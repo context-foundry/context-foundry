@@ -1,0 +1,10 @@
+# Overnight Tasks Queue
+# Format: project_name|task_description|hours|priority
+# Priority: higher number = runs first (0 is default)
+
+# Examples:
+# todo-app|Build CLI todo application with add/list/complete/delete|4|10
+# api-server|REST API with JWT authentication and user management|8|5
+# dashboard|Admin dashboard with charts and analytics|6|3
+
+# Your tasks below:

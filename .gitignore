@@ -15,6 +15,12 @@ logs/
 # Session data
 checkpoints/sessions/*.json
 checkpoints/artifacts/temp/
+checkpoints/ralph/*/
+overnight_tasks.txt
+
+# Pattern library
+foundry/patterns/patterns.db
+foundry/patterns/*.db
 
 # IDE
 .vscode/

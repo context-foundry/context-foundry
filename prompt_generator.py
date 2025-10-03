@@ -373,26 +373,92 @@ Remember: This is production code. Make it clean, tested, and documented."""
 
 
 def main():
-    """Run the Real Context Foundry."""
-    print("🏭 REAL CONTEXT FOUNDRY - Generate Actual Content")
-    print("=" * 60)
+    """Run the Prompt Generator with mode selection."""
+    import argparse
+    import sys
 
-    # Define the task
-    task = """Create a CLI todo app with:
-- Add/remove/list tasks
-- Mark tasks complete
-- Save to JSON file
-- Colorful output with rich library
-- Full test coverage"""
+    parser = argparse.ArgumentParser(
+        description="Context Foundry - Generate prompts or run autonomously"
+    )
+    parser.add_argument("project_name", nargs="?", help="Project name")
+    parser.add_argument("task", nargs="?", help="Task description")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Interactive mode: Generate prompts to copy/paste (default)",
+    )
+    parser.add_argument(
+        "--api", action="store_true", help="API mode: Use Claude API with checkpoints"
+    )
+    parser.add_argument(
+        "--autonomous",
+        action="store_true",
+        help="Autonomous mode: Fully automated, no human approval",
+    )
 
-    foundry = RealContextFoundry("todo-app", task)
-    foundry.save_prompts()
+    args = parser.parse_args()
 
-    print("\n🎯 Next Steps:")
-    print("1. Copy each prompt to Claude")
-    print("2. Save Claude's responses to the specified files")
-    print("3. After Task 6, you'll have a complete, working todo app!")
-    print("\nThe prompts are also saved in prompts/ for reference.")
+    # If no mode specified and no args, run interactive demo
+    if not args.project_name and not args.task:
+        print("🏭 CONTEXT FOUNDRY - Prompt Generator")
+        print("=" * 60)
+        print("\n📖 Usage:")
+        print("  Interactive (copy/paste):")
+        print('    python prompt_generator.py todo-app "Build CLI todo app"')
+        print("\n  API mode (with Claude API):")
+        print('    python prompt_generator.py todo-app "Build CLI todo app" --api')
+        print("\n  Autonomous mode (overnight runs):")
+        print('    python prompt_generator.py todo-app "Build CLI todo app" --autonomous')
+        print("\n💡 For API/autonomous modes, you need ANTHROPIC_API_KEY set")
+        print("   Get your key from: https://console.anthropic.com/")
+        sys.exit(0)
+
+    # Determine mode
+    if args.autonomous:
+        mode = "autonomous"
+    elif args.api:
+        mode = "api"
+    else:
+        mode = "interactive"
+
+    project_name = args.project_name or "todo-app"
+    task = args.task or "Create a CLI todo app with add/remove/list/complete tasks"
+
+    # Route to appropriate handler
+    if mode == "interactive":
+        # Original interactive prompt generation
+        print("🏭 CONTEXT FOUNDRY - Interactive Mode")
+        print("=" * 60)
+        foundry = RealContextFoundry(project_name, task)
+        foundry.save_prompts()
+
+        print("\n🎯 Next Steps:")
+        print("1. Copy each prompt to Claude")
+        print("2. Save Claude's responses to the specified files")
+        print("3. After all tasks, you'll have a complete, working app!")
+        print("\nThe prompts are also saved in prompts/ for reference.")
+
+    elif mode in ("api", "autonomous"):
+        # Use autonomous orchestrator
+        print(f"🤖 Launching {'Autonomous' if mode == 'autonomous' else 'API'} Orchestrator...")
+        print("=" * 60)
+
+        # Import and run autonomous orchestrator
+        sys.path.append(str(Path(__file__).parent))
+        from workflows.autonomous_orchestrator import AutonomousOrchestrator
+
+        orchestrator = AutonomousOrchestrator(
+            project_name=project_name,
+            task_description=task,
+            autonomous=(mode == "autonomous"),
+        )
+
+        result = orchestrator.run()
+
+        if result["status"] == "success":
+            sys.exit(0)
+        else:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

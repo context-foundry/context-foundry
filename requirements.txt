@@ -1,0 +1,17 @@
+# Context Foundry Dependencies
+
+# Core
+anthropic>=0.40.0  # Claude API client
+
+# CLI Framework
+click>=8.0.0  # Command-line interface framework
+rich>=13.0.0  # Beautiful terminal output
+tabulate>=0.9.0  # Table formatting
+
+# Utilities
+python-dotenv>=1.0.0  # Environment variable management
+
+# Pattern Library
+sentence-transformers>=2.2.0  # Semantic search embeddings
+numpy>=1.24.0  # Numerical operations
+pyyaml>=6.0  # Configuration files
