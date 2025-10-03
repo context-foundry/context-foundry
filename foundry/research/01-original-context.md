@@ -116,3 +116,8 @@ Building toward fully autonomous coding workflows:
 5. Add checkpoint and artifact management
 6. Create example workflows and patterns
 7. Test with real-world projects
+
+## Sources & Attribution
+
+- **[Dexter Horthy's HumanLayer Demo](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff)** - "Anti-vibe coding" methodology and 35K LOC in 7 hours demonstration
+- **[Anthropic's Claude Agent SDK](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk)** - Context management patterns and subagent orchestration techniques
