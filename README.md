@@ -7,7 +7,7 @@
 
 Context Foundry transforms fuzzy requests into clean, reviewable PRs through disciplined three-phase execution. It's the opposite of "vibe coding" - instead of chaotic back-and-forth with AI, it's systematic progression through research, planning, and implementation.
 
-**Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software.
+**Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software. Inspired by [Dexter Horthy's approach at HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff) and Anthropic's [agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk).
 
 ## The Three-Phase Workflow
 
@@ -31,6 +31,7 @@ graph LR
 - Follows execution paths, not random files
 - Produces compact research artifact (max 5K tokens)
 - Context target: <30%
+- Uses [subagent isolation patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk) for efficient exploration
 
 ### Phase 2: Architect (Planning)
 
@@ -154,7 +155,7 @@ context-foundry/
 
 Based on the methodology that powers Context Foundry:
 
-- **HumanLayer**: 35K lines of code in 7 hours (vs. 3-5 day estimate)
+- **[HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff)**: 35K lines of code in 7 hours (vs. 3-5 day estimate) - demonstrated by Dexter Horthy
 - **BAML Fix**: 300K line Rust codebase, PR merged in 1 hour
 - **Boundary**: 35K lines with WASM support in 7 hours
 - **AgentCoder**: 96.3% pass@1 on HumanEval
@@ -187,7 +188,7 @@ Based on the methodology that powers Context Foundry:
 ## Advanced Features
 
 - **Pattern Library**: Learns from successful implementations
-- **Context Compaction**: Automatic summarization at 50% usage
+- **Context Compaction**: Automatic summarization at 50% usage (based on [Claude agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk))
 - **Subagent Isolation**: 200K token windows returning 1-2K summaries
 - **Test-First Development**: Tests generated before implementation
 - **Continuous Checkpointing**: Git commits after each task
@@ -209,4 +210,9 @@ MIT - Because good ideas should spread.
 
 *"Workflow over vibes. Specs before code. Context is everything."*
 
-Built with insights from Dex (HumanLayer), Anthropic's Claude team, and the growing context engineering community.
+## Credits & Inspiration
+
+This project builds on foundational work from:
+- **[Dexter Horthy](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff)** (HumanLayer) - Pioneered the "anti-vibe coding" approach and demonstrated 35K LOC in 7 hours
+- **[Anthropic's Claude Agent SDK](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk)** - Context management patterns and subagent orchestration techniques
+- The growing context engineering community exploring systematic AI development
