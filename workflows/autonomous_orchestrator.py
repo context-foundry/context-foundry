@@ -523,7 +523,13 @@ DO:
             r"file:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
             # Pattern 3: "File path: path"
             r"File path:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
-            # Pattern 4: Just a path in backticks before code block
+            # Pattern 4: "## File: path" (markdown h2 header)
+            r"##\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 5: "### File: path" (markdown h3 header)
+            r"###\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 6: "# File: path" (any markdown header)
+            r"#+\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 7: Just a path in backticks before code block
             r"`([^`\n]+\.[a-z]{2,4})`\n```(?:\w+)?\n(.*?)```",
         ]
 
