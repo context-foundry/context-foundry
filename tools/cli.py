@@ -193,6 +193,97 @@ def enhance(task, autonomous, use_patterns, create_pr):
 
 
 @foundry.command()
+@click.option('--port', default=None, type=int, help='Port for server (stdio by default)')
+@click.option('--config-help', is_flag=True, help='Show Claude Desktop configuration help')
+def serve(port, config_help):
+    """
+    Start Context Foundry as an MCP server for Claude Desktop.
+
+    This mode allows you to use Context Foundry through Claude Desktop
+    without API charges - it uses your Claude Pro/Max subscription instead.
+
+    Note: Requires Python 3.10+ and fastmcp package.
+    Install with: pip install -r requirements-mcp.txt
+
+    Examples:
+
+    \b
+      # Start MCP server (stdio transport for Claude Desktop)
+      foundry serve
+
+    \b
+      # Show configuration help
+      foundry serve --config-help
+    """
+    # Check Python version
+    import sys
+    if sys.version_info < (3, 10):
+        console.print("[red]❌ MCP mode requires Python 3.10 or higher[/red]")
+        console.print(f"[yellow]Current version: Python {sys.version_info.major}.{sys.version_info.minor}[/yellow]\n")
+        console.print("[cyan]Options:[/cyan]")
+        console.print("  1. Upgrade Python to 3.10+ and run: pip install -r requirements-mcp.txt")
+        console.print("  2. Use API mode instead: foundry build <project> <task>\n")
+        sys.exit(1)
+
+    if config_help:
+        console.print(Panel.fit(
+            "[bold cyan]🔌 Claude Desktop MCP Configuration[/bold cyan]\n\n"
+            "[yellow]1. Locate your Claude Desktop config file:[/yellow]\n"
+            "   • macOS: ~/Library/Application Support/Claude/claude_desktop_config.json\n"
+            "   • Windows: %APPDATA%/Claude/claude_desktop_config.json\n\n"
+            "[yellow]2. Add Context Foundry to your config:[/yellow]\n"
+            '   {\n'
+            '     "mcpServers": {\n'
+            '       "context-foundry": {\n'
+            '         "command": "python",\n'
+            '         "args": ["-m", "tools.mcp_server"],\n'
+            f'         "cwd": "{Path.cwd()}"\n'
+            '       }\n'
+            '     }\n'
+            '   }\n\n'
+            "[yellow]3. Restart Claude Desktop[/yellow]\n\n"
+            "[yellow]4. In Claude Desktop, type:[/yellow]\n"
+            '   "Use context_foundry_build to create a todo app"\n\n'
+            "[green]✅ Now using Context Foundry without API charges![/green]\n\n"
+            "[dim]For more help, see: github.com/snedea/context-foundry/docs/MCP_SETUP.md[/dim]",
+            title="MCP Server Setup",
+            border_style="cyan"
+        ))
+        return
+
+    console.print(Panel.fit(
+        "[bold green]🔌 Starting Context Foundry MCP Server[/bold green]\n\n"
+        "[cyan]Mode:[/cyan] Claude Desktop Integration\n"
+        "[cyan]Transport:[/cyan] stdio\n"
+        "[cyan]Cost:[/cyan] Free (uses your Claude subscription)\n\n"
+        "[yellow]Available Tools:[/yellow]\n"
+        "  • context_foundry_build - Build new projects\n"
+        "  • context_foundry_enhance - Enhance existing projects (coming soon)\n"
+        "  • context_foundry_status - Get server status\n\n"
+        "[dim]Configure Claude Desktop with: foundry serve --config-help[/dim]",
+        title="MCP Server",
+        border_style="green"
+    ))
+
+    console.print("\n[yellow]Starting server...[/yellow]\n")
+
+    # Run the MCP server
+    try:
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, "-m", "tools.mcp_server"],
+            cwd=Path.cwd()
+        )
+        sys.exit(result.returncode)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Server stopped[/yellow]")
+        sys.exit(0)
+    except Exception as e:
+        console.print(f"\n[red]❌ Error starting server: {e}[/red]")
+        sys.exit(1)
+
+
+@foundry.command()
 @click.option('--session', help='Specific session ID to check')
 @click.option('--all', 'show_all', is_flag=True, help='Show all sessions')
 @click.option('--watch', is_flag=True, help='Watch mode (auto-refresh)')

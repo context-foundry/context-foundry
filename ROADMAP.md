@@ -1,16 +1,28 @@
 # Context Foundry Roadmap
 
-## Current Status: v1.0
+## Current Status: v1.2
 
-Context Foundry currently supports building new projects from scratch with:
+Context Foundry supports two execution modes:
+
+**🆓 MCP Mode (Free):**
+- ✅ Use through Claude Desktop without API charges
+- ✅ Powered by your Claude Pro/Max subscription
+- ✅ Interactive and conversational workflow
+
+**💳 API Mode (Paid):**
+- ✅ Standalone CLI for automation and CI/CD
+- ✅ Direct Anthropic API access
+- ✅ Traditional command-line operation
+
+**Core Features (Both Modes):**
 - ✅ Scout → Architect → Builder workflow
 - ✅ Automated context management
 - ✅ Pattern library learning
-- ✅ Claude CLI authentication (in addition to API key)
 - ✅ Local git commits
 - ✅ Human review checkpoints
 
 ## Planned Features
+
 
 ### 🚧 High Priority: Enhance Existing Projects
 
@@ -134,11 +146,67 @@ foundry enhance-multi "Add authentication" \
 - ✅ Livestream dashboard
 - ✅ Session analysis and metrics
 
-### v1.1 - Claude CLI Support
-- ✅ Claude CLI authentication backend
+### v1.1 - Authentication Improvements
+- ✅ Attempted Claude CLI integration (later found to still use API)
 - ✅ Auto-detection of auth method
 - ✅ Environment variable configuration
 - ✅ Documentation updates
+- ⚠️ **Note:** Claude CLI mode removed in v1.2 - was misleading as it still charged API fees
+
+### v1.2 - MCP Server Mode (October 2025)
+**Major Feature: Dual-Mode Architecture**
+
+Context Foundry now supports two execution modes, giving users flexibility based on their needs:
+
+**🆓 MCP Mode (Free - No API Charges)**
+- ✅ MCP (Model Context Protocol) server implementation using FastMCP
+- ✅ Integration with Claude Desktop via MCP tools
+- ✅ Uses Claude Pro/Max subscription instead of API calls
+- ✅ Interactive development through Claude Desktop interface
+- ✅ Three MCP tools: `context_foundry_build`, `context_foundry_enhance`, `context_foundry_status`
+- ✅ `foundry serve` command to start MCP server
+- ✅ Automatic configuration help with `--config-help`
+
+**💳 API Mode (Continues to Work)**
+- ✅ Standalone CLI operation via `foundry build`
+- ✅ Direct Anthropic API integration
+- ✅ Works with Python 3.9+
+- ✅ Good for CI/CD and automation
+
+**📦 Two-Tier Dependency Architecture**
+- ✅ Base installation works with Python 3.9+ (`requirements.txt`)
+- ✅ Optional MCP mode requires Python 3.10+ (`requirements-mcp.txt`)
+- ✅ Graceful degradation - users only install what they need
+- ✅ Clear error messages guiding users to correct setup
+
+**🏗️ Technical Implementation**
+- ✅ Created `ClaudeCodeClient` for MCP mode (mirrors `ClaudeClient` interface)
+- ✅ Factory function `get_claude_client()` selects appropriate client
+- ✅ MCP server with three tools for building, enhancing, and status checking
+- ✅ Fixed package structure - added `__init__.py` to all package directories
+- ✅ Removed misleading `claude_cli_integration.py`
+
+**📚 Comprehensive Documentation**
+- ✅ New `INSTALL.md` with installation guide, troubleshooting, and lessons learned
+- ✅ New `docs/MCP_SETUP.md` with step-by-step MCP configuration
+- ✅ Configuration template in `config/claude_desktop_config.example.json`
+- ✅ Documented 8 key lessons learned from implementation
+- ✅ Common issues section with 6 specific problems and solutions
+- ✅ Verification checklists for both modes
+
+**🎓 Lessons Learned**
+1. Python version management is critical - two-tier architecture solves compatibility
+2. Package structure matters - `find_packages()` requires `__init__.py` files
+3. PATH management is non-trivial - document exactly where scripts install
+4. Editable installs can be tricky - explicit Python version helps
+5. Dependencies should be gradual - optional features = optional dependencies
+6. Error messages should be helpful - guide users with exact commands
+7. Documentation should match reality - write after debugging, not before
+8. Two modes require two strategies - shared core with different clients
+
+**Key Insight:** Users discovered that the original "Claude CLI" mode still charged API fees, leading to this comprehensive dual-mode implementation that provides true free usage via MCP while maintaining API mode for automation.
+
+**Completed:** October 4, 2025
 
 ## Contributing
 

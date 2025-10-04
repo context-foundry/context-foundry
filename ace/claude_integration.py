@@ -23,46 +23,46 @@ def get_claude_client(
     log_dir: Optional[Path] = None,
     session_id: Optional[str] = None,
     use_context_manager: bool = True,
-    prefer_cli: bool = None
-) -> Union['ClaudeClient', 'ClaudeCLIClient']:
+    prefer_mcp: bool = None
+) -> Union['ClaudeClient', 'ClaudeCodeClient']:
     """
-    Factory function to get appropriate Claude client (API or CLI).
+    Factory function to get appropriate Claude client (API or MCP).
 
     Args:
         log_dir: Directory for logs
         session_id: Session identifier
         use_context_manager: Enable context management
-        prefer_cli: If True, use CLI. If None, auto-detect from env
+        prefer_mcp: If True, use MCP mode. If None, auto-detect from env
 
     Returns:
-        ClaudeClient or ClaudeCLIClient instance
+        ClaudeClient (API mode) or ClaudeCodeClient (MCP mode) instance
     """
     # Import here to avoid circular dependency
-    from ace.claude_cli_integration import ClaudeCLIClient
+    from ace.claude_code_client import ClaudeCodeClient
 
-    # Check preference
-    if prefer_cli is None:
-        prefer_cli = os.getenv('USE_CLAUDE_CLI', '').lower() in ('true', '1', 'yes')
+    # Check if running in MCP mode
+    if prefer_mcp is None:
+        prefer_mcp = os.getenv('CONTEXT_FOUNDRY_MCP_MODE', '').lower() in ('true', '1', 'yes')
 
-    # Try CLI if preferred or if API key not available
+    # If MCP mode requested, use ClaudeCodeClient
+    if prefer_mcp:
+        print("🔧 Using MCP Mode (Claude Desktop integration)")
+        print("💰 No API charges - using your Claude subscription")
+        return ClaudeCodeClient(log_dir, session_id, use_context_manager)
+
+    # Otherwise, use API mode
     api_key = os.getenv('ANTHROPIC_API_KEY', '').strip()
-    if prefer_cli or not api_key:
-        try:
-            # Check if Claude CLI is available
-            result = subprocess.run(
-                ["claude", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                print("🔧 Using Claude CLI for authentication")
-                return ClaudeCLIClient(log_dir, session_id, use_context_manager)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+    if not api_key:
+        raise ValueError(
+            "ANTHROPIC_API_KEY environment variable not set.\n"
+            "Options:\n"
+            "1. Set ANTHROPIC_API_KEY=your_key (API mode - charges apply)\n"
+            "2. Use MCP mode through Claude Desktop (no charges - see docs)\n"
+            "Get API key from: https://console.anthropic.com/"
+        )
 
-    # Fall back to API
     print("🔧 Using Anthropic API for authentication")
+    print("💰 API charges apply - see https://www.anthropic.com/pricing")
     return ClaudeClient(log_dir, session_id, use_context_manager)
 
 

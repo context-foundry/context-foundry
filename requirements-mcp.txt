@@ -1,0 +1,11 @@
+# MCP Server Mode Dependencies
+# Install with: pip install -r requirements-mcp.txt
+#
+# Note: MCP mode requires Python 3.10 or higher
+# Check your version: python --version
+
+# Base dependencies
+-r requirements.txt
+
+# MCP Server SDK
+fastmcp>=2.0.0  # Model Context Protocol server framework

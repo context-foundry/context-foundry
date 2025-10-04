@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""
+MCP Server for Context Foundry
+Enables Claude Desktop to use Context Foundry without API charges
+"""
+
+import os
+import sys
+import json
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+# Check if FastMCP is available
+try:
+    from fastmcp import FastMCP
+except ImportError:
+    print("❌ Error: FastMCP not installed", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("MCP Server mode requires Python 3.10+ and the fastmcp package.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("To install MCP mode dependencies:", file=sys.stderr)
+    print("  1. Upgrade to Python 3.10 or higher", file=sys.stderr)
+    print("  2. Run: pip install -r requirements-mcp.txt", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Or use API mode instead (no Python version requirement):", file=sys.stderr)
+    print("  export ANTHROPIC_API_KEY=your_key", file=sys.stderr)
+    print("  foundry build my-app 'task description'", file=sys.stderr)
+    print("", file=sys.stderr)
+    sys.exit(1)
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from workflows.autonomous_orchestrator import AutonomousOrchestrator
+
+# Create MCP server
+mcp = FastMCP("Context Foundry")
+
+# Track active builds
+active_builds = {}
+
+
+@mcp.tool()
+def context_foundry_build(
+    task_description: str,
+    project_name: Optional[str] = None,
+    autonomous: bool = False,
+    use_patterns: bool = True
+) -> str:
+    """
+    Build a new project from scratch using Context Foundry's Scout → Architect → Builder workflow.
+
+    Args:
+        task_description: Description of what to build (e.g., "Create a todo app with REST API")
+        project_name: Optional name for the project (auto-generated if not provided)
+        autonomous: If True, skip human review checkpoints
+        use_patterns: If True, use pattern library for better results
+
+    Returns:
+        Status message with build results
+    """
+    try:
+        # Auto-generate project name if not provided
+        if not project_name:
+            project_name = task_description.lower().replace(" ", "-")[:30]
+
+        # Create orchestrator
+        orchestrator = AutonomousOrchestrator(
+            task_description=task_description,
+            project_name=project_name,
+            mode="new",
+            autonomous_mode=autonomous,
+            use_patterns=use_patterns
+        )
+
+        # Run the workflow
+        # Note: This is synchronous and may take several minutes
+        result = orchestrator.run()
+
+        if result["success"]:
+            return f"""✅ Build Complete!
+
+Project: {project_name}
+Location: {result.get('project_dir', 'N/A')}
+Tasks Completed: {result.get('tasks_completed', 0)}
+
+Files created:
+{chr(10).join('- ' + f for f in result.get('files_created', []))}
+
+You can now review the code and run the project!
+"""
+        else:
+            return f"""❌ Build Failed
+
+Error: {result.get('error', 'Unknown error')}
+
+Check the logs for more details.
+"""
+
+    except Exception as e:
+        return f"❌ Error during build: {str(e)}"
+
+
+@mcp.tool()
+def context_foundry_enhance(
+    task_description: str,
+    autonomous: bool = False,
+    use_patterns: bool = True
+) -> str:
+    """
+    Enhance an existing project with new features (Coming Soon).
+
+    Args:
+        task_description: Description of what to add/modify
+        autonomous: If True, skip human review checkpoints
+        use_patterns: If True, use pattern library
+
+    Returns:
+        Status message
+    """
+    return """🚧 Feature Coming Soon!
+
+The 'enhance' mode is planned for Q1 2025.
+
+Current status: You can use 'context_foundry_build' to create new projects from scratch.
+
+For now, to modify existing code:
+1. Describe the full project including existing + new features
+2. Use context_foundry_build
+3. Manually merge the generated code
+"""
+
+
+@mcp.tool()
+def context_foundry_status() -> str:
+    """
+    Get the current status of Context Foundry.
+
+    Returns:
+        Status information including version and capabilities
+    """
+    return """Context Foundry MCP Server - Status
+
+✅ Server: Running
+✅ Mode: MCP (Claude Desktop Integration)
+💰 Cost: Free (uses your Claude subscription, no API charges)
+
+Available Tools:
+- context_foundry_build: Build new projects from scratch
+- context_foundry_enhance: Enhance existing projects (coming soon)
+- context_foundry_status: Get server status
+
+Example Usage:
+"Use context_foundry_build to create a todo app with REST API and SQLite storage"
+
+Documentation: https://github.com/snedea/context-foundry
+"""
+
+
+@mcp.resource("logs://latest")
+def get_latest_logs() -> str:
+    """Get the most recent build logs."""
+    logs_dir = Path("logs")
+    if not logs_dir.exists():
+        return "No logs found"
+
+    # Find most recent log directory
+    log_dirs = sorted([d for d in logs_dir.iterdir() if d.is_dir()], reverse=True)
+    if not log_dirs:
+        return "No logs found"
+
+    latest = log_dirs[0]
+    session_log = latest / "session.jsonl"
+
+    if session_log.exists():
+        with open(session_log) as f:
+            lines = f.readlines()
+            return f"Latest log ({latest.name}):\n\n" + "\n".join(lines[-10:])
+
+    return f"Log directory exists but no session.jsonl found: {latest}"
+
+
+if __name__ == "__main__":
+    # Run the MCP server
+    # This uses stdio transport which is standard for Claude Desktop
+    print("🚀 Starting Context Foundry MCP Server...", file=sys.stderr)
+    print("📋 Available tools: context_foundry_build, context_foundry_enhance, context_foundry_status", file=sys.stderr)
+    print("💡 Configure in Claude Desktop to use without API charges!", file=sys.stderr)
+
+    mcp.run()

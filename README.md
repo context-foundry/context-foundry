@@ -80,36 +80,64 @@ graph LR
 # Install Context Foundry
 git clone https://github.com/yourusername/context-foundry.git
 cd context-foundry
-pip install -e .
+
+# Base installation (works with Python 3.9+)
+pip install -r requirements.txt
+
+# Optional: MCP mode (requires Python 3.10+)
+pip install -r requirements-mcp.txt
 
 # On macOS, add foundry to PATH
 export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust Python version as needed
 source ~/.zshrc
 
-# Choose your authentication method:
+# Choose your mode:
 
-# Option A: Use Claude CLI (if you have it installed)
-export USE_CLAUDE_CLI=true
+# Option A: MCP Mode (Claude Desktop - no API charges) - RECOMMENDED
+# See docs/MCP_SETUP.md for full setup guide
+foundry serve --config-help
 
-# Option B: Use Anthropic API key
-foundry config --init
+# Option B: API Mode (standalone CLI - charges apply)
 export ANTHROPIC_API_KEY=your_key_here
 
 # Verify setup
 foundry --version
 ```
 
-**Authentication Options:**
-- **Claude CLI**: If you're already using Claude CLI, just set `USE_CLAUDE_CLI=true` - no API key needed!
-- **API Key**: Get a key from [Anthropic Console](https://console.anthropic.com/) and set `ANTHROPIC_API_KEY`
+**Two Ways to Use Context Foundry:**
 
-For detailed installation instructions, see [INSTALL.md](INSTALL.md).
+| Mode | Cost | Setup | Best For |
+|------|------|-------|----------|
+| **MCP Mode** | Free (uses Claude Pro/Max) | [Setup Guide](docs/MCP_SETUP.md) | Interactive development |
+| **API Mode** | Pay per token | Set `ANTHROPIC_API_KEY` | CI/CD, automation |
 
-### Basic Usage (with CLI)
+💡 **Recommended**: Use MCP mode if you have Claude Pro/Max subscription - it's free and integrates seamlessly with Claude Desktop!
 
-Context Foundry supports two workflows:
+### Basic Usage
 
-#### 1. Build New Projects (from scratch)
+Context Foundry works in two modes:
+
+#### Option 1: MCP Mode (via Claude Desktop)
+
+Once configured (see [MCP Setup Guide](docs/MCP_SETUP.md)), use Context Foundry directly in Claude Desktop:
+
+```
+Use context_foundry_build to create a REST API with:
+- FastAPI framework
+- PostgreSQL database
+- JWT authentication
+- OpenAPI documentation
+Call it "my-api"
+```
+
+**Benefits:**
+- ✅ No API charges (uses your Claude subscription)
+- ✅ Interactive - review and modify plans before building
+- ✅ Seamless Claude Desktop integration
+
+#### Option 2: API Mode (standalone CLI)
+
+**1. Build New Projects (from scratch)**
 
 ```bash
 # Interactive build with reviews
@@ -128,7 +156,7 @@ foundry build web-app "Todo app" --livestream
 
 **Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
 
-#### 2. Enhance Existing Projects (modify existing code) 🚧 *Coming Soon*
+**2. Enhance Existing Projects (modify existing code)** 🚧 *Coming Soon*
 
 ```bash
 # Navigate to your existing repo

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "context-foundry": {
+      "command": "python",
+      "args": [
+        "-m",
+        "tools.mcp_server"
+      ],
+      "cwd": "/path/to/context-foundry",
+      "env": {}
+    }
+  }
+}
