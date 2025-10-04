@@ -62,7 +62,7 @@ echo "ANTHROPIC_API_KEY=sk-ant-api03-your-key-here" >> .env
 
 ```bash
 # Run health check
-python tools/health_check.py
+python3 tools/health_check.py
 
 # You should see: ✅ All critical checks passed!
 ```
@@ -76,6 +76,8 @@ Let's build a simple CLI todo application as our first project.
 ```bash
 foundry build todo-cli "Create a CLI todo app with add, list, and complete commands. Use local JSON file for storage."
 ```
+
+**Note:** Your project will be created in the `examples/todo-cli/` directory (relative to your Context Foundry installation). This keeps generated projects organized and separate from the Context Foundry codebase.
 
 **What happens next:**
 
@@ -138,6 +140,15 @@ foundry build todo-cli "Create a CLI todo app with add, list, and complete comma
 
    **Pro tip:** A bad plan = thousands of bad lines of code. Take your time here!
 
+   **💡 You can customize the plan!** If you want to make changes:
+   1. Edit any of the `.md` files directly in your text editor
+   2. Modify specs, adjust the plan, add/remove/reorder tasks, etc.
+   3. Save your changes
+   4. Type `approve` in the console
+   5. The Builder will use your edited files!
+
+   This gives you full control to fine-tune the implementation before any code is written.
+
 5. **Builder Phase** (~10 minutes)
    - Implements each task sequentially
    - Writes tests first, then implementation
@@ -173,8 +184,8 @@ You'll see:
 ### 3.1 Check the Output
 
 ```bash
-# Your new project is in the output directory
-cd projects/todo-cli  # Or wherever it was created
+# Your new project is in the examples directory
+cd examples/todo-cli
 
 # List files
 ls -la
@@ -193,8 +204,8 @@ ls -la
 pip install -r requirements.txt
 
 # Run the app
-python todo.py add "Learn Context Foundry"
-python todo.py list
+python3 todo.py add "Learn Context Foundry"
+python3 todo.py list
 
 # You should see your todo item!
 ```
@@ -412,6 +423,7 @@ If you see test failures during the build, that's normal. Check the final result
 - **What to review:** ⚠️ **CRITICAL** - Review everything carefully!
 - **Context target:** <40%
 - **Why it matters:** Bad plan = thousands of bad LOC
+- **Customization:** Edit the .md files directly before approving - your changes will be used
 
 ### 🔨 Builder (Implementation)
 - **Purpose:** Execute the plan

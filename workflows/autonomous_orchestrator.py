@@ -138,10 +138,12 @@ class AutonomousOrchestrator:
         scout_config = Path(".foundry/agents/scout.md").read_text()
 
         # Build prompt
+        current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
         prompt = f"""You are the Scout agent in Context Foundry.
 
 Task: {self.task_description}
 Project: {self.project_name}
+Current date/time: {current_timestamp}
 
 This is a NEW project - you're starting from scratch, no existing codebase.
 

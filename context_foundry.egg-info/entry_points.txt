@@ -1,0 +1,3 @@
+[console_scripts]
+foundry = tools.cli:foundry
+

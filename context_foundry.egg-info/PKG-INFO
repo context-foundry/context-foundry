@@ -1,3 +1,27 @@
+Metadata-Version: 2.1
+Name: context-foundry
+Version: 1.0.0
+Summary: The Anti-Vibe Coding System - Spec-first development through automated context engineering
+Home-page: https://github.com/yourusername/context-foundry
+Author: Context Foundry Team
+Author-email: contact@contextfoundry.dev
+License: MIT
+Keywords: ai,coding-assistant,claude,context-engineering,code-generation,development-workflow,automation
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Software Development :: Code Generators
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
 # 🏭 Context Foundry
 
 > **The Anti-Vibe Coding System**: Spec-first development through automated context engineering.
@@ -40,7 +64,6 @@ graph LR
 - Decomposes into atomic, testable tasks
 - Context target: <40%
 - **CRITICAL**: Human review required (highest leverage point)
-- **Customizable**: Edit the generated SPEC/PLAN/TASKS files before approving - your changes will be used by the Builder
 
 ### Phase 3: Builder (Implementation)
 
@@ -62,26 +85,19 @@ git clone https://github.com/yourusername/context-foundry.git
 cd context-foundry
 pip install -e .
 
-# On macOS, add foundry to PATH
-export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust Python version as needed
-source ~/.zshrc
-
 # Configure API key
 foundry config --init
 export ANTHROPIC_API_KEY=your_key_here
 
 # Verify setup
-foundry --version
+python tools/health_check.py
 ```
-
-For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 
 ### Basic Usage (with CLI)
 
 ```bash
 # Interactive build with reviews
 foundry build my-app "Build user authentication with JWT"
-# Creates project in: examples/my-app/
 
 # Autonomous build (no reviews)
 foundry build api-server "REST API with PostgreSQL" --autonomous
@@ -92,8 +108,6 @@ foundry build big-project "Complex system" --overnight 8
 # With livestream dashboard
 foundry build web-app "Todo app" --livestream
 ```
-
-**Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
 
 ### Monitor Progress
 
@@ -226,3 +240,5 @@ This project builds on foundational work from:
 - **[Dexter Horthy](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff)** (HumanLayer) - Pioneered the "anti-vibe coding" approach and demonstrated 35K LOC in 7 hours
 - **[Anthropic's Claude Agent SDK](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk)** - Context management patterns and subagent orchestration techniques
 - The growing context engineering community exploring systematic AI development
+
+
