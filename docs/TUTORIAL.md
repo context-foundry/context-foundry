@@ -71,6 +71,31 @@ python3 tools/health_check.py
 
 Let's build a simple CLI todo application as our first project.
 
+### Key Insight: Don't Overthink the Prompt
+
+**You don't need to be a prompt engineer.** The initial command is just a starting point:
+
+- ✅ **Good enough beats perfect** - Describe what you want in 1-2 sentences
+- ✅ **The power is in refinement** - You'll review and edit the plan before any code is written
+- ✅ **80/20 rule** - Your prompt gets you 80% there, checkpoint editing gets you to 100%
+
+**Traditional approach:**
+```
+❌ Spend 30 minutes crafting the perfect prompt
+❌ Hope the AI understands everything
+❌ Get frustrated when it doesn't
+```
+
+**Context Foundry approach:**
+```
+✅ Spend 2 minutes on a "good enough" prompt
+✅ Review the generated plan (5 minutes)
+✅ Edit the SPEC/PLAN/TASKS files to make it perfect
+✅ Approve and let it build exactly what you want
+```
+
+**Bottom line:** The critical checkpoint is at the Architect phase where you review and edit the plan, not the initial prompt.
+
 ### 2.1 Start the Build
 
 ```bash
