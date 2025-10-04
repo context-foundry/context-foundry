@@ -9,6 +9,26 @@ Context Foundry transforms fuzzy requests into clean, reviewable PRs through dis
 
 **Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software. Inspired by [Dexter Horthy's approach at HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff) and Anthropic's [agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk).
 
+## Philosophy: Workflow Over Prompt Perfection
+
+**You don't need to master prompt engineering.** Context Foundry's power comes from structured refinement, not from crafting the perfect initial prompt:
+
+- **Initial prompt**: Just describe what you want (1-2 sentences, "good enough")
+- **Scout phase**: AI researches and proposes architecture
+- **Architect phase**: You review and edit the SPEC/PLAN/TASKS files directly
+- **Builder phase**: AI builds exactly what you approved
+
+**The difference:**
+```
+Traditional approach:          Context Foundry approach:
+├─ Perfect prompt (30 min)    ├─ Quick prompt (2 min)
+├─ Hope for the best          ├─ Review plan (5 min)
+├─ Get 70% of what you want   ├─ Edit to 100% accuracy
+└─ Iterate via chat           └─ Approve and build
+```
+
+Your initial prompt gets you ~80% there. Editing the plan at the critical checkpoint gets you to 100%. **This is workflow over vibes.**
+
 ## The Three-Phase Workflow
 
 ```mermaid

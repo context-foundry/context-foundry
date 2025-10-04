@@ -459,10 +459,13 @@ If you see test failures during the build, that's normal. Check the final result
 
 ## Tips for Success
 
-### 1. Be Specific in Task Descriptions
+### 1. Be Specific in Task Descriptions (But Don't Overthink It)
 
-**❌ Bad:** "Build an app"
-**✅ Good:** "Build a CLI todo app with add, list, complete, and delete commands using JSON file storage"
+**❌ Too vague:** "Build an app"
+**✅ Good enough:** "Build a CLI todo app with add, list, and complete commands"
+**✅ Also fine:** "Build a CLI todo app with add, list, complete, and delete commands using JSON file storage"
+
+Remember: You can always add missing features or adjust details when you review the plan at the Architect checkpoint. The initial prompt just needs to convey the general idea.
 
 ### 2. Always Review the Plan
 
