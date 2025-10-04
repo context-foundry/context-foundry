@@ -348,8 +348,28 @@ Instructions:
 Project: {self.project_name}
 Project directory: {self.project_dir}
 
-Generate the complete, working code for this task.
-Include all file contents with proper file paths."""
+CRITICAL: You MUST output actual code files, not descriptions!
+
+Use this EXACT format for each file:
+
+File: backend/main.py
+```python
+# Actual code goes here
+import something
+
+def main():
+    pass
+```
+
+File: frontend/index.html
+```html
+<!DOCTYPE html>
+<html>
+...actual HTML...
+</html>
+```
+
+DO NOT just list files or describe them - output the COMPLETE code for every file."""
 
             # Inject relevant patterns if enabled
             pattern_ids = []
@@ -475,25 +495,48 @@ Include all file contents with proper file paths."""
 
     def _extract_and_save_code(self, response: str, project_dir: Path):
         """Extract code blocks from response and save to files."""
-        # Look for markdown code blocks with file paths
         import re
 
-        pattern = r"(?:File|file|File path|file_path):\s*([^\n]+)\n```(?:\w+)?\n(.*?)```"
-        matches = re.finditer(pattern, response, re.DOTALL)
+        # Try multiple patterns to be flexible
+        patterns = [
+            # Pattern 1: "File: path" followed by code block
+            r"File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 2: "file: path" (lowercase)
+            r"file:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 3: "File path: path"
+            r"File path:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            # Pattern 4: Just a path in backticks before code block
+            r"`([^`\n]+\.[a-z]{2,4})`\n```(?:\w+)?\n(.*?)```",
+        ]
 
-        for match in matches:
-            filepath = match.group(1).strip()
-            code = match.group(2).strip()
+        files_created = 0
 
-            # Clean up filepath
-            filepath = filepath.replace("`", "").strip()
+        for pattern in patterns:
+            matches = re.finditer(pattern, response, re.DOTALL | re.IGNORECASE)
 
-            # Save file
-            full_path = project_dir / filepath
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(code)
+            for match in matches:
+                filepath = match.group(1).strip()
+                code = match.group(2).strip()
 
-            print(f"   📁 Created: {full_path}")
+                # Clean up filepath
+                filepath = filepath.replace("`", "").strip()
+
+                # Skip if filepath looks like description text
+                if len(filepath) > 100 or '\n' in filepath:
+                    continue
+
+                # Save file
+                full_path = project_dir / filepath
+                full_path.parent.mkdir(parents=True, exist_ok=True)
+                full_path.write_text(code)
+
+                print(f"   📁 Created: {full_path}")
+                files_created += 1
+
+        if files_created == 0:
+            print(f"   ⚠️  WARNING: No code files were extracted from Builder output!")
+            print(f"   💡 Check: logs/{self.timestamp}/task_*_output.md")
+            print(f"   The LLM may have described files instead of outputting code.")
 
     def _update_progress(
         self, progress_file: Path, completed: List[Dict], total: List[Dict]
