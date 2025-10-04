@@ -4,11 +4,15 @@ Pattern Library Manager
 Central pattern library management with semantic search and tracking.
 """
 
+import os
 import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+# Suppress HuggingFace tokenizers parallelism warning
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 import numpy as np
 from sentence_transformers import SentenceTransformer

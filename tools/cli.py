@@ -18,6 +18,10 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
 from tabulate import tabulate
+from dotenv import load_dotenv
+
+# Load .env file before anything else
+load_dotenv()
 
 # Add parent directory for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -39,10 +43,14 @@ def foundry():
     Spec-first development through automated context engineering.
     Scout → Architect → Builder. Workflow over vibes.
     """
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        console.print("[yellow]⚠️  Warning: ANTHROPIC_API_KEY not set[/yellow]")
-        console.print("[dim]Set it with: export ANTHROPIC_API_KEY=your_key[/dim]\n")
+    # Check for authentication
+    use_cli = os.getenv('USE_CLAUDE_CLI', '').lower() in ('true', '1', 'yes')
+    has_api_key = bool(os.getenv("ANTHROPIC_API_KEY", '').strip())
+
+    if not use_cli and not has_api_key:
+        console.print("[yellow]⚠️  Warning: No authentication configured[/yellow]")
+        console.print("[dim]Option 1: Set USE_CLAUDE_CLI=true (if you have Claude CLI)[/dim]")
+        console.print("[dim]Option 2: Set ANTHROPIC_API_KEY=your_key[/dim]\n")
 
 
 @foundry.command()
@@ -145,6 +153,43 @@ def build(project, task, autonomous, livestream, overnight, use_patterns, contex
     except Exception as e:
         console.print(f"\n[red]❌ Error: {e}[/red]")
         sys.exit(1)
+
+
+@foundry.command()
+@click.argument('task')
+@click.option('--autonomous', is_flag=True, help='Skip human review checkpoints')
+@click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
+@click.option('--create-pr/--no-pr', default=True, help='Create pull request when complete')
+def enhance(task, autonomous, use_patterns, create_pr):
+    """
+    Enhance an existing project with new features (🚧 Coming Soon).
+
+    Run this command from within an existing git repository.
+    Context Foundry will scout your codebase and make targeted changes.
+
+    Examples:
+
+    \b
+      # Navigate to your repo
+      cd ~/my-project
+
+    \b
+      # Add a feature
+      foundry enhance "Add JWT authentication to the API"
+
+    \b
+      # Autonomous mode
+      foundry enhance "Add rate limiting" --autonomous
+    """
+    console.print("[yellow]🚧 The 'enhance' command is coming soon![/yellow]\n")
+    console.print("[dim]This feature will allow you to:")
+    console.print("  • Scout existing codebases")
+    console.print("  • Plan changes that fit your architecture")
+    console.print("  • Make targeted modifications")
+    console.print("  • Create pull requests for review\n")
+    console.print("[dim]For now, use 'foundry build' to create new projects.")
+    console.print("[dim]Track progress: https://github.com/snedea/context-foundry/issues[/dim]")
+    sys.exit(0)
 
 
 @foundry.command()

@@ -37,7 +37,38 @@ foundry --version
 - If you get permission errors, use `pip install -e . --user`
 - SSL warnings about urllib3 are harmless and can be ignored
 
-### 1.3 Get Your API Key
+### 1.3 Choose Your Authentication Method
+
+Context Foundry supports two authentication methods - choose the one that works best for you:
+
+#### Option A: Use Claude CLI (Recommended if you have Claude CLI installed)
+
+If you're already using Claude CLI (the tool you may be using right now!), you can use Context Foundry without any additional API key:
+
+```bash
+# Check if Claude CLI is installed and you're logged in
+claude --version
+
+# If this works, you're all set! Skip to 1.5 (Verify Setup)
+```
+
+**Benefits:**
+- No API key needed
+- Uses your existing Claude authentication
+- Simpler setup
+
+To use Claude CLI mode:
+```bash
+# Set environment variable
+export USE_CLAUDE_CLI=true
+
+# Or add to .env file
+echo "USE_CLAUDE_CLI=true" >> .env
+```
+
+#### Option B: Use Anthropic API Key
+
+If you don't have Claude CLI or prefer to use the API:
 
 1. Go to [Anthropic Console](https://console.anthropic.com/)
 2. Sign up or log in
@@ -51,11 +82,15 @@ foundry --version
 # Initialize configuration
 foundry config --init
 
-# Set your API key
+# For API key method:
 export ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-
 # Or add to .env file
 echo "ANTHROPIC_API_KEY=sk-ant-api03-your-key-here" >> .env
+
+# For Claude CLI method:
+export USE_CLAUDE_CLI=true
+# Or add to .env file
+echo "USE_CLAUDE_CLI=true" >> .env
 ```
 
 ### 1.5 Verify Setup
@@ -364,8 +399,22 @@ source ~/.zshrc
 
 **Note:** Adjust the Python version (3.9) to match your installed version.
 
-### Issue: API key not set
+### Issue: API key not set / Authentication failed
 
+Context Foundry supports two authentication methods:
+
+**Option 1: Claude CLI (No API key needed)**
+```bash
+# Check if Claude CLI is available
+claude --version
+
+# If it works, enable CLI mode
+export USE_CLAUDE_CLI=true
+# Or add to .env
+echo "USE_CLAUDE_CLI=true" >> .env
+```
+
+**Option 2: API Key**
 ```bash
 # Check if set
 echo $ANTHROPIC_API_KEY

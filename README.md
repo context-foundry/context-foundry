@@ -86,7 +86,12 @@ pip install -e .
 export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust Python version as needed
 source ~/.zshrc
 
-# Configure API key
+# Choose your authentication method:
+
+# Option A: Use Claude CLI (if you have it installed)
+export USE_CLAUDE_CLI=true
+
+# Option B: Use Anthropic API key
 foundry config --init
 export ANTHROPIC_API_KEY=your_key_here
 
@@ -94,9 +99,17 @@ export ANTHROPIC_API_KEY=your_key_here
 foundry --version
 ```
 
+**Authentication Options:**
+- **Claude CLI**: If you're already using Claude CLI, just set `USE_CLAUDE_CLI=true` - no API key needed!
+- **API Key**: Get a key from [Anthropic Console](https://console.anthropic.com/) and set `ANTHROPIC_API_KEY`
+
 For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 
 ### Basic Usage (with CLI)
+
+Context Foundry supports two workflows:
+
+#### 1. Build New Projects (from scratch)
 
 ```bash
 # Interactive build with reviews
@@ -114,6 +127,26 @@ foundry build web-app "Todo app" --livestream
 ```
 
 **Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
+
+#### 2. Enhance Existing Projects (modify existing code) 🚧 *Coming Soon*
+
+```bash
+# Navigate to your existing repo
+cd ~/my-existing-project
+
+# Enhance with new features
+foundry enhance "Add JWT authentication to existing API"
+
+# This will:
+# - Scout your existing codebase
+# - Plan changes that fit your architecture
+# - Make targeted modifications
+# - Create a PR for review
+```
+
+**When to use which:**
+- `foundry build` - Starting a new project from scratch
+- `foundry enhance` - Adding features to an existing codebase
 
 ### Monitor Progress
 

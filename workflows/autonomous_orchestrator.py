@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ace.claude_integration import ClaudeClient
+from ace.claude_integration import get_claude_client
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
@@ -37,12 +37,14 @@ class AutonomousOrchestrator:
         project_dir: Optional[Path] = None,
         use_patterns: bool = True,
         enable_livestream: bool = False,
+        mode: str = "new",  # "new" or "enhance"
     ):
         self.project_name = project_name
         self.task_description = task_description
         self.autonomous = autonomous  # If True, skip human approvals
         self.use_patterns = use_patterns  # If True, use pattern library
         self.enable_livestream = enable_livestream  # If True, broadcast to livestream
+        self.mode = mode  # "new" = build from scratch, "enhance" = modify existing
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Paths
@@ -58,8 +60,8 @@ class AutonomousOrchestrator:
         # Session
         self.session_id = f"{project_name}_{self.timestamp}"
 
-        # Claude client with context management
-        self.claude = ClaudeClient(
+        # Claude client with context management (auto-selects API or CLI)
+        self.claude = get_claude_client(
             log_dir=self.logs_path,
             session_id=self.session_id,
             use_context_manager=True
@@ -145,9 +147,9 @@ Task: {self.task_description}
 Project: {self.project_name}
 Current date/time: {current_timestamp}
 
-This is a NEW project - you're starting from scratch, no existing codebase.
+{"This is a NEW project - you're starting from scratch, no existing codebase." if self.mode == "new" else "This is an EXISTING project - scout the codebase and plan targeted changes."}
 
-Your job is to research and design the architecture for this project.
+Your job is to {"research and design the architecture for this project" if self.mode == "new" else "understand the existing codebase and plan how to implement the requested changes"}.
 
 {scout_config}
 
