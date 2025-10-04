@@ -151,6 +151,9 @@ Current date/time: {current_timestamp}
 
 Your job is to {"research and design the architecture for this project" if self.mode == "new" else "understand the existing codebase and plan how to implement the requested changes"}.
 
+IMPORTANT: You do NOT have file write access. Output your complete response as text.
+Do NOT ask for permission to create files. Just provide the full RESEARCH.md content.
+
 {scout_config}
 
 Generate a complete RESEARCH.md following the format in the config.
@@ -224,6 +227,9 @@ Project: {self.project_name}
 Research from Scout phase:
 {research_content}
 
+IMPORTANT: You do NOT have file write access. Output the complete content of all three files as text.
+Do NOT ask for permission to create files. Just provide the full file contents.
+
 {architect_config}
 
 Generate THREE files with comprehensive planning:
@@ -232,7 +238,7 @@ Generate THREE files with comprehensive planning:
 2. PLAN.md - Technical implementation plan with architecture decisions, phases, testing strategy
 3. TASKS.md - Detailed task breakdown with dependencies and estimated context
 
-Be thorough and specific. This is the CRITICAL planning phase."""
+Output each file's COMPLETE content. Be thorough and specific. This is the CRITICAL planning phase."""
 
         # Inject relevant patterns if enabled
         pattern_ids = []
@@ -348,13 +354,17 @@ Instructions:
 Project: {self.project_name}
 Project directory: {self.project_dir}
 
-CRITICAL: You MUST output actual code files, not descriptions!
+CRITICAL INSTRUCTIONS:
+1. You do NOT have file write access or tools
+2. Do NOT ask for permission to create files
+3. You MUST output actual code files as text, not descriptions
+4. Output COMPLETE file contents in markdown code blocks
 
 Use this EXACT format for each file:
 
 File: backend/main.py
 ```python
-# Actual code goes here
+# Actual complete code goes here
 import something
 
 def main():
@@ -365,11 +375,19 @@ File: frontend/index.html
 ```html
 <!DOCTYPE html>
 <html>
-...actual HTML...
+...complete actual HTML...
 </html>
 ```
 
-DO NOT just list files or describe them - output the COMPLETE code for every file."""
+DO NOT:
+- Ask "May I create these files?"
+- Just list or describe files
+- Use Write/Edit tools (you don't have them)
+
+DO:
+- Output COMPLETE working code for every file
+- Include all imports, functions, classes
+- Provide production-ready code"""
 
             # Inject relevant patterns if enabled
             pattern_ids = []

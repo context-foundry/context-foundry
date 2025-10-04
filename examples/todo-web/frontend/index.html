@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📝 Todo App</h1>
+            <p class="subtitle">Stay organized, get things done</p>
+        </header>
+
+        <main>
+            <!-- Add Todo Form -->
+            <section class="add-todo-section">
+                <form id="add-todo-form">
+                    <div class="form-group">
+                        <input 
+                            type="text" 
+                            id="todo-title" 
+                            placeholder="What needs to be done?" 
+                            required
+                            maxlength="200"
+                        >
+                    </div>
+                    <div class="form-group">
+                        <textarea 
+                            id="todo-description" 
+                            placeholder="Description (optional)"
+                            rows="2"
+                            maxlength="500"
+                        ></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span class="btn-icon">+</span>
+                        Add Todo
+                    </button>
+                </form>
+            </section>
+
+            <!-- Filters -->
+            <section class="filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="active">Active</button>
+                <button class="filter-btn" data-filter="completed">Completed</button>
+            </section>
+
+            <!-- Todo List -->
+            <section class="todos-section">
+                <div id="loading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Loading todos...</p>
+                </div>
+
+                <div id="error-message" class="error-message hidden"></div>
+
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="empty-icon">📭</div>
+                    <h3>No todos yet</h3>
+                    <p>Add your first todo to get started!</p>
+                </div>
+
+                <ul id="todo-list" class="todo-list"></ul>
+            </section>
+        </main>
+
+        <!-- Toast Notification -->
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
