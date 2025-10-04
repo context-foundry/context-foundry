@@ -57,6 +57,21 @@ foundry --version
 # Should output: foundry, version 1.0.0
 ```
 
+**macOS Note:** If you installed with `pip install -e .` on macOS, the `foundry` command may be installed in `~/Library/Python/3.9/bin` (or similar path for your Python version). You'll need to add this to your PATH:
+
+```bash
+# Add to your shell configuration (~/.zshrc or ~/.bashrc)
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+
+# Then reload your shell configuration
+source ~/.zshrc  # or source ~/.bashrc
+
+# Now verify the command works
+foundry --version
+```
+
+**Known Issue:** You may see an SSL warning about urllib3 when running the command. This is harmless and doesn't prevent the command from working. You can safely ignore it or upgrade urllib3 if desired.
+
 ### 2. Initialize Configuration
 
 ```bash
@@ -188,12 +203,28 @@ pip install -e .
 
 If `foundry` command is not found after installation:
 
+**On Linux:**
 ```bash
 # Check if pip bin directory is in PATH
 python3 -m pip show context-foundry
 
 # Add to PATH (add to ~/.bashrc or ~/.zshrc)
 export PATH="$HOME/.local/bin:$PATH"
+```
+
+**On macOS:**
+```bash
+# Find the installation location
+which foundry
+
+# If not found, check the Python user bin directory
+ls ~/Library/Python/3.*/bin/foundry
+
+# Add the appropriate path to your shell config (~/.zshrc or ~/.bashrc)
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust version as needed
+
+# Reload your shell configuration
+source ~/.zshrc  # or source ~/.bashrc
 ```
 
 ### Import Errors

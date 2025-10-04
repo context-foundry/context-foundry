@@ -61,13 +61,19 @@ git clone https://github.com/yourusername/context-foundry.git
 cd context-foundry
 pip install -e .
 
+# On macOS, add foundry to PATH
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust Python version as needed
+source ~/.zshrc
+
 # Configure API key
 foundry config --init
 export ANTHROPIC_API_KEY=your_key_here
 
 # Verify setup
-python tools/health_check.py
+foundry --version
 ```
+
+For detailed installation instructions, see [INSTALL.md](INSTALL.md).
 
 ### Basic Usage (with CLI)
 

@@ -32,8 +32,10 @@ foundry --version
 ```
 
 **Troubleshooting:**
-- If `foundry` command not found, add `~/.local/bin` to your PATH
+- **Linux:** If `foundry` command not found, add `~/.local/bin` to your PATH
+- **macOS:** If `foundry` command not found, add `~/Library/Python/3.9/bin` to your PATH (adjust Python version as needed)
 - If you get permission errors, use `pip install -e . --user`
+- SSL warnings about urllib3 are harmless and can be ignored
 
 ### 1.3 Get Your API Key
 
@@ -303,6 +305,7 @@ foundry build my-app "Your task" --autonomous
 
 ### Issue: Command not found
 
+**On Linux:**
 ```bash
 # Solution: Add pip bin directory to PATH
 export PATH="$HOME/.local/bin:$PATH"
@@ -310,6 +313,20 @@ export PATH="$HOME/.local/bin:$PATH"
 # Add to ~/.bashrc or ~/.zshrc to make permanent
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
+
+**On macOS:**
+```bash
+# Solution: Add Python user bin directory to PATH
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"
+
+# Add to ~/.zshrc or ~/.bashrc to make permanent
+echo 'export PATH="$HOME/Library/Python/3.9/bin:$PATH"' >> ~/.zshrc
+
+# Reload your configuration
+source ~/.zshrc
+```
+
+**Note:** Adjust the Python version (3.9) to match your installed version.
 
 ### Issue: API key not set
 
