@@ -551,11 +551,23 @@ Total Tokens: {stats['total_tokens']:,}
             print("Bad plan = thousands of bad lines of code")
             print("🚨" * 30)
 
-        print(f"\n✋ Human Review Required: {phase} Phase")
-        print(f"📄 Files: {result}")
-        approval = input("\nType 'approve' to continue, anything else to abort: ")
+        while True:
+            print(f"\n✋ Human Review Required: {phase} Phase")
+            print(f"📄 Files: {result}")
+            approval = input("\nType 'approve' to continue, anything else to abort: ")
 
-        return approval.lower() == "approve"
+            if approval.lower() == "approve":
+                return True
+
+            # Confirmation before aborting
+            print(f"\n⚠️  You typed: '{approval}'")
+            confirm = input("Are you sure you want to abort? (yes/no): ")
+
+            if confirm.lower() in ('yes', 'y'):
+                return False
+            else:
+                print("\n💡 Tip: Type 'approve' (exactly) to continue")
+                # Loop back to ask for approval again
 
     def abort(self, reason: str) -> Dict:
         """Abort workflow."""
