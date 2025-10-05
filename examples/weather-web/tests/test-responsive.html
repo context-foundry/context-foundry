@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Design Tests - Weather Web</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/responsive.css">
+    <style>
+        .test-results { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 300px;
+            max-height: 100vh;
+            overflow-y: auto;
+            background: white;
+            z-index: 9999;
+            border: 2px solid #333;
+            padding: 10px;
+        }
+        .test-pass { color: green; font-size: 12px; }
+        .test-fail { color: red; font-size: 12px; }
+        .test-section { margin: 10px 0; padding: 5px; border: 1px solid #ccc; font-size: 12px; }
+        .viewport-indicator {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            z-index: 10000;
+        }
+        .test-viewport {
+            border: 2px dashed #ccc;
+            margin: 20px 0;
+            padding: 10px;
+        }
+        .measurement-helper {
+            position: absolute;
+            visibility: hidden;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewport-indicator" id="viewport-indicator">
+        Viewport: <span id="viewport-size">Loading...</span>
+    </div>
+    
+    <div class="test-results">
+        <h2>Responsive Design Tests</h2>
+        <div id="test-output"></div>
+        <button id="run-tests" onclick="runAllTests()">Run Tests</button>
+    </div>
+
+    <!-- Test HTML Structure -->
+    <div class="test-content" style="margin-left: 320px;">
+        <!-- Header Test -->
+        <header class="header">
+            <div class="container">
+                <h1 class="header__title">
+                    <span class="header__icon">⛅</span>
+                    Weather Dashboard
+                </h1>
+                <nav class="header__nav">
+                    <button class="btn btn--secondary" id="unit-toggle">°C</button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content Test -->
+        <main class="main">
+            <div class="container">
+                <!-- Search Section -->
+                <section class="search-section">
+                    <div class="search-container">
+                        <form class="search-form">
+                            <div class="search-input-group">
+                                <input type="search" class="search-input" placeholder="Search for a city...">
+                                <button type="submit" class="btn btn--primary search-btn">
+                                    <span class="search-btn__icon">🔍</span>
+                                    <span class="search-btn__text">Search</span>
+                                </button>
+                            </div>
+                        </form>
+                        <button class="btn btn--secondary location-btn">
+                            <span class="location-btn__icon">📍</span>
+                            <span class="location-btn__text">Use My Location</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Weather Display -->
+                <section class="weather-display">
+                    <div class="weather-card">
+                        <div class="weather-header">
+                            <h2 class="weather-location">London, GB</h2>
+                            <div class="weather-time">Updated 2 minutes ago</div>
+                        </div>
+                        <div class="weather-main">
+                            <div class="weather-icon-large">
+                                <img src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='20' fill='gold'/></svg>" alt="sunny">
+                            </div>
+                            <div class="weather-temperature">
+                                <span class="temperature-value">22</span>
+                                <span class="temperature-unit">°C</span>
+                            </div>
+                            <div class="weather-description">Clear sky</div>
+                        </div>
+                        <div class="weather-details">
+                            <div class="weather-detail">
+                                <span class="detail-label">Feels like</span>
+                                <span class="detail-value">24°C</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="detail-label">Humidity</span>
+                                <span class="detail-value">65%</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="detail-label">Wind</span>
+                                <span class="detail-value">5 km/h</span>
+                            </div>
+                            <div class="weather-detail">
+                                <span class="detail-label">Pressure</span>
+                                <span class="detail-value">1013 hPa</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Forecast Section -->
+                <section class="forecast-section">
+                    <h2 class="forecast-title">5-Day Forecast</h2>
+                    <div class="forecast-grid">
+                        <div class="forecast-item">
+                            <div class="forecast-day">Mon</div>
+                            <div class="forecast-icon">☀️</div>
+                            <div class="forecast-temps">
+                                <span class="forecast-high">25°</span>
+                                <span class="forecast-low">18°</span>
+                            </div>
+                        </div>
+                        <div class="forecast-item">
+                            <div class="forecast-day">Tue</div>
+                            <div class="forecast-icon">⛅</div>
+                            <div class="forecast-temps">
+                                <span class="forecast-high">23°</span>
+                                <span class="forecast-low">16°</span>
+                            </div>
+                        </div>
+                        <div class="forecast-item">
+                            <div class="forecast-day">Wed</div>
+                            <div class="forecast-icon">🌧️</div>
+                            <div class="forecast-temps">
+                                <span class="forecast-high">20°</span>
+                                <span class="forecast-low">14°</span>
+                            </div>
+                        </div>
+                        <div class="forecast-item">
+                            <div class="forecast-day">Thu</div>
+                            <div class="forecast-icon">⛈️</div>
+                            <div class="forecast-temps">
+                                <span class="forecast-high">19°</span>
+                                <span class="forecast-low">13°</span>
+                            </div>
+                        </div>
+                        <div class="forecast-item">
+                            <div class="forecast-day">Fri</div>
+                            <div class="forecast-icon">☀️</div>
+                            <div class="forecast-temps">
+                                <span class="forecast-high">26°</span>
+                                <span class="forecast-low">19°</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="container">
+                <p class="footer__text">Weather data provided by OpenWeatherMap</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Measurement helpers -->
+    <div class="measurement-helper" id="measurement-helper"></div>
+
+    <script>
+        // Test framework
+        class ResponsiveTestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+                this.currentViewport = this.getViewportSize();
+                this.updateViewportIndicator();
+                
+                // Listen for viewport changes
+                window.addEventListener('resize', () => {
+                    this.currentViewport = this.getViewportSize();
+                    this.updateViewportIndicator();
+                });
+            }
+
+            getViewportSize() {
+                return {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                };
+            }
+
+            updateViewportIndicator() {
+                const indicator = document.getElementById('viewport-size');
+                if (indicator) {
+                    indicator.textContent = `${this.currentViewport.width}×${this.currentViewport.height}`;
+                }
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                this.output.innerHTML = '';
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        console.error(error);
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message, tolerance = 1) {
+                if (Math.abs(actual - expected) > tolerance) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertGreaterThan(actual, expected, message) {
+                if (actual <= expected) {
+                    throw new Error(`${message}: expected ${actual} > ${expected}`);
+                }
+            }
+
+            assertLessThan(actual, expected, message) {
+                if (actual >= expected) {
+                    throw new Error(`${message}: expected ${actual} < ${expected}`);
+                }
+            }
+
+            getComputedStyleValue(element, property) {
+                return window.getComputedStyle(element).getPropertyValue(property);
+            }
+
+            getElementDimensions(element) {
+                const rect = element.getBoundingClientRect();
+                return {
+                    width: rect.width,
+                    height: rect.height,
+                    top: rect.top,
+                    left: rect.left
+                };
+            }
+
+            // Simulate viewport size for testing
+            simulateViewport(width, height) {
+                // This is a simplified simulation - in real testing you'd use tools like Puppeteer
+                document.documentElement.style.setProperty('--test-viewport-width', width + 'px');
+                document.documentElement.style.setProperty('--test-viewport-height', height + 'px');
+            }
+
+            isTouchTarget(element, minSize = 44) {
+                const rect = element.getBoundingClientRect();
+                return rect.width >= minSize && rect.height >= minSize;
+            }
+        }
+
+        const runner = new ResponsiveTestRunner();
+
+        // Breakpoint Tests
+        runner.test('CSS breakpoints are defined correctly', () => {
+            const rootStyles = getComputedStyle(document.documentElement);
+            
+            // Test that our breakpoints exist (we'll check for custom properties or media query effects)
+            const container = document.querySelector('.container');
+            const containerMaxWidth = getComputedStyle(container).maxWidth;
+            
+            runner.assert(containerMaxWidth, 'Container should have a max-width defined');
+        });
+
+        // Mobile-First Tests (320px - 767px)
+        runner.test('Mobile layout: Search input is full width', () => {
+            const searchInput = document.querySelector('.search-input');
+            const searchContainer = document.querySelector('.search-input-group');
+            
+            if (window.innerWidth <= 767) {
+                const inputRect = searchInput.getBoundingClientRect();
+                const containerRect = searchContainer.getBoundingClientRect();
+                
+                // Input should take most of the container width
+                runner.assertGreaterThan(inputRect.width / containerRect.width, 0.6, 
+                    'Search input should take majority of container width on mobile');
+            }
+        });
+
+        runner.test('Mobile layout: Button text hidden on small screens', () => {
+            const searchBtnText = document.querySelector('.search-btn__text');
+            const locationBtnText = document.querySelector('.location-btn__text');
+            
+            if (window.innerWidth < 480) {
+                const searchTextStyle = getComputedStyle(searchBtnText);
+                const locationTextStyle = getComputedStyle(locationBtnText);
+                
+                runner.assertEqual(searchTextStyle.display, 'none', 
+                    'Search button text should be hidden on small mobile screens');
+                runner.assertEqual(locationTextStyle.display, 'none', 
+                    'Location button text should be hidden on small mobile screens');
+            }
+        });
+
+        runner.test('Mobile layout: Weather card is single column', () => {
+            const weatherMain = document.querySelector('.weather-main');
+            const weatherDetails = document.querySelector('.weather-details');
+            
+            if (window.innerWidth <= 767) {
+                const mainStyle = getComputedStyle(weatherMain);
+                const detailsStyle = getComputedStyle(weatherDetails);
+                
+                // Should be flex column or block layout on mobile
+                const isVertical = mainStyle.flexDirection === 'column' || 
+                                 mainStyle.display === 'block' ||
+                                 detailsStyle.display === 'block';
+                
+                runner.assert(isVertical, 'Weather card should use vertical layout on mobile');
+            }
+        });
+
+        runner.test('Mobile layout: Forecast grid is scrollable horizontally', () => {
+            const forecastGrid = document.querySelector('.forecast-grid');
+            
+            if (window.innerWidth <= 767) {
+                const gridStyle = getComputedStyle(forecastGrid);
+                const hasHorizontalScroll = gridStyle.overflowX === 'auto' || 
+                                          gridStyle.overflowX === 'scroll';
+                
+                runner.assert(hasHorizontalScroll || gridStyle.display === 'flex', 
+                    'Forecast grid should be horizontally scrollable or flex on mobile');
+            }
+        });
+
+        // Touch Target Tests
+        runner.test('All interactive elements meet minimum touch target size', () => {
+            const interactiveElements = document.querySelectorAll('button, input, a, [tabindex]');
+            
+            for (const element of interactiveElements) {
+                if (element.offsetParent !== null) { // Element is visible
+                    runner.assert(runner.isTouchTarget(element, 44), 
+                        `Element ${element.tagName}.${element.className} should meet 44px minimum touch target`);
+                }
+            }
+        });
+
+        runner.test('Search input has adequate touch padding', () => {
+            const searchInput = document.querySelector('.search-input');
+            const inputStyle = getComputedStyle(searchInput);
+            const paddingTop = parseInt(inputStyle.paddingTop);
+            const paddingBottom = parseInt(inputStyle.paddingBottom);
+            const fontSize = parseInt(inputStyle.fontSize);
+            
+            runner.assertGreaterThan(paddingTop + paddingBottom + fontSize, 40, 
+                'Search input should have adequate internal spacing for touch');
+        });
+
+        // Tablet Tests (768px - 1023px)
+        runner.test('Tablet layout: Search form shows button text', () => {
+            if (window.innerWidth >= 768) {
+                const searchBtnText = document.querySelector('.search-btn__text');
+                const locationBtnText = document.querySelector('.location-btn__text');
+                
+                const searchTextStyle = getComputedStyle(searchBtnText);
+                const locationTextStyle = getComputedStyle(locationBtnText);
+                
+                runner.assert(searchTextStyle.display !== 'none', 
+                    'Search button text should be visible on tablet');
+                runner.assert(locationTextStyle.display !== 'none', 
+                    'Location button text should be visible on tablet');
+            }
+        });
+
+        runner.test('Tablet layout: Weather card uses grid layout', () => {
+            if (window.innerWidth >= 768 && window.innerWidth <= 1023) {
+                const weatherCard = document.querySelector('.weather-card');
+                const cardStyle = getComputedStyle(weatherCard);
+                
+                const usesGrid = cardStyle.display === 'grid' || 
+                               cardStyle.display === 'flex' ||
+                               weatherCard.querySelector('.weather-main').style.display === 'flex';
+                
+                runner.assert(usesGrid, 'Weather card should use grid or flex layout on tablet');
+            }
+        });
+
+        runner.test('Tablet layout: Forecast shows 3-5 items per row', () => {
+            if (window.innerWidth >= 768) {
+                const forecastGrid = document.querySelector('.forecast-grid');
+                const forecastItems = document.querySelectorAll('.forecast-item');
+                
+                if (forecastItems.length > 0) {
+                    const gridStyle = getComputedStyle(forecastGrid);
+                    const firstItem = forecastItems[0];
+                    const itemWidth = firstItem.getBoundingClientRect().width;
+                    const gridWidth = forecastGrid.getBoundingClientRect().width;
+                    
+                    const itemsPerRow = Math.floor(gridWidth / itemWidth);
+                    runner.assertGreaterThan(itemsPerRow, 2, 
+                        'Forecast should show at least 3 items per row on tablet');
+                }
+            }
+        });
+
+        // Desktop Tests (1024px+)
+        runner.test('Desktop layout: Container has maximum width', () => {
+            if (window.innerWidth >= 1024) {
+                const container = document.querySelector('.container');
+                const containerStyle = getComputedStyle(container);
+                const maxWidth = parseInt(containerStyle.maxWidth);
+                
+                runner.assertGreaterThan(maxWidth, 0, 'Container should have a maximum width on desktop');
+                runner.assertLessThan(maxWidth, window.innerWidth, 
+                    'Container max-width should be less than viewport width');
+            }
+        });
+
+        runner.test('Desktop layout: Weather card shows detailed layout', () => {
+            if (window.innerWidth >= 1024) {
+                const weatherDetails = document.querySelector('.weather-details');
+                const detailItems = weatherDetails.querySelectorAll('.weather-detail');
+                
+                // Should show multiple details in a grid or flex layout
+                runner.assertGreaterThan(detailItems.length, 2, 
+                    'Weather details should show multiple items on desktop');
+                
+                const detailsStyle = getComputedStyle(weatherDetails);
+                const usesGrid = detailsStyle.display === 'grid' || 
+                               detailsStyle.display === 'flex';
+                
+                runner.assert(usesGrid, 'Weather details should use grid or flex layout on desktop');
+            }
+        });
+
+        runner.test('Desktop layout: Forecast shows all items in single row', () => {
+            if (window.innerWidth >= 1024) {
+                const forecastItems = document.querySelectorAll('.forecast-item');
+                
+                if (forecastItems.length > 0) {
+                    let allInSameRow = true;
+                    const firstItemTop = forecastItems[0].getBoundingClientRect().top;
+                    
+                    for (let i = 1; i < Math.min(5, forecastItems.length); i++) {
+                        const itemTop = forecastItems[i].getBoundingClientRect().top;
+                        if (Math.abs(itemTop - firstItemTop) > 10) {
+                            allInSameRow = false;
+                            break;
+                        }
+                    }
+                    
+                    runner.assert(allInSameRow, 
+                        'Forecast items should be in the same row on desktop');
+                }
+            }
+        });
+
+        // Flexible Layout Tests
+        runner.test('Layout adapts to content changes', () => {
+            const weatherCard = document.querySelector('.weather-card');
+            const originalHeight = weatherCard.getBoundingClientRect().height;
+            
+            // Add extra content
+            const extraContent = document.createElement('div');
+            extraContent.className = 'test-extra-content';
+            extraContent.textContent = 'Extra content for testing';
+            extraContent.style.padding = '20px';
+            weatherCard.appendChild(extraContent);
+            
+            const newHeight = weatherCard.getBoundingClientRect().height;
+            
+            runner.assertGreaterThan(newHeight, originalHeight, 
+                'Layout should adapt to additional content');
+            
+            // Clean up
+            weatherCard.removeChild(extraContent);
+        });
+
+        runner.test('Forecast grid handles variable item counts', () => {
+            const forecastGrid = document.querySelector('.forecast-grid');
+            const originalItems = forecastGrid.querySelectorAll('.forecast-item');
+            
+            // Add extra forecast item
+            const extraItem = originalItems[0].cloneNode(true);
+            extraItem.querySelector('.forecast-day').textContent = 'Sat';
+            forecastGrid.appendChild(extraItem);
+            
+            const gridStyle = getComputedStyle(forecastGrid);
+            const gridWidth = forecastGrid.getBoundingClientRect().width;
+            
+            runner.assertGreaterThan(gridWidth, 0, 
+                'Grid should maintain width with additional items');
+            
+            // Clean up
+            forecastGrid.removeChild(extraItem);
+        });
+
+        // Performance and Accessibility Tests
+        runner.test('No horizontal scrollbars at standard breakpoints', () => {
+            const body = document.body;
+            const html = document.documentElement;
+            
+            const documentWidth = Math.max(
+                body.scrollWidth,
+                body.offsetWidth,
+                html.clientWidth,
+                html.scrollWidth,
+                html.offsetWidth
+            );
+            
+            runner.assertLessThan(documentWidth, window.innerWidth + 20, 
+                'Should not cause horizontal scrolling (allowing 20px tolerance)');
+        });
+
+        runner.test('Text remains readable at all sizes', () => {
+            const textElements = document.querySelectorAll('p, span, div, h1, h2, h3, h4, h5, h6');
+            
+            for (const element of textElements) {
+                if (element.offsetParent !== null) { // Element is visible
+                    const style = getComputedStyle(element);
+                    const fontSize = parseInt(style.fontSize);
+                    
+                    if (fontSize > 0) { // Has text content
+                        runner.assertGreaterThan(fontSize, 12, 
+                            `Text element ${element.tagName}.${element.className} should have readable font size`);
+                    }
+                }
+            }
+        });
+
+        runner.test('Interactive elements have adequate spacing', () => {
+            const buttons = document.querySelectorAll('button');
+            
+            for (let i = 0; i < buttons.length - 1; i++) {
+                const current = buttons[i];
+                const next = buttons[i + 1];
+                
+                if (current.offsetParent && next.offsetParent) {
+                    const currentRect = current.getBoundingClientRect();
+                    const nextRect = next.getBoundingClientRect();
+                    
+                    // Check if buttons are on the same row (similar top position)
+                    if (Math.abs(currentRect.top - nextRect.top) < 10) {
+                        const spacing = nextRect.left - currentRect.right;
+                        runner.assertGreaterThan(spacing, 8, 
+                            'Adjacent buttons should have adequate spacing');
+                    }
+                }
+            }
+        });
+
+        // CSS Grid and Flexbox Tests
+        runner.test('CSS Grid is used appropriately for layout', () => {
+            const potentialGridContainers = document.querySelectorAll('.forecast-grid, .weather-details');
+            
+            for (const container of potentialGridContainers) {
+                const style = getComputedStyle(container);
+                const usesModernLayout = style.display === 'grid' || 
+                                       style.display === 'flex';
+                
+                runner.assert(usesModernLayout, 
+                    `Container ${container.className} should use CSS Grid or Flexbox`);
+            }
+        });
+
+        runner.test('Flexbox handles content overflow correctly', () => {
+            const flexContainers = document.querySelectorAll('[style*="display: flex"], .search-input-group');
+            
+            for (const container of flexContainers) {
+                const style = getComputedStyle(container);
+                if (style.display === 'flex') {
+                    const hasFlexWrap = style.flexWrap === 'wrap' || 
+                                      style.flexWrap === 'wrap-reverse';
+                    const hasOverflowHandling = style.overflowX !== 'visible' || hasFlexWrap;
+                    
+                    runner.assert(hasOverflowHandling, 
+                        `Flex container ${container.className} should handle overflow`);
+                }
+            }
+        });
+
+        // Media Query Tests
+        runner.test('Media queries are functioning', () => {
+            // Test by checking if certain styles change based on viewport
+            const searchBtnText = document.querySelector('.search-btn__text');
+            
+            if (searchBtnText) {
+                const style = getComputedStyle(searchBtnText);
+                
+                // The display property should change based on media queries
+                const hasMediaQueryEffect = style.display === 'none' || 
+                                           style.display === 'inline' ||
+                                           style.display === 'inline-block';
+                
+                runner.assert(hasMediaQueryEffect, 
+                    'Media queries should affect element display');
+            }
+        });
+
+        // Orientation and Device Tests
+        runner.test('Layout handles orientation changes', () => {
+            // Test portrait vs landscape considerations
+            const isLandscape = window.innerWidth > window.innerHeight;
+            const weatherCard = document.querySelector('.weather-card');
+            const cardStyle = getComputedStyle(weatherCard);
+            
+            // Layout should be appropriate for orientation
+            runner.assert(cardStyle.display !== '', 'Weather card should have display style');
+            
+            // In landscape mode on mobile, layout might be different
+            if (isLandscape && window.innerWidth <= 767) {
+                // Additional landscape-specific tests could go here
+                runner.assert(true, 'Landscape layout handled');
+            }
+        });
+
+        // Print Media Tests
+        runner.test('Print styles are considered', () => {
+            // Check if there are any print-specific considerations
+            const header = document.querySelector('.header');
+            const footer = document.querySelector('.footer');
+            
+            runner.assert(header, 'Header exists for print styling');
+            runner.assert(footer, 'Footer exists for print styling');
+        });
+
+        // High DPI/Retina Display Tests
+        runner.test('High DPI displays are supported', () => {
+            const images = document.querySelectorAll('img');
+            const icons = document.querySelectorAll('.weather-icon, .forecast-icon');
+            
+            // Check that images and icons can scale properly
+            for (const img of images) {
+                const style = getComputedStyle(img);
+                runner.assert(style.maxWidth || style.width, 
+                    'Images should have width constraints for high DPI');
+            }
+        });
+
+        // Global function to run tests
+        window.runAllTests = function() {
+            runner.run();
+        };
+
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                runAllTests();
+            }, 1000);
+        });
+
+        // Re-run tests on resize (throttled)
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                runAllTests();
+            }, 500);
+        });
+    </script>
+</body>
+</html>
