@@ -3,165 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Web App - Production Ready</title>
-    <link rel="stylesheet" href="styles.css">
-    <meta name="description" content="Weather application using free OpenWeatherMap API">
-    <meta name="keywords" content="weather, forecast, temperature, free API">
+    <title>Weather App</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>Weather App</h1>
-            <p class="api-status" id="apiStatus">Free OpenWeatherMap API • Production Ready</p>
+        <header class="app-header">
+            <h1>🌤️ Weather App</h1>
+            <p class="app-subtitle">Get current weather information for any city</p>
         </header>
-        
-        <main>
-            <div class="search-section">
-                <input type="text" id="cityInput" placeholder="Enter city name..." aria-label="City name input" />
-                <button id="searchBtn" aria-label="Get weather data">Get Weather</button>
-                <button id="cancelBtn" class="cancel-btn hidden" aria-label="Cancel request">Cancel</button>
-            </div>
-            
-            <!-- Validation feedback -->
-            <div id="validationFeedback" class="validation-feedback hidden" role="alert" aria-live="polite"></div>
-            
-            <!-- Loading state -->
-            <div id="loadingContainer" class="loading-container hidden" role="status" aria-live="polite">
+
+        <!-- Configuration Error Display (hidden by default) -->
+        <div id="config-error" class="error-message config-error" style="display: none;">
+            <!-- Content will be populated by config.js -->
+        </div>
+
+        <main class="weather-section">
+            <!-- Search Form -->
+            <form id="weather-form" class="search-form" role="search" aria-label="Weather search">
+                <div class="input-group">
+                    <label for="city-input" class="visually-hidden">Enter city name</label>
+                    <input 
+                        type="text" 
+                        id="city-input" 
+                        class="city-input" 
+                        placeholder="Enter city name (e.g., Houston, London, Tokyo)"
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-describedby="search-help"
+                        required
+                        minlength="2"
+                        maxlength="100"
+                    >
+                    <button 
+                        type="submit" 
+                        id="search-button" 
+                        class="search-button"
+                        aria-label="Get weather information"
+                    >
+                        <span class="button-text">Get Weather</span>
+                        <span class="loading-spinner" aria-hidden="true">⏳</span>
+                    </button>
+                </div>
+                <div id="search-help" class="input-help">
+                    Press Enter or click "Get Weather" to search
+                </div>
+            </form>
+
+            <!-- Loading State -->
+            <div id="loading-state" class="loading-state" style="display: none;" aria-live="polite">
                 <div class="loading-content">
-                    <div class="loading-spinner" aria-hidden="true"></div>
-                    <div class="loading-messages">
-                        <h3 id="loadingTitle">Loading weather data...</h3>
-                        <p id="loadingSubtitle">Connecting to weather service</p>
-                        <div class="loading-progress">
-                            <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
-                                <div id="progressFill" class="progress-fill"></div>
-                            </div>
-                            <small id="progressText">Initializing request...</small>
-                        </div>
-                    </div>
-                    <div class="loading-details">
-                        <div class="loading-stat">
-                            <span class="stat-label">Attempt:</span>
-                            <span id="attemptCount" aria-label="Current attempt number">1 of 3</span>
-                        </div>
-                        <div class="loading-stat">
-                            <span class="stat-label">Elapsed:</span>
-                            <span id="elapsedTime" aria-label="Time elapsed">0s</span>
-                        </div>
-                        <div class="loading-stat">
-                            <span class="stat-label">Status:</span>
-                            <span id="loadingStatus" aria-label="Current status">Connecting...</span>
-                        </div>
-                    </div>
+                    <div class="loading-animation">🌍</div>
+                    <p>Fetching weather data...</p>
                 </div>
             </div>
-            
-            <!-- Error state -->
-            <div id="errorContainer" class="error-container hidden" role="alert" aria-live="assertive">
-                <div class="error-content">
-                    <div class="error-icon" aria-hidden="true">⚠️</div>
-                    <h3 id="errorTitle">Request Failed</h3>
-                    <p id="errorMessage">An error occurred while loading weather data.</p>
-                    <div class="error-details">
-                        <small id="errorDetails">Error details will appear here</small>
+
+            <!-- Weather Display -->
+            <div id="weather-display" class="weather-display" style="display: none;" aria-live="polite">
+                <div class="weather-header">
+                    <h2 id="weather-city" class="weather-city"></h2>
+                    <p id="weather-country" class="weather-country"></p>
+                </div>
+                
+                <div class="weather-main">
+                    <div class="temperature-section">
+                        <span id="weather-temp" class="temperature"></span>
+                        <span class="temp-unit">°C</span>
                     </div>
-                    <div class="error-actions">
-                        <button id="retryBtn" class="retry-btn" aria-label="Retry the weather request">Try Again</button>
-                        <button id="dismissBtn" class="dismiss-btn" aria-label="Dismiss error message">Dismiss</button>
+                    <div class="weather-description">
+                        <span id="weather-desc" class="description"></span>
+                        <span id="weather-icon" class="weather-icon" aria-hidden="true"></span>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Success state - Weather display -->
-            <div id="weatherContainer" class="weather-container hidden" role="main" aria-live="polite">
-                <div class="weather-content">
-                    <div class="weather-header">
-                        <h2 id="cityName" tabindex="0">City Name</h2>
-                        <div class="data-freshness">
-                            <small id="dataTimestamp" aria-label="Data freshness">Updated just now</small>
-                            <button id="refreshBtn" class="refresh-btn" aria-label="Refresh weather data" title="Refresh data">🔄</button>
-                        </div>
+
+                <div class="weather-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Feels like</span>
+                        <span id="weather-feels-like" class="detail-value"></span>
                     </div>
-                    
-                    <div class="weather-main">
-                        <div class="temperature" aria-label="Current temperature">
-                            <span id="temp" tabindex="0">--</span>
-                            <span class="unit">°C</span>
-                        </div>
-                        <div class="condition">
-                            <span id="description" tabindex="0" aria-label="Weather condition">Loading...</span>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Humidity</span>
+                        <span id="weather-humidity" class="detail-value"></span>
                     </div>
-                    
-                    <div class="weather-details" role="group" aria-label="Weather details">
-                        <div class="detail-item">
-                            <span class="label">Feels like:</span>
-                            <span id="feelsLike" tabindex="0" aria-label="Feels like temperature">--°C</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Humidity:</span>
-                            <span id="humidity" tabindex="0" aria-label="Humidity level">--%</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="label">Wind:</span>
-                            <span id="windSpeed" tabindex="0" aria-label="Wind speed">-- m/s</span>
-                        </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Wind Speed</span>
+                        <span id="weather-wind" class="detail-value"></span>
                     </div>
-                    
-                    <div class="api-attribution">
-                        <small>Weather data from <a href="https://openweathermap.org/" target="_blank" rel="noopener">OpenWeatherMap Free API</a></small>
+                    <div class="detail-item">
+                        <span class="detail-label">Pressure</span>
+                        <span id="weather-pressure" class="detail-value"></span>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Task 7: Integration test controls -->
-            <div id="testControls" class="test-controls hidden">
-                <h3>Integration Test Controls</h3>
-                <div class="test-buttons">
-                    <button onclick="runFullIntegrationTest()">Run Full Test Suite</button>
-                    <button onclick="testErrorScenarios()">Test Error Scenarios</button>
-                    <button onclick="testStateTransitions()">Test State Transitions</button>
-                    <button onclick="testAccessibility()">Test Accessibility</button>
-                    <button onclick="testPerformance()">Test Performance</button>
+
+                <div class="weather-meta">
+                    <p id="weather-timestamp" class="timestamp"></p>
                 </div>
-                <div id="testResults" class="test-results"></div>
             </div>
-            
-            <!-- Production debug panel -->
-            <div id="debugPanel" class="debug-panel">
-                <details>
-                    <summary>Debug Information (Task 7 - Integration Testing)</summary>
-                    <div class="debug-content">
-                        <div class="debug-section">
-                            <h4>System Status:</h4>
-                            <p><strong>Current State:</strong> <span id="debugCurrentState">idle</span></p>
-                            <p><strong>API Endpoint:</strong> <span id="debugEndpoint">api.openweathermap.org</span></p>
-                            <p><strong>Last Success:</strong> <span id="debugLastSuccess">Never</span></p>
-                            <p><strong>Error Count:</strong> <span id="debugErrorCount">0</span></p>
-                            <p><strong>Requests Made:</strong> <span id="debugRequestCount">0</span></p>
-                        </div>
-                        <div class="debug-section">
-                            <h4>Performance Metrics:</h4>
-                            <p><strong>Average Response Time:</strong> <span id="debugAvgResponseTime">0ms</span></p>
-                            <p><strong>Success Rate:</strong> <span id="debugSuccessRate">100%</span></p>
-                            <p><strong>Cache Hits:</strong> <span id="debugCacheHits">0</span></p>
-                        </div>
-                        <div class="debug-actions">
-                            <button onclick="window.weatherApp?.exportDebugData()">Export Debug Data</button>
-                            <button onclick="window.weatherApp?.clearCache()">Clear Cache</button>
-                            <button onclick="window.weatherApp?.resetMetrics()">Reset Metrics</button>
-                            <button onclick="toggleTestControls()">Toggle Test Controls</button>
-                        </div>
-                    </div>
-                </details>
+
+            <!-- Error Display -->
+            <div id="error-display" class="error-display" style="display: none;" aria-live="assertive">
+                <div class="error-icon">⚠️</div>
+                <h3 id="error-title" class="error-title"></h3>
+                <p id="error-message" class="error-message"></p>
+                <button id="retry-button" class="retry-button">Try Again</button>
             </div>
         </main>
+
+        <!-- Debug Panel -->
+        <aside class="debug-panel" id="debug-panel">
+            <h3>Debug Information <span class="debug-toggle" id="debug-toggle">▼</span></h3>
+            <div class="debug-content" id="debug-content">
+                <div class="debug-section">
+                    <h4>System Status:</h4>
+                    <ul class="debug-list">
+                        <li>Current State: <span id="debug-state">idle</span></li>
+                        <li>API Endpoint: <span id="debug-endpoint">api.openweathermap.org</span></li>
+                        <li>Last Success: <span id="debug-last-success">Never</span></li>
+                        <li>Error Count: <span id="debug-error-count">0</span></li>
+                        <li>Requests Made: <span id="debug-request-count">0</span></li>
+                    </ul>
+                </div>
+                
+                <div class="debug-section">
+                    <h4>Performance Metrics:</h4>
+                    <ul class="debug-list">
+                        <li>Average Response Time: <span id="debug-avg-time">0ms</span></li>
+                        <li>Success Rate: <span id="debug-success-rate">100%</span></li>
+                        <li>Cache Hits: <span id="debug-cache-hits">0</span></li>
+                    </ul>
+                </div>
+
+                <div class="debug-actions">
+                    <button id="export-debug" class="debug-button">Export Debug Data</button>
+                    <button id="clear-cache" class="debug-button">Clear Cache</button>
+                    <button id="reset-metrics" class="debug-button">Reset Metrics</button>
+                </div>
+            </div>
+        </aside>
+
+        <footer class="app-footer">
+            <p>Weather data provided by <a href="https://openweathermap.org/" target="_blank" rel="noopener">OpenWeatherMap</a></p>
+        </footer>
     </div>
-    
-    <!-- Task 7: Toast notifications for better user feedback -->
-    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
-    
-    <script src="weather.js"></script>
-    <script src="integration-tests.js"></script>
+
+    <!-- Scripts -->
+    <script src="config.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>
