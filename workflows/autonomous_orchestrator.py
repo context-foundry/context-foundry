@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from ace.claude_integration import get_claude_client
 from ace.pricing_database import PricingDatabase
+from ace.blueprint_manager import BlueprintManager
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
@@ -58,13 +59,16 @@ class AutonomousOrchestrator:
 
         # Paths
         self.project_dir = project_dir or Path(f"examples/{project_name}")
-        self.blueprints_path = Path("blueprints")
+        self.blueprints_path = self.project_dir / ".context-foundry"  # Local to project
         self.checkpoints_path = Path("checkpoints/sessions")
         self.logs_path = Path(f"logs/{self.timestamp}")
 
         # Create directories
         self.project_dir.mkdir(parents=True, exist_ok=True)
         self.logs_path.mkdir(parents=True, exist_ok=True)
+
+        # Initialize blueprint manager
+        self.blueprint_manager = BlueprintManager(self.project_dir)
 
         # Session
         self.session_id = f"{project_name}_{self.timestamp}"
@@ -254,6 +258,53 @@ class AutonomousOrchestrator:
         # Build prompt based on mode
         current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
 
+        # Check if this is a foundry-built project
+        is_foundry_project = self.blueprint_manager.is_foundry_project()
+        existing_context = ""
+
+        if is_foundry_project and self.mode in ["fix", "enhance"]:
+            # Load existing blueprints
+            research, spec, plan, tasks = self.blueprint_manager.load_canonical_blueprints()
+
+            print("📚 Detected foundry-built project - loading existing context...")
+            print(f"   Found: .context-foundry/ directory")
+
+            # Build context from existing blueprints
+            existing_context = f"""
+========================================
+FOUNDRY-BUILT PROJECT - EXISTING CONTEXT
+========================================
+
+This project was originally built by Context Foundry. Below is the existing context from the original build.
+Your job is to BUILD ON this existing knowledge, not start from scratch.
+
+### ORIGINAL RESEARCH:
+{research or "Not found"}
+
+### ORIGINAL SPECIFICATION:
+{spec or "Not found"}
+
+### ORIGINAL PLAN:
+{plan or "Not found"}
+
+### ORIGINAL TASKS:
+{tasks or "Not found"}
+
+========================================
+END OF EXISTING CONTEXT
+========================================
+
+Now, for the NEW task: {self.task_description}
+
+Your job is to:
+1. Understand what was already built (see above)
+2. Identify what needs to change for the new task
+3. Update the research/plan to reflect the new requirements
+4. Build on the existing architecture, don't reinvent it
+
+IMPORTANT: Use the exact file paths and structure from the existing blueprints above.
+"""
+
         # Mode-specific instructions
         if self.mode == "new":
             mode_context = "This is a NEW project - you're starting from scratch, no existing codebase."
@@ -310,6 +361,8 @@ Task: {self.task_description}
 Project: {self.project_name}
 Project Directory: {self.project_dir}
 Current date/time: {current_timestamp}
+
+{existing_context}
 
 {mode_context}
 
@@ -468,6 +521,9 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
             "spec": str(spec_file),
             "plan": str(plan_file),
             "tasks": str(tasks_file),
+            "spec_content": files.get("spec", response),
+            "plan_content": files.get("plan", response),
+            "tasks_content": files.get("tasks", response),
             "metadata": metadata,
             "status": "complete",
         }
@@ -1049,6 +1105,24 @@ Total Tokens: {stats['total_tokens']:,}
         # Save session summary
         session_file = self.checkpoints_path / f"{self.session_id}.json"
         session_file.write_text(json.dumps(results, indent=2))
+
+        # Save blueprints using BlueprintManager (with history and manifest)
+        if all([results.get('scout'), results.get('architect')]):
+            try:
+                self.blueprint_manager.save_blueprints(
+                    research=results['scout']['content'],
+                    spec=results['architect'].get('spec_content', ''),
+                    plan=results['architect'].get('plan_content', ''),
+                    tasks=results['architect'].get('tasks_content', ''),
+                    session_id=self.timestamp,
+                    mode=self.mode,
+                    task_description=self.task_description
+                )
+                print(f"\n📦 Blueprints saved to: {self.blueprint_manager.context_dir}")
+                print(f"   📚 Canonical files updated")
+                print(f"   📜 History saved to: history/{self.mode}_{self.timestamp}/")
+            except Exception as e:
+                print(f"⚠️  Blueprint saving failed: {e}")
 
         # Extract patterns from successful build
         if self.use_patterns and self.pattern_library:
