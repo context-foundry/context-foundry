@@ -3,81 +3,143 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Web App - Free API</title>
+    <title>Weather Web App - Enhanced Loading States</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Weather App</h1>
-            <p class="api-status">Now using free OpenWeatherMap API</p>
+            <p class="api-status">Using free OpenWeatherMap API with enhanced loading states</p>
         </header>
         
         <main>
             <div class="search-section">
                 <input type="text" id="cityInput" placeholder="Enter city name..." />
                 <button id="searchBtn">Get Weather</button>
+                <button id="cancelBtn" class="cancel-btn hidden">Cancel</button>
             </div>
             
-            <!-- UPDATED: Enhanced loading message with context -->
-            <div id="loadingMessage" class="loading hidden">
-                <div class="loading-spinner"></div>
-                <p>Loading weather data from free API...</p>
-                <small>Using OpenWeatherMap free tier (10s timeout)</small>
-            </div>
-            
-            <!-- UPDATED: Enhanced error message display -->
-            <div id="errorMessage" class="error hidden">
-            </div>
-            
-            <!-- Rate limit info for users -->
-            <div id="rateLimitInfo" class="rate-limit-info hidden">
-                <small>Free API limits: 60 requests/minute, 1,000 requests/day</small>
-            </div>
-            
-            <div id="weatherResult" class="weather-result hidden">
-                <div class="weather-info">
-                    <h2 id="cityName"></h2>
-                    <div class="temperature">
-                        <span id="temp"></span>
-                        <span class="unit">°C</span>
-                    </div>
-                    <div class="condition">
-                        <span id="description"></span>
-                    </div>
-                    <div class="details">
-                        <div class="detail-item">
-                            <span class="label">Feels like:</span>
-                            <span id="feelsLike"></span>°C
+            <!-- TASK 6: Enhanced loading state management -->
+            <div id="loadingContainer" class="loading-container hidden">
+                <div class="loading-content">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-messages">
+                        <h3 id="loadingTitle">Loading weather data...</h3>
+                        <p id="loadingSubtitle">Connecting to weather service</p>
+                        <div class="loading-progress">
+                            <div class="progress-bar">
+                                <div id="progressFill" class="progress-fill"></div>
+                            </div>
+                            <small id="progressText">Initializing request...</small>
                         </div>
-                        <div class="detail-item">
-                            <span class="label">Humidity:</span>
-                            <span id="humidity"></span>%
+                    </div>
+                    <div class="loading-details">
+                        <div class="loading-stat">
+                            <span class="stat-label">Attempt:</span>
+                            <span id="attemptCount">1 of 3</span>
                         </div>
-                        <div class="detail-item">
-                            <span class="label">Wind:</span>
-                            <span id="windSpeed"></span> m/s
+                        <div class="loading-stat">
+                            <span class="stat-label">Elapsed:</span>
+                            <span id="elapsedTime">0s</span>
+                        </div>
+                        <div class="loading-stat">
+                            <span class="stat-label">Status:</span>
+                            <span id="loadingStatus">Connecting...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TASK 6: Enhanced error message with state management -->
+            <div id="errorContainer" class="error-container hidden">
+                <div class="error-content">
+                    <div class="error-icon">⚠️</div>
+                    <h3 id="errorTitle">Request Failed</h3>
+                    <p id="errorMessage">An error occurred while loading weather data.</p>
+                    <div class="error-details">
+                        <small id="errorDetails">Error details will appear here</small>
+                    </div>
+                    <div class="error-actions">
+                        <button id="retryBtn" class="retry-btn">Try Again</button>
+                        <button id="dismissBtn" class="dismiss-btn">Dismiss</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TASK 6: Enhanced success state -->
+            <div id="weatherContainer" class="weather-container hidden">
+                <div class="weather-content">
+                    <div class="weather-header">
+                        <h2 id="cityName">City Name</h2>
+                        <div class="data-freshness">
+                            <small id="dataTimestamp">Updated just now</small>
+                            <button id="refreshBtn" class="refresh-btn">🔄</button>
                         </div>
                     </div>
                     
-                    <!-- NEW: API source attribution -->
+                    <div class="weather-main">
+                        <div class="temperature">
+                            <span id="temp">--</span>
+                            <span class="unit">°C</span>
+                        </div>
+                        <div class="condition">
+                            <span id="description">Loading...</span>
+                        </div>
+                    </div>
+                    
+                    <div class="weather-details">
+                        <div class="detail-item">
+                            <span class="label">Feels like:</span>
+                            <span id="feelsLike">--</span>°C
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Humidity:</span>
+                            <span id="humidity">--%</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="label">Wind:</span>
+                            <span id="windSpeed">-- m/s</span>
+                        </div>
+                    </div>
+                    
                     <div class="api-attribution">
                         <small>Weather data from OpenWeatherMap Free API</small>
                     </div>
                 </div>
             </div>
             
-            <!-- NEW: Debug panel for development -->
-            <div id="debugPanel" class="debug-panel">
+            <!-- TASK 6: State transition animations -->
+            <div id="stateTransition" class="state-transition hidden">
+                <div class="transition-content">
+                    <div class="transition-spinner"></div>
+                    <p id="transitionMessage">Updating...</p>
+                </div>
+            </div>
+            
+            <!-- TASK 6: Debug panel for state management -->
+            <div id="stateDebugPanel" class="debug-panel">
                 <details>
-                    <summary>Debug Info (Task 3 Implementation)</summary>
+                    <summary>Loading State Debug (Task 6)</summary>
                     <div class="debug-content">
-                        <p><strong>API Endpoint:</strong> <span id="debugEndpoint">api.openweathermap.org</span></p>
-                        <p><strong>API Type:</strong> Free Tier</p>
-                        <p><strong>Timeout:</strong> 10 seconds</p>
-                        <p><strong>Rate Limits:</strong> 60/min, 1000/day</p>
-                        <p><strong>Status:</strong> <span id="debugStatus">Ready</span></p>
-                        <button onclick="console.log(window.weatherApp.getAPIStatus())">Log API Status</button>
+                        <div class="debug-section">
+                            <h4>Current State:</h4>
+                            <p><strong>Active State:</strong> <span id="debugCurrentState">idle</span></p>
+                            <p><strong>Previous State:</strong> <span id="debugPreviousState">none</span></p>
+                            <p><strong>State Duration:</strong> <span id="debugStateDuration">0ms</span></p>
+                            <p><strong>Transition Count:</strong> <span id="debugTransitionCount">0</span></p>
+                        </div>
+                        <div class="debug-section">
+                            <h4>Loading Details:</h4>
+                            <p><strong>Progress:</strong> <span id="debugProgress">0%</span></p>
+                            <p><strong>Current Attempt:</strong> <span id="debugAttempt">0</span></p>
+                            <p><strong>Elapsed Time:</strong> <span id="debugElapsed">0ms</span></p>
+                        </div>
+                        <div class="debug-actions">
+                            <button onclick="window.weatherApp?.debugStateManager()">Log State Manager</button>
+                            <button onclick="window.weatherApp?.testStateTransitions()">Test Transitions</button>
+                            <button onclick="window.weatherApp?.resetState()">Reset State</button>
+                        </div>
                     </div>
                 </details>
             </div>
