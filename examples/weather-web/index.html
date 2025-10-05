@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather Web App</title>
+    <title>Weather Web App - Free API</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Weather App</h1>
+            <p class="api-status">Now using free OpenWeatherMap API</p>
         </header>
         
         <main>
@@ -18,11 +19,20 @@
                 <button id="searchBtn">Get Weather</button>
             </div>
             
+            <!-- UPDATED: Enhanced loading message with context -->
             <div id="loadingMessage" class="loading hidden">
-                Loading weather data...
+                <div class="loading-spinner"></div>
+                <p>Loading weather data from free API...</p>
+                <small>Using OpenWeatherMap free tier (10s timeout)</small>
             </div>
             
+            <!-- UPDATED: Enhanced error message display -->
             <div id="errorMessage" class="error hidden">
+            </div>
+            
+            <!-- Rate limit info for users -->
+            <div id="rateLimitInfo" class="rate-limit-info hidden">
+                <small>Free API limits: 60 requests/minute, 1,000 requests/day</small>
             </div>
             
             <div id="weatherResult" class="weather-result hidden">
@@ -49,7 +59,27 @@
                             <span id="windSpeed"></span> m/s
                         </div>
                     </div>
+                    
+                    <!-- NEW: API source attribution -->
+                    <div class="api-attribution">
+                        <small>Weather data from OpenWeatherMap Free API</small>
+                    </div>
                 </div>
+            </div>
+            
+            <!-- NEW: Debug panel for development -->
+            <div id="debugPanel" class="debug-panel">
+                <details>
+                    <summary>Debug Info (Task 3 Implementation)</summary>
+                    <div class="debug-content">
+                        <p><strong>API Endpoint:</strong> <span id="debugEndpoint">api.openweathermap.org</span></p>
+                        <p><strong>API Type:</strong> Free Tier</p>
+                        <p><strong>Timeout:</strong> 10 seconds</p>
+                        <p><strong>Rate Limits:</strong> 60/min, 1000/day</p>
+                        <p><strong>Status:</strong> <span id="debugStatus">Ready</span></p>
+                        <button onclick="console.log(window.weatherApp.getAPIStatus())">Log API Status</button>
+                    </div>
+                </details>
             </div>
         </main>
     </div>
