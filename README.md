@@ -9,6 +9,19 @@ Context Foundry transforms fuzzy requests into clean, reviewable PRs through dis
 
 **Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software. Inspired by [Dexter Horthy's approach at HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff) and Anthropic's [agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk).
 
+## ⚠️ Disclaimer
+
+**Context Foundry is an AI-powered tool and may make mistakes.** Please use with discretion:
+
+- **Always review generated code** before deploying to production
+- **Test thoroughly** - AI-generated code may have bugs or security vulnerabilities
+- **Verify architectural decisions** - The AI may make suboptimal choices
+- **Check for breaking changes** - Especially when using `foundry enhance` or `foundry fix` on existing projects
+- **Backup your work** - Context Foundry commits to git automatically, but always backup critical code
+- **API costs apply** - Building large projects can consume significant API credits
+
+Context Foundry is a productivity tool, not a replacement for human judgment. Use it to accelerate development, but maintain responsibility for code quality and security.
+
 ## Philosophy: Workflow Over Prompt Perfection
 
 **You don't need to master prompt engineering.** Context Foundry's power comes from structured refinement, not from crafting the perfect initial prompt:
@@ -131,25 +144,51 @@ foundry build web-app "Todo app" --livestream
 
 **Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
 
-**Enhance Existing Projects (modify existing code)** 🚧 *Coming Soon*
+**Auto-Push to GitHub** ✨ *New*
 
 ```bash
-# Navigate to your existing repo
-cd ~/my-existing-project
+# Build and automatically push to GitHub
+foundry build my-app "Build user auth" --push
 
-# Enhance with new features
-foundry enhance "Add JWT authentication to existing API"
+# The --push flag works with all commands
+foundry fix my-app "Fix broken tests" --push
+foundry enhance my-app "Add dark mode" --push
+```
 
-# This will:
-# - Scout your existing codebase
-# - Plan changes that fit your architecture
-# - Make targeted modifications
-# - Create a PR for review
+**Fix Issues in Existing Projects** ✨ *New*
+
+```bash
+# Fix by describing the issue (works on any codebase)
+foundry fix my-app "CSS files are missing"
+foundry fix https://github.com/user/repo "Login button broken"
+foundry fix ./local-project "API timeout errors"
+
+# Fast session resume (for foundry-built projects)
+# Reuses existing blueprints, re-runs only failed tasks
+foundry fix weather-web "Fix tasks 12,14" --session 20251004_214024 --tasks 12,14
+
+# Autonomous mode with auto-push
+foundry fix my-app "Fix broken endpoints" --autonomous --push
+```
+
+**Enhance Existing Projects (add features)** ✨ *New*
+
+```bash
+# Add features to any codebase (GitHub, local, or foundry projects)
+foundry enhance weather-web "Add 7-day forecast view"
+foundry enhance https://github.com/user/repo "Add dark mode toggle"
+foundry enhance ./my-app "Add TypeScript support"
+
+# With auto-push and autonomous mode
+foundry enhance my-project "Add JWT authentication" --autonomous --push
 ```
 
 **When to use which:**
-- `foundry build` - Starting a new project from scratch
-- `foundry enhance` - Adding features to an existing codebase
+- `foundry build` - Create a new project from scratch
+- `foundry fix` - Repair bugs or missing files in existing code
+- `foundry enhance` - Add new features to existing projects
+
+All three modes support GitHub URLs, local paths, and foundry project names!
 
 ## 🎨 Multi-Provider AI Support
 

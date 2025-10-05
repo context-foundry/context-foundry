@@ -973,7 +973,7 @@ Total Tokens: {stats['total_tokens']:,}
             analyzer = SessionAnalyzer(
                 pattern_library=self.pattern_library if self.use_patterns else None
             )
-            metrics = analyzer.analyze(self.session_id, self.checkpoints_path.parent)
+            metrics = analyzer.analyze(self.session_id, self.checkpoints_path)
 
             if metrics:
                 print(f"   ✅ Analysis complete")
