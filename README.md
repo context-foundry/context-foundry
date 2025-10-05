@@ -151,6 +151,94 @@ foundry enhance "Add JWT authentication to existing API"
 - `foundry build` - Starting a new project from scratch
 - `foundry enhance` - Adding features to an existing codebase
 
+## 🎨 Multi-Provider AI Support
+
+Context Foundry supports **7 AI providers** with complete flexibility to mix and match models across phases.
+
+### Supported Providers
+
+| Provider | Best For | Cost Range | Models Available |
+|----------|----------|------------|------------------|
+| **Anthropic (Claude)** | Reasoning, planning | $0.80-75/1M tokens | Opus, Sonnet, Haiku |
+| **OpenAI (GPT)** | Coding, general tasks | $0.15-60/1M tokens | GPT-4o, GPT-4o-mini |
+| **Google (Gemini)** | Huge context (2M), multimodal | $0.075-5/1M tokens | Gemini 2.0 Flash, 1.5 Pro |
+| **Groq** | Ultra-fast inference | $0.05-0.79/1M tokens | Llama 3.1 8B, 70B |
+| **Cloudflare** | Code generation | $0.10/1M tokens | Qwen 2.5 Coder |
+| **Fireworks** | Code models | $0.20/1M tokens | StarCoder2 |
+| **Mistral** | Code specialist | $0.20-6/1M tokens | Codestral, Mistral Large |
+
+### Configuration
+
+Edit `.env` to choose providers per phase:
+
+```bash
+# Use Claude for planning, GPT-4o-mini for coding (recommended)
+SCOUT_PROVIDER=anthropic
+SCOUT_MODEL=claude-sonnet-4-5-20250929
+
+ARCHITECT_PROVIDER=anthropic
+ARCHITECT_MODEL=claude-sonnet-4-5-20250929
+
+BUILDER_PROVIDER=openai
+BUILDER_MODEL=gpt-4o-mini
+```
+
+**Cost Optimization Example:**
+- Scout + Architect: Claude Sonnet ($3-15/1M) - Best planning
+- Builder: GPT-4o-mini ($0.15-0.60/1M) - Cheap coding
+
+**Result:** ~50-70% cost reduction vs all-Claude, same quality planning!
+
+### CLI Commands
+
+```bash
+# List all available models
+foundry models --list
+
+# Update pricing from all providers
+foundry pricing --update
+
+# Estimate cost before building
+foundry estimate "Build a todo app"
+```
+
+**Learn more:** See [Multi-Provider Guide](docs/MULTI_PROVIDER_GUIDE.md) for detailed configuration and cost optimization strategies.
+
+---
+
+## 💡 Quick Start Examples
+
+New to Context Foundry? Try these **ready-to-run examples**:
+
+### 1. Todo CLI App (15-20 min, $4-8)
+```bash
+foundry build todo-cli "Build a command-line todo app with add, list, complete, and remove commands. Use JSON for storage and colorful terminal output with the Rich library."
+```
+
+### 2. URL Shortener (20-30 min, $6-12)
+```bash
+foundry build url-shortener "Create a URL shortener REST API with Flask. Generate short codes, redirect to original URLs, track click counts. Include a basic web UI and SQLite database."
+```
+
+### 3. Expense Tracker (20-25 min, $5-10)
+```bash
+foundry build expense-tracker "Build a CLI expense tracker. Add expenses with amount, category, and description. View spending by category, generate monthly reports, and set budget alerts. Store in SQLite database."
+```
+
+### 4. Weather CLI (15-20 min, $3-7)
+```bash
+foundry build weather-cli "Create a command-line weather app that fetches current weather and 5-day forecast from OpenWeatherMap API. Beautiful terminal output with weather icons and color-coded temperatures."
+```
+
+### 5. Note Manager (20-25 min, $5-9)
+```bash
+foundry build note-manager "Build a CLI note-taking app. Create, edit, search, and tag notes. Store as markdown files. Include full-text search and tag management."
+```
+
+**More examples:** See [Quick Start Examples](QUICK_START_EXAMPLES.md) and [Detailed Examples](docs/EXAMPLES.md)
+
+---
+
 ### Monitor Progress
 
 ```bash
@@ -213,6 +301,7 @@ context-foundry/
 | **Scout Phase** | ✅ Working | Research and architecture exploration |
 | **Architect Phase** | ✅ Working | Specification and task planning |
 | **Builder Phase** | ✅ Working | Test-driven implementation |
+| **Multi-Provider AI** | ✅ Working | 7 AI providers, per-phase configuration, cost optimization |
 | **Context Management** | ✅ Working | Auto-compaction at 40% threshold |
 | **Pattern Library** | ✅ Working | Learning from successful builds |
 | **CLI Interface** | ✅ Working | Unified `foundry` command |

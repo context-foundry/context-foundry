@@ -756,5 +756,257 @@ def config(init, show, set):
         console.print("[yellow]Use --init, --show, or --set[/yellow]")
 
 
+@foundry.command()
+@click.option('--list', 'list_models', is_flag=True, help='List all available models')
+@click.option('--provider', help='Filter by provider')
+def models(list_models, provider):
+    """
+    List available AI models and providers.
+
+    Examples:
+
+    \b
+      # List all models from all providers
+      foundry models --list
+
+    \b
+      # List models from specific provider
+      foundry models --list --provider anthropic
+    """
+    from ace.provider_registry import get_registry
+    from ace.pricing_database import PricingDatabase
+
+    registry = get_registry()
+    db = PricingDatabase()
+
+    if not list_models:
+        # Show quick summary
+        providers = registry.list_providers()
+        console.print(f"\n[bold]Available Providers:[/bold] {', '.join(providers)}\n")
+        console.print("[dim]Use --list to see all models[/dim]")
+        return
+
+    # List all models
+    all_models = registry.list_all_models()
+
+    if provider:
+        # Filter by provider
+        if provider not in all_models:
+            console.print(f"[red]Provider '{provider}' not found[/red]")
+            return
+        all_models = {provider: all_models[provider]}
+
+    # Display models by provider
+    for provider_name, models_list in all_models.items():
+        if not models_list:
+            continue
+
+        provider_obj = registry.get(provider_name)
+        console.print(f"\n[bold cyan]{provider_obj.get_display_name()}[/bold cyan]")
+
+        # Create table
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Model", style="white")
+        table.add_column("Context", style="dim")
+        table.add_column("Pricing (per 1M tokens)", style="green")
+        table.add_column("Description", style="dim")
+
+        for model in models_list:
+            # Get pricing
+            pricing = db.get_pricing(provider_name, model.name)
+
+            if pricing:
+                price_str = f"${pricing.input_cost_per_1m:.2f} / ${pricing.output_cost_per_1m:.2f}"
+            else:
+                price_str = "N/A"
+
+            table.add_row(
+                model.name,
+                f"{model.context_window:,}",
+                price_str,
+                model.description[:50] + "..." if len(model.description) > 50 else model.description
+            )
+
+        console.print(table)
+
+    db.close()
+
+
+@foundry.command()
+@click.option('--update', is_flag=True, help='Update pricing from all providers')
+@click.option('--list', 'list_pricing', is_flag=True, help='List current pricing')
+@click.option('--force', is_flag=True, help='Force update even if not stale')
+def pricing(update, list_pricing, force):
+    """
+    Manage AI model pricing.
+
+    Examples:
+
+    \b
+      # Update pricing from all providers
+      foundry pricing --update
+
+    \b
+      # Force update
+      foundry pricing --update --force
+
+    \b
+      # List current pricing
+      foundry pricing --list
+    """
+    from ace.pricing_fetcher import PricingFetcher
+    from ace.pricing_database import PricingDatabase
+
+    fetcher = PricingFetcher()
+
+    if update:
+        console.print("\n[bold]Updating pricing from providers...[/bold]\n")
+
+        results = fetcher.fetch_all(force=force)
+
+        # Display results
+        success_count = sum(1 for r in results.values() if r.get('status') == 'success')
+        failed_count = sum(1 for r in results.values() if r.get('status') == 'failed')
+        skipped_count = sum(1 for r in results.values() if r.get('status') == 'skipped')
+
+        for provider_name, result in results.items():
+            if result['status'] == 'success':
+                console.print(f"[green]✅ {provider_name}[/green] - {result['models_updated']} models updated")
+            elif result['status'] == 'failed':
+                console.print(f"[red]❌ {provider_name}[/red] - {result.get('error', 'Unknown error')}")
+            elif result['status'] == 'skipped':
+                console.print(f"[dim]⏭️  {provider_name}[/dim] - {result.get('message', 'Skipped')}")
+
+        console.print(f"\n[bold]Summary:[/bold] {success_count} updated, {failed_count} failed, {skipped_count} skipped\n")
+
+    elif list_pricing:
+        db = PricingDatabase()
+        all_pricing = db.get_all_pricing()
+
+        if not all_pricing:
+            console.print("[yellow]No pricing data available. Run: foundry pricing --update[/yellow]")
+            db.close()
+            return
+
+        # Group by provider
+        by_provider = {}
+        for provider, model, pricing in all_pricing:
+            if provider not in by_provider:
+                by_provider[provider] = []
+            by_provider[provider].append((model, pricing))
+
+        # Display
+        for provider_name, models in by_provider.items():
+            console.print(f"\n[bold cyan]{provider_name.title()}[/bold cyan]")
+
+            table = Table(show_header=True, header_style="bold")
+            table.add_column("Model")
+            table.add_column("Input (per 1M)")
+            table.add_column("Output (per 1M)")
+            table.add_column("Updated")
+
+            for model_name, pricing in models:
+                table.add_row(
+                    model_name,
+                    f"${pricing.input_cost_per_1m:.2f}",
+                    f"${pricing.output_cost_per_1m:.2f}",
+                    pricing.updated_at.strftime("%Y-%m-%d")
+                )
+
+            console.print(table)
+
+        db.close()
+
+    else:
+        # Show status
+        status = fetcher.get_pricing_status()
+
+        console.print("\n[bold]Pricing Status[/bold]\n")
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Provider")
+        table.add_column("Status")
+        table.add_column("Last Updated")
+        table.add_column("Needs Update")
+
+        for provider_name, provider_status in status.items():
+            if provider_status['status'] == 'never_updated':
+                table.add_row(
+                    provider_name,
+                    "[yellow]Never updated[/yellow]",
+                    "N/A",
+                    "[red]Yes[/red]"
+                )
+            else:
+                last_updated = provider_status['last_updated'].strftime("%Y-%m-%d")
+                needs_update = "[yellow]Yes[/yellow]" if provider_status['needs_update'] else "[green]No[/green]"
+
+                table.add_row(
+                    provider_name,
+                    provider_status['status'],
+                    last_updated,
+                    needs_update
+                )
+
+        console.print(table)
+        console.print("\n[dim]Run 'foundry pricing --update' to update pricing[/dim]\n")
+
+
+@foundry.command()
+@click.argument('task_description')
+def estimate(task_description):
+    """
+    Estimate cost for a project before building.
+
+    Examples:
+
+    \b
+      # Estimate cost for a project
+      foundry estimate "Build a todo app with React"
+    """
+    from ace.cost_estimator import CostEstimator
+    from ace.ai_client import AIClient
+
+    # Load current configuration
+    try:
+        client = AIClient()
+    except ValueError as e:
+        console.print(f"[red]Configuration error: {e}[/red]")
+        console.print("[yellow]Make sure you have providers configured in .env[/yellow]")
+        sys.exit(1)
+
+    # Show configuration
+    console.print("\n[bold]Current Configuration:[/bold]")
+    console.print(client.get_config_summary())
+    console.print()
+
+    # Estimate cost
+    try:
+        estimator = CostEstimator()
+
+        estimate = estimator.estimate(
+            task_description,
+            client.config.scout.provider,
+            client.config.scout.model,
+            client.config.architect.provider,
+            client.config.architect.model,
+            client.config.builder.provider,
+            client.config.builder.model
+        )
+
+        # Display estimate
+        console.print(Panel.fit(
+            estimator.format_estimate(estimate),
+            title="Cost Estimate",
+            border_style="green"
+        ))
+
+        console.print("[dim]Note: Actual costs may vary based on task complexity[/dim]\n")
+
+    except Exception as e:
+        console.print(f"[red]Error estimating cost: {e}[/red]")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     foundry()
