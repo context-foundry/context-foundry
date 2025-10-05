@@ -268,21 +268,39 @@ class AutonomousOrchestrator:
         elif self.mode == "enhance":
             mode_context = f"This is an EXISTING project at: {self.project_dir}\nYou need to analyze the codebase and plan how to ADD the requested feature."
             job_description = "understand the existing codebase architecture and plan how to integrate the new feature"
+            mandatory_steps = """MANDATORY FIRST STEPS - DO NOT SKIP:
+1. List ALL files in the project directory (use Glob tool with pattern "**/*")
+2. Identify and read the entry point file (index.html for web, main.py for Python, package.json for Node, etc.)
+3. Read any files referenced in the entry point (script tags, imports, requires)
+4. Document EXACT file paths (e.g., "js/weather-api.js" not "weather-api.js or similar")
+5. Identify which SPECIFIC existing files need modification
+6. Only suggest creating NEW files if absolutely necessary and no existing file can be modified
+
+DO NOT guess at file names or locations. If you cannot find a file, say so explicitly."""
             focus_areas = """Focus on:
-1. Current project structure and patterns
+1. Current project structure and patterns (based on actual file listing)
 2. Where the new feature fits in the architecture
-3. What files need to be created or modified
+3. EXACT file paths that need to be created OR modified
 4. Integration points with existing code
 5. Potential conflicts or breaking changes
 6. Testing strategy for the new feature"""
         else:  # fix mode
             mode_context = f"This is an EXISTING project at: {self.project_dir}\nYou need to analyze the codebase and identify how to FIX the reported issue."
             job_description = "understand the existing codebase and identify the root cause of the issue and how to fix it"
+            mandatory_steps = """MANDATORY FIRST STEPS - DO NOT SKIP:
+1. List ALL files in the project directory (use Glob tool with pattern "**/*")
+2. Identify and read the entry point file (index.html for web, main.py for Python, package.json for Node, etc.)
+3. Read any files referenced in the entry point (script tags, imports, requires)
+4. Document EXACT file paths (e.g., "js/weather-api.js" not "weather-api.js or similar")
+5. Identify which SPECIFIC existing files need modification
+6. Only suggest creating NEW files if absolutely necessary and no existing file can be modified
+
+DO NOT guess at file names or locations. If you cannot find a file, say so explicitly."""
             focus_areas = """Focus on:
-1. Current project structure
-2. Files related to the issue
+1. Current project structure (based on actual file listing)
+2. EXACT files related to the issue (with full paths)
 3. Root cause analysis
-4. What needs to be fixed or added
+4. What needs to be fixed in EXISTING files (prefer modification over creation)
 5. Potential side effects of the fix
 6. Testing strategy to prevent regression"""
 
@@ -296,6 +314,8 @@ Current date/time: {current_timestamp}
 {mode_context}
 
 Your job is to {job_description}.
+
+{mandatory_steps}
 
 IMPORTANT: You do NOT have file write access. Output your complete response as text.
 Do NOT ask for permission to create files. Just provide the full RESEARCH.md content.
@@ -358,15 +378,31 @@ Keep output under 5000 tokens. Be specific and actionable."""
         # Load Architect agent config
         architect_config = Path(".foundry/agents/architect.md").read_text()
 
+        # Add mode-specific file path requirements
+        if self.mode in ["fix", "enhance"]:
+            file_path_requirements = """
+CRITICAL FILE PATH REQUIREMENTS (fix/enhance modes):
+- Use EXACT file paths from Scout research (e.g., "js/weather-api.js" not "weather-api.js")
+- For each task, explicitly state if it MODIFIES existing file or CREATES new file
+- Format: "MODIFY js/config.js" or "CREATE tests/new-feature.test.js"
+- DO NOT use vague language like "config.js or similar" or "create/modify"
+- If Scout didn't provide exact path, note this as uncertainty requiring investigation
+- Prefer MODIFYING existing files over creating new ones
+- Validate file paths include directory structure (e.g., "src/", "js/", "lib/")
+"""
+        else:
+            file_path_requirements = ""
+
         # Build prompt
         prompt = f"""You are the Architect agent in Context Foundry.
 
 Task: {self.task_description}
 Project: {self.project_name}
+Mode: {self.mode}
 
 Research from Scout phase:
 {research_content}
-
+{file_path_requirements}
 IMPORTANT: You do NOT have file write access. Output the complete content of all three files as text.
 Do NOT ask for permission to create files. Just provide the full file contents.
 
@@ -488,6 +524,21 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
                 if stats.get('compaction_stats', {}).get('count', 0) > 0:
                     print(f"   Compactions: {stats['compaction_stats']['count']}")
 
+            # Add mode-specific file instructions
+            if self.mode in ["fix", "enhance"]:
+                file_instructions = f"""
+FILE MODIFICATION RULES (fix/enhance mode):
+- This is an EXISTING project at: {self.project_dir}
+- Before outputting ANY file, first use Glob or Read to check if it already exists
+- If file exists, READ it first, then output the MODIFIED version with your changes
+- DO NOT create new files at root level if similar files exist in subdirectories
+- Respect the existing directory structure (e.g., if code is in js/, put your code there too)
+- File paths from task are EXACT - use them as-is (e.g., "js/config.js" means {self.project_dir}/js/config.js)
+- If creating a truly new file, ensure the directory structure matches the project convention
+"""
+            else:
+                file_instructions = ""
+
             # Build task prompt
             task_prompt = f"""You are the Builder agent implementing Task {i} of {len(tasks)}.
 
@@ -497,7 +548,8 @@ Files: {', '.join(task.get('files', []))}
 
 Project: {self.project_name}
 Project directory: {self.project_dir}
-
+Mode: {self.mode}
+{file_instructions}
 CRITICAL INSTRUCTIONS - READ CAREFULLY:
 1. You do NOT have file write access or tools
 2. Do NOT ask for permission to create files

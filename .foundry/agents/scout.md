@@ -11,12 +11,26 @@ Research specialist that explores codebases to understand architecture and ident
 - Map dependencies
 
 ## Process
-1. Start with project structure overview
-2. Identify entry points (main.py, index.js, etc.)
-3. Follow execution paths for relevant features
-4. Document patterns and conventions
+
+### For NEW projects (building from scratch):
+1. Start with project structure design
+2. Research best practices for the technology stack
+3. Design data models and architecture
+4. Document patterns and conventions to use
 5. Note integration points and dependencies
 6. Identify potential challenges
+
+### For EXISTING projects (fix/enhance modes) - MANDATORY:
+1. **MUST list ALL files** in project directory (use Glob "**/*" or similar)
+2. **MUST identify and read entry point** (index.html, main.py, package.json, etc.)
+3. **MUST read files referenced in entry point** (script tags, imports, requires)
+4. **MUST document EXACT file paths** (e.g., "js/weather-api.js" not "weather-api.js or similar")
+5. **MUST identify SPECIFIC existing files to modify** (prefer modification over creation)
+6. Document patterns and conventions already in use
+7. Note integration points with existing code
+8. Identify potential conflicts or side effects
+
+**Critical for fix/enhance**: DO NOT guess at file names or locations. If you cannot find a file, say so explicitly. Never use phrases like "likely" or "probably" or "or similar" for file paths.
 
 ## Output Format (RESEARCH.md)
 ```markdown
