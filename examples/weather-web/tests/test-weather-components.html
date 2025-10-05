@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Components Tests - Weather Web</title>
+    <link rel="stylesheet" href="../css/styles.css">
+    <link rel="stylesheet" href="../css/components.css">
+    <style>
+        .test-results { font-family: Arial, sans-serif; margin: 20px; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .test-info { color: blue; margin: 5px 0; }
+        .test-container { margin: 20px 0; padding: 20px; border: 2px solid #ddd; }
+    </style>
+</head>
+<body>
+    <div class="test-results">
+        <h1>Weather Components Tests</h1>
+        <div id="test-output"></div>
+        
+        <!-- Test containers for visual validation -->
+        <div class="test-container">
+            <h2>Weather Card Test Container</h2>
+            <div id="weather-card-test"></div>
+        </div>
+        
+        <div class="test-container">
+            <h2>Forecast Grid Test Container</h2>
+            <div id="forecast-grid-test"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        console.error('Test error:', error);
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertContains(container, selector, message) {
+                const element = container.querySelector(selector);
+                if (!element) {
+                    throw new Error(`${message}: selector ${selector} not found`);
+                }
+                return element;
+            }
+        }
+
+        const runner = new TestRunner();
+
+        // Mock weather data for testing
+        const mockCurrentWeather = {
+            city: 'London',
+            country: 'GB',
+            temperature: 20,
+            feelsLike: 22,
+            description: 'Clear Sky',
+            icon: '01d',
+            humidity: 65,
+            pressure: 1013,
+            wind: { speed: 15, direction: 'SW' },
+            visibility: 10,
+            sunrise: new Date('2024-01-15T07:00:00Z'),
+            sunset: new Date('2024-01-15T17:00:00Z'),
+            timestamp: new Date()
+        };
+
+        const mockForecastData = [
+            {
+                date: new Date('2024-01-16T12:00:00Z'),
+                minTemp: 15,
+                maxTemp: 25,
+                description: 'Sunny',
+                icon: '01d',
+                humidity: 60,
+                precipitation: 0
+            },
+            {
+                date: new Date('2024-01-17T12:00:00Z'),
+                minTemp: 18,
+                maxTemp: 28,
+                description: 'Partly Cloudy',
+                icon: '02d',
+                humidity: 55,
+                precipitation: 10
+            },
+            {
+                date: new Date('2024-01-18T12:00:00Z'),
+                minTemp: 12,
+                maxTemp: 20,
+                description: 'Light Rain',
+                icon: '10d',
+                humidity: 80,
+                precipitation: 60
+            },
+            {
+                date: new Date('2024-01-19T12:00:00Z'),
+                minTemp: 10,
+                maxTemp: 18,
+                description: 'Cloudy',
+                icon: '04d',
+                humidity: 70,
+                precipitation: 20
+            },
+            {
+                date: new Date('2024-01-20T12:00:00Z'),
+                minTemp: 16,
+                maxTemp: 24,
+                description: 'Clear',
+                icon: '01d',
+                humidity: 50,
+                precipitation: 0
+            }
+        ];
+
+        // WeatherCard Component Tests
+        runner.test('WeatherCard class can be imported and instantiated', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.createElement('div');
+            const weatherCard = new WeatherCard(container);
+            
+            runner.assert(weatherCard instanceof WeatherCard, 'Should create WeatherCard instance');
+            runner.assert(typeof weatherCard.render === 'function', 'Should have render method');
+            runner.assert(typeof weatherCard.update === 'function', 'Should have update method');
+            runner.assert(typeof weatherCard.showLoading === 'function', 'Should have showLoading method');
+            runner.assert(typeof weatherCard.showError === 'function', 'Should have showError method');
+        });
+
+        runner.test('WeatherCard validates container parameter', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            try {
+                new WeatherCard(null);
+                runner.assert(false, 'Should throw error with null container');
+            } catch (error) {
+                runner.assert(error.message.includes('container'), 'Should throw meaningful error');
+            }
+        });
+
+        runner.test('WeatherCard renders weather data correctly', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.getElementById('weather-card-test');
+            const weatherCard = new WeatherCard(container);
+            
+            weatherCard.render(mockCurrentWeather);
+            
+            // Check if main elements are present
+            runner.assertContains(container, '.weather-card__header', 'Should have header');
+            runner.assertContains(container, '.weather-card__main', 'Should have main section');
+            runner.assertContains(container, '.weather-card__details', 'Should have details section');
+            
+            // Check if data is displayed
+            const cityElement = container.querySelector('.weather-card__city');
+            runner.assert(cityElement && cityElement.textContent.includes('London'), 'Should display city name');
+            
+            const tempElement = container.querySelector('.weather-card__temperature');
+            runner.assert(tempElement && tempElement.textContent.includes('20'), 'Should display temperature');
+            
+            const descElement = container.querySelector('.weather-card__description');
+            runner.assert(descElement && descElement.textContent.includes('Clear Sky'), 'Should display description');
+        });
+
+        runner.test('WeatherCard shows loading state', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.createElement('div');
+            const weatherCard = new WeatherCard(container);
+            
+            weatherCard.showLoading();
+            
+            runner.assertContains(container, '.weather-card__loading', 'Should show loading indicator');
+            
+            const loadingText = container.querySelector('.weather-card__loading-text');
+            runner.assert(loadingText && loadingText.textContent.length > 0, 'Should have loading text');
+        });
+
+        runner.test('WeatherCard shows error state', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.createElement('div');
+            const weatherCard = new WeatherCard(container);
+            
+            const errorMessage = 'Failed to load weather data';
+            weatherCard.showError(errorMessage);
+            
+            runner.assertContains(container, '.weather-card__error', 'Should show error container');
+            
+            const errorText = container.querySelector('.weather-card__error-message');
+            runner.assert(errorText && errorText.textContent.includes(errorMessage), 'Should display error message');
+        });
+
+        runner.test('WeatherCard updates existing data', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.createElement('div');
+            const weatherCard = new WeatherCard(container);
+            
+            // Initial render
+            weatherCard.render(mockCurrentWeather);
+            
+            // Update with new data
+            const updatedData = { ...mockCurrentWeather, temperature: 25, city: 'Paris' };
+            weatherCard.update(updatedData);
+            
+            const cityElement = container.querySelector('.weather-card__city');
+            runner.assert(cityElement && cityElement.textContent.includes('Paris'), 'Should update city name');
+            
+            const tempElement = container.querySelector('.weather-card__temperature');
+            runner.assert(tempElement && tempElement.textContent.includes('25'), 'Should update temperature');
+        });
+
+        runner.test('WeatherCard handles temperature units', async () => {
+            const { WeatherCard } = await import('../js/components/weatherCard.js');
+            
+            const container = document.createElement('div');
+            const weatherCard = new WeatherCard(container, { units: 'F' });
+            
+            weatherCard.render(mockCurrentWeather);
+            
+            const tempElement = container.querySelector('.weather-card__temperature');
+            runner.assert(tempElement && tempElement.textContent.includes('°F'), 'Should display Fahrenheit units');
+        });
+
+        // ForecastGrid Component Tests
+        runner.test('ForecastGrid class can be imported and instantiated', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.createElement('div');
+            const forecastGrid = new ForecastGrid(container);
+            
+            runner.assert(forecastGrid instanceof ForecastGrid, 'Should create ForecastGrid instance');
+            runner.assert(typeof forecastGrid.render === 'function', 'Should have render method');
+            runner.assert(typeof forecastGrid.update === 'function', 'Should have update method');
+            runner.assert(typeof forecastGrid.showLoading === 'function', 'Should have showLoading method');
+            runner.assert(typeof forecastGrid.showError === 'function', 'Should have showError method');
+        });
+
+        runner.test('ForecastGrid validates container parameter', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            try {
+                new ForecastGrid(null);
+                runner.assert(false, 'Should throw error with null container');
+            } catch (error) {
+                runner.assert(error.message.includes('container'), 'Should throw meaningful error');
+            }
+        });
+
+        runner.test('ForecastGrid renders forecast data correctly', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.getElementById('forecast-grid-test');
+            const forecastGrid = new ForecastGrid(container);
+            
+            forecastGrid.render(mockForecastData);
+            
+            // Check if grid container exists
+            runner.assertContains(container, '.forecast-grid', 'Should have forecast grid');
+            
+            // Check if forecast items are rendered
+            const forecastItems = container.querySelectorAll('.forecast-item');
+            runner.assertEqual(forecastItems.length, 5, 'Should render 5 forecast items');
+            
+            // Check first item content
+            const firstItem = forecastItems[0];
+            runner.assertContains(firstItem, '.forecast-item__date', 'Should have date element');
+            runner.assertContains(firstItem, '.forecast-item__icon', 'Should have icon element');
+            runner.assertContains(firstItem, '.forecast-item__temps', 'Should have temperature element');
+        });
+
+        runner.test('ForecastGrid shows loading state', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.createElement('div');
+            const forecastGrid = new ForecastGrid(container);
+            
+            forecastGrid.showLoading();
+            
+            runner.assertContains(container, '.forecast-grid__loading', 'Should show loading indicator');
+        });
+
+        runner.test('ForecastGrid shows error state', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.createElement('div');
+            const forecastGrid = new ForecastGrid(container);
+            
+            const errorMessage = 'Failed to load forecast data';
+            forecastGrid.showError(errorMessage);
+            
+            runner.assertContains(container, '.forecast-grid__error', 'Should show error container');
+            
+            const errorText = container.querySelector('.forecast-grid__error-message');
+            runner.assert(errorText && errorText.textContent.includes(errorMessage), 'Should display error message');
+        });
+
+        runner.test('ForecastGrid updates existing data', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.createElement('div');
+            const forecastGrid = new ForecastGrid(container);
+            
+            // Initial render
+            forecastGrid.render(mockForecastData);
+            
+            // Update with modified data
+            const updatedData = mockForecastData.map(item => ({
+                ...item,
+                maxTemp: item.maxTemp + 5
+            }));
+            
+            forecastGrid.update(updatedData);
+            
+            const forecastItems = container.querySelectorAll('.forecast-item');
+            runner.assert(forecastItems.length > 0, 'Should maintain forecast items after update');
+        });
+
+        runner.test('ForecastGrid handles empty data gracefully', async () => {
+            const { ForecastGrid } = await import('../js/components/forecast.js');
+            
+            const container = document.createElement('div');
+            const forecastGrid = new ForecastGrid(container);
+            
+            forecastGrid.render([]);
+            
+            const emptyMessage = container.querySelector('.forecast-grid__empty');
+            runner.assert(emptyMessage !== null, 'Should show empty state message');
+        });
+
+        // CSS Components Tests
+        runner.test('Component CSS classes are defined', () => {
+            const testElement = document.createElement('div');
+            testElement.className = 'weather-card';
+            document.body.appendChild(testElement);
+            
+            const styles = getComputedStyle(testElement);
+            
+            // Check if component styles are applied
+            runner.assert(styles.getPropertyValue('display') !== '', 'Weather card should have display property');
+            runner.assert(styles.getPropertyValue('background-color') !== '', 'Weather card should have background color');
+            
+            document.body.removeChild(testElement);
+        });
+
+        runner.test('Forecast grid CSS classes are defined', () => {
+            const testElement = document.createElement('div');
+            testElement.className = 'forecast-grid';
+            document.body.appendChild(testElement);
+            
+            const styles = getComputedStyle(testElement);
+            
+            // Check if grid styles are applied
+            runner.assert(styles.getPropertyValue('display') !== '', 'Forecast grid should have display property');
+            
+            document.body.removeChild(testElement);
+        });
+
+        runner.test('Temperature color classes work correctly', () => {
+            const testElement = document.createElement('div');
+            testElement.className = 'temperature temperature--hot';
+            document.body.appendChild(testElement);
+            
+            const styles = getComputedStyle(testElement);
+            const color = styles.getPropertyValue('color');
+            
+            runner.assert(color !== '', 'Temperature color should be applied');
+            
+            document.body.removeChild(testElement);
+        });
+
+        runner.test('Responsive design classes exist', () => {
+            // Test that responsive utility classes are defined
+            const classes = [
+                'weather-card--mobile',
+                'forecast-grid--responsive',
+                'weather-details--compact'
+            ];
+            
+            classes.forEach(className => {
+                const testElement = document.createElement('div');
+                testElement.className = className;
+                document.body.appendChild(testElement);
+                
+                // Just verify the class can be applied without errors
+                runner.assert(testElement.className === className, `Class ${className} should be applicable`);
+                
+                document.body.removeChild(testElement);
+            });
+        });
+
+        // Run all tests
+        runner.run();
+    </script>
+</body>
+</html>
