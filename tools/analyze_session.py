@@ -39,27 +39,53 @@ class SessionAnalyzer:
         if checkpoints_dir is None:
             checkpoints_dir = Path.home() / "context-foundry" / "checkpoints" / "ralph"
 
+        # First check if session exists as JSON file (new format)
+        session_file = checkpoints_dir / f"{session_id}.json"
         session_dir = checkpoints_dir / session_id
 
-        if not session_dir.exists():
-            print(f"❌ Session not found: {session_dir}")
+        # Determine which format we're dealing with
+        if session_file.exists():
+            # New format: single JSON file
+            print(f"📊 Analyzing session: {session_id}")
+
+            with open(session_file) as f:
+                session_data = json.load(f)
+
+            metrics = {
+                'session_id': session_id,
+                'completion': self._extract_completion_from_json(session_data),
+                'context': self._extract_context_from_json(session_data),
+                'time': self._extract_time_from_json(session_data),
+                'tokens': self._extract_tokens_from_json(session_data),
+                'cost': self._calculate_cost_from_json(session_data),
+                'patterns': self._analyze_pattern_usage(session_id) if self.library else {}
+            }
+
+            # Generate report (save to checkpoints dir since no session_dir)
+            report_path = self._generate_report_from_json(session_id, metrics, checkpoints_dir)
+            metrics['report_path'] = str(report_path)
+
+        elif session_dir.exists():
+            # Old format: directory with multiple JSON files (backward compatibility)
+            print(f"📊 Analyzing session: {session_id}")
+
+            metrics = {
+                'session_id': session_id,
+                'completion': self._calculate_completion_rate(session_dir),
+                'context': self._analyze_context_efficiency(session_dir),
+                'time': self._analyze_time_metrics(session_dir),
+                'tokens': self._analyze_token_usage(session_dir),
+                'cost': self._calculate_cost(session_dir),
+                'patterns': self._analyze_pattern_usage(session_id) if self.library else {}
+            }
+
+            # Generate report
+            report_path = self._generate_report(session_id, metrics, session_dir)
+            metrics['report_path'] = str(report_path)
+        else:
+            print(f"❌ Session not found: {session_id}")
+            print(f"   Looked for: {session_file} or {session_dir}")
             return {}
-
-        print(f"📊 Analyzing session: {session_id}")
-
-        metrics = {
-            'session_id': session_id,
-            'completion': self._calculate_completion_rate(session_dir),
-            'context': self._analyze_context_efficiency(session_dir),
-            'time': self._analyze_time_metrics(session_dir),
-            'tokens': self._analyze_token_usage(session_dir),
-            'cost': self._calculate_cost(session_dir),
-            'patterns': self._analyze_pattern_usage(session_id) if self.library else {}
-        }
-
-        # Generate report
-        report_path = self._generate_report(session_id, metrics, session_dir)
-        metrics['report_path'] = str(report_path)
 
         # Update pattern ratings if library available
         if self.library:
@@ -313,6 +339,274 @@ class SessionAnalyzer:
             'avg_rating': avg_rating,
             'top': top
         }
+
+    def _extract_completion_from_json(self, session_data: Dict) -> Dict:
+        """Extract completion metrics from JSON session data.
+
+        Args:
+            session_data: Session data from JSON file
+
+        Returns:
+            Completion metrics
+        """
+        # Get tasks completed from builder
+        builder_data = session_data.get('builder', {})
+        completed = builder_data.get('tasks_completed', 0)
+
+        # Try to get total tasks from tasks list or plan
+        total = completed  # Default to completed if we can't find total
+
+        # Check if we have task list
+        if 'tasks' in builder_data and isinstance(builder_data['tasks'], list):
+            total = len(builder_data['tasks'])
+
+        return {
+            'rate': (completed / total * 100) if total > 0 else 0.0,
+            'completed': completed,
+            'total': total,
+            'remaining': total - completed
+        }
+
+    def _extract_context_from_json(self, session_data: Dict) -> Dict:
+        """Extract context metrics from JSON session data.
+
+        Args:
+            session_data: Session data from JSON file
+
+        Returns:
+            Context metrics
+        """
+        context_values = []
+        compactions = 0
+
+        # Extract context from each phase
+        for phase in ['scout', 'architect', 'builder']:
+            if phase in session_data:
+                metadata = session_data[phase].get('metadata', {})
+                context_pct = metadata.get('context_percentage', 0)
+                if context_pct > 0:
+                    context_values.append(context_pct)
+
+                # Check for compaction stats in builder
+                if phase == 'builder' and 'compaction_stats' in metadata:
+                    compaction_count = metadata['compaction_stats'].get('count', 0)
+                    compactions += compaction_count
+
+        if not context_values:
+            return {'average': 0.0, 'max': 0.0, 'min': 0.0, 'compactions': 0}
+
+        return {
+            'average': sum(context_values) / len(context_values),
+            'max': max(context_values),
+            'min': min(context_values),
+            'compactions': compactions
+        }
+
+    def _extract_time_from_json(self, session_data: Dict) -> Dict:
+        """Extract time metrics from JSON session data.
+
+        Args:
+            session_data: Session data from JSON file
+
+        Returns:
+            Time metrics
+        """
+        # Try to extract timestamps from metadata
+        start_time = None
+        end_time = None
+
+        # Get earliest timestamp from scout
+        if 'scout' in session_data:
+            scout_ts = session_data['scout'].get('metadata', {}).get('timestamp')
+            if scout_ts:
+                start_time = scout_ts
+
+        # Get latest timestamp from builder
+        if 'builder' in session_data:
+            builder_ts = session_data['builder'].get('metadata', {}).get('timestamp')
+            if builder_ts:
+                end_time = builder_ts
+
+        if not start_time:
+            return {'total_minutes': 0.0, 'total_hours': 0.0, 'avg_per_task': 0.0, 'tasks_completed': 0}
+
+        try:
+            start_dt = datetime.fromisoformat(start_time)
+            end_dt = datetime.fromisoformat(end_time) if end_time else datetime.now()
+
+            total_seconds = (end_dt - start_dt).total_seconds()
+            total_minutes = total_seconds / 60
+            total_hours = total_minutes / 60
+
+            tasks_completed = session_data.get('builder', {}).get('tasks_completed', 0)
+            avg_per_task = total_minutes / tasks_completed if tasks_completed > 0 else 0.0
+
+            return {
+                'total_minutes': total_minutes,
+                'total_hours': total_hours,
+                'avg_per_task': avg_per_task,
+                'tasks_completed': tasks_completed
+            }
+        except Exception:
+            return {'total_minutes': 0.0, 'total_hours': 0.0, 'avg_per_task': 0.0, 'tasks_completed': 0}
+
+    def _extract_tokens_from_json(self, session_data: Dict) -> Dict:
+        """Extract token metrics from JSON session data.
+
+        Args:
+            session_data: Session data from JSON file
+
+        Returns:
+            Token metrics
+        """
+        total_input = 0
+        total_output = 0
+
+        # Sum tokens from all phases
+        for phase in ['scout', 'architect', 'builder']:
+            if phase in session_data:
+                metadata = session_data[phase].get('metadata', {})
+                total_input += metadata.get('total_input_tokens', metadata.get('input_tokens', 0))
+                total_output += metadata.get('total_output_tokens', metadata.get('output_tokens', 0))
+
+        total_tokens = total_input + total_output
+        tasks_completed = session_data.get('builder', {}).get('tasks_completed', 0)
+
+        return {
+            'total': total_tokens,
+            'per_task': total_tokens // tasks_completed if tasks_completed > 0 else 0,
+            'input': total_input,
+            'output': total_output
+        }
+
+    def _calculate_cost_from_json(self, session_data: Dict) -> float:
+        """Calculate cost from JSON session data.
+
+        Args:
+            session_data: Session data from JSON file
+
+        Returns:
+            Cost in USD
+        """
+        tokens = self._extract_tokens_from_json(session_data)
+        input_tokens = tokens.get('input', 0)
+        output_tokens = tokens.get('output', 0)
+
+        # Try to use pricing database for accurate costs
+        try:
+            from ace.pricing_database import PricingDatabase
+            import os
+
+            db = PricingDatabase()
+
+            # Get provider/model from env (fallback to Claude Sonnet 4)
+            provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+            model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
+
+            pricing = db.get_pricing(provider, model)
+
+            if pricing:
+                cost = (input_tokens / 1_000_000 * pricing.input_cost_per_1m) + \
+                       (output_tokens / 1_000_000 * pricing.output_cost_per_1m)
+            else:
+                # Fallback to default Claude Sonnet 4 pricing
+                input_cost_per_1k = 0.003
+                output_cost_per_1k = 0.015
+                cost = (input_tokens / 1000 * input_cost_per_1k) + \
+                       (output_tokens / 1000 * output_cost_per_1k)
+
+            db.close()
+            return cost
+
+        except Exception:
+            # If anything fails, use fallback pricing
+            input_cost_per_1k = 0.003
+            output_cost_per_1k = 0.015
+            cost = (input_tokens / 1000 * input_cost_per_1k) + \
+                   (output_tokens / 1000 * output_cost_per_1k)
+            return cost
+
+    def _generate_report_from_json(self, session_id: str, metrics: Dict, checkpoints_dir: Path) -> Path:
+        """Generate report from JSON session data.
+
+        Args:
+            session_id: Session identifier
+            metrics: Metrics dictionary
+            checkpoints_dir: Checkpoints directory path
+
+        Returns:
+            Path to generated report
+        """
+        report = f"""# Session Analysis: {session_id}
+
+**Generated**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## Summary
+
+- **Completion Rate**: {metrics['completion']['rate']:.1f}%
+- **Tasks Completed**: {metrics['completion']['completed']}/{metrics['completion']['total']}
+- **Total Time**: {metrics['time']['total_hours']:.1f} hours
+- **Total Cost**: ${metrics['cost']:.2f}
+
+## Performance Metrics
+
+### Context Usage
+- **Average**: {metrics['context']['average']:.1f}%
+- **Maximum**: {metrics['context']['max']:.1f}%
+- **Minimum**: {metrics['context']['min']:.1f}%
+- **Compactions**: {metrics['context']['compactions']}
+
+### Time
+- **Total Duration**: {metrics['time']['total_minutes']:.1f} minutes ({metrics['time']['total_hours']:.1f} hours)
+- **Avg per Task**: {metrics['time']['avg_per_task']:.1f} minutes
+- **Tasks Completed**: {metrics['time']['tasks_completed']}
+
+### Tokens
+- **Total Tokens**: {metrics['tokens']['total']:,}
+- **Input Tokens**: {metrics['tokens']['input']:,}
+- **Output Tokens**: {metrics['tokens']['output']:,}
+- **Tokens per Task**: {metrics['tokens']['per_task']:,}
+
+### Cost
+- **Total Cost**: ${metrics['cost']:.2f}
+- **Cost per Task**: ${metrics['cost'] / metrics['completion']['completed'] if metrics['completion']['completed'] > 0 else 0:.2f}
+
+"""
+
+        # Add pattern usage if available
+        if metrics['patterns']:
+            report += f"""## Pattern Usage
+
+- **Patterns Used**: {metrics['patterns'].get('patterns_used', 0)}
+- **Avg Rating**: {metrics['patterns'].get('avg_rating', 0):.1f}/5
+
+### Top Patterns
+"""
+            for pattern in metrics['patterns'].get('top', []):
+                report += f"- Pattern #{pattern['id']}: {pattern['name']} ({pattern['success_rate']:.0f}% success, rating: {pattern['rating']}/5)\n"
+
+        # Add recommendations
+        report += f"""
+## Recommendations
+
+"""
+        if metrics['context']['average'] > 40:
+            report += "- ⚠️ **High Context Usage**: Average context usage is above 40%. Consider more aggressive compaction.\n"
+
+        if metrics['context']['compactions'] > 5:
+            report += "- ⚠️ **Frequent Compactions**: Consider chunking tasks into smaller units.\n"
+
+        if metrics['completion']['rate'] < 70:
+            report += "- ⚠️ **Low Completion Rate**: Review task complexity and time allocation.\n"
+
+        if metrics['time']['avg_per_task'] > 30:
+            report += "- ⚠️ **Long Task Duration**: Tasks taking >30min on average. Consider breaking down further.\n"
+
+        # Save report to checkpoints directory with analysis suffix
+        report_file = checkpoints_dir / f"{session_id}_analysis.md"
+        report_file.write_text(report)
+
+        return report_file
 
     def _update_pattern_ratings(self, session_id: str, metrics: Dict):
         """Update pattern ratings based on session success.
