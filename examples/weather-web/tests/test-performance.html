@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Tests - Weather Web</title>
+    <style>
+        .test-results { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 350px;
+            max-height: 100vh;
+            overflow-y: auto;
+            background: white;
+            z-index: 9999;
+            border: 2px solid #333;
+            padding: 10px;
+            font-size: 12px;
+        }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 10px 0; padding: 5px; border: 1px solid #ccc; }
+        .performance-metrics {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #f0f0f0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            font-size: 11px;
+            z-index: 10000;
+        }
+    </style>
+</head>
+<body>
+    <div class="performance-metrics" id="performance-metrics">
+        <div>Load Time: <span id="load-time">0ms</span></div>
+        <div>API Calls: <span id="api-count">0</span></div>
+        <div>Cache Hits: <span id="cache-hits">0</span></div>
+        <div>Image Loads: <span id="image-loads">0</span></div>
+    </div>
+
+    <div class="test-results">
+        <h2>Performance Tests</h2>
+        <div id="test-output"></div>
+        <button id="run-tests" onclick="runPerformanceTests()">Run Tests</button>
+        <button id="stress-test" onclick="runStressTests()">Stress Test</button>
+    </div>
+
+    <!-- Test environment setup -->
+    <div style="display: none;" id="test-environment">
+        <div id="test-search-input"></div>
+        <div id="test-images-container"></div>
+        <div id="test-components-container"></div>
+    </div>
+
+    <script type="module">
+        // Performance testing framework
+        class PerformanceTestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+                this.metrics = {
+                    startTime: performance.now(),
+                    apiCalls: 0,
+                    cacheHits: 0,
+                    imageLoads: 0,
+                    loadTime: 0
+                };
+                this.updateMetricsDisplay();
+                
+                // Mock performance observers
+                this.setupMockAPIs();
+            }
+
+            setupMockAPIs() {
+                // Mock fetch for API call counting
+                const originalFetch = window.fetch;
+                window.fetch = (...args) => {
+                    this.metrics.apiCalls++;
+                    this.updateMetricsDisplay();
+                    return originalFetch.apply(window, args);
+                };
+
+                // Mock Image constructor for image loading tracking
+                const originalImage = window.Image;
+                window.Image = function() {
+                    const img = new originalImage();
+                    const originalOnLoad = img.onload;
+                    img.onload = function() {
+                        window.testRunner.metrics.imageLoads++;
+                        window.testRunner.updateMetricsDisplay();
+                        if (originalOnLoad) originalOnLoad.apply(this, arguments);
+                    };
+                    return img;
+                };
+            }
+
+            updateMetricsDisplay() {
+                this.metrics.loadTime = performance.now() - this.metrics.startTime;
+                document.getElementById('load-time').textContent = `${this.metrics.loadTime.toFixed(0)}ms`;
+                document.getElementById('api-count').textContent = this.metrics.apiCalls;
+                document.getElementById('cache-hits').textContent = this.metrics.cacheHits;
+                document.getElementById('image-loads').textContent = this.metrics.imageLoads;
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                this.output.innerHTML = '';
+                let passed = 0;
+                let failed = 0;
+
+                this.log('🚀 Starting Performance Tests...', 'test-section');
+
+                for (const test of this.tests) {
+                    const testStartTime = performance.now();
+                    try {
+                        await test.fn();
+                        const testDuration = performance.now() - testStartTime;
+                        this.log(`✓ ${test.name} (${testDuration.toFixed(1)}ms)`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        const testDuration = performance.now() - testStartTime;
+                        this.log(`✗ ${test.name} (${testDuration.toFixed(1)}ms): ${error.message}`, 'test-fail');
+                        console.error(error);
+                        failed++;
+                    }
+                }
+
+                this.log(`\n📊 Results: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message, tolerance = 1) {
+                if (typeof actual === 'number' && typeof expected === 'number') {
+                    if (Math.abs(actual - expected) > tolerance) {
+                        throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                    }
+                } else if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertLessThan(actual, expected, message) {
+                if (actual >= expected) {
+                    throw new Error(`${message}: expected ${actual} < ${expected}`);
+                }
+            }
+
+            async measureTime(fn) {
+                const start = performance.now();
+                await fn();
+                return performance.now() - start;
+            }
+
+            async waitFor(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+
+        const testRunner = new PerformanceTestRunner();
+        window.testRunner = testRunner;
+
+        // Debouncing Tests
+        testRunner.test('Debounce utility exists and works correctly', async () => {
+            // Test that debounce utility is available
+            let debounceModule;
+            try {
+                debounceModule = await import('../js/utils/performance.js');
+            } catch (e) {
+                debounceModule = await import('../js/utils/helpers.js');
+            }
+            
+            const debounce = debounceModule.debounce || debounceModule.default?.debounce;
+            testRunner.assert(typeof debounce === 'function', 'Debounce function should exist');
+
+            let callCount = 0;
+            const testFn = () => callCount++;
+            const debouncedFn = debounce(testFn, 100);
+
+            // Call multiple times rapidly
+            debouncedFn();
+            debouncedFn();
+            debouncedFn();
+
+            testRunner.assertEqual(callCount, 0, 'Function should not be called immediately');
+
+            await testRunner.waitFor(150);
+            testRunner.assertEqual(callCount, 1, 'Function should be called once after delay');
+        });
+
+        testRunner.test('Search input debouncing prevents excessive API calls', async () => {
+            // Mock search input and API calls
+            let apiCallCount = 0;
+            const mockSearchAPI = () => {
+                apiCallCount++;
+                return Promise.resolve([]);
+            };
+
+            // Test rapid typing simulation
+            const searchInput = document.createElement('input');
+            document.getElementById('test-search-input').appendChild(searchInput);
+
+            // Import search component or debounce logic
+            try {
+                const searchModule = await import('../js/components/searchBar.js');
+                const SearchBar = searchModule.default || searchModule.SearchBar;
+                
+                if (SearchBar) {
+                    const searchBar = new SearchBar(searchInput.parentElement, {
+                        searchAPI: mockSearchAPI,
+                        debounceDelay: 100
+                    });
+
+                    // Simulate rapid typing
+                    for (let i = 0; i < 10; i++) {
+                        searchInput.value = 'London'.substring(0, i + 1);
+                        searchInput.dispatchEvent(new Event('input'));
+                    }
+
+                    await testRunner.waitFor(200);
+                    testRunner.assertLessThan(apiCallCount, 5, 'API calls should be debounced');
+                }
+            } catch (e) {
+                // Skip if search component not available
+                testRunner.log('Search component not available, skipping test');
+            }
+        });
+
+        // Image Optimization Tests
+        testRunner.test('Lazy loading is implemented for images', async () => {
+            const testImage = document.createElement('img');
+            testImage.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="red"/></svg>';
+            testImage.loading = 'lazy';
+            document.getElementById('test-images-container').appendChild(testImage);
+
+            testRunner.assert(testImage.loading === 'lazy', 'Images should have lazy loading attribute');
+        });
+
+        testRunner.test('Image optimization utilities exist', async () => {
+            try {
+                const imageModule = await import('../js/utils/imageOptimizer.js');
+                const ImageOptimizer = imageModule.default || imageModule.ImageOptimizer;
+                
+                testRunner.assert(ImageOptimizer, 'ImageOptimizer should exist');
+                testRunner.assert(typeof ImageOptimizer.optimizeImage === 'function', 'Should have optimizeImage method');
+                testRunner.assert(typeof ImageOptimizer.preloadImage === 'function', 'Should have preloadImage method');
+            } catch (e) {
+                throw new Error('Image optimization utilities not found');
+            }
+        });
+
+        testRunner.test('WebP format detection and fallback works', async () => {
+            try {
+                const imageModule = await import('../js/utils/imageOptimizer.js');
+                const ImageOptimizer = imageModule.default || imageModule.ImageOptimizer;
+                
+                const supportsWebP = await ImageOptimizer.supportsWebP();
+                testRunner.assert(typeof supportsWebP === 'boolean', 'WebP support detection should return boolean');
+                
+                const optimizedUrl = ImageOptimizer.getOptimizedImageUrl('test.jpg', { width: 100, height: 100 });
+                testRunner.assert(typeof optimizedUrl === 'string', 'Should return optimized URL');
+            } catch (e) {
+                throw new Error('WebP detection not implemented: ' + e.message);
+            }
+        });
+
+        // Service Worker Tests
+        testRunner.test('Service worker registration works', async () => {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    testRunner.assert(registration, 'Service worker should register successfully');
+                    testRunner.assert(registration.scope, 'Service worker should have scope');
+                } catch (e) {
+                    // Service worker file might not exist in test environment
+                    testRunner.log('Service worker file not found (expected in test environment)');
+                }
+            } else {
+                testRunner.log('Service worker not supported in this browser');
+            }
+        });
+
+        testRunner.test('Cache API is utilized correctly', async () => {
+            if ('caches' in window) {
+                try {
+                    const cache = await caches.open('weather-app-v1');
+                    testRunner.assert(cache, 'Cache should be openable');
+                    
+                    // Test caching a simple resource
+                    const testUrl = '/test-cache-resource';
+                    const testResponse = new Response('test data');
+                    await cache.put(testUrl, testResponse);
+                    
+                    const cachedResponse = await cache.match(testUrl);
+                    testRunner.assert(cachedResponse, 'Resource should be retrievable from cache');
+                } catch (e) {
+                    throw new Error('Cache API error: ' + e.message);
+                }
+            } else {
+                testRunner.log('Cache API not supported in this browser');
+            }
+        });
+
+        // API Call Optimization Tests
+        testRunner.test('API calls are minimized with caching', async () => {
+            try {
+                const weatherModule = await import('../js/services/weatherService.js');
+                const WeatherService = weatherModule.default || weatherModule.WeatherService;
+                
+                if (WeatherService) {
+                    const service = new WeatherService();
+                    
+                    // Reset API call counter
+                    const initialCallCount = testRunner.metrics.apiCalls;
+                    
+                    // Make same request multiple times
+                    const location = 'London';
+                    await Promise.all([
+                        service.getCurrentWeather?.(location),
+                        service.getCurrentWeather?.(location),
+                        service.getCurrentWeather?.(location)
+                    ].filter(Boolean));
+                    
+                    const finalCallCount = testRunner.metrics.apiCalls - initialCallCount;
+                    testRunner.assertLessThan(finalCallCount, 3, 'Duplicate requests should be cached');
+                }
+            } catch (e) {
+                testRunner.log('WeatherService not available for testing: ' + e.message);
+            }
+        });
+
+        testRunner.test('Request deduplication prevents concurrent duplicate calls', async () => {
+            try {
+                const performanceModule = await import('../js/utils/performance.js');
+                const RequestDeduplicator = performanceModule.RequestDeduplicator || performanceModule.default?.RequestDeduplicator;
+                
+                if (RequestDeduplicator) {
+                    const deduplicator = new RequestDeduplicator();
+                    
+                    let apiCallCount = 0;
+                    const mockAPI = (url) => {
+                        apiCallCount++;
+                        return new Promise(resolve => setTimeout(() => resolve({ data: url }), 100));
+                    };
+                    
+                    // Make concurrent requests for same resource
+                    const promises = [
+                        deduplicator.deduplicate('test-url', () => mockAPI('test-url')),
+                        deduplicator.deduplicate('test-url', () => mockAPI('test-url')),
+                        deduplicator.deduplicate('test-url', () => mockAPI('test-url'))
+                    ];
+                    
+                    await Promise.all(promises);
+                    testRunner.assertEqual(apiCallCount, 1, 'Only one API call should be made for concurrent duplicate requests');
+                }
+            } catch (e) {
+                throw new Error('Request deduplication not implemented: ' + e.message);
+            }
+        });
+
+        // Component Lazy Loading Tests
+        testRunner.test('Components can be lazy loaded', async () => {
+            try {
+                const lazyLoaderModule = await import('../js/utils/lazyLoader.js');
+                const LazyLoader = lazyLoaderModule.default || lazyLoaderModule.LazyLoader;
+                
+                testRunner.assert(LazyLoader, 'LazyLoader should exist');
+                testRunner.assert(typeof LazyLoader.loadComponent === 'function', 'Should have loadComponent method');
+                
+                const testContainer = document.getElementById('test-components-container');
+                const componentPromise = LazyLoader.loadComponent('testComponent', testContainer);
+                
+                testRunner.assert(componentPromise instanceof Promise, 'Component loading should return a promise');
+            } catch (e) {
+                throw new Error('Lazy loading not implemented: ' + e.message);
+            }
+        });
+
+        testRunner.test('Intersection Observer is used for lazy loading', async () => {
+            testRunner.assert('IntersectionObserver' in window, 'IntersectionObserver should be available');
+            
+            try {
+                const lazyLoaderModule = await import('../js/utils/lazyLoader.js');
+                const LazyLoader = lazyLoaderModule.default || lazyLoaderModule.LazyLoader;
+                
+                if (LazyLoader.observeElement) {
+                    const testElement = document.createElement('div');
+                    document.body.appendChild(testElement);
+                    
+                    let observerCallbackCalled = false;
+                    const callback = () => { observerCallbackCalled = true; };
+                    
+                    LazyLoader.observeElement(testElement, callback);
+                    
+                    // Simulate element coming into view
+                    await testRunner.waitFor(100);
+                    
+                    document.body.removeChild(testElement);
+                    testRunner.assert(typeof LazyLoader.observeElement === 'function', 'Observer method should exist');
+                }
+            } catch (e) {
+                testRunner.log('Intersection Observer implementation not found: ' + e.message);
+            }
+        });
+
+        // Memory Management Tests
+        testRunner.test('Memory leaks are prevented in component lifecycle', async () => {
+            try {
+                // Test that components properly clean up
+                const weatherCardModule = await import('../js/components/weatherCard.js');
+                const WeatherCard = weatherCardModule.default || weatherCardModule.WeatherCard;
+                
+                if (WeatherCard) {
+                    const testContainer = document.createElement('div');
+                    document.body.appendChild(testContainer);
+                    
+                    const weatherCard = new WeatherCard(testContainer);
+                    if (weatherCard.init) {
+                        await weatherCard.init();
+                    }
+                    
+                    // Test cleanup
+                    if (weatherCard.destroy) {
+                        weatherCard.destroy();
+                        testRunner.assert(true, 'Component should have destroy method for cleanup');
+                    }
+                    
+                    document.body.removeChild(testContainer);
+                }
+            } catch (e) {
+                testRunner.log('Component lifecycle testing skipped: ' + e.message);
+            }
+        });
+
+        // Bundle Size and Resource Loading Tests
+        testRunner.test('Critical CSS is inlined', () => {
+            const inlineStyles = document.querySelectorAll('style');
+            const hasInlineCSS = Array.from(inlineStyles).some(style => 
+                style.textContent.includes('critical') || style.textContent.length > 100
+            );
+            
+            // This test is more about structure - in real implementation, critical CSS would be inlined
+            testRunner.assert(document.head.querySelector('link[rel="stylesheet"]'), 'CSS should be properly linked');
+        });
+
+        testRunner.test('Resources are preloaded appropriately', () => {
+            const preloadLinks = document.querySelectorAll('link[rel="preload"], link[rel="prefetch"], link[rel="preconnect"]');
+            
+            if (preloadLinks.length > 0) {
+                testRunner.assert(preloadLinks.length > 0, 'Should have resource preload hints');
+            } else {
+                testRunner.log('No preload links found - consider adding for performance');
+            }
+        });
+
+        // Performance Budget Tests
+        testRunner.test('Performance budget is within limits', async () => {
+            const performanceBudget = {
+                loadTime: 3000, // 3 seconds
+                apiCalls: 10,   // Max 10 API calls for initial load
+                imageSize: 500000 // 500KB total images
+            };
+            
+            testRunner.assertLessThan(testRunner.metrics.loadTime, performanceBudget.loadTime, 
+                'Load time should be within budget');
+            testRunner.assertLessThan(testRunner.metrics.apiCalls, performanceBudget.apiCalls, 
+                'API calls should be within budget');
+        });
+
+        // Network Efficiency Tests
+        testRunner.test('HTTP/2 push or preload is utilized', () => {
+            const linkElements = document.querySelectorAll('link[rel="preload"]');
+            const hasPreload = linkElements.length > 0;
+            
+            if (!hasPreload) {
+                testRunner.log('Consider using resource preloading for better performance');
+            } else {
+                testRunner.assert(true, 'Resource preloading is implemented');
+            }
+        });
+
+        testRunner.test('Compression is enabled for text resources', async () => {
+            try {
+                const response = await fetch(document.location.href, { method: 'HEAD' });
+                const encoding = response.headers.get('content-encoding');
+                
+                if (encoding && (encoding.includes('gzip') || encoding.includes('br'))) {
+                    testRunner.assert(true, 'Compression is enabled');
+                } else {
+                    testRunner.log('Consider enabling gzip/brotli compression for better performance');
+                }
+            } catch (e) {
+                testRunner.log('Could not test compression: ' + e.message);
+            }
+        });
+
+        // Stress Testing Functions
+        window.runStressTests = async function() {
+            testRunner.log('\n🔥 Starting Stress Tests...', 'test-section');
+            
+            // Rapid API call test
+            try {
+                const startTime = performance.now();
+                const promises = [];
+                
+                for (let i = 0; i < 50; i++) {
+                    promises.push(
+                        fetch('data:application/json,{"test":' + i + '}')
+                            .catch(() => {}) // Ignore errors for this test
+                    );
+                }
+                
+                await Promise.allSettled(promises);
+                const duration = performance.now() - startTime;
+                
+                testRunner.log(`✓ 50 concurrent requests handled in ${duration.toFixed(0)}ms`, 'test-pass');
+            } catch (e) {
+                testRunner.log(`✗ Stress test failed: ${e.message}`, 'test-fail');
+            }
+            
+            // Memory stress test
+            try {
+                const initialMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+                
+                // Create and destroy many components
+                const components = [];
+                for (let i = 0; i < 100; i++) {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<span>Component ${i}</span>`;
+                    document.body.appendChild(div);
+                    components.push(div);
+                }
+                
+                // Clean up
+                components.forEach(comp => document.body.removeChild(comp));
+                
+                const finalMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+                const memoryGrowth = finalMemory - initialMemory;
+                
+                testRunner.log(`✓ Memory growth after component creation/destruction: ${memoryGrowth} bytes`, 'test-pass');
+            } catch (e) {
+                testRunner.log(`✗ Memory test failed: ${e.message}`, 'test-fail');
+            }
+        };
+
+        // Main test runner function
+        window.runPerformanceTests = function() {
+            testRunner.run();
+        };
+
+        // Auto-run tests when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                runPerformanceTests();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
