@@ -3,157 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Beautiful weather dashboard with current conditions and 5-day forecast">
-    <meta name="theme-color" content="#4A90E2">
-    
-    <title>Weather Dashboard - Current Weather & 5-Day Forecast</title>
-    
-    <!-- Preconnect to external resources -->
-    <link rel="preconnect" href="https://api.openweathermap.org">
-    <link rel="preconnect" href="https://openweathermap.org">
-    
-    <!-- CSS -->
+    <title>Accessible Weather App</title>
     <link rel="stylesheet" href="css/styles.css">
-    
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛅</text></svg>">
-    
-    <!-- PWA Manifest (future enhancement) -->
-    <link rel="manifest" href="manifest.json">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Skip to main content for accessibility -->
-    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <!-- Skip to main content link for keyboard users -->
+    <a href="#main-content" class="skip-link" aria-label="Skip to main content">Skip to main content</a>
     
-    <header role="banner" class="header">
-        <div class="container">
-            <h1 class="header__title">
-                <span class="header__icon" aria-hidden="true">⛅</span>
-                Weather Dashboard
-            </h1>
-            <nav class="header__nav" role="navigation" aria-label="Settings">
-                <button type="button" class="btn btn--secondary" id="unit-toggle" aria-label="Toggle between Celsius and Fahrenheit">
-                    °C
-                </button>
-            </nav>
-        </div>
-    </header>
+    <!-- High contrast toggle -->
+    <div class="accessibility-controls" role="toolbar" aria-label="Accessibility options">
+        <button id="high-contrast-toggle" 
+                type="button"
+                class="contrast-toggle"
+                aria-label="Toggle high contrast mode"
+                aria-pressed="false">
+            <span class="visually-hidden">High contrast mode</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93 0-4.08 3.06-7.44 7-7.93v15.86z"/>
+            </svg>
+        </button>
+    </div>
 
-    <main id="main-content" role="main" class="main">
-        <div class="container">
+    <div class="app-container">
+        <header role="banner">
+            <h1 id="app-title">Weather Dashboard</h1>
+        </header>
+
+        <main id="main-content" role="main">
             <!-- Search Section -->
-            <section class="search-section" aria-label="Location Search">
-                <div class="search-container">
-                    <form class="search-form" role="search" aria-label="Search for city weather">
-                        <div class="search-input-group">
-                            <label for="city-search" class="visually-hidden">
-                                Search for a city
-                            </label>
-                            <input 
-                                type="search" 
-                                id="city-search"
-                                class="search-input"
-                                placeholder="Search for a city..."
-                                aria-label="Enter city name to search for weather"
-                                autocomplete="off"
-                                spellcheck="false"
-                            >
-                            <button type="submit" class="btn btn--primary search-btn" aria-label="Search for weather">
-                                <span class="search-btn__icon" aria-hidden="true">🔍</span>
-                                <span class="search-btn__text">Search</span>
-                            </button>
-                        </div>
-                    </form>
+            <section class="search-section" aria-labelledby="search-heading">
+                <h2 id="search-heading" class="visually-hidden">Search for weather information</h2>
+                
+                <div class="search-container" role="search">
+                    <label for="location-input" class="visually-hidden">Enter city name or location</label>
+                    <input 
+                        type="text" 
+                        id="location-input"
+                        class="location-input"
+                        placeholder="Enter city name..."
+                        aria-describedby="search-instructions"
+                        autocomplete="off"
+                        role="combobox"
+                        aria-expanded="false"
+                        aria-haspopup="listbox"
+                        aria-autocomplete="list">
                     
-                    <button type="button" class="btn btn--secondary location-btn" id="get-location" aria-label="Get weather for current location">
-                        <span class="location-btn__icon" aria-hidden="true">📍</span>
-                        <span class="location-btn__text">Use My Location</span>
+                    <div id="search-instructions" class="visually-hidden">
+                        Type city name and press Enter or click search button to get weather information
+                    </div>
+                    
+                    <button 
+                        type="button"
+                        id="search-btn"
+                        class="search-btn"
+                        aria-label="Search for weather">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </button>
+                    
+                    <button 
+                        type="button"
+                        id="location-btn"
+                        class="location-btn"
+                        aria-label="Use current location">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
                     </button>
                 </div>
 
-                <!-- Recent Searches -->
-                <div class="recent-searches" id="recent-searches" aria-label="Recent searches">
-                    <h3 class="recent-searches__title">Recent Searches</h3>
-                    <ul class="recent-searches__list" role="list">
-                        <!-- Populated by JavaScript -->
-                    </ul>
-                </div>
+                <!-- Search suggestions dropdown -->
+                <ul id="search-suggestions" 
+                    class="search-suggestions" 
+                    role="listbox" 
+                    aria-label="Location suggestions"
+                    hidden></ul>
             </section>
 
-            <!-- Current Weather Display -->
-            <section class="weather-display" aria-label="Current Weather">
-                <div class="weather-card" id="current-weather">
-                    <!-- Loading state -->
-                    <div class="loading-state" id="weather-loading" aria-live="polite">
-                        <div class="loading-spinner" aria-hidden="true"></div>
-                        <p>Loading weather data...</p>
+            <!-- Loading indicator -->
+            <div id="loading-indicator" 
+                 class="loading" 
+                 role="status" 
+                 aria-label="Loading weather data"
+                 hidden>
+                <div class="spinner" aria-hidden="true"></div>
+                <span class="loading-text">Loading weather data...</span>
+            </div>
+
+            <!-- Error message -->
+            <div id="error-message" 
+                 class="error-message" 
+                 role="alert" 
+                 aria-live="polite"
+                 hidden></div>
+
+            <!-- Weather display -->
+            <section id="weather-display" 
+                     class="weather-display" 
+                     aria-labelledby="current-weather-heading"
+                     hidden>
+                
+                <div class="current-weather" tabindex="0">
+                    <h2 id="current-weather-heading">Current Weather</h2>
+                    
+                    <div class="weather-main">
+                        <div class="location-info">
+                            <h3 id="current-location" class="location-name"></h3>
+                            <p id="current-date" class="date"></p>
+                        </div>
+                        
+                        <div class="temperature-display">
+                            <img id="weather-icon" 
+                                 class="weather-icon" 
+                                 alt=""
+                                 role="img">
+                            <span id="current-temp" 
+                                  class="temperature"
+                                  aria-label="Current temperature"></span>
+                        </div>
                     </div>
                     
-                    <!-- Error state -->
-                    <div class="error-state" id="weather-error" role="alert" aria-live="assertive" hidden>
-                        <div class="error-icon" aria-hidden="true">⚠️</div>
-                        <h3 class="error-title">Unable to load weather data</h3>
-                        <p class="error-message">Please check your connection and try again.</p>
-                        <button type="button" class="btn btn--primary retry-btn" id="retry-weather">
-                            Retry
-                        </button>
+                    <div class="weather-details">
+                        <div class="detail-item" role="group" aria-labelledby="condition-label">
+                            <span id="condition-label" class="label">Condition</span>
+                            <span id="weather-condition" class="value"></span>
+                        </div>
+                        
+                        <div class="detail-item" role="group" aria-labelledby="feels-like-label">
+                            <span id="feels-like-label" class="label">Feels like</span>
+                            <span id="feels-like" class="value"></span>
+                        </div>
+                        
+                        <div class="detail-item" role="group" aria-labelledby="humidity-label">
+                            <span id="humidity-label" class="label">Humidity</span>
+                            <span id="humidity" class="value"></span>
+                        </div>
+                        
+                        <div class="detail-item" role="group" aria-labelledby="wind-label">
+                            <span id="wind-label" class="label">Wind</span>
+                            <span id="wind-speed" class="value"></span>
+                        </div>
                     </div>
-                    
-                    <!-- Weather content (populated by JavaScript) -->
-                    <div class="weather-content" id="weather-content" hidden>
-                        <!-- Will be populated by WeatherCard component -->
+                </div>
+
+                <!-- 5-day forecast -->
+                <div class="forecast-section">
+                    <h3 id="forecast-heading">5-Day Forecast</h3>
+                    <div id="forecast-container" 
+                         class="forecast-container" 
+                         role="group" 
+                         aria-labelledby="forecast-heading">
                     </div>
                 </div>
             </section>
+        </main>
 
-            <!-- 5-Day Forecast -->
-            <section class="forecast-section" aria-label="5-Day Weather Forecast">
-                <h2 class="forecast-title">5-Day Forecast</h2>
-                <div class="forecast-grid" id="forecast-grid">
-                    <!-- Loading state -->
-                    <div class="loading-state" id="forecast-loading" aria-live="polite">
-                        <div class="loading-spinner" aria-hidden="true"></div>
-                        <p>Loading forecast data...</p>
-                    </div>
-                    
-                    <!-- Error state -->
-                    <div class="error-state" id="forecast-error" role="alert" aria-live="assertive" hidden>
-                        <div class="error-icon" aria-hidden="true">⚠️</div>
-                        <p class="error-message">Unable to load forecast data.</p>
-                        <button type="button" class="btn btn--primary retry-btn" id="retry-forecast">
-                            Retry
-                        </button>
-                    </div>
-                    
-                    <!-- Forecast content (populated by JavaScript) -->
-                    <div class="forecast-content" id="forecast-content" hidden>
-                        <!-- Will be populated by Forecast component -->
-                    </div>
-                </div>
-            </section>
-        </div>
-    </main>
+        <footer role="contentinfo">
+            <p>&copy; 2024 Weather Dashboard. Weather data provided by OpenWeatherMap API.</p>
+        </footer>
+    </div>
 
-    <footer role="contentinfo" class="footer">
-        <div class="container">
-            <p class="footer__text">
-                Weather data provided by 
-                <a href="https://openweathermap.org/" target="_blank" rel="noopener noreferrer" class="footer__link">
-                    OpenWeatherMap
-                </a>
-            </p>
-            <p class="footer__copyright">
-                &copy; 2024 Weather Dashboard. Built with ❤️ for everyone.
-            </p>
-        </div>
-    </footer>
+    <!-- Live region for announcements -->
+    <div id="announcements" 
+         aria-live="polite" 
+         aria-atomic="true" 
+         class="visually-hidden"></div>
 
-    <!-- JavaScript Modules -->
-    <script type="module" src="js/app.js"></script>
-    
-    <!-- Fallback for browsers without module support -->
-    <script nomodule>
-        document.body.innerHTML = '<div style="text-align: center; padding: 50px; font-family: Arial;"><h1>Browser Not Supported</h1><p>Please use a modern browser to view this weather dashboard.</p></div>';
-    </script>
+    <script src="js/accessibility.js"></script>
+    <script src="js/weather-api.js"></script>
+    <script src="js/weather-display.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>

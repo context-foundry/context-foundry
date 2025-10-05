@@ -57,12 +57,13 @@ def foundry():
 @click.argument('project')
 @click.argument('task')
 @click.option('--autonomous', is_flag=True, help='Skip human review checkpoints')
+@click.option('--push', is_flag=True, help='Automatically push to GitHub after successful build')
 @click.option('--livestream', is_flag=True, help='Enable real-time dashboard')
 @click.option('--overnight', type=int, metavar='HOURS', help='Schedule overnight run')
 @click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
 @click.option('--context-manager/--no-context-manager', default=True, help='Enable smart context management')
 @click.option('--project-dir', type=click.Path(), help='Custom project directory')
-def build(project, task, autonomous, livestream, overnight, use_patterns, context_manager, project_dir):
+def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir):
     """
     Build a new project with Context Foundry.
 
@@ -75,6 +76,10 @@ def build(project, task, autonomous, livestream, overnight, use_patterns, contex
     \b
       # Autonomous build (no reviews)
       foundry build api-server "REST API with PostgreSQL" --autonomous
+
+    \b
+      # Auto-push to GitHub after successful build
+      foundry build web-app "Todo app with React" --push
 
     \b
       # Overnight session (8 hours)
@@ -134,7 +139,8 @@ def build(project, task, autonomous, livestream, overnight, use_patterns, contex
             autonomous=autonomous,
             project_dir=Path(project_dir) if project_dir else None,
             use_patterns=use_patterns,
-            enable_livestream=livestream
+            enable_livestream=livestream,
+            auto_push=push
         )
 
         result = orchestrator.run()
@@ -143,6 +149,12 @@ def build(project, task, autonomous, livestream, overnight, use_patterns, contex
             console.print("\n[green]✅ Build complete![/green]")
             console.print(f"\n[cyan]📁 Project files:[/cyan] {result.get('project_dir', 'N/A')}")
             console.print(f"[cyan]📊 Session ID:[/cyan] {result.get('session_id', 'N/A')}")
+
+            if push:
+                if result.get('pushed_to_github'):
+                    console.print(f"[green]✓[/green] [cyan]Pushed to GitHub[/cyan]")
+                else:
+                    console.print(f"[yellow]⚠[/yellow] [cyan]Push to GitHub failed (see output above)[/cyan]")
         else:
             console.print(f"\n[yellow]⚠️  Build incomplete: {result.get('status')}[/yellow]")
             sys.exit(1)
@@ -156,40 +168,226 @@ def build(project, task, autonomous, livestream, overnight, use_patterns, contex
 
 
 @foundry.command()
-@click.argument('task')
+@click.argument('project')
+@click.argument('issue')
+@click.option('--session', type=str, help='Session ID to resume (for foundry projects)')
+@click.option('--tasks', type=str, help='Comma-separated task numbers to re-run (e.g. "12,14")')
 @click.option('--autonomous', is_flag=True, help='Skip human review checkpoints')
+@click.option('--push', is_flag=True, help='Push to GitHub after successful fix')
 @click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
-@click.option('--create-pr/--no-pr', default=True, help='Create pull request when complete')
-def enhance(task, autonomous, use_patterns, create_pr):
+def fix(project, issue, session, tasks, autonomous, push, use_patterns):
     """
-    Enhance an existing project with new features (🚧 Coming Soon).
+    Fix issues in an existing project.
 
-    Run this command from within an existing git repository.
-    Context Foundry will scout your codebase and make targeted changes.
+    PROJECT can be: GitHub URL, local path, or project name in examples/
+    ISSUE is a natural language description of what to fix
 
     Examples:
 
     \b
-      # Navigate to your repo
-      cd ~/my-project
+      # Fix a specific issue
+      foundry fix weather-web "CSS files are missing from the build"
 
     \b
-      # Add a feature
-      foundry enhance "Add JWT authentication to the API"
+      # Resume a foundry session and re-run failed tasks
+      foundry fix weather-web "Fix tasks 12 and 14" --session 20251004_214024 --tasks 12,14
 
     \b
-      # Autonomous mode
-      foundry enhance "Add rate limiting" --autonomous
+      # Fix a GitHub repo
+      foundry fix https://github.com/user/repo "Login button doesn't work"
+
+    \b
+      # Autonomous mode with auto-push
+      foundry fix ./my-app "Fix broken API endpoints" --autonomous --push
     """
-    console.print("[yellow]🚧 The 'enhance' command is coming soon![/yellow]\n")
-    console.print("[dim]This feature will allow you to:")
-    console.print("  • Scout existing codebases")
-    console.print("  • Plan changes that fit your architecture")
-    console.print("  • Make targeted modifications")
-    console.print("  • Create pull requests for review\n")
-    console.print("[dim]For now, use 'foundry build' to create new projects.")
-    console.print("[dim]Track progress: https://github.com/snedea/context-foundry/issues[/dim]")
-    sys.exit(0)
+    from utils.project_detector import ProjectDetector
+    from workflows.autonomous_orchestrator import AutonomousOrchestrator
+
+    console.print(Panel.fit(
+        "[bold yellow]🔧 Context Foundry - Fix[/bold yellow]\n"
+        f"[cyan]Project:[/cyan] {project}\n"
+        f"[cyan]Issue:[/cyan] {issue}",
+        title="Fix Mode",
+        border_style="yellow"
+    ))
+
+    # Check for API key
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        console.print("[red]❌ Error: ANTHROPIC_API_KEY not set[/red]")
+        console.print("[yellow]Get your API key from: https://console.anthropic.com/[/yellow]")
+        sys.exit(1)
+
+    try:
+        # Detect project location
+        detector = ProjectDetector()
+        project_path, source_type = detector.detect(project)
+
+        console.print(f"\n[green]✓[/green] Project found: {project_path} ({source_type})")
+
+        # Extract project name from path
+        project_name = project_path.name
+
+        # Check for session resume mode
+        if session or tasks:
+            # Session resume mode
+            if not session:
+                # Try to find latest session
+                session = detector.get_latest_session_id(project_name)
+                if session:
+                    console.print(f"[cyan]📋 Using latest session:[/cyan] {session}")
+                else:
+                    console.print("[yellow]⚠️  No session found. Running in smart fix mode.[/yellow]")
+
+            if session:
+                console.print(f"\n[bold]Resuming session: {session}[/bold]")
+                if tasks:
+                    task_list = [int(t.strip()) for t in tasks.split(',')]
+                    console.print(f"[cyan]Re-running tasks:[/cyan] {task_list}\n")
+                else:
+                    console.print("[yellow]No tasks specified. Will analyze and fix issues.[/yellow]\n")
+
+        console.print("[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
+
+        orchestrator = AutonomousOrchestrator(
+            project_name=project_name,
+            task_description=issue,
+            autonomous=autonomous,
+            project_dir=project_path,
+            use_patterns=use_patterns,
+            mode="fix",
+            auto_push=push
+        )
+
+        # Pass session and task info if in resume mode
+        if session:
+            orchestrator.resume_session = session
+        if tasks:
+            orchestrator.resume_tasks = [int(t.strip()) for t in tasks.split(',')]
+
+        result = orchestrator.run()
+
+        if result.get("status") == "success":
+            console.print("\n[green]✅ Fix complete![/green]")
+            console.print(f"\n[cyan]📁 Project:[/cyan] {result.get('project_dir', 'N/A')}")
+            console.print(f"[cyan]📊 Session:[/cyan] {result.get('session_id', 'N/A')}")
+
+            if push and result.get('pushed_to_github'):
+                console.print(f"[green]✓[/green] [cyan]Pushed to GitHub[/cyan]")
+        else:
+            console.print(f"\n[yellow]⚠️  Fix incomplete: {result.get('status')}[/yellow]")
+            sys.exit(1)
+
+    except ValueError as e:
+        console.print(f"\n[red]❌ {e}[/red]")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠️  Fix interrupted by user[/yellow]")
+        sys.exit(130)
+    except Exception as e:
+        console.print(f"\n[red]❌ Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+@foundry.command()
+@click.argument('project')
+@click.argument('feature')
+@click.option('--autonomous', is_flag=True, help='Skip human review checkpoints')
+@click.option('--push', is_flag=True, help='Push to GitHub after successful enhancement')
+@click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
+@click.option('--create-pr/--no-pr', default=False, help='Create pull request when complete')
+def enhance(project, feature, autonomous, push, use_patterns, create_pr):
+    """
+    Enhance an existing project with new features.
+
+    PROJECT can be: GitHub URL, local path, or project name in examples/
+    FEATURE is a natural language description of what to add
+
+    Examples:
+
+    \b
+      # Enhance a local project
+      foundry enhance ./my-app "Add dark mode toggle to settings"
+
+    \b
+      # Enhance a GitHub repo
+      foundry enhance https://github.com/user/repo "Add rate limiting to API"
+
+    \b
+      # Enhance a foundry project
+      foundry enhance weather-web "Add 7-day forecast view"
+
+    \b
+      # Autonomous mode with auto-push
+      foundry enhance my-project "Add JWT authentication" --autonomous --push
+    """
+    from utils.project_detector import ProjectDetector
+    from workflows.autonomous_orchestrator import AutonomousOrchestrator
+
+    console.print(Panel.fit(
+        "[bold green]🔧 Context Foundry - Enhance[/bold green]\n"
+        f"[cyan]Project:[/cyan] {project}\n"
+        f"[cyan]Feature:[/cyan] {feature}",
+        title="Enhancement Mode",
+        border_style="green"
+    ))
+
+    # Check for API key
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        console.print("[red]❌ Error: ANTHROPIC_API_KEY not set[/red]")
+        console.print("[yellow]Get your API key from: https://console.anthropic.com/[/yellow]")
+        sys.exit(1)
+
+    try:
+        # Detect project location
+        detector = ProjectDetector()
+        project_path, source_type = detector.detect(project)
+
+        console.print(f"\n[green]✓[/green] Project found: {project_path} ({source_type})")
+
+        # Extract project name from path
+        project_name = project_path.name
+
+        console.print("\n[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
+
+        orchestrator = AutonomousOrchestrator(
+            project_name=project_name,
+            task_description=feature,
+            autonomous=autonomous,
+            project_dir=project_path,
+            use_patterns=use_patterns,
+            mode="enhance",
+            auto_push=push
+        )
+
+        result = orchestrator.run()
+
+        if result.get("status") == "success":
+            console.print("\n[green]✅ Enhancement complete![/green]")
+            console.print(f"\n[cyan]📁 Project:[/cyan] {result.get('project_dir', 'N/A')}")
+            console.print(f"[cyan]📊 Session:[/cyan] {result.get('session_id', 'N/A')}")
+
+            if push and result.get('pushed_to_github'):
+                console.print(f"[green]✓[/green] [cyan]Pushed to GitHub[/cyan]")
+
+            if create_pr:
+                console.print("\n[yellow]🚧 PR creation coming soon![/yellow]")
+        else:
+            console.print(f"\n[yellow]⚠️  Enhancement incomplete: {result.get('status')}[/yellow]")
+            sys.exit(1)
+
+    except ValueError as e:
+        console.print(f"\n[red]❌ {e}[/red]")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]⚠️  Enhancement interrupted by user[/yellow]")
+        sys.exit(130)
+    except Exception as e:
+        console.print(f"\n[red]❌ Error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
 @foundry.command()

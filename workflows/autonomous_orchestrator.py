@@ -39,15 +39,21 @@ class AutonomousOrchestrator:
         enable_livestream: bool = False,
         mode: str = "new",  # "new" or "enhance"
         ctx: Optional[Any] = None,  # FastMCP Context for MCP mode
+        auto_push: bool = False,  # If True, push to GitHub after successful build
     ):
         self.project_name = project_name
         self.task_description = task_description
         self.autonomous = autonomous  # If True, skip human approvals
         self.use_patterns = use_patterns  # If True, use pattern library
         self.enable_livestream = enable_livestream  # If True, broadcast to livestream
-        self.mode = mode  # "new" = build from scratch, "enhance" = modify existing
+        self.mode = mode  # "new" = build from scratch, "enhance" = modify existing, "fix" = repair issues
         self.ctx = ctx  # Store MCP context
+        self.auto_push = auto_push  # If True, push to GitHub after build
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        # For fix mode session resume
+        self.resume_session = None  # Session ID to resume
+        self.resume_tasks = None  # List of task numbers to re-run
 
         # Paths
         self.project_dir = project_dir or Path(f"examples/{project_name}")
@@ -98,6 +104,7 @@ class AutonomousOrchestrator:
         print(f"🤖 Mode: {'Autonomous' if autonomous else 'Interactive'}")
         print(f"📚 Patterns: {'Enabled' if use_patterns else 'Disabled'}")
         print(f"📡 Livestream: {'Enabled' if enable_livestream else 'Disabled'}")
+        print(f"📤 Auto-push: {'Enabled' if auto_push else 'Disabled'}")
         print(f"💾 Session: {self.session_id}\n")
 
     def run(self) -> Dict:
@@ -105,6 +112,11 @@ class AutonomousOrchestrator:
         results = {}
 
         try:
+            # Check if we're in session resume mode (fix mode with existing session)
+            if self.mode == "fix" and self.resume_session and self.resume_tasks:
+                return self.run_session_resume()
+
+            # Normal workflow: Scout → Architect → Builder
             # Phase 1: Scout
             print("🔍 PHASE 1: SCOUT")
             print("-" * 60)
@@ -131,8 +143,72 @@ class AutonomousOrchestrator:
             builder_result = self.run_builder_phase(architect_result)
             results["builder"] = builder_result
 
-            if not self.autonomous and not self.get_approval("Builder", builder_result):
-                return self.abort("Build phase rejected")
+            return self.finalize(results)
+
+        except Exception as e:
+            return self.handle_error(e, results)
+
+    def run_session_resume(self) -> Dict:
+        """Resume a previous session and re-run specific tasks."""
+        print(f"🔄 SESSION RESUME MODE")
+        print(f"{'='*60}")
+        print(f"Session: {self.project_name}_{self.resume_session}")
+        print(f"Re-running tasks: {self.resume_tasks}")
+        print(f"{'='*60}\n")
+
+        results = {}
+
+        try:
+            # Load existing blueprints
+            tasks_file = self.blueprints_path / f"tasks/TASKS_{self.resume_session}.md"
+            spec_file = self.blueprints_path / f"specs/SPEC_{self.resume_session}.md"
+            plan_file = self.blueprints_path / f"plans/PLAN_{self.resume_session}.md"
+
+            if not tasks_file.exists():
+                raise FileNotFoundError(
+                    f"Session tasks file not found: {tasks_file}\n"
+                    f"Cannot resume session {self.resume_session}"
+                )
+
+            print(f"✓ Loaded tasks from: {tasks_file}")
+            if spec_file.exists():
+                print(f"✓ Loaded spec from: {spec_file}")
+            if plan_file.exists():
+                print(f"✓ Loaded plan from: {plan_file}")
+
+            # Parse tasks
+            tasks_content = tasks_file.read_text()
+            all_tasks = self._parse_tasks(tasks_content)
+
+            print(f"\n📋 Total tasks in session: {len(all_tasks)}")
+            print(f"🎯 Re-running: {len(self.resume_tasks)} tasks\n")
+
+            # Filter to only the tasks we want to re-run
+            tasks_to_run = []
+            for task_num in self.resume_tasks:
+                if 1 <= task_num <= len(all_tasks):
+                    tasks_to_run.append(all_tasks[task_num - 1])
+                else:
+                    print(f"⚠️  Warning: Task {task_num} not found (only {len(all_tasks)} tasks exist)")
+
+            if not tasks_to_run:
+                return self.abort("No valid tasks to run")
+
+            # Re-run the Builder phase with only these tasks
+            print(f"🔨 BUILDER PHASE (Task Resume)")
+            print("-" * 60)
+
+            # Create a minimal architect_result for compatibility
+            architect_result = {
+                "tasks": str(tasks_file),
+                "spec": str(spec_file) if spec_file.exists() else None,
+                "plan": str(plan_file) if plan_file.exists() else None,
+                "status": "resumed"
+            }
+
+            # Run builder but override tasks
+            builder_result = self._run_builder_for_tasks(tasks_to_run)
+            results["builder"] = builder_result
 
             return self.finalize(results)
 
@@ -144,17 +220,51 @@ class AutonomousOrchestrator:
         # Load Scout agent config
         scout_config = Path(".foundry/agents/scout.md").read_text()
 
-        # Build prompt
+        # Build prompt based on mode
         current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Mode-specific instructions
+        if self.mode == "new":
+            mode_context = "This is a NEW project - you're starting from scratch, no existing codebase."
+            job_description = "research and design the architecture for this project"
+            focus_areas = """Focus on:
+1. Best architecture for this type of project
+2. Technology stack and dependencies
+3. Project structure and file organization
+4. Data models and storage
+5. Implementation patterns
+6. Potential challenges"""
+        elif self.mode == "enhance":
+            mode_context = f"This is an EXISTING project at: {self.project_dir}\nYou need to analyze the codebase and plan how to ADD the requested feature."
+            job_description = "understand the existing codebase architecture and plan how to integrate the new feature"
+            focus_areas = """Focus on:
+1. Current project structure and patterns
+2. Where the new feature fits in the architecture
+3. What files need to be created or modified
+4. Integration points with existing code
+5. Potential conflicts or breaking changes
+6. Testing strategy for the new feature"""
+        else:  # fix mode
+            mode_context = f"This is an EXISTING project at: {self.project_dir}\nYou need to analyze the codebase and identify how to FIX the reported issue."
+            job_description = "understand the existing codebase and identify the root cause of the issue and how to fix it"
+            focus_areas = """Focus on:
+1. Current project structure
+2. Files related to the issue
+3. Root cause analysis
+4. What needs to be fixed or added
+5. Potential side effects of the fix
+6. Testing strategy to prevent regression"""
+
         prompt = f"""You are the Scout agent in Context Foundry.
 
 Task: {self.task_description}
 Project: {self.project_name}
+Project Directory: {self.project_dir}
 Current date/time: {current_timestamp}
 
-{"This is a NEW project - you're starting from scratch, no existing codebase." if self.mode == "new" else "This is an EXISTING project - scout the codebase and plan targeted changes."}
+{mode_context}
 
-Your job is to {"research and design the architecture for this project" if self.mode == "new" else "understand the existing codebase and plan how to implement the requested changes"}.
+Your job is to {job_description}.
 
 IMPORTANT: You do NOT have file write access. Output your complete response as text.
 Do NOT ask for permission to create files. Just provide the full RESEARCH.md content.
@@ -162,13 +272,7 @@ Do NOT ask for permission to create files. Just provide the full RESEARCH.md con
 {scout_config}
 
 Generate a complete RESEARCH.md following the format in the config.
-Focus on:
-1. Best architecture for this type of project
-2. Technology stack and dependencies
-3. Project structure and file organization
-4. Data models and storage
-5. Implementation patterns
-6. Potential challenges
+{focus_areas}
 
 Keep output under 5000 tokens. Be specific and actionable."""
 
@@ -312,6 +416,12 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
 
         print(f"Found {len(tasks)} tasks to implement\n")
 
+        return self._run_builder_for_tasks(tasks)
+
+    def _run_builder_for_tasks(self, tasks: List[Dict]) -> Dict:
+        """Run builder for a specific list of tasks."""
+        print(f"Found {len(tasks)} tasks to implement\n")
+
         # Broadcast phase start
         if self.broadcaster:
             self.broadcaster.phase_change("builder", context_percent=0)
@@ -320,6 +430,10 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         completed_tasks = []
         progress_file = self.checkpoints_path / f"PROGRESS_{self.timestamp}.md"
         progress_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Track file creation across all tasks
+        total_impl_files = 0
+        total_test_files = 0
 
         for i, task in enumerate(tasks, 1):
             print(f"📝 Task {i}/{len(tasks)}: {task['name']}")
@@ -350,20 +464,23 @@ Task: {task['name']}
 Description: {task.get('description', '')}
 Files: {', '.join(task.get('files', []))}
 
-Instructions:
-1. Write comprehensive tests FIRST (TDD approach)
-2. Then implement the functionality
-3. Use proper type hints and docstrings
-4. Ensure all tests pass
-
 Project: {self.project_name}
 Project directory: {self.project_dir}
 
-CRITICAL INSTRUCTIONS:
+CRITICAL INSTRUCTIONS - READ CAREFULLY:
 1. You do NOT have file write access or tools
 2. Do NOT ask for permission to create files
-3. You MUST output actual code files as text, not descriptions
+3. You MUST output ACTUAL IMPLEMENTATION FILES - not just tests!
 4. Output COMPLETE file contents in markdown code blocks
+
+REQUIRED OUTPUT:
+1. IMPLEMENTATION FILES FIRST - Create the actual CSS, JS, HTML, or other production files
+2. Then create test files if appropriate
+3. Use proper type hints and docstrings
+4. Both implementation AND tests must be in the SAME response
+
+IMPORTANT: If this task requires CSS files, JS components, or other implementation files,
+you MUST generate those files. Do NOT generate only test files.
 
 Use this EXACT format for each file:
 
@@ -414,7 +531,9 @@ DO:
             task_output.write_text(response)
 
             # Extract and save code files
-            self._extract_and_save_code(response, self.project_dir)
+            file_stats = self._extract_and_save_code(response, self.project_dir)
+            total_impl_files += file_stats['implementation']
+            total_test_files += file_stats['test']
 
             print(f"   ✅ Task {i} complete")
             print(f"   📄 Output: {task_output}")
@@ -435,16 +554,40 @@ DO:
 
             self._update_progress(progress_file, completed_tasks, tasks)
 
-            # Git commit
+            # Git commit with appropriate prefix based on mode
             if self._git_available():
+                # Use conventional commit prefixes
+                commit_prefix = {
+                    "fix": "fix:",
+                    "enhance": "feat:",
+                    "new": "feat:"
+                }.get(self.mode, "chore:")
+
                 self._create_git_commit(
-                    f"Task {i}: {task['name']}\n\nContext: {metadata['context_percentage']}%"
+                    f"{commit_prefix} Task {i}: {task['name']}\n\nContext: {metadata['context_percentage']}%"
                 )
+
+        # Print summary
+        print(f"\n{'='*60}")
+        print(f"📊 Builder Phase Summary")
+        print(f"{'='*60}")
+        print(f"✅ Tasks completed: {len(completed_tasks)}/{len(tasks)}")
+        print(f"📁 Implementation files: {total_impl_files}")
+        print(f"🧪 Test files: {total_test_files}")
+        if total_impl_files == 0:
+            print(f"\n⚠️  WARNING: No implementation files were generated!")
+            print(f"   This build may be incomplete. Check task outputs.")
+        print(f"{'='*60}\n")
 
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
             "metadata": self.claude.get_context_stats(),
+            "files_created": {
+                "implementation": total_impl_files,
+                "test": total_test_files,
+                "total": total_impl_files + total_test_files
+            },
             "status": "complete",
         }
 
@@ -516,8 +659,12 @@ DO:
 
         return tasks
 
-    def _extract_and_save_code(self, response: str, project_dir: Path):
-        """Extract code blocks from response and save to files."""
+    def _extract_and_save_code(self, response: str, project_dir: Path) -> dict:
+        """Extract code blocks from response and save to files.
+
+        Returns:
+            dict with 'total', 'implementation', and 'test' file counts
+        """
         import re
 
         # Try multiple patterns to be flexible
@@ -539,6 +686,8 @@ DO:
         ]
 
         files_created = 0
+        test_files = 0
+        impl_files = 0
 
         for pattern in patterns:
             matches = re.finditer(pattern, response, re.DOTALL | re.IGNORECASE)
@@ -562,10 +711,21 @@ DO:
                 print(f"   📁 Created: {full_path}")
                 files_created += 1
 
+                # Track test vs implementation files
+                if 'test' in filepath.lower() or filepath.startswith('tests/'):
+                    test_files += 1
+                else:
+                    impl_files += 1
+
         if files_created == 0:
             print(f"   ⚠️  WARNING: No code files were extracted from Builder output!")
-            print(f"   💡 Check: logs/{self.timestamp}/task_*_output.md")
-            print(f"   The LLM may have described files instead of outputting code.")
+            print(f"   💡 Review the task output log file - the LLM may have described files instead of generating code.")
+            print(f"   📄 Check: logs/{self.timestamp}/task_*_output.md")
+        elif impl_files == 0 and test_files > 0:
+            print(f"   ⚠️  WARNING: Only test files were created ({test_files} tests, 0 implementation files)")
+            print(f"   💡 The LLM may have misunderstood the task - implementation files are missing!")
+
+        return {'total': files_created, 'implementation': impl_files, 'test': test_files}
 
     def _update_progress(
         self, progress_file: Path, completed: List[Dict], total: List[Dict]
@@ -613,6 +773,67 @@ Total Tokens: {stats['total_tokens']:,}
         except Exception as e:
             print(f"   ⚠️  Git commit failed: {e}")
 
+    def _push_to_github(self) -> bool:
+        """Push commits to GitHub remote.
+
+        Returns:
+            bool: True if push succeeded, False otherwise
+        """
+        try:
+            # Get current branch
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5
+            )
+            current_branch = result.stdout.strip()
+
+            # Check if remote exists
+            result = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                print(f"\n⚠️  No 'origin' remote configured. Skipping push.")
+                print(f"   Configure with: git remote add origin <url>")
+                return False
+
+            remote_url = result.stdout.strip()
+            print(f"\n📤 Pushing to GitHub...")
+            print(f"   Remote: {remote_url}")
+            print(f"   Branch: {current_branch}")
+
+            # Push to remote
+            result = subprocess.run(
+                ["git", "push", "origin", current_branch],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode == 0:
+                print(f"✅ Successfully pushed to GitHub!")
+                return True
+            else:
+                print(f"⚠️  Push failed: {result.stderr}")
+                if "rejected" in result.stderr.lower():
+                    print(f"   💡 Tip: Pull changes first with: git pull origin {current_branch}")
+                elif "authentication" in result.stderr.lower() or "permission" in result.stderr.lower():
+                    print(f"   💡 Tip: Check your GitHub authentication (SSH key or token)")
+                return False
+
+        except subprocess.TimeoutExpired:
+            print(f"\n⚠️  Push timed out. Check your network connection.")
+            return False
+        except Exception as e:
+            print(f"\n⚠️  Push failed: {e}")
+            return False
+
     def get_approval(
         self, phase: str, result: Dict, critical: bool = False
     ) -> bool:
@@ -625,7 +846,19 @@ Total Tokens: {stats['total_tokens']:,}
 
         while True:
             print(f"\n✋ Human Review Required: {phase} Phase")
-            print(f"📄 Files: {result}")
+
+            # Extract file paths from result dict
+            files = [v for k, v in result.items() if k in ('file', 'spec', 'plan', 'tasks') and isinstance(v, str)]
+            if files:
+                print(f"📄 Files: {', '.join(files)}")
+
+            # Show metadata if available
+            if 'metadata' in result:
+                meta = result['metadata']
+                ctx_pct = meta.get('context_percentage', 0)
+                tokens = meta.get('total_tokens', 0)
+                print(f"📊 Context: {ctx_pct}% | Tokens: {tokens:,}")
+
             approval = input("\nType 'approve' to continue, anything else to abort: ")
 
             if approval.lower() == "approve":
@@ -688,17 +921,28 @@ Total Tokens: {stats['total_tokens']:,}
                 pricing = db.get_pricing(provider, model)
 
                 if pricing and stats.get('total_tokens', 0) > 0:
-                    # Rough estimate: assume 30% input, 70% output
-                    total_tokens = stats['total_tokens']
-                    input_tokens = int(total_tokens * 0.3)
-                    output_tokens = int(total_tokens * 0.7)
+                    # Use exact token counts if available, otherwise estimate
+                    input_tokens = stats.get('total_input_tokens')
+                    output_tokens = stats.get('total_output_tokens')
 
-                    cost = (input_tokens / 1_000_000 * pricing.input_cost_per_1m) + \
-                           (output_tokens / 1_000_000 * pricing.output_cost_per_1m)
+                    if input_tokens is None or output_tokens is None:
+                        # Fallback: estimate 30% input, 70% output
+                        total_tokens = stats['total_tokens']
+                        input_tokens = int(total_tokens * 0.3)
+                        output_tokens = int(total_tokens * 0.7)
+                        cost_label = "ESTIMATED COST (30/70 split)"
+                    else:
+                        cost_label = "TOTAL COST"
 
-                    print(f"\n💰 ESTIMATED COST")
+                    input_cost = input_tokens / 1_000_000 * pricing.input_cost_per_1m
+                    output_cost = output_tokens / 1_000_000 * pricing.output_cost_per_1m
+                    total_cost = input_cost + output_cost
+
+                    print(f"\n💰 {cost_label}")
                     print("━" * 60)
-                    print(f"Total Cost: ${cost:.2f} (approximate)")
+                    print(f"Input:  {input_tokens:,} tokens × ${pricing.input_cost_per_1m}/1M = ${input_cost:.4f}")
+                    print(f"Output: {output_tokens:,} tokens × ${pricing.output_cost_per_1m}/1M = ${output_cost:.4f}")
+                    print(f"Total: ${total_cost:.2f}")
                     print(f"Model: {provider}/{model}")
                     print("━" * 60)
 
@@ -758,27 +1002,55 @@ Total Tokens: {stats['total_tokens']:,}
                 }
             )
 
-        return {"status": "success", "session_id": self.session_id, "results": results}
+        # Push to GitHub if enabled
+        push_success = False
+        if self.auto_push:
+            if self._git_available():
+                push_success = self._push_to_github()
+            else:
+                print(f"\n⚠️  Auto-push enabled but git is not available")
+
+        return {
+            "status": "success",
+            "session_id": self.session_id,
+            "project_dir": str(self.project_dir),
+            "pushed_to_github": push_success,
+            "results": results
+        }
 
 
 def main():
     """CLI entry point."""
     if len(sys.argv) < 3:
-        print("Usage: python autonomous_orchestrator.py <project_name> <task_description> [--autonomous]")
+        print("Usage: python autonomous_orchestrator.py <project_name> <task_description> [--autonomous] [--push]")
+        print()
+        print("Options:")
+        print("  --autonomous  Skip human approval prompts")
+        print("  --push        Automatically push to GitHub after successful build")
         print()
         print("Examples:")
         print('  python autonomous_orchestrator.py todo-app "Build CLI todo app"')
         print('  python autonomous_orchestrator.py api-server "REST API with auth" --autonomous')
+        print('  python autonomous_orchestrator.py web-app "Build web app" --push')
         sys.exit(1)
 
     project_name = sys.argv[1]
     task_description = " ".join(sys.argv[2:])
     autonomous = "--autonomous" in sys.argv
+    auto_push = "--push" in sys.argv
 
+    # Clean flags from task description
     if autonomous:
         task_description = task_description.replace("--autonomous", "").strip()
+    if auto_push:
+        task_description = task_description.replace("--push", "").strip()
 
-    orchestrator = AutonomousOrchestrator(project_name, task_description, autonomous)
+    orchestrator = AutonomousOrchestrator(
+        project_name,
+        task_description,
+        autonomous=autonomous,
+        auto_push=auto_push
+    )
     result = orchestrator.run()
 
     exit(0 if result["status"] == "success" else 1)

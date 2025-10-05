@@ -26,7 +26,7 @@ const config = {
     // OpenWeatherMap API configuration
     API_KEY: isDevelopment 
         ? 'your-development-api-key-here' 
-        : (window.WEATHER_API_KEY || 'your-production-api-key-here'),
+        : (window.WEATHER_API_KEY || 'c4b27d06b0817cd09f83aa58745fda97'),
     
     API_BASE_URL: 'https://api.openweathermap.org/data/2.5',
     
