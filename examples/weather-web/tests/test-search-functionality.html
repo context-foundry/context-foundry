@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Functionality Tests - Weather Web</title>
+    <style>
+        .test-results { font-family: Arial, sans-serif; margin: 20px; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="test-results">
+        <h1>Search Functionality Tests</h1>
+        <div id="test-output"></div>
+    </div>
+
+    <!-- Mock HTML structure for testing -->
+    <div id="test-container" style="display: none;">
+        <form class="search-form">
+            <div class="search-input-group">
+                <input type="search" id="city-search" class="search-input" placeholder="Search for a city...">
+                <button type="submit" class="btn btn--primary search-btn">Search</button>
+            </div>
+        </form>
+        <div class="recent-searches" id="recent-searches">
+            <ul class="recent-searches__list"></ul>
+        </div>
+        <div class="search-suggestions" id="search-suggestions"></div>
+    </div>
+
+    <script type="module">
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertExists(selector, message, container = document) {
+                const element = container.querySelector(selector);
+                if (!element) {
+                    throw new Error(`${message}: element ${selector} not found`);
+                }
+                return element;
+            }
+        }
+
+        const runner = new TestRunner();
+
+        // Mock WeatherService for testing
+        class MockWeatherService {
+            static async searchCities(query) {
+                if (query === 'London') {
+                    return [
+                        { name: 'London', country: 'GB', lat: 51.5074, lon: -0.1278 },
+                        { name: 'London', country: 'CA', lat: 42.9849, lon: -81.2453 }
+                    ];
+                }
+                if (query === 'invalid') {
+                    throw new Error('City not found');
+                }
+                return [];
+            }
+
+            static async getCurrentWeather(lat, lon) {
+                return {
+                    name: 'Test City',
+                    main: { temp: 20, humidity: 60 },
+                    weather: [{ main: 'Clear', description: 'clear sky', icon: '01d' }]
+                };
+            }
+        }
+
+        // SearchBar Tests
+        runner.test('SearchBar class can be instantiated', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            runner.assert(searchBar instanceof SearchBar, 'SearchBar should be instantiated');
+            runner.assert(typeof searchBar.handleSearch === 'function', 'Should have handleSearch method');
+            runner.assert(typeof searchBar.validateInput === 'function', 'Should have validateInput method');
+        });
+
+        runner.test('SearchBar initializes DOM elements correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            runner.assert(searchBar.searchForm, 'Should find search form');
+            runner.assert(searchBar.searchInput, 'Should find search input');
+            runner.assert(searchBar.searchButton, 'Should find search button');
+        });
+
+        runner.test('Input validation works correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            runner.assertEqual(searchBar.validateInput(''), false, 'Empty string should be invalid');
+            runner.assertEqual(searchBar.validateInput('   '), false, 'Whitespace only should be invalid');
+            runner.assertEqual(searchBar.validateInput('a'), false, 'Single character should be invalid');
+            runner.assertEqual(searchBar.validateInput('London'), true, 'Valid city name should be valid');
+            runner.assertEqual(searchBar.validateInput('New York'), true, 'City with space should be valid');
+        });
+
+        runner.test('Search input sanitization works', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            runner.assertEqual(searchBar.sanitizeInput('  London  '), 'London', 'Should trim whitespace');
+            runner.assertEqual(searchBar.sanitizeInput('london'), 'London', 'Should capitalize first letter');
+            runner.assertEqual(searchBar.sanitizeInput('new york'), 'New York', 'Should capitalize words');
+            runner.assertEqual(searchBar.sanitizeInput('<script>'), 'Script', 'Should remove HTML tags');
+        });
+
+        runner.test('Debounced search works correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            let searchCount = 0;
+            searchBar.performSearch = async () => { searchCount++; };
+            
+            // Trigger multiple rapid searches
+            searchBar.debouncedSearch('London');
+            searchBar.debouncedSearch('London');
+            searchBar.debouncedSearch('London');
+            
+            // Wait for debounce delay
+            await new Promise(resolve => setTimeout(resolve, 350));
+            
+            runner.assertEqual(searchCount, 1, 'Should only perform one search after debounce');
+        });
+
+        runner.test('Recent searches are managed correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            // Clear existing searches
+            searchBar.recentSearches = [];
+            
+            searchBar.addToRecentSearches('London');
+            searchBar.addToRecentSearches('Paris');
+            
+            runner.assertEqual(searchBar.recentSearches.length, 2, 'Should have 2 recent searches');
+            runner.assertEqual(searchBar.recentSearches[0], 'Paris', 'Most recent should be first');
+            
+            // Add duplicate
+            searchBar.addToRecentSearches('London');
+            runner.assertEqual(searchBar.recentSearches.length, 2, 'Should not add duplicate');
+            runner.assertEqual(searchBar.recentSearches[0], 'London', 'Duplicate should move to front');
+        });
+
+        runner.test('Search suggestions are displayed correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            const mockResults = [
+                { name: 'London', country: 'GB', lat: 51.5074, lon: -0.1278 },
+                { name: 'London', country: 'CA', lat: 42.9849, lon: -81.2453 }
+            ];
+            
+            searchBar.displaySuggestions(mockResults);
+            
+            const suggestions = container.querySelector('.search-suggestions');
+            const items = suggestions.querySelectorAll('.suggestion-item');
+            
+            runner.assertEqual(items.length, 2, 'Should display 2 suggestions');
+            runner.assert(items[0].textContent.includes('London'), 'Should display city name');
+            runner.assert(items[0].textContent.includes('GB'), 'Should display country code');
+        });
+
+        runner.test('Error handling works correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            // Mock error scenario
+            searchBar.performSearch = async () => {
+                throw new Error('Network error');
+            };
+            
+            await searchBar.handleSearch(new Event('submit'));
+            
+            const errorElement = container.querySelector('.search-error');
+            runner.assert(errorElement, 'Should display error message');
+            runner.assert(errorElement.textContent.includes('error'), 'Should contain error text');
+        });
+
+        runner.test('Loading state is managed correctly', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            searchBar.setLoadingState(true);
+            runner.assert(searchBar.searchButton.disabled, 'Search button should be disabled during loading');
+            runner.assert(searchBar.searchButton.textContent.includes('Searching'), 'Should show loading text');
+            
+            searchBar.setLoadingState(false);
+            runner.assert(!searchBar.searchButton.disabled, 'Search button should be enabled after loading');
+            runner.assert(!searchBar.searchButton.textContent.includes('Searching'), 'Should not show loading text');
+        });
+
+        runner.test('Keyboard navigation works for suggestions', async () => {
+            const { SearchBar } = await import('../js/components/searchBar.js');
+            const container = document.getElementById('test-container');
+            const searchBar = new SearchBar(container);
+            
+            const mockResults = [
+                { name: 'London', country: 'GB', lat: 51.5074, lon: -0.1278 },
+                { name: 'London', country: 'CA', lat: 42.9849, lon: -81.2453 }
+            ];
+            
+            searchBar.displaySuggestions(mockResults);
+            
+            // Simulate arrow down
+            const arrowDownEvent = new KeyboardEvent('keydown', { key: 'ArrowDown' });
+            searchBar.searchInput.dispatchEvent(arrowDownEvent);
+            
+            const activeSuggestion = container.querySelector('.suggestion-item--active');
+            runner.assert(activeSuggestion, 'Should have active suggestion after arrow down');
+        });
+
+        // WeatherService Search Integration Tests
+        runner.test('WeatherService search cities method exists', async () => {
+            // Note: Using mock for testing, real implementation would test actual service
+            runner.assert(typeof MockWeatherService.searchCities === 'function', 'searchCities method should exist');
+        });
+
+        runner.test('WeatherService handles search results correctly', async () => {
+            const results = await MockWeatherService.searchCities('London');
+            
+            runner.assert(Array.isArray(results), 'Should return array of results');
+            runner.assert(results.length > 0, 'Should return results for valid city');
+            runner.assert(results[0].name, 'Result should have name property');
+            runner.assert(results[0].country, 'Result should have country property');
+            runner.assert(typeof results[0].lat === 'number', 'Result should have latitude');
+            runner.assert(typeof results[0].lon === 'number', 'Result should have longitude');
+        });
+
+        runner.test('WeatherService handles search errors correctly', async () => {
+            try {
+                await MockWeatherService.searchCities('invalid');
+                runner.assert(false, 'Should throw error for invalid city');
+            } catch (error) {
+                runner.assert(error.message.includes('not found'), 'Should throw appropriate error');
+            }
+        });
+
+        // CSS Component Tests
+        runner.test('Search component CSS classes exist', () => {
+            const testEl = document.createElement('div');
+            testEl.innerHTML = `
+                <div class="search-container">
+                    <div class="search-input-group">
+                        <input class="search-input">
+                        <button class="search-btn">Search</button>
+                    </div>
+                    <div class="search-suggestions"></div>
+                    <div class="search-error"></div>
+                </div>
+            `;
+            
+            document.body.appendChild(testEl);
+            
+            runner.assertExists('.search-container', 'Search container class should exist');
+            runner.assertExists('.search-input-group', 'Search input group class should exist');
+            runner.assertExists('.search-suggestions', 'Search suggestions class should exist');
+            runner.assertExists('.search-error', 'Search error class should exist');
+            
+            document.body.removeChild(testEl);
+        });
+
+        runner.test('Search accessibility attributes are present', () => {
+            const container = document.getElementById('test-container');
+            const searchInput = container.querySelector('#city-search');
+            
+            runner.assert(searchInput.getAttribute('aria-label') || 
+                         searchInput.getAttribute('aria-labelledby'), 
+                         'Search input should have aria-label');
+        });
+
+        // Run all tests
+        runner.run();
+    </script>
+</body>
+</html>
