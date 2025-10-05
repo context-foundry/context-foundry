@@ -390,7 +390,15 @@ Based on the methodology that powers Context Foundry:
 
 ## Advanced Features
 
-- **Pattern Library**: Learns from successful implementations
+- **Pattern Library**: Self-improving system that learns from each successful build
+  - Automatically extracts proven code patterns from completed projects
+  - Stores patterns in local database with semantic embeddings
+  - Injects relevant patterns (>70% success rate) into Builder prompts
+  - Enabled by default (`--no-patterns` to disable)
+  - **Example**: When building "FastAPI authentication", automatically includes proven OAuth2 patterns from past builds
+  - **Benefits**: Faster builds, higher quality code, cost savings from reduced trial-and-error
+  - Starts empty and grows: ~50 patterns after 10 builds, ~500 after 100 builds
+  - See [Pattern Library Guide](foundry/patterns/README.md) for details
 - **Context Compaction**: Automatic summarization at 50% usage (based on [Claude agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk))
 - **Subagent Isolation**: 200K token windows returning 1-2K summaries
 - **Test-First Development**: Tests generated before implementation

@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any
 sys.path.append(str(Path(__file__).parent.parent))
 
 from ace.claude_integration import get_claude_client
+from ace.pricing_database import PricingDatabase
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
@@ -107,6 +108,33 @@ class AutonomousOrchestrator:
         print(f"📤 Auto-push: {'Enabled' if auto_push else 'Disabled'}")
         print(f"💾 Session: {self.session_id}\n")
 
+    def _format_phase_header(self, phase_name: str, emoji: str, env_provider_var: str, env_model_var: str) -> str:
+        """
+        Format phase header with agent name, model, and pricing info.
+
+        Args:
+            phase_name: Name of phase (e.g., "1: SCOUT", "2: ARCHITECT", "3: BUILDER")
+            emoji: Emoji for the phase
+            env_provider_var: Environment variable name for provider (e.g., "SCOUT_PROVIDER")
+            env_model_var: Environment variable name for model (e.g., "SCOUT_MODEL")
+
+        Returns:
+            Formatted header string
+        """
+        provider = os.getenv(env_provider_var, 'anthropic')
+        model = os.getenv(env_model_var, 'claude-sonnet-4-20250514')
+
+        # Get pricing info
+        pricing_db = PricingDatabase()
+        pricing = pricing_db.get_pricing(provider, model)
+
+        if pricing:
+            pricing_str = f"${pricing.input_cost_per_1m:.2f}/1M in, ${pricing.output_cost_per_1m:.2f}/1M out"
+        else:
+            pricing_str = "pricing unavailable"
+
+        return f"{emoji} PHASE {phase_name} Agent ({provider.title()} {model} | {pricing_str})"
+
     def run(self) -> Dict:
         """Execute the complete autonomous workflow."""
         results = {}
@@ -118,7 +146,8 @@ class AutonomousOrchestrator:
 
             # Normal workflow: Scout → Architect → Builder
             # Phase 1: Scout
-            print("🔍 PHASE 1: SCOUT")
+            header = self._format_phase_header("1: SCOUT", "🔍", "SCOUT_PROVIDER", "SCOUT_MODEL")
+            print(header)
             print("-" * 60)
             scout_result = self.run_scout_phase()
             results["scout"] = scout_result
@@ -127,7 +156,8 @@ class AutonomousOrchestrator:
                 return self.abort("Scout phase rejected")
 
             # Phase 2: Architect
-            print("\n📐 PHASE 2: ARCHITECT")
+            header = self._format_phase_header("2: ARCHITECT", "📐", "ARCHITECT_PROVIDER", "ARCHITECT_MODEL")
+            print(f"\n{header}")
             print("-" * 60)
             architect_result = self.run_architect_phase(scout_result)
             results["architect"] = architect_result
@@ -138,7 +168,8 @@ class AutonomousOrchestrator:
                     return self.abort("Architecture phase rejected")
 
             # Phase 3: Builder
-            print("\n🔨 PHASE 3: BUILDER")
+            header = self._format_phase_header("3: BUILDER", "🔨", "BUILDER_PROVIDER", "BUILDER_MODEL")
+            print(f"\n{header}")
             print("-" * 60)
             builder_result = self.run_builder_phase(architect_result)
             results["builder"] = builder_result

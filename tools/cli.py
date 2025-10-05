@@ -34,6 +34,34 @@ from foundry.patterns.pattern_manager import PatternLibrary
 console = Console()
 
 
+def confirm_settings(settings: dict) -> bool:
+    """Show settings summary and ask user to confirm before starting.
+
+    Args:
+        settings: Dictionary of settings to display
+
+    Returns:
+        True if user confirms, False otherwise
+    """
+    console.print("\n[bold yellow]📋 Configuration Summary[/bold yellow]")
+    console.print("─" * 60)
+
+    for key, value in settings.items():
+        console.print(f"  [cyan]{key}:[/cyan] {value}")
+
+    console.print("─" * 60)
+    console.print("[dim]Review settings above. Type 'y' or 'yes' to proceed, or anything else to abort.[/dim]")
+
+    response = input("\n👉 Proceed with these settings? (y/n): ").strip().lower()
+
+    if response in ['y', 'yes']:
+        console.print("[green]✓[/green] Starting workflow...\n")
+        return True
+    else:
+        console.print("[yellow]⚠️  Aborted by user. Restart with different flags if needed.[/yellow]")
+        return False
+
+
 @click.group()
 @click.version_option(version="1.0.0")
 def foundry():
@@ -92,7 +120,8 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
     console.print(Panel.fit(
         "[bold blue]🏭 Context Foundry[/bold blue]\n"
         f"[cyan]Project:[/cyan] {project}\n"
-        f"[cyan]Task:[/cyan] {task}",
+        f"[cyan]Task:[/cyan] {task}\n"
+        f"[cyan]Ralph Wiggum mode:[/cyan] {'🤖 On (autonomous)' if autonomous else '👤 Off (interactive)'}",
         title="Starting Build",
         border_style="blue"
     ))
@@ -131,6 +160,21 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
 
     # Build the project
     console.print("[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
+
+    # Pre-flight confirmation
+    settings = {
+        "Project": project,
+        "Task": task,
+        "Mode": "Build (new project)",
+        "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
+        "Livestream": "📡 On" if livestream else "Off",
+        "Auto-push to GitHub": "✓ On" if push else "Off",
+        "Pattern injection": "✓ On" if use_patterns else "Off",
+        "Context management": "✓ On" if context_manager else "Off"
+    }
+
+    if not confirm_settings(settings):
+        sys.exit(0)
 
     try:
         orchestrator = AutonomousOrchestrator(
@@ -206,7 +250,8 @@ def fix(project, issue, session, tasks, autonomous, push, use_patterns):
     console.print(Panel.fit(
         "[bold yellow]🔧 Context Foundry - Fix[/bold yellow]\n"
         f"[cyan]Project:[/cyan] {project}\n"
-        f"[cyan]Issue:[/cyan] {issue}",
+        f"[cyan]Issue:[/cyan] {issue}\n"
+        f"[cyan]Ralph Wiggum mode:[/cyan] {'🤖 On (autonomous)' if autonomous else '👤 Off (interactive)'}",
         title="Fix Mode",
         border_style="yellow"
     ))
@@ -247,6 +292,24 @@ def fix(project, issue, session, tasks, autonomous, push, use_patterns):
                     console.print("[yellow]No tasks specified. Will analyze and fix issues.[/yellow]\n")
 
         console.print("[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
+
+        # Pre-flight confirmation
+        settings = {
+            "Project": project_name,
+            "Issue": issue,
+            "Mode": "Fix (repair existing)",
+            "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
+            "Auto-push to GitHub": "✓ On" if push else "Off",
+            "Pattern injection": "✓ On" if use_patterns else "Off"
+        }
+
+        if session:
+            settings["Session resume"] = f"📋 {session}"
+        if tasks:
+            settings["Re-run tasks"] = tasks
+
+        if not confirm_settings(settings):
+            sys.exit(0)
 
         orchestrator = AutonomousOrchestrator(
             project_name=project_name,
@@ -328,7 +391,8 @@ def enhance(project, feature, autonomous, push, use_patterns, create_pr):
     console.print(Panel.fit(
         "[bold green]🔧 Context Foundry - Enhance[/bold green]\n"
         f"[cyan]Project:[/cyan] {project}\n"
-        f"[cyan]Feature:[/cyan] {feature}",
+        f"[cyan]Feature:[/cyan] {feature}\n"
+        f"[cyan]Ralph Wiggum mode:[/cyan] {'🤖 On (autonomous)' if autonomous else '👤 Off (interactive)'}",
         title="Enhancement Mode",
         border_style="green"
     ))
@@ -350,6 +414,20 @@ def enhance(project, feature, autonomous, push, use_patterns, create_pr):
         project_name = project_path.name
 
         console.print("\n[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
+
+        # Pre-flight confirmation
+        settings = {
+            "Project": project_name,
+            "Feature": feature,
+            "Mode": "Enhance (add features)",
+            "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
+            "Auto-push to GitHub": "✓ On" if push else "Off",
+            "Pattern injection": "✓ On" if use_patterns else "Off",
+            "Create PR": "✓ On" if create_pr else "Off"
+        }
+
+        if not confirm_settings(settings):
+            sys.exit(0)
 
         orchestrator = AutonomousOrchestrator(
             project_name=project_name,
