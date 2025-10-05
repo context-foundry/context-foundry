@@ -260,9 +260,10 @@ EOF
 - No additional per-token API charges (beyond subscription cost)
 
 **Current Status:**
-- ⚠️ Not yet functional - Claude Desktop doesn't support MCP sampling
-- ✅ Fully implemented and ready for when support is added
-- ⚠️ See docs/MCP_SETUP.md for details
+- ✅ MCP mode works as terminal-based MCP server (uses API key)
+- ⚠️ Claude Desktop integration not available (would use subscription - blocked by sampling support)
+- ✅ Use `foundry serve` to run MCP server
+- ℹ️ See docs/MCP_SETUP.md for details
 
 **Pros (when available):**
 - ✅ Uses Claude Pro/Max subscription ($20/month) instead of per-token charges

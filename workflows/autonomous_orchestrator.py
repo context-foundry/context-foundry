@@ -703,8 +703,18 @@ DO:
                 if len(filepath) > 100 or '\n' in filepath:
                     continue
 
+                # Strip leading slashes to ensure relative path
+                # (Python's Path treats "/file.txt" as absolute, ignoring project_dir)
+                filepath = filepath.lstrip('/')
+
                 # Save file
-                full_path = project_dir / filepath
+                full_path = (project_dir / filepath).resolve()
+
+                # Security check: ensure file is within project directory
+                if not str(full_path).startswith(str(project_dir.resolve())):
+                    print(f"   ⚠️  WARNING: Skipping file outside project directory: {filepath}")
+                    continue
+
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 full_path.write_text(code)
 

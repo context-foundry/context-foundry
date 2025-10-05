@@ -119,9 +119,9 @@ foundry --version
 | Mode | Cost | Setup | Status |
 |------|------|-------|--------|
 | **API Mode** | ~$3-10 per project (pay per token) | Set `ANTHROPIC_API_KEY` | ✅ **Works now - Recommended** |
-| **MCP Mode** | Requires Claude Pro/Max ($20/month) | [Setup Guide](docs/MCP_SETUP.md) | ⚠️ **Not yet functional** - awaiting Claude Desktop sampling support |
+| **MCP Mode** | Terminal-based MCP server (uses API key) | [Setup Guide](docs/MCP_SETUP.md) | ✅ **Works now** - uses API like CLI mode |
 
-💡 **Current Recommendation**: Use API mode. MCP mode is fully implemented but Claude Desktop doesn't yet support the required "sampling" feature. When available, MCP mode will use your Claude subscription instead of incurring additional per-token API charges.
+💡 **Both modes work**: API mode (CLI) and MCP mode (MCP server) both use API keys. Future enhancement: Claude Desktop integration would allow using paid subscription instead of API keys.
 
 ### Basic Usage
 
@@ -291,13 +291,13 @@ foundry status --watch
 foundry analyze --format markdown --save report.md
 ```
 
-## Roadmap: MCP Mode
+## MCP Mode
 
-**MCP Mode (Model Context Protocol)** is fully implemented but not yet functional. It's designed to work through Claude Desktop using your Claude Pro/Max subscription instead of per-token API charges.
+**MCP Mode (Model Context Protocol)** is fully implemented and functional. It runs as a terminal-based MCP server using your Anthropic API key, just like CLI mode.
 
-**Current Status:** ⚠️ Blocked by Claude Desktop - sampling not yet supported
+**Current Status:** ✅ Working (terminal-based MCP server)
+**Future Enhancement:** Claude Desktop integration (would use subscription instead of API charges - blocked by lack of sampling support)
 **Technical Details:** See [MCP Setup Guide](docs/MCP_SETUP.md)
-**When Available:** Will work automatically without code changes
 
 ## Key Principles
 
@@ -349,6 +349,7 @@ context-foundry/
 | **Git Integration** | ✅ Working | Auto-commits and checkpointing |
 | **Health Checks** | ✅ Working | Setup validation |
 | **Session Analysis** | ✅ Working | Metrics and reporting |
+| **MCP Mode** | ✅ Working | Terminal-based MCP server (uses API key) |
 | **PR Creation** | 📋 Planned | Automatic GitHub PRs |
 | **Multi-Project** | 📋 Planned | Managing multiple projects |
 | **Cloud Deployment** | 📋 Planned | Hosted Context Foundry |

@@ -1,9 +1,12 @@
 # MCP Server Mode Setup Guide
 
-> ⚠️ **IMPORTANT LIMITATION (as of October 2025):**
-> Claude Desktop does not yet support MCP sampling, which Context Foundry requires to function. The MCP server will run and tools will appear in Claude Desktop, but they will return an error message explaining this limitation. Use API mode (with ANTHROPIC_API_KEY) for actual builds until Claude Desktop adds sampling support.
+> ✅ **MCP MODE IS FUNCTIONAL** (as of October 2025):
+> MCP mode works as a terminal-based MCP server using your Anthropic API key. You can use `foundry serve` to start the MCP server and interact with it programmatically.
+>
+> ⚠️ **CLAUDE DESKTOP INTEGRATION NOT YET AVAILABLE:**
+> While the MCP server works, Claude Desktop integration is blocked because Claude Desktop doesn't support MCP sampling. This means you can't use it through Claude Desktop's UI with your paid subscription (instead of API charges) yet. Use `foundry build` CLI or `foundry serve` for terminal-based MCP server.
 
-This guide shows you how to set up Context Foundry as an MCP server. When Claude Desktop adds sampling support, Context Foundry will work using your Claude subscription instead of per-token API charges.
+This guide shows you how to set up Context Foundry as an MCP server. The MCP server works today using your API key. In the future, Claude Desktop integration would allow using your Claude subscription instead of per-token API charges.
 
 ## What is MCP Mode?
 
