@@ -93,11 +93,8 @@ source ~/.zshrc
 
 # Choose your mode:
 
-# Option A: MCP Mode (Claude Desktop - no API charges) - RECOMMENDED
-# See docs/MCP_SETUP.md for full setup guide
-foundry serve --config-help
-
-# Option B: API Mode (standalone CLI - charges apply)
+# Option A: API Mode (standalone CLI - recommended for now)
+# Set your Anthropic API key
 export ANTHROPIC_API_KEY=your_key_here
 
 # Verify setup
@@ -106,20 +103,22 @@ foundry --version
 
 **Two Ways to Use Context Foundry:**
 
-| Mode | Cost | Setup | Best For |
-|------|------|-------|----------|
-| **MCP Mode** | Free (uses Claude Pro/Max) | [Setup Guide](docs/MCP_SETUP.md) | Interactive development |
-| **API Mode** | Pay per token | Set `ANTHROPIC_API_KEY` | CI/CD, automation |
+| Mode | Cost | Setup | Status |
+|------|------|-------|--------|
+| **API Mode** | ~$3-10 per project (pay per token) | Set `ANTHROPIC_API_KEY` | ✅ **Works now - Recommended** |
+| **MCP Mode** | Requires Claude Pro/Max ($20/month) | [Setup Guide](docs/MCP_SETUP.md) | ⚠️ **Not yet functional** - awaiting Claude Desktop sampling support |
 
-💡 **Recommended**: Use MCP mode if you have Claude Pro/Max subscription - it's free and integrates seamlessly with Claude Desktop!
+💡 **Current Recommendation**: Use API mode. MCP mode is fully implemented but Claude Desktop doesn't yet support the required "sampling" feature. When available, MCP mode will use your Claude subscription instead of incurring additional per-token API charges.
 
 ### Basic Usage
 
 Context Foundry works in two modes:
 
-#### Option 1: MCP Mode (via Claude Desktop)
+#### Option 1: MCP Mode (via Claude Desktop) - ⚠️ Not Yet Functional
 
-Once configured (see [MCP Setup Guide](docs/MCP_SETUP.md)), use Context Foundry directly in Claude Desktop:
+> **Note:** MCP mode is fully implemented but doesn't work yet because Claude Desktop doesn't support MCP sampling. See [MCP Setup Guide](docs/MCP_SETUP.md) for details and current status.
+
+Once Claude Desktop adds sampling support, you'll be able to use Context Foundry directly:
 
 ```
 Use context_foundry_build to create a REST API with:
@@ -130,10 +129,12 @@ Use context_foundry_build to create a REST API with:
 Call it "my-api"
 ```
 
-**Benefits:**
-- ✅ No API charges (uses your Claude subscription)
+**Benefits (when available):**
+- ✅ Uses Claude Pro/Max subscription (no additional per-token charges)
 - ✅ Interactive - review and modify plans before building
 - ✅ Seamless Claude Desktop integration
+
+**For now:** Use API mode below.
 
 #### Option 2: API Mode (standalone CLI)
 

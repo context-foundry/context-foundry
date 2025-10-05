@@ -255,9 +255,10 @@ def serve(port, config_help):
         "[bold green]🔌 Starting Context Foundry MCP Server[/bold green]\n\n"
         "[cyan]Mode:[/cyan] Claude Desktop Integration\n"
         "[cyan]Transport:[/cyan] stdio\n"
-        "[cyan]Cost:[/cyan] Free (uses your Claude subscription)\n\n"
+        "[cyan]Status:[/cyan] Not yet functional (awaiting Claude Desktop sampling support)\n"
+        "[cyan]Cost:[/cyan] Will use Claude Pro/Max subscription ($20/month) when available\n\n"
         "[yellow]Available Tools:[/yellow]\n"
-        "  • context_foundry_build - Build new projects\n"
+        "  • context_foundry_build - Build new projects (returns error about sampling)\n"
         "  • context_foundry_enhance - Enhance existing projects (coming soon)\n"
         "  • context_foundry_status - Get server status\n\n"
         "[dim]Configure Claude Desktop with: foundry serve --config-help[/dim]",

@@ -257,10 +257,15 @@ EOF
 - Claude Desktop connects to it
 - You talk to Claude Desktop
 - Claude processes prompts using your subscription
-- No API calls = no API charges
+- No additional per-token API charges (beyond subscription cost)
 
-**Pros:**
-- ✅ Free (uses Claude Pro/Max subscription)
+**Current Status:**
+- ⚠️ Not yet functional - Claude Desktop doesn't support MCP sampling
+- ✅ Fully implemented and ready for when support is added
+- ⚠️ See docs/MCP_SETUP.md for details
+
+**Pros (when available):**
+- ✅ Uses Claude Pro/Max subscription ($20/month) instead of per-token charges
 - ✅ Integrated with Claude Desktop
 - ✅ Interactive and conversational
 - ✅ Can review and iterate easily

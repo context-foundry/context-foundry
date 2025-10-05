@@ -4,9 +4,10 @@
 
 Context Foundry supports two execution modes:
 
-**🆓 MCP Mode (Free):**
-- ✅ Use through Claude Desktop without API charges
-- ✅ Powered by your Claude Pro/Max subscription
+**⚠️ MCP Mode (Not Yet Functional):**
+- ⚠️ Fully implemented but awaiting Claude Desktop sampling support
+- ⚠️ Requires Claude Pro/Max subscription ($20/month)
+- ⚠️ When available: Uses subscription instead of per-token API charges
 - ✅ Interactive and conversational workflow
 
 **💳 API Mode (Paid):**
@@ -158,13 +159,13 @@ foundry enhance-multi "Add authentication" \
 
 Context Foundry now supports two execution modes, giving users flexibility based on their needs:
 
-**🆓 MCP Mode (Free - No API Charges)**
-- ✅ MCP (Model Context Protocol) server implementation using FastMCP
-- ✅ Integration with Claude Desktop via MCP tools
-- ✅ Uses Claude Pro/Max subscription instead of API calls
-- ✅ Interactive development through Claude Desktop interface
-- ✅ Three MCP tools: `context_foundry_build`, `context_foundry_enhance`, `context_foundry_status`
+**⚠️ MCP Mode (Not Yet Functional - Awaiting Claude Desktop Support)**
+- ✅ MCP (Model Context Protocol) server implementation using FastMCP (complete)
+- ⚠️ Integration with Claude Desktop blocked by lack of sampling support
+- ⚠️ Will use Claude Pro/Max subscription instead of per-token charges when available
+- ✅ Three MCP tools implemented: `context_foundry_build`, `context_foundry_enhance`, `context_foundry_status`
 - ✅ `foundry serve` command to start MCP server
+- ⚠️ Tools return helpful error messages explaining current limitation
 - ✅ Automatic configuration help with `--config-help`
 
 **💳 API Mode (Continues to Work)**
