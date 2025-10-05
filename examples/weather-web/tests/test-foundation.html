@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foundation Tests - Weather Web</title>
+    <style>
+        .test-results { font-family: Arial, sans-serif; margin: 20px; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <div class="test-results">
+        <h1>Foundation Tests</h1>
+        <div id="test-output"></div>
+    </div>
+
+    <script type="module">
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertExists(selector, message) {
+                const element = document.querySelector(selector);
+                if (!element) {
+                    throw new Error(`${message}: element ${selector} not found`);
+                }
+                return element;
+            }
+        }
+
+        const runner = new TestRunner();
+
+        // HTML Structure Tests
+        runner.test('HTML has proper doctype and lang attribute', () => {
+            const html = document.documentElement;
+            runner.assertEqual(html.getAttribute('lang'), 'en', 'HTML lang attribute should be "en"');
+        });
+
+        runner.test('Meta tags are present and correct', () => {
+            const charset = document.querySelector('meta[charset]');
+            const viewport = document.querySelector('meta[name="viewport"]');
+            
+            runner.assert(charset, 'Charset meta tag should exist');
+            runner.assert(viewport, 'Viewport meta tag should exist');
+            runner.assert(viewport.getAttribute('content').includes('width=device-width'), 'Viewport should be responsive');
+        });
+
+        runner.test('Main layout containers exist', () => {
+            runner.assertExists('header', 'Header element should exist');
+            runner.assertExists('main', 'Main element should exist');
+            runner.assertExists('.search-section', 'Search section should exist');
+            runner.assertExists('.weather-display', 'Weather display section should exist');
+            runner.assertExists('.forecast-section', 'Forecast section should exist');
+        });
+
+        runner.test('Semantic HTML structure is correct', () => {
+            const header = runner.assertExists('header', 'Header should exist');
+            const main = runner.assertExists('main', 'Main should exist');
+            const searchSection = runner.assertExists('.search-section', 'Search section should exist');
+            
+            runner.assert(header.querySelector('h1'), 'Header should contain h1');
+            runner.assert(main.contains(searchSection), 'Search section should be in main');
+        });
+
+        // CSS Tests
+        runner.test('CSS file loads successfully', () => {
+            const cssLink = document.querySelector('link[href*="styles.css"]');
+            runner.assert(cssLink, 'CSS file should be linked');
+            
+            // Check if CSS loaded by testing if custom property exists
+            const computedStyle = getComputedStyle(document.documentElement);
+            runner.assert(computedStyle.getPropertyValue('--primary-color'), 'CSS custom properties should be loaded');
+        });
+
+        runner.test('Responsive design CSS is applied', () => {
+            const container = document.querySelector('.container');
+            const computedStyle = getComputedStyle(container);
+            
+            runner.assert(computedStyle.maxWidth, 'Container should have max-width');
+            runner.assert(computedStyle.margin.includes('auto') || computedStyle.marginLeft === 'auto', 'Container should be centered');
+        });
+
+        // Configuration Tests
+        runner.test('Config module loads and has required properties', async () => {
+            try {
+                const config = await import('../js/config.js');
+                runner.assert(config.default || config.config, 'Config should export default or named export');
+                
+                const configObj = config.default || config.config;
+                runner.assert(configObj.API_KEY !== undefined, 'Config should have API_KEY property');
+                runner.assert(configObj.API_BASE_URL, 'Config should have API_BASE_URL');
+                runner.assert(configObj.CACHE_DURATION, 'Config should have CACHE_DURATION');
+            } catch (error) {
+                throw new Error(`Config module failed to load: ${error.message}`);
+            }
+        });
+
+        runner.test('Config has development/production environment handling', async () => {
+            const config = await import('../js/config.js');
+            const configObj = config.default || config.config;
+            
+            runner.assert(typeof configObj.isDevelopment === 'boolean', 'Config should have isDevelopment flag');
+            runner.assert(configObj.getApiKey, 'Config should have getApiKey method');
+        });
+
+        // Accessibility Tests
+        runner.test('Accessibility attributes are present', () => {
+            const searchInput = document.querySelector('input[type="search"]');
+            if (searchInput) {
+                runner.assert(searchInput.getAttribute('aria-label') || searchInput.getAttribute('aria-labelledby'), 
+                            'Search input should have aria-label');
+            }
+
+            const main = document.querySelector('main');
+            runner.assert(main.getAttribute('role') === 'main' || main.tagName === 'MAIN', 
+                         'Main content should have proper role');
+        });
+
+        // Performance Tests
+        runner.test('Critical resources are preloaded or optimized', () => {
+            const title = document.querySelector('title');
+            runner.assert(title && title.textContent.trim(), 'Page should have meaningful title');
+            
+            // Check for performance hints
+            const links = document.querySelectorAll('link');
+            const hasPreconnect = Array.from(links).some(link => link.getAttribute('rel') === 'preconnect');
+            runner.assert(hasPreconnect, 'Should have preconnect hints for external resources');
+        });
+
+        // Run all tests
+        runner.run();
+    </script>
+</body>
+</html>
