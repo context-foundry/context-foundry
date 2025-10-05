@@ -7,6 +7,7 @@ Estimates project costs based on task and model configuration
 from typing import Dict, Optional
 from dataclasses import dataclass
 from ace.pricing_database import PricingDatabase
+from ace.provider_registry import get_registry
 
 
 @dataclass
@@ -143,10 +144,22 @@ class CostEstimator:
         Returns:
             PhaseEstimate
         """
-        # Get pricing
+        # Get pricing from database
         pricing = self.db.get_pricing(provider, model)
+
+        # If not in database, try to get from provider fallback
         if not pricing:
-            raise ValueError(f"No pricing found for {provider}/{model}")
+            try:
+                registry = get_registry()
+                provider_obj = registry.get(provider)
+                fallback_pricing = provider_obj._get_fallback_pricing()
+
+                if fallback_pricing and model in fallback_pricing:
+                    pricing = fallback_pricing[model]
+                else:
+                    raise ValueError(f"No pricing found for {provider}/{model}")
+            except Exception:
+                raise ValueError(f"No pricing found for {provider}/{model}")
 
         # Get phase multipliers
         phase_config = self.phase_multipliers[phase]

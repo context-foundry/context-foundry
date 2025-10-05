@@ -14,12 +14,13 @@ from ace.providers.base_provider import ModelPricing
 class PricingDatabase:
     """Database for AI model pricing"""
 
-    def __init__(self, db_path: Optional[Path] = None):
+    def __init__(self, db_path: Optional[Path] = None, auto_populate: bool = True):
         """
         Initialize pricing database.
 
         Args:
             db_path: Path to SQLite database file
+            auto_populate: Auto-populate with fallback pricing if empty
         """
         if db_path is None:
             db_path = Path(__file__).parent / "pricing.db"
@@ -30,6 +31,10 @@ class PricingDatabase:
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
+
+        # Auto-populate with fallback pricing if empty
+        if auto_populate and self.is_empty():
+            self._populate_from_fallback()
 
     def _create_tables(self):
         """Create database tables if they don't exist"""
@@ -242,6 +247,58 @@ class PricingDatabase:
         """, (datetime.now(),))
 
         return [row['provider'] for row in cursor.fetchall()]
+
+    def is_empty(self) -> bool:
+        """
+        Check if database has any pricing data.
+
+        Returns:
+            True if database is empty
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM pricing")
+        row = cursor.fetchone()
+        return row['count'] == 0
+
+    def _populate_from_fallback(self):
+        """
+        Populate database with fallback pricing from all providers.
+        This ensures the database has initial data without requiring
+        a web fetch.
+        """
+        try:
+            # Import here to avoid circular dependency
+            from ace.provider_registry import get_registry
+
+            registry = get_registry()
+
+            # Get fallback pricing from each provider
+            for provider_name in registry.list_providers():
+                try:
+                    provider = registry.get(provider_name)
+                    fallback_pricing = provider._get_fallback_pricing()
+
+                    if fallback_pricing:
+                        # Save to database
+                        self.save_pricing(provider_name, fallback_pricing)
+
+                        # Mark as fallback data (status='fallback')
+                        self.update_status(
+                            provider_name,
+                            status='fallback',
+                            error_message='Using hardcoded fallback pricing. Run "foundry pricing --update" for latest prices.',
+                            update_interval_days=30
+                        )
+                except Exception as e:
+                    # Silently skip providers that fail
+                    # This ensures partial initialization is better than none
+                    pass
+
+        except Exception as e:
+            # If registry import or initialization fails, silently continue
+            # This ensures the database still works even if provider
+            # registry has issues
+            pass
 
     def close(self):
         """Close database connection"""
