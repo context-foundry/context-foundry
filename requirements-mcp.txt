@@ -9,3 +9,4 @@
 
 # MCP Server SDK
 fastmcp>=2.0.0  # Model Context Protocol server framework
+nest-asyncio>=1.5.0  # Enable nested event loops for sync/async compatibility

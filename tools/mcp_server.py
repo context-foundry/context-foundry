@@ -13,7 +13,8 @@ from typing import Optional
 
 # Check if FastMCP is available
 try:
-    from fastmcp import FastMCP
+    from fastmcp import FastMCP, Context
+    from fastmcp.server.dependencies import get_context
 except ImportError:
     print("❌ Error: FastMCP not installed", file=sys.stderr)
     print("", file=sys.stderr)
@@ -42,7 +43,7 @@ active_builds = {}
 
 
 @mcp.tool()
-def context_foundry_build(
+async def context_foundry_build(
     task_description: str,
     project_name: Optional[str] = None,
     autonomous: bool = False,
@@ -61,25 +62,83 @@ def context_foundry_build(
         Status message with build results
     """
     try:
+        # Get FastMCP context
+        ctx = get_context()
+
+        # Check if client supports sampling by attempting a test call
+        # Context Foundry requires MCP sampling, which Claude Desktop doesn't yet support
+        try:
+            # Try a minimal sampling request to check support
+            await ctx.sample("test", max_tokens=1)
+        except ValueError as e:
+            if "does not support sampling" in str(e):
+                return f"""❌ MCP Sampling Not Supported
+
+Context Foundry requires MCP sampling to function, but Claude Desktop doesn't yet support this feature.
+
+**Why this is needed:**
+Context Foundry uses a Scout → Architect → Builder workflow that requires multiple LLM calls to:
+- Research and design architecture (Scout)
+- Create specifications and plans (Architect)
+- Generate working code (Builder)
+
+**Alternative - Use API Mode:**
+You can use Context Foundry's CLI with an Anthropic API key:
+
+1. Get an API key from https://console.anthropic.com/
+2. Set environment variable:
+   ```bash
+   export ANTHROPIC_API_KEY=your_key_here
+   ```
+
+3. Run the build:
+   ```bash
+   foundry build {project_name or 'my-app'} "{task_description}"
+   ```
+
+**Example:**
+```bash
+foundry build hello-foundry "Create a simple Python script with one file (hello.py) that prints 'Hello from Context Foundry!'"
+```
+
+**Cost:** API mode: ~$3-10 per project in API charges. MCP mode (when available): No per-token charges, uses your Claude subscription.
+
+**Status:** MCP mode will be enabled automatically when Claude Desktop adds sampling support.
+Documentation: https://modelcontextprotocol.io/docs/concepts/sampling
+"""
+            else:
+                raise  # Different error, re-raise it
+
+        # If we get here, sampling IS supported! Proceed with build
         # Auto-generate project name if not provided
         if not project_name:
             project_name = task_description.lower().replace(" ", "-")[:30]
 
-        # Create orchestrator
+        # Change to context-foundry base directory so relative paths work
+        base_dir = Path(__file__).parent.parent
+        original_cwd = os.getcwd()
+        os.chdir(base_dir)
+
+        # Use absolute path for project directory
+        project_dir = base_dir / "examples" / project_name
+
+        # Create orchestrator with MCP context
         orchestrator = AutonomousOrchestrator(
             task_description=task_description,
             project_name=project_name,
             mode="new",
-            autonomous_mode=autonomous,
-            use_patterns=use_patterns
+            autonomous=autonomous,
+            use_patterns=use_patterns,
+            project_dir=project_dir,
+            ctx=ctx
         )
 
         # Run the workflow
-        # Note: This is synchronous and may take several minutes
-        result = orchestrator.run()
+        try:
+            result = orchestrator.run()
 
-        if result["success"]:
-            return f"""✅ Build Complete!
+            if result["success"]:
+                return f"""✅ Build Complete!
 
 Project: {project_name}
 Location: {result.get('project_dir', 'N/A')}
@@ -90,15 +149,21 @@ Files created:
 
 You can now review the code and run the project!
 """
-        else:
-            return f"""❌ Build Failed
+            else:
+                return f"""❌ Build Failed
 
 Error: {result.get('error', 'Unknown error')}
 
 Check the logs for more details.
 """
+        finally:
+            # Restore original working directory
+            os.chdir(original_cwd)
 
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"❌ ERROR: {error_details}", file=sys.stderr)
         return f"❌ Error during build: {str(e)}"
 
 
@@ -143,18 +208,27 @@ def context_foundry_status() -> str:
     return """Context Foundry MCP Server - Status
 
 ✅ Server: Running
-✅ Mode: MCP (Claude Desktop Integration)
-💰 Cost: Free (uses your Claude subscription, no API charges)
+❌ Sampling: Not supported by Claude Desktop (required for Context Foundry)
 
-Available Tools:
-- context_foundry_build: Build new projects from scratch
-- context_foundry_enhance: Enhance existing projects (coming soon)
-- context_foundry_status: Get server status
+**Current Limitation:**
+Context Foundry requires MCP sampling to function, but Claude Desktop doesn't yet support this feature.
 
-Example Usage:
-"Use context_foundry_build to create a todo app with REST API and SQLite storage"
+**Workaround - Use API Mode:**
+```bash
+export ANTHROPIC_API_KEY=your_key_here
+foundry build my-app "description of what to build"
+```
 
-Documentation: https://github.com/snedea/context-foundry
+**Available Tools:**
+- context_foundry_build: Returns error message about sampling (not functional yet)
+- context_foundry_enhance: Coming soon
+- context_foundry_status: This status message
+
+**When will MCP mode work?**
+Automatically when Claude Desktop adds sampling support. No code changes needed.
+Benefits: No per-token API charges, uses your Claude Pro/Max subscription instead.
+
+**More info:** https://modelcontextprotocol.io/docs/concepts/sampling
 """
 
 

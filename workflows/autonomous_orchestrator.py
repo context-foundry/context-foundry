@@ -10,7 +10,7 @@ import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -38,6 +38,7 @@ class AutonomousOrchestrator:
         use_patterns: bool = True,
         enable_livestream: bool = False,
         mode: str = "new",  # "new" or "enhance"
+        ctx: Optional[Any] = None,  # FastMCP Context for MCP mode
     ):
         self.project_name = project_name
         self.task_description = task_description
@@ -45,6 +46,7 @@ class AutonomousOrchestrator:
         self.use_patterns = use_patterns  # If True, use pattern library
         self.enable_livestream = enable_livestream  # If True, broadcast to livestream
         self.mode = mode  # "new" = build from scratch, "enhance" = modify existing
+        self.ctx = ctx  # Store MCP context
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Paths
@@ -60,11 +62,14 @@ class AutonomousOrchestrator:
         # Session
         self.session_id = f"{project_name}_{self.timestamp}"
 
-        # Claude client with context management (auto-selects API or CLI)
+        # Claude client with context management (auto-selects API or MCP mode)
+        # If ctx is provided, it will use MCP mode
         self.claude = get_claude_client(
             log_dir=self.logs_path,
             session_id=self.session_id,
-            use_context_manager=True
+            use_context_manager=True,
+            prefer_mcp=ctx is not None,  # Use MCP if ctx provided
+            ctx=ctx
         )
 
         # Initialize pattern library components

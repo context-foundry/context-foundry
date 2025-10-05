@@ -10,7 +10,7 @@ import time
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, Any
 import anthropic
 from anthropic import Anthropic, APIError, RateLimitError
 
@@ -23,7 +23,8 @@ def get_claude_client(
     log_dir: Optional[Path] = None,
     session_id: Optional[str] = None,
     use_context_manager: bool = True,
-    prefer_mcp: bool = None
+    prefer_mcp: bool = None,
+    ctx: Optional[Any] = None
 ) -> Union['ClaudeClient', 'ClaudeCodeClient']:
     """
     Factory function to get appropriate Claude client (API or MCP).
@@ -33,6 +34,7 @@ def get_claude_client(
         session_id: Session identifier
         use_context_manager: Enable context management
         prefer_mcp: If True, use MCP mode. If None, auto-detect from env
+        ctx: FastMCP Context object (required for MCP mode)
 
     Returns:
         ClaudeClient (API mode) or ClaudeCodeClient (MCP mode) instance
@@ -47,8 +49,8 @@ def get_claude_client(
     # If MCP mode requested, use ClaudeCodeClient
     if prefer_mcp:
         print("🔧 Using MCP Mode (Claude Desktop integration)")
-        print("💰 No API charges - using your Claude subscription")
-        return ClaudeCodeClient(log_dir, session_id, use_context_manager)
+        print("💰 Uses your Claude subscription (no per-token API charges)")
+        return ClaudeCodeClient(log_dir, session_id, use_context_manager, ctx)
 
     # Otherwise, use API mode
     api_key = os.getenv('ANTHROPIC_API_KEY', '').strip()

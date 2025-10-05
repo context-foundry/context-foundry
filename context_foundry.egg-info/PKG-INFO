@@ -1,4 +1,4 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: context-foundry
 Version: 1.0.0
 Summary: The Anti-Vibe Coding System - Spec-first development through automated context engineering
@@ -7,7 +7,6 @@ Author: Context Foundry Team
 Author-email: contact@contextfoundry.dev
 License: MIT
 Keywords: ai,coding-assistant,claude,context-engineering,code-generation,development-workflow,automation
-Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
@@ -21,6 +20,25 @@ Classifier: Topic :: Software Development :: Code Generators
 Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
+Requires-Dist: anthropic>=0.40.0
+Requires-Dist: click>=8.0.0
+Requires-Dist: rich>=13.0.0
+Requires-Dist: tabulate>=0.9.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: sentence-transformers>=2.2.0
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: pyyaml>=6.0
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 # 🏭 Context Foundry
 
@@ -32,6 +50,26 @@ Description-Content-Type: text/markdown
 Context Foundry transforms fuzzy requests into clean, reviewable PRs through disciplined three-phase execution. It's the opposite of "vibe coding" - instead of chaotic back-and-forth with AI, it's systematic progression through research, planning, and implementation.
 
 **Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software. Inspired by [Dexter Horthy's approach at HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff) and Anthropic's [agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk).
+
+## Philosophy: Workflow Over Prompt Perfection
+
+**You don't need to master prompt engineering.** Context Foundry's power comes from structured refinement, not from crafting the perfect initial prompt:
+
+- **Initial prompt**: Just describe what you want (1-2 sentences, "good enough")
+- **Scout phase**: AI researches and proposes architecture
+- **Architect phase**: You review and edit the SPEC/PLAN/TASKS files directly
+- **Builder phase**: AI builds exactly what you approved
+
+**The difference:**
+```
+Traditional approach:          Context Foundry approach:
+├─ Perfect prompt (30 min)    ├─ Quick prompt (2 min)
+├─ Hope for the best          ├─ Review plan (5 min)
+├─ Get 70% of what you want   ├─ Edit to 100% accuracy
+└─ Iterate via chat           └─ Approve and build
+```
+
+Your initial prompt gets you ~80% there. Editing the plan at the critical checkpoint gets you to 100%. **This is workflow over vibes.**
 
 ## The Three-Phase Workflow
 
@@ -64,6 +102,7 @@ graph LR
 - Decomposes into atomic, testable tasks
 - Context target: <40%
 - **CRITICAL**: Human review required (highest leverage point)
+- **Customizable**: Edit the generated SPEC/PLAN/TASKS files before approving - your changes will be used by the Builder
 
 ### Phase 3: Builder (Implementation)
 
@@ -83,21 +122,69 @@ graph LR
 # Install Context Foundry
 git clone https://github.com/yourusername/context-foundry.git
 cd context-foundry
-pip install -e .
 
-# Configure API key
-foundry config --init
+# Base installation (works with Python 3.9+)
+pip install -r requirements.txt
+
+# Optional: MCP mode (requires Python 3.10+)
+pip install -r requirements-mcp.txt
+
+# On macOS, add foundry to PATH
+export PATH="$HOME/Library/Python/3.9/bin:$PATH"  # Adjust Python version as needed
+source ~/.zshrc
+
+# Choose your mode:
+
+# Option A: MCP Mode (Claude Desktop - no API charges) - RECOMMENDED
+# See docs/MCP_SETUP.md for full setup guide
+foundry serve --config-help
+
+# Option B: API Mode (standalone CLI - charges apply)
 export ANTHROPIC_API_KEY=your_key_here
 
 # Verify setup
-python tools/health_check.py
+foundry --version
 ```
 
-### Basic Usage (with CLI)
+**Two Ways to Use Context Foundry:**
+
+| Mode | Cost | Setup | Best For |
+|------|------|-------|----------|
+| **MCP Mode** | Free (uses Claude Pro/Max) | [Setup Guide](docs/MCP_SETUP.md) | Interactive development |
+| **API Mode** | Pay per token | Set `ANTHROPIC_API_KEY` | CI/CD, automation |
+
+💡 **Recommended**: Use MCP mode if you have Claude Pro/Max subscription - it's free and integrates seamlessly with Claude Desktop!
+
+### Basic Usage
+
+Context Foundry works in two modes:
+
+#### Option 1: MCP Mode (via Claude Desktop)
+
+Once configured (see [MCP Setup Guide](docs/MCP_SETUP.md)), use Context Foundry directly in Claude Desktop:
+
+```
+Use context_foundry_build to create a REST API with:
+- FastAPI framework
+- PostgreSQL database
+- JWT authentication
+- OpenAPI documentation
+Call it "my-api"
+```
+
+**Benefits:**
+- ✅ No API charges (uses your Claude subscription)
+- ✅ Interactive - review and modify plans before building
+- ✅ Seamless Claude Desktop integration
+
+#### Option 2: API Mode (standalone CLI)
+
+**1. Build New Projects (from scratch)**
 
 ```bash
 # Interactive build with reviews
 foundry build my-app "Build user authentication with JWT"
+# Creates project in: examples/my-app/
 
 # Autonomous build (no reviews)
 foundry build api-server "REST API with PostgreSQL" --autonomous
@@ -108,6 +195,28 @@ foundry build big-project "Complex system" --overnight 8
 # With livestream dashboard
 foundry build web-app "Todo app" --livestream
 ```
+
+**Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
+
+**2. Enhance Existing Projects (modify existing code)** 🚧 *Coming Soon*
+
+```bash
+# Navigate to your existing repo
+cd ~/my-existing-project
+
+# Enhance with new features
+foundry enhance "Add JWT authentication to existing API"
+
+# This will:
+# - Scout your existing codebase
+# - Plan changes that fit your architecture
+# - Make targeted modifications
+# - Create a PR for review
+```
+
+**When to use which:**
+- `foundry build` - Starting a new project from scratch
+- `foundry enhance` - Adding features to an existing codebase
 
 ### Monitor Progress
 
@@ -240,5 +349,3 @@ This project builds on foundational work from:
 - **[Dexter Horthy](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff)** (HumanLayer) - Pioneered the "anti-vibe coding" approach and demonstrated 35K LOC in 7 hours
 - **[Anthropic's Claude Agent SDK](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk)** - Context management patterns and subagent orchestration techniques
 - The growing context engineering community exploring systematic AI development
-
-

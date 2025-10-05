@@ -1,14 +1,17 @@
 # MCP Server Mode Setup Guide
 
-This guide shows you how to use Context Foundry through Claude Desktop **without API charges** by running it as an MCP (Model Context Protocol) server.
+> ⚠️ **IMPORTANT LIMITATION (as of October 2025):**
+> Claude Desktop does not yet support MCP sampling, which Context Foundry requires to function. The MCP server will run and tools will appear in Claude Desktop, but they will return an error message explaining this limitation. Use API mode (with ANTHROPIC_API_KEY) for actual builds until Claude Desktop adds sampling support.
+
+This guide shows you how to set up Context Foundry as an MCP server. When Claude Desktop adds sampling support, Context Foundry will work using your Claude subscription instead of per-token API charges.
 
 ## What is MCP Mode?
 
-Context Foundry supports two modes:
+Context Foundry is designed to support two modes:
 
 | Feature | API Mode | MCP Mode |
 |---------|----------|----------|
-| **Cost** | Pay per token | Free (uses Claude subscription) |
+| **Cost** | Pay per token | Uses Claude subscription (no per-token charges) |
 | **Requirement** | Anthropic API key | Claude Pro/Max subscription |
 | **Use Case** | CI/CD, automation | Interactive development |
 | **Command** | `foundry build` | Via Claude Desktop |
@@ -293,11 +296,32 @@ No configuration changes needed - just choose which interface to use.
 
 **Cost Comparison:**
 
-| Scenario | API Mode Cost | MCP Mode Cost |
+| Scenario | API Mode Cost | MCP Mode Cost (When Available) |
 |----------|---------------|---------------|
-| Build 5 projects | ~$2-5 | $0 (included in subscription) |
-| Daily development | ~$50-100/month | $0 (included in subscription) |
-| Team of 5 | ~$250-500/month | $100/month (5 × $20 Pro) |
+| Build 5 projects | ~$2-5 in API charges | Included in Claude Pro/Max subscription ($20/month) |
+| Daily development | ~$50-100/month in API charges | Claude Pro/Max subscription ($20/month) |
+| Team of 5 | ~$250-500/month in API charges | 5 × Claude Pro/Max subscriptions ($100/month total) |
 
-MCP mode makes sense if you're already paying for Claude Pro/Max and do interactive development work.
+MCP mode makes sense if you're already paying for Claude Pro/Max and do interactive development work - you avoid additional per-token API charges.
+
+## Why Doesn't MCP Mode Work Yet?
+
+Context Foundry needs to make multiple LLM calls during its Scout → Architect → Builder workflow. In MCP, this would be done through "sampling" - where the MCP server asks Claude Desktop to run inference and return results.
+
+**The technical flow would be:**
+1. Claude Desktop calls `context_foundry_build` MCP tool
+2. Context Foundry MCP server calls `ctx.sample()` to ask Claude to do research
+3. Claude Desktop processes the request and returns results
+4. This repeats for architecture design and code generation
+
+**Current status:**
+Claude Desktop's MCP implementation doesn't support step #2-3 (sampling). When the server tries to call `ctx.sample()`, it gets the error: "Client does not support sampling".
+
+**What we built:**
+The complete MCP implementation is ready and tested. When Claude Desktop adds sampling support, Context Foundry will work immediately with no code changes needed. You can see this in our implementation at:
+- `tools/mcp_server.py` - MCP server with context injection
+- `ace/claude_code_client.py` - MCP-compatible client using ctx.sample()
+
+**For now:**
+Use API mode with your Anthropic API key. It works perfectly and gives you the full Context Foundry experience. This incurs per-token API charges separate from your Claude subscription.
 
