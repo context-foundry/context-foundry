@@ -9,19 +9,6 @@ Context Foundry transforms fuzzy requests into clean, reviewable PRs through dis
 
 **Core Innovation**: Automated Context Engineering (ACE) - maintaining <40% context utilization while building complex software. Inspired by [Dexter Horthy's approach at HumanLayer](https://youtu.be/IS_y40zY-hc?si=ZMg7I3FKILvI8Fff) and Anthropic's [agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk).
 
-## ⚠️ Disclaimer
-
-**Context Foundry is an AI-powered tool and may make mistakes.** Please use with discretion:
-
-- **Always review generated code** before deploying to production
-- **Test thoroughly** - AI-generated code may have bugs or security vulnerabilities
-- **Verify architectural decisions** - The AI may make suboptimal choices
-- **Check for breaking changes** - Especially when using `foundry enhance` or `foundry fix` on existing projects
-- **Backup your work** - Context Foundry commits to git automatically, but always backup critical code
-- **API costs apply** - Building large projects can consume significant API credits
-
-Context Foundry is a productivity tool, not a replacement for human judgment. Use it to accelerate development, but maintain responsibility for code quality and security.
-
 ## Philosophy: Workflow Over Prompt Perfection
 
 **You don't need to master prompt engineering.** Context Foundry's power comes from structured refinement, not from crafting the perfect initial prompt:
@@ -427,6 +414,19 @@ We're building the future of systematic AI-assisted development. Join us!
 ## License
 
 MIT - Because good ideas should spread.
+
+## ⚠️ Disclaimer
+
+**Context Foundry is an AI-powered tool and may make mistakes.** Please use with discretion:
+
+- **Always review generated code** before deploying to production
+- **Test thoroughly** - AI-generated code may have bugs or security vulnerabilities
+- **Verify architectural decisions** - The AI may make suboptimal choices
+- **Check for breaking changes** - Especially when using `foundry enhance` or `foundry fix` on existing projects
+- **Backup your work** - Context Foundry commits to git automatically, but always backup critical code
+- **API costs apply** - Building large projects can consume significant API credits
+
+Context Foundry is a productivity tool, not a replacement for human judgment. Use it to accelerate development, but maintain responsibility for code quality and security.
 
 ---
 
