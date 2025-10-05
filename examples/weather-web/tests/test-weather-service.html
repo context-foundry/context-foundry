@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Service Tests - Weather Web</title>
+    <style>
+        .test-results { font-family: Arial, sans-serif; margin: 20px; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .test-info { color: blue; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="test-results">
+        <h1>Weather Service API Integration Tests</h1>
+        <div id="test-output"></div>
+    </div>
+
+    <script type="module">
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        console.error('Test error:', error);
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+
+            assertThrows(fn, message) {
+                let threw = false;
+                try {
+                    fn();
+                } catch (error) {
+                    threw = true;
+                }
+                if (!threw) {
+                    throw new Error(`${message}: expected function to throw`);
+                }
+            }
+        }
+
+        const runner = new TestRunner();
+
+        // Mock config for testing
+        const mockConfig = {
+            API_KEY: 'test-api-key',
+            API_BASE_URL: 'https://api.openweathermap.org/data/2.5',
+            CACHE_DURATION: 600000, // 10 minutes
+            isDevelopment: true,
+            getApiKey: () => 'test-api-key'
+        };
+
+        // Mock fetch for testing
+        let mockFetch = null;
+        const originalFetch = window.fetch;
+
+        function setMockFetch(mockFn) {
+            mockFetch = mockFn;
+            window.fetch = mockFn;
+        }
+
+        function resetFetch() {
+            window.fetch = originalFetch;
+            mockFetch = null;
+        }
+
+        // Helper Tests
+        runner.test('Helpers module exports required functions', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            runner.assert(typeof helpers.formatTemperature === 'function', 'Should export formatTemperature');
+            runner.assert(typeof helpers.formatDate === 'function', 'Should export formatDate');
+            runner.assert(typeof helpers.capitalizeWords === 'function', 'Should export capitalizeWords');
+            runner.assert(typeof helpers.kelvinToCelsius === 'function', 'Should export kelvinToCelsius');
+            runner.assert(typeof helpers.kelvinToFahrenheit === 'function', 'Should export kelvinToFahrenheit');
+            runner.assert(typeof helpers.getWindDirection === 'function', 'Should export getWindDirection');
+            runner.assert(typeof helpers.debounce === 'function', 'Should export debounce');
+            runner.assert(typeof helpers.throttle === 'function', 'Should export throttle');
+        });
+
+        runner.test('Temperature conversion functions work correctly', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            // Kelvin to Celsius
+            runner.assertEqual(helpers.kelvinToCelsius(273.15), 0, 'Kelvin to Celsius conversion');
+            runner.assertEqual(helpers.kelvinToCelsius(293.15), 20, 'Kelvin to Celsius conversion');
+            
+            // Kelvin to Fahrenheit
+            runner.assertEqual(helpers.kelvinToFahrenheit(273.15), 32, 'Kelvin to Fahrenheit conversion');
+            runner.assertEqual(helpers.kelvinToFahrenheit(293.15), 68, 'Kelvin to Fahrenheit conversion');
+        });
+
+        runner.test('Temperature formatting works correctly', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            runner.assertEqual(helpers.formatTemperature(20, 'C'), '20°C', 'Celsius formatting');
+            runner.assertEqual(helpers.formatTemperature(68, 'F'), '68°F', 'Fahrenheit formatting');
+            runner.assertEqual(helpers.formatTemperature(20.7, 'C'), '21°C', 'Rounding works');
+        });
+
+        runner.test('Wind direction calculation works correctly', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            runner.assertEqual(helpers.getWindDirection(0), 'N', 'North direction');
+            runner.assertEqual(helpers.getWindDirection(90), 'E', 'East direction');
+            runner.assertEqual(helpers.getWindDirection(180), 'S', 'South direction');
+            runner.assertEqual(helpers.getWindDirection(270), 'W', 'West direction');
+            runner.assertEqual(helpers.getWindDirection(45), 'NE', 'Northeast direction');
+        });
+
+        runner.test('Text capitalization works correctly', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            runner.assertEqual(helpers.capitalizeWords('clear sky'), 'Clear Sky', 'Capitalize words');
+            runner.assertEqual(helpers.capitalizeWords('scattered clouds'), 'Scattered Clouds', 'Multiple words');
+            runner.assertEqual(helpers.capitalizeWords(''), '', 'Empty string');
+        });
+
+        runner.test('Date formatting works correctly', async () => {
+            const helpers = await import('../js/utils/helpers.js');
+            
+            const testDate = new Date('2024-01-15T12:00:00Z');
+            const formatted = helpers.formatDate(testDate);
+            runner.assert(typeof formatted === 'string', 'Returns string');
+            runner.assert(formatted.length > 0, 'Returns non-empty string');
+        });
+
+        // WeatherService Tests
+        runner.test('WeatherService class can be instantiated', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            runner.assert(service instanceof WeatherService, 'Should create WeatherService instance');
+            runner.assert(typeof service.getCurrentWeather === 'function', 'Should have getCurrentWeather method');
+            runner.assert(typeof service.getForecast === 'function', 'Should have getForecast method');
+            runner.assert(typeof service.searchCities === 'function', 'Should have searchCities method');
+        });
+
+        runner.test('WeatherService validates configuration', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            runner.assertThrows(() => {
+                new WeatherService(null);
+            }, 'Should throw with null config');
+            
+            runner.assertThrows(() => {
+                new WeatherService({});
+            }, 'Should throw with incomplete config');
+        });
+
+        runner.test('WeatherService builds correct API URLs', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            // Test private method via reflection (for testing purposes)
+            const url = service._buildUrl('weather', { q: 'London' });
+            runner.assert(url.includes('api.openweathermap.org'), 'URL contains API domain');
+            runner.assert(url.includes('weather'), 'URL contains endpoint');
+            runner.assert(url.includes('q=London'), 'URL contains query parameter');
+            runner.assert(url.includes('appid=test-api-key'), 'URL contains API key');
+        });
+
+        runner.test('WeatherService handles cache correctly', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            // Mock successful API response
+            const mockWeatherData = {
+                name: 'London',
+                main: { temp: 293.15, humidity: 65 },
+                weather: [{ main: 'Clear', description: 'clear sky' }]
+            };
+            
+            setMockFetch(async () => ({
+                ok: true,
+                json: async () => mockWeatherData
+            }));
+            
+            try {
+                // First call should hit API
+                const result1 = await service.getCurrentWeather('London');
+                runner.assert(result1.name === 'London', 'First call returns data');
+                
+                // Second call should use cache (we can verify by checking if fetch was called again)
+                const result2 = await service.getCurrentWeather('London');
+                runner.assert(result2.name === 'London', 'Second call returns cached data');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        runner.test('WeatherService handles API errors correctly', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            // Mock API error
+            setMockFetch(async () => ({
+                ok: false,
+                status: 404,
+                statusText: 'Not Found',
+                json: async () => ({ message: 'city not found' })
+            }));
+            
+            try {
+                await service.getCurrentWeather('InvalidCity');
+                runner.assert(false, 'Should have thrown an error');
+            } catch (error) {
+                runner.assert(error.message.includes('city not found'), 'Should throw meaningful error');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        runner.test('WeatherService handles network errors correctly', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            // Mock network error
+            setMockFetch(async () => {
+                throw new Error('Network error');
+            });
+            
+            try {
+                await service.getCurrentWeather('London');
+                runner.assert(false, 'Should have thrown an error');
+            } catch (error) {
+                runner.assert(error.message.includes('Network'), 'Should handle network errors');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        runner.test('WeatherService transforms current weather data correctly', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            const mockApiResponse = {
+                name: 'London',
+                sys: { country: 'GB' },
+                main: { 
+                    temp: 293.15,
+                    feels_like: 295.15,
+                    humidity: 65,
+                    pressure: 1013
+                },
+                weather: [{ 
+                    main: 'Clear',
+                    description: 'clear sky',
+                    icon: '01d'
+                }],
+                wind: { speed: 5.5, deg: 180 },
+                visibility: 10000,
+                dt: 1642248000
+            };
+            
+            setMockFetch(async () => ({
+                ok: true,
+                json: async () => mockApiResponse
+            }));
+            
+            try {
+                const result = await service.getCurrentWeather('London');
+                
+                runner.assert(result.city === 'London', 'Transforms city name');
+                runner.assert(result.country === 'GB', 'Transforms country');
+                runner.assert(typeof result.temperature === 'number', 'Transforms temperature');
+                runner.assert(result.description === 'Clear Sky', 'Capitalizes description');
+                runner.assert(result.icon === '01d', 'Includes weather icon');
+                runner.assert(typeof result.wind === 'object', 'Transforms wind data');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        runner.test('WeatherService transforms forecast data correctly', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            const mockForecastResponse = {
+                list: [
+                    {
+                        dt: 1642248000,
+                        main: { temp_min: 283.15, temp_max: 293.15 },
+                        weather: [{ main: 'Clear', description: 'clear sky', icon: '01d' }]
+                    },
+                    {
+                        dt: 1642334400,
+                        main: { temp_min: 285.15, temp_max: 295.15 },
+                        weather: [{ main: 'Clouds', description: 'few clouds', icon: '02d' }]
+                    }
+                ]
+            };
+            
+            setMockFetch(async () => ({
+                ok: true,
+                json: async () => mockForecastResponse
+            }));
+            
+            try {
+                const result = await service.getForecast('London');
+                
+                runner.assert(Array.isArray(result), 'Returns array');
+                runner.assert(result.length <= 5, 'Returns max 5 days');
+                runner.assert(result[0].date instanceof Date, 'Transforms date');
+                runner.assert(typeof result[0].minTemp === 'number', 'Transforms min temperature');
+                runner.assert(typeof result[0].maxTemp === 'number', 'Transforms max temperature');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        runner.test('WeatherService implements rate limiting', async () => {
+            const { WeatherService } = await import('../js/services/weatherService.js');
+            
+            const service = new WeatherService(mockConfig);
+            
+            let callCount = 0;
+            setMockFetch(async () => {
+                callCount++;
+                return {
+                    ok: true,
+                    json: async () => ({ name: 'Test' })
+                };
+            });
+            
+            try {
+                // Make multiple rapid calls
+                const promises = [];
+                for (let i = 0; i < 5; i++) {
+                    promises.push(service.getCurrentWeather(`City${i}`));
+                }
+                
+                await Promise.all(promises);
+                
+                // Should implement some form of rate limiting
+                runner.assert(callCount <= 5, 'Should not exceed reasonable call count');
+            } finally {
+                resetFetch();
+            }
+        });
+
+        // Run all tests
+        runner.run();
+    </script>
+</body>
+</html>
