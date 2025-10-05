@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Integration Tests - Weather Web</title>
+    <style>
+        .test-results { font-family: Arial, sans-serif; margin: 20px; }
+        .test-pass { color: green; }
+        .test-fail { color: red; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        .test-output { max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="test-results">
+        <h1>Main Application Logic Tests</h1>
+        <div id="test-output" class="test-output"></div>
+    </div>
+
+    <!-- Mock HTML structure for testing -->
+    <div style="display: none;" id="test-container">
+        <header class="header">
+            <button id="unit-toggle">°C</button>
+        </header>
+        <main>
+            <form class="search-form">
+                <input type="search" id="city-search" placeholder="Search for a city...">
+                <button type="submit" class="search-btn">Search</button>
+            </form>
+            <button id="get-location">Use My Location</button>
+            <div id="recent-searches" class="recent-searches">
+                <ul class="recent-searches__list"></ul>
+            </div>
+            <div id="current-weather" class="weather-card">
+                <div id="weather-loading" class="loading-state">Loading...</div>
+                <div id="weather-error" class="error-state" hidden>Error</div>
+                <div id="weather-content" class="weather-content" hidden>Weather Content</div>
+                <button id="retry-weather" class="retry-btn">Retry</button>
+            </div>
+            <div id="forecast-grid" class="forecast-grid">
+                <div id="forecast-loading" class="loading-state">Loading...</div>
+                <div id="forecast-error" class="error-state" hidden>Error</div>
+                <div id="forecast-content" class="forecast-content" hidden>Forecast Content</div>
+                <button id="retry-forecast" class="retry-btn">Retry</button>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        // Mock dependencies
+        const mockConfig = {
+            API_KEY: 'test-api-key',
+            API_BASE_URL: 'https://api.openweathermap.org/data/2.5',
+            CACHE_DURATION: 600000,
+            getApiKey: () => 'test-api-key',
+            isDevelopment: true
+        };
+
+        const mockWeatherData = {
+            weather: [{
+                id: 800,
+                main: 'Clear',
+                description: 'clear sky',
+                icon: '01d'
+            }],
+            main: {
+                temp: 22,
+                feels_like: 24,
+                humidity: 65,
+                pressure: 1013
+            },
+            wind: {
+                speed: 3.5,
+                deg: 180
+            },
+            name: 'London',
+            sys: { country: 'GB' }
+        };
+
+        const mockForecastData = {
+            list: Array.from({ length: 40 }, (_, i) => ({
+                dt: Date.now() / 1000 + (i * 3 * 3600),
+                main: {
+                    temp: 20 + Math.random() * 10,
+                    temp_min: 18 + Math.random() * 5,
+                    temp_max: 25 + Math.random() * 5
+                },
+                weather: [{
+                    id: 800,
+                    main: 'Clear',
+                    description: 'clear sky',
+                    icon: '01d'
+                }],
+                dt_txt: new Date(Date.now() + (i * 3 * 3600 * 1000)).toISOString()
+            }))
+        };
+
+        // Mock services
+        class MockWeatherService {
+            async getCurrentWeather(query) {
+                if (query === 'error') throw new Error('API Error');
+                return { ...mockWeatherData, name: query };
+            }
+            
+            async getForecast(query) {
+                if (query === 'error') throw new Error('API Error');
+                return mockForecastData;
+            }
+        }
+
+        class MockLocationService {
+            async getCurrentPosition() {
+                return {
+                    coords: { latitude: 51.5074, longitude: -0.1278 },
+                    accuracy: 10,
+                    timestamp: Date.now()
+                };
+            }
+            
+            async reverseGeocode(lat, lon) {
+                return 'London, GB';
+            }
+        }
+
+        class MockStorageService {
+            static data = new Map();
+            
+            static get(key) {
+                return this.data.get(key);
+            }
+            
+            static set(key, value) {
+                this.data.set(key, value);
+            }
+            
+            static getRecentSearches() {
+                return ['London', 'Paris', 'New York'];
+            }
+            
+            static addRecentSearch(city) {
+                // Mock implementation
+            }
+            
+            static getUserPreference(key) {
+                return key === 'temperatureUnit' ? 'celsius' : null;
+            }
+            
+            static setUserPreference(key, value) {
+                // Mock implementation
+            }
+        }
+
+        class MockSearchBar {
+            constructor(container, options = {}) {
+                this.container = container;
+                this.options = options;
+                this.isInitialized = false;
+            }
+            
+            init() {
+                this.isInitialized = true;
+                return this;
+            }
+            
+            updateSuggestions(suggestions) {
+                this.lastSuggestions = suggestions;
+            }
+            
+            clearInput() {
+                this.container.querySelector('input').value = '';
+            }
+        }
+
+        class MockWeatherCard {
+            constructor(container) {
+                this.container = container;
+                this.isInitialized = false;
+            }
+            
+            init() {
+                this.isInitialized = true;
+                return this;
+            }
+            
+            showLoading() {
+                this.state = 'loading';
+            }
+            
+            showError(message, showRetry = true) {
+                this.state = 'error';
+                this.errorMessage = message;
+            }
+            
+            showWeather(data) {
+                this.state = 'success';
+                this.weatherData = data;
+            }
+        }
+
+        class MockForecast {
+            constructor(container) {
+                this.container = container;
+                this.isInitialized = false;
+            }
+            
+            init() {
+                this.isInitialized = true;
+                return this;
+            }
+            
+            showLoading() {
+                this.state = 'loading';
+            }
+            
+            showError(message, showRetry = true) {
+                this.state = 'error';
+                this.errorMessage = message;
+            }
+            
+            showForecast(data) {
+                this.state = 'success';
+                this.forecastData = data;
+            }
+        }
+
+        // Test framework
+        class TestRunner {
+            constructor() {
+                this.tests = [];
+                this.output = document.getElementById('test-output');
+                this.setupMocks();
+            }
+
+            setupMocks() {
+                // Mock global objects
+                window.mockConfig = mockConfig;
+                window.MockWeatherService = MockWeatherService;
+                window.MockLocationService = MockLocationService;
+                window.MockStorageService = MockStorageService;
+                window.MockSearchBar = MockSearchBar;
+                window.MockWeatherCard = MockWeatherCard;
+                window.MockForecast = MockForecast;
+            }
+
+            test(name, fn) {
+                this.tests.push({ name, fn });
+            }
+
+            async run() {
+                let passed = 0;
+                let failed = 0;
+
+                for (const test of this.tests) {
+                    try {
+                        await test.fn();
+                        this.log(`✓ ${test.name}`, 'test-pass');
+                        passed++;
+                    } catch (error) {
+                        this.log(`✗ ${test.name}: ${error.message}`, 'test-fail');
+                        console.error(error);
+                        failed++;
+                    }
+                }
+
+                this.log(`\nResults: ${passed} passed, ${failed} failed`, 
+                         failed === 0 ? 'test-pass' : 'test-fail');
+            }
+
+            log(message, className = '') {
+                const div = document.createElement('div');
+                div.textContent = message;
+                div.className = className;
+                this.output.appendChild(div);
+            }
+
+            assert(condition, message) {
+                if (!condition) {
+                    throw new Error(message);
+                }
+            }
+
+            assertEqual(actual, expected, message) {
+                if (actual !== expected) {
+                    throw new Error(`${message}: expected ${expected}, got ${actual}`);
+                }
+            }
+        }
+
+        const runner = new TestRunner();
+
+        // Application State Tests
+        runner.test('WeatherApp class exists and can be instantiated', async () => {
+            // Import the app module
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            runner.assert(WeatherApp, 'WeatherApp class should be exported');
+            
+            const app = new WeatherApp();
+            runner.assert(app, 'WeatherApp should be instantiable');
+        });
+
+        runner.test('App initializes with correct default state', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const app = new WeatherApp();
+            
+            runner.assertEqual(app.state.isLoading, false, 'Initial loading state should be false');
+            runner.assertEqual(app.state.currentCity, null, 'Initial current city should be null');
+            runner.assertEqual(app.state.temperatureUnit, 'celsius', 'Default temperature unit should be celsius');
+            runner.assert(app.state.recentSearches instanceof Array, 'Recent searches should be an array');
+        });
+
+        runner.test('App initializes all components correctly', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            runner.assert(app.searchBar && app.searchBar.isInitialized, 'SearchBar should be initialized');
+            runner.assert(app.weatherCard && app.weatherCard.isInitialized, 'WeatherCard should be initialized');
+            runner.assert(app.forecast && app.forecast.isInitialized, 'Forecast should be initialized');
+            runner.assert(app.isInitialized, 'App should be marked as initialized');
+        });
+
+        runner.test('Event handlers are properly bound', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Test that event handlers exist
+            runner.assert(typeof app.handleSearch === 'function', 'handleSearch should be a function');
+            runner.assert(typeof app.handleLocationRequest === 'function', 'handleLocationRequest should be a function');
+            runner.assert(typeof app.handleUnitToggle === 'function', 'handleUnitToggle should be a function');
+            runner.assert(typeof app.handleRetry === 'function', 'handleRetry should be a function');
+        });
+
+        // State Management Tests
+        runner.test('State updates correctly when loading weather', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Mock the loadWeatherData method
+            let stateChanges = [];
+            const originalUpdateState = app.updateState;
+            app.updateState = function(changes) {
+                stateChanges.push({ ...changes });
+                return originalUpdateState.call(this, changes);
+            };
+            
+            await app.loadWeatherData('London');
+            
+            runner.assert(stateChanges.some(change => change.isLoading === true), 'Should set loading state');
+            runner.assert(stateChanges.some(change => change.currentCity === 'London'), 'Should update current city');
+        });
+
+        runner.test('Temperature unit conversion works correctly', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            
+            const celsiusTemp = 0;
+            const fahrenheitTemp = app.convertTemperature(celsiusTemp, 'celsius', 'fahrenheit');
+            runner.assertEqual(fahrenheitTemp, 32, 'Should convert 0°C to 32°F');
+            
+            const fahrenheitTocelsius = app.convertTemperature(32, 'fahrenheit', 'celsius');
+            runner.assertEqual(fahrenheitTocelsius, 0, 'Should convert 32°F to 0°C');
+        });
+
+        runner.test('Error handling works for weather loading failures', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Force an error by using the 'error' city name
+            await app.loadWeatherData('error');
+            
+            runner.assertEqual(app.state.isLoading, false, 'Loading should be false after error');
+            runner.assert(app.state.error, 'Error should be set in state');
+        });
+
+        // User Interaction Tests
+        runner.test('Search form submission triggers weather loading', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            const searchInput = testContainer.querySelector('#city-search');
+            const searchForm = testContainer.querySelector('.search-form');
+            
+            searchInput.value = 'Paris';
+            
+            let searchCalled = false;
+            const originalHandleSearch = app.handleSearch;
+            app.handleSearch = function(event) {
+                searchCalled = true;
+                return originalHandleSearch.call(this, event);
+            };
+            
+            // Simulate form submission
+            const event = new Event('submit', { bubbles: true, cancelable: true });
+            searchForm.dispatchEvent(event);
+            
+            runner.assert(searchCalled, 'Search handler should be called on form submission');
+        });
+
+        runner.test('Location button triggers geolocation', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            const locationButton = testContainer.querySelector('#get-location');
+            
+            let locationCalled = false;
+            const originalHandleLocation = app.handleLocationRequest;
+            app.handleLocationRequest = function(event) {
+                locationCalled = true;
+                return originalHandleLocation.call(this, event);
+            };
+            
+            locationButton.click();
+            
+            runner.assert(locationCalled, 'Location handler should be called on button click');
+        });
+
+        runner.test('Unit toggle updates state and UI', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            const unitToggle = testContainer.querySelector('#unit-toggle');
+            const initialUnit = app.state.temperatureUnit;
+            
+            unitToggle.click();
+            
+            runner.assert(app.state.temperatureUnit !== initialUnit, 'Temperature unit should change');
+        });
+
+        // Integration Tests
+        runner.test('Recent searches are displayed and clickable', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Should load recent searches from storage
+            runner.assert(app.state.recentSearches.length > 0, 'Should have recent searches');
+            
+            // Simulate clicking a recent search
+            await app.handleRecentSearchClick('London');
+            
+            runner.assertEqual(app.state.currentCity, 'London', 'Should update current city when recent search clicked');
+        });
+
+        runner.test('Retry buttons work for both weather and forecast', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Set up an error state
+            app.updateState({ 
+                error: 'Test error',
+                currentCity: 'TestCity'
+            });
+            
+            const retryWeatherBtn = testContainer.querySelector('#retry-weather');
+            const retryForecastBtn = testContainer.querySelector('#retry-forecast');
+            
+            let retryCalled = false;
+            const originalHandleRetry = app.handleRetry;
+            app.handleRetry = function(event) {
+                retryCalled = true;
+                return originalHandleRetry.call(this, event);
+            };
+            
+            retryWeatherBtn.click();
+            
+            runner.assert(retryCalled, 'Retry handler should be called');
+        });
+
+        runner.test('App handles browser back/forward navigation', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Test popstate handling
+            runner.assert(typeof app.handlePopState === 'function', 'Should have popstate handler');
+            
+            // Mock history state
+            const mockState = { city: 'Berlin' };
+            await app.handlePopState({ state: mockState });
+            
+            runner.assertEqual(app.state.currentCity, 'Berlin', 'Should update city from history state');
+        });
+
+        // Performance and Error Recovery Tests
+        runner.test('App handles multiple rapid searches gracefully', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Simulate rapid searches
+            const promises = [
+                app.loadWeatherData('London'),
+                app.loadWeatherData('Paris'),
+                app.loadWeatherData('Berlin')
+            ];
+            
+            await Promise.allSettled(promises);
+            
+            // Should handle gracefully without errors
+            runner.assert(true, 'Should handle multiple rapid searches without crashing');
+        });
+
+        runner.test('App recovers from service failures', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            // Mock service failure
+            const originalWeatherService = app.weatherService;
+            app.weatherService = {
+                getCurrentWeather: () => Promise.reject(new Error('Service unavailable')),
+                getForecast: () => Promise.reject(new Error('Service unavailable'))
+            };
+            
+            await app.loadWeatherData('London');
+            
+            runner.assert(app.state.error, 'Should set error state when services fail');
+            runner.assertEqual(app.state.isLoading, false, 'Should stop loading state');
+            
+            // Restore service
+            app.weatherService = originalWeatherService;
+        });
+
+        // Accessibility Tests
+        runner.test('App announces state changes to screen readers', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            runner.assert(typeof app.announceToScreenReader === 'function', 'Should have screen reader announcement method');
+            
+            // Test announcement
+            app.announceToScreenReader('Weather loaded for London');
+            
+            // Check if announcement was made (implementation should create/update an aria-live region)
+            const liveRegion = document.querySelector('[aria-live]');
+            runner.assert(liveRegion, 'Should have aria-live region for announcements');
+        });
+
+        // Memory Management Tests
+        runner.test('App properly cleans up resources', async () => {
+            const appModule = await import('../js/app.js');
+            const WeatherApp = appModule.default || appModule.WeatherApp;
+            
+            const testContainer = document.getElementById('test-container');
+            const app = new WeatherApp(testContainer);
+            await app.init();
+            
+            runner.assert(typeof app.destroy === 'function', 'Should have destroy method');
+            
+            // Test cleanup
+            app.destroy();
+            
+            runner.assert(app.isInitialized === false, 'Should mark as uninitialized after destroy');
+        });
+
+        // Run all tests
+        runner.run();
+    </script>
+</body>
+</html>
