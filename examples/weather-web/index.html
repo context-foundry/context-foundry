@@ -3,281 +3,513 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weather App</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Weather App - Professional Weather Service</title>
+    <meta name="description" content="Get accurate weather information for any city worldwide. Professional weather app with detailed forecasts and real-time updates.">
+    <meta name="keywords" content="weather, forecast, temperature, humidity, wind, climate">
+    <meta name="theme-color" content="#2563eb">
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Weather App - Professional Weather Service">
+    <meta property="og:description" content="Get accurate weather information for any city worldwide">
+    <meta property="og:url" content="">
+    <meta property="og:image" content="./assets/weather-og-image.png">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Weather App">
+    <meta name="twitter:description" content="Professional weather information service">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="./assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
+    
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://api.openweathermap.org">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(registration => console.log('SW registered'))
+                    .catch(error => console.log('SW registration failed'));
+            });
+        }
+    </script>
 </head>
 <body>
-    <div class="container">
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
+    <!-- Toast notifications container -->
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+    
+    <div class="app-container">
+        <!-- Header -->
         <header class="app-header">
-            <h1>🌤️ Weather App</h1>
-            <p class="app-subtitle">Get current weather information for any city worldwide</p>
+            <div class="header-content">
+                <h1 class="app-title">
+                    <span class="weather-icon" aria-hidden="true">🌤️</span>
+                    Weather Pro
+                </h1>
+                <p class="app-subtitle">Professional weather information service</p>
+            </div>
+            <nav class="header-nav" aria-label="Main navigation">
+                <button id="favorites-btn" class="nav-btn" aria-label="View favorite locations">
+                    <span aria-hidden="true">⭐</span>
+                    <span class="nav-text">Favorites</span>
+                </button>
+                <button id="settings-btn" class="nav-btn" aria-label="Open settings">
+                    <span aria-hidden="true">⚙️</span>
+                    <span class="nav-text">Settings</span>
+                </button>
+            </nav>
         </header>
 
-        <!-- Configuration Error Display (hidden by default) -->
-        <div id="config-error" class="error-message config-error" style="display: none;">
-            <!-- Content will be populated by config.js -->
-        </div>
-
-        <main class="weather-section">
-            <!-- Search Form -->
-            <form id="weather-form" class="search-form" role="search" aria-label="Weather search">
-                <div class="input-group">
-                    <label for="city-input" class="visually-hidden">Enter city name</label>
-                    <input 
-                        type="text" 
-                        id="city-input" 
-                        class="city-input" 
-                        placeholder="Enter city name (e.g., Houston, London, Tokyo)"
-                        autocomplete="off"
-                        spellcheck="false"
-                        aria-describedby="search-help"
-                        required
-                        minlength="2"
-                        maxlength="100"
-                    >
-                    <button 
-                        type="submit" 
-                        id="search-button" 
-                        class="search-button"
-                        aria-label="Get weather information"
-                    >
-                        <span class="button-text">Get Weather</span>
-                        <span class="loading-spinner" aria-hidden="true">⏳</span>
-                    </button>
-                </div>
-                <div id="search-help" class="input-help">
-                    Press Enter or click "Get Weather" to search
-                </div>
-            </form>
-
-            <!-- Loading State -->
-            <div id="loading-state" class="loading-state" style="display: none;" aria-live="polite">
-                <div class="loading-content">
-                    <div class="loading-animation">🌍</div>
-                    <p class="loading-text">Fetching weather data...</p>
-                    <div class="loading-progress">
-                        <div class="progress-bar"></div>
-                    </div>
+        <!-- Main content -->
+        <main id="main-content" class="main-content">
+            <!-- Configuration error (hidden by default) -->
+            <div id="config-error" class="config-error" style="display: none;" role="alert">
+                <div class="error-content">
+                    <h3>⚠️ Configuration Required</h3>
+                    <p>Please configure your OpenWeatherMap API key to use this application.</p>
+                    <details class="setup-instructions">
+                        <summary>Setup Instructions</summary>
+                        <ol>
+                            <li>Get a free API key from <a href="https://openweathermap.org/api" target="_blank" rel="noopener">OpenWeatherMap</a></li>
+                            <li>Create a <code>.env</code> file in the project root</li>
+                            <li>Add: <code>OPENWEATHER_API_KEY=your_api_key_here</code></li>
+                            <li>Refresh this page</li>
+                        </ol>
+                    </details>
                 </div>
             </div>
 
-            <!-- Weather Display -->
-            <div id="weather-display" class="weather-display" style="display: none;" aria-live="polite">
-                <!-- Location Header -->
-                <div class="weather-header">
-                    <div class="location-info">
-                        <h2 id="weather-city" class="weather-city"></h2>
-                        <p id="weather-country" class="weather-country"></p>
-                        <div class="coordinates">
-                            <span id="weather-coordinates" class="coordinates-text"></span>
+            <!-- Search section -->
+            <section class="search-section" aria-labelledby="search-heading">
+                <h2 id="search-heading" class="visually-hidden">Weather Search</h2>
+                
+                <form id="weather-form" class="search-form" role="search">
+                    <div class="search-input-group">
+                        <label for="city-input" class="input-label">
+                            Enter city name
+                        </label>
+                        <div class="input-wrapper">
+                            <input 
+                                type="text" 
+                                id="city-input" 
+                                class="city-input" 
+                                placeholder="Search for a city (e.g., London, New York, Tokyo)"
+                                autocomplete="off"
+                                spellcheck="false"
+                                aria-describedby="search-help input-validation"
+                                required
+                                minlength="2"
+                                maxlength="100"
+                                pattern="[A-Za-z\s\-',.]+"
+                                title="Enter city name using letters, spaces, and common punctuation only"
+                            >
+                            <button 
+                                type="submit" 
+                                id="search-btn" 
+                                class="search-btn"
+                                aria-label="Search for weather information"
+                            >
+                                <span class="btn-text">Get Weather</span>
+                                <span class="btn-loading" aria-hidden="true">
+                                    <span class="loading-spinner"></span>
+                                </span>
+                            </button>
+                        </div>
+                        <div id="input-validation" class="input-validation" aria-live="polite"></div>
+                        <div id="search-help" class="search-help">
+                            Press Enter or click "Get Weather" to search
                         </div>
                     </div>
-                    <div class="weather-timestamp-header">
-                        <p id="weather-timestamp" class="timestamp"></p>
-                        <button id="refresh-weather" class="refresh-button" aria-label="Refresh weather data">
-                            🔄
+                </form>
+
+                <!-- Recent searches -->
+                <div id="recent-searches" class="recent-searches" style="display: none;">
+                    <h3 class="recent-title">Recent Searches</h3>
+                    <div id="recent-list" class="recent-list" role="list"></div>
+                </div>
+
+                <!-- City suggestions -->
+                <div id="city-suggestions" class="city-suggestions" style="display: none;">
+                    <h3 class="suggestions-title">Did you mean?</h3>
+                    <div id="suggestions-list" class="suggestions-list" role="list"></div>
+                </div>
+            </section>
+
+            <!-- Loading state -->
+            <section id="loading-section" class="loading-section" style="display: none;" aria-live="polite">
+                <div class="loading-content">
+                    <div class="loading-animation">
+                        <div class="loading-icon">🌍</div>
+                        <div class="loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                    <h3 id="loading-title" class="loading-title">Fetching weather data...</h3>
+                    <p id="loading-subtitle" class="loading-subtitle">Please wait while we get the latest information</p>
+                    <button id="cancel-request" class="cancel-btn" type="button">Cancel</button>
+                </div>
+            </section>
+
+            <!-- Weather display -->
+            <section id="weather-section" class="weather-section" style="display: none;" aria-live="polite">
+                <!-- Weather header -->
+                <header class="weather-header">
+                    <div class="location-info">
+                        <h2 id="weather-city" class="city-name"></h2>
+                        <p class="location-details">
+                            <span id="weather-country" class="country"></span>
+                            <span id="weather-coordinates" class="coordinates"></span>
+                        </p>
+                    </div>
+                    <div class="weather-actions">
+                        <button id="refresh-btn" class="action-btn" title="Refresh weather data">
+                            <span aria-hidden="true">🔄</span>
+                            <span class="visually-hidden">Refresh</span>
+                        </button>
+                        <button id="share-btn" class="action-btn" title="Share weather info">
+                            <span aria-hidden="true">📤</span>
+                            <span class="visually-hidden">Share</span>
+                        </button>
+                        <button id="favorite-btn" class="action-btn" title="Add to favorites">
+                            <span aria-hidden="true">⭐</span>
+                            <span class="visually-hidden">Favorite</span>
                         </button>
                     </div>
-                </div>
-                
-                <!-- Main Weather Info -->
-                <div class="weather-main">
-                    <div class="temperature-section">
-                        <div class="current-temp">
-                            <span id="weather-temp" class="temperature"></span>
+                </header>
+
+                <!-- Current weather overview -->
+                <div class="current-weather">
+                    <div class="weather-main">
+                        <div class="temperature-display">
+                            <span id="weather-temp" class="temperature">--</span>
                             <span class="temp-unit">°C</span>
                         </div>
-                        <div class="temp-range">
-                            <span class="temp-label">Feels like</span>
-                            <span id="weather-feels-like" class="feels-like-temp"></span>
-                        </div>
-                        <div class="temp-minmax">
-                            <span id="weather-temp-min" class="temp-min"></span>
-                            <span class="temp-separator">•</span>
-                            <span id="weather-temp-max" class="temp-max"></span>
+                        <div class="weather-condition">
+                            <div id="weather-icon" class="condition-icon" aria-hidden="true">🌤️</div>
+                            <div class="condition-text">
+                                <p id="weather-desc" class="description">Loading...</p>
+                                <p id="weather-condition" class="condition-main"></p>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="weather-description">
-                        <div class="weather-icon-container">
-                            <span id="weather-icon" class="weather-icon" aria-hidden="true"></span>
-                        </div>
-                        <div class="condition-info">
-                            <span id="weather-condition" class="condition-main"></span>
-                            <span id="weather-desc" class="description"></span>
-                        </div>
+                    <div class="feels-like">
+                        <span class="feels-label">Feels like</span>
+                        <span id="weather-feels-like" class="feels-value">--°C</span>
                     </div>
                 </div>
 
-                <!-- Weather Details Grid -->
+                <!-- Temperature range -->
+                <div id="temp-range" class="temp-range">
+                    <div class="temp-item">
+                        <span class="temp-label">Low</span>
+                        <span id="weather-temp-min" class="temp-value">--°C</span>
+                    </div>
+                    <div class="temp-item">
+                        <span class="temp-label">High</span>
+                        <span id="weather-temp-max" class="temp-value">--°C</span>
+                    </div>
+                </div>
+
+                <!-- Weather details grid -->
                 <div class="weather-details">
+                    <!-- Atmospheric conditions -->
                     <div class="detail-group atmospheric">
-                        <h3 class="detail-group-title">Atmospheric Conditions</h3>
+                        <h3 class="group-title">Atmospheric</h3>
                         <div class="detail-grid">
                             <div class="detail-item">
-                                <div class="detail-icon">💧</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">💧</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Humidity</span>
-                                    <span id="weather-humidity" class="detail-value"></span>
+                                    <span id="weather-humidity" class="detail-value">--%</span>
                                 </div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-icon">🏋️</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">🌡️</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Pressure</span>
-                                    <span id="weather-pressure" class="detail-value"></span>
+                                    <span id="weather-pressure" class="detail-value">-- hPa</span>
                                 </div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-icon">👁️</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">👁️</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Visibility</span>
-                                    <span id="weather-visibility" class="detail-value"></span>
+                                    <span id="weather-visibility" class="detail-value">-- km</span>
                                 </div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-icon">☁️</div>
-                                <div class="detail-content">
-                                    <span class="detail-label">Cloud Cover</span>
-                                    <span id="weather-clouds" class="detail-value"></span>
+                                <div class="detail-icon" aria-hidden="true">☁️</div>
+                                <div class="detail-info">
+                                    <span class="detail-label">Cloudiness</span>
+                                    <span id="weather-clouds" class="detail-value">--%</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Wind conditions -->
                     <div class="detail-group wind">
-                        <h3 class="detail-group-title">Wind Information</h3>
+                        <h3 class="group-title">Wind</h3>
                         <div class="detail-grid">
                             <div class="detail-item">
-                                <div class="detail-icon">💨</div>
-                                <div class="detail-content">
-                                    <span class="detail-label">Wind Speed</span>
-                                    <span id="weather-wind" class="detail-value"></span>
+                                <div class="detail-icon" aria-hidden="true">💨</div>
+                                <div class="detail-info">
+                                    <span class="detail-label">Speed</span>
+                                    <span id="weather-wind" class="detail-value">-- m/s</span>
                                 </div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-icon">🧭</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">🧭</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Direction</span>
-                                    <span id="weather-wind-direction" class="detail-value"></span>
+                                    <span id="weather-wind-direction" class="detail-value">--</span>
                                 </div>
                             </div>
-                            <div class="detail-item wind-gust" style="display: none;">
-                                <div class="detail-icon">💨💨</div>
-                                <div class="detail-content">
-                                    <span class="detail-label">Wind Gust</span>
-                                    <span id="weather-wind-gust" class="detail-value"></span>
+                            <div id="wind-gust" class="detail-item" style="display: none;">
+                                <div class="detail-icon" aria-hidden="true">🌪️</div>
+                                <div class="detail-info">
+                                    <span class="detail-label">Gusts</span>
+                                    <span id="weather-wind-gust" class="detail-value">-- m/s</span>
                                 </div>
                             </div>
-                        </div>
-                        <div class="wind-compass">
-                            <div id="wind-compass-arrow" class="compass-arrow" style="transform: rotate(0deg);">
-                                ↑
+                            <div class="detail-item compass-item">
+                                <div class="wind-compass" role="img" aria-label="Wind direction compass">
+                                    <div id="wind-compass-arrow" class="compass-arrow"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="detail-group sun-times" id="sun-times-group" style="display: none;">
-                        <h3 class="detail-group-title">Sun Times</h3>
+                    <!-- Sun information -->
+                    <div id="sun-times-group" class="detail-group sun-times" style="display: none;">
+                        <h3 class="group-title">Sun</h3>
                         <div class="detail-grid">
                             <div class="detail-item">
-                                <div class="detail-icon">🌅</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">🌅</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Sunrise</span>
-                                    <span id="weather-sunrise" class="detail-value"></span>
+                                    <span id="weather-sunrise" class="detail-value">--:--</span>
                                 </div>
                             </div>
                             <div class="detail-item">
-                                <div class="detail-icon">🌇</div>
-                                <div class="detail-content">
+                                <div class="detail-icon" aria-hidden="true">🌇</div>
+                                <div class="detail-info">
                                     <span class="detail-label">Sunset</span>
-                                    <span id="weather-sunset" class="detail-value"></span>
+                                    <span id="weather-sunset" class="detail-value">--:--</span>
                                 </div>
                             </div>
-                        </div>
-                        <div class="sun-progress">
-                            <div id="sun-progress-bar" class="sun-progress-inner">
-                                <div id="sun-position" class="sun-position">☀️</div>
+                            <div class="detail-item sun-progress-item">
+                                <div class="sun-progress-track">
+                                    <div id="sun-position" class="sun-position"></div>
+                                </div>
+                                <span class="sun-progress-label">Sun position</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Weather Alert Section (if applicable) -->
-                <div id="weather-alerts" class="weather-alerts" style="display: none;">
-                    <h3 class="alert-title">⚠️ Weather Alerts</h3>
-                    <div id="alert-content" class="alert-content">
-                        <!-- Alert content will be populated dynamically -->
-                    </div>
-                </div>
+                <!-- Weather metadata -->
+                <footer class="weather-footer">
+                    <p id="weather-timestamp" class="timestamp">Last updated: Never</p>
+                    <p class="data-source">Data provided by OpenWeatherMap</p>
+                </footer>
+            </section>
 
-                <!-- Additional Info -->
-                <div class="weather-footer">
-                    <div class="data-source">
-                        <small>Data provided by <a href="https://openweathermap.org/" target="_blank" rel="noopener">OpenWeatherMap</a></small>
+            <!-- Error display -->
+            <section id="error-section" class="error-section" style="display: none;" role="alert" aria-live="assertive">
+                <div class="error-content">
+                    <div class="error-icon" aria-hidden="true">⚠️</div>
+                    <div class="error-info">
+                        <h3 id="error-title" class="error-title">Something went wrong</h3>
+                        <p id="error-message" class="error-message">An unexpected error occurred.</p>
                     </div>
-                    <div class="weather-actions">
-                        <button id="share-weather" class="action-button" aria-label="Share weather information">
-                            📤 Share
-                        </button>
-                        <button id="favorite-location" class="action-button" aria-label="Add to favorites">
-                            ⭐ Favorite
-                        </button>
+                    <div class="error-actions">
+                        <button id="retry-btn" class="primary-btn">Try Again</button>
+                        <button id="clear-error-btn" class="secondary-btn">Clear</button>
                     </div>
                 </div>
-            </div>
-
-            <!-- Error Display -->
-            <div id="error-display" class="error-display" style="display: none;" aria-live="assertive">
-                <div class="error-icon">⚠️</div>
-                <h3 id="error-title" class="error-title"></h3>
-                <p id="error-message" class="error-message"></p>
-                <div class="error-actions">
-                    <button id="retry-button" class="retry-button">Try Again</button>
-                    <button id="clear-error" class="clear-button">Clear</button>
-                </div>
-            </div>
+            </section>
         </main>
 
-        <!-- Debug Panel -->
-        <aside class="debug-panel" id="debug-panel">
-            <h3>Debug Information <span class="debug-toggle" id="debug-toggle">▼</span></h3>
-            <div class="debug-content" id="debug-content">
-                <div class="debug-section">
-                    <h4>System Status:</h4>
-                    <ul class="debug-list">
-                        <li>Current State: <span id="debug-state" class="debug-value">idle</span></li>
-                        <li>API Endpoint: <span id="debug-endpoint" class="debug-value">api.openweathermap.org</span></li>
-                        <li>Last Success: <span id="debug-last-success" class="debug-value">Never</span></li>
-                        <li>Error Count: <span id="debug-error-count" class="debug-value">0</span></li>
-                        <li>Requests Made: <span id="debug-request-count" class="debug-value">0</span></li>
-                    </ul>
+        <!-- Settings modal -->
+        <div id="settings-modal" class="modal" style="display: none;" role="dialog" aria-labelledby="settings-title" aria-modal="true">
+            <div class="modal-content">
+                <header class="modal-header">
+                    <h2 id="settings-title">Settings</h2>
+                    <button id="close-settings" class="close-btn" aria-label="Close settings">&times;</button>
+                </header>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label for="temp-unit">Temperature Unit</label>
+                        <select id="temp-unit" class="setting-select">
+                            <option value="metric">Celsius (°C)</option>
+                            <option value="imperial">Fahrenheit (°F)</option>
+                            <option value="kelvin">Kelvin (K)</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label for="wind-unit">Wind Speed Unit</label>
+                        <select id="wind-unit" class="setting-select">
+                            <option value="ms">Meters per second (m/s)</option>
+                            <option value="kmh">Kilometers per hour (km/h)</option>
+                            <option value="mph">Miles per hour (mph)</option>
+                            <option value="knots">Knots</option>
+                        </select>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="auto-refresh" class="setting-checkbox">
+                            Auto-refresh weather data (every 5 minutes)
+                        </label>
+                    </div>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="save-searches" class="setting-checkbox" checked>
+                            Save recent searches
+                        </label>
+                    </div>
                 </div>
-                
+                <footer class="modal-footer">
+                    <button id="save-settings" class="primary-btn">Save Settings</button>
+                    <button id="reset-settings" class="secondary-btn">Reset to Defaults</button>
+                </footer>
+            </div>
+        </div>
+
+        <!-- Favorites modal -->
+        <div id="favorites-modal" class="modal" style="display: none;" role="dialog" aria-labelledby="favorites-title" aria-modal="true">
+            <div class="modal-content">
+                <header class="modal-header">
+                    <h2 id="favorites-title">Favorite Locations</h2>
+                    <button id="close-favorites" class="close-btn" aria-label="Close favorites">&times;</button>
+                </header>
+                <div class="modal-body">
+                    <div id="favorites-list" class="favorites-list">
+                        <div class="empty-state">
+                            <p>No favorite locations yet.</p>
+                            <p>Search for a city and click the star icon to add it to your favorites.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug panel -->
+        <aside id="debug-panel" class="debug-panel" role="region" aria-labelledby="debug-title">
+            <header class="debug-header">
+                <h3 id="debug-title">
+                    Debug Information 
+                    <button id="debug-toggle" class="debug-toggle" aria-label="Toggle debug panel" aria-expanded="true">
+                        ▼
+                    </button>
+                </h3>
+            </header>
+            
+            <div id="debug-content" class="debug-content">
+                <!-- System status -->
                 <div class="debug-section">
-                    <h4>Performance Metrics:</h4>
-                    <ul class="debug-list">
-                        <li>Average Response Time: <span id="debug-avg-time" class="debug-value">0ms</span></li>
-                        <li>Success Rate: <span id="debug-success-rate" class="debug-value">100%</span></li>
-                        <li>Cache Hits: <span id="debug-cache-hits" class="debug-value">0</span></li>
-                        <li>Cache Size: <span id="debug-cache-size" class="debug-value">0</span></li>
-                    </ul>
+                    <h4>System Status</h4>
+                    <div class="debug-grid">
+                        <div class="debug-item">
+                            <span class="debug-label">State:</span>
+                            <span id="debug-state" class="debug-value">initializing</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">API Endpoint:</span>
+                            <span id="debug-endpoint" class="debug-value">api.openweathermap.org</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Last Success:</span>
+                            <span id="debug-last-success" class="debug-value">Never</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Requests Made:</span>
+                            <span id="debug-request-count" class="debug-value">0</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Error Count:</span>
+                            <span id="debug-error-count" class="debug-value">0</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Config Status:</span>
+                            <span id="debug-config-status" class="debug-value">unknown</span>
+                        </div>
+                    </div>
                 </div>
 
+                <!-- Performance metrics -->
+                <div class="debug-section">
+                    <h4>Performance Metrics</h4>
+                    <div class="debug-grid">
+                        <div class="debug-item">
+                            <span class="debug-label">Success Rate:</span>
+                            <span id="debug-success-rate" class="debug-value">100%</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Avg Response Time:</span>
+                            <span id="debug-avg-time" class="debug-value">0ms</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Cache Hits:</span>
+                            <span id="debug-cache-hits" class="debug-value">0</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Rate Limit:</span>
+                            <span id="debug-rate-limit" class="debug-value">0/60</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Cache Size:</span>
+                            <span id="debug-cache-size" class="debug-value">0</span>
+                        </div>
+                        <div class="debug-item">
+                            <span class="debug-label">Queue Length:</span>
+                            <span id="debug-queue-length" class="debug-value">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent errors -->
+                <div class="debug-section">
+                    <h4>Recent Errors</h4>
+                    <div id="debug-errors" class="debug-errors">
+                        <p class="debug-no-data">No errors recorded</p>
+                    </div>
+                </div>
+
+                <!-- Debug actions -->
                 <div class="debug-actions">
-                    <button id="export-debug" class="debug-button">Export Debug Data</button>
-                    <button id="clear-cache" class="debug-button">Clear Cache</button>
-                    <button id="reset-metrics" class="debug-button">Reset Metrics</button>
-                    <button id="test-api" class="debug-button">Test API</button>
+                    <button id="test-api-btn" class="debug-btn">Test API</button>
+                    <button id="export-debug-btn" class="debug-btn">Export Debug</button>
+                    <button id="clear-cache-btn" class="debug-btn">Clear Cache</button>
+                    <button id="reset-metrics-btn" class="debug-btn">Reset Metrics</button>
                 </div>
             </div>
         </aside>
 
+        <!-- Footer -->
         <footer class="app-footer">
-            <p>&copy; 2024 Weather App • Weather data provided by <a href="https://openweathermap.org/" target="_blank" rel="noopener">OpenWeatherMap</a></p>
+            <div class="footer-content">
+                <p>Weather data provided by <a href="https://openweathermap.org/" target="_blank" rel="noopener">OpenWeatherMap</a></p>
+                <p class="footer-version">Weather Pro v1.0 | <a href="#" id="about-link">About</a> | <a href="#" id="privacy-link">Privacy</a></p>
+            </div>
         </footer>
     </div>
 
@@ -285,5 +517,31 @@
     <script src="config.js"></script>
     <script src="weather-api.js"></script>
     <script src="main.js"></script>
+    
+    <!-- Development only scripts -->
+    <script>
+        // Development environment detection
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.log('🔧 Development mode detected');
+            
+            // Add keyboard shortcuts for development
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch (e.key) {
+                        case 'd':
+                            e.preventDefault();
+                            document.getElementById('debug-toggle').click();
+                            break;
+                        case 'r':
+                            if (e.shiftKey) {
+                                e.preventDefault();
+                                location.reload();
+                            }
+                            break;
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
