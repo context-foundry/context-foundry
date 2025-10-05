@@ -307,6 +307,17 @@ foundry analyze --format markdown --save report.md
 - **40% context utilization is the golden zone**
 - **Tests before implementation, always**
 
+## How Context Foundry Works
+
+Context Foundry uses a unique **stateless conversation architecture** to maintain context efficiency:
+
+- **Scout, Architect, Builder** each run as separate conversations with Claude
+- **Context resets** between phases clear conversation history but persist state to files
+- **File-based state** instead of conversation memory enables unlimited session length
+- Maintains **<40% context utilization** even during hours-long builds
+
+**Want the technical details?** See [Architecture Deep Dive](docs/ARCHITECTURE.md) to understand exactly what happens when you see "🔄 Context reset - starting fresh conversation"
+
 ## Project Structure
 
 ```
