@@ -112,33 +112,7 @@ foundry --version
 
 ### Basic Usage
 
-Context Foundry works in two modes:
-
-#### Option 1: MCP Mode (via Claude Desktop) - ⚠️ Not Yet Functional
-
-> **Note:** MCP mode is fully implemented but doesn't work yet because Claude Desktop doesn't support MCP sampling. See [MCP Setup Guide](docs/MCP_SETUP.md) for details and current status.
-
-Once Claude Desktop adds sampling support, you'll be able to use Context Foundry directly:
-
-```
-Use context_foundry_build to create a REST API with:
-- FastAPI framework
-- PostgreSQL database
-- JWT authentication
-- OpenAPI documentation
-Call it "my-api"
-```
-
-**Benefits (when available):**
-- ✅ Uses Claude Pro/Max subscription (no additional per-token charges)
-- ✅ Interactive - review and modify plans before building
-- ✅ Seamless Claude Desktop integration
-
-**For now:** Use API mode below.
-
-#### Option 2: API Mode (standalone CLI)
-
-**1. Build New Projects (from scratch)**
+**Build New Projects (from scratch)**
 
 ```bash
 # Interactive build with reviews
@@ -157,7 +131,7 @@ foundry build web-app "Todo app" --livestream
 
 **Note:** Projects are created in the `examples/` directory to keep generated code organized and separate from the Context Foundry codebase.
 
-**2. Enhance Existing Projects (modify existing code)** 🚧 *Coming Soon*
+**Enhance Existing Projects (modify existing code)** 🚧 *Coming Soon*
 
 ```bash
 # Navigate to your existing repo
@@ -189,6 +163,14 @@ foundry status --watch
 # Analyze completed session
 foundry analyze --format markdown --save report.md
 ```
+
+## Roadmap: MCP Mode
+
+**MCP Mode (Model Context Protocol)** is fully implemented but not yet functional. It's designed to work through Claude Desktop using your Claude Pro/Max subscription instead of per-token API charges.
+
+**Current Status:** ⚠️ Blocked by Claude Desktop - sampling not yet supported
+**Technical Details:** See [MCP Setup Guide](docs/MCP_SETUP.md)
+**When Available:** Will work automatically without code changes
 
 ## Key Principles
 
