@@ -309,6 +309,7 @@ IMPORTANT: Use the exact file paths and structure from the existing blueprints a
         if self.mode == "new":
             mode_context = "This is a NEW project - you're starting from scratch, no existing codebase."
             job_description = "research and design the architecture for this project"
+            mandatory_steps = ""
             focus_areas = """Focus on:
 1. Best architecture for this type of project
 2. Technology stack and dependencies
@@ -498,6 +499,11 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
 
         # Simple parsing: look for markdown headers
         files = self._parse_architect_response(response)
+
+        # Create directories before writing
+        spec_file.parent.mkdir(parents=True, exist_ok=True)
+        plan_file.parent.mkdir(parents=True, exist_ok=True)
+        tasks_file.parent.mkdir(parents=True, exist_ok=True)
 
         spec_file.write_text(files.get("spec", response))
         plan_file.write_text(files.get("plan", response))
@@ -1008,20 +1014,14 @@ Total Tokens: {stats['total_tokens']:,}
                 tokens = meta.get('total_tokens', 0)
                 print(f"📊 Context: {ctx_pct}% | Tokens: {tokens:,}")
 
-            approval = input("\nType 'approve' to continue, anything else to abort: ")
+            print("\n[dim]Review the output above. Type 'y' or 'yes' to proceed, or anything else to abort.[/dim]")
+            approval = input("\n👉 Proceed with this phase? (y/n): ").strip().lower()
 
-            if approval.lower() == "approve":
+            if approval in ['y', 'yes']:
                 return True
-
-            # Confirmation before aborting
-            print(f"\n⚠️  You typed: '{approval}'")
-            confirm = input("Are you sure you want to abort? (yes/no): ")
-
-            if confirm.lower() in ('yes', 'y'):
-                return False
             else:
-                print("\n💡 Tip: Type 'approve' (exactly) to continue")
-                # Loop back to ask for approval again
+                print("\n[yellow]⚠️  Aborted by user.[/yellow]")
+                return False
 
     def abort(self, reason: str) -> Dict:
         """Abort workflow."""
@@ -1104,6 +1104,7 @@ Total Tokens: {stats['total_tokens']:,}
 
         # Save session summary
         session_file = self.checkpoints_path / f"{self.session_id}.json"
+        session_file.parent.mkdir(parents=True, exist_ok=True)
         session_file.write_text(json.dumps(results, indent=2))
 
         # Save blueprints using BlueprintManager (with history and manifest)

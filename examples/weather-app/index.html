@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Beautiful weather app showing current conditions and 5-day forecast">
+    <meta name="keywords" content="weather, forecast, temperature, conditions">
+    <meta name="author" content="Weather App">
+    
+    <title>Weather App - Current Weather & Forecast</title>
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://api.openweathermap.org">
+    
+    <!-- Main stylesheet -->
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iNiIgZmlsbD0iI0ZGQjk0MyIvPgo8L3N2Zz4K">
+</head>
+<body>
+    <!-- Skip to main content link for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    
+    <!-- Application header -->
+    <header class="app-header" role="banner">
+        <div class="container">
+            <h1 class="app-title">
+                <svg class="app-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+                    <circle cx="16" cy="16" r="6" fill="currentColor"/>
+                    <path d="M16 2v4M16 26v4M30 16h-4M6 16H2M25.66 6.34l-2.83 2.83M9.17 22.83l-2.83 2.83M25.66 25.66l-2.83-2.83M9.17 9.17l-2.83-2.83" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                Weather App
+            </h1>
+            
+            <nav class="header-nav" role="navigation" aria-label="Main navigation">
+                <button class="theme-toggle" type="button" aria-label="Toggle dark/light theme" title="Toggle theme">
+                    <svg class="theme-icon sun-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <circle cx="10" cy="10" r="4" fill="currentColor"/>
+                        <path d="M10 1v2M10 17v2M19 10h-2M3 10H1M16.24 3.76l-1.41 1.41M5.17 14.83l-1.41 1.41M16.24 16.24l-1.41-1.41M5.17 5.17l-1.41-1.41" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                    <svg class="theme-icon moon-icon" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" fill="currentColor"/>
+                    </svg>
+                </button>
+                
+                <button class="settings-button" type="button" aria-label="Open settings" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" fill="currentColor"/>
+                        <path d="M10 1l3 3h4v4l3 3-3 3v4h-4l-3 3-3-3H3v-4L0 10l3-3V3h4l3-3z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                    </svg>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main content area -->
+    <main id="main-content" class="main-content" role="main">
+        <div class="container">
+            <!-- Search section -->
+            <section class="search-section" aria-labelledby="search-heading">
+                <h2 id="search-heading" class="visually-hidden">Search for a location</h2>
+                <div class="search-container">
+                    <div class="search-input-wrapper">
+                        <label for="location-search" class="visually-hidden">Enter city name</label>
+                        <input 
+                            type="search" 
+                            id="location-search" 
+                            class="search-input" 
+                            placeholder="Search for a city..."
+                            autocomplete="off"
+                            spellcheck="false"
+                            aria-describedby="search-help"
+                        >
+                        <button type="button" class="search-button" aria-label="Search for location">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                <circle cx="9" cy="9" r="8" stroke="currentColor" stroke-width="2"/>
+                                <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="location-button" aria-label="Use current location" title="Use my location">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                                <polygon points="10,1 4,19 10,13 16,19" fill="currentColor"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="search-help" class="search-help">
+                        Enter a city name or use your current location
+                    </div>
+                    <div class="search-results" role="listbox" aria-label="Search results"></div>
+                </div>
+            </section>
+
+            <!-- Current weather section -->
+            <section class="current-weather-section" aria-labelledby="current-weather-heading">
+                <h2 id="current-weather-heading" class="section-heading">Current Weather</h2>
+                <div class="weather-card-container">
+                    <div class="weather-card" role="region" aria-label="Current weather information">
+                        <!-- Loading state -->
+                        <div class="loading-skeleton" aria-hidden="true">
+                            <div class="skeleton-location"></div>
+                            <div class="skeleton-temperature"></div>
+                            <div class="skeleton-condition"></div>
+                            <div class="skeleton-details"></div>
+                        </div>
+                        
+                        <!-- Weather content (hidden initially) -->
+                        <div class="weather-content" style="display: none;">
+                            <div class="weather-header">
+                                <div class="location-info">
+                                    <h3 class="location-name" id="current-location">Loading...</h3>
+                                    <p class="location-time" id="current-time">--</p>
+                                </div>
+                                <button type="button" class="favorite-button" aria-label="Add to favorites" title="Add to favorites">
+                                    <svg class="favorite-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <div class="weather-main">
+                                <div class="temperature-section">
+                                    <div class="current-temperature" id="current-temp">--°</div>
+                                    <div class="feels-like" id="feels-like">Feels like --°</div>
+                                    <div class="condition-text" id="condition-text">Loading...</div>
+                                </div>
+                                
+                                <div class="weather-icon-section">
+                                    <div class="weather-icon" id="weather-icon" aria-label="Weather condition icon">
+                                        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+                                            <circle cx="40" cy="40" r="15" fill="currentColor" opacity="0.3"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="weather-details">
+                                <div class="detail-item">
+                                    <span class="detail-label">Humidity</span>
+                                    <span class="detail-value" id="humidity">--%</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Wind</span>
+                                    <span class="detail-value" id="wind">-- mph</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Pressure</span>
+                                    <span class="detail-value" id="pressure">-- hPa</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Visibility</span>
+                                    <span class="detail-value" id="visibility">-- km</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">UV Index</span>
+                                    <span class="detail-value" id="uv-index">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Error state -->
+                        <div class="error-state" style="display: none;" role="alert">
+                            <svg class="error-icon" width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                                <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="2"/>
+                                <path d="m18 18 12 12M30 18l-12 12" stroke="currentColor" stroke-width="2"/>
+                            </svg>
+                            <h3 class="error-title">Unable to load weather</h3>
+                            <p class="error-message">Please check your connection and try again.</p>
+                            <button type="button" class="retry-button">Retry</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Forecast section -->
+            <section class="forecast-section" aria-labelledby="forecast-heading">
+                <h2 id="forecast-heading" class="section-heading">5-Day Forecast</h2>
+                <div class="forecast-container">
+                    <div class="forecast-list" role="list" aria-label="Weather forecast for next 5 days">
+                        <!-- Forecast items will be populated by JavaScript -->
+                        <div class="forecast-loading">
+                            <div class="loading-text">Loading forecast...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Favorites section -->
+            <section class="favorites-section" aria-labelledby="favorites-heading" style="display: none;">
+                <h2 id="favorites-heading" class="section-heading">Favorite Locations</h2>
+                <div class="favorites-container">
+                    <div class="favorites-list" role="list" aria-label="Your favorite weather locations">
+                        <!-- Favorites will be populated by JavaScript -->
+                    </div>
+                    <div class="no-favorites" style="display: none;">
+                        <p>No favorite locations yet. Add some by clicking the star icon on weather cards!</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer" role="contentinfo">
+        <div class="container">
+            <div class="footer-content">
+                <p class="footer-text">
+                    Weather data provided by <a href="https://openweathermap.org/" target="_blank" rel="noopener noreferrer">OpenWeatherMap</a>
+                </p>
+                <div class="footer-links">
+                    <button type="button" class="footer-button about-button">About</button>
+                    <button type="button" class="footer-button privacy-button">Privacy</button>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settings-modal" style="display: none;" role="dialog" aria-labelledby="settings-modal-title" aria-modal="true">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="settings-modal-title" class="modal-title">Settings</h2>
+                <button type="button" class="modal-close" aria-label="Close settings">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="m18 6-12 12M6 6l12 12" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Units</h3>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span class="setting-name">Temperature</span>
+                            <select class="setting-select" id="temperature-unit">
+                                <option value="celsius">Celsius (°C)</option>
+                                <option value="fahrenheit">Fahrenheit (°F)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span class="setting-name">Wind Speed</span>
+                            <select class="setting-select" id="wind-unit">
+                                <option value="metric">km/h</option>
+                                <option value="imperial">mph</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <h3 class="settings-group-title">Preferences</h3>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span class="setting-name">Auto-detect location</span>
+                            <input type="checkbox" class="setting-checkbox" id="auto-location" checked>
+                            <span class="setting-toggle"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label">
+                            <span class="setting-name">Show detailed weather info</span>
+                            <input type="checkbox" class="setting-checkbox" id="show-details" checked>
+                            <span class="setting-toggle"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="button button-secondary modal-cancel">Cancel</button>
+                <button type="button" class="button button-primary modal-save">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div class="loading-overlay" id="loading-overlay" style="display: none;" aria-hidden="true">
+        <div class="loading-spinner">
+            <svg class="spinner" width="40" height="40" viewBox="0 0 50 50">
+                <circle class="path" cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="4"></circle>
+            </svg>
+            <p class="loading-text">Loading weather data...</p>
+        </div>
+    </div>
+
+    <!-- JavaScript modules -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

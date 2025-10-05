@@ -167,7 +167,7 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
         "Task": task,
         "Mode": "Build (new project)",
         "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
-        "Livestream": "📡 On" if livestream else "Off",
+        "Livestream": "📡 Enabled" if livestream else "Disabled",
         "Auto-push to GitHub": "✓ On" if push else "Off",
         "Pattern injection": "✓ On" if use_patterns else "Off",
         "Context management": "✓ On" if context_manager else "Off"
