@@ -222,7 +222,7 @@ class SessionAnalyzer:
         }
 
     def _calculate_cost(self, session_dir: Path) -> float:
-        """Calculate estimated API cost.
+        """Calculate estimated API cost using pricing database.
 
         Args:
             session_dir: Path to session directory
@@ -231,18 +231,44 @@ class SessionAnalyzer:
             Cost in USD
         """
         tokens = self._analyze_token_usage(session_dir)
-
-        # Claude Sonnet 4 pricing (approximate)
-        input_cost_per_1k = 0.003
-        output_cost_per_1k = 0.015
-
         input_tokens = tokens.get('input', 0)
         output_tokens = tokens.get('output', 0)
 
-        cost = (input_tokens / 1000 * input_cost_per_1k) + \
-               (output_tokens / 1000 * output_cost_per_1k)
+        # Try to use pricing database for accurate costs
+        try:
+            from ace.pricing_database import PricingDatabase
+            import os
 
-        return cost
+            db = PricingDatabase()
+
+            # Get provider/model from env (fallback to Claude Sonnet 4)
+            # This is approximate since session might have used different models
+            provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+            model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
+
+            pricing = db.get_pricing(provider, model)
+
+            if pricing:
+                # Use actual pricing
+                cost = (input_tokens / 1_000_000 * pricing.input_cost_per_1m) + \
+                       (output_tokens / 1_000_000 * pricing.output_cost_per_1m)
+            else:
+                # Fallback to default Claude Sonnet 4 pricing
+                input_cost_per_1k = 0.003
+                output_cost_per_1k = 0.015
+                cost = (input_tokens / 1000 * input_cost_per_1k) + \
+                       (output_tokens / 1000 * output_cost_per_1k)
+
+            db.close()
+            return cost
+
+        except Exception:
+            # If anything fails, use fallback pricing
+            input_cost_per_1k = 0.003
+            output_cost_per_1k = 0.015
+            cost = (input_tokens / 1000 * input_cost_per_1k) + \
+                   (output_tokens / 1000 * output_cost_per_1k)
+            return cost
 
     def _analyze_pattern_usage(self, session_id: str) -> Dict:
         """Analyze pattern usage and effectiveness.

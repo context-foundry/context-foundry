@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from ace.provider_registry import get_registry
 from ace.providers.base_provider import ProviderResponse
+from ace.cost_tracker import CostTracker
 
 
 @dataclass
@@ -37,7 +38,8 @@ class AIClient:
         self,
         config: Optional[PhaseConfig] = None,
         log_dir: Optional[Path] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        cost_tracker: Optional[CostTracker] = None
     ):
         """
         Initialize AI client.
@@ -46,11 +48,13 @@ class AIClient:
             config: Phase configuration (loads from env if None)
             log_dir: Directory for logs
             session_id: Session identifier
+            cost_tracker: Cost tracker instance (creates new if None)
         """
         self.registry = get_registry()
         self.config = config or self._load_config_from_env()
         self.log_dir = log_dir
         self.session_id = session_id
+        self.cost_tracker = cost_tracker or CostTracker()
 
         # Validate configuration
         self._validate_config()
@@ -150,6 +154,7 @@ class AIClient:
                     config,
                     prompt,
                     self.builder_history,
+                    'builder',
                     **kwargs
                 )
 
@@ -176,13 +181,14 @@ class AIClient:
             ProviderResponse
         """
         config = getattr(self.config, phase_name)
-        return self._call_with_config(config, prompt, history, **kwargs)
+        return self._call_with_config(config, prompt, history, phase_name, **kwargs)
 
     def _call_with_config(
         self,
         config: ModelConfig,
         prompt: str,
         history: List[Dict[str, str]],
+        phase_name: Optional[str] = None,
         **kwargs
     ) -> ProviderResponse:
         """
@@ -192,6 +198,7 @@ class AIClient:
             config: Model configuration
             prompt: User prompt
             history: Conversation history
+            phase_name: Optional phase name for cost tracking
             **kwargs: Additional parameters
 
         Returns:
@@ -216,6 +223,16 @@ class AIClient:
         # Track usage
         self.total_input_tokens += response.input_tokens
         self.total_output_tokens += response.output_tokens
+
+        # Track cost
+        if phase_name and self.cost_tracker:
+            self.cost_tracker.track_usage(
+                phase=phase_name,
+                provider=config.provider,
+                model=config.model,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens
+            )
 
         # Log if enabled
         if self.log_dir:
@@ -254,6 +271,26 @@ class AIClient:
             'total_output_tokens': self.total_output_tokens,
             'total_tokens': self.total_input_tokens + self.total_output_tokens
         }
+
+    def get_cost_summary(self, verbose: bool = True) -> str:
+        """
+        Get formatted cost summary.
+
+        Args:
+            verbose: Include detailed breakdown
+
+        Returns:
+            Formatted cost summary string
+        """
+        return self.cost_tracker.format_summary(verbose=verbose)
+
+    def get_total_cost(self) -> float:
+        """Get total cost across all phases"""
+        return self.cost_tracker.get_total_cost()
+
+    def get_cost_details(self) -> Dict:
+        """Get detailed cost breakdown"""
+        return self.cost_tracker.get_summary()
 
     def reset_history(self, phase: Optional[str] = None):
         """

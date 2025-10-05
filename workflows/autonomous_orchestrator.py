@@ -671,6 +671,41 @@ Total Tokens: {stats['total_tokens']:,}
         print(f"💾 Logs: {self.logs_path}")
         print(f"🎯 Session: {self.session_id}")
 
+        # Display cost summary if using AIClient
+        try:
+            if hasattr(self.claude, 'get_cost_summary'):
+                print(f"\n{self.claude.get_cost_summary(verbose=True)}")
+        except Exception:
+            # Fallback: calculate approximate cost
+            try:
+                from ace.pricing_database import PricingDatabase
+                db = PricingDatabase()
+
+                # Get provider/model from env
+                provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+                model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
+
+                pricing = db.get_pricing(provider, model)
+
+                if pricing and stats.get('total_tokens', 0) > 0:
+                    # Rough estimate: assume 30% input, 70% output
+                    total_tokens = stats['total_tokens']
+                    input_tokens = int(total_tokens * 0.3)
+                    output_tokens = int(total_tokens * 0.7)
+
+                    cost = (input_tokens / 1_000_000 * pricing.input_cost_per_1m) + \
+                           (output_tokens / 1_000_000 * pricing.output_cost_per_1m)
+
+                    print(f"\n💰 ESTIMATED COST")
+                    print("━" * 60)
+                    print(f"Total Cost: ${cost:.2f} (approximate)")
+                    print(f"Model: {provider}/{model}")
+                    print("━" * 60)
+
+                db.close()
+            except Exception:
+                pass
+
         # Save final conversation
         self.claude.save_full_conversation(self.logs_path / "full_conversation.json")
 
