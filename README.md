@@ -503,8 +503,8 @@ git commit -m "builder(task-1): Set up project structure
 # Switch to experimental branch
 git checkout feature/git-as-memory
 
-# Build as normal
-foundry build my-app "Build a todo app"
+# Build with --git-memory flag
+foundry build my-app "Build a todo app" --git-memory
 
 # Check git log for agent memory commits
 cd examples/my-app
