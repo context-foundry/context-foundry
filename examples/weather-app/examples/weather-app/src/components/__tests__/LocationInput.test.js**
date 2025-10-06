@@ -1,0 +1,14 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import LocationInput from '../LocationInput';
+
+test('renders LocationInput and submits correct value', () => {
+    const handleSubmit = jest.fn();
+    render(<LocationInput onSubmit={handleSubmit} />);
+
+    const input = screen.getByPlaceholderText('Enter city name');
+    fireEvent.change(input, { target: { value: 'London' } });
+    fireEvent.click(screen.getByText('Get Weather'));
+
+    expect(handleSubmit).toHaveBeenCalledWith('London');
+});

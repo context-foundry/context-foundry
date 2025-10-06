@@ -1,0 +1,13 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import WeatherDisplay from '../WeatherDisplay';
+
+test('renders weather information when provided', () => {
+    render(<WeatherDisplay weather="Sunny" />);
+    expect(screen.getByText('Sunny')).toBeInTheDocument();
+});
+
+test('renders message when no weather data is available', () => {
+    render(<WeatherDisplay weather="" />);
+    expect(screen.getByText('No weather data available.')).toBeInTheDocument();
+});

@@ -1,0 +1,15 @@
+/**
+ * Fetches weather data for a given location.
+ * 
+ * @param {string} location - The city name to fetch weather data for.
+ * @returns {Promise<string>} - A promise that resolves to the weather information.
+ */
+export const fetchWeather = async (location) => {
+    const apiKey = 'YOUR_API_KEY';  // Replace with your actual API key
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${apiKey}&units=metric`);
+    if (!response.ok) {
+        throw new Error('Error fetching weather data');
+    }
+    const data = await response.json();
+    return `${data.weather[0].description} in ${location}, Temperature: ${data.main.temp}°C`;
+};
