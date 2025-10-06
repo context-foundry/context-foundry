@@ -1,0 +1,28 @@
+// api.js
+/**
+ * Weather API Utility
+ * Provides functions to fetch weather data from an external API.
+ */
+
+const API_URL = "https://api.openweathermap.org/data/2.5/weather";
+const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;
+
+/**
+ * Fetch weather data for a specific city.
+ * 
+ * @param {string} city - The name of the city
+ * @returns {Promise<Object>} - The weather data for the city
+ */
+export const fetchWeatherData = async (city) => {
+  try {
+    const response = await fetch(`${API_URL}?q=${city}&appid=${API_KEY}&units=metric`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch weather data");
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error("API error:", error);
+    throw error;
+  }
+};

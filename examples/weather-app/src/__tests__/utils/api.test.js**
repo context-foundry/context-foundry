@@ -1,0 +1,31 @@
+// api.test.js
+import { fetchWeatherData } from "../../utils/api";
+
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        name: "London",
+        main: { temp: 15 },
+        weather: [{ description: "Sunny" }],
+      }),
+  })
+);
+
+test("fetchWeatherData fetches data correctly for a valid city", async () => {
+  const data = await fetchWeatherData("London");
+  expect(data.name).toBe("London");
+  expect(data.main.temp).toBe(15);
+  expect(data.weather[0].description).toBe("Sunny");
+});
+
+test("fetchWeatherData throws an error for an invalid city", async () => {
+  global.fetch.mockImplementationOnce(() =>
+    Promise.resolve({ ok: false })
+  );
+
+  await expect(fetchWeatherData("UnknownCity")).rejects.toThrow(
+    "Failed to fetch weather data"
+  );
+});

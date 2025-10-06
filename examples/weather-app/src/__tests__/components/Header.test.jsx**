@@ -1,0 +1,9 @@
+// Header.test.jsx
+import React from "react";
+import { render } from "@testing-library/react";
+import Header from "../../components/Header";
+
+test("renders the Header component with correct text", () => {
+  const { getByText } = render(<Header />);
+  expect(getByText("Weather App")).toBeInTheDocument();
+});

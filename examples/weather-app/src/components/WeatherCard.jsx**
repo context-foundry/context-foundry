@@ -1,0 +1,25 @@
+// WeatherCard.jsx
+import React from "react";
+
+/**
+ * WeatherCard Component
+ * Display the weather information for a specific location.
+ * 
+ * @param {Object} props - React component properties
+ * @param {string} props.cityName - Name of the city
+ * @param {string} props.temperature - Temperature in the city
+ * @param {string} props.description - Weather description
+ * 
+ * @returns {JSX.Element} - The rendered WeatherCard JSX.
+ */
+const WeatherCard = ({ cityName, temperature, description }) => {
+  return (
+    <div className="p-4 max-w-sm border rounded shadow-lg">
+      <h2 className="text-xl font-semibold">{cityName}</h2>
+      <p className="text-lg">{temperature} °C</p>
+      <p className="text-gray-600">{description}</p>
+    </div>
+  );
+};
+
+export default WeatherCard;
