@@ -186,8 +186,8 @@ def foundry():
 @click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
 @click.option('--context-manager/--no-context-manager', default=True, help='Enable smart context management')
 @click.option('--project-dir', type=click.Path(), help='Custom project directory')
-@click.option('--git', is_flag=True, help='Enable Git as Memory (commit agent reasoning to git)')
-def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir, git):
+@click.option('--git-memory', is_flag=True, help='Enable Git as Memory (commit agent reasoning to git)')
+def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir, git_memory):
     """
     Build a new project with Context Foundry.
 
@@ -286,7 +286,7 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
         "Auto-push to GitHub": "✓ On" if push else "Off",
         "Pattern injection": "✓ On" if use_patterns else "Off",
         "Context management": "✓ On" if context_manager else "Off",
-        "Git as Memory": "🧪 On (experimental)" if git else "Off"
+        "Git as Memory": "🧪 On (experimental)" if git_memory else "Off"
     }
 
     if not confirm_settings(settings):
@@ -301,7 +301,7 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
             use_patterns=use_patterns,
             enable_livestream=livestream,
             auto_push=push,
-            git_memory=git
+            git_memory=git_memory
         )
 
         result = orchestrator.run()
