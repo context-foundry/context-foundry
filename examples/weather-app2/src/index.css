@@ -1,16 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for the weather app */
+
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    @apply bg-blue-500 h-screen flex flex-col items-center justify-center;
 }
 
-.App {
-  text-align: center;
+h1 {
+    @apply text-white text-4xl mb-4;
 }
 
-.App-header {
-  background-color: #282c34;
-  padding: 20px;
-  color: white;
+.container {
+    @apply bg-white rounded-lg shadow-lg p-6 w-full max-w-md;
+}
+
+.search-bar {
+    @apply mb-4;
+}
+
+.weather-result {
+    @apply text-center text-gray-700;
+}
+
+.weather-info {
+    @apply text-2xl font-bold text-gray-800;
+}
+
+.error-message {
+    @apply text-red-500;
+    display: none; /* initial state hidden */
+}
+
+/* Responsive styling */
+@media (max-width: 640px) {
+    h1 {
+        @apply text-3xl;
+    }
+
+    .container {
+        @apply p-4;
+    }
+
+    .weather-info {
+        @apply text-xl;
+    }
 }

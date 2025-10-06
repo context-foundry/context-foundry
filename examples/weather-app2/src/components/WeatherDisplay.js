@@ -1,15 +1,19 @@
 import React from 'react';
 
-const WeatherDisplay = ({ data }) => {
+function WeatherDisplay({ weatherData, errorMessage }) {
     return (
-        <div className="weather-display">
-            <h2>Weather for {data.name}</h2>
-            <p>Temperature: {data.main.temp} °C</p>
-            <p>Condition: {data.weather[0].description}</p>
-            <p>Humidity: {data.main.humidity} %</p>
-            <p>Wind Speed: {data.wind.speed} m/s</p>
+        <div className="weather-result">
+            {errorMessage ? (
+                <p className="error-message">{errorMessage}</p>
+            ) : (
+                <div className="weather-info">
+                    <h2>{weatherData.location}</h2>
+                    <p>{weatherData.temperature}°C</p>
+                    <p>{weatherData.condition}</p>
+                </div>
+            )}
         </div>
     );
-};
+}
 
 export default WeatherDisplay;

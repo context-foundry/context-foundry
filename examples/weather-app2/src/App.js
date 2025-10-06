@@ -1,32 +1,37 @@
 import React, { useState } from 'react';
 import SearchBar from './components/SearchBar';
 import WeatherDisplay from './components/WeatherDisplay';
-import api from './services/api';
+import './index.css';
 
-const App = () => {
-    // State to store weather data and search input
+function App() {
     const [weatherData, setWeatherData] = useState(null);
-    const [city, setCity] = useState('');
+    const [errorMessage, setErrorMessage] = useState('');
 
-    // Function to handle the user's search
-    const handleSearch = async (searchQuery) => {
-        setCity(searchQuery);
-        try {
-            const data = await api.getWeatherData(searchQuery);
-            setWeatherData(data);
-        } catch (error) {
-            console.error("Failed to fetch weather data:", error);
+    const fetchWeatherData = async (location) => {
+        const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Use real API key
+        const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${location}`);
+        
+        if (!response.ok) {
+            setErrorMessage('Failed to fetch weather data. Please try again.');
+            return;
         }
+
+        const data = await response.json();
+        setWeatherData({
+            location: data.location.name,
+            temperature: data.current.temp_c,
+            condition: data.current.condition.text
+        });
+        setErrorMessage('');
     };
 
     return (
-        <div className="app">
+        <div className="container">
             <h1>Weather App</h1>
-            <SearchBar onSearch={handleSearch} />
-            {weatherData && <WeatherDisplay data={weatherData} />}
-            {weatherData === null && <p>No data available. Please search for a city.</p>}
+            <SearchBar onSearch={fetchWeatherData} />
+            <WeatherDisplay weatherData={weatherData} errorMessage={errorMessage} />
         </div>
     );
-};
+}
 
 export default App;
