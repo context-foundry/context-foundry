@@ -1,79 +1,49 @@
-// Actual complete code goes here
-const API_KEY = 'c4b27d06b0817cd09f83aa58745fda97'; // Your OpenWeatherMap API Key
-const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+// app.js
+
+const API_KEY = 'your_actual_api_key'; // Replace with your actual API key
+const weatherForm = document.getElementById('weather-form');
+const weatherOutput = document.getElementById('weather-output');
+
+weatherForm.addEventListener('submit', (event) => {
+    event.preventDefault(); // Prevent form submission
+    const city = event.target.elements.city.value;
+    fetchWeatherData(city);
+});
 
 /**
- * Fetch weather data from OpenWeatherMap API based on city name.
- *
- * @param {string} city - The name of the city to fetch the weather for.
- * @returns {Promise<object>} The weather data for the specified city.
+ * Fetch weather data from the OpenWeather API.
+ * @param {string} city - The name of the city to fetch weather data for.
  */
 async function fetchWeatherData(city) {
     try {
-        const response = await fetch(`${BASE_URL}?q=${city}&appid=${API_KEY}&units=metric`);
+        const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`);
         if (!response.ok) {
-            throw new Error(`Error fetching weather data: ${response.statusText}`);
+            throw new Error('City not found');
         }
         const data = await response.json();
-        return extractWeatherData(data);
+        displayWeatherData(data);
     } catch (error) {
-        console.error(error);
-        alert("Failed to fetch weather data. Please try again.");
+        displayError(error.message);
     }
 }
 
 /**
- * Extract relevant data from API response.
- *
- * @param {object} data - The JSON response from the API.
- * @returns {object} An object containing extracted weather information.
+ * Display weather data in the HTML.
+ * @param {Object} data - The JSON data retrieved from the weather API.
  */
-function extractWeatherData(data) {
-    return {
-        city: data.name,
-        temperature: data.main.temp,
-        description: data.weather[0].description,
-        humidity: data.main.humidity,
-        windSpeed: data.wind.speed,
-    };
-}
-
-/**
- * Handle user input and fetch weather data.
- *
- * @param {Event} event - The event triggered by form submission.
- */
-function handleUserInput(event) {
-    event.preventDefault();
-    const cityInput = document.getElementById('cityInput');
-    const cityName = cityInput.value.trim();
-    if (cityName) {
-        fetchWeatherData(cityName).then((weatherData) => {
-            if (weatherData) {
-                displayWeatherData(weatherData);
-            }
-        });
-        cityInput.value = ''; // Clear input field after submission
-    } else {
-        alert("Please enter a city name.");
-    }
-}
-
-/**
- * Display fetched weather data to the user.
- *
- * @param {object} weatherData - The weather data to display.
- */
-function displayWeatherData(weatherData) {
-    const weatherInfoContainer = document.getElementById('weatherInfo');
-    weatherInfoContainer.innerHTML = `
-        <h3>Weather in ${weatherData.city}</h3>
-        <p>Temperature: ${weatherData.temperature}°C</p>
-        <p>Description: ${weatherData.description}</p>
-        <p>Humidity: ${weatherData.humidity}%</p>
-        <p>Wind Speed: ${weatherData.windSpeed} m/s</p>
+function displayWeatherData(data) {
+    const { name, main, weather } = data;
+    weatherOutput.innerHTML = `
+        <h2>Weather in ${name}</h2>
+        <p>Temperature: ${main.temp} °C</p>
+        <p>Condition: ${weather[0].description}</p>
     `;
 }
 
-// Add event listener for form submission
-document.getElementById('weatherForm').addEventListener('submit', handleUserInput);
+/**
+ * Display an error message in the HTML.
+ * @param {string} message - The error message to display.
+ */
+function displayError(message) {
+    weatherOutput.innerHTML = `<p class="error">${message}</p>`;
+}
