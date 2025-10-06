@@ -1,22 +1,19 @@
-// Frontend logic to fetch and display weather data
-document.getElementById("weather-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
+// Optimized main application code (React)
+import React from 'react';
+import SearchBar from './components/SearchBar';
+import WeatherDisplay from './components/WeatherDisplay';
+import './styles/index.css';
 
-  const city = document.getElementById("city-input").value;
+function App() {
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Weather App</h1>
+      </header>
+      <SearchBar />
+      <WeatherDisplay />
+    </div>
+  );
+}
 
-  try {
-    const response = await fetch(`/api/weather/${city}`);
-    if (!response.ok) {
-      throw new Error("Failed to fetch weather data");
-    }
-    const data = await response.json();
-
-    document.getElementById("weather-data").textContent = `
-      City: ${data.name}
-      Temperature: ${(data.main.temp - 273.15).toFixed(2)} °C
-      Weather: ${data.weather[0].description}
-    `;
-  } catch (error) {
-    document.getElementById("weather-data").textContent = error.message;
-  }
-});
+export default App;
