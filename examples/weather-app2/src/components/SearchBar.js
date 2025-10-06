@@ -1,30 +1,28 @@
 import React, { useState } from 'react';
 
-/**
- * SearchBar component for user input.
- * 
- * @param {function} onSearch - Callback function to handle search submission.
- * @returns {JSX.Element}
- */
 const SearchBar = ({ onSearch }) => {
-    const [query, setQuery] = useState('');
+    const [inputValue, setInputValue] = useState('');
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onSearch(query);
-        setQuery('');
+    const handleChange = (event) => {
+        setInputValue(event.target.value);
+    };
+
+    const handleSubmit = (event) => {
+        event.preventDefault();
+        onSearch(inputValue);
+        setInputValue(''); // Clear input after search
     };
 
     return (
-        <form onSubmit={handleSubmit} className="search-bar">
-            <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter city name..."
-                className="search-input"
+        <form onSubmit={handleSubmit}>
+            <input 
+                type="text" 
+                value={inputValue} 
+                onChange={handleChange} 
+                placeholder="Enter city name" 
+                required 
             />
-            <button type="submit" className="search-button">Search</button>
+            <button type="submit">Search</button>
         </form>
     );
 };

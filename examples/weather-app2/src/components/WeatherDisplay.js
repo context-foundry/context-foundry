@@ -1,21 +1,13 @@
 import React from 'react';
 
-/**
- * WeatherDisplay component to show weather data.
- * 
- * @param {Object} weatherData - The weather data to display.
- * @returns {JSX.Element}
- */
-const WeatherDisplay = ({ weatherData }) => {
-    if (!weatherData) {
-        return <div className="weather-display">No data available.</div>;
-    }
-
+const WeatherDisplay = ({ data }) => {
     return (
         <div className="weather-display">
-            <h2>{weatherData.city}</h2>
-            <p>Temperature: {weatherData.temperature} °C</p>
-            <p>Conditions: {weatherData.conditions}</p>
+            <h2>Weather for {data.name}</h2>
+            <p>Temperature: {data.main.temp} °C</p>
+            <p>Condition: {data.weather[0].description}</p>
+            <p>Humidity: {data.main.humidity} %</p>
+            <p>Wind Speed: {data.wind.speed} m/s</p>
         </div>
     );
 };
