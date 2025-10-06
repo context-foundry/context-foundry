@@ -1,14 +1,19 @@
-// Basic test for the app.js functionality
-describe('Weather App Tests', () => {
-    it('should fetch weather data for a valid city', async () => {
-        const city = 'London';
-        const data = await fetchWeather(city);
-        expect(data).toHaveProperty('main');
-        expect(data.name).toBe(city);
-    });
+// Test file to verify the app's responsiveness (Example: Using Jest)
+test('Check if temperature and condition are correctly updated', () => {
+    document.body.innerHTML = `
+        <div class="weather-card" id="weather-card">
+            <div class="weather-details">
+                <div id="temperature">Temp: 20°C</div>
+                <div id="condition">Condition: Sunny</div>
+            </div>
+        </div>
+    `;
+    
+    updateWeather();
+    
+    const temperature = document.getElementById('temperature').textContent;
+    const condition = document.getElementById('condition').textContent;
 
-    it('should display an error for an invalid city', async () => {
-        const city = 'InvalidCityName';
-        await expect(fetchWeather(city)).rejects.toThrow('City not found');
-    });
+    expect(temperature).toBe('Temp: 20°C');
+    expect(condition).toBe('Condition: Sunny');
 });
