@@ -45,16 +45,17 @@ graph LR
     H --> G
 ```
 
-### Phase 1: Scout (Research)
+### Phase 1: Scout Agent (Research)
 
-- Systematically explores the codebase
+**Autonomous AI agent** that systematically explores the codebase:
 - Follows execution paths, not random files
 - Produces compact research artifact (max 5K tokens)
 - Context target: <30%
 - Uses [subagent isolation patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk) for efficient exploration
 
-### Phase 2: Architect (Planning)
+### Phase 2: Architect Agent (Planning)
 
+**Autonomous AI agent** that transforms research into actionable plans:
 - Creates specifications from research
 - Generates technical plans with alternatives considered
 - Decomposes into atomic, testable tasks
@@ -62,8 +63,9 @@ graph LR
 - **CRITICAL**: Human review required (highest leverage point)
 - **Customizable**: Edit the generated SPEC/PLAN/TASKS files before approving - your changes will be used by the Builder
 
-### Phase 3: Builder (Implementation)
+### Phase 3: Builder Agent (Implementation)
 
+**Autonomous AI agent** that executes the approved plan:
 - Executes tasks sequentially
 - Test-driven development (tests first)
 - Continuous context compaction
