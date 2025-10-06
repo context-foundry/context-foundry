@@ -61,7 +61,7 @@ class SmartCompactor:
         tracked_content: List,
         current_metrics: dict
     ) -> Dict:
-        """Compact context using Claude for intelligent summarization.
+        """Compact context using hybrid time+importance strategy with validation.
 
         Args:
             tracked_content: List of ContentItem objects to compact
@@ -70,23 +70,73 @@ class SmartCompactor:
         Returns:
             Dictionary with compaction results
         """
-        # Separate content by importance and type
-        critical_items = [item for item in tracked_content if item.importance_score >= 0.85]
-        compactable_items = [item for item in tracked_content if item.importance_score < 0.85]
+        # Strategy 1: Keep recent context (last N items)
+        KEEP_RECENT = 8  # Last 8 messages (4 user-assistant pairs)
+        recent_items = tracked_content[-KEEP_RECENT:] if len(tracked_content) > KEEP_RECENT else []
+
+        # Strategy 2: Keep critical items by type and score
+        critical_types = {"decision", "error", "pattern"}
+        critical_items = [
+            item for item in tracked_content
+            if item.content_type in critical_types or item.importance_score >= 0.90
+        ]
+
+        # Strategy 3: Determine what's compactable (exclude recent and critical)
+        recent_and_critical = set(recent_items + critical_items)
+        compactable_items = [
+            item for item in tracked_content
+            if item not in recent_and_critical
+        ]
+
+        # Validation 1: Need meaningful content to compact
+        if len(compactable_items) < 5:
+            return {
+                "compacted": False,
+                "reason": f"Not enough content to compact ({len(compactable_items)} items < 5 minimum)",
+                "retained_content": tracked_content,
+                "estimated_tokens": sum(item.token_estimate for item in tracked_content),
+                "reduction_pct": 0,
+                "summary_file": None
+            }
+
+        compactable_tokens = sum(item.token_estimate for item in compactable_items)
+        if compactable_tokens < 5000:
+            return {
+                "compacted": False,
+                "reason": f"Compactable content too small ({compactable_tokens} tokens < 5K minimum)",
+                "retained_content": tracked_content,
+                "estimated_tokens": sum(item.token_estimate for item in tracked_content),
+                "reduction_pct": 0,
+                "summary_file": None
+            }
 
         # Build conversation history for summarization
         conversation_text = self._build_conversation_text(compactable_items)
+
+        # Validation 2: Ensure conversation text is meaningful
+        if len(conversation_text.strip()) < 100:
+            return {
+                "compacted": False,
+                "reason": "Conversation text too short (< 100 chars)",
+                "retained_content": tracked_content,
+                "estimated_tokens": sum(item.token_estimate for item in tracked_content),
+                "reduction_pct": 0,
+                "summary_file": None
+            }
 
         # Create summarization prompt
         summary_prompt = self._build_summary_prompt(
             conversation_text,
             current_metrics,
-            len(critical_items),
+            len(recent_items) + len(critical_items),
             len(compactable_items)
         )
 
         # Call Claude for summarization
         print("🤖 Calling Claude for intelligent context compaction...")
+        print(f"   Compacting: {len(compactable_items)} items ({compactable_tokens:,} tokens)")
+        print(f"   Keeping: {len(recent_items)} recent + {len(critical_items)} critical")
+
         response = self.client.messages.create(
             model=self.model,
             max_tokens=4000,  # Generous limit for summary
@@ -95,6 +145,27 @@ class SmartCompactor:
 
         summary = response.content[0].text
         summary_tokens = response.usage.output_tokens
+
+        # Validation 3: Check summary quality (detect "I don't see content" responses)
+        invalid_phrases = [
+            "I don't see",
+            "I notice that the conversation content to summarize is missing",
+            "I notice that the conversation content to summarize was not included",
+            "no actual conversation",
+            "conversation content was not included"
+        ]
+
+        if any(phrase.lower() in summary.lower() for phrase in invalid_phrases):
+            error_msg = f"Claude received empty/invalid conversation. Summary preview: {summary[:200]}"
+            print(f"   ❌ {error_msg}")
+            return {
+                "compacted": False,
+                "reason": error_msg,
+                "retained_content": tracked_content,
+                "estimated_tokens": sum(item.token_estimate for item in tracked_content),
+                "reduction_pct": 0,
+                "summary_file": None
+            }
 
         # Save summary to file
         summary_file = self._save_summary(summary, current_metrics)
@@ -111,27 +182,41 @@ class SmartCompactor:
             content_type="summary"
         )
 
-        # Retain critical items + summary
-        retained_content = critical_items + [compact_item]
+        # Assemble final content: recent + critical + summary
+        retained_content = list(recent_and_critical) + [compact_item]
 
         # Calculate reduction
         before_tokens = sum(item.token_estimate for item in tracked_content)
         after_tokens = sum(item.token_estimate for item in retained_content)
         reduction_pct = ((before_tokens - after_tokens) / before_tokens * 100) if before_tokens > 0 else 0
 
+        # Validation 4: Ensure meaningful reduction achieved
+        if reduction_pct < 10:
+            error_msg = f"Compaction ineffective: {reduction_pct:.1f}% reduction (minimum 10% required)"
+            print(f"   ❌ {error_msg}")
+            return {
+                "compacted": False,
+                "reason": error_msg,
+                "retained_content": tracked_content,
+                "estimated_tokens": before_tokens,
+                "reduction_pct": 0,
+                "summary_file": str(summary_file)
+            }
+
         # Extract critical items preserved
         critical_descriptions = [
             f"{item.content_type}: {item.content[:100]}..."
-            for item in critical_items[:5]  # Top 5
+            for item in list(recent_and_critical)[:5]  # Top 5
         ]
 
-        print(f"✅ Compaction complete:")
-        print(f"   Before: {before_tokens:,} tokens")
-        print(f"   After: {after_tokens:,} tokens")
+        print(f"✅ Compaction successful:")
+        print(f"   Before: {before_tokens:,} tokens ({len(tracked_content)} items)")
+        print(f"   After: {after_tokens:,} tokens ({len(retained_content)} items)")
         print(f"   Reduction: {reduction_pct:.1f}%")
         print(f"   Summary saved: {summary_file}")
 
         return {
+            "compacted": True,
             "summary": summary,
             "retained_content": retained_content,
             "estimated_tokens": after_tokens,

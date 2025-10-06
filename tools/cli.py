@@ -62,6 +62,101 @@ def confirm_settings(settings: dict) -> bool:
         return False
 
 
+def check_provider_authentication():
+    """Check if configured providers have API keys.
+
+    Returns:
+        List of tuples (provider_name, api_key_name) for missing authentication
+    """
+    # Get configured providers from environment
+    scout_provider = os.getenv('SCOUT_PROVIDER', 'anthropic')
+    architect_provider = os.getenv('ARCHITECT_PROVIDER', 'anthropic')
+    builder_provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+
+    # Get unique providers
+    providers_needed = {scout_provider, architect_provider, builder_provider}
+
+    # Map provider names to their API key environment variables
+    provider_key_map = {
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'openai': 'OPENAI_API_KEY',
+        'github': 'GITHUB_TOKEN',
+        'zai': 'ZAI_API_KEY',
+        'gemini': 'GOOGLE_API_KEY',
+        'groq': 'GROQ_API_KEY',
+        'cloudflare': 'CLOUDFLARE_API_KEY',
+        'fireworks': 'FIREWORKS_API_KEY',
+        'mistral': 'MISTRAL_API_KEY',
+    }
+
+    # Check each provider's API key
+    missing = []
+    for provider in providers_needed:
+        key_name = provider_key_map.get(provider)
+        if key_name and not os.getenv(key_name):
+            missing.append((provider, key_name))
+
+    return missing
+
+
+def test_provider_connectivity():
+    """Test that each configured provider can connect successfully.
+
+    Returns:
+        True if all providers connect successfully, False otherwise
+    """
+    from ace.ai_client import AIClient
+    from ace.provider_registry import get_registry
+
+    console.print("\n[bold]🔍 Testing model connectivity...[/bold]")
+
+    # Get configured providers
+    scout_provider = os.getenv('SCOUT_PROVIDER', 'anthropic')
+    scout_model = os.getenv('SCOUT_MODEL', 'claude-sonnet-4-20250514')
+    architect_provider = os.getenv('ARCHITECT_PROVIDER', 'anthropic')
+    architect_model = os.getenv('ARCHITECT_MODEL', 'claude-sonnet-4-20250514')
+    builder_provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+    builder_model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
+
+    # Get unique provider/model combinations to test
+    configs = [
+        ('Scout', scout_provider, scout_model),
+        ('Architect', architect_provider, architect_model),
+        ('Builder', builder_provider, builder_model),
+    ]
+
+    all_ok = True
+    registry = get_registry()
+
+    for phase, provider_name, model_name in configs:
+        try:
+            # Get provider instance
+            provider = registry.get(provider_name)
+            provider_display = provider.get_display_name()
+
+            # Test connection with minimal API call
+            console.print(f"  • {phase} ({provider_display} {model_name})... ", end="")
+
+            test_response = provider.call_api(
+                messages=[{"role": "user", "content": "test"}],
+                model=model_name,
+                max_tokens=1
+            )
+
+            if test_response and test_response.content:
+                console.print("[green]✓ Connected[/green]")
+            else:
+                console.print("[red]✗ Invalid response[/red]")
+                all_ok = False
+
+        except Exception as e:
+            console.print(f"[red]✗ Error[/red]")
+            console.print(f"    [dim]{str(e)}[/dim]")
+            all_ok = False
+
+    return all_ok
+
+
 @click.group()
 @click.version_option(version="1.0.0")
 def foundry():
@@ -126,11 +221,20 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
         border_style="blue"
     ))
 
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        console.print("[red]❌ Error: ANTHROPIC_API_KEY not set[/red]")
-        console.print("[yellow]Get your API key from: https://console.anthropic.com/[/yellow]")
+    # Check for provider authentication
+    missing_auth = check_provider_authentication()
+    if missing_auth:
+        console.print("[red]❌ Error: Missing authentication for configured providers[/red]")
+        for provider, key_name in missing_auth:
+            console.print(f"[yellow]  • Provider '{provider}' requires: {key_name}[/yellow]")
+        console.print("\n[dim]Check your .env file configuration.[/dim]")
         sys.exit(1)
+
+    # Test provider connectivity
+    if not test_provider_connectivity():
+        console.print("\n[red]❌ Fix connectivity errors above before proceeding[/red]")
+        sys.exit(1)
+    console.print("[green]✓ All models connected successfully![/green]")
 
     # Overnight mode
     if overnight:
@@ -162,10 +266,20 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
     console.print("[bold]Starting Scout → Architect → Builder workflow...[/bold]\n")
 
     # Pre-flight confirmation
+    scout_provider = os.getenv('SCOUT_PROVIDER', 'anthropic')
+    scout_model = os.getenv('SCOUT_MODEL', 'claude-sonnet-4-20250514')
+    architect_provider = os.getenv('ARCHITECT_PROVIDER', 'anthropic')
+    architect_model = os.getenv('ARCHITECT_MODEL', 'claude-sonnet-4-20250514')
+    builder_provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
+    builder_model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
+
     settings = {
         "Project": project,
         "Task": task,
         "Mode": "Build (new project)",
+        "Scout": f"{scout_provider} / {scout_model}",
+        "Architect": f"{architect_provider} / {architect_model}",
+        "Builder": f"{builder_provider} / {builder_model}",
         "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
         "Livestream": "📡 Enabled" if livestream else "Disabled",
         "Auto-push to GitHub": "✓ On" if push else "Off",
@@ -256,10 +370,13 @@ def fix(project, issue, session, tasks, autonomous, push, use_patterns):
         border_style="yellow"
     ))
 
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        console.print("[red]❌ Error: ANTHROPIC_API_KEY not set[/red]")
-        console.print("[yellow]Get your API key from: https://console.anthropic.com/[/yellow]")
+    # Check for provider authentication
+    missing_auth = check_provider_authentication()
+    if missing_auth:
+        console.print("[red]❌ Error: Missing authentication for configured providers[/red]")
+        for provider, key_name in missing_auth:
+            console.print(f"[yellow]  • Provider '{provider}' requires: {key_name}[/yellow]")
+        console.print("\n[dim]Check your .env file configuration.[/dim]")
         sys.exit(1)
 
     try:
@@ -397,10 +514,13 @@ def enhance(project, feature, autonomous, push, use_patterns, create_pr):
         border_style="green"
     ))
 
-    # Check for API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        console.print("[red]❌ Error: ANTHROPIC_API_KEY not set[/red]")
-        console.print("[yellow]Get your API key from: https://console.anthropic.com/[/yellow]")
+    # Check for provider authentication
+    missing_auth = check_provider_authentication()
+    if missing_auth:
+        console.print("[red]❌ Error: Missing authentication for configured providers[/red]")
+        for provider, key_name in missing_auth:
+            console.print(f"[yellow]  • Provider '{provider}' requires: {key_name}[/yellow]")
+        console.print("\n[dim]Check your .env file configuration.[/dim]")
         sys.exit(1)
 
     try:

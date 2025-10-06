@@ -131,6 +131,8 @@ class BaseProvider(ABC):
             'groq': 'Groq',
             'cloudflare': 'Cloudflare Workers AI',
             'fireworks': 'Fireworks AI',
-            'mistral': 'Mistral AI'
+            'mistral': 'Mistral AI',
+            'zai': 'Z.ai (GLM)',
+            'github': 'GitHub Models (FREE)'
         }
         return name_map.get(self.name, self.name.title())

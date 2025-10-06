@@ -1,0 +1,21 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f4f4f4;
+  color: #333;
+}
+
+#app {
+  text-align: center;
+  padding: 20px;
+}
+
+#weather-container {
+  margin-top: 20px;
+  padding: 10px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  display: inline-block;
+}

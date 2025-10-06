@@ -446,7 +446,8 @@ Generate complete, working code.
         import re
 
         # Look for file paths and code blocks
-        pattern = r"(?:File|file|File path):\s*([^\n]+)\n```(?:\w+)?\n(.*?)```"
+        # Fixed: Allow optional whitespace/newline after language identifier
+        pattern = r"(?:File|file|File path):\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```"
         matches = re.finditer(pattern, response, re.DOTALL)
 
         for match in matches:

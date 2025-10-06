@@ -49,6 +49,7 @@ class ContextManager:
     COMPACTION_THRESHOLD = 0.40  # Compact at 40%
     COMPACTION_TARGET = 0.25  # Target 25% after compaction
     CRITICAL_THRESHOLD = 0.70  # Emergency compaction at 70%
+    EMERGENCY_THRESHOLD = 0.80  # Hard stop at 80%
 
     def __init__(self, session_id: str, checkpoint_dir: Optional[Path] = None):
         """Initialize context manager.
@@ -166,8 +167,40 @@ class ContextManager:
 
         return False, f"No compaction needed: {usage_pct*100:.1f}% usage"
 
+    def should_emergency_stop(self) -> Tuple[bool, str]:
+        """Check if we need to emergency stop the build.
+
+        Returns:
+            Tuple of (should_stop, reason)
+        """
+        usage_pct = self.get_usage().context_percentage / 100
+
+        # Check 1: Hard context limit exceeded
+        if usage_pct >= self.EMERGENCY_THRESHOLD:
+            return True, f"EMERGENCY: Context at {usage_pct*100:.1f}% (limit: {self.EMERGENCY_THRESHOLD*100:.0f}%)"
+
+        # Check 2: Compactions are consistently failing (making things worse)
+        if self.compaction_count >= 3 and len(self.metrics_history) >= 4:
+            # Check last 3 compactions
+            recent_metrics = self.metrics_history[-4:]  # Before comp, after comp, before comp, after comp
+
+            # Look for pattern where tokens increase after compaction
+            failing_compactions = 0
+            for i in range(0, len(recent_metrics) - 1, 2):
+                before = recent_metrics[i].total_tokens
+                after = recent_metrics[i + 1].total_tokens if i + 1 < len(recent_metrics) else before
+
+                # If compaction increased tokens instead of reducing
+                if after >= before * 0.95:  # Less than 5% reduction = failing
+                    failing_compactions += 1
+
+            if failing_compactions >= 2:
+                return True, f"EMERGENCY: {failing_compactions} recent compactions failed (algorithm breakdown)"
+
+        return False, ""
+
     def compact(self, compactor=None) -> Dict:
-        """Trigger context compaction.
+        """Trigger context compaction with error handling and fallbacks.
 
         Args:
             compactor: Optional SmartCompactor instance. If None, uses basic compaction.
@@ -188,34 +221,81 @@ class ContextManager:
 
         before_tokens = self.total_input_tokens
         before_count = len(self.tracked_content)
+        compacted_successfully = False
+        summary = ""
 
-        if compactor:
-            # Use intelligent compactor
-            result = compactor.compact_context(self.tracked_content, self.get_usage())
-            self.tracked_content = result["retained_content"]
-            summary = result["summary"]
-            after_tokens = result["estimated_tokens"]
-        else:
-            # Basic prioritization-based compaction
-            self.tracked_content = self._basic_compaction()
-            after_tokens = sum(item.token_estimate for item in self.tracked_content)
-            summary = "Basic priority-based compaction"
+        try:
+            if compactor:
+                # Try intelligent compaction
+                result = compactor.compact_context(self.tracked_content, self.get_usage())
 
-        # Update metrics
-        self.total_input_tokens = after_tokens
-        self.compaction_count += 1
-        self.last_compaction_tokens = before_tokens - after_tokens
+                # Check if compaction actually happened
+                if result.get("compacted", True):
+                    # Smart compaction succeeded
+                    self.tracked_content = result["retained_content"]
+                    summary = result.get("summary", "Smart compaction")
+                    after_tokens = result["estimated_tokens"]
+                    compacted_successfully = True
+                    print(f"   ✅ Smart compaction successful")
+                else:
+                    # Smart compaction skipped/failed - fall back to basic
+                    skip_reason = result.get("reason", "Unknown reason")
+                    print(f"   ⚠️  Smart compaction skipped: {skip_reason}")
+                    print(f"   ⬇️  Falling back to basic compaction...")
+                    self.tracked_content = self._basic_compaction()
+                    after_tokens = sum(item.token_estimate for item in self.tracked_content)
+                    summary = f"Basic compaction (smart skipped: {skip_reason})"
+                    compacted_successfully = True
 
+            else:
+                # Use basic compaction directly
+                self.tracked_content = self._basic_compaction()
+                after_tokens = sum(item.token_estimate for item in self.tracked_content)
+                summary = "Basic priority-based compaction"
+                compacted_successfully = True
+
+        except Exception as e:
+            # Compaction failed entirely - fall back to basic
+            print(f"   ❌ Compaction error: {e}")
+            print(f"   ⬇️  Falling back to basic compaction...")
+            try:
+                self.tracked_content = self._basic_compaction()
+                after_tokens = sum(item.token_estimate for item in self.tracked_content)
+                summary = f"Basic compaction (error recovery: {str(e)[:100]})"
+                compacted_successfully = True
+            except Exception as fallback_error:
+                # Even basic compaction failed - no compaction
+                print(f"   ❌ Basic compaction also failed: {fallback_error}")
+                print(f"   ⚠️  Continuing without compaction (manual intervention needed)")
+                return {
+                    "compacted": False,
+                    "reason": f"Compaction failed: {str(e)[:100]}",
+                    "before_tokens": before_tokens,
+                    "after_tokens": before_tokens,
+                    "reduction_pct": 0,
+                    "error": str(e)
+                }
+
+        # Validate reduction
         reduction_pct = ((before_tokens - after_tokens) / before_tokens * 100) if before_tokens > 0 else 0
 
-        # Save compaction summary
-        self._save_compaction_summary(before_tokens, after_tokens, summary)
+        if reduction_pct < 5 and compacted_successfully:
+            print(f"   ⚠️  WARNING: Compaction ineffective ({reduction_pct:.1f}% reduction)")
 
-        # Checkpoint after compaction
-        self.checkpoint()
+        # Update metrics only if compaction succeeded
+        if compacted_successfully:
+            self.total_input_tokens = after_tokens
+            self.compaction_count += 1
+            self.last_compaction_tokens = before_tokens - after_tokens
+
+            # Save compaction summary
+            self._save_compaction_summary(before_tokens, after_tokens, summary)
+
+            # Checkpoint after compaction
+            self.checkpoint()
 
         return {
-            "compacted": True,
+            "compacted": compacted_successfully,
             "reason": reason,
             "before_tokens": before_tokens,
             "after_tokens": after_tokens,

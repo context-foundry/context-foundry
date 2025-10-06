@@ -11,11 +11,13 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+from rich.console import Console
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
 
-from ace.claude_integration import get_claude_client
+from ace.ai_client import AIClient
+from ace.cost_tracker import CostTracker
 from ace.pricing_database import PricingDatabase
 from ace.blueprint_manager import BlueprintManager
 from foundry.patterns.pattern_manager import PatternLibrary
@@ -23,6 +25,9 @@ from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
 from tools.analyze_session import SessionAnalyzer
 from tools.livestream.broadcaster import EventBroadcaster
+
+# Rich console for styled output
+console = Console()
 
 
 class AutonomousOrchestrator:
@@ -73,15 +78,18 @@ class AutonomousOrchestrator:
         # Session
         self.session_id = f"{project_name}_{self.timestamp}"
 
-        # Claude client with context management (auto-selects API or MCP mode)
-        # If ctx is provided, it will use MCP mode
-        self.claude = get_claude_client(
+        # Multi-provider AI client (supports any provider via registry)
+        # Configured via SCOUT_PROVIDER, ARCHITECT_PROVIDER, BUILDER_PROVIDER env vars
+        self.ai_client = AIClient(
             log_dir=self.logs_path,
             session_id=self.session_id,
-            use_context_manager=True,
-            prefer_mcp=ctx is not None,  # Use MCP if ctx provided
-            ctx=ctx
+            cost_tracker=CostTracker()
         )
+
+        # Note: MCP mode (ctx parameter) not yet supported in AIClient
+        # TODO: Add MCP support to AIClient if needed
+        if ctx is not None:
+            print("⚠️  Warning: MCP mode not yet supported with multi-provider AIClient")
 
         # Initialize pattern library components
         if self.use_patterns:
@@ -397,30 +405,39 @@ Keep output under 5000 tokens. Be specific and actionable."""
             self.broadcaster.phase_change("scout", context_percent=0)
             self.broadcaster.log_line("Starting Scout phase: Research and architecture")
 
-        # Call Claude with content type tracking
-        self.claude.reset_context()
-        response, metadata = self.claude.call_claude(prompt, content_type="decision")
+        # Call Scout phase with configured provider
+        self.ai_client.reset_history('scout')
+        response = self.ai_client.scout(prompt)
 
         # Save RESEARCH.md
         research_file = self.blueprints_path / f"specs/RESEARCH_{self.timestamp}.md"
         research_file.parent.mkdir(parents=True, exist_ok=True)
-        research_file.write_text(response)
+        research_file.write_text(response.content)
 
         print(f"✅ Research complete")
         print(f"📄 Saved to: {research_file}")
-        print(f"📊 Context: {metadata['context_percentage']}%")
+        print(f"📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
 
         # Broadcast completion
         if self.broadcaster:
-            self.broadcaster.log_line(f"Scout phase complete - {metadata['context_percentage']}% context")
+            self.broadcaster.log_line(f"Scout phase complete - {response.total_tokens} tokens")
             self.broadcaster.context_update(
-                int(metadata.get('context_percentage', 0)),
-                metadata.get('total_tokens', 0)
+                0,  # Context percentage not tracked per-phase in AIClient
+                response.total_tokens
             )
+
+        # Create metadata dict for compatibility
+        metadata = {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "total_tokens": response.total_tokens,
+            "model": response.model,
+            "provider": self.ai_client.config.scout.provider
+        }
 
         return {
             "file": str(research_file),
-            "content": response,
+            "content": response.content,
             "metadata": metadata,
             "status": "complete",
         }
@@ -487,9 +504,9 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
             self.broadcaster.phase_change("architect", context_percent=0)
             self.broadcaster.log_line("Starting Architect phase: Creating specifications")
 
-        # Call Claude with fresh context
-        self.claude.reset_context()
-        response, metadata = self.claude.call_claude(prompt, content_type="decision")
+        # Call Architect phase with configured provider
+        self.ai_client.reset_history('architect')
+        response = self.ai_client.architect(prompt)
 
         # Parse response to extract three files
         # For now, save the whole response and prompt user to split
@@ -498,30 +515,39 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         tasks_file = self.blueprints_path / f"tasks/TASKS_{self.timestamp}.md"
 
         # Simple parsing: look for markdown headers
-        files = self._parse_architect_response(response)
+        files = self._parse_architect_response(response.content)
 
         # Create directories before writing
         spec_file.parent.mkdir(parents=True, exist_ok=True)
         plan_file.parent.mkdir(parents=True, exist_ok=True)
         tasks_file.parent.mkdir(parents=True, exist_ok=True)
 
-        spec_file.write_text(files.get("spec", response))
-        plan_file.write_text(files.get("plan", response))
-        tasks_file.write_text(files.get("tasks", response))
+        spec_file.write_text(files.get("spec", response.content))
+        plan_file.write_text(files.get("plan", response.content))
+        tasks_file.write_text(files.get("tasks", response.content))
 
         print(f"✅ Architecture complete")
         print(f"📄 SPEC: {spec_file}")
         print(f"📄 PLAN: {plan_file}")
         print(f"📄 TASKS: {tasks_file}")
-        print(f"📊 Context: {metadata['context_percentage']}%")
+        print(f"📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
 
         # Broadcast completion
         if self.broadcaster:
-            self.broadcaster.log_line(f"Architect phase complete - {metadata['context_percentage']}% context")
+            self.broadcaster.log_line(f"Architect phase complete - {response.total_tokens} tokens")
             self.broadcaster.context_update(
-                int(metadata.get('context_percentage', 0)),
-                metadata.get('total_tokens', 0)
+                0,  # Context percentage not tracked per-phase in AIClient
+                response.total_tokens
             )
+
+        # Create metadata dict for compatibility
+        metadata = {
+            "input_tokens": response.input_tokens,
+            "output_tokens": response.output_tokens,
+            "total_tokens": response.total_tokens,
+            "model": response.model,
+            "provider": self.ai_client.config.architect.provider
+        }
 
         return {
             "spec": str(spec_file),
@@ -571,20 +597,18 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
             if self.broadcaster:
                 self.broadcaster.log_line(f"Task {i}/{len(tasks)}: {task['name']}")
 
-            # Check context usage - compaction is now automatic in ClaudeClient
-            stats = self.claude.get_context_stats()
-            context_pct = stats.get('context_percentage', 0)
-            print(f"   Context: {context_pct:.1f}%")
+            # Check usage stats
+            stats = self.ai_client.get_usage_stats()
+            print(f"   Total Tokens: {stats['total_tokens']:,}")
 
             # Broadcast context update
             if self.broadcaster:
-                self.broadcaster.context_update(int(context_pct), stats.get('total_tokens', 0))
+                # Note: Context percentage not tracked in AIClient
+                self.broadcaster.context_update(0, stats['total_tokens'])
 
-            # Show context health if available
-            if 'context_health' in stats:
-                print(f"   Health: {stats['context_health']}")
-                if stats.get('compaction_stats', {}).get('count', 0) > 0:
-                    print(f"   Compactions: {stats['compaction_stats']['count']}")
+            # Note: Context health tracking and emergency stops
+            # are not yet implemented in AIClient
+            # TODO: Add context window tracking per provider
 
             # Add mode-specific file instructions
             if self.mode in ["fix", "enhance"]:
@@ -668,24 +692,26 @@ DO:
                 if pattern_ids:
                     print(f"   📚 Using {len(pattern_ids)} patterns")
 
-            # Call Claude with code content type
-            response, metadata = self.claude.call_claude(task_prompt, content_type="code")
+            # Call Builder phase with configured provider (supports per-task overrides)
+            response = self.ai_client.builder(task_prompt, task_num=i)
 
             # Save task output
             task_output = self.logs_path / f"task_{i}_output.md"
-            task_output.write_text(response)
+            task_output.write_text(response.content)
 
             # Extract and save code files
-            file_stats = self._extract_and_save_code(response, self.project_dir)
+            file_stats = self._extract_and_save_code(response.content, self.project_dir)
             total_impl_files += file_stats['implementation']
             total_test_files += file_stats['test']
 
             print(f"   ✅ Task {i} complete")
             print(f"   📄 Output: {task_output}")
+            print(f"   📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
 
             # Broadcast task completion
             if self.broadcaster:
-                self.broadcaster.task_complete(task['name'], int(metadata.get('context_percentage', 0)))
+                # Note: Context percentage not tracked per-task in AIClient
+                self.broadcaster.task_complete(task['name'], 0)
 
             # Update progress
             completed_tasks.append(
@@ -693,7 +719,7 @@ DO:
                     "task": i,
                     "name": task["name"],
                     "status": "complete",
-                    "context": metadata["context_percentage"],
+                    "tokens": response.total_tokens,
                 }
             )
 
@@ -709,7 +735,7 @@ DO:
                 }.get(self.mode, "chore:")
 
                 self._create_git_commit(
-                    f"{commit_prefix} Task {i}: {task['name']}\n\nContext: {metadata['context_percentage']}%"
+                    f"{commit_prefix} Task {i}: {task['name']}\n\nTokens: {response.total_tokens}"
                 )
 
         # Print summary
@@ -727,7 +753,7 @@ DO:
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
-            "metadata": self.claude.get_context_stats(),
+            "metadata": self.ai_client.get_usage_stats(),
             "files_created": {
                 "implementation": total_impl_files,
                 "test": total_test_files,
@@ -813,21 +839,22 @@ DO:
         import re
 
         # Try multiple patterns to be flexible
+        # Fixed: Allow optional whitespace/newline after language identifier
         patterns = [
             # Pattern 1: "File: path" followed by code block
-            r"File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"File:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 2: "file: path" (lowercase)
-            r"file:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"file:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 3: "File path: path"
-            r"File path:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"File path:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 4: "## File: path" (markdown h2 header)
-            r"##\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"##\s+File:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 5: "### File: path" (markdown h3 header)
-            r"###\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"###\s+File:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 6: "# File: path" (any markdown header)
-            r"#+\s+File:\s*([^\n]+)\n```(?:\w+)?\n(.*?)```",
+            r"#+\s+File:\s*([^\n]+)\n```(?:\w+)?[ \t]*\n?(.*?)```",
             # Pattern 7: Just a path in backticks before code block
-            r"`([^`\n]+\.[a-z]{2,4})`\n```(?:\w+)?\n(.*?)```",
+            r"`([^`\n]+\.[a-z]{2,4})`\n```(?:\w+)?[ \t]*\n?(.*?)```",
         ]
 
         files_created = 0
@@ -872,10 +899,24 @@ DO:
                 else:
                     impl_files += 1
 
+        # Enhanced validation: Detect extraction failures
         if files_created == 0:
+            # Check if code blocks exist in response
+            import re
+            code_blocks_found = len(re.findall(r'```\w+', response))
+            file_markers_found = len(re.findall(r'(?:File|file):\s*\S+', response))
+
             print(f"   ⚠️  WARNING: No code files were extracted from Builder output!")
-            print(f"   💡 Review the task output log file - the LLM may have described files instead of generating code.")
+
+            if code_blocks_found > 0 or file_markers_found > 0:
+                print(f"   🔍 Debug: Found {code_blocks_found} code blocks and {file_markers_found} file markers")
+                print(f"   ⚠️  This may indicate a regex extraction failure!")
+                print(f"   💡 Check the output format - language identifier may not have newline")
+            else:
+                print(f"   💡 The LLM may have described files instead of generating code.")
+
             print(f"   📄 Check: logs/{self.timestamp}/task_*_output.md")
+
         elif impl_files == 0 and test_files > 0:
             print(f"   ⚠️  WARNING: Only test files were created ({test_files} tests, 0 implementation files)")
             print(f"   💡 The LLM may have misunderstood the task - implementation files are missing!")
@@ -886,17 +927,16 @@ DO:
         self, progress_file: Path, completed: List[Dict], total: List[Dict]
     ):
         """Update progress tracking file."""
-        stats = self.claude.get_context_stats()
+        stats = self.ai_client.get_usage_stats()
 
         content = f"""# Build Progress: {self.project_name}
 Session: {self.session_id}
-Current Context: {stats['context_percentage']}%
 Total Tokens: {stats['total_tokens']:,}
 
 ## Completed Tasks
 """
         for task in completed:
-            content += f"- [x] Task {task['task']}: {task['name']} (Context: {task['context']}%)\n"
+            content += f"- [x] Task {task['task']}: {task['name']} (Tokens: {task['tokens']:,})\n"
 
         content += "\n## Remaining Tasks\n"
         for i, task in enumerate(total[len(completed) :], len(completed) + 1):
@@ -1014,13 +1054,13 @@ Total Tokens: {stats['total_tokens']:,}
                 tokens = meta.get('total_tokens', 0)
                 print(f"📊 Context: {ctx_pct}% | Tokens: {tokens:,}")
 
-            print("\n[dim]Review the output above. Type 'y' or 'yes' to proceed, or anything else to abort.[/dim]")
+            console.print("\n[dim]Review the output above. Type 'y' or 'yes' to proceed, or anything else to abort.[/dim]")
             approval = input("\n👉 Proceed with this phase? (y/n): ").strip().lower()
 
             if approval in ['y', 'yes']:
                 return True
             else:
-                print("\n[yellow]⚠️  Aborted by user.[/yellow]")
+                console.print("\n[yellow]⚠️  Aborted by user.[/yellow]")
                 return False
 
     def abort(self, reason: str) -> Dict:
@@ -1043,7 +1083,7 @@ Total Tokens: {stats['total_tokens']:,}
 
     def finalize(self, results: Dict) -> Dict:
         """Finalize successful workflow."""
-        stats = self.claude.get_context_stats()
+        stats = self.ai_client.get_usage_stats()
 
         print(f"\n{'='*60}")
         print("✅ CONTEXT FOUNDRY WORKFLOW COMPLETE!")
@@ -1053,10 +1093,9 @@ Total Tokens: {stats['total_tokens']:,}
         print(f"💾 Logs: {self.logs_path}")
         print(f"🎯 Session: {self.session_id}")
 
-        # Display cost summary if using AIClient
+        # Display cost summary
         try:
-            if hasattr(self.claude, 'get_cost_summary'):
-                print(f"\n{self.claude.get_cost_summary(verbose=True)}")
+            print(f"\n{self.ai_client.get_cost_summary(verbose=True)}")
         except Exception:
             # Fallback: calculate approximate cost
             try:
@@ -1099,8 +1138,8 @@ Total Tokens: {stats['total_tokens']:,}
             except Exception:
                 pass
 
-        # Save final conversation
-        self.claude.save_full_conversation(self.logs_path / "full_conversation.json")
+        # Note: Full conversation history not saved with AIClient
+        # Individual phase logs are saved by AIClient's log_dir parameter
 
         # Save session summary
         session_file = self.checkpoints_path / f"{self.session_id}.json"

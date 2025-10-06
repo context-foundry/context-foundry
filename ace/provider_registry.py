@@ -62,6 +62,18 @@ class ProviderRegistry:
         except ImportError:
             pass
 
+        try:
+            from ace.providers.zai_provider import ZaiProvider
+            self.providers['zai'] = ZaiProvider()
+        except ImportError:
+            pass
+
+        try:
+            from ace.providers.github_provider import GitHubProvider
+            self.providers['github'] = GitHubProvider()
+        except ImportError:
+            pass
+
     def get(self, name: str) -> BaseProvider:
         """
         Get provider by name.
