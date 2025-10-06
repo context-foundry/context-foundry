@@ -1,0 +1,26 @@
+/* Weather Card styles */
+
+.weather-card {
+    background-color: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    margin: 15px;
+    width: 250px;
+    text-align: center;
+}
+
+.weather-card h2 {
+    font-size: 24px;
+    color: #4a90e2;
+}
+
+.weather-card .temperature {
+    font-size: 48px;
+    color: #e94e77;
+}
+
+.weather-card .condition {
+    font-size: 18px;
+    color: #9b9b9b;
+}

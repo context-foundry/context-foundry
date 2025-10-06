@@ -1,33 +1,23 @@
 import React from 'react';
-import PropTypes from 'prop-types';
 import './WeatherCard.css';
 
 /**
- * WeatherCard component displays the current weather for a specific location.
+ * WeatherCard component to display individual weather information.
  * 
- * @param {Object} props - Component props
- * @param {string} props.city - The name of the city
- * @param {string} props.temperature - The current temperature
- * @param {string} props.condition - The current weather condition
- * @param {string} props.icon - Weather icon URL
- * @returns {JSX.Element}
+ * @param {Object} props - Component properties
+ * @param {string} props.city - City name
+ * @param {number} props.temperature - Temperature in Celsius
+ * @param {string} props.condition - Weather condition (e.g., sunny, rainy)
+ * @returns {JSX.Element} Rendered WeatherCard component
  */
-const WeatherCard = ({ city, temperature, condition, icon }) => {
+const WeatherCard = ({ city, temperature, condition }) => {
     return (
         <div className="weather-card">
             <h2>{city}</h2>
-            <img src={icon} alt={condition} />
-            <p>{temperature}°C</p>
-            <p>{condition}</p>
+            <div className="temperature">{temperature}°C</div>
+            <div className="condition">{condition}</div>
         </div>
     );
-};
-
-WeatherCard.propTypes = {
-    city: PropTypes.string.isRequired,
-    temperature: PropTypes.string.isRequired,
-    condition: PropTypes.string.isRequired,
-    icon: PropTypes.string.isRequired,
 };
 
 export default WeatherCard;
