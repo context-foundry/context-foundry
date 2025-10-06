@@ -1,0 +1,12 @@
+.app {
+  text-align: center;
+  margin: 20px;
+}
+
+.weather-info {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background-color: #fff;
+}

@@ -1,40 +1,49 @@
-import React, { useState, useEffect } from 'react';
-import WeatherCard from './components/WeatherCard';
-import 'bootstrap/dist/css/bootstrap.min.css';
+import React from 'react';
+import axios from 'axios';
+import './App.css';
 
-/**
- * Main App component that fetches and displays weather data.
- * 
- * @returns {JSX.Element} The App component.
- */
 const App = () => {
-    const [weatherData, setWeatherData] = useState(null);
+  const [weatherData, setWeatherData] = React.useState(null);
+  const [location, setLocation] = React.useState('');
 
-    useEffect(() => {
-        const fetchWeather = async () => {
-            const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Ensure you have your API key set in .env
-            const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=London`);
-            const data = await response.json();
-            setWeatherData(data);
-        };
+  const fetchWeather = () => {
+    const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Use your actual API key
+    axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${API_KEY}`)
+      .then(response => {
+        setWeatherData(response.data);
+      })
+      .catch(error => {
+        console.error("There was an error fetching the weather data!", error);
+      });
+  };
 
-        fetchWeather();
-    }, []);
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    fetchWeather();
+  };
 
-    return (
-        <div className="container mt-4">
-            {weatherData ? (
-                <WeatherCard
-                    city={weatherData.location.name}
-                    temperature={weatherData.current.temp_c}
-                    condition={weatherData.current.condition.text}
-                    icon={weatherData.current.condition.icon}
-                />
-            ) : (
-                <p>Loading...</p>
-            )}
+  return (
+    <div className="app">
+      <h1>Weather App</h1>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          placeholder="Enter location"
+          required
+        />
+        <button type="submit">Get Weather</button>
+      </form>
+      {weatherData && (
+        <div className="weather-info">
+          <h2>{weatherData.name}</h2>
+          <p>{Math.round(weatherData.main.temp - 273.15)} °C</p>
+          <p>{weatherData.weather[0].description}</p>
         </div>
-    );
+      )}
+    </div>
+  );
 };
 
 export default App;

@@ -64,10 +64,10 @@ class AutonomousOrchestrator:
         self.resume_tasks = None  # List of task numbers to re-run
 
         # Paths
-        self.project_dir = project_dir or Path(f"examples/{project_name}")
+        self.project_dir = project_dir or (FOUNDRY_ROOT / "examples" / project_name)
         self.blueprints_path = self.project_dir / ".context-foundry"  # Local to project
-        self.checkpoints_path = Path("checkpoints/sessions")
-        self.logs_path = Path(f"logs/{self.timestamp}")
+        self.checkpoints_path = FOUNDRY_ROOT / "checkpoints" / "sessions"
+        self.logs_path = FOUNDRY_ROOT / "logs" / self.timestamp
 
         # Create directories
         self.project_dir.mkdir(parents=True, exist_ok=True)
@@ -737,6 +737,14 @@ Correct: const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;
 
 ⚠️  CREATE REACT APP (CRA) STRUCTURE REQUIREMENTS:
 If the task mentions "Create React App", "CRA", "react-scripts", or package.json has "react-scripts":
+□ MUST include "react-scripts" in package.json dependencies:
+  ```json
+  "dependencies": {{
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-scripts": "^5.0.0"
+  }}
+  ```
 □ MUST create public/index.html with:
   - <!DOCTYPE html> declaration
   - <div id="root"></div> for React mounting

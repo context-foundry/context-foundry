@@ -1,11 +1,10 @@
-/* Global styles for the Weather App */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   font-family: Arial, sans-serif;
-  background-color: #f8f9fa;
+  background-color: #f0f0f0;
   margin: 0;
   padding: 0;
-}
-
-.container {
-  margin-top: 20px;
 }
