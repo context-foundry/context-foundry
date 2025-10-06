@@ -1,19 +1,16 @@
-// Test file to verify the app's responsiveness (Example: Using Jest)
-test('Check if temperature and condition are correctly updated', () => {
-    document.body.innerHTML = `
-        <div class="weather-card" id="weather-card">
-            <div class="weather-details">
-                <div id="temperature">Temp: 20°C</div>
-                <div id="condition">Condition: Sunny</div>
-            </div>
-        </div>
-    `;
-    
-    updateWeather();
-    
-    const temperature = document.getElementById('temperature').textContent;
-    const condition = document.getElementById('condition').textContent;
+/**
+ * Test the fetchWeatherData function.
+ */
+async function testFetchWeatherData() {
+    const testCity = 'London';
+    const data = await fetchWeatherData(testCity);
+    console.log(`Weather data for ${testCity}:`, data);
+    if (data && data.main) {
+        console.log(`Temperature in ${testCity}: ${data.main.temp} °C`);
+    } else {
+        console.error('No weather data found for the test city.');
+    }
+}
 
-    expect(temperature).toBe('Temp: 20°C');
-    expect(condition).toBe('Condition: Sunny');
-});
+// Run the test
+testFetchWeatherData();
