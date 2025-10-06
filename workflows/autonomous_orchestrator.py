@@ -590,6 +590,9 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         total_impl_files = 0
         total_test_files = 0
 
+        # Track all files created by previous tasks for context
+        previous_files_created = []
+
         for i, task in enumerate(tasks, 1):
             # Reset builder history for each task to prevent context overflow
             # Each task is self-contained with SPEC/PLAN/TASKS in prompt
@@ -629,6 +632,20 @@ FILE MODIFICATION RULES (fix/enhance mode):
             else:
                 file_instructions = ""
 
+            # Build previous tasks context
+            previous_context = ""
+            if previous_files_created:
+                previous_context = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                previous_context += "⚠️  PREVIOUS TASKS COMPLETED - IMPORTANT FILE PATHS:\n"
+                previous_context += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                for task_num, files in previous_files_created:
+                    previous_context += f"Task {task_num} created:\n"
+                    for file_path in sorted(files):
+                        previous_context += f"  ✓ {file_path}\n"
+                previous_context += "\n⚠️  CRITICAL: When referencing files from previous tasks,\n"
+                previous_context += "use the EXACT paths shown above! Do NOT change file locations!\n"
+                previous_context += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
             # Build task prompt
             task_prompt = f"""You are the Builder agent implementing Task {i} of {len(tasks)}.
 
@@ -639,7 +656,7 @@ Files: {', '.join(task.get('files', []))}
 Project: {self.project_name}
 Project directory: {self.project_dir}
 Mode: {self.mode}
-{file_instructions}
+{previous_context}{file_instructions}
 CRITICAL INSTRUCTIONS - READ CAREFULLY:
 1. You do NOT have file write access or tools
 2. Do NOT ask for permission to create files
@@ -708,6 +725,10 @@ DO:
             total_impl_files += file_stats['implementation']
             total_test_files += file_stats['test']
 
+            # Track files created for this task to include in future task prompts
+            if file_stats['files_list']:
+                previous_files_created.append((i, file_stats['files_list']))
+
             print(f"   ✅ Task {i} complete")
             print(f"   📄 Output: {task_output}")
             print(f"   📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
@@ -754,6 +775,36 @@ DO:
             print(f"   This build may be incomplete. Check task outputs.")
         print(f"{'='*60}\n")
 
+        # Generate README if build was successful
+        readme_path = None
+        if total_impl_files > 0 and self.mode == "new":
+            print("📝 Generating README.md...")
+            readme_path = self._generate_readme(previous_files_created)
+            if readme_path:
+                print(f"   ✅ README created: {readme_path}")
+
+        # Validate build files for broken references
+        validation_result = {"issues": [], "warnings": []}
+        if total_impl_files > 0:
+            print("\n🔍 Validating file references...")
+            all_created_files = []
+            for task_num, files in previous_files_created:
+                all_created_files.extend(files)
+
+            validation_result = self._validate_build_files(all_created_files)
+
+            if validation_result["issues"]:
+                print(f"   ⚠️  Found {len(validation_result['issues'])} issue(s):")
+                for issue in validation_result["issues"]:
+                    print(f"      • {issue}")
+            else:
+                print(f"   ✅ All file references valid")
+
+            if validation_result["warnings"]:
+                print(f"   ⚠️  {len(validation_result['warnings'])} warning(s):")
+                for warning in validation_result["warnings"]:
+                    print(f"      • {warning}")
+
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
@@ -763,6 +814,8 @@ DO:
                 "test": total_test_files,
                 "total": total_impl_files + total_test_files
             },
+            "readme_path": str(readme_path) if readme_path else None,
+            "validation": validation_result,
             "status": "complete",
         }
 
@@ -838,7 +891,7 @@ DO:
         """Extract code blocks from response and save to files.
 
         Returns:
-            dict with 'total', 'implementation', and 'test' file counts
+            dict with 'total', 'implementation', 'test' counts, and 'files_list' with paths
         """
         import re
 
@@ -864,6 +917,7 @@ DO:
         files_created = 0
         test_files = 0
         impl_files = 0
+        files_list = []  # Track all created file paths
 
         for pattern in patterns:
             matches = re.finditer(pattern, response, re.DOTALL | re.IGNORECASE)
@@ -896,6 +950,7 @@ DO:
 
                 print(f"   📁 Created: {full_path}")
                 files_created += 1
+                files_list.append(filepath)  # Track the relative path
 
                 # Track test vs implementation files
                 if 'test' in filepath.lower() or filepath.startswith('tests/'):
@@ -925,7 +980,12 @@ DO:
             print(f"   ⚠️  WARNING: Only test files were created ({test_files} tests, 0 implementation files)")
             print(f"   💡 The LLM may have misunderstood the task - implementation files are missing!")
 
-        return {'total': files_created, 'implementation': impl_files, 'test': test_files}
+        return {
+            'total': files_created,
+            'implementation': impl_files,
+            'test': test_files,
+            'files_list': files_list
+        }
 
     def _update_progress(
         self, progress_file: Path, completed: List[Dict], total: List[Dict]
@@ -947,6 +1007,208 @@ Total Tokens: {stats['total_tokens']:,}
             content += f"- [ ] Task {i}: {task['name']}\n"
 
         progress_file.write_text(content)
+
+    def _generate_readme(self, files_created: List) -> Optional[Path]:
+        """Generate README.md with project info and run instructions.
+
+        Args:
+            files_created: List of (task_num, files_list) tuples
+
+        Returns:
+            Path to README.md if created, None otherwise
+        """
+        # Collect all files
+        all_files = []
+        for task_num, files_list in files_created:
+            all_files.extend(files_list)
+
+        if not all_files:
+            return None
+
+        # Detect project type
+        has_package_json = (self.project_dir / "package.json").exists()
+        has_requirements_txt = (self.project_dir / "requirements.txt").exists()
+        has_index_html = any('index.html' in f for f in all_files)
+
+        # Determine run instructions
+        if has_package_json:
+            project_type = "Node.js"
+            run_instructions = """## Quick Start
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Run the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Open your browser to the URL shown in the terminal (usually http://localhost:3000)"""
+
+        elif has_index_html and not has_package_json:
+            project_type = "Static HTML"
+            run_instructions = """## Quick Start
+
+This is a static HTML/CSS/JavaScript app. No build step needed!
+
+1. Simply open `index.html` in your web browser
+2. Or use a local server:
+   ```bash
+   python3 -m http.server 8000
+   ```
+   Then open http://localhost:8000"""
+
+        elif has_requirements_txt:
+            project_type = "Python"
+            main_file = next((f for f in all_files if 'main.py' in f or 'app.py' in f), 'main.py')
+            run_instructions = f"""## Quick Start
+
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the application:
+   ```bash
+   python {main_file}
+   ```"""
+
+        else:
+            project_type = "Application"
+            run_instructions = """## Quick Start
+
+See the project files to determine how to run this application."""
+
+        # Extract API keys from task description
+        api_key_section = ""
+        if 'api' in self.task_description.lower() and 'key' in self.task_description.lower():
+            # Try to extract key from description
+            import re
+            key_match = re.search(r'key[=:\s]+([a-zA-Z0-9]+)', self.task_description, re.IGNORECASE)
+            if key_match:
+                api_key_section = f"""
+## API Configuration
+
+This app uses an API key that's already configured in the code:
+- API Key: `{key_match.group(1)}`
+
+To use your own API key, update the relevant configuration file."""
+
+        # Build file structure
+        file_structure = "\n".join(f"- `{f}`" for f in sorted(all_files) if not f.startswith('tests/'))
+
+        # Generate README content
+        readme_content = f"""# {self.project_name.replace('-', ' ').replace('_', ' ').title()}
+
+{self.task_description}
+
+{run_instructions}{api_key_section}
+
+## Project Structure
+
+{file_structure}
+
+## Built With
+
+- **Type**: {project_type}
+- **Generated**: {datetime.now().strftime('%Y-%m-%d')}
+- **Tool**: [Context Foundry](https://github.com/your-repo/context-foundry)
+
+---
+
+*This README was automatically generated by Context Foundry*
+"""
+
+        # Save README
+        readme_path = self.project_dir / "README.md"
+        readme_path.write_text(readme_content)
+
+        return readme_path
+
+    def _validate_build_files(self, all_files: List[str]) -> Dict[str, List[str]]:
+        """Validate that all file references in the code actually exist.
+
+        Returns:
+            dict with 'issues' list and 'warnings' list
+        """
+        import re
+
+        issues = []
+        warnings = []
+
+        # Get all created files as Path objects
+        created_files = {Path(f) for f in all_files}
+        created_filenames = {p.name for p in created_files}
+        created_paths_str = {str(p) for p in created_files}
+
+        # Check HTML files for broken links
+        html_files = [f for f in all_files if f.endswith('.html')]
+        for html_file in html_files:
+            html_path = self.project_dir / html_file
+            if not html_path.exists():
+                continue
+
+            try:
+                content = html_path.read_text()
+
+                # Check CSS links: <link rel="stylesheet" href="...">
+                css_links = re.findall(r'<link[^>]*href=["\']([^"\']+\.css)["\']', content)
+                for css_link in css_links:
+                    # Resolve relative path
+                    if not css_link.startswith(('http://', 'https://', '//')):
+                        expected_path = (html_path.parent / css_link).resolve()
+                        relative_to_project = expected_path.relative_to(self.project_dir)
+                        if str(relative_to_project) not in created_paths_str:
+                            issues.append(f"{html_file} links to '{css_link}' but file not found at {relative_to_project}")
+
+                # Check JS scripts: <script src="...">
+                js_links = re.findall(r'<script[^>]*src=["\']([^"\']+\.js)["\']', content)
+                for js_link in js_links:
+                    if not js_link.startswith(('http://', 'https://', '//')):
+                        expected_path = (html_path.parent / js_link).resolve()
+                        relative_to_project = expected_path.relative_to(self.project_dir)
+                        if str(relative_to_project) not in created_paths_str:
+                            issues.append(f"{html_file} links to '{js_link}' but file not found at {relative_to_project}")
+
+            except Exception as e:
+                warnings.append(f"Could not validate {html_file}: {e}")
+
+        # Check JS files for imports
+        js_files = [f for f in all_files if f.endswith('.js') and not f.endswith('.test.js')]
+        for js_file in js_files:
+            js_path = self.project_dir / js_file
+            if not js_path.exists():
+                continue
+
+            try:
+                content = js_path.read_text()
+
+                # Check ES6 imports: import ... from '...'
+                imports = re.findall(r'import\s+.*?from\s+["\']([^"\']+)["\']', content)
+                for import_path in imports:
+                    # Skip node_modules and external packages
+                    if not import_path.startswith('.'):
+                        continue
+
+                    # Resolve relative import
+                    if not import_path.endswith('.js'):
+                        import_path += '.js'
+
+                    expected_path = (js_path.parent / import_path).resolve()
+                    try:
+                        relative_to_project = expected_path.relative_to(self.project_dir)
+                        if str(relative_to_project) not in created_paths_str:
+                            issues.append(f"{js_file} imports '{import_path}' but file not found at {relative_to_project}")
+                    except ValueError:
+                        # Path is outside project directory, skip
+                        pass
+
+            except Exception as e:
+                warnings.append(f"Could not validate {js_file}: {e}")
+
+        return {"issues": issues, "warnings": warnings}
 
     def _git_available(self) -> bool:
         """Check if git is available and initialized."""
@@ -1096,6 +1358,25 @@ Total Tokens: {stats['total_tokens']:,}
         print(f"📊 Total Tokens: {stats['total_tokens']:,}")
         print(f"💾 Logs: {self.logs_path}")
         print(f"🎯 Session: {self.session_id}")
+
+        # Display README and run instructions
+        builder_result = results.get('builder', {})
+        readme_path = builder_result.get('readme_path')
+        if readme_path:
+            print(f"\n📖 README: {readme_path}")
+
+            # Detect project type and show run instructions
+            has_package_json = (self.project_dir / "package.json").exists()
+            has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
+
+            if has_package_json:
+                print(f"\n🚀 Quick Start:")
+                print(f"   cd {self.project_dir}")
+                print(f"   npm install")
+                print(f"   npm run dev")
+            elif has_index_html:
+                print(f"\n🚀 Quick Start:")
+                print(f"   Open {self.project_dir}/index.html in your browser")
 
         # Display cost summary
         try:

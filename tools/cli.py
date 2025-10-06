@@ -308,6 +308,26 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
             console.print(f"\n[cyan]📁 Project files:[/cyan] {result.get('project_dir', 'N/A')}")
             console.print(f"[cyan]📊 Session ID:[/cyan] {result.get('session_id', 'N/A')}")
 
+            # Display README and run instructions
+            builder_result = result.get('results', {}).get('builder', {})
+            readme_path = builder_result.get('readme_path')
+            if readme_path:
+                console.print(f"[cyan]📖 README:[/cyan] {readme_path}")
+
+                # Detect project type and show run instructions
+                project_dir = result.get('project_dir', '')
+                has_package_json = os.path.exists(os.path.join(project_dir, "package.json"))
+                has_index_html = os.path.exists(os.path.join(project_dir, "index.html"))
+
+                if has_package_json:
+                    console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
+                    console.print(f"   [dim]cd {project_dir}[/dim]")
+                    console.print(f"   [dim]npm install[/dim]")
+                    console.print(f"   [dim]npm run dev[/dim]")
+                elif has_index_html:
+                    console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
+                    console.print(f"   [dim]Open {project_dir}/index.html in your browser[/dim]")
+
             if push:
                 if result.get('pushed_to_github'):
                     console.print(f"[green]✓[/green] [cyan]Pushed to GitHub[/cyan]")
