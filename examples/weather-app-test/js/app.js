@@ -1,31 +1,25 @@
-// Basic functionality for the Weather App
+// JavaScript to handle the search functionality and update the weather sections
 
-document.getElementById('getWeatherBtn').addEventListener('click', getWeather);
+document.getElementById('search-button').addEventListener('click', function() {
+    const city = document.getElementById('city-input').value;
+    getCurrentWeather(city);
+    getWeatherForecast(city);
+});
 
-async function getWeather() {
-    const city = document.getElementById('cityInput').value;
-    const API_KEY = 'your_actual_api_key_here'; // Replace with your actual API key
-    const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`;
-
-    try {
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-            throw new Error('City not found');
-        }
-        const data = await response.json();
-        displayWeather(data);
-    } catch (error) {
-        document.getElementById('weatherResult').innerText = error.message;
-    }
+/**
+ * Fetches the current weather for the specified city.
+ * @param {string} city - The name of the city to search for.
+ */
+function getCurrentWeather(city) {
+    // Your API call logic here
+    console.log(`Fetching current weather for ${city}`);
 }
 
-function displayWeather(data) {
-    const weatherResultDiv = document.getElementById('weatherResult');
-    const temperature = data.main.temp;
-    const description = data.weather[0].description;
-    weatherResultDiv.innerHTML = `
-        <h2>${data.name}</h2>
-        <p>Temperature: ${temperature} °C</p>
-        <p>Condition: ${description}</p>
-    `;
+/**
+ * Fetches the weather forecast for the specified city.
+ * @param {string} city - The name of the city to search for.
+ */
+function getWeatherForecast(city) {
+    // Your API call logic here
+    console.log(`Fetching weather forecast for ${city}`);
 }
