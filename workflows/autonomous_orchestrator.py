@@ -463,7 +463,25 @@ CRITICAL FILE PATH REQUIREMENTS (fix/enhance modes):
 - Validate file paths include directory structure (e.g., "src/", "js/", "lib/")
 """
         else:
-            file_path_requirements = ""
+            file_path_requirements = """
+CRITICAL FILE PATH REQUIREMENTS (new projects):
+□ For Create React App / React projects:
+  - ALL source files MUST be under src/ directory
+  - Components: src/components/*.js (e.g., src/components/Header.js)
+  - Services/APIs: src/services/*.js or src/api/*.js (e.g., src/services/weatherService.js)
+  - Styles: src/*.css or src/styles/*.css (e.g., src/App.css, src/index.css)
+  - Utils/Helpers: src/utils/*.js (e.g., src/utils/formatDate.js)
+  - Tests: Co-located with source (e.g., src/components/Header.test.js)
+  - Public assets: public/ (e.g., public/index.html, public/favicon.ico)
+
+□ Use FULL paths from project root in task breakdown:
+  - ✅ CORRECT: "src/components/WeatherCard.js"
+  - ❌ WRONG: "components/WeatherCard.js" or "WeatherCard.js"
+
+□ For other project types (Node.js, Python, etc.):
+  - Follow standard conventions for that ecosystem
+  - Always specify full paths from project root
+"""
 
         # Build prompt
         prompt = f"""You are the Architect agent in Context Foundry.
