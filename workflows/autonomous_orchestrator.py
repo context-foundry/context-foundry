@@ -761,7 +761,15 @@ Minimal public/index.html template:
 </html>
 ```
 
-⚠️  CRITICAL: react-scripts will FAIL without public/index.html - always create it!"""
+⚠️  CRITICAL: react-scripts will FAIL without public/index.html - always create it!
+
+Additional common CRA files to create if needed:
+- src/index.css - Global styles imported by src/index.js
+- src/App.css - Component styles for App component
+- public/manifest.json - PWA manifest (optional)
+- public/favicon.ico - Browser icon (optional)
+
+If you import a file (e.g., `import './index.css'`), you MUST create that file!"""
 
             # Inject relevant patterns if enabled
             pattern_ids = []
@@ -1433,7 +1441,10 @@ To use your own API key, update the relevant configuration file."""
                         continue
 
                     # Resolve relative import
-                    if not import_path.endswith('.js') and not import_path.endswith('.jsx') and not import_path.endswith('.ts') and not import_path.endswith('.tsx'):
+                    # Only add .js extension if no extension is present
+                    import os
+                    _, ext = os.path.splitext(import_path)
+                    if not ext:  # No extension, assume .js
                         import_path += '.js'
 
                     expected_path = (js_path.parent / import_path).resolve()
