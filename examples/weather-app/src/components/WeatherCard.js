@@ -1,25 +1,25 @@
 import React from 'react';
-import styled from 'styled-components';
 
-const Card = styled.div`
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    padding: 20px;
-    margin: 10px;
-    text-align: center;
-
-    @media (max-width: 600px) {
-        width: 80%;
-    }
-`;
-
-const WeatherCard = ({ city, temperature, weather }) => {
+/**
+ * WeatherCard component to display weather information
+ * @param {Object} props
+ * @param {Object} props.weather The weather data
+ * @param {string} props.error Error message, if any
+ * @returns {JSX.Element}
+ */
+const WeatherCard = ({ weather, error }) => {
     return (
-        <Card>
-            <h2>{city}</h2>
-            <p>Temperature: {temperature}°C</p>
-            <p>{weather}</p>
-        </Card>
+        <div className="weather-card">
+            {error ? (
+                <div className="error-message">{error}</div>
+            ) : (
+                <>
+                    <h2>{weather.name}</h2>
+                    <p>Temperature: {weather.main.temp} °C</p>
+                    <p>Description: {weather.weather[0].description}</p>
+                </>
+            )}
+        </div>
     );
 };
 

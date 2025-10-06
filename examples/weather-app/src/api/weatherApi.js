@@ -1,40 +1,26 @@
-// This module handles the API calls to fetch current weather and forecast data from OpenWeatherMap.
+import axios from 'axios';
 
-const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Ensure to set this in your .env file
-const BASE_URL = 'https://api.openweathermap.org/data/2.5';
-
-/**
- * Fetch current weather data for a given city.
- * @param {string} cityName - The name of the city to fetch weather data for.
- * @returns {Promise<object>} - A promise that resolves to the current weather data.
- */
-export const fetchCurrentWeather = async (cityName) => {
-    try {
-        const response = await fetch(`${BASE_URL}/weather?q=${cityName}&appid=${API_KEY}&units=metric`);
-        if (!response.ok) {
-            throw new Error('Unable to fetch current weather data.');
-        }
-        return await response.json();
-    } catch (error) {
-        console.error(error);
-        throw error;
-    }
-};
+const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;
+const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
 
 /**
- * Fetch forecast weather data for a given city.
- * @param {string} cityName - The name of the city to fetch forecast data for.
- * @returns {Promise<object>} - A promise that resolves to the forecast weather data.
+ * Fetch weather data from OpenWeatherMap API
+ * @param {string} city The name of the city to fetch weather for
+ * @returns {Promise<Object>} The weather data
+ * @throws {Error} Throws error if the API request fails
  */
-export const fetchWeatherForecast = async (cityName) => {
+export const fetchWeatherData = async (city) => {
     try {
-        const response = await fetch(`${BASE_URL}/forecast?q=${cityName}&appid=${API_KEY}&units=metric`);
-        if (!response.ok) {
-            throw new Error('Unable to fetch weather forecast data.');
-        }
-        return await response.json();
+        const response = await axios.get(`${BASE_URL}?q=${city}&appid=${API_KEY}&units=metric`);
+        return response.data;
     } catch (error) {
-        console.error(error);
-        throw error;
+        // Handle specific error responses
+        if (error.response) {
+            throw new Error(`Error ${error.response.status}: ${error.response.data.message}`);
+        } else if (error.request) {
+            throw new Error('Network error. Please try again later.');
+        } else {
+            throw new Error('An unexpected error occurred');
+        }
     }
 };

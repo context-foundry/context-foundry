@@ -1,52 +1,42 @@
 import React, { useState } from 'react';
-import styled from 'styled-components';
+import { fetchWeatherData } from '../api/weatherApi';
+import WeatherCard from './WeatherCard';
 
-const SearchContainer = styled.div`
-    margin: 20px;
-`;
+/**
+ * Search component for fetching weather data
+ * @returns {JSX.Element}
+ */
+const Search = () => {
+    const [city, setCity] = useState('');
+    const [weather, setWeather] = useState(null);
+    const [error, setError] = useState('');
 
-const Input = styled.input`
-    padding: 10px;
-    border-radius: 5px;
-    border: none;
-    width: 60%;
-
-    @media (max-width: 600px) {
-        width: 80%;
-    }
-`;
-
-const Button = styled.button`
-    padding: 10px;
-    border-radius: 5px;
-    border: none;
-    background-color: #007bff;
-    color: white;
-    cursor: pointer;
-
-    &:hover {
-        background-color: #0056b3;
-    }
-`;
-
-const Search = ({ onSearch }) => {
-    const [query, setQuery] = useState('');
-
-    const handleSearch = () => {
-        onSearch(query);
-        setQuery('');
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        setError('');  // Reset error message
+        try {
+            const data = await fetchWeatherData(city);
+            setWeather(data);
+        } catch (err) {
+            setError(err.message);
+            setWeather(null);
+        }
     };
 
     return (
-        <SearchContainer>
-            <Input 
-                type="text" 
-                value={query} 
-                onChange={(e) => setQuery(e.target.value)} 
-                placeholder="Search city..."
-            />
-            <Button onClick={handleSearch}>Search</Button>
-        </SearchContainer>
+        <div>
+            <form onSubmit={handleSearch}>
+                <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Enter city name"
+                />
+                <button type="submit">Get Weather</button>
+            </form>
+            {weather && <WeatherCard weather={weather} error={error} />}
+            {error && <div className="error-message">{error}</div>}
+        </div>
     );
 };
 

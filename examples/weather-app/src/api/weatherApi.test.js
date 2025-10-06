@@ -1,62 +1,45 @@
-import { fetchCurrentWeather, fetchWeatherForecast } from './weatherApi';
+import { fetchWeatherData } from './weatherApi';
+import axios from 'axios';
 
-// Mocking the fetch API
-global.fetch = jest.fn();
+jest.mock('axios');
 
-describe('Weather API', () => {
-    afterEach(() => {
-        jest.clearAllMocks(); // Clear mock calls between tests
+describe('fetchWeatherData', () => {
+    it('should return weather data for valid city', async () => {
+        const city = 'London';
+        const weatherData = { name: 'London', main: { temp: 15 }, weather: [{ description: 'Clear' }] };
+
+        axios.get.mockResolvedValue({ data: weatherData });
+
+        const data = await fetchWeatherData(city);
+        expect(data).toEqual(weatherData);
     });
 
-    test('fetchCurrentWeather should return weather data for a valid city', async () => {
-        // Given
-        const cityName = 'London';
-        const mockWeatherData = { weather: [{ description: 'clear sky' }], main: { temp: 15 } };
-        fetch.mockResolvedValueOnce({
-            ok: true,
-            json: jest.fn().mockResolvedValueOnce(mockWeatherData),
+    it('should throw an error for invalid city', async () => {
+        const city = 'InvalidCity';
+
+        axios.get.mockRejectedValue({
+            response: {
+                status: 404,
+                data: { message: 'city not found' },
+            },
         });
 
-        // When
-        const data = await fetchCurrentWeather(cityName);
-
-        // Then
-        expect(fetch).toHaveBeenCalledWith(`https://api.openweathermap.org/data/2.5/weather?q=${cityName}&appid=${process.env.REACT_APP_WEATHER_API_KEY}&units=metric`);
-        expect(data).toEqual(mockWeatherData);
+        await expect(fetchWeatherData(city)).rejects.toThrow('Error 404: city not found');
     });
 
-    test('fetchCurrentWeather should throw an error for an invalid city', async () => {
-        // Given
-        const cityName = 'InvalidCity';
-        fetch.mockResolvedValueOnce({ ok: false });
+    it('should handle network errors', async () => {
+        const city = 'SomeCity';
 
-        // When / Then
-        await expect(fetchCurrentWeather(cityName)).rejects.toThrow('Unable to fetch current weather data.');
+        axios.get.mockRejectedValue({ request: {} });
+
+        await expect(fetchWeatherData(city)).rejects.toThrow('Network error. Please try again later.');
     });
 
-    test('fetchWeatherForecast should return forecast data for a valid city', async () => {
-        // Given
-        const cityName = 'London';
-        const mockForecastData = { list: [{ main: { temp: 14 } }, { main: { temp: 15 } }] };
-        fetch.mockResolvedValueOnce({
-            ok: true,
-            json: jest.fn().mockResolvedValueOnce(mockForecastData),
-        });
+    it('should handle unexpected errors', async () => {
+        const city = 'SomeCity';
 
-        // When
-        const data = await fetchWeatherForecast(cityName);
+        axios.get.mockRejectedValue(new Error('An unexpected error'));
 
-        // Then
-        expect(fetch).toHaveBeenCalledWith(`https://api.openweathermap.org/data/2.5/forecast?q=${cityName}&appid=${process.env.REACT_APP_WEATHER_API_KEY}&units=metric`);
-        expect(data).toEqual(mockForecastData);
-    });
-
-    test('fetchWeatherForecast should throw an error for an invalid city', async () => {
-        // Given
-        const cityName = 'InvalidCity';
-        fetch.mockResolvedValueOnce({ ok: false });
-
-        // When / Then
-        await expect(fetchWeatherForecast(cityName)).rejects.toThrow('Unable to fetch weather forecast data.');
+        await expect(fetchWeatherData(city)).rejects.toThrow('An unexpected error occurred');
     });
 });
