@@ -3,23 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
     <title>Weather App</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-blue-100 flex items-center justify-center h-screen">
-    <div class="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-        <h1 class="text-3xl font-bold text-center text-gray-800">Weather App</h1>
-        <div class="mt-6">
-            <input type="text" id="location" placeholder="Enter your location"
-                   class="w-full p-2 rounded border border-gray-300 focus:outline-none focus:ring focus:ring-blue-500" />
-            <button id="getWeather" class="w-full mt-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">Get Weather</button>
-        </div>
-        <div id="weatherInfo" class="mt-6 hidden">
-            <h2 class="text-xl font-semibold text-gray-800">Weather Information</h2>
-            <div id="details" class="mt-2 text-gray-700"></div>
-        </div>
+<body>
+    <div id="app">
+        <input type="text" id="cityInput" placeholder="Enter city name">
+        <button id="searchButton">Get Weather</button>
+        <div id="output"></div>
     </div>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

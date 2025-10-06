@@ -1,23 +1,22 @@
-document.getElementById('weather-form').addEventListener('submit', async function(event) {
-    event.preventDefault();
+// app.js - Main application file
 
-    const city = document.getElementById('city-input').value;
-    const weatherData = await fetchWeather(city);
-    
-    if (weatherData) {
-        displayWeather(weatherData);
-    }
-});
+import { getWeatherData } from './api.js';
+import { renderWeatherData } from './store.js';
 
 /**
- * Display the weather data on the page.
- * @param {Object} data - The weather data object.
+ * Initializes the application
  */
-function displayWeather(data) {
-    const resultDiv = document.getElementById('weather-result');
-    resultDiv.innerHTML = `
-        <h2>${data.name}</h2>
-        <p>Temperature: ${data.main.temp} °C</p>
-        <p>Weather: ${data.weather[0].description}</p>
-    `;
+function init() {
+    document.getElementById('searchButton').addEventListener('click', handleSearch);
 }
+
+/**
+ * Handles the search for weather data
+ */
+async function handleSearch() {
+    const city = document.getElementById('cityInput').value;
+    const weatherData = await getWeatherData(city);
+    renderWeatherData(weatherData);
+}
+
+window.onload = init;
