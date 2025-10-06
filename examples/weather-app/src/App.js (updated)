@@ -1,0 +1,25 @@
+// src/App.js
+
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { fetchWeatherData } from './reducers/weatherReducer';
+import WeatherCard from './components/WeatherCard';
+
+const App = () => {
+    const dispatch = useDispatch();
+    const { weatherData, loading, error } = useSelector((state) => state.weather);
+    
+    useEffect(() => {
+        dispatch(fetchWeatherData('New York')); // Example location
+    }, [dispatch]);
+
+    return (
+        <div className="App">
+            {loading && <p>Loading...</p>}
+            {error && <p>Error: {error}</p>}
+            {weatherData && <WeatherCard data={weatherData} />}
+        </div>
+    );
+};
+
+export default App;

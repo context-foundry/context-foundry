@@ -1,8 +1,10 @@
-// Placeholder for root reducer
+// src/reducers/index.js
+
 import { combineReducers } from 'redux';
+import weatherReducer from './weatherReducer';
 
 const rootReducer = combineReducers({
-  // Add your reducers here
+    weather: weatherReducer,
 });
 
 export default rootReducer;
