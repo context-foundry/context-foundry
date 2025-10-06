@@ -2,4 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Additional custom styles if needed */
+body {
+  @apply bg-gray-100;
+}

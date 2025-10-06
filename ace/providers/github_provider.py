@@ -7,6 +7,8 @@ Provides GPT-4o and other models via https://models.inference.ai.azure.com
 
 import os
 import requests
+import time
+import re
 from typing import List, Dict, Optional
 from datetime import datetime
 from ace.providers.base_provider import (
@@ -99,38 +101,79 @@ class GitHubProvider(BaseProvider):
             **kwargs
         }
 
-        try:
-            response = requests.post(
-                "https://models.inference.ai.azure.com/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=120
-            )
+        # Retry logic for rate limits (429 errors)
+        max_retries = 3
+        base_wait_time = 60  # seconds
 
-            if response.status_code != 200:
-                raise ValueError(
-                    f"GitHub Models API error: HTTP {response.status_code}. "
-                    f"Response: {response.text}"
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    "https://models.inference.ai.azure.com/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=120
                 )
 
-            data = response.json()
+                # Handle rate limit (429)
+                if response.status_code == 429:
+                    if attempt < max_retries - 1:  # Don't retry on last attempt
+                        # Parse wait time from error message
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get('error', {}).get('message', '')
 
-            # Parse OpenAI-compatible response
-            choice = data["choices"][0]
-            usage = data.get("usage", {})
+                            # Try to extract wait time from message like "wait 60 seconds"
+                            wait_match = re.search(r'wait (\d+) seconds?', error_msg, re.IGNORECASE)
+                            if wait_match:
+                                base_wait_time = int(wait_match.group(1))
+                        except:
+                            pass  # Use default wait time
 
-            return ProviderResponse(
-                content=choice["message"]["content"],
-                model=data.get("model", model),
-                input_tokens=usage.get("prompt_tokens", 0),
-                output_tokens=usage.get("completion_tokens", 0),
-                total_tokens=usage.get("total_tokens", 0),
-                finish_reason=choice.get("finish_reason", "stop"),
-                raw_response=data
-            )
+                        # Exponential backoff: 60s, 90s, 120s
+                        wait_time = base_wait_time * (1.5 ** attempt)
+                        print(f"\n⏳ Rate limit hit. Waiting {wait_time:.0f}s before retry (attempt {attempt+1}/{max_retries})...")
+                        time.sleep(wait_time)
+                        continue  # Retry
+                    else:
+                        # Last attempt failed
+                        raise ValueError(
+                            f"GitHub Models API error: HTTP {response.status_code}. "
+                            f"Response: {response.text}"
+                        )
 
-        except requests.exceptions.RequestException as e:
-            raise ValueError(f"Failed to call GitHub Models API: {e}")
+                # Handle other non-200 status codes
+                if response.status_code != 200:
+                    raise ValueError(
+                        f"GitHub Models API error: HTTP {response.status_code}. "
+                        f"Response: {response.text}"
+                    )
+
+                # Success! Parse response
+                data = response.json()
+
+                # Parse OpenAI-compatible response
+                choice = data["choices"][0]
+                usage = data.get("usage", {})
+
+                return ProviderResponse(
+                    content=choice["message"]["content"],
+                    model=data.get("model", model),
+                    input_tokens=usage.get("prompt_tokens", 0),
+                    output_tokens=usage.get("completion_tokens", 0),
+                    total_tokens=usage.get("total_tokens", 0),
+                    finish_reason=choice.get("finish_reason", "stop"),
+                    raw_response=data
+                )
+
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    # Network error, retry with backoff
+                    wait_time = base_wait_time * (1.5 ** attempt)
+                    print(f"\n⚠️  Network error. Retrying in {wait_time:.0f}s (attempt {attempt+1}/{max_retries})...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise ValueError(f"Failed to call GitHub Models API: {e}")
 
     def get_available_models(self) -> List[Model]:
         """Get list of available GitHub Models (FREE)"""
