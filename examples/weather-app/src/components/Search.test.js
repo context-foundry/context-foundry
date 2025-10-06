@@ -1,16 +1,14 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import Search from './Search';
 
-test('Search component calls onSearch with correct input', () => {
+test('it calls onSearch with the input value when submitted', () => {
     const handleSearch = jest.fn();
-    const { getByPlaceholderText, getByText } = render(<Search onSearch={handleSearch} />);
+    render(<Search onSearch={handleSearch} />);
     
-    const input = getByPlaceholderText('Enter a city');
-    const button = getByText('Search');
+    const input = screen.getByPlaceholderText('Enter location');
+    fireEvent.change(input, { target: { value: 'London' } });
+    fireEvent.submit(screen.getByRole('form'));
 
-    fireEvent.change(input, { target: { value: 'New York' } });
-    fireEvent.click(button);
-    
-    expect(handleSearch).toHaveBeenCalledWith('New York');
+    expect(handleSearch).toHaveBeenCalledWith('London');
 });

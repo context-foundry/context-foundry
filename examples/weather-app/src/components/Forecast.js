@@ -1,24 +1,24 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
-/**
- * Forecast component displays a 5-day weather forecast.
- * 
- * @param {Array} forecast - Array of forecast objects containing date and temperature.
- */
-const Forecast = ({ forecast }) => {
+const Forecast = ({ data }) => {
     return (
         <div className="forecast">
-            <h3>5-Day Forecast</h3>
-            <div className="forecast-cards">
-                {forecast.map(({ date, temperature }, index) => (
-                    <div key={index} className="forecast-card">
-                        <p>{date}</p>
-                        <p>{temperature}°C</p>
-                    </div>
-                ))}
-            </div>
+            <h2>Forecast</h2>
+            {data.map((day, index) => (
+                <div key={index} className="forecast-card">
+                    <p>Date: {day.date}</p>
+                    <p>Max Temp: {day.day.maxtemp}°C</p>
+                    <p>Min Temp: {day.day.mintemp}°C</p>
+                    <p>Condition: {day.day.condition.text}</p>
+                </div>
+            ))}
         </div>
     );
+};
+
+Forecast.propTypes = {
+    data: PropTypes.array.isRequired,
 };
 
 export default Forecast;

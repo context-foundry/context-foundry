@@ -1,32 +1,35 @@
 import React, { useState } from 'react';
+import PropTypes from 'prop-types';
 
-/**
- * Search component for inputting location to get weather updates.
- * 
- * @param {function} onSearch - Function to call when searching for weather.
- */
 const Search = ({ onSearch }) => {
-    const [query, setQuery] = useState('');
+    const [inputValue, setInputValue] = useState('');
+
+    const handleInputChange = (event) => {
+        setInputValue(event.target.value);
+    };
 
     const handleSubmit = (event) => {
         event.preventDefault();
-        if (query) {
-            onSearch(query);
-            setQuery('');
-        }
+        onSearch(inputValue); // Pass the search term to the parent component
+        setInputValue(''); // Clear input after search
     };
 
     return (
         <form onSubmit={handleSubmit}>
             <input
                 type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Enter a city"
+                placeholder="Enter location"
+                value={inputValue}
+                onChange={handleInputChange}
+                required
             />
             <button type="submit">Search</button>
         </form>
     );
+};
+
+Search.propTypes = {
+    onSearch: PropTypes.func.isRequired,
 };
 
 export default Search;

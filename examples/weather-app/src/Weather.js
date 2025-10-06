@@ -1,15 +1,19 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 
 const Weather = ({ data }) => {
-  const { main, weather } = data;
+    return (
+        <div className="weather">
+            <h2>Current Weather</h2>
+            <p>Location: {data.location.name}</p>
+            <p>Temperature: {data.current.temp}°C</p>
+            <p>Condition: {data.current.condition.text}</p>
+        </div>
+    );
+};
 
-  return (
-    <div>
-      <h2>{data.name}</h2>
-      <p>Temperature: {(main.temp - 273.15).toFixed(2)}°C</p>
-      <p>Weather: {weather[0].description}</p>
-    </div>
-  );
+Weather.propTypes = {
+    data: PropTypes.object.isRequired,
 };
 
 export default Weather;
