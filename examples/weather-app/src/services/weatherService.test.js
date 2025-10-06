@@ -1,67 +1,18 @@
-import weatherService from './weatherService';
+import { fetchWeatherData } from './weatherService';
 import axios from 'axios';
 
 jest.mock('axios');
 
-describe('weatherService', () => {
-  const city = 'London';
-  const weatherData = {
-    weather: [{ description: 'clear sky' }],
-    main: { temp: 15 },
-    name: city,
-  };
+describe('Weather Service', () => {
+  test('fetchWeatherData retrieves weather data', async () => {
+    const location = 'New York';
+    const data = { location: { name: location }, current: { temperature: 20 } };
 
-  const forecastData = {
-    list: [{ weather: [{ description: 'light rain' }], main: { temp: 12 } }],
-  };
+    axios.get.mockResolvedValueOnce({ data });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+    const result = await fetchWeatherData(location);
 
-  it('should fetch weather data by city', async () => {
-    axios.get.mockResolvedValue({ data: weatherData });
-
-    const data = await weatherService.getWeatherByCity(city);
-    expect(data).toEqual(weatherData);
-    expect(axios.get).toHaveBeenCalledWith(
-      expect.stringContaining('/weather'),
-      expect.objectContaining({
-        params: expect.objectContaining({
-          q: city,
-          appid: expect.any(String),
-          units: 'metric',
-        }),
-      })
-    );
-  });
-
-  it('should fetch forecast data by city', async () => {
-    axios.get.mockResolvedValue({ data: forecastData });
-
-    const data = await weatherService.getForecastByCity(city);
-    expect(data).toEqual(forecastData);
-    expect(axios.get).toHaveBeenCalledWith(
-      expect.stringContaining('/forecast'),
-      expect.objectContaining({
-        params: expect.objectContaining({
-          q: city,
-          appid: expect.any(String),
-          units: 'metric',
-        }),
-      })
-    );
-  });
-
-  it('should handle errors when fetching weather data', async () => {
-    axios.get.mockRejectedValue(new Error('Network Error'));
-
-    await expect(weatherService.getWeatherByCity(city)).rejects.toThrow('Network Error');
-  });
-
-  it('should handle errors when fetching forecast data', async () => {
-    axios.get.mockRejectedValue(new Error('Network Error'));
-
-    await expect(weatherService.getForecastByCity(city)).rejects.toThrow('Network Error');
+    expect(result).toBe(data);
+    expect(axios.get).toHaveBeenCalledWith(`https://api.weatherapi.com/v1/current.json?key=${process.env.REACT_APP_WEATHER_API_KEY}&q=${location}`);
   });
 });

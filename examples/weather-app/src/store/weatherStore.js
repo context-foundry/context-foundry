@@ -1,48 +1,52 @@
-// Actual complete code for weather context and provider
-import React, { createContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useReducer } from 'react';
+import { fetchWeatherData } from '../services/weatherService';
 
-// Create Weather Context
+// Initial state
+const initialState = {
+  weatherData: null,
+  error: null,
+};
+
+// Action types
+const SET_WEATHER = 'SET_WEATHER';
+const SET_ERROR = 'SET_ERROR';
+
+// Reducer function
+const weatherReducer = (state, action) => {
+  switch (action.type) {
+    case SET_WEATHER:
+      return { ...state, weatherData: action.payload, error: null };
+    case SET_ERROR:
+      return { ...state, error: action.payload };
+    default:
+      return state;
+  }
+};
+
+// Create context
 const WeatherContext = createContext();
 
-// Weather Provider component
-const WeatherProvider = ({ children }) => {
-    const [weatherData, setWeatherData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+// Provider component
+export const WeatherProvider = ({ children }) => {
+  const [state, dispatch] = useReducer(weatherReducer, initialState);
 
-    // Effect to fetch weather data
-    const fetchWeatherData = async (location) => {
-        setLoading(true);
-        try {
-            const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${process.env.REACT_APP_WEATHER_API_KEY}&units=metric`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch weather data');
-            }
-            const data = await response.json();
-            setWeatherData(data);
-            setError(null);
-        } catch (err) {
-            setError(err.message);
-            setWeatherData(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <WeatherContext.Provider value={{ weatherData, loading, error, fetchWeatherData }}>
-            {children}
-        </WeatherContext.Provider>
-    );
-};
-
-// Custom hook to use weather context
-const useWeather = () => {
-    const context = React.useContext(WeatherContext);
-    if (!context) {
-        throw new Error("useWeather must be used within a WeatherProvider");
+  const fetchWeather = async (location) => {
+    try {
+      const data = await fetchWeatherData(location);
+      dispatch({ type: SET_WEATHER, payload: data });
+    } catch (error) {
+      dispatch({ type: SET_ERROR, payload: error.message });
     }
-    return context;
+  };
+
+  return (
+    <WeatherContext.Provider value={{ ...state, fetchWeather }}>
+      {children}
+    </WeatherContext.Provider>
+  );
 };
 
-export { WeatherProvider, useWeather };
+// Custom hook to use the weather context
+export const useStore = () => {
+  return useContext(WeatherContext);
+};
