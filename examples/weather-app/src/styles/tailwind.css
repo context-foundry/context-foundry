@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add custom TailwindCSS styles below */
+
+body {
+  @apply bg-gray-100 text-gray-800;
+}
+
+#app {
+  @apply text-center p-6;
+}
+
+h1 {
+  @apply text-3xl font-bold text-primary mb-4;
+}
+
+#weather-container {
+  @apply mt-4 p-5 bg-white rounded shadow-md inline-block;
+}
+
+p {
+  @apply text-sm text-gray-700;
+}
