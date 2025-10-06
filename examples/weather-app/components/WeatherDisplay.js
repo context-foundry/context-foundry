@@ -1,21 +1,15 @@
 import React from 'react';
-import { useWeather } from '../App';
 
-const WeatherDisplay = () => {
-  const { weatherData } = useWeather();
-
-  if (!weatherData) {
-    return <p>No weather data available. Please enter a city.</p>;
-  }
-
-  return (
-    <div>
-      <h2>Weather in {weatherData.location.name}</h2>
-      <p>Temperature: {weatherData.current.temp_c}°C</p>
-      <p>Condition: {weatherData.current.condition.text}</p>
-      <img src={weatherData.current.condition.icon} alt="weather icon" />
-    </div>
-  );
+const WeatherDisplay = ({ data }) => {
+    return (
+        <div className="weather-display">
+            <h2 className="text-xl font-semibold">{data.city}</h2>
+            <div className="weather-info">
+                <p className="text-lg">{data.temperature}°C</p>
+                <p className="text-sm">{data.condition} - {data.description}</p>
+            </div>
+        </div>
+    );
 };
 
 export default WeatherDisplay;

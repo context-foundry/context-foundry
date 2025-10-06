@@ -1,25 +1,18 @@
 import React from 'react';
-import { useWeather } from '../App';
 
-const CitySearch = () => {
-  const { city, setCity, fetchWeather } = useWeather();
+const CitySearch = ({ onCityChange }) => {
+    const handleChange = (event) => {
+        onCityChange(event.target.value);
+    };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    fetchWeather(city);
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        value={city}
-        onChange={(e) => setCity(e.target.value)}
-        placeholder="Enter city"
-      />
-      <button type="submit">Get Weather</button>
-    </form>
-  );
+    return (
+        <input
+            type="text"
+            className="input"
+            placeholder="Enter city"
+            onChange={handleChange}
+        />
+    );
 };
 
 export default CitySearch;

@@ -1,36 +1,39 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { useState } from 'react';
 import CitySearch from './components/CitySearch';
 import WeatherDisplay from './components/WeatherDisplay';
-import './App.css';
+import './style.css';
 
-// Create a Context for the Weather Data
-const WeatherContext = createContext();
+const App = () => {
+    const [city, setCity] = useState('');
+    const [weatherData, setWeatherData] = useState(null);
 
-function App() {
-  const [weatherData, setWeatherData] = useState(null);
-  const [city, setCity] = useState('');
+    const handleCityChange = (newCity) => {
+        setCity(newCity);
+    };
 
-  const fetchWeather = async (city) => {
-    const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Ensure your API key is set in environment variables
-    const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${city}`);
-    const data = await response.json();
-    setWeatherData(data);
-  };
+    const handleFetchWeather = async () => {
+        // Fetch weather data logic here (API call)
+        // For demonstration, we will use a mock response
+        const mockWeatherData = {
+            city: city,
+            temperature: 23,
+            condition: 'Sunny',
+            description: 'Clear Sky',
+        };
+        setWeatherData(mockWeatherData);
+    };
 
-  return (
-    <WeatherContext.Provider value={{ weatherData, fetchWeather, city, setCity }}>
-      <div className="App">
-        <h1>Weather App</h1>
-        <CitySearch />
-        <WeatherDisplay />
-      </div>
-    </WeatherContext.Provider>
-  );
-}
-
-// Custom hook to use weather context
-export const useWeather = () => {
-  return useContext(WeatherContext);
+    return (
+        <div className="header">
+            <h1 className="text-2xl font-bold">Weather App</h1>
+            <div className="city-search">
+                <CitySearch onCityChange={handleCityChange} />
+                <button className="button" onClick={handleFetchWeather}>Get Weather</button>
+            </div>
+            {weatherData && <WeatherDisplay data={weatherData} />}
+            <footer className="footer">© 2023 Weather App</footer>
+        </div>
+    );
 };
 
 export default App;

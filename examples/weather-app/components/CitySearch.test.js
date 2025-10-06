@@ -1,25 +1,21 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import CitySearch from './CitySearch';
-import { WeatherContext } from '../App';
 
-const mockFetchWeather = jest.fn();
-const mockSetCity = jest.fn();
+test('renders input for city search', () => {
+    const mockOnCityChange = jest.fn();
+    render(<CitySearch onCityChange={mockOnCityChange} />);
+    const inputElement = screen.getByPlaceholderText(/enter city/i);
+    expect(inputElement).toBeInTheDocument();
+});
 
-test('renders CitySearch component and handle city input', () => {
-  render(
-    <WeatherContext.Provider value={{ city: '', setCity: mockSetCity, fetchWeather: mockFetchWeather }}>
-      <CitySearch />
-    </WeatherContext.Provider>
-  );
+test('calls onCityChange prop when input value changes', () => {
+    const mockOnCityChange = jest.fn();
+    render(<CitySearch onCityChange={mockOnCityChange} />);
+    const inputElement = screen.getByPlaceholderText(/enter city/i);
+    
+    inputElement.value = 'New York';
+    inputElement.dispatchEvent(new Event('input'));
 
-  const inputElement = screen.getByPlaceholderText(/Enter city/i);
-  fireEvent.change(inputElement, { target: { value: 'London' } });
-
-  expect(mockSetCity).toHaveBeenCalledWith('London');
-  
-  const buttonElement = screen.getByText(/Get Weather/i);
-  fireEvent.click(buttonElement);
-
-  expect(mockFetchWeather).toHaveBeenCalledWith('London');
+    expect(mockOnCityChange).toHaveBeenCalledWith('New York');
 });
