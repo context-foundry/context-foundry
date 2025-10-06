@@ -320,10 +320,27 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
                 has_index_html = os.path.exists(os.path.join(project_dir, "index.html"))
 
                 if has_package_json:
+                    # Detect correct npm command from package.json
+                    try:
+                        import json
+                        with open(os.path.join(project_dir, "package.json")) as f:
+                            package_data = json.load(f)
+                        scripts = package_data.get('scripts', {})
+
+                        # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                        if 'start' in scripts:
+                            npm_command = "npm start"
+                        elif 'dev' in scripts:
+                            npm_command = "npm run dev"
+                        else:
+                            npm_command = "npm start"  # default
+                    except:
+                        npm_command = "npm start"  # fallback
+
                     console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
                     console.print(f"   [dim]cd {project_dir}[/dim]")
                     console.print(f"   [dim]npm install[/dim]")
-                    console.print(f"   [dim]npm run dev[/dim]")
+                    console.print(f"   [dim]{npm_command}[/dim]")
                 elif has_index_html:
                     console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
                     console.print(f"   [dim]Open {project_dir}/index.html in your browser[/dim]")

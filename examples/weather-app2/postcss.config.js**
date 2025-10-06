@@ -1,7 +1,0 @@
-// Actual complete code goes here
-module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}

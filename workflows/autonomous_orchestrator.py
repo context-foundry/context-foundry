@@ -14,7 +14,8 @@ from typing import Dict, List, Optional, Any
 from rich.console import Console
 
 # Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+FOUNDRY_ROOT = Path(__file__).parent.parent
+sys.path.append(str(FOUNDRY_ROOT))
 
 from ace.ai_client import AIClient
 from ace.cost_tracker import CostTracker
@@ -261,7 +262,7 @@ class AutonomousOrchestrator:
     def run_scout_phase(self) -> Dict:
         """Scout phase: Research architecture and approach."""
         # Load Scout agent config
-        scout_config = Path(".foundry/agents/scout.md").read_text()
+        scout_config = (FOUNDRY_ROOT / ".foundry/agents/scout.md").read_text()
 
         # Build prompt based on mode
         current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -447,7 +448,7 @@ Keep output under 5000 tokens. Be specific and actionable."""
         research_content = scout_result["content"]
 
         # Load Architect agent config
-        architect_config = Path(".foundry/agents/architect.md").read_text()
+        architect_config = (FOUNDRY_ROOT / ".foundry/agents/architect.md").read_text()
 
         # Add mode-specific file path requirements
         if self.mode in ["fix", "enhance"]:
@@ -732,7 +733,35 @@ Correct: const API_KEY = 'c4b27d06b0817cd09f83aa58745fda97';
 Wrong: const API_KEY = 'YOUR_API_KEY';  // ❌ NEVER DO THIS
 
 Example - React:
-Correct: const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;"""
+Correct: const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;
+
+⚠️  CREATE REACT APP (CRA) STRUCTURE REQUIREMENTS:
+If the task mentions "Create React App", "CRA", "react-scripts", or package.json has "react-scripts":
+□ MUST create public/index.html with:
+  - <!DOCTYPE html> declaration
+  - <div id="root"></div> for React mounting
+  - %PUBLIC_URL% placeholders (e.g., <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />)
+□ MUST create src/index.js that renders to #root
+□ Optional but recommended: public/manifest.json, public/favicon.ico
+
+Minimal public/index.html template:
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
+```
+
+⚠️  CRITICAL: react-scripts will FAIL without public/index.html - always create it!"""
 
             # Inject relevant patterns if enabled
             pattern_ids = []
