@@ -1,22 +1,27 @@
 import React from 'react';
 
 /**
- * WeatherDisplay component to showcase weather data.
- * @param {Object} props - Component props.
- * @param {Object} props.weatherData - Weather data object to display.
- * @returns {JSX.Element} Rendered component.
+ * WeatherDisplay component renders the weather information along with loading and error states.
+ * 
+ * @param {Object} props - The component props
+ * @param {Object} props.weatherData - The weather data to display
+ * @param {boolean} props.loading - Indicates if the data is loading
+ * @param {string|null} props.error - Error message if there is an error
  */
-const WeatherDisplay = ({ weatherData }) => {
-  if (!weatherData) {
-    return null;
+const WeatherDisplay = ({ weatherData, loading, error }) => {
+  if (loading) {
+    return <div className="loading">Loading...</div>;
   }
 
-  const { name, main, weather } = weatherData;
+  if (error) {
+    return <div className="error">Error: {error}</div>;
+  }
+
   return (
-    <div className="weather-display border border-gray-300 rounded p-4">
-      <h2 className="text-xl font-bold">{name}</h2>
-      <p className="text-lg">Temperature: {main.temp} °C</p>
-      <p className="text-lg">Condition: {weather[0].description}</p>
+    <div className="weather-display">
+      <h1>Weather for {weatherData.location}</h1>
+      <p>Temperature: {weatherData.temperature}°C</p>
+      <p>Condition: {weatherData.condition}</p>
     </div>
   );
 };

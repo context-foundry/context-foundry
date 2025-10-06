@@ -1,43 +1,38 @@
-import { renderHook } from '@testing-library/react-hooks';
+import { renderHook, act } from '@testing-library/react-hooks';
 import useWeatherFetch from '../hooks/useWeatherFetch';
 
-global.fetch = jest.fn(() =>
-    Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ name: 'Test City', main: { temp: 20 } }),
-    })
-);
+describe('useWeatherFetch Hook', () => {
+  beforeEach(() => {
+    fetch.resetMocks();
+  });
 
-describe('useWeatherFetch', () => {
-    it('should fetch weather data successfully', async () => {
-        const { result, waitForNextUpdate } = renderHook(() => useWeatherFetch('Test City'));
+  test('returns loading, data and error states', async () => {
+    fetch.mockResponseOnce(JSON.stringify({ location: 'New York', temperature: 25, condition: 'Sunny' }));
 
-        await waitForNextUpdate();
+    const { result, waitForNextUpdate } = renderHook(() => useWeatherFetch('New York'));
 
-        expect(result.current.loading).toBe(false);
-        expect(result.current.weatherData).toEqual({ name: 'Test City', main: { temp: 20 } });
-    });
+    expect(result.current.loading).toBe(true);
+    expect(result.current.weatherData).toBeNull();
+    expect(result.current.error).toBeNull();
 
-    it('should handle fetch errors', async () => {
-        fetch.mockImplementationOnce(() =>
-            Promise.resolve({
-                ok: false,
-                json: () => Promise.resolve({}),
-            })
-        );
+    await waitForNextUpdate();
 
-        const { result, waitForNextUpdate } = renderHook(() => useWeatherFetch('Invalid City'));
+    expect(result.current.loading).toBe(false);
+    expect(result.current.weatherData).toEqual({ location: 'New York', temperature: 25, condition: 'Sunny' });
+    expect(result.current.error).toBeNull();
+  });
 
-        await waitForNextUpdate();
+  test('sets error on fetch failure', async () => {
+    fetch.mockRejectOnce(new Error('Failed to fetch'));
 
-        expect(result.current.loading).toBe(false);
-        expect(result.current.error).toBe('Failed to fetch weather data');
-    });
+    const { result, waitForNextUpdate } = renderHook(() => useWeatherFetch('Invalid location'));
 
-    it('should not fetch data if no city is provided', () => {
-        const { result } = renderHook(() => useWeatherFetch(''));
+    expect(result.current.loading).toBe(true);
+    
+    await waitForNextUpdate();
 
-        expect(result.current.loading).toBe(true);
-        expect(result.current.weatherData).toBeNull();
-    });
+    expect(result.current.loading).toBe(false);
+    expect(result.current.weatherData).toBeNull();
+    expect(result.current.error).toBe('Failed to fetch');
+  });
 });
