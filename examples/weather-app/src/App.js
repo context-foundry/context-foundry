@@ -1,41 +1,38 @@
-import React, { useState } from 'react';
-import 'bootstrap/dist/css/bootstrap.min.css';
+import React, { useState, useEffect } from 'react';
 import WeatherCard from './components/WeatherCard';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
+/**
+ * Main App component that fetches and displays weather data.
+ * 
+ * @returns {JSX.Element} The App component.
+ */
 const App = () => {
-    const [location, setLocation] = useState('');
     const [weatherData, setWeatherData] = useState(null);
 
-    const handleSearch = (e) => {
-        e.preventDefault();
-        // Here you would typically fetch weather data based on the location
-        // Mocking the data for demonstration purposes
-        const mockWeather = {
-            location: location,
-            temperature: '22°C',
-            description: 'Sunny',
+    useEffect(() => {
+        const fetchWeather = async () => {
+            const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Ensure you have your API key set in .env
+            const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=London`);
+            const data = await response.json();
+            setWeatherData(data);
         };
-        setWeatherData(mockWeather);
-    };
+
+        fetchWeather();
+    }, []);
 
     return (
-        <div className="container mt-5">
-            <h1 className="text-center">Weather App</h1>
-            <form className="mb-4" onSubmit={handleSearch}>
-                <div className="input-group">
-                    <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Enter location"
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value)}
-                    />
-                    <button className="btn btn-primary" type="submit">
-                        Search
-                    </button>
-                </div>
-            </form>
-            {weatherData && <WeatherCard data={weatherData} />}
+        <div className="container mt-4">
+            {weatherData ? (
+                <WeatherCard
+                    city={weatherData.location.name}
+                    temperature={weatherData.current.temp_c}
+                    condition={weatherData.current.condition.text}
+                    icon={weatherData.current.condition.icon}
+                />
+            ) : (
+                <p>Loading...</p>
+            )}
         </div>
     );
 };

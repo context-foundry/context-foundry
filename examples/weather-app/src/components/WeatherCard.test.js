@@ -1,21 +1,19 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import WeatherCard from './WeatherCard';
 
-test('renders WeatherCard with correct data', () => {
-    const mockData = {
-        location: 'New York',
-        temperature: '22°C',
-        description: 'Sunny',
-    };
+test('renders weather card with correct data', () => {
+    const { getByText, getByAltText } = render(
+        <WeatherCard 
+            city="London" 
+            temperature="20" 
+            condition="Sunny" 
+            icon="http://example.com/icon.png" 
+        />
+    );
 
-    render(<WeatherCard data={mockData} />);
-
-    const locationElement = screen.getByText(/New York/i);
-    const temperatureElement = screen.getByText(/Temperature: 22°C/i);
-    const descriptionElement = screen.getByText(/Condition: Sunny/i);
-
-    expect(locationElement).toBeInTheDocument();
-    expect(temperatureElement).toBeInTheDocument();
-    expect(descriptionElement).toBeInTheDocument();
+    expect(getByText(/London/i)).toBeInTheDocument();
+    expect(getByText(/20 °C/i)).toBeInTheDocument();
+    expect(getByText(/Sunny/i)).toBeInTheDocument();
+    expect(getByAltText(/Weather Icon/i)).toBeInTheDocument();
 });
