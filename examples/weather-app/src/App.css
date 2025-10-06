@@ -1,22 +1,60 @@
+/* Main container styles */
 body {
-  font-family: Arial, sans-serif;
-  background-color: #f0f0f0;
-  margin: 0;
-  padding: 20px;
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(to right, #4facfe, #00f2fe);
+    color: white;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    text-align: center;
+    background-color: rgba(52, 58, 64, 0.8);
+    border-radius: 10px;
+    padding: 2rem;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive design */
+@media only screen and (max-width: 600px) {
+    .container {
+        padding: 1rem;
+    }
 }
 
 h1 {
-  color: #333;
+    margin-bottom: 1rem;
 }
 
-input {
-  padding: 10px;
-  margin-bottom: 20px;
-  width: 300px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+input[type="text"] {
+    padding: 0.5rem;
+    border: none;
+    border-radius: 5px;
+    margin-bottom: 1rem;
+    width: 80%;
+    max-width: 400px;
 }
 
-h2 {
-  color: #444;
+button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+.weather-card {
+    padding: 1rem;
+    margin: 0.5rem;
+    border-radius: 5px;
+    background-color: rgba(255, 255, 255, 0.1);
 }

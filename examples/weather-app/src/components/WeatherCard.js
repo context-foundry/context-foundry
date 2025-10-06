@@ -1,20 +1,25 @@
 import React from 'react';
+import styled from 'styled-components';
 
-/**
- * WeatherCard component displays the weather information.
- * 
- * @param {Object} props - The properties passed to the component.
- * @param {string} props.city - The name of the city.
- * @param {number} props.temperature - The temperature in Celsius.
- * @param {string} props.condition - The current weather condition.
- */
-const WeatherCard = ({ city, temperature, condition }) => {
+const Card = styled.div`
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 10px;
+    text-align: center;
+
+    @media (max-width: 600px) {
+        width: 80%;
+    }
+`;
+
+const WeatherCard = ({ city, temperature, weather }) => {
     return (
-        <div className="weather-card">
+        <Card>
             <h2>{city}</h2>
-            <p>{temperature}°C</p>
-            <p>{condition}</p>
-        </div>
+            <p>Temperature: {temperature}°C</p>
+            <p>{weather}</p>
+        </Card>
     );
 };
 

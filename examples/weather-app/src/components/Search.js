@@ -1,35 +1,53 @@
 import React, { useState } from 'react';
-import PropTypes from 'prop-types';
+import styled from 'styled-components';
+
+const SearchContainer = styled.div`
+    margin: 20px;
+`;
+
+const Input = styled.input`
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    width: 60%;
+
+    @media (max-width: 600px) {
+        width: 80%;
+    }
+`;
+
+const Button = styled.button`
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+
+    &:hover {
+        background-color: #0056b3;
+    }
+`;
 
 const Search = ({ onSearch }) => {
-    const [inputValue, setInputValue] = useState('');
+    const [query, setQuery] = useState('');
 
-    const handleInputChange = (event) => {
-        setInputValue(event.target.value);
-    };
-
-    const handleSubmit = (event) => {
-        event.preventDefault();
-        onSearch(inputValue); // Pass the search term to the parent component
-        setInputValue(''); // Clear input after search
+    const handleSearch = () => {
+        onSearch(query);
+        setQuery('');
     };
 
     return (
-        <form onSubmit={handleSubmit}>
-            <input
-                type="text"
-                placeholder="Enter location"
-                value={inputValue}
-                onChange={handleInputChange}
-                required
+        <SearchContainer>
+            <Input 
+                type="text" 
+                value={query} 
+                onChange={(e) => setQuery(e.target.value)} 
+                placeholder="Search city..."
             />
-            <button type="submit">Search</button>
-        </form>
+            <Button onClick={handleSearch}>Search</Button>
+        </SearchContainer>
     );
-};
-
-Search.propTypes = {
-    onSearch: PropTypes.func.isRequired,
 };
 
 export default Search;
