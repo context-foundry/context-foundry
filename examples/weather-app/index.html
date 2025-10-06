@@ -10,9 +10,10 @@
     <div class="container">
         <h1>Weather App</h1>
         <form id="weather-form">
-            <input type="text" name="city" placeholder="Enter city name" required>
+            <input type="text" id="search-input" placeholder="Enter location" required>
             <button type="submit">Get Weather</button>
         </form>
+        <div id="error-message" class="error-message"></div>
         <div id="weather-output"></div>
     </div>
     <script src="app.js"></script>
