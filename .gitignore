@@ -18,6 +18,9 @@ checkpoints/artifacts/temp/
 checkpoints/ralph/*/
 overnight_tasks.txt
 
+# Test projects built by foundry - don't commit to GitHub
+examples/*/
+
 # Pattern library
 foundry/patterns/patterns.db
 foundry/patterns/*.db
