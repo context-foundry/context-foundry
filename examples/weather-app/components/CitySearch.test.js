@@ -1,16 +1,25 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import CitySearch from './CitySearch';
+import { WeatherContext } from '../App';
 
-test('renders CitySearch component and handles input change and submit', () => {
-    const handleSearch = jest.fn();
-    render(<CitySearch onSearch={handleSearch} />);
+const mockFetchWeather = jest.fn();
+const mockSetCity = jest.fn();
 
-    const input = screen.getByPlaceholderText(/enter city name/i);
-    const button = screen.getByText(/search/i);
+test('renders CitySearch component and handle city input', () => {
+  render(
+    <WeatherContext.Provider value={{ city: '', setCity: mockSetCity, fetchWeather: mockFetchWeather }}>
+      <CitySearch />
+    </WeatherContext.Provider>
+  );
 
-    fireEvent.change(input, { target: { value: 'London' } });
-    fireEvent.click(button);
+  const inputElement = screen.getByPlaceholderText(/Enter city/i);
+  fireEvent.change(inputElement, { target: { value: 'London' } });
 
-    expect(handleSearch).toHaveBeenCalledWith('London');
+  expect(mockSetCity).toHaveBeenCalledWith('London');
+  
+  const buttonElement = screen.getByText(/Get Weather/i);
+  fireEvent.click(buttonElement);
+
+  expect(mockFetchWeather).toHaveBeenCalledWith('London');
 });

@@ -1,49 +1,36 @@
-import React from 'react';
-import axios from 'axios';
+import React, { createContext, useContext, useState } from 'react';
+import CitySearch from './components/CitySearch';
+import WeatherDisplay from './components/WeatherDisplay';
 import './App.css';
 
-const App = () => {
-  const [weatherData, setWeatherData] = React.useState(null);
-  const [location, setLocation] = React.useState('');
+// Create a Context for the Weather Data
+const WeatherContext = createContext();
 
-  const fetchWeather = () => {
-    const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Use your actual API key
-    axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${location}&appid=${API_KEY}`)
-      .then(response => {
-        setWeatherData(response.data);
-      })
-      .catch(error => {
-        console.error("There was an error fetching the weather data!", error);
-      });
-  };
+function App() {
+  const [weatherData, setWeatherData] = useState(null);
+  const [city, setCity] = useState('');
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    fetchWeather();
+  const fetchWeather = async (city) => {
+    const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Ensure your API key is set in environment variables
+    const response = await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${city}`);
+    const data = await response.json();
+    setWeatherData(data);
   };
 
   return (
-    <div className="app">
-      <h1>Weather App</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Enter location"
-          required
-        />
-        <button type="submit">Get Weather</button>
-      </form>
-      {weatherData && (
-        <div className="weather-info">
-          <h2>{weatherData.name}</h2>
-          <p>{Math.round(weatherData.main.temp - 273.15)} °C</p>
-          <p>{weatherData.weather[0].description}</p>
-        </div>
-      )}
-    </div>
+    <WeatherContext.Provider value={{ weatherData, fetchWeather, city, setCity }}>
+      <div className="App">
+        <h1>Weather App</h1>
+        <CitySearch />
+        <WeatherDisplay />
+      </div>
+    </WeatherContext.Provider>
   );
+}
+
+// Custom hook to use weather context
+export const useWeather = () => {
+  return useContext(WeatherContext);
 };
 
 export default App;

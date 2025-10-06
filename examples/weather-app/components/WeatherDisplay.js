@@ -1,24 +1,21 @@
 import React from 'react';
+import { useWeather } from '../App';
 
-/**
- * WeatherDisplay component to show weather data.
- * @param {object} props - Props for the component.
- * @param {object} props.weatherData - Weather data to display.
- * @returns {JSX.Element} The rendered component.
- */
-const WeatherDisplay = ({ weatherData }) => {
-    if (!weatherData) {
-        return <div>No weather data available.</div>;
-    }
+const WeatherDisplay = () => {
+  const { weatherData } = useWeather();
 
-    return (
-        <div>
-            <h2>Weather in {weatherData.name}</h2>
-            <p>Temperature: {weatherData.main.temp}°C</p>
-            <p>Weather: {weatherData.weather[0].description}</p>
-            <p>Humidity: {weatherData.main.humidity}%</p>
-        </div>
-    );
+  if (!weatherData) {
+    return <p>No weather data available. Please enter a city.</p>;
+  }
+
+  return (
+    <div>
+      <h2>Weather in {weatherData.location.name}</h2>
+      <p>Temperature: {weatherData.current.temp_c}°C</p>
+      <p>Condition: {weatherData.current.condition.text}</p>
+      <img src={weatherData.current.condition.icon} alt="weather icon" />
+    </div>
+  );
 };
 
 export default WeatherDisplay;

@@ -1,36 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useWeather } from '../App';
 
-/**
- * CitySearch component to handle user input for city search.
- * @param {object} props - Props for the component.
- * @param {function} props.onSearch - Callback function to handle the search action.
- * @returns {JSX.Element} The rendered component.
- */
-const CitySearch = ({ onSearch }) => {
-    const [city, setCity] = useState('');
+const CitySearch = () => {
+  const { city, setCity, fetchWeather } = useWeather();
 
-    const handleInputChange = (event) => {
-        setCity(event.target.value);
-    };
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    fetchWeather(city);
+  };
 
-    const handleSearch = (event) => {
-        event.preventDefault();
-        onSearch(city);
-        setCity('');
-    };
-
-    return (
-        <form onSubmit={handleSearch}>
-            <input 
-                type="text" 
-                value={city} 
-                onChange={handleInputChange} 
-                placeholder="Enter city name" 
-                required 
-            />
-            <button type="submit">Search</button>
-        </form>
-    );
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        type="text"
+        value={city}
+        onChange={(e) => setCity(e.target.value)}
+        placeholder="Enter city"
+      />
+      <button type="submit">Get Weather</button>
+    </form>
+  );
 };
 
 export default CitySearch;
