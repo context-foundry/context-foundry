@@ -7,11 +7,14 @@
     <title>Weather App</title>
 </head>
 <body>
-    <div id="app">
+    <div class="container">
         <h1>Weather App</h1>
-        <input type="text" id="city" placeholder="Enter city name">
-        <button id="getWeather">Get Weather</button>
-        <div id="weatherResult"></div>
+        <div class="search-bar">
+            <input type="text" id="cityInput" placeholder="Enter city name" />
+            <button id="searchButton">Search</button>
+        </div>
+        <div id="weatherDisplay" class="weather-display"></div>
+        <div id="errorNotification" class="error-notification"></div>
     </div>
     <script src="app.js"></script>
 </body>

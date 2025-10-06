@@ -1,38 +1,42 @@
-/**
- * Fetch weather data from OpenWeatherMap API.
- * @param {string} city - The name of the city to fetch weather data for.
- * @returns {Promise<void>}
- */
+// app.js
+
+// Function to display weather information
+function displayWeather(data) {
+    const weatherDisplay = document.getElementById('weatherDisplay');
+    weatherDisplay.innerHTML = `
+        <h2>Weather in ${data.name}</h2>
+        <p>Temperature: ${(data.main.temp - 273.15).toFixed(2)} °C</p>
+        <p>Weather: ${data.weather[0].description}</p>
+    `;
+}
+
+// Function to display error notification
+function displayError(message) {
+    const errorNotification = document.getElementById('errorNotification');
+    errorNotification.innerText = message;
+}
+
+// Function to fetch weather data
 async function fetchWeather(city) {
-    const API_KEY = 'your_actual_api_key'; // Replace with your OpenWeatherMap API key
-    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`);
-    const data = await response.json();
-    return data;
-}
+    const API_KEY = 'YOUR_API_KEY'; // Replace with actual API key
+    const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}`);
 
-/**
- * Display weather result on the webpage.
- * @param {string} city - The name of the city.
- * @param {object} weatherData - The weather data object.
- */
-function displayWeather(city, weatherData) {
-    const weatherResult = document.getElementById('weatherResult');
-    if (weatherData.cod === 200) {
-        const description = weatherData.weather[0].description;
-        const temperature = weatherData.main.temp;
-        weatherResult.innerHTML = `<h2>Weather in ${city}</h2><p>${description}</p><p>Temperature: ${temperature}°C</p>`;
-    } else {
-        weatherResult.innerHTML = `<p>${weatherData.message}</p>`;
+    if (!response.ok) {
+        displayError('City not found. Please try again.');
+        return;
     }
+
+    const data = await response.json();
+    displayWeather(data);
 }
 
-// Event listener for the button click
-document.getElementById('getWeather').addEventListener('click', async () => {
-    const cityInput = document.getElementById('city').value;
+// Event listener for the search button
+document.getElementById('searchButton').addEventListener('click', () => {
+    const cityInput = document.getElementById('cityInput').value;
     if (cityInput) {
-        const weatherData = await fetchWeather(cityInput);
-        displayWeather(cityInput, weatherData);
+        displayError(''); // Clear previous errors
+        fetchWeather(cityInput);
     } else {
-        alert('Please enter a city name!');
+        displayError('Please enter a city name.');
     }
 });
