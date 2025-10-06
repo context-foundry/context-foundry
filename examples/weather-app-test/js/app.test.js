@@ -1,41 +1,38 @@
-describe('Weather App', () => {
+// Actual complete test code goes here
+import { fetchWeather, updateDOM, handleError } from './app.js';
+
+describe('Weather App Tests', () => {
     beforeEach(() => {
         document.body.innerHTML = `
-            <div id="app">
-                <form id="weatherForm">
-                    <input type="text" id="cityInput" value="London">
-                    <button type="submit">Get Weather</button>
-                </form>
-                <div id="weather"></div>
-            </div>
+            <div id="weather-info"></div>
+            <div id="error-message"></div>
         `;
     });
 
-    test('fetchWeather function returns weather data for valid city', async () => {
+    test('fetchWeather returns data when city is valid', async () => {
         const data = await fetchWeather('London');
         expect(data).toHaveProperty('name', 'London');
     });
 
-    test('displayWeather function updates the DOM correctly', () => {
-        const mockData = {
-            name: 'London',
-            main: { temp: 15 },
-            weather: [{ description: 'clear sky' }]
-        };
-        
-        displayWeather(mockData);
-        const weatherContainer = document.getElementById('weather');
-        expect(weatherContainer.innerHTML).toContain('Weather in London');
-        expect(weatherContainer.innerHTML).toContain('Temperature: 15 °C');
-        expect(weatherContainer.innerHTML).toContain('Condition: clear sky');
+    test('fetchWeather throws error when city is invalid', async () => {
+        await expect(fetchWeather('InvalidCity')).rejects.toThrow('City not found');
     });
 
-    test('handleFormSubmit function shows alert for empty input', () => {
-        const event = new Event('submit');
-        const cityInput = document.getElementById('cityInput');
-        cityInput.value = ''; // empty value
+    test('updateDOM updates the weather information on the page', () => {
+        const weatherData = {
+            name: 'London',
+            main: { temp: 15, feels_like: 14 },
+            weather: [{ description: 'clear sky' }],
+        };
+        
+        updateDOM(weatherData);
+        
+        expect(document.getElementById('weather-info').innerHTML).toContain('Weather in London');
+        expect(document.getElementById('weather-info').innerHTML).toContain('Temperature: 15 °C');
+    });
 
-        handleFormSubmit(event);
-        expect(alert).toHaveBeenCalledWith('Please enter a city name');
+    test('handleError displays error message', () => {
+        handleError(new Error('City not found'));
+        expect(document.getElementById('error-message').textContent).toBe('City not found');
     });
 });
