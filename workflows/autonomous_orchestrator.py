@@ -1735,10 +1735,26 @@ To use your own API key, update the relevant configuration file."""
             has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
 
             if has_package_json:
+                # Detect correct npm command from package.json
+                try:
+                    import json
+                    package_data = json.loads((self.project_dir / "package.json").read_text())
+                    scripts = package_data.get('scripts', {})
+
+                    # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                    if 'start' in scripts:
+                        npm_command = "npm start"
+                    elif 'dev' in scripts:
+                        npm_command = "npm run dev"
+                    else:
+                        npm_command = "npm start"  # default
+                except:
+                    npm_command = "npm start"  # fallback
+
                 print(f"\n🚀 Quick Start:")
                 print(f"   cd {self.project_dir}")
                 print(f"   npm install")
-                print(f"   npm run dev")
+                print(f"   {npm_command}")
             elif has_index_html:
                 print(f"\n🚀 Quick Start:")
                 print(f"   Open {self.project_dir}/index.html in your browser")
