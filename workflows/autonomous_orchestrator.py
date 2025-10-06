@@ -427,6 +427,17 @@ Keep output under 5000 tokens. Be specific and actionable."""
                 response.total_tokens
             )
 
+        # Commit agent memory to git
+        self._commit_agent_memory(
+            phase="scout",
+            message=f"Research {self.project_name}",
+            details=[
+                f"Mode: {self.mode}",
+                f"Tokens: {response.total_tokens}",
+                f"Model: {response.model}"
+            ]
+        )
+
         # Create metadata dict for compatibility
         metadata = {
             "input_tokens": response.input_tokens,
@@ -558,6 +569,25 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
                 0,  # Context percentage not tracked per-phase in AIClient
                 response.total_tokens
             )
+
+        # Commit agent memory to git
+        try:
+            # Try to parse task count for commit message
+            tasks_content = files.get("tasks", "")
+            task_count = len([line for line in tasks_content.split('\n') if line.startswith('### Task ')])
+            task_info = f"{task_count} tasks identified" if task_count > 0 else "Implementation plan created"
+        except:
+            task_info = "Implementation plan created"
+
+        self._commit_agent_memory(
+            phase="architect",
+            message=f"Created implementation plan for {self.project_name}",
+            details=[
+                task_info,
+                f"Tokens: {response.total_tokens}",
+                f"Model: {response.model}"
+            ]
+        )
 
         # Create metadata dict for compatibility
         metadata = {
@@ -858,6 +888,18 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 self._create_git_commit(
                     f"{commit_prefix} Task {i}: {task['name']}\n\nTokens: {response.total_tokens}"
                 )
+
+            # Commit agent memory to git (separate from code commit)
+            files_created = file_stats.get('files_list', [])
+            self._commit_agent_memory(
+                phase=f"builder(task-{i})",
+                message=task['name'],
+                details=[
+                    f"Files: {len(files_created)} created",
+                    f"Tokens: {response.total_tokens}",
+                    f"Model: {response.model}"
+                ] + [f"  - {f}" for f in files_created[:5]]  # Show first 5 files
+            )
 
         # Print summary
         print(f"\n{'='*60}")
@@ -1659,6 +1701,57 @@ To use your own API key, update the relevant configuration file."""
             print(f"   📍 Git commit created")
         except Exception as e:
             print(f"   ⚠️  Git commit failed: {e}")
+
+    def _commit_agent_memory(self, phase: str, message: str, details: List[str] = None):
+        """Commit agent knowledge/memory to git for transparency.
+
+        This implements the "Git as Memory" system where agent reasoning
+        and decisions are tracked in git history for auditability.
+
+        Args:
+            phase: Agent phase (scout/architect/builder)
+            message: Commit message summary
+            details: Optional list of bullet points for commit body
+        """
+        if not self._git_available():
+            return  # Silently skip if git not available
+
+        try:
+            # Change to project directory
+            original_dir = os.getcwd()
+            os.chdir(self.project_dir)
+
+            # Stage .context-foundry files only
+            subprocess.run(
+                ["git", "add", ".context-foundry/"],
+                check=True,
+                timeout=10,
+                capture_output=True
+            )
+
+            # Build commit message with optional details
+            commit_msg = f"{phase}: {message}"
+            if details:
+                commit_msg += "\n\n" + "\n".join(f"- {detail}" for detail in details)
+
+            # Create commit
+            subprocess.run(
+                ["git", "commit", "-m", commit_msg],
+                check=True,
+                timeout=10,
+                capture_output=True
+            )
+
+            print(f"   📍 Agent memory committed to git ({phase})")
+
+        except subprocess.CalledProcessError:
+            # No changes to commit or commit failed - that's okay
+            pass
+        except Exception as e:
+            # Don't fail the build if git commit fails
+            print(f"   ⚠️  Git memory commit skipped: {e}")
+        finally:
+            os.chdir(original_dir)
 
     def _push_to_github(self) -> bool:
         """Push commits to GitHub remote.
