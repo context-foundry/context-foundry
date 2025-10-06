@@ -5,17 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather App</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="app.js" defer></script>
 </head>
 <body>
-    <header>
+    <div class="app">
         <h1>Weather App</h1>
-    </header>
-    <main>
-        <section id="weather-container">
-            <h2>Weather Information</h2>
-            <p id="weather-data">Loading...</p>
-        </section>
-    </main>
+        <form id="weatherForm">
+            <input type="text" id="cityInput" placeholder="Enter a city name" required>
+            <button type="submit">Get Weather</button>
+        </form>
+        <div id="weatherResult" class="hidden">
+            <h2 id="cityName"></h2>
+            <p id="temperature"></p>
+            <p id="description"></p>
+            <img id="icon" alt="Weather Icon">
+        </div>
+    </div>
+    <script src="script.js"></script>
 </body>
 </html>
