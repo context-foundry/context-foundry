@@ -1,96 +1,50 @@
-/* Basic Reset */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: Arial, sans-serif;
-}
-
-/* Body Styles */
 body {
-    background-color: #f0f8ff;
-    color: #333;
-}
-
-/* Container */
-.container {
-    max-width: 800px;
-    margin: 0 auto;
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
     padding: 20px;
-    border-radius: 8px;
-    background-color: #fff;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* Header Styles */
-header {
+#app {
+    max-width: 600px;
+    margin: auto;
+    padding: 20px;
+    background: white;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
     text-align: center;
-    padding: 20px 0;
 }
 
-header h1 {
-    font-size: 2.5em;
-    margin-bottom: 10px;
-}
-
-/* Form Styles */
 form {
     display: flex;
-    justify-content: space-between;
-    margin-top: 20px;
+    justify-content: center;
+    margin-bottom: 20px;
 }
 
-form input[type="text"] {
-    flex: 1;
+input[type="text"] {
     padding: 10px;
+    width: 70%;
     border: 1px solid #ccc;
-    border-radius: 4px;
-    margin-right: 10px;
+    border-radius: 5px;
 }
 
-form button {
-    padding: 10px 15px;
+button {
+    padding: 10px;
     border: none;
-    border-radius: 4px;
-    background-color: #007bff;
+    background-color: #28a745;
     color: white;
+    border-radius: 5px;
     cursor: pointer;
 }
 
-form button:hover {
-    background-color: #0056b3;
+button:hover {
+    background-color: #218838;
 }
 
-/* Weather Card */
-.weather-card {
+#weather {
+    text-align: center;
     margin-top: 20px;
-    padding: 15px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    background-color: #f9f9f9;
-    text-align: center;
-}
-
-.weather-card h2 {
-    margin-bottom: 10px;
-}
-
-.weather-card p {
-    margin: 5px 0;
-}
-
-/* Footer Styles */
-footer {
-    text-align: center;
-    margin-top: 30px;
-    font-size: 0.9em;
-}
-
-footer a {
-    color: #007bff;
-    text-decoration: none;
-}
-
-footer a:hover {
-    text-decoration: underline;
 }

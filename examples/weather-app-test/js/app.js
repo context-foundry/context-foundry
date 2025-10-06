@@ -1,25 +1,64 @@
-// JavaScript to handle the search functionality and update the weather sections
+// API Integration to fetch weather data from OpenWeatherMap 
 
-document.getElementById('search-button').addEventListener('click', function() {
-    const city = document.getElementById('city-input').value;
-    getCurrentWeather(city);
-    getWeatherForecast(city);
-});
+// OpenWeatherMap API Key
+const API_KEY = 'YOUR_API_KEY'; // Replace with your actual API key
 
 /**
- * Fetches the current weather for the specified city.
- * @param {string} city - The name of the city to search for.
+ * Fetch weather data for a specified city from OpenWeatherMap API.
+ * @param {string} city - The name of the city to fetch the weather for.
+ * @returns {Promise<Object>} - A promise that resolves to the weather data.
  */
-function getCurrentWeather(city) {
-    // Your API call logic here
-    console.log(`Fetching current weather for ${city}`);
+async function fetchWeather(city) {
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error('City not found');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching weather data:', error);
+        throw error;
+    }
 }
 
 /**
- * Fetches the weather forecast for the specified city.
- * @param {string} city - The name of the city to search for.
+ * Handle the form submission to fetch the weather data.
+ * @param {Event} event - The form submission event.
  */
-function getWeatherForecast(city) {
-    // Your API call logic here
-    console.log(`Fetching weather forecast for ${city}`);
+function handleFormSubmit(event) {
+    event.preventDefault();
+    const cityInput = document.getElementById('cityInput');
+    const city = cityInput.value.trim();
+
+    if (city) {
+        fetchWeather(city)
+            .then(data => {
+                displayWeather(data);
+            })
+            .catch(error => {
+                alert(error.message);
+            });
+    } else {
+        alert('Please enter a city name');
+    }
 }
+
+/**
+ * Display the fetched weather data on the webpage.
+ * @param {Object} data - The weather data object.
+ */
+function displayWeather(data) {
+    const weatherContainer = document.getElementById('weather');
+    const { name, main, weather } = data;
+    const weatherInfo = `
+        <h2>Weather in ${name}</h2>
+        <p>Temperature: ${main.temp} °C</p>
+        <p>Condition: ${weather[0].description}</p>
+    `;
+    weatherContainer.innerHTML = weatherInfo;
+}
+
+// Event Listener for Form Submission
+document.getElementById('weatherForm').addEventListener('submit', handleFormSubmit);
