@@ -353,3 +353,98 @@ git log .context-foundry/  # Should show scout/architect/builder commits
 git branch -d feature/git-as-memory
 git push origin --delete feature/git-as-memory
 ```
+
+---
+
+### Headless Browser Smoke Test (The Real Solution)
+
+**Problem**: Current validation (CSS imports, file references) doesn't catch runtime bugs:
+- DOM errors (getElementById returning null)
+- ID mismatches between HTML/JS
+- API integration failures
+- Missing function definitions
+- Race conditions
+- Any bug that only appears when code runs
+
+**Solution**: Run actual headless browser test after build completes
+
+**Why This Matters**: Only way to catch bugs you haven't thought of yet. Current approach is whack-a-mole (fix DOM bug, next time it's an API bug, etc.). This solves the root cause, not symptoms.
+
+**Implementation Phases**:
+
+**Phase 1: Detect + Report (1-2 hours)**
+- After Builder completes, detect project type (HTML/React/etc.)
+- If web app, spin up Puppeteer/Playwright headless browser
+- Load index.html or localhost:3000
+- Capture console errors, uncaught exceptions, failed network requests
+- Report to user: "⚠️  Found 2 errors: ..."
+- Flag: `foundry build app "..." --verify`
+
+**Phase 2: Auto-Fix Loop (2-3 hours)**
+- After smoke test finds errors, send them back to Builder
+- Builder creates "fix" tasks to resolve errors
+- Re-run smoke test
+- Repeat up to 3 times
+- Flag: `foundry build app "..." --verify --auto-fix`
+- **This is self-healing code** ⭐
+
+**Phase 3: Interactive Testing (1 week)**
+- Automated clicks, form fills, navigation
+- Test user workflows, not just page load
+- Flag: `foundry build app "..." --verify --interactive`
+
+**Technical Details**:
+- Use Playwright (supports Chromium, Firefox, WebKit)
+- `pip install playwright` (optional dependency)
+- Gracefully skip if not installed
+- For static HTML: `file:///path/to/index.html`
+- For React/dev servers: Start server first, then test `localhost:3000`
+
+**Challenges**:
+- API keys / external dependencies (401 errors aren't bugs)
+- Dev servers (need to start server before testing)
+- False positives (CORS in file://, missing favicon)
+- Time overhead (5-15 seconds per test)
+
+**Filtering Strategy**:
+- JavaScript errors → MUST FIX (bugs)
+- Network 4xx/5xx → WARN USER (config issue, not bug)
+- Missing resources (favicon.ico) → IGNORE (not critical)
+- CORS in file:// → IGNORE (expected for local HTML)
+
+**Benefits**:
+- Catches ALL runtime bugs, not just known patterns
+- Turns foundry from "might work" to "definitely works"
+- Reduces manual testing/debugging time
+- Self-healing with --auto-fix flag
+
+**Example Output**:
+```bash
+foundry build weather-app "..." --verify --auto-fix
+
+# After build:
+🧪 Running smoke test...
+❌ Found 2 errors:
+   • TypeError: Cannot read 'addEventListener' of null (app.js:39)
+   • GET api.openweathermap.org 401 Unauthorized
+
+🔄 Auto-fixing JavaScript errors...
+   Task fix-1: Fix DOM loading in app.js
+
+🧪 Running smoke test...
+✅ All tests passed!
+
+⚠️  Configuration warnings:
+   • API returned 401 - check your API key in config.js
+```
+
+**Priority**: High (solves root cause, not symptoms)
+
+**Effort**: 3-4 hours for full implementation
+
+**Dependencies**: `playwright` (optional pip install)
+
+**Location to Implement**:
+- `workflows/autonomous_orchestrator.py` after line ~1620 (existing `_run_smoke_test` method)
+- Add new method: `_run_headless_browser_test()`
+- Add auto-fix loop in `_run_builder_for_tasks()` after all tasks complete
