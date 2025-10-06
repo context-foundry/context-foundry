@@ -1442,7 +1442,6 @@ To use your own API key, update the relevant configuration file."""
 
                     # Resolve relative import
                     # Only add .js extension if no extension is present
-                    import os
                     _, ext = os.path.splitext(import_path)
                     if not ext:  # No extension, assume .js
                         import_path += '.js'
