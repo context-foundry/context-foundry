@@ -1,19 +1,40 @@
-import React from 'react';
+// This component displays the weather information for the searched city
+import React, { useState } from 'react';
+import { fetchWeatherData } from '../services/api';
 
-function WeatherDisplay({ weatherData, errorMessage }) {
+const WeatherDisplay = ({ city }) => {
+    const [weather, setWeather] = useState(null);
+    const [error, setError] = useState('');
+
+    const handleFetchWeather = async () => {
+        setError(''); // Clear previous error
+        try {
+            const data = await fetchWeatherData(city);
+            setWeather(data);
+        } catch (error) {
+            setError(error.message); // Set error message for display
+        }
+    };
+
+    // Fetch weather when city changes
+    React.useEffect(() => {
+        if (city) {
+            handleFetchWeather();
+        }
+    }, [city]);
+
     return (
-        <div className="weather-result">
-            {errorMessage ? (
-                <p className="error-message">{errorMessage}</p>
-            ) : (
-                <div className="weather-info">
-                    <h2>{weatherData.location}</h2>
-                    <p>{weatherData.temperature}°C</p>
-                    <p>{weatherData.condition}</p>
+        <div>
+            {error && <p style={{ color: 'red' }}>{error}</p>} {/* Display error message */}
+            {weather && (
+                <div>
+                    <h1>{weather.name}</h1>
+                    <p>{weather.main.temp} °C</p>
+                    <p>{weather.weather[0].description}</p>
                 </div>
             )}
         </div>
     );
-}
+};
 
 export default WeatherDisplay;

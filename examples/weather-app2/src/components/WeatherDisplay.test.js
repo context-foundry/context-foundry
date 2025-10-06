@@ -1,23 +1,36 @@
+// Tests for WeatherDisplay component
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import WeatherDisplay from './WeatherDisplay';
+import { fetchWeatherData } from '../services/api';
 
-test('displays weather data correctly', () => {
-    const weatherData = {
-        city: 'New York',
-        temperature: 25,
-        conditions: 'Sunny',
-    };
+// Mock the fetchWeatherData function
+jest.mock('../services/api');
 
-    render(<WeatherDisplay weatherData={weatherData} />);
+describe('WeatherDisplay', () => {
+    afterEach(() => {
+        jest.clearAllMocks();
+    });
 
-    expect(screen.getByText(/New York/i)).toBeInTheDocument();
-    expect(screen.getByText(/Temperature: 25 °C/i)).toBeInTheDocument();
-    expect(screen.getByText(/Conditions: Sunny/i)).toBeInTheDocument();
-});
+    test('displays weather data on successful fetch', async () => {
+        fetchWeatherData.mockResolvedValueOnce({
+            name: 'London',
+            main: { temp: 15 },
+            weather: [{ description: 'Clear sky' }],
+        });
+        
+        render(<WeatherDisplay city="London" />);
+        
+        expect(await screen.findByText(/London/i)).toBeInTheDocument();
+        expect(await screen.findByText(/15 °C/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Clear sky/i)).toBeInTheDocument();
+    });
 
-test('displays no data message when no weather data is provided', () => {
-    render(<WeatherDisplay weatherData={null} />);
+    test('displays an error message on fetch failure', async () => {
+        fetchWeatherData.mockRejectedValueOnce(new Error('City not found'));
 
-    expect(screen.getByText(/no data available/i)).toBeInTheDocument();
+        render(<WeatherDisplay city="InvalidCity" />);
+
+        expect(await screen.findByText(/City not found/i)).toBeInTheDocument();
+    });
 });
