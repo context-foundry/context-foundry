@@ -1,8 +1,8 @@
-// Ensuring optimized mounting for production
+// Entry point for the app
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './app';
-import './styles/index.css';
+import './index.css'; // TailwindCSS enabled file
+import App from './App';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

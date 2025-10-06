@@ -699,7 +699,21 @@ DO NOT:
 DO:
 - Output COMPLETE working code for every file
 - Include all imports, functions, classes
-- Provide production-ready code"""
+- Provide production-ready code
+
+⚠️  COMPONENT INTEGRATION CHECKLIST (if creating React/UI components):
+□ Wire up all component props - check what parent components expect
+□ Connect state management (useState, useContext, props, etc.)
+□ Pass callbacks for event handling (onClick, onSubmit, onChange, etc.)
+□ Transform/format data to match component prop expectations
+□ Import and use hooks properly (useEffect dependencies, etc.)
+□ Ensure parent components render children with correct props
+
+Example: If creating SearchBar component that expects onSearch prop,
+the parent App component MUST:
+- Define a handler function (e.g., handleSearch)
+- Pass it as <SearchBar onSearch={{handleSearch}} />
+- Use the search value in state or API calls"""
 
             # Inject relevant patterns if enabled
             pattern_ids = []
@@ -783,6 +797,14 @@ DO:
             if readme_path:
                 print(f"   ✅ README created: {readme_path}")
 
+        # Generate .env file with API keys if applicable
+        env_path = None
+        if total_impl_files > 0 and self.mode == "new":
+            env_path = self._generate_env_file()
+            if env_path:
+                print(f"   ✅ Environment file created: {env_path}")
+                print(f"   💡 Remember to restart your dev server to load new environment variables")
+
         # Validate build files for broken references
         validation_result = {"issues": [], "warnings": []}
         if total_impl_files > 0:
@@ -804,6 +826,41 @@ DO:
                 print(f"   ⚠️  {len(validation_result['warnings'])} warning(s):")
                 for warning in validation_result["warnings"]:
                     print(f"      • {warning}")
+
+        # Validate project structure (CRA, Vite, etc.)
+        structure_result = {"issues": [], "warnings": []}
+        if total_impl_files > 0:
+            print("\n🏗️  Validating project structure...")
+            structure_result = self._validate_project_structure()
+
+            if structure_result["issues"]:
+                print(f"   ❌ Found {len(structure_result['issues'])} structure issue(s):")
+                for issue in structure_result["issues"]:
+                    print(f"      • {issue}")
+            else:
+                print(f"   ✅ Project structure valid")
+
+            if structure_result["warnings"]:
+                print(f"   ⚠️  {len(structure_result['warnings'])} structure warning(s):")
+                for warning in structure_result["warnings"]:
+                    print(f"      • {warning}")
+
+        # Optional smoke test (disabled by default to save time)
+        smoke_test_result = {"success": None, "output": "", "errors": []}
+        run_smoke_test = os.getenv('FOUNDRY_SMOKE_TEST', 'false').lower() in ('true', '1', 'yes')
+
+        if run_smoke_test and total_impl_files > 0:
+            print("\n🧪 Running smoke test...")
+            smoke_test_result = self._run_smoke_test()
+
+            if smoke_test_result["success"] is True:
+                print(f"   ✅ {smoke_test_result['output']}")
+            elif smoke_test_result["success"] is False:
+                print(f"   ❌ Build test failed:")
+                for error in smoke_test_result["errors"]:
+                    print(f"      • {error}")
+            else:
+                print(f"   ⏭️  {smoke_test_result['output']}")
 
         return {
             "tasks_completed": len(completed_tasks),
@@ -1017,13 +1074,16 @@ Total Tokens: {stats['total_tokens']:,}
         Returns:
             Path to README.md if created, None otherwise
         """
-        # Collect all files
-        all_files = []
+        # Collect all files (use set to deduplicate)
+        all_files_set = set()
         for task_num, files_list in files_created:
-            all_files.extend(files_list)
+            all_files_set.update(files_list)
 
-        if not all_files:
+        if not all_files_set:
             return None
+
+        # Convert to sorted list for consistent ordering
+        all_files = sorted(all_files_set)
 
         # Detect project type
         has_package_json = (self.project_dir / "package.json").exists()
@@ -1127,6 +1187,70 @@ To use your own API key, update the relevant configuration file."""
 
         return readme_path
 
+    def _generate_env_file(self) -> Optional[Path]:
+        """Generate .env file with API keys extracted from task description.
+
+        Returns:
+            Path to .env if created, None otherwise
+        """
+        import re
+
+        # Check if task description mentions API keys
+        if 'api' not in self.task_description.lower() or 'key' not in self.task_description.lower():
+            return None
+
+        # Extract API key name and value
+        # Common patterns:
+        # - "key=abc123" or "key: abc123"
+        # - "api key abc123" or "API_KEY=abc123"
+        # - "openweathermap api key c4b27..."
+
+        env_vars = {}
+
+        # Pattern 1: key=value or key:value
+        key_match = re.search(r'key[=:\s]+([a-zA-Z0-9_-]+)', self.task_description, re.IGNORECASE)
+        if key_match:
+            key_value = key_match.group(1)
+
+            # Detect project type for proper env var naming
+            package_json_path = self.project_dir / "package.json"
+            if package_json_path.exists():
+                try:
+                    import json
+                    package_data = json.loads(package_json_path.read_text())
+                    dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+                    # Create React App uses REACT_APP_ prefix
+                    if 'react-scripts' in dependencies:
+                        env_vars['REACT_APP_WEATHER_API_KEY'] = key_value
+                        env_vars['REACT_APP_API_KEY'] = key_value
+                    # Vite uses VITE_ prefix
+                    elif 'vite' in dependencies:
+                        env_vars['VITE_WEATHER_API_KEY'] = key_value
+                        env_vars['VITE_API_KEY'] = key_value
+                    else:
+                        env_vars['API_KEY'] = key_value
+                        env_vars['WEATHER_API_KEY'] = key_value
+                except:
+                    env_vars['API_KEY'] = key_value
+            else:
+                env_vars['API_KEY'] = key_value
+
+        if not env_vars:
+            return None
+
+        # Generate .env content
+        env_content = "# Auto-generated by Context Foundry\n"
+        env_content += "# API Keys extracted from task description\n\n"
+        for key, value in env_vars.items():
+            env_content += f"{key}={value}\n"
+
+        # Save .env file
+        env_path = self.project_dir / ".env"
+        env_path.write_text(env_content)
+
+        return env_path
+
     def _validate_build_files(self, all_files: List[str]) -> Dict[str, List[str]]:
         """Validate that all file references in the code actually exist.
 
@@ -1193,7 +1317,7 @@ To use your own API key, update the relevant configuration file."""
                         continue
 
                     # Resolve relative import
-                    if not import_path.endswith('.js'):
+                    if not import_path.endswith('.js') and not import_path.endswith('.jsx') and not import_path.endswith('.ts') and not import_path.endswith('.tsx'):
                         import_path += '.js'
 
                     expected_path = (js_path.parent / import_path).resolve()
@@ -1205,10 +1329,164 @@ To use your own API key, update the relevant configuration file."""
                         # Path is outside project directory, skip
                         pass
 
+                # Check CSS imports: import './styles.css'
+                css_imports = re.findall(r'import\s+["\']([^"\']+\.css)["\']', content)
+                for css_import in css_imports:
+                    # Only check relative imports
+                    if css_import.startswith('.'):
+                        expected_path = (js_path.parent / css_import).resolve()
+                        try:
+                            relative_to_project = expected_path.relative_to(self.project_dir)
+                            if str(relative_to_project) not in created_paths_str:
+                                issues.append(f"{js_file} imports '{css_import}' but file not found at {relative_to_project}")
+                        except ValueError:
+                            # Path is outside project directory, skip
+                            pass
+
             except Exception as e:
                 warnings.append(f"Could not validate {js_file}: {e}")
 
         return {"issues": issues, "warnings": warnings}
+
+    def _validate_project_structure(self) -> Dict[str, List[str]]:
+        """Validate project structure matches detected type (CRA, Vite, etc.).
+
+        Returns:
+            dict with 'issues' list and 'warnings' list
+        """
+        issues = []
+        warnings = []
+
+        package_json_path = self.project_dir / "package.json"
+
+        if not package_json_path.exists():
+            return {"issues": issues, "warnings": warnings}
+
+        try:
+            import json
+            package_data = json.loads(package_json_path.read_text())
+            dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+            # Check for Create React App
+            if 'react-scripts' in dependencies:
+                # CRA requires specific structure
+                public_index = self.project_dir / "public" / "index.html"
+                src_index_js = self.project_dir / "src" / "index.js"
+                src_index_html = self.project_dir / "src" / "index.html"
+
+                if not public_index.exists():
+                    issues.append("Create React App detected but public/index.html is missing (required by react-scripts)")
+
+                if src_index_html.exists():
+                    issues.append("Found src/index.html but CRA requires public/index.html - move it to public/ directory")
+
+                if not src_index_js.exists():
+                    warnings.append("Create React App detected but src/index.js entry point not found")
+
+            # Check for Vite
+            elif 'vite' in dependencies:
+                # Vite typically uses index.html in root
+                root_index = self.project_dir / "index.html"
+                if not root_index.exists():
+                    warnings.append("Vite detected but index.html not found in project root")
+
+            # Check for TailwindCSS without config
+            if 'tailwindcss' in dependencies:
+                tailwind_config = self.project_dir / "tailwind.config.js"
+                postcss_config = self.project_dir / "postcss.config.js"
+
+                if not tailwind_config.exists():
+                    warnings.append("TailwindCSS installed but tailwind.config.js not found")
+                if not postcss_config.exists():
+                    warnings.append("TailwindCSS installed but postcss.config.js not found")
+
+        except Exception as e:
+            warnings.append(f"Could not validate project structure: {e}")
+
+        return {"issues": issues, "warnings": warnings}
+
+    def _run_smoke_test(self) -> Dict[str, any]:
+        """Run optional smoke test to catch build errors.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        package_json_path = self.project_dir / "package.json"
+
+        if not package_json_path.exists():
+            return {"success": None, "output": "No package.json found - skipping smoke test", "errors": []}
+
+        try:
+            import json
+            package_data = json.loads(package_json_path.read_text())
+            scripts = package_data.get('scripts', {})
+
+            # Check if build script exists
+            if 'build' not in scripts:
+                return {"success": None, "output": "No build script found - skipping smoke test", "errors": []}
+
+            print(f"   Running build test: npm run build")
+            print(f"   (This may take a minute...)")
+
+            # Run build with timeout
+            result = subprocess.run(
+                ['npm', 'run', 'build'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=120  # 2 minute timeout
+            )
+
+            if result.returncode == 0:
+                return {
+                    "success": True,
+                    "output": "Build succeeded",
+                    "errors": []
+                }
+            else:
+                # Parse common errors
+                errors = []
+                stderr = result.stderr
+
+                if "Module not found" in stderr:
+                    # Extract module not found errors
+                    import re
+                    module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
+                    for module in module_errors:
+                        errors.append(f"Missing module: {module}")
+
+                if "index.html" in stderr and "public" in stderr:
+                    errors.append("Missing public/index.html (required for CRA)")
+
+                if not errors:
+                    # Just show first few lines of error
+                    error_lines = stderr.strip().split('\n')[:5]
+                    errors = error_lines
+
+                return {
+                    "success": False,
+                    "output": result.stderr[:500],  # First 500 chars
+                    "errors": errors
+                }
+
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "output": "Build timeout (exceeded 2 minutes)",
+                "errors": ["Build took too long - possible infinite loop or large project"]
+            }
+        except FileNotFoundError:
+            return {
+                "success": None,
+                "output": "npm not found - skipping smoke test",
+                "errors": []
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "output": str(e),
+                "errors": [f"Smoke test failed: {e}"]
+            }
 
     def _git_available(self) -> bool:
         """Check if git is available and initialized."""
