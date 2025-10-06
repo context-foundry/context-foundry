@@ -1,34 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-/**
- * LocationInput component to capture user input for location.
- * 
- * @param {function} onSubmit - Callback function to handle the location input submission.
- */
-const LocationInput = ({ onSubmit }) => {
-    const [location, setLocation] = useState('');
-
-    const handleInputChange = (event) => {
-        setLocation(event.target.value);
+const LocationInput = ({ location, onLocationChange, onFetchWeather }) => {
+    const handleChange = (event) => {
+        onLocationChange(event.target.value);
     };
 
-    const handleFormSubmit = (event) => {
+    const handleSubmit = (event) => {
         event.preventDefault();
-        onSubmit(location);
-        setLocation(''); // Clear input after submission
+        onFetchWeather();
     };
 
     return (
-        <form onSubmit={handleFormSubmit} className="location-input">
-            <input 
-                type="text" 
-                value={location} 
-                onChange={handleInputChange} 
-                placeholder="Enter location" 
-                required 
-                className="input-field"
+        <form onSubmit={handleSubmit}>
+            <input
+                type="text"
+                value={location}
+                onChange={handleChange}
+                placeholder="Enter a location"
+                required
             />
-            <button type="submit" className="submit-button">Get Weather</button>
+            <button type="submit">Get Weather</button>
         </form>
     );
 };
