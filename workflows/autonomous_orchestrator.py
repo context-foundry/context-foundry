@@ -591,6 +591,10 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         total_test_files = 0
 
         for i, task in enumerate(tasks, 1):
+            # Reset builder history for each task to prevent context overflow
+            # Each task is self-contained with SPEC/PLAN/TASKS in prompt
+            self.ai_client.reset_history('builder')
+
             print(f"📝 Task {i}/{len(tasks)}: {task['name']}")
 
             # Broadcast task start
