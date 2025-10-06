@@ -1,40 +1,33 @@
+// Location input component to capture user's location input
+
 import React, { useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { fetchWeather } from '../actions/weatherActions';
 
-/**
- * LocationInput component for user input of location.
- * @param {Object} props - Component props.
- * @param {function} props.onSubmit - Function to handle the location submission.
- * @returns {JSX.Element} Rendered component.
- */
-const LocationInput = ({ onSubmit }) => {
-  const [location, setLocation] = useState('');
+const LocationInput = () => {
+    const [location, setLocation] = useState('');
+    const dispatch = useDispatch();
 
-  const handleChange = (event) => {
-    setLocation(event.target.value);
-  };
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (location) {
+            dispatch(fetchWeather(location));
+            setLocation('');
+        }
+    };
 
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    if (location) {
-      onSubmit(location);
-      setLocation('');
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex items-center">
-      <input
-        type="text"
-        value={location}
-        onChange={handleChange}
-        placeholder="Enter location"
-        className="border border-gray-300 rounded p-2"
-      />
-      <button type="submit" className="ml-2 bg-blue-500 text-white rounded p-2">
-        Get Weather
-      </button>
-    </form>
-  );
+    return (
+        <form onSubmit={handleSubmit}>
+            <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Enter location"
+                required
+            />
+            <button type="submit">Get Weather</button>
+        </form>
+    );
 };
 
 export default LocationInput;

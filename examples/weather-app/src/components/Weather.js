@@ -1,42 +1,21 @@
-// Weather component to fetch and display weather information
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+// Weather component to display the weather information
+
+import React from 'react';
+import { useSelector } from 'react-redux';
 
 const Weather = () => {
-  const [weatherData, setWeatherData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const API_KEY = process.env.REACT_APP_WEATHER_API_KEY; // Use your actual API key
+    const { data, loading, error } = useSelector((state) => state.weather);
 
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        const response = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=London&appid=${API_KEY}`);
-        setWeatherData(response.data);
-      } catch (error) {
-        console.error("Error fetching the weather data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    if (loading) return <div>Loading...</div>;
+    if (error) return <div>{error}</div>;
 
-    fetchWeather();
-  }, [API_KEY]);
-
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (!weatherData) {
-    return <div>No data available</div>;
-  }
-
-  return (
-    <div>
-      <h2 className="text-2xl">{weatherData.name}</h2>
-      <p>{weatherData.weather[0].description}</p>
-      <p>Temperature: {Math.round(weatherData.main.temp - 273.15)} °C</p>
-    </div>
-  );
+    return (
+        <div>
+            <h1>Weather in {data.location.name}</h1>
+            <p>Temperature: {data.current.temp_c} °C</p>
+            <p>Condition: {data.current.condition.text}</p>
+        </div>
+    );
 };
 
 export default Weather;
