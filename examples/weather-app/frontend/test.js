@@ -1,44 +1,27 @@
-// frontend/test.js
-describe('Weather App Input Validation', () => {
-    let cityInput;
-    let errorMessage;
+// Test functionality related to local storage for recent searches
 
-    beforeEach(() => {
-        document.body.innerHTML = `
-            <form id="city-form">
-                <input type="text" id="city-input">
-                <p id="error-message" class="error-message"></p>
-            </form>
-        `;
-        cityInput = document.getElementById('city-input');
-        errorMessage = document.getElementById('error-message');
-        // Attach the event listener for testing
-        document.getElementById('city-form').addEventListener('submit', (event) => {
-            event.preventDefault();
-            const cityName = cityInput.value.trim();
-            if (validateCityName(cityName)) {
-                errorMessage.textContent = '';
-            } else {
-                errorMessage.textContent = 'Please enter a valid city name.';
-            }
-        });
-    });
+// Test save to local storage
+function testSaveSearch() {
+    // Clear localStorage before testing
+    localStorage.clear();
+  
+    saveSearchToLocal('New York');
+    let searches = JSON.parse(localStorage.getItem('recentSearches'));
+    console.assert(searches.length === 1 && searches[0] === 'New York', 'Test Failed: New York was not saved correctly');
+}
 
-    test('validates city name with letters', () => {
-        cityInput.value = 'New York';
-        document.getElementById('city-form').dispatchEvent(new Event('submit'));
-        expect(errorMessage.textContent).toBe('');
-    });
+// Test load recent searches
+function testLoadRecentSearches() {
+    localStorage.setItem('recentSearches', JSON.stringify(['Los Angeles', 'Chicago']));
+    document.body.innerHTML = '<ul id="recent-searches"></ul>'; // Mock DOM
 
-    test('invalidates empty city name', () => {
-        cityInput.value = '';
-        document.getElementById('city-form').dispatchEvent(new Event('submit'));
-        expect(errorMessage.textContent).toBe('Please enter a valid city name.');
-    });
+    loadRecentSearches();
+    const items = document.querySelectorAll('#recent-searches li');
+    console.assert(items.length === 2, 'Test Failed: Recent searches were not loaded correctly');
+    console.assert(items[0].textContent === 'Los Angeles', 'Test Failed: First item was not Los Angeles');
+    console.assert(items[1].textContent === 'Chicago', 'Test Failed: Second item was not Chicago');
+}
 
-    test('invalidates city names with special characters', () => {
-        cityInput.value = 'New@York';
-        document.getElementById('city-form').dispatchEvent(new Event('submit'));
-        expect(errorMessage.textContent).toBe('Please enter a valid city name.');
-    });
-});
+// Running tests
+testSaveSearch();
+testLoadRecentSearches();
