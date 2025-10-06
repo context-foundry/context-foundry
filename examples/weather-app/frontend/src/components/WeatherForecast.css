@@ -1,0 +1,10 @@
+.weather-forecast {
+  margin-top: 20px;
+}
+
+.forecast-item {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px;
+  margin: 5px;
+}
