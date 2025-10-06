@@ -1195,7 +1195,6 @@ Total Tokens: {stats['total_tokens']:,}
         if has_package_json:
             # Check which npm script to use
             try:
-                import json
                 package_data = json.loads((self.project_dir / "package.json").read_text())
                 scripts = package_data.get('scripts', {})
 
@@ -1366,7 +1365,6 @@ To use your own API key, update the relevant configuration file."""
             package_json_path = self.project_dir / "package.json"
             if package_json_path.exists():
                 try:
-                    import json
                     package_data = json.loads(package_json_path.read_text())
                     dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
 
@@ -1515,7 +1513,6 @@ To use your own API key, update the relevant configuration file."""
             return {"issues": issues, "warnings": warnings}
 
         try:
-            import json
             package_data = json.loads(package_json_path.read_text())
             dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
 
@@ -1569,7 +1566,6 @@ To use your own API key, update the relevant configuration file."""
             return {"success": None, "output": "No package.json found - skipping smoke test", "errors": []}
 
         try:
-            import json
             package_data = json.loads(package_json_path.read_text())
             scripts = package_data.get('scripts', {})
 
@@ -1802,7 +1798,6 @@ To use your own API key, update the relevant configuration file."""
             if has_package_json:
                 # Detect correct npm command from package.json
                 try:
-                    import json
                     package_data = json.loads((self.project_dir / "package.json").read_text())
                     scripts = package_data.get('scripts', {})
 
