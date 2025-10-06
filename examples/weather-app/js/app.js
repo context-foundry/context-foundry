@@ -1,73 +1,57 @@
-// Define constants for API integration and DOM interaction
-const API_KEY = 'your_api_key_here'; // Replace with your actual API key
-const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
+import { fetchWeatherData, parseWeatherData } from "./utils.js";
 
 /**
- * Fetch weather data for a given city.
- *
- * @param {string} city - Name of the city to fetch weather for.
- * @returns {Promise<object>} - A promise resolving to the data object from the API.
+ * Application logic for the Weather App
+ * Handles user interactions and API error handling
  */
-async function fetchWeatherData(city) {
-  try {
-    const response = await fetch(`${BASE_URL}?q=${city}&appid=${API_KEY}&units=metric`);
-    if (!response.ok) {
-      throw new Error('City not found');
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("weather-form");
+  const cityInput = document.getElementById("city-input");
+  const resultContainer = document.getElementById("result");
+  const errorContainer = document.getElementById("error-message");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const city = cityInput.value.trim();
+    if (!city) {
+      showError("City name cannot be empty.");
+      return;
     }
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching weather data:', error.message);
-    throw error;
-  }
-}
 
-/**
- * Updates the weather results section with data from the API.
- *
- * @param {object} data - Weather data returned from the API.
- */
-function updateWeatherUI(data) {
-  const weatherSection = document.getElementById('weather-results');
+    // Clear previous results and errors
+    resultContainer.innerHTML = "";
+    errorContainer.innerHTML = "";
 
-  // Clear previous data
-  weatherSection.innerHTML = '';
+    const apiURL = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=YOUR_API_KEY&units=metric`;
 
-  // Create and insert dynamic UI elements
-  const city = document.createElement('h2');
-  city.textContent = `${data.name}, ${data.sys.country}`;
-  const temperature = document.createElement('p');
-  temperature.textContent = `Temperature: ${data.main.temp}°C`;
-  const weatherDescription = document.createElement('p');
-  weatherDescription.textContent = `Condition: ${data.weather[0].description}`;
-  const humidity = document.createElement('p');
-  humidity.textContent = `Humidity: ${data.main.humidity}%`;
+    try {
+      const data = await fetchWeatherData(apiURL);
+      const parsedData = parseWeatherData(data);
+      renderWeather(parsedData);
+    } catch (error) {
+      showError(error.message);
+    }
+  });
 
-  // Append elements to UI
-  weatherSection.appendChild(city);
-  weatherSection.appendChild(temperature);
-  weatherSection.appendChild(weatherDescription);
-  weatherSection.appendChild(humidity);
-}
-
-/**
- * Handles the search button click event.
- */
-async function handleSearch() {
-  const inputField = document.getElementById('location-input');
-  const city = inputField.value.trim();
-
-  if (!city) {
-    alert('Please enter a city name.');
-    return;
+  /**
+   * Render weather information on the page
+   * @param {Object} weather - The weather data object
+   */
+  function renderWeather(weather) {
+    const { city, temp, temp_min, temp_max } = weather;
+    resultContainer.innerHTML = `
+      <p><strong>${city}</strong></p>
+      <p>Temperature: ${temp} &#8451;</p>
+      <p>Min Temperature: ${temp_min} &#8451;</p>
+      <p>Max Temperature: ${temp_max} &#8451;</p>`;
   }
 
-  try {
-    const weatherData = await fetchWeatherData(city);
-    updateWeatherUI(weatherData);
-  } catch (error) {
-    alert('Could not fetch weather data. Please try again.');
+  /**
+   * Display error message to the user
+   * @param {string} message - Error message to display
+   */
+  function showError(message) {
+    errorContainer.innerHTML = `<p class="error">${message}</p>`;
   }
-}
-
-// Event listener for search button
-document.getElementById('search-btn').addEventListener('click', handleSearch);
+});
