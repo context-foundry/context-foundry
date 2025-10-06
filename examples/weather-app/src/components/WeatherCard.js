@@ -9,10 +9,11 @@ import WeatherApi from "../api/weatherApi";
  */
 async function WeatherCard(city, weatherApi) {
   const card = document.createElement("div");
-  card.className = "mt-4 p-6 bg-white rounded-lg shadow-md max-w-md mx-auto";
+  card.className =
+    "p-6 bg-white rounded-lg shadow-md max-w-md mx-auto mt-4 border border-gray-200";
 
   const loadingText = document.createElement("p");
-  loadingText.className = "text-gray-600";
+  loadingText.className = "text-gray-500";
   loadingText.innerText = "Fetching weather data...";
   card.appendChild(loadingText);
 
@@ -23,30 +24,30 @@ async function WeatherCard(city, weatherApi) {
     card.innerHTML = "";
 
     const cityTitle = document.createElement("h2");
-    cityTitle.className = "text-xl font-bold text-center mb-2";
+    cityTitle.className = "text-xl font-semibold text-center text-gray-800 mb-3";
     cityTitle.innerText = `Weather in ${city}`;
     card.appendChild(cityTitle);
 
     const weatherDescription = document.createElement("p");
-    weatherDescription.className = "text-gray-800 text-center";
+    weatherDescription.className = "text-lg text-gray-700 text-center";
     weatherDescription.innerText = weatherData.weather[0].description;
     card.appendChild(weatherDescription);
 
     const temperature = document.createElement("p");
-    temperature.className = "text-lg text-gray-800 font-semibold text-center";
+    temperature.className = "text-lg text-gray-800 font-bold text-center my-2";
     temperature.innerText = `Temperature: ${WeatherApi.kelvinToCelsius(
       weatherData.main.temp
     )} °C`;
     card.appendChild(temperature);
 
     const humidity = document.createElement("p");
-    humidity.className = "text-gray-700 text-center";
+    humidity.className = "text-sm text-gray-600 text-center";
     humidity.innerText = `Humidity: ${weatherData.main.humidity}%`;
     card.appendChild(humidity);
   } catch (error) {
     console.error("Error creating WeatherCard:", error.message);
     card.innerHTML = `
-      <p class="text-red-500 text-center">Failed to fetch weather data. Try again later.</p>
+      <p class="text-red-500 text-center">Failed to fetch weather data. Please try again.</p>
     `;
   }
 

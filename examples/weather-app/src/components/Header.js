@@ -6,10 +6,10 @@
  */
 function Header() {
   const header = document.createElement("header");
-  header.className = "w-full bg-primary text-white text-center py-4 shadow-lg";
+  header.className = "bg-blue-500 text-white text-center py-4 shadow-lg";
 
   const title = document.createElement("h1");
-  title.className = "text-2xl font-bold";
+  title.className = "text-3xl font-bold";
   title.innerText = "Weather App";
 
   header.appendChild(title);
