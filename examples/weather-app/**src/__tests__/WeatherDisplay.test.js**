@@ -1,0 +1,17 @@
+import React from 'react';
+import { render } from '@testing-library/react';
+import WeatherDisplay from '../components/WeatherDisplay';
+
+test('displays weather data correctly', () => {
+  const weatherData = {
+    location: 'Paris',
+    temperature: 20,
+    condition: 'Cloudy',
+  };
+  
+  const { getByText } = render(<WeatherDisplay data={weatherData} />);
+  
+  expect(getByText(/Paris/i)).toBeInTheDocument();
+  expect(getByText(/Temperature: 20°C/i)).toBeInTheDocument();
+  expect(getByText(/Condition: Cloudy/i)).toBeInTheDocument();
+});

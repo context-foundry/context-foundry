@@ -1,0 +1,26 @@
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import LocationInput from '../components/LocationInput';
+
+const mockStore = configureStore([]);
+
+test('submits location input', () => {
+  const store = mockStore();
+
+  const { getByPlaceholderText, getByText } = render(
+    <Provider store={store}>
+      <LocationInput />
+    </Provider>
+  );
+
+  const inputElement = getByPlaceholderText(/Enter location/i);
+  const submitButton = getByText(/Get Weather/i);
+
+  fireEvent.change(inputElement, { target: { value: 'London' } });
+  fireEvent.click(submitButton);
+
+  const actions = store.getActions();
+  expect(actions[0].type).toBe('FETCH_WEATHER');
+});

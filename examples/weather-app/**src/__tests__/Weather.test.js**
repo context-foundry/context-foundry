@@ -1,0 +1,30 @@
+import React from 'react';
+import { render } from '@testing-library/react';
+import Weather from '../components/Weather';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+
+const mockStore = configureStore([]);
+
+test('renders Weather component', () => {
+  const store = mockStore({
+    weather: {
+      data: {
+        location: 'London',
+        temperature: 15,
+        condition: 'Sunny',
+      },
+      error: null,
+    },
+  });
+
+  const { getByText } = render(
+    <Provider store={store}>
+      <Weather />
+    </Provider>
+  );
+
+  expect(getByText(/London/i)).toBeInTheDocument();
+  expect(getByText(/Temperature: 15°C/i)).toBeInTheDocument();
+  expect(getByText(/Condition: Sunny/i)).toBeInTheDocument();
+});
