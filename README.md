@@ -347,6 +347,7 @@ context-foundry/
 | **Overnight Sessions** | ✅ Working | Ralph Wiggum autonomous mode |
 | **Livestream Dashboard** | 🚧 Beta | Real-time progress visualization |
 | **Git Integration** | ✅ Working | Auto-commits and checkpointing |
+| **Git as Memory** | 🧪 Experimental | Commit agent reasoning to git (feature branch) |
 | **Health Checks** | ✅ Working | Setup validation |
 | **Session Analysis** | ✅ Working | Metrics and reporting |
 | **MCP Mode** | ✅ Working | Terminal-based MCP server (uses API key) |
@@ -403,6 +404,127 @@ Based on the methodology that powers Context Foundry:
 - **Subagent Isolation**: 200K token windows returning 1-2K summaries
 - **Test-First Development**: Tests generated before implementation
 - **Continuous Checkpointing**: Git commits after each task
+
+## 🧪 Experimental Features
+
+> ⚠️ **EXPERIMENTAL**: These features are in active development and may have significant limitations. Use with caution and expect rough edges.
+
+### Git as Memory (Branch: `feature/git-as-memory`)
+
+**Concept**: Commit agent reasoning files (`.context-foundry/`) to git after each phase, treating knowledge evolution as auditable history.
+
+**Status**: 🧪 Experimental - Implementation complete, testing in progress
+
+#### What It Does
+
+After each agent phase (Scout, Architect, Builder), Context Foundry commits `.context-foundry/` files to git with conventional commit messages:
+
+```bash
+# After Scout
+git commit -m "scout: Research weather-app
+- Mode: new
+- Tokens: 1789
+- Model: claude-sonnet-4-5"
+
+# After Architect
+git commit -m "architect: Created implementation plan for weather-app
+- 5 tasks identified
+- Tokens: 2345"
+
+# After Builder Task 1
+git commit -m "builder(task-1): Set up project structure
+- Files: 3 created
+- Tokens: 1234
+  - src/App.js
+  - src/index.js
+  - public/index.html"
+```
+
+#### Potential Benefits
+
+- `git log .context-foundry/` - See complete agent reasoning timeline
+- `git blame .context-foundry/PLAN.md` - Trace when specific decisions were made
+- `git diff session-1..session-5 .context-foundry/` - Compare how understanding evolved
+- `git checkout HEAD~10 .context-foundry/` - Reconstruct what agent knew at any point
+
+#### Critical Limitations (Why I'm Skeptical)
+
+**Merge Conflicts**
+- If multiple sessions modify `.context-foundry/` files, you'll get merge conflicts
+- Not clear how to resolve "conflicting agent reasoning"
+- Could break workflows that expect clean git history
+
+**Commit Noise**
+- Adds 3-15+ commits per build session (1 Scout + 1 Architect + N Builder tasks)
+- Clutters `git log` - harder to find actual code changes
+- `git blame` on code files shows "builder(task-3)" instead of meaningful human commit messages
+- May confuse tools that rely on commit patterns
+
+**Repo Bloat**
+- `.context-foundry/` can be 10-50KB per commit
+- Over 100 builds = 1-5MB of git history just for agent memory
+- Git operations (clone, fetch, push) get slower
+
+**Questionable Utility**
+- **When is this actually useful?** Most developers care about what the code does, not how the AI reasoned about it
+- You already have `.context-foundry/` files on disk - why commit them?
+- `git log` doesn't replace proper documentation of architectural decisions
+- If the agent made a bad decision, you still have to manually fix the code - knowing "when" it was wrong doesn't help
+
+**Edge Cases That Could Break**
+- Non-git projects: Feature silently skips (good), but no way to know it's disabled
+- Detached HEAD state: Commits succeed but aren't on any branch
+- Shallow clones: Git operations might fail
+- Protected branches: Commits might be rejected
+- Pre-commit hooks: Could reject agent memory commits
+
+**Performance Impact**
+- Each commit adds ~50-200ms overhead per task
+- On large builds (50+ tasks), adds 2.5-10s total time
+- Git operations block the build process
+
+#### When You Might Want This (Maybe)
+
+- Debugging why an agent made a specific architectural choice
+- Compliance/audit requirements for AI-generated code
+- Research on agent reasoning evolution
+- Multi-week projects where you need to trace decision history
+
+#### When You Definitely Don't Want This
+
+- Clean git history is important to your team
+- Building many small projects (commit noise outweighs benefits)
+- You don't care about agent reasoning, just the final code
+- Working in a monorepo with many developers
+
+#### How to Enable
+
+```bash
+# Switch to experimental branch
+git checkout feature/git-as-memory
+
+# Build as normal
+foundry build my-app "Build a todo app"
+
+# Check git log for agent memory commits
+cd examples/my-app
+git log --grep="scout:\\|architect:\\|builder"
+```
+
+#### My Honest Assessment
+
+This feature solves a problem that **most users don't have**. The primary value proposition - "see how agent reasoning evolved" - is interesting for researchers or debugging rare edge cases, but adds overhead and complexity for everyday use.
+
+**The core issue**: If the agent built what you wanted, you don't need to audit its reasoning. If it built the wrong thing, you need to *fix the code*, not study the commit history.
+
+I implemented this because:
+1. It's technically interesting (git as a reasoning audit log)
+2. It was requested as an experimental feature
+3. It might be useful for compliance/research use cases
+
+But I'm skeptical it will see wide adoption. **Use at your own risk.**
+
+---
 
 ## Contributing
 
