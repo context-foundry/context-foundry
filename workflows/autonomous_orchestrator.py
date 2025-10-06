@@ -994,6 +994,13 @@ the parent App component MUST:
                 # (Python's Path treats "/file.txt" as absolute, ignoring project_dir)
                 filepath = filepath.lstrip('/')
 
+                # Fix: Remove duplicate project path prefixes
+                # LLM sometimes outputs "examples/weather-app/src/..." when we're already in examples/weather-app/
+                if filepath.startswith(f'examples/{self.project_name}/'):
+                    filepath = filepath.replace(f'examples/{self.project_name}/', '', 1)
+                elif filepath.startswith(f'{self.project_name}/'):
+                    filepath = filepath.replace(f'{self.project_name}/', '', 1)
+
                 # Save file
                 full_path = (project_dir / filepath).resolve()
 
@@ -1003,6 +1010,18 @@ the parent App component MUST:
                     continue
 
                 full_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Post-process CRA template variables before writing
+                if '%PUBLIC_URL%' in code or '%REACT_APP_' in code:
+                    # Replace CRA template variables
+                    code = code.replace('%PUBLIC_URL%', '')  # Empty string for local dev
+                    # Replace environment variables if available
+                    import re
+                    env_vars = re.findall(r'%REACT_APP_([A-Z_]+)%', code)
+                    for var_name in env_vars:
+                        env_value = os.getenv(f'REACT_APP_{var_name}', '')
+                        code = code.replace(f'%REACT_APP_{var_name}%', env_value)
+
                 full_path.write_text(code)
 
                 print(f"   📁 Created: {full_path}")
@@ -1092,8 +1111,26 @@ Total Tokens: {stats['total_tokens']:,}
 
         # Determine run instructions
         if has_package_json:
-            project_type = "Node.js"
-            run_instructions = """## Quick Start
+            # Check which npm script to use
+            try:
+                import json
+                package_data = json.loads((self.project_dir / "package.json").read_text())
+                scripts = package_data.get('scripts', {})
+
+                # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                if 'start' in scripts:
+                    npm_command = "npm start"
+                elif 'dev' in scripts:
+                    npm_command = "npm run dev"
+                else:
+                    npm_command = "npm start"  # default
+
+                project_type = "Node.js"
+            except:
+                npm_command = "npm start"  # fallback
+                project_type = "Node.js"
+
+            run_instructions = f"""## Quick Start
 
 1. Install dependencies:
    ```bash
@@ -1102,7 +1139,7 @@ Total Tokens: {stats['total_tokens']:,}
 
 2. Run the development server:
    ```bash
-   npm run dev
+   {npm_command}
    ```
 
 3. Open your browser to the URL shown in the terminal (usually http://localhost:3000)"""
