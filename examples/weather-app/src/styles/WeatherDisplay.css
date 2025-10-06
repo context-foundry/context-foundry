@@ -1,0 +1,43 @@
+/* WeatherDisplay Component Styles */
+
+.weather-display {
+  background-color: #f4f4f4;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.weather-display__title {
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin-bottom: 12px;
+}
+
+.weather-display__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.weather-display__icon {
+  width: 100px;
+  height: 100px;
+}
+
+.weather-display__temp {
+  font-size: 2.5rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.weather-display__description {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.weather-display__message {
+  font-size: 1.4rem;
+  color: #999;
+}
