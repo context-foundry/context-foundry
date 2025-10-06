@@ -1,20 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Weather App</title>
+    <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div class="container">
+    <div id="app">
         <h1>Weather App</h1>
-        <div class="search-bar">
-            <input type="text" id="cityInput" placeholder="Enter city name" />
-            <button id="searchButton">Search</button>
-        </div>
-        <div id="weatherDisplay" class="weather-display"></div>
-        <div id="errorNotification" class="error-notification"></div>
+        <form id="weatherForm">
+            <input type="text" id="cityInput" placeholder="Enter city name" required />
+            <button type="submit">Get Weather</button>
+        </form>
+        <div id="weatherInfo"></div>
     </div>
     <script src="app.js"></script>
 </body>
