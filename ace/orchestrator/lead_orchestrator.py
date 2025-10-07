@@ -174,22 +174,27 @@ Output your plan as structured JSON with this exact schema:
         context_str = json.dumps(project_context or {}, indent=2)
 
         # Call AI provider with extended thinking (if supported)
-        # Note: Extended thinking is Anthropic-specific, other providers will ignore it
-        response = self.provider.call_api(
-            model=self.model_name,
-            max_tokens=16000,
-            thinking={
-                "type": "enabled",
-                "budget_tokens": 10000
-            } if self.provider_name == 'anthropic' else None,
-            messages=[{
+        # Build kwargs conditionally to avoid passing unsupported parameters
+        call_kwargs = {
+            'model': self.model_name,
+            'max_tokens': 16000,
+            'messages': [{
                 "role": "user",
                 "content": self.PLANNING_PROMPT.format(
                     user_request=user_request,
                     project_context=context_str
                 )
             }]
-        )
+        }
+
+        # Only add thinking parameter for Anthropic (extended thinking feature)
+        if self.provider_name == 'anthropic':
+            call_kwargs['thinking'] = {
+                "type": "enabled",
+                "budget_tokens": 10000
+            }
+
+        response = self.provider.call_api(**call_kwargs)
 
         # Extract plan content
         # ProviderResponse.content is a string (already unified by provider)
@@ -306,6 +311,7 @@ Create a structured summary that:
 
 Output the compressed summary now."""
 
+        # Build kwargs (no thinking needed for compression - simpler task)
         response = self.provider.call_api(
             model=self.model_name,
             max_tokens=4000,

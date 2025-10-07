@@ -79,14 +79,11 @@ Begin your research now and provide a detailed report."""
         print(f"   🔍 {self.task.id}: Starting research...")
 
         try:
-            response = self.provider.call_api(
-                model=self.model_name,
-                max_tokens=8000,
-                thinking={
-                    "type": "enabled",
-                    "budget_tokens": 3000
-                } if self.provider_name == 'anthropic' else None,
-                messages=[{
+            # Build kwargs conditionally to avoid passing unsupported parameters
+            call_kwargs = {
+                'model': self.model_name,
+                'max_tokens': 8000,
+                'messages': [{
                     "role": "user",
                     "content": self.SUBAGENT_PROMPT.format(
                         objective=self.task.objective,
@@ -95,7 +92,16 @@ Begin your research now and provide a detailed report."""
                         boundaries=self.task.boundaries or "Focus on your specific objective only"
                     )
                 }]
-            )
+            }
+
+            # Only add thinking parameter for Anthropic
+            if self.provider_name == 'anthropic':
+                call_kwargs['thinking'] = {
+                    "type": "enabled",
+                    "budget_tokens": 3000
+                }
+
+            response = self.provider.call_api(**call_kwargs)
 
             # Extract findings (ProviderResponse.content is already a string)
             findings = response.content

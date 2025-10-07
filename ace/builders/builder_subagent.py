@@ -95,14 +95,11 @@ Begin implementation now. Provide complete, working code with file paths."""
         print(f"   🔨 {self.task.id}: Starting implementation...")
 
         try:
-            response = self.provider.call_api(
-                model=self.model_name,
-                max_tokens=16000,
-                thinking={
-                    "type": "enabled",
-                    "budget_tokens": 5000
-                } if self.provider_name == 'anthropic' else None,
-                messages=[{
+            # Build kwargs conditionally to avoid passing unsupported parameters
+            call_kwargs = {
+                'model': self.model_name,
+                'max_tokens': 16000,
+                'messages': [{
                     "role": "user",
                     "content": self.SUBAGENT_PROMPT.format(
                         objective=self.task.objective,
@@ -111,7 +108,16 @@ Begin implementation now. Provide complete, working code with file paths."""
                         architect_guidance=self.architect_result.get('summary', 'Follow best practices')
                     )
                 }]
-            )
+            }
+
+            # Only add thinking parameter for Anthropic
+            if self.provider_name == 'anthropic':
+                call_kwargs['thinking'] = {
+                    "type": "enabled",
+                    "budget_tokens": 5000
+                }
+
+            response = self.provider.call_api(**call_kwargs)
 
             # Extract implementation (ProviderResponse.content is already a string)
             implementation = response.content
