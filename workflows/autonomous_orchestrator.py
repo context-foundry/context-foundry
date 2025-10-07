@@ -1019,6 +1019,29 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                     print(f"   • {issue}")
                 # Don't fail on structure issues - Builder might have fixed them
 
+            # Step 3: Runtime validation (smoke test with retry)
+            if not validation_failed:
+                print("\n🧪 Step 3: Runtime Validation")
+                if not self._retry_until_success(
+                    validation_fn=self._run_smoke_test_wrapper,
+                    context_description="Runtime smoke test",
+                    max_attempts=3
+                ):
+                    validation_failed = True
+                    failure_reason = "Runtime validation failed after 3 attempts"
+
+            # Step 4: Browser validation (optional, controlled by env var)
+            run_browser_validation = os.getenv('FOUNDRY_BROWSER_VALIDATION', 'true').lower() in ('true', '1', 'yes')
+            if not validation_failed and run_browser_validation:
+                print("\n🌐 Step 4: Browser Validation (Playwright)")
+                if not self._retry_until_success(
+                    validation_fn=self._run_browser_validation,
+                    context_description="Browser validation (Playwright)",
+                    max_attempts=2
+                ):
+                    validation_failed = True
+                    failure_reason = "Browser validation failed after 2 attempts"
+
         # Check for validation failures
         if validation_failed:
             print("\n" + "="*60)
@@ -1673,6 +1696,29 @@ To use your own API key, update the relevant configuration file."""
         # For Node.js projects, run runtime integration tests
         return self._run_nodejs_integration_test()
 
+    def _run_smoke_test_wrapper(self) -> tuple:
+        """Wrapper for smoke test that returns format expected by _retry_until_success.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        result = self._run_smoke_test()
+
+        # Handle None success (test skipped)
+        if result['success'] is None:
+            return (True, {})  # Skip means no failure
+
+        # Convert to expected format
+        if result['success']:
+            return (True, {})
+        else:
+            error_details = {
+                'message': result.get('output', 'Smoke test failed'),
+                'errors': result.get('errors', []),
+                'stderr': '\n'.join(result.get('errors', []))
+            }
+            return (False, error_details)
+
     def _run_build_validation(self) -> tuple:
         """
         Validate that npm install + npm build work.
@@ -2122,19 +2168,40 @@ To use your own API key, update the relevant configuration file."""
         import signal
         import socket
 
+        # Check if this is a React app (CRA, Vite, etc.)
+        package_json_path = self.project_dir / "package.json"
+        is_react_app = False
+        is_vite_app = False
+        use_npm_start = False
+
+        if package_json_path.exists():
+            try:
+                package_data = json.loads(package_json_path.read_text())
+                deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+                scripts = package_data.get('scripts', {})
+
+                is_react_app = 'react-scripts' in deps
+                is_vite_app = 'vite' in deps
+
+                # Use npm start for React apps or if start script exists
+                use_npm_start = is_react_app or (is_vite_app and 'dev' in scripts) or 'start' in scripts
+            except Exception:
+                pass
+
         # Find server entry point
         server_file = None
-        for candidate in ['server.js', 'app.js', 'index.js', 'src/server.js', 'src/app.js']:
-            if (self.project_dir / candidate).exists():
-                server_file = candidate
-                break
+        if not use_npm_start:
+            for candidate in ['server.js', 'app.js', 'index.js', 'src/server.js', 'src/app.js']:
+                if (self.project_dir / candidate).exists():
+                    server_file = candidate
+                    break
 
-        if not server_file:
-            return {
-                "success": None,
-                "output": "No server file found (server.js, app.js, etc.)",
-                "errors": []
-            }
+            if not server_file:
+                return {
+                    "success": None,
+                    "output": "No server file found (server.js, app.js, etc.) and not a React/Vite app",
+                    "errors": []
+                }
 
         # Find an available port
         def find_free_port():
@@ -2153,18 +2220,31 @@ To use your own API key, update the relevant configuration file."""
             env = os.environ.copy()
             env['PORT'] = str(test_port)
             env['NODE_ENV'] = 'test'
+            env['BROWSER'] = 'none'  # Don't open browser for React apps
+
+            # Choose command based on app type
+            if use_npm_start:
+                if is_react_app:
+                    start_command = ['npm', 'start']
+                elif is_vite_app:
+                    start_command = ['npm', 'run', 'dev']
+                else:
+                    start_command = ['npm', 'start']
+            else:
+                start_command = ['node', server_file]
 
             server_process = subprocess.Popen(
-                ['node', server_file],
+                start_command,
                 cwd=self.project_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=env
             )
 
-            # Wait for server to start (max 5 seconds)
+            # Wait for server to start (max 15 seconds for React/Vite, 5 for Node)
+            max_wait_time = 15 if use_npm_start else 5
             server_ready = False
-            for i in range(50):  # 50 * 0.1 = 5 seconds
+            for i in range(max_wait_time * 10):  # Check every 0.1 seconds
                 time.sleep(0.1)
                 try:
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -2188,7 +2268,7 @@ To use your own API key, update the relevant configuration file."""
                 return {
                     "success": False,
                     "output": "Server did not start in time",
-                    "errors": ["Server took too long to start (>5s)"]
+                    "errors": [f"Server took too long to start (>{max_wait_time}s)"]
                 }
 
             # Test root endpoint
@@ -2266,6 +2346,259 @@ To use your own API key, update the relevant configuration file."""
                 "output": "Sanity test failed",
                 "errors": [f"Test error: {str(e)}"]
             }
+
+    def _run_browser_validation(self) -> tuple:
+        """
+        Run browser-based validation using Playwright to catch client-side errors.
+        This catches issues like "Cannot GET /", React mounting errors, etc.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        import socket
+        import time
+
+        # Check if Playwright is available
+        package_json_path = self.project_dir / "package.json"
+        if not package_json_path.exists():
+            return (True, {})  # Skip for non-Node projects
+
+        # Check if this is a web app that needs browser validation
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+            scripts = package_data.get('scripts', {})
+
+            is_react_app = 'react-scripts' in deps or 'react' in deps
+            is_vite_app = 'vite' in deps
+            has_start_script = 'start' in scripts or 'dev' in scripts
+
+            # Only run browser validation for web apps
+            if not (is_react_app or is_vite_app or has_start_script):
+                return (True, {})  # Skip for non-web apps
+
+        except Exception:
+            return (True, {})
+
+        # Find an available port
+        def find_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+
+        test_port = find_free_port()
+        server_process = None
+
+        try:
+            print(f"      Starting dev server for browser validation...")
+
+            # Install Playwright if not present
+            playwright_check = subprocess.run(
+                ['npm', 'list', 'playwright'],
+                cwd=self.project_dir,
+                capture_output=True,
+                timeout=10
+            )
+
+            if playwright_check.returncode != 0:
+                print(f"      Installing Playwright for browser validation...")
+                install_result = subprocess.run(
+                    ['npm', 'install', '--save-dev', '--no-save', 'playwright'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    timeout=120
+                )
+                if install_result.returncode != 0:
+                    return (True, {})  # Skip if can't install
+
+                # Install Playwright browsers (Chromium only for speed)
+                print(f"      Installing Playwright browsers...")
+                browser_install = subprocess.run(
+                    ['npx', 'playwright', 'install', 'chromium', '--with-deps'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    timeout=180
+                )
+                if browser_install.returncode != 0:
+                    return (True, {})  # Skip if can't install browsers
+
+            # Start dev server
+            env = os.environ.copy()
+            env['PORT'] = str(test_port)
+            env['BROWSER'] = 'none'
+            env['CI'] = 'true'
+
+            if is_react_app:
+                start_command = ['npm', 'start']
+            elif is_vite_app:
+                start_command = ['npm', 'run', 'dev']
+            else:
+                start_command = ['npm', 'start']
+
+            server_process = subprocess.Popen(
+                start_command,
+                cwd=self.project_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+
+            # Wait for server to start
+            server_ready = False
+            for i in range(200):  # 20 seconds max
+                time.sleep(0.1)
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.5)
+                        s.connect(('localhost', test_port))
+                        server_ready = True
+                        break
+                except (socket.error, ConnectionRefusedError):
+                    if server_process.poll() is not None:
+                        stdout, stderr = server_process.communicate()
+                        return (False, {
+                            'message': 'Dev server failed to start',
+                            'stderr': stderr.decode()[:500]
+                        })
+                    continue
+
+            if not server_ready:
+                server_process.terminate()
+                return (False, {
+                    'message': 'Dev server timeout',
+                    'stderr': 'Server did not start within 20 seconds'
+                })
+
+            # Give server a moment to fully initialize
+            time.sleep(2)
+
+            # Create Playwright test script
+            test_script = f"""
+const {{ chromium }} = require('playwright');
+
+(async () => {{
+    const browser = await chromium.launch({{
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }});
+
+    try {{
+        const page = await browser.newPage();
+
+        // Collect console errors
+        const errors = [];
+        page.on('console', msg => {{
+            if (msg.type() === 'error') {{
+                errors.push(msg.text());
+            }}
+        }});
+
+        page.on('pageerror', error => {{
+            errors.push(error.message);
+        }});
+
+        // Navigate to app
+        const response = await page.goto('http://localhost:{test_port}', {{
+            waitUntil: 'networkidle',
+            timeout: 15000
+        }});
+
+        // Check response status
+        if (response.status() === 404) {{
+            console.error('ERROR: Page returned 404 - Cannot GET /');
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Wait for content to render
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(1000);
+
+        // Check for root element content
+        const bodyText = await page.textContent('body');
+        if (!bodyText || bodyText.trim().length === 0) {{
+            console.error('ERROR: Page loaded but has no visible content');
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Check for JavaScript errors
+        if (errors.length > 0) {{
+            console.error('JavaScript errors detected:');
+            errors.forEach(err => console.error('  - ' + err));
+            await browser.close();
+            process.exit(1);
+        }}
+
+        console.log('SUCCESS: Page loaded and rendered correctly');
+        await browser.close();
+        process.exit(0);
+
+    }} catch (error) {{
+        console.error('ERROR: ' + error.message);
+        try {{
+            await browser.close();
+        }} catch (e) {{
+            // Ignore close errors
+        }}
+        process.exit(1);
+    }}
+}})();
+"""
+
+            # Write test script
+            test_script_path = self.project_dir / 'playwright-test-temp.js'
+            test_script_path.write_text(test_script)
+
+            try:
+                # Run Playwright test
+                print(f"      Running browser validation...")
+                result = subprocess.run(
+                    ['node', 'playwright-test-temp.js'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                # Clean up test script
+                test_script_path.unlink()
+
+                if result.returncode == 0:
+                    print(f"      ✅ Browser validation passed")
+                    return (True, {})
+                else:
+                    return (False, {
+                        'message': 'Browser validation failed',
+                        'stderr': result.stderr,
+                        'stdout': result.stdout
+                    })
+
+            finally:
+                # Clean up test script if it still exists
+                if test_script_path.exists():
+                    test_script_path.unlink()
+
+        except subprocess.TimeoutExpired:
+            return (False, {
+                'message': 'Browser validation timeout',
+                'stderr': 'Playwright test exceeded 30 seconds'
+            })
+        except Exception as e:
+            return (False, {
+                'message': f'Browser validation error: {str(e)}',
+                'stderr': str(e)
+            })
+        finally:
+            # Always kill server
+            if server_process:
+                server_process.terminate()
+                try:
+                    server_process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    server_process.kill()
 
     def _retry_until_success(self, validation_fn, context_description: str, max_attempts: int = 3) -> bool:
         """
