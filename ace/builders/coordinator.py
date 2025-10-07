@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Any, Optional
-from anthropic import Anthropic
 
 from ..orchestrator.models import SubagentTask, SubagentResult, PhaseResult
 from .builder_subagent import BuilderSubagent
@@ -20,19 +19,13 @@ class ParallelBuilderCoordinator:
 
     MAX_PARALLEL_BUILDERS = 4  # Limit to avoid conflicts and rate limiting
 
-    def __init__(self, client: Optional[Anthropic] = None):
+    def __init__(self, ai_client):
         """Initialize coordinator.
 
         Args:
-            client: Optional Anthropic client. If None, creates new one.
+            ai_client: AIClient instance (provider-agnostic)
         """
-        if client is None:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY not set")
-            client = Anthropic(api_key=api_key)
-
-        self.client = client
+        self.ai_client = ai_client
 
     def execute_parallel(
         self,
@@ -119,5 +112,5 @@ class ParallelBuilderCoordinator:
         Returns:
             SubagentResult from execution
         """
-        subagent = BuilderSubagent(self.client, task, project_dir, architect_result)
+        subagent = BuilderSubagent(self.ai_client, task, project_dir, architect_result)
         return subagent.execute()

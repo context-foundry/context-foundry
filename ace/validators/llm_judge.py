@@ -11,7 +11,6 @@ Based on Anthropic's approach:
 import json
 import os
 from typing import Dict, Any, Optional
-from anthropic import Anthropic
 
 
 class LLMJudge:
@@ -81,20 +80,18 @@ Output as JSON (valid JSON only, no markdown):
   "overall": {{"pass": true/false, "critical_issues": []}}
 }}"""
 
-    def __init__(self, client: Optional[Anthropic] = None):
+    def __init__(self, ai_client):
         """Initialize LLM Judge.
 
         Args:
-            client: Optional Anthropic client. If None, creates new one.
+            ai_client: AIClient instance (provider-agnostic)
         """
-        if client is None:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY not set")
-            client = Anthropic(api_key=api_key)
+        self.ai_client = ai_client
 
-        self.client = client
-        self.model = os.getenv("VALIDATOR_MODEL", "claude-sonnet-4-20250514")
+        # Use architect provider/model for validation (similar to planning/judging tasks)
+        self.provider_name = ai_client.config.architect.provider
+        self.model_name = ai_client.config.architect.model
+        self.provider = ai_client.registry.get(self.provider_name)
 
     def evaluate(self, requirements: str, code_summary: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -111,8 +108,8 @@ Output as JSON (valid JSON only, no markdown):
         print("\n⚖️  LLM Judge evaluating code...")
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
+            response = self.provider.call_api(
+                model=self.model_name,
                 max_tokens=4000,
                 messages=[{
                     "role": "user",
@@ -124,8 +121,8 @@ Output as JSON (valid JSON only, no markdown):
                 }]
             )
 
-            # Extract JSON from response
-            response_text = response.content[0].text
+            # Extract JSON from response (ProviderResponse.content is already a string)
+            response_text = response.content
 
             # Try to extract JSON
             if "```json" in response_text:

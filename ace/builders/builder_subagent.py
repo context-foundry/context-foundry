@@ -12,7 +12,6 @@ Key principles from Anthropic:
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from anthropic import Anthropic
 
 from ..orchestrator.models import SubagentTask, SubagentResult
 
@@ -62,7 +61,7 @@ Begin implementation now. Provide complete, working code with file paths."""
 
     def __init__(
         self,
-        client: Optional[Anthropic],
+        ai_client,
         task: SubagentTask,
         project_dir: Path,
         architect_result: Optional[Dict] = None
@@ -70,23 +69,21 @@ Begin implementation now. Provide complete, working code with file paths."""
         """Initialize Builder subagent.
 
         Args:
-            client: Anthropic client instance
+            ai_client: AIClient instance (provider-agnostic)
             task: SubagentTask to execute
             project_dir: Project directory for writing files
             architect_result: Optional architect guidance
         """
-        if client is None:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY not set")
-            client = Anthropic(api_key=api_key)
-
-        self.client = client
+        self.ai_client = ai_client
         self.task = task
         self.project_dir = Path(project_dir)
         self.architect_result = architect_result or {}
-        self.model = os.getenv("BUILDER_MODEL", "claude-sonnet-4-20250514")
         self.files_written = []
+
+        # Use builder provider/model from AIClient configuration
+        self.provider_name = ai_client.config.builder.provider
+        self.model_name = ai_client.config.builder.model
+        self.provider = ai_client.registry.get(self.provider_name)
 
     def execute(self) -> SubagentResult:
         """Execute the build task with TDD approach.
@@ -98,13 +95,13 @@ Begin implementation now. Provide complete, working code with file paths."""
         print(f"   🔨 {self.task.id}: Starting implementation...")
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
+            response = self.provider.call_api(
+                model=self.model_name,
                 max_tokens=16000,
                 thinking={
                     "type": "enabled",
                     "budget_tokens": 5000
-                },
+                } if self.provider_name == 'anthropic' else None,
                 messages=[{
                     "role": "user",
                     "content": self.SUBAGENT_PROMPT.format(
@@ -116,17 +113,14 @@ Begin implementation now. Provide complete, working code with file paths."""
                 }]
             )
 
-            # Extract implementation
-            implementation = ""
-            for block in response.content:
-                if block.type == "text":
-                    implementation += block.text
+            # Extract implementation (ProviderResponse.content is already a string)
+            implementation = response.content
 
             # Parse and write files
             files_written = self._parse_and_write_files(implementation)
 
             # Calculate token usage
-            token_usage = response.usage.input_tokens + response.usage.output_tokens
+            token_usage = response.input_tokens + response.output_tokens
 
             print(f"   ✅ {self.task.id}: Implementation complete ({len(files_written)} files, {token_usage:,} tokens)")
 
@@ -138,9 +132,11 @@ Begin implementation now. Provide complete, working code with file paths."""
                 files_written=files_written,
                 token_usage=token_usage,
                 metadata={
-                    'input_tokens': response.usage.input_tokens,
-                    'output_tokens': response.usage.output_tokens,
-                    'file_count': len(files_written)
+                    'input_tokens': response.input_tokens,
+                    'output_tokens': response.output_tokens,
+                    'file_count': len(files_written),
+                    'provider': self.provider_name,
+                    'model': self.model_name
                 }
             )
 

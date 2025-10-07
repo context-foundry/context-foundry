@@ -11,7 +11,6 @@ Based on Anthropic's multi-agent system:
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional
-from anthropic import Anthropic
 
 from ..orchestrator.models import SubagentTask, SubagentResult, PhaseResult
 from .scout_subagent import ScoutSubagent
@@ -22,19 +21,13 @@ class ParallelScoutCoordinator:
 
     MAX_PARALLEL_SCOUTS = 5  # Limit to avoid rate limiting
 
-    def __init__(self, client: Optional[Anthropic] = None):
+    def __init__(self, ai_client):
         """Initialize coordinator.
 
         Args:
-            client: Optional Anthropic client. If None, creates new one.
+            ai_client: AIClient instance (provider-agnostic)
         """
-        if client is None:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY not set")
-            client = Anthropic(api_key=api_key)
-
-        self.client = client
+        self.ai_client = ai_client
 
     def execute_parallel(self, tasks: List[SubagentTask]) -> PhaseResult:
         """
@@ -103,5 +96,5 @@ class ParallelScoutCoordinator:
         Returns:
             SubagentResult from execution
         """
-        subagent = ScoutSubagent(self.client, task)
+        subagent = ScoutSubagent(self.ai_client, task)
         return subagent.execute()

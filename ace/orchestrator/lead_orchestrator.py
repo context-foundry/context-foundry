@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from anthropic import Anthropic
 
 from .models import SubagentTask, WorkflowPlan
 
@@ -140,20 +139,18 @@ Output your plan as structured JSON with this exact schema:
   "parallelization_strategy": "explanation of parallel execution strategy"
 }}"""
 
-    def __init__(self, client: Optional[Anthropic] = None):
+    def __init__(self, ai_client):
         """Initialize Lead Orchestrator.
 
         Args:
-            client: Anthropic client instance. If None, creates new one.
+            ai_client: AIClient instance (provider-agnostic)
         """
-        if client is None:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY not set")
-            client = Anthropic(api_key=api_key)
+        self.ai_client = ai_client
 
-        self.client = client
-        self.model = os.getenv("ORCHESTRATOR_MODEL", "claude-sonnet-4-20250514")
+        # Use architect provider/model for orchestration (strategic planning)
+        self.provider_name = ai_client.config.architect.provider
+        self.model_name = ai_client.config.architect.model
+        self.provider = ai_client.registry.get(self.provider_name)
 
     def plan_workflow(self, user_request: str, project_context: Optional[Dict] = None) -> WorkflowPlan:
         """
@@ -176,14 +173,15 @@ Output your plan as structured JSON with this exact schema:
         # Prepare context
         context_str = json.dumps(project_context or {}, indent=2)
 
-        # Call Claude with extended thinking
-        response = self.client.messages.create(
-            model=self.model,
+        # Call AI provider with extended thinking (if supported)
+        # Note: Extended thinking is Anthropic-specific, other providers will ignore it
+        response = self.provider.call_api(
+            model=self.model_name,
             max_tokens=16000,
             thinking={
                 "type": "enabled",
                 "budget_tokens": 10000
-            },
+            } if self.provider_name == 'anthropic' else None,
             messages=[{
                 "role": "user",
                 "content": self.PLANNING_PROMPT.format(
@@ -193,19 +191,12 @@ Output your plan as structured JSON with this exact schema:
             }]
         )
 
-        # Extract thinking and plan
-        thinking_content = ""
-        plan_content = ""
+        # Extract plan content
+        # ProviderResponse.content is a string (already unified by provider)
+        plan_content = response.content
 
-        for block in response.content:
-            if block.type == "thinking":
-                thinking_content = block.thinking
-            elif block.type == "text":
-                plan_content = block.text
-
-        thinking_tokens = len(thinking_content.split()) if thinking_content else 0
         print(f"\n📋 Planning Complete")
-        print(f"   Thinking tokens used: ~{thinking_tokens}")
+        print(f"   Tokens: {response.input_tokens} in / {response.output_tokens} out")
 
         # Parse the plan
         try:
@@ -315,8 +306,8 @@ Create a structured summary that:
 
 Output the compressed summary now."""
 
-        response = self.client.messages.create(
-            model=self.model,
+        response = self.provider.call_api(
+            model=self.model_name,
             max_tokens=4000,
             messages=[{
                 "role": "user",
@@ -324,7 +315,7 @@ Output the compressed summary now."""
             }]
         )
 
-        compressed_summary = response.content[0].text
+        compressed_summary = response.content
 
         # Calculate compression stats
         original_tokens = len(all_findings.split())
@@ -348,12 +339,14 @@ def test_lead_orchestrator():
     print("🧪 Testing Lead Orchestrator")
     print("=" * 60)
 
-    # Check API key
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        print("⚠️  ANTHROPIC_API_KEY not set - skipping live test")
-        return
+    # Import AIClient for testing
+    from ace.ai_client import AIClient
+    from ace.cost_tracker import CostTracker
 
-    orchestrator = LeadOrchestrator()
+    # Create AI client
+    ai_client = AIClient(cost_tracker=CostTracker())
+
+    orchestrator = LeadOrchestrator(ai_client)
 
     # Test planning
     print("\n1. Testing workflow planning...")

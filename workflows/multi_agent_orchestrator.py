@@ -25,9 +25,9 @@ from typing import Dict, Any, Optional
 FOUNDRY_ROOT = Path(__file__).parent.parent
 sys.path.append(str(FOUNDRY_ROOT))
 
-from anthropic import Anthropic
-
 # Import multi-agent components
+from ace.ai_client import AIClient
+from ace.cost_tracker import CostTracker
 from ace.orchestrator import (
     LeadOrchestrator,
     WorkflowPlan,
@@ -89,17 +89,19 @@ class MultiAgentOrchestrator:
         self.project_dir.mkdir(parents=True, exist_ok=True)
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize Anthropic client
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not set")
-        self.client = Anthropic(api_key=api_key)
+        # Initialize AI client (provider-agnostic)
+        # Uses SCOUT_PROVIDER, ARCHITECT_PROVIDER, BUILDER_PROVIDER from env
+        self.ai_client = AIClient(
+            log_dir=self.session_dir,
+            session_id=self.session_id,
+            cost_tracker=CostTracker()
+        )
 
-        # Initialize components
-        self.lead_orchestrator = LeadOrchestrator(self.client)
-        self.scout_coordinator = ParallelScoutCoordinator(self.client)
-        self.builder_coordinator = ParallelBuilderCoordinator(self.client)
-        self.llm_judge = LLMJudge(self.client)
+        # Initialize components (pass AI client)
+        self.lead_orchestrator = LeadOrchestrator(self.ai_client)
+        self.scout_coordinator = ParallelScoutCoordinator(self.ai_client)
+        self.builder_coordinator = ParallelBuilderCoordinator(self.ai_client)
+        self.llm_judge = LLMJudge(self.ai_client)
 
         # Initialize production features
         self.checkpoint_manager = CheckpointManager(self.session_dir) if enable_checkpointing else None
