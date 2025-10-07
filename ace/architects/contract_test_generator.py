@@ -53,6 +53,8 @@ def run_cli(*args):
 
     WEB_TEST_TEMPLATE = """// Generated contract tests from SPEC.yaml
 const request = require('supertest');
+const fs = require('fs');
+const path = require('path');
 
 describe('contract:web', () => {{
 {test_cases}
@@ -62,6 +64,43 @@ describe('contract:web', () => {{
     WEB_TEST_CASE = """  test('{test_name}', async () => {{
     const res = await request('{base_url}').get('{path}');
     expect(res.status).toBe({status});{title_check}
+  }});
+"""
+
+    STATIC_HTML_TEST_TEMPLATE = """// Generated contract tests from SPEC.yaml
+const fs = require('fs');
+const path = require('path');
+
+describe('contract:web', () => {{
+{test_cases}
+}});
+"""
+
+    STATIC_HTML_TEST_CASE = """  test('HTML file {html_file} has valid file references', () => {{
+    const htmlPath = path.join(__dirname, '../..', '{html_path}');
+    const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
+    const htmlDir = path.dirname(htmlPath);
+
+    // Check CSS links
+    const cssRegex = /<link[^>]*href=["']([^"']+\\.css)["']/g;
+    let match;
+    while ((match = cssRegex.exec(htmlContent)) !== null) {{
+      const cssPath = match[1];
+      if (!cssPath.startsWith('http://') && !cssPath.startsWith('https://') && !cssPath.startsWith('//')) {{
+        const resolvedPath = path.resolve(htmlDir, cssPath);
+        expect(fs.existsSync(resolvedPath)).toBe(true);
+      }}
+    }}
+
+    // Check JS scripts
+    const jsRegex = /<script[^>]*src=["']([^"']+\\.js)["']/g;
+    while ((match = jsRegex.exec(htmlContent)) !== null) {{
+      const jsPath = match[1];
+      if (!jsPath.startsWith('http://') && !jsPath.startsWith('https://') && !jsPath.startsWith('//')) {{
+        const resolvedPath = path.resolve(htmlDir, jsPath);
+        expect(fs.existsSync(resolvedPath)).toBe(true);
+      }}
+    }}
   }});
 """
 
@@ -254,7 +293,12 @@ describe('contract:web', () => {{
             Dict with single entry: test filename -> test content
         """
         base_url = spec.get('base_url', 'http://localhost:3000')
-        pages = spec.get('pages', [])
+        contract = spec.get('contract', {})
+        pages = contract.get('pages', [])
+
+        # Check if this is a static HTML project (no endpoints defined)
+        endpoints = contract.get('endpoints', [])
+        is_static = len(endpoints) == 0 and len(pages) > 0
 
         if not pages:
             # No pages defined, create minimal test
@@ -265,32 +309,57 @@ describe('contract:web', () => {{
 
         test_cases = []
 
-        for page in pages:
-            path = page.get('path', '/')
-            title = page.get('title_contains', '')
-            status = page.get('status', 200)
+        # For static HTML projects, generate file reference validation tests
+        if is_static:
+            for page in pages:
+                path = page.get('path', '/')
+                # Convert URL path to file path (e.g., '/' -> 'public/index.html')
+                if path == '/':
+                    html_path = 'public/index.html'
+                else:
+                    html_path = f"public{path}.html" if not path.endswith('.html') else f"public{path}"
 
-            # Build test name
-            test_name = f"GET {path}"
+                html_file = Path(html_path).name
 
-            # Build title check
-            title_check = ""
-            if title:
-                title_check = f"\n    expect(res.text).toContain('{title}');"
+                # Generate static file reference test
+                test_case = self.STATIC_HTML_TEST_CASE.format(
+                    html_file=html_file,
+                    html_path=html_path
+                )
+                test_cases.append(test_case)
 
-            # Generate test case
-            test_case = self.WEB_TEST_CASE.format(
-                test_name=test_name,
-                base_url=base_url,
-                path=path,
-                status=status,
-                title_check=title_check
+            # Combine into full test file using static template
+            content = self.STATIC_HTML_TEST_TEMPLATE.format(
+                test_cases="\n".join(test_cases)
             )
-            test_cases.append(test_case)
+        else:
+            # For dynamic web apps, generate server tests
+            for page in pages:
+                path = page.get('path', '/')
+                title = page.get('title_contains', '')
+                status = page.get('status', 200)
 
-        # Combine into full test file
-        content = self.WEB_TEST_TEMPLATE.format(
-            test_cases="\n".join(test_cases)
-        )
+                # Build test name
+                test_name = f"GET {path}"
+
+                # Build title check
+                title_check = ""
+                if title:
+                    title_check = f"\n    expect(res.text).toContain('{title}');"
+
+                # Generate test case
+                test_case = self.WEB_TEST_CASE.format(
+                    test_name=test_name,
+                    base_url=base_url,
+                    path=path,
+                    status=status,
+                    title_check=title_check
+                )
+                test_cases.append(test_case)
+
+            # Combine into full test file
+            content = self.WEB_TEST_TEMPLATE.format(
+                test_cases="\n".join(test_cases)
+            )
 
         return {"tests/contract/web.contract.test.js": content}

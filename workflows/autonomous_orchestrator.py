@@ -999,6 +999,49 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
             else:
                 print(f"   ⏭️  {smoke_test_result['output']}")
 
+        # Check for validation failures and fail build if critical issues found
+        has_critical_issues = False
+        critical_errors = []
+
+        if validation_result["issues"]:
+            has_critical_issues = True
+            critical_errors.extend([f"File reference: {issue}" for issue in validation_result["issues"]])
+
+        if structure_result["issues"]:
+            has_critical_issues = True
+            critical_errors.extend([f"Structure: {issue}" for issue in structure_result["issues"]])
+
+        if smoke_test_result["success"] is False:
+            has_critical_issues = True
+            critical_errors.extend([f"Smoke test: {error}" for error in smoke_test_result["errors"]])
+
+        # If critical issues found, fail the build
+        if has_critical_issues:
+            print("\n" + "="*60)
+            print("❌ BUILD FAILED - Critical validation issues found")
+            print("="*60)
+            for error in critical_errors:
+                print(f"   • {error}")
+            print("\nPlease fix these issues and rebuild.")
+            print("="*60)
+
+            return {
+                "tasks_completed": len(completed_tasks),
+                "progress_file": str(progress_file),
+                "metadata": self.ai_client.get_usage_stats(),
+                "files_created": {
+                    "implementation": total_impl_files,
+                    "test": total_test_files,
+                    "total": total_impl_files + total_test_files
+                },
+                "readme_path": str(readme_path) if readme_path else None,
+                "validation": validation_result,
+                "structure": structure_result,
+                "smoke_test": smoke_test_result,
+                "status": "failed",
+                "errors": critical_errors,
+            }
+
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
@@ -1617,8 +1660,9 @@ To use your own API key, update the relevant configuration file."""
         """
         package_json_path = self.project_dir / "package.json"
 
+        # Check if this is a static HTML project (no package.json)
         if not package_json_path.exists():
-            return {"success": None, "output": "No package.json found - skipping smoke test", "errors": []}
+            return self._run_static_html_smoke_test()
 
         try:
             package_data = json.loads(package_json_path.read_text())
@@ -1689,6 +1733,131 @@ To use your own API key, update the relevant configuration file."""
                 "success": False,
                 "output": str(e),
                 "errors": [f"Smoke test failed: {e}"]
+            }
+
+    def _run_static_html_smoke_test(self) -> Dict[str, any]:
+        """Run smoke test for static HTML projects.
+
+        Starts a simple HTTP server and validates HTML files load without 404s.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        import http.server
+        import socketserver
+        import threading
+        import time
+        import urllib.request
+        import urllib.error
+
+        # Find HTML files in public/ directory
+        public_dir = self.project_dir / "public"
+        if not public_dir.exists():
+            return {
+                "success": None,
+                "output": "No public/ directory found - skipping static HTML smoke test",
+                "errors": []
+            }
+
+        html_files = list(public_dir.glob("**/*.html"))
+        if not html_files:
+            return {
+                "success": None,
+                "output": "No HTML files found in public/ - skipping static HTML smoke test",
+                "errors": []
+            }
+
+        print(f"   Starting HTTP server on port 8888...")
+        print(f"   Checking {len(html_files)} HTML file(s) for broken references...")
+
+        errors = []
+        server = None
+        server_thread = None
+
+        try:
+            # Start simple HTTP server
+            os.chdir(public_dir)
+            handler = http.server.SimpleHTTPRequestHandler
+
+            # Suppress server logs
+            handler.log_message = lambda *args: None
+
+            server = socketserver.TCPServer(("", 8888), handler)
+            server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+
+            # Give server time to start
+            time.sleep(0.5)
+
+            # Test each HTML file
+            for html_file in html_files:
+                relative_path = html_file.relative_to(public_dir)
+                url = f"http://localhost:8888/{relative_path}"
+
+                try:
+                    # Fetch the HTML page
+                    response = urllib.request.urlopen(url, timeout=5)
+                    html_content = response.read().decode('utf-8')
+
+                    # Parse and check for common broken references
+                    import re
+
+                    # Check CSS links
+                    css_links = re.findall(r'<link[^>]*href=["\']([^"\']+\.css)["\']', html_content)
+                    for css_link in css_links:
+                        if not css_link.startswith(('http://', 'https://', '//')):
+                            css_url = f"http://localhost:8888/{css_link}" if not css_link.startswith('/') else f"http://localhost:8888{css_link}"
+                            try:
+                                urllib.request.urlopen(css_url, timeout=2)
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"{relative_path}: CSS file not found: {css_link}")
+                            except Exception as e:
+                                errors.append(f"{relative_path}: Could not load CSS {css_link}: {str(e)}")
+
+                    # Check JS scripts
+                    js_links = re.findall(r'<script[^>]*src=["\']([^"\']+\.js)["\']', html_content)
+                    for js_link in js_links:
+                        if not js_link.startswith(('http://', 'https://', '//')):
+                            js_url = f"http://localhost:8888/{js_link}" if not js_link.startswith('/') else f"http://localhost:8888{js_link}"
+                            try:
+                                urllib.request.urlopen(js_url, timeout=2)
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"{relative_path}: JS file not found: {js_link}")
+                            except Exception as e:
+                                errors.append(f"{relative_path}: Could not load JS {js_link}: {str(e)}")
+
+                except Exception as e:
+                    errors.append(f"Could not load {relative_path}: {str(e)}")
+
+            # Shutdown server
+            if server:
+                server.shutdown()
+
+            os.chdir(self.project_dir)
+
+            if errors:
+                return {
+                    "success": False,
+                    "output": f"Found {len(errors)} broken file reference(s)",
+                    "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": f"All {len(html_files)} HTML file(s) loaded successfully",
+                    "errors": []
+                }
+
+        except Exception as e:
+            if server:
+                server.shutdown()
+            os.chdir(self.project_dir)
+            return {
+                "success": False,
+                "output": "Static HTML smoke test failed",
+                "errors": [f"Test error: {str(e)}"]
             }
 
     def _git_available(self) -> bool:

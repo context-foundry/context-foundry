@@ -64,3 +64,81 @@ Current Context: [X%]
 - Commits must include test results
 - No proceeding without passing tests
 - Document unexpected challenges
+
+## HTML File Path Best Practices
+When creating HTML files for web projects, follow these rules for file references:
+
+### Rule 1: Use Relative Paths from HTML File Location
+- If `public/index.html` references `public/styles.css`, use `href="styles.css"` (NOT `href="public/styles.css"`)
+- If `public/index.html` references `public/js/app.js`, use `src="js/app.js"` (NOT `src="public/js/app.js"`)
+
+### Rule 2: Use ./ for Same Directory
+```html
+<!-- Good: Same directory reference -->
+<link rel="stylesheet" href="./styles.css" />
+<script src="./script.js"></script>
+
+<!-- Bad: Incorrect path -->
+<link rel="stylesheet" href="public/styles.css" />
+```
+
+### Rule 3: Use ../ for Parent Directory
+```html
+<!-- Good: Parent directory reference -->
+<link rel="stylesheet" href="../css/styles.css" />
+
+<!-- Bad: Absolute path that won't work -->
+<link rel="stylesheet" href="/css/styles.css" />
+```
+
+### Rule 4: Avoid Absolute Paths for Local Files
+```html
+<!-- Bad: Absolute paths break in different environments -->
+<link rel="stylesheet" href="/styles.css" />
+
+<!-- Good: Relative paths work everywhere -->
+<link rel="stylesheet" href="styles.css" />
+```
+
+### Examples by Project Structure
+
+**Structure 1: Flat public/ directory**
+```
+public/
+  index.html
+  styles.css
+  script.js
+```
+In `index.html`:
+```html
+<link rel="stylesheet" href="styles.css" />
+<script src="script.js"></script>
+```
+
+**Structure 2: Nested directories**
+```
+public/
+  index.html
+  css/
+    styles.css
+  js/
+    app.js
+```
+In `index.html`:
+```html
+<link rel="stylesheet" href="css/styles.css" />
+<script src="js/app.js"></script>
+```
+
+**Structure 3: HTML in subdirectory**
+```
+public/
+  pages/
+    index.html
+  css/
+    styles.css
+```
+In `pages/index.html`:
+```html
+<link rel="stylesheet" href="../css/styles.css" />
+```
