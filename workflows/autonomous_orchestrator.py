@@ -21,6 +21,7 @@ from ace.ai_client import AIClient
 from ace.cost_tracker import CostTracker
 from ace.pricing_database import PricingDatabase
 from ace.blueprint_manager import BlueprintManager
+from ace.architects.spec_generator import SpecYamlGenerator, detect_project_type
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
@@ -273,7 +274,7 @@ class AutonomousOrchestrator:
 
         if is_foundry_project and self.mode in ["fix", "enhance"]:
             # Load existing blueprints
-            research, spec, plan, tasks = self.blueprint_manager.load_canonical_blueprints()
+            research, spec, spec_yaml, plan, tasks = self.blueprint_manager.load_canonical_blueprints()
 
             print("📚 Detected foundry-built project - loading existing context...")
             print(f"   Found: .context-foundry/ directory")
@@ -545,8 +546,37 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         plan_file.write_text(files.get("plan", response.content))
         tasks_file.write_text(files.get("tasks", response.content))
 
-        print(f"✅ Architecture complete")
+        # Phase 2: Generate SPEC.yaml from SPEC.md
+        spec_yaml_content = None
+        spec_yaml_file = None
+        try:
+            print("\n🔧 Generating SPEC.yaml...")
+
+            # Detect project type from SPEC.md content
+            spec_content = files.get("spec", response.content)
+            project_type = detect_project_type(spec_content)
+            print(f"   Detected project type: {project_type}")
+
+            # Generate SPEC.yaml
+            spec_generator = SpecYamlGenerator(self.ai_client)
+            spec_yaml_content = spec_generator.generate(spec_content, project_type)
+
+            # Save SPEC.yaml to .context-foundry directory
+            spec_yaml_file = self.blueprints_path / "SPEC.yaml"
+            spec_yaml_file.parent.mkdir(parents=True, exist_ok=True)
+            spec_yaml_file.write_text(spec_yaml_content)
+
+            print(f"   ✅ SPEC.yaml generated")
+            print(f"   📄 Saved to: {spec_yaml_file}")
+
+        except Exception as e:
+            print(f"   ⚠️  SPEC.yaml generation failed (non-blocking): {e}")
+            # Continue without SPEC.yaml - this is a Phase 2 feature, not critical
+
+        print(f"\n✅ Architecture complete")
         print(f"📄 SPEC: {spec_file}")
+        if spec_yaml_file:
+            print(f"📄 SPEC.yaml: {spec_yaml_file}")
         print(f"📄 PLAN: {plan_file}")
         print(f"📄 TASKS: {tasks_file}")
         print(f"📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
@@ -570,9 +600,11 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
 
         return {
             "spec": str(spec_file),
+            "spec_yaml": str(spec_yaml_file) if spec_yaml_file else None,
             "plan": str(plan_file),
             "tasks": str(tasks_file),
             "spec_content": files.get("spec", response),
+            "spec_yaml_content": spec_yaml_content,
             "plan_content": files.get("plan", response),
             "tasks_content": files.get("tasks", response),
             "metadata": metadata,
@@ -1882,7 +1914,8 @@ To use your own API key, update the relevant configuration file."""
                     tasks=results['architect'].get('tasks_content', ''),
                     session_id=self.timestamp,
                     mode=self.mode,
-                    task_description=self.task_description
+                    task_description=self.task_description,
+                    spec_yaml=results['architect'].get('spec_yaml_content')
                 )
                 print(f"\n📦 Blueprints saved to: {self.blueprint_manager.context_dir}")
                 print(f"   📚 Canonical files updated")
