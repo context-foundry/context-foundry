@@ -982,9 +982,9 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 for warning in structure_result["warnings"]:
                     print(f"      • {warning}")
 
-        # Optional smoke test (disabled by default to save time)
+        # Smoke test (enabled by default, set FOUNDRY_SMOKE_TEST=false to skip)
         smoke_test_result = {"success": None, "output": "", "errors": []}
-        run_smoke_test = os.getenv('FOUNDRY_SMOKE_TEST', 'false').lower() in ('true', '1', 'yes')
+        run_smoke_test = os.getenv('FOUNDRY_SMOKE_TEST', 'true').lower() in ('true', '1', 'yes')
 
         if run_smoke_test and total_impl_files > 0:
             print("\n🧪 Running smoke test...")
@@ -1664,56 +1664,96 @@ To use your own API key, update the relevant configuration file."""
         if not package_json_path.exists():
             return self._run_static_html_smoke_test()
 
+        # For Node.js projects, run runtime integration tests
+        return self._run_nodejs_integration_test()
+
+    def _run_nodejs_integration_test(self) -> Dict[str, any]:
+        """Run integration tests for Node.js projects.
+
+        Includes:
+        - Contract test execution
+        - Runtime server testing
+        - Endpoint validation
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        package_json_path = self.project_dir / "package.json"
+
         try:
             package_data = json.loads(package_json_path.read_text())
             scripts = package_data.get('scripts', {})
 
-            # Check if build script exists
-            if 'build' not in scripts:
-                return {"success": None, "output": "No build script found - skipping smoke test", "errors": []}
+            errors = []
+            outputs = []
 
-            print(f"   Running build test: npm run build")
-            print(f"   (This may take a minute...)")
+            # Step 1: Check if contract tests exist
+            contract_test_dir = self.project_dir / "tests" / "contract"
+            if contract_test_dir.exists():
+                print(f"   Running contract tests...")
+                contract_result = self._run_contract_tests()
 
-            # Run build with timeout
-            result = subprocess.run(
-                ['npm', 'run', 'build'],
-                cwd=self.project_dir,
-                capture_output=True,
-                text=True,
-                timeout=120  # 2 minute timeout
-            )
+                if contract_result["success"] is False:
+                    errors.extend(contract_result["errors"])
+                    outputs.append(f"Contract tests failed: {len(contract_result['errors'])} error(s)")
+                elif contract_result["success"] is True:
+                    outputs.append(f"Contract tests passed")
 
-            if result.returncode == 0:
-                return {
-                    "success": True,
-                    "output": "Build succeeded",
-                    "errors": []
-                }
-            else:
-                # Parse common errors
-                errors = []
-                stderr = result.stderr
+            # Step 2: Check if build script exists (for React/Vue/etc)
+            if 'build' in scripts:
+                print(f"   Running build test: npm run build")
+                print(f"   (This may take a minute...)")
 
-                if "Module not found" in stderr:
-                    # Extract module not found errors
+                # Run build with timeout
+                result = subprocess.run(
+                    ['npm', 'run', 'build'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=120  # 2 minute timeout
+                )
+
+                if result.returncode == 0:
+                    outputs.append("Build succeeded")
+                else:
+                    # Parse common errors
                     import re
-                    module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
-                    for module in module_errors:
-                        errors.append(f"Missing module: {module}")
+                    stderr = result.stderr
 
-                if "index.html" in stderr and "public" in stderr:
-                    errors.append("Missing public/index.html (required for CRA)")
+                    if "Module not found" in stderr:
+                        module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
+                        for module in module_errors:
+                            errors.append(f"Build error: Missing module {module}")
 
-                if not errors:
-                    # Just show first few lines of error
-                    error_lines = stderr.strip().split('\n')[:5]
-                    errors = error_lines
+                    if "index.html" in stderr and "public" in stderr:
+                        errors.append("Build error: Missing public/index.html (required for CRA)")
 
+                    if not errors:
+                        error_lines = stderr.strip().split('\n')[:3]
+                        errors.extend([f"Build error: {line}" for line in error_lines if line])
+
+            # Step 3: Run quick sanity test (start server and test endpoints)
+            print(f"   Running server sanity test...")
+            sanity_result = self._run_quick_sanity_test()
+
+            if sanity_result["success"] is False:
+                errors.extend(sanity_result["errors"])
+                outputs.append(f"Server sanity test failed")
+            elif sanity_result["success"] is True:
+                outputs.append(f"Server sanity test passed")
+
+            # Determine overall success
+            if errors:
                 return {
                     "success": False,
-                    "output": result.stderr[:500],  # First 500 chars
+                    "output": "; ".join(outputs) if outputs else "Integration tests failed",
                     "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": "; ".join(outputs) if outputs else "All integration tests passed",
+                    "errors": []
                 }
 
         except subprocess.TimeoutExpired:
@@ -1732,7 +1772,7 @@ To use your own API key, update the relevant configuration file."""
             return {
                 "success": False,
                 "output": str(e),
-                "errors": [f"Smoke test failed: {e}"]
+                "errors": [f"Integration test failed: {e}"]
             }
 
     def _run_static_html_smoke_test(self) -> Dict[str, any]:
@@ -1857,6 +1897,265 @@ To use your own API key, update the relevant configuration file."""
             return {
                 "success": False,
                 "output": "Static HTML smoke test failed",
+                "errors": [f"Test error: {str(e)}"]
+            }
+
+    def _run_contract_tests(self) -> Dict[str, any]:
+        """Run contract tests if they exist.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        contract_test_dir = self.project_dir / "tests" / "contract"
+
+        if not contract_test_dir.exists():
+            return {"success": None, "output": "No contract tests found", "errors": []}
+
+        # Check for test files
+        test_files = list(contract_test_dir.glob("*.test.js")) + list(contract_test_dir.glob("*.test.py"))
+
+        if not test_files:
+            return {"success": None, "output": "No contract test files found", "errors": []}
+
+        # Install dependencies if needed
+        package_json = self.project_dir / "package.json"
+        if package_json.exists():
+            # Check if jest and supertest are installed
+            try:
+                package_data = json.loads(package_json.read_text())
+                deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+                if 'jest' not in deps or 'supertest' not in deps:
+                    print(f"      Installing test dependencies...")
+                    subprocess.run(
+                        ['npm', 'install', '--save-dev', 'jest', 'supertest'],
+                        cwd=self.project_dir,
+                        capture_output=True,
+                        timeout=60
+                    )
+            except Exception:
+                pass  # Continue even if installation fails
+
+        # Try to run tests
+        try:
+            # Try Jest (JavaScript)
+            result = subprocess.run(
+                ['npx', 'jest', 'tests/contract', '--json'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            # Parse Jest output
+            try:
+                test_output = json.loads(result.stdout)
+                if test_output.get('success'):
+                    num_tests = test_output.get('numPassedTests', 0)
+                    return {
+                        "success": True,
+                        "output": f"{num_tests} contract test(s) passed",
+                        "errors": []
+                    }
+                else:
+                    # Extract failures
+                    errors = []
+                    for test_result in test_output.get('testResults', []):
+                        for assertion in test_result.get('assertionResults', []):
+                            if assertion.get('status') == 'failed':
+                                title = assertion.get('title', 'Unknown test')
+                                errors.append(f"Contract test failed: {title}")
+
+                    if not errors:
+                        errors = ["Contract tests failed (see logs for details)"]
+
+                    return {
+                        "success": False,
+                        "output": "Contract tests failed",
+                        "errors": errors
+                    }
+            except json.JSONDecodeError:
+                # Fallback: parse stderr for common errors
+                if result.returncode != 0:
+                    return {
+                        "success": False,
+                        "output": "Contract tests failed",
+                        "errors": [f"Test execution error: {result.stderr[:200]}"]
+                    }
+
+        except FileNotFoundError:
+            return {
+                "success": None,
+                "output": "Jest not available - skipping contract tests",
+                "errors": []
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "output": "Contract tests timeout",
+                "errors": ["Tests took too long (>30s)"]
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "output": "Contract test error",
+                "errors": [f"Error running tests: {str(e)}"]
+            }
+
+        return {"success": None, "output": "Could not run contract tests", "errors": []}
+
+    def _run_quick_sanity_test(self) -> Dict[str, any]:
+        """Quick sanity test: Start server and test basic endpoints.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        import time
+        import signal
+        import socket
+
+        # Find server entry point
+        server_file = None
+        for candidate in ['server.js', 'app.js', 'index.js', 'src/server.js', 'src/app.js']:
+            if (self.project_dir / candidate).exists():
+                server_file = candidate
+                break
+
+        if not server_file:
+            return {
+                "success": None,
+                "output": "No server file found (server.js, app.js, etc.)",
+                "errors": []
+            }
+
+        # Find an available port
+        def find_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+
+        test_port = find_free_port()
+        errors = []
+        server_process = None
+
+        try:
+            # Start server on test port
+            env = os.environ.copy()
+            env['PORT'] = str(test_port)
+            env['NODE_ENV'] = 'test'
+
+            server_process = subprocess.Popen(
+                ['node', server_file],
+                cwd=self.project_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+
+            # Wait for server to start (max 5 seconds)
+            server_ready = False
+            for i in range(50):  # 50 * 0.1 = 5 seconds
+                time.sleep(0.1)
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.5)
+                        s.connect(('localhost', test_port))
+                        server_ready = True
+                        break
+                except (socket.error, ConnectionRefusedError):
+                    # Check if process died
+                    if server_process.poll() is not None:
+                        stdout, stderr = server_process.communicate()
+                        return {
+                            "success": False,
+                            "output": "Server failed to start",
+                            "errors": [f"Server crashed: {stderr.decode()[:200]}"]
+                        }
+                    continue
+
+            if not server_ready:
+                server_process.terminate()
+                return {
+                    "success": False,
+                    "output": "Server did not start in time",
+                    "errors": ["Server took too long to start (>5s)"]
+                }
+
+            # Test root endpoint
+            import urllib.request
+            import urllib.error
+
+            try:
+                response = urllib.request.urlopen(f"http://localhost:{test_port}/", timeout=2)
+                status = response.getcode()
+
+                if status == 404:
+                    errors.append("Root route (/) returns 404 - server needs to serve static files or add root route")
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    errors.append("Root route (/) returns 404 - server needs to serve static files or add root route")
+                # Other HTTP errors are acceptable (redirect, auth, etc.)
+            except Exception as e:
+                errors.append(f"Root route test error: {str(e)}")
+
+            # Load SPEC.yaml and test contract endpoints
+            spec_yaml_path = self.project_dir / ".context-foundry" / "SPEC.yaml"
+            if spec_yaml_path.exists():
+                import yaml
+                try:
+                    with open(spec_yaml_path) as f:
+                        spec = yaml.safe_load(f)
+
+                    contract = spec.get('contract', {})
+                    endpoints = contract.get('endpoints', [])
+
+                    for endpoint in endpoints[:3]:  # Test up to 3 endpoints
+                        path = endpoint.get('path', '/')
+                        method = endpoint.get('method', 'GET')
+
+                        if method == 'GET':
+                            try:
+                                response = urllib.request.urlopen(f"http://localhost:{test_port}{path}?city=test", timeout=2)
+                                # Success - endpoint exists
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"Contract endpoint {method} {path} returns 404 - not implemented")
+                                # Other errors (400, 500) are acceptable - endpoint exists
+                            except Exception as e:
+                                # Ignore other errors
+                                pass
+
+                except Exception:
+                    pass  # Ignore SPEC.yaml parsing errors
+
+            # Shutdown server
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+
+            if errors:
+                return {
+                    "success": False,
+                    "output": f"Found {len(errors)} issue(s)",
+                    "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": "Server started and responded correctly",
+                    "errors": []
+                }
+
+        except Exception as e:
+            if server_process:
+                server_process.terminate()
+            return {
+                "success": False,
+                "output": "Sanity test failed",
                 "errors": [f"Test error: {str(e)}"]
             }
 
