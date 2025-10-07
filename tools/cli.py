@@ -1441,5 +1441,52 @@ def estimate(task_description):
         sys.exit(1)
 
 
+@foundry.command()
+@click.argument('project_path', type=click.Path(exists=True))
+@click.option('--verify-file', default='verify.yml', help='Verification config file')
+@click.option('--artifacts-dir', type=click.Path(), help='Artifacts output directory')
+@click.option('--fail-fast/--no-fail-fast', default=True, help='Stop on first failure')
+def verify(project_path, verify_file, artifacts_dir, fail_fast):
+    """
+    Run verification on a generated project.
+
+    Executes verify.yml and reports pass/fail deterministically.
+    """
+    from ace.verifiers import VerificationHarness
+
+    project = Path(project_path)
+    artifacts = Path(artifacts_dir) if artifacts_dir else None
+
+    console.print(f"🔍 Running verification on {project.name}...")
+    console.print()
+
+    harness = VerificationHarness(project, artifacts)
+    result = harness.run(verify_file)
+
+    # Print results
+    for step in result.steps:
+        status = "✅" if step.passed else "❌"
+        console.print(f"{status} {step.step_name} ({step.duration_ms}ms)")
+
+        if not step.passed:
+            console.print(f"   Error {step.error_code}: {step.message}")
+            if step.stderr:
+                console.print(f"   stderr: {step.stderr[:200]}")
+
+    console.print()
+    console.print(f"Total duration: {result.total_duration_ms}ms")
+    console.print(f"Artifacts saved to: {result.artifacts_path}")
+
+    if result.passed:
+        console.print("✅ Verification PASSED")
+        sys.exit(0)
+    else:
+        console.print("❌ Verification FAILED")
+        if result.failed_step:
+            console.print(f"Failed at: {result.failed_step.step_name}")
+            console.print(f"Error: {result.failed_step.error_code} - {result.failed_step.message}")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     foundry()
