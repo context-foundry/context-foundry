@@ -22,6 +22,7 @@ from ace.cost_tracker import CostTracker
 from ace.pricing_database import PricingDatabase
 from ace.blueprint_manager import BlueprintManager
 from ace.architects.spec_generator import SpecYamlGenerator, detect_project_type
+from ace.architects.contract_test_generator import ContractTestGenerator
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
@@ -568,6 +569,28 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
 
             print(f"   ✅ SPEC.yaml generated")
             print(f"   📄 Saved to: {spec_yaml_file}")
+
+            # Phase 3: Generate contract tests from SPEC.yaml
+            try:
+                print("\n🧪 Generating contract tests from SPEC.yaml...")
+
+                test_generator = ContractTestGenerator()
+                contract_tests = test_generator.generate_from_yaml(spec_yaml_file)
+
+                # Write contract tests to project directory
+                test_files_created = []
+                for test_file, test_content in contract_tests.items():
+                    test_path = self.project_dir / test_file
+                    test_path.parent.mkdir(parents=True, exist_ok=True)
+                    test_path.write_text(test_content)
+                    test_files_created.append(test_file)
+                    print(f"   ✅ Created: {test_file}")
+
+                print(f"   📦 Generated {len(test_files_created)} contract test file(s)")
+
+            except Exception as e:
+                print(f"   ⚠️  Contract test generation failed (non-blocking): {e}")
+                # Continue without contract tests - this is Phase 3, not critical
 
         except Exception as e:
             print(f"   ⚠️  SPEC.yaml generation failed (non-blocking): {e}")
