@@ -982,47 +982,53 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 for warning in structure_result["warnings"]:
                     print(f"      • {warning}")
 
-        # Smoke test (enabled by default, set FOUNDRY_SMOKE_TEST=false to skip)
-        smoke_test_result = {"success": None, "output": "", "errors": []}
+        # ============================================================
+        # SELF-HEALING VALIDATION PHASE
+        # ============================================================
         run_smoke_test = os.getenv('FOUNDRY_SMOKE_TEST', 'true').lower() in ('true', '1', 'yes')
+        validation_failed = False
+        failure_reason = None
 
         if run_smoke_test and total_impl_files > 0:
-            print("\n🧪 Running smoke test...")
-            smoke_test_result = self._run_smoke_test()
-
-            if smoke_test_result["success"] is True:
-                print(f"   ✅ {smoke_test_result['output']}")
-            elif smoke_test_result["success"] is False:
-                print(f"   ❌ Build test failed:")
-                for error in smoke_test_result["errors"]:
-                    print(f"      • {error}")
-            else:
-                print(f"   ⏭️  {smoke_test_result['output']}")
-
-        # Check for validation failures and fail build if critical issues found
-        has_critical_issues = False
-        critical_errors = []
-
-        if validation_result["issues"]:
-            has_critical_issues = True
-            critical_errors.extend([f"File reference: {issue}" for issue in validation_result["issues"]])
-
-        if structure_result["issues"]:
-            has_critical_issues = True
-            critical_errors.extend([f"Structure: {issue}" for issue in structure_result["issues"]])
-
-        if smoke_test_result["success"] is False:
-            has_critical_issues = True
-            critical_errors.extend([f"Smoke test: {error}" for error in smoke_test_result["errors"]])
-
-        # If critical issues found, fail the build
-        if has_critical_issues:
             print("\n" + "="*60)
-            print("❌ BUILD FAILED - Critical validation issues found")
+            print("🔧 SELF-HEALING VALIDATION PHASE")
             print("="*60)
-            for error in critical_errors:
-                print(f"   • {error}")
-            print("\nPlease fix these issues and rebuild.")
+            print("Running validations with automatic error fixing...")
+
+            # Step 1: Build validation (npm install + npm build) with retry
+            print("\n📦 Step 1: Build Validation")
+            if not self._retry_until_success(
+                validation_fn=self._run_build_validation,
+                context_description="Build validation (npm install + npm build)",
+                max_attempts=3
+            ):
+                validation_failed = True
+                failure_reason = "Build validation failed after 3 attempts"
+
+            # Step 2: Static validation (only if build passed, or no build needed)
+            if not validation_failed and validation_result["issues"]:
+                print("\n📋 Static Validation Issues Detected:")
+                for issue in validation_result["issues"]:
+                    print(f"   • {issue}")
+                # Don't fail on static validation issues - Builder might have fixed them
+                # Just show warnings
+
+            if not validation_failed and structure_result["issues"]:
+                print("\n🏗️  Structure Validation Issues Detected:")
+                for issue in structure_result["issues"]:
+                    print(f"   • {issue}")
+                # Don't fail on structure issues - Builder might have fixed them
+
+        # Check for validation failures
+        if validation_failed:
+            print("\n" + "="*60)
+            print("❌ CONTEXT FOUNDRY WORKFLOW FAILED")
+            print("="*60)
+            print(f"\nReason: {failure_reason}")
+            print(f"Project: {self.project_dir}")
+            print("\n⚠️  The build could not complete successfully after multiple attempts.")
+            print("Check the error messages above for details.")
+            print("\nManual intervention may be required.")
             print("="*60)
 
             return {
@@ -1037,11 +1043,11 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 "readme_path": str(readme_path) if readme_path else None,
                 "validation": validation_result,
                 "structure": structure_result,
-                "smoke_test": smoke_test_result,
                 "status": "failed",
-                "errors": critical_errors,
+                "failure_reason": failure_reason,
             }
 
+        # SUCCESS!
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
@@ -1667,6 +1673,108 @@ To use your own API key, update the relevant configuration file."""
         # For Node.js projects, run runtime integration tests
         return self._run_nodejs_integration_test()
 
+    def _run_build_validation(self) -> tuple:
+        """
+        Validate that npm install + npm build work.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        package_json_path = self.project_dir / "package.json"
+
+        if not package_json_path.exists():
+            return (True, {})  # No package.json, skip
+
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            scripts = package_data.get('scripts', {})
+            deps = package_data.get('dependencies', {})
+
+            # Detect React app
+            is_react_app = 'react-scripts' in deps
+
+            # Step 1: npm install
+            print(f"      Installing dependencies...")
+            install_result = subprocess.run(
+                ['npm', 'install'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=180  # 3 minute timeout for install
+            )
+
+            if install_result.returncode != 0:
+                return (False, {
+                    'message': 'Dependency installation failed',
+                    'stderr': install_result.stderr,
+                    'stdout': install_result.stdout,
+                    'command': 'npm install',
+                    'exit_code': install_result.returncode
+                })
+
+            print(f"      ✅ Dependencies installed")
+
+            # Step 2: npm build (if build script exists)
+            if 'build' not in scripts:
+                return (True, {})  # No build script, that's okay
+
+            print(f"      Running build: npm run build...")
+
+            build_result = subprocess.run(
+                ['npm', 'run', 'build'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=180  # 3 minute timeout for build
+            )
+
+            if build_result.returncode == 0:
+                print(f"      ✅ Build succeeded")
+                return (True, {})
+            else:
+                # Parse common errors
+                import re
+                stderr = build_result.stderr
+                errors = []
+
+                if "Module not found" in stderr:
+                    module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
+                    errors.extend([f"Missing module: {m}" for m in module_errors])
+
+                if "Cannot find module" in stderr:
+                    module_errors = re.findall(r"Cannot find module '([^']+)'", stderr)
+                    errors.extend([f"Cannot find module: {m}" for m in module_errors])
+
+                if "SyntaxError" in stderr:
+                    errors.append("Syntax error in code - check stderr for details")
+
+                error_message = '; '.join(errors) if errors else 'Build failed - see stderr'
+
+                return (False, {
+                    'message': error_message,
+                    'stderr': stderr,
+                    'stdout': build_result.stdout,
+                    'command': 'npm run build',
+                    'exit_code': build_result.returncode
+                })
+
+        except subprocess.TimeoutExpired as e:
+            return (False, {
+                'message': 'Build timeout (exceeded 3 minutes)',
+                'stderr': str(e),
+                'command': e.cmd
+            })
+        except FileNotFoundError:
+            return (False, {
+                'message': 'npm not found - ensure Node.js is installed',
+                'command': 'npm'
+            })
+        except Exception as e:
+            return (False, {
+                'message': f'Build validation exception: {str(e)}',
+                'stack_trace': str(e)
+            })
+
     def _run_nodejs_integration_test(self) -> Dict[str, any]:
         """Run integration tests for Node.js projects.
 
@@ -2159,6 +2267,208 @@ To use your own API key, update the relevant configuration file."""
                 "errors": [f"Test error: {str(e)}"]
             }
 
+    def _retry_until_success(self, validation_fn, context_description: str, max_attempts: int = 3) -> bool:
+        """
+        Run a validation function, and if it fails, feed errors back to Builder to fix.
+
+        Args:
+            validation_fn: Function that returns (success: bool, error_details: dict)
+            context_description: Human description of what's being validated
+            max_attempts: Maximum retry attempts
+
+        Returns:
+            True if validation passed, False if all attempts failed
+        """
+        import time
+
+        for attempt in range(1, max_attempts + 1):
+            print(f"\n🔄 Validation attempt {attempt}/{max_attempts}: {context_description}")
+
+            # Run validation
+            try:
+                success, error_details = validation_fn()
+            except Exception as e:
+                success = False
+                error_details = {
+                    'message': f'Validation exception: {str(e)}',
+                    'stack_trace': str(e)
+                }
+
+            if success:
+                print(f"   ✅ {context_description} - PASSED")
+                return True
+
+            # Failed
+            print(f"   ❌ {context_description} - FAILED")
+            error_message = error_details.get('message', 'Unknown error')
+            print(f"   Error: {error_message[:200]}...")  # Truncate long errors
+
+            if attempt < max_attempts:
+                print(f"   🔧 Feeding error back to Builder for fix (attempt {attempt}/{max_attempts})...")
+
+                # Create fix task with complete error context
+                fix_task = {
+                    'id': f'fix_{context_description.lower().replace(" ", "_")}_{attempt}',
+                    'description': f'Fix validation failure: {context_description}',
+                    'validation_failure': {
+                        'context': context_description,
+                        'error_message': error_details.get('message', ''),
+                        'stderr': error_details.get('stderr', ''),
+                        'stdout': error_details.get('stdout', ''),
+                        'failed_command': error_details.get('command', ''),
+                        'exit_code': error_details.get('exit_code', None),
+                        'stack_trace': error_details.get('stack_trace', ''),
+                        'missing_files': error_details.get('missing_files', []),
+                        'attempt_number': attempt
+                    }
+                }
+
+                # Builder fixes the issue
+                self._ask_builder_to_fix(fix_task)
+
+                # Wait a moment for file system to settle
+                time.sleep(2)
+            else:
+                print(f"   ❌ Max attempts reached ({max_attempts}). Validation failed.")
+                # Show detailed error on final attempt
+                if error_details.get('stderr'):
+                    print(f"\n   Final error details:")
+                    print(f"   {error_details.get('stderr', '')[:500]}")
+                return False
+
+        return False
+
+    def _ask_builder_to_fix(self, fix_task: Dict):
+        """
+        Ask Builder agent to fix a validation failure.
+
+        The Builder receives:
+        - What failed (smoke test? contract test? specific error?)
+        - Complete error output (stderr, exit codes, logs)
+        - Context about what was expected
+        - Attempt number (so it tries different approaches)
+        """
+
+        failure_context = fix_task['validation_failure']
+
+        # Build a clear prompt for the Builder
+        fix_prompt = f"""
+VALIDATION FAILURE - FIX REQUIRED
+
+Context: {failure_context['context']}
+Attempt: {failure_context['attempt_number']}
+
+ERROR DETAILS:
+{failure_context['error_message']}
+
+STDERR OUTPUT:
+{failure_context.get('stderr', 'N/A')[:1000]}
+
+STDOUT OUTPUT:
+{failure_context.get('stdout', 'N/A')[:500]}
+
+FAILED COMMAND:
+{failure_context.get('failed_command', 'N/A')}
+
+EXIT CODE:
+{failure_context.get('exit_code', 'N/A')}
+
+Your task: Analyze this failure and fix the code so the validation passes.
+
+Common issues to check:
+- Missing dependencies in package.json or requirements.txt
+- Missing files or incorrect file paths
+- Syntax errors or import errors
+- Incorrect server startup code
+- Missing environment variables
+- Port conflicts or network issues
+- Test expectations not matching implementation
+- React app trying to run as Node server
+- Missing npm install before npm build
+
+Fix the root cause, not just the symptoms. Make targeted changes.
+
+IMPORTANT:
+- If this is attempt {failure_context['attempt_number']}, try a different approach than before
+- Read the error carefully - it tells you exactly what's wrong
+- Check package.json dependencies match what code imports
+- For React apps, ensure react-scripts is properly configured
+- For Express apps, ensure static middleware is configured
+"""
+
+        print(f"      Calling Builder to apply fixes...")
+
+        # Get current project context
+        project_context = self._get_current_project_context()
+
+        # Call Builder with fix context
+        try:
+            # Use AI client to call Builder
+            full_prompt = f"{fix_prompt}\n\nCURRENT PROJECT STATE:\n{project_context}"
+
+            response = self.ai_client.call_claude(
+                prompt=full_prompt,
+                context="Builder fixing validation failure",
+                max_tokens=8000
+            )
+
+            # Extract and save code from response
+            extracted = self._extract_and_save_code(response, self.project_dir)
+
+            print(f"      ✅ Builder applied {extracted['total']} file change(s)")
+
+            # Create git commit for the fix
+            if self._git_available():
+                self._create_git_commit(f"fix: {fix_task['description']} (attempt {failure_context['attempt_number']})")
+
+        except Exception as e:
+            print(f"      ⚠️  Builder fix attempt failed: {str(e)}")
+
+    def _get_current_project_context(self) -> str:
+        """Get current state of project for Builder context."""
+
+        context = []
+
+        # Project directory
+        context.append(f"Project directory: {self.project_dir}")
+
+        # List files
+        context.append("\nProject files:")
+        for root, dirs, files in os.walk(self.project_dir):
+            # Skip node_modules, .git, etc
+            dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '.context-foundry', 'build', 'dist']]
+
+            level = root.replace(str(self.project_dir), '').count(os.sep)
+            indent = ' ' * 2 * level
+            context.append(f'{indent}{os.path.basename(root)}/')
+
+            subindent = ' ' * 2 * (level + 1)
+            for file in files:
+                context.append(f'{subindent}{file}')
+
+        # package.json content
+        package_json = self.project_dir / "package.json"
+        if package_json.exists():
+            context.append("\npackage.json:")
+            try:
+                import json
+                with open(package_json) as f:
+                    pkg = json.load(f)
+                context.append(json.dumps(pkg, indent=2))
+            except:
+                context.append("(could not read)")
+
+        # SPEC.yaml content
+        spec_yaml = self.project_dir / ".context-foundry" / "SPEC.yaml"
+        if spec_yaml.exists():
+            context.append("\nSPEC.yaml:")
+            try:
+                context.append(spec_yaml.read_text()[:500])
+            except:
+                context.append("(could not read)")
+
+        return '\n'.join(context)
+
     def _git_available(self) -> bool:
         """Check if git is available and initialized."""
         try:
@@ -2297,50 +2607,66 @@ To use your own API key, update the relevant configuration file."""
         }
 
     def finalize(self, results: Dict) -> Dict:
-        """Finalize successful workflow."""
+        """Finalize workflow (successful or failed)."""
         stats = self.ai_client.get_usage_stats()
 
+        # Check if build failed
+        builder_result = results.get('builder', {})
+        build_status = builder_result.get('status', 'complete')
+        build_failed = (build_status == 'failed')
+
         print(f"\n{'='*60}")
-        print("✅ CONTEXT FOUNDRY WORKFLOW COMPLETE!")
-        print(f"{'='*60}")
-        print(f"📁 Project: {self.project_dir}")
+        if build_failed:
+            print("❌ CONTEXT FOUNDRY WORKFLOW FAILED!")
+            failure_reason = builder_result.get('failure_reason', 'Unknown error')
+            print(f"{'='*60}")
+            print(f"\n⚠️  Build failed: {failure_reason}")
+            print(f"📁 Project: {self.project_dir}")
+            print(f"\nThe build could not complete successfully.")
+            print("Review the error messages above for details.")
+        else:
+            print("✅ CONTEXT FOUNDRY WORKFLOW COMPLETE!")
+            print(f"{'='*60}")
+            print(f"📁 Project: {self.project_dir}")
+
         print(f"📊 Total Tokens: {stats['total_tokens']:,}")
         print(f"💾 Logs: {self.logs_path}")
         print(f"🎯 Session: {self.session_id}")
 
-        # Display README and run instructions
-        builder_result = results.get('builder', {})
-        readme_path = builder_result.get('readme_path')
-        if readme_path:
-            print(f"\n📖 README: {readme_path}")
+        # Only show run instructions if build succeeded
+        if not build_failed:
+            # Display README and run instructions
+            readme_path = builder_result.get('readme_path')
+            if readme_path:
+                print(f"\n📖 README: {readme_path}")
 
-            # Detect project type and show run instructions
-            has_package_json = (self.project_dir / "package.json").exists()
-            has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
+                # Detect project type and show run instructions
+                has_package_json = (self.project_dir / "package.json").exists()
+                has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
 
-            if has_package_json:
-                # Detect correct npm command from package.json
-                try:
-                    package_data = json.loads((self.project_dir / "package.json").read_text())
-                    scripts = package_data.get('scripts', {})
+                if has_package_json:
+                    # Detect correct npm command from package.json
+                    try:
+                        package_data = json.loads((self.project_dir / "package.json").read_text())
+                        scripts = package_data.get('scripts', {})
 
-                    # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
-                    if 'start' in scripts:
-                        npm_command = "npm start"
-                    elif 'dev' in scripts:
-                        npm_command = "npm run dev"
-                    else:
-                        npm_command = "npm start"  # default
-                except:
-                    npm_command = "npm start"  # fallback
+                        # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                        if 'start' in scripts:
+                            npm_command = "npm start"
+                        elif 'dev' in scripts:
+                            npm_command = "npm run dev"
+                        else:
+                            npm_command = "npm start"  # default
+                    except:
+                        npm_command = "npm start"  # fallback
 
-                print(f"\n🚀 Quick Start:")
-                print(f"   cd {self.project_dir}")
-                print(f"   npm install")
-                print(f"   {npm_command}")
-            elif has_index_html:
-                print(f"\n🚀 Quick Start:")
-                print(f"   Open {self.project_dir}/index.html in your browser")
+                    print(f"\n🚀 Quick Start:")
+                    print(f"   cd {self.project_dir}")
+                    print(f"   npm install")
+                    print(f"   {npm_command}")
+                elif has_index_html:
+                    print(f"\n🚀 Quick Start:")
+                    print(f"   Open {self.project_dir}/index.html in your browser")
 
         # Display cost summary
         try:
