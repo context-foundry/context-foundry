@@ -2739,14 +2739,13 @@ IMPORTANT:
             # Use AI client to call Builder
             full_prompt = f"{fix_prompt}\n\nCURRENT PROJECT STATE:\n{project_context}"
 
-            response = self.ai_client.call_claude(
+            response = self.ai_client.builder(
                 prompt=full_prompt,
-                context="Builder fixing validation failure",
                 max_tokens=8000
             )
 
             # Extract and save code from response
-            extracted = self._extract_and_save_code(response, self.project_dir)
+            extracted = self._extract_and_save_code(response.content, self.project_dir)
 
             print(f"      ✅ Builder applied {extracted['total']} file change(s)")
 
