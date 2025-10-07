@@ -186,7 +186,8 @@ def foundry():
 @click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
 @click.option('--context-manager/--no-context-manager', default=True, help='Enable smart context management')
 @click.option('--project-dir', type=click.Path(), help='Custom project directory')
-def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir):
+@click.option('--legacy', is_flag=True, help='Use legacy sequential mode instead of multi-agent (for autonomous builds)')
+def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir, legacy):
     """
     Build a new project with Context Foundry.
 
@@ -273,6 +274,9 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
     builder_provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
     builder_model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
 
+    # Determine if multi-agent mode will be used
+    will_use_multi_agent = autonomous and not legacy
+
     settings = {
         "Project": project,
         "Task": task,
@@ -281,6 +285,7 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
         "Architect": f"{architect_provider} / {architect_model}",
         "Builder": f"{builder_provider} / {builder_model}",
         "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
+        "Multi-Agent": "🚀 On (parallel)" if will_use_multi_agent else "Off (sequential)",
         "Livestream": "📡 Enabled" if livestream else "Disabled",
         "Auto-push to GitHub": "✓ On" if push else "Off",
         "Pattern injection": "✓ On" if use_patterns else "Off",
@@ -298,7 +303,8 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
             project_dir=Path(project_dir) if project_dir else None,
             use_patterns=use_patterns,
             enable_livestream=livestream,
-            auto_push=push
+            auto_push=push,
+            use_multi_agent=autonomous and not legacy
         )
 
         result = orchestrator.run()
