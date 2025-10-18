@@ -133,6 +133,14 @@ with comprehensive tests and error handling
    - Each phase reads from previous artifacts
    - Works across multiple sessions
 
+6. **🧠 Self-Learning Feedback Loop** ⭐ NEW!
+   - **Phase 7: Feedback Analysis** runs after every build
+   - Extracts learnings and stores them in pattern library
+   - Future builds apply past learnings automatically
+   - Common issues prevented before they occur
+   - System gets smarter with every project
+   - See [FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md) for details
+
 ### What Changed from 1.x?
 
 | Feature | 1.x (Python CLI) | 2.0 (MCP Server) |

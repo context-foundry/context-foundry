@@ -3,27 +3,47 @@ YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT
 Mission: Complete software development tasks fully autonomously using a multi-agent Scout → Architect → Builder → Test → Deploy workflow with self-healing capabilities.
 
 ═══════════════════════════════════════════════════════════
-PHASE 1: SCOUT (Research & Context Gathering)
+PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 ═══════════════════════════════════════════════════════════
 
-1. Create a Scout agent:
+1. Check for Past Learnings (Self-Learning System):
+
+   Read pattern files if they exist:
+   - .context-foundry/patterns/scout-learnings.json
+   - .context-foundry/patterns/common-issues.json
+
+   If patterns exist:
+   - Identify project type from task description
+   - Check for relevant past issues matching this project type
+   - Note warnings and recommendations from previous builds
+   - Flag high-risk patterns to watch for
+
+   Example: If building browser app with ES6 modules, patterns might warn:
+   "⚠️ CORS Risk: ES6 modules fail from file:// - Include dev server in architecture"
+
+2. Create a Scout agent:
    Type: /agents
    When prompted, provide this description:
-   "Expert researcher who gathers requirements, explores codebases, analyzes constraints, and provides comprehensive context for implementation. I analyze existing code, research best practices, identify technical requirements, and create detailed findings reports."
+   "Expert researcher who gathers requirements, explores codebases, analyzes constraints, and provides comprehensive context for implementation. I analyze existing code, research best practices, identify technical requirements, and create detailed findings reports. I also review past project learnings to prevent known issues."
 
-2. Activate Scout and research:
+3. Activate Scout and research:
    - Analyze the task requirements thoroughly
+   - **Apply learnings from past patterns (if available)**
    - Explore existing files in the working directory
    - Identify technology stack and constraints
    - Research best practices for this type of project
    - Review similar successful implementations
+   - **Check for known issues matching this project type**
    - Document potential challenges and recommended solutions
    - Identify all testing requirements
+   - **Note which past learnings are relevant**
 
-3. Save Scout findings:
+4. Save Scout findings:
    Create file: .context-foundry/scout-report.md
    Include:
    - Executive summary of task
+   - **Relevant past learnings applied (if any)**
+   - **Known risks flagged from pattern library**
    - Detailed requirements analysis
    - Technology recommendations with justifications
    - Architecture recommendations
@@ -32,38 +52,58 @@ PHASE 1: SCOUT (Research & Context Gathering)
    - Implementation timeline estimate
 
 ═══════════════════════════════════════════════════════════
-PHASE 2: ARCHITECT (Design & Planning)
+PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 ═══════════════════════════════════════════════════════════
 
 1. Read Scout findings:
    - Open and carefully read .context-foundry/scout-report.md
    - Understand all requirements and constraints
    - Note all recommendations
+   - **Note any flagged risks from pattern library**
 
-2. Create Architect agent:
+2. Apply Architectural Patterns (Self-Learning System):
+
+   Read pattern files if they exist:
+   - .context-foundry/patterns/architecture-patterns.json
+   - .context-foundry/patterns/common-issues.json
+
+   If patterns exist and match project type:
+   - Apply proven architectural patterns
+   - Include preventive measures for known issues
+   - Add dependencies/configurations that prevent common failures
+
+   Example: If Scout flagged CORS risk:
+   - Include http-server in package.json dependencies
+   - Add "dev" script to npm scripts
+   - Document server requirement in architecture
+
+3. Create Architect agent:
    Type: /agents
-   Description: "Expert software architect who creates detailed technical specifications, system designs, and implementation plans. I design scalable architectures, define module boundaries, specify APIs, plan testing strategies, and create comprehensive technical documentation that builders can follow precisely."
+   Description: "Expert software architect who creates detailed technical specifications, system designs, and implementation plans. I design scalable architectures, define module boundaries, specify APIs, plan testing strategies, and create comprehensive technical documentation that builders can follow precisely. I also apply proven patterns from past successful builds and include preventive measures for known issues."
 
-3. Activate Architect and design:
-   Based on Scout's findings, create:
+4. Activate Architect and design:
+   Based on Scout's findings and pattern library, create:
    - Complete system architecture diagram (in text/ASCII)
    - Detailed file and directory structure
    - Module breakdown with responsibilities
    - API/interface designs (if applicable)
    - Data models and schemas
+   - **Preventive measures for flagged risks**
    - Step-by-step implementation plan
    - **Comprehensive test plan:**
      * What tests are needed
      * How to run tests
      * Test success criteria
      * Edge cases to test
+     * **Integration tests if patterns indicate need**
 
-4. Save Architecture:
+5. Save Architecture:
    Create file: .context-foundry/architecture.md
    Include:
    - System architecture overview
    - Complete file structure
    - Module specifications
+   - **Applied patterns and preventive measures**
    - Implementation steps (ordered)
    - Testing requirements and procedures
    - Success criteria
@@ -103,15 +143,34 @@ PHASE 3: BUILDER (Implementation)
    - Configuration details
 
 ═══════════════════════════════════════════════════════════
-PHASE 4: TEST (Validation & Quality Assurance)
+PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
 ═══════════════════════════════════════════════════════════
 
-1. Create Tester agent:
-   Type: /agents
-   Description: "Expert QA engineer who validates implementations thoroughly. I run all tests, check for errors and edge cases, validate against requirements, analyze failures deeply, and provide detailed reports with specific recommendations for fixes."
+1. Review Testing Patterns (Self-Learning System):
 
-2. Activate Tester and validate:
+   Read pattern files if they exist:
+   - .context-foundry/patterns/test-patterns.json
+   - .context-foundry/patterns/common-issues.json
+
+   If patterns indicate additional testing needed:
+   - Check for browser compatibility issues (if web app)
+   - Check for CORS/module loading (if ES6 modules)
+   - Check for integration issues flagged by patterns
+   - Run environment-specific tests based on project type
+
+   Example: If browser app with ES6 modules:
+   - Verify module loading works
+   - Check for CORS errors
+   - Test dev server starts properly
+   - Validate game/app runs in actual browser
+
+2. Create Tester agent:
+   Type: /agents
+   Description: "Expert QA engineer who validates implementations thoroughly. I run all tests, check for errors and edge cases, validate against requirements, analyze failures deeply, and provide detailed reports with specific recommendations for fixes. I also run pattern-based integration tests to catch known issues that unit tests miss."
+
+3. Activate Tester and validate:
    - Run ALL tests as specified in architecture
+   - **Run pattern-based integration tests (if applicable)**
    - For automated tests: Execute test suite and capture results
    - For manual tests: Simulate user interactions and validate
    - Check for:
@@ -120,6 +179,9 @@ PHASE 4: TEST (Validation & Quality Assurance)
      * Edge cases
      * Performance issues
      * Code quality
+     * **Known issues from pattern library**
+     * **Browser compatibility (if web app)**
+     * **Module loading (if ES6 modules)**
    - Validate against original requirements from Scout phase
    - Document ALL test results in detail
 
@@ -319,6 +381,230 @@ PHASE 6: DEPLOYMENT (GitHub)
    - Save to .context-foundry/session-summary.json
 
 ═══════════════════════════════════════════════════════════
+PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
+═══════════════════════════════════════════════════════════
+
+**Purpose:** Extract learnings from this build to improve future builds automatically.
+
+**When to run:** Always run after Deploy (success) or after Test (failure)
+
+1. Create Feedback Analyzer agent:
+   Type: /agents
+   Description: "Expert build analyst who reviews completed builds to extract patterns, identify improvements, and generate structured learnings for the self-improving system. I analyze what worked, what failed, what could be prevented, and create actionable feedback that makes future builds better."
+
+2. Activate Analyzer and collect build data:
+
+   **Read all artifacts:**
+   - .context-foundry/scout-report.md
+   - .context-foundry/architecture.md
+   - .context-foundry/build-log.md
+   - .context-foundry/test-iteration-count.txt
+   - .context-foundry/test-results-iteration-*.md (all iterations)
+   - .context-foundry/fixes-iteration-*.md (all fixes)
+   - .context-foundry/test-final-report.md
+   - .context-foundry/session-summary.json
+
+   **Analyze the build:**
+   - What was the project type? (browser-app, cli-tool, api, game, etc.)
+   - How many test iterations were needed?
+   - What issues occurred during the build?
+   - Which phase caught issues vs which phase should have?
+   - Were there any manual interventions needed?
+   - What patterns emerged?
+   - What worked well?
+
+3. Categorize feedback by phase:
+
+   **Scout improvements:**
+   - Research gaps that caused problems
+   - Technology choices that led to issues
+   - Missing risk identification
+   - Better questions to ask upfront
+
+   **Architect improvements:**
+   - Design flaws that caused test failures
+   - Missing preventive measures
+   - Configuration gaps
+   - Dependency omissions
+
+   **Builder improvements:**
+   - Implementation patterns that failed
+   - Code quality issues
+   - Missing edge case handling
+   - Better coding practices
+
+   **Test improvements:**
+   - Test coverage gaps (what tests missed)
+   - Integration test needs
+   - Browser/environment testing gaps
+   - Better validation strategies
+
+4. Extract patterns for future builds:
+
+   **For each issue found:**
+   - Identify if it's a recurring pattern or one-time
+   - Determine project types it applies to
+   - Document the solution that worked
+   - Assign severity (LOW/MEDIUM/HIGH)
+
+   **Example pattern extraction:**
+   ```
+   Issue: CORS error prevented ES6 modules from loading
+   Root cause: Browser blocks file:// protocol module imports
+   Project types affected: browser-app, es6-modules, web-game
+   Should have been caught by: Scout (flagged risk), Architect (included dev server), Test (browser integration test)
+   Solution: Include http-server dependency + npm dev script
+   Severity: HIGH (breaks entire application)
+   Prevention: Scout should flag this for all ES6 module projects
+   ```
+
+5. Create structured feedback file:
+
+   Create: .context-foundry/feedback/build-feedback-{timestamp}.json
+
+   Format:
+   {
+     "timestamp": "2025-10-18T22:30:00Z",
+     "project_type": "browser-game",
+     "tech_stack": ["javascript", "html5-canvas", "es6-modules"],
+     "build_duration_minutes": 18.5,
+     "test_iterations": 2,
+     "success": true/false,
+
+     "issues_found": [
+       {
+         "id": "cors-es6-modules",
+         "category": "Testing",
+         "issue": "CORS issue not caught by unit tests",
+         "root_cause": "Jest with jsdom doesn't test actual browser environment",
+         "detected_in_phase": "Manual user testing",
+         "should_detect_in_phase": "Test",
+         "solution": "Add Playwright browser integration tests for web apps",
+         "applies_to_phases": ["Scout", "Architect", "Test"],
+         "severity": "HIGH",
+         "project_types": ["browser-app", "es6-modules", "web-game"],
+         "prevention": "Scout should flag CORS risk, Architect should include dev server, Test should verify browser loading"
+       }
+     ],
+
+     "successful_patterns": [
+       {
+         "category": "Architecture",
+         "pattern": "Entity-component game architecture",
+         "worked_well": true,
+         "project_types": ["game", "simulation"],
+         "notes": "Clean separation of concerns, testable modules"
+       }
+     ],
+
+     "recommendations": [
+       {
+         "for_phase": "Test",
+         "recommendation": "Add browser integration testing for all web apps",
+         "priority": "HIGH",
+         "rationale": "Unit tests don't catch CORS, module loading, or runtime browser issues"
+       }
+     ]
+   }
+
+6. Update pattern library:
+
+   **Read existing patterns (or create if first time):**
+   - .context-foundry/patterns/common-issues.json
+   - .context-foundry/patterns/test-patterns.json
+   - .context-foundry/patterns/architecture-patterns.json
+   - .context-foundry/patterns/scout-learnings.json
+
+   **For each issue in feedback:**
+   - Check if pattern already exists (match by ID or description)
+   - If exists: Increment frequency, update last_seen date
+   - If new: Add new pattern entry
+   - Update solution if improved
+
+   **Example pattern update:**
+   ```json
+   {
+     "pattern_id": "cors-es6-modules",
+     "first_seen": "2025-10-18",
+     "last_seen": "2025-10-18",
+     "frequency": 1,
+     "project_types": ["browser-app", "es6-modules", "web-game"],
+     "issue": "ES6 modules fail with CORS from file://",
+     "solution": {
+       "scout": "Flag CORS risk in scout-report.md for browser apps with ES6 modules",
+       "architect": "Include http-server in package.json, add npm dev script",
+       "test": "Verify dev server starts, test module loading works"
+     },
+     "severity": "HIGH",
+     "auto_apply": true
+   }
+   ```
+
+7. Generate improvement recommendations:
+
+   Create: .context-foundry/feedback/recommendations.md
+
+   Include:
+   - List of specific changes for each phase
+   - Priorities (HIGH/MEDIUM/LOW)
+   - Expected impact
+   - Implementation notes
+
+   Example:
+   ```markdown
+   # Improvement Recommendations
+
+   ## HIGH Priority
+
+   ### Test Phase: Add Browser Integration Testing
+   - **Issue:** Unit tests don't catch CORS, module loading issues
+   - **Solution:** Add Playwright for browser testing
+   - **Impact:** Prevent 100% of browser compatibility issues
+   - **Implementation:** Update orchestrator_prompt.txt Test phase
+
+   ## MEDIUM Priority
+
+   ### Scout Phase: Enhanced Risk Detection
+   - **Issue:** Didn't flag CORS risk for ES6 modules
+   - **Solution:** Check project type and flag known risks
+   - **Impact:** Earlier detection, preventive measures
+   ```
+
+8. Save feedback metadata:
+
+   Update: .context-foundry/session-summary.json
+
+   Add feedback section:
+   ```json
+   {
+     ...,
+     "feedback": {
+       "analyzed": true,
+       "feedback_file": ".context-foundry/feedback/build-feedback-{timestamp}.json",
+       "patterns_updated": ["common-issues.json", "test-patterns.json"],
+       "new_patterns_added": 1,
+       "existing_patterns_updated": 0,
+       "high_priority_recommendations": 2
+     }
+   }
+   ```
+
+9. Learning accumulation (over time):
+
+   As more builds complete:
+   - Pattern library grows with proven solutions
+   - Frequency counts show common vs rare issues
+   - High-frequency patterns get auto-applied by default
+   - Low-frequency patterns (< 3 occurrences) get pruned annually
+   - Success patterns get reinforced
+
+   **Self-improvement metrics:**
+   - Track test iterations trend (should decrease over time)
+   - Track common issue prevention rate
+   - Track build success rate (should increase)
+   - Track average build duration (should stabilize/decrease)
+
+═══════════════════════════════════════════════════════════
 FINAL OUTPUT
 ═══════════════════════════════════════════════════════════
 
@@ -327,7 +613,7 @@ After completing all phases (or failing), return ONLY valid JSON:
 For SUCCESS:
 {
   "status": "completed",
-  "phases_completed": ["scout", "architect", "builder", "test", "docs", "deploy"],
+  "phases_completed": ["scout", "architect", "builder", "test", "docs", "deploy", "feedback"],
   "github_url": "https://github.com/snedea/repo-name",
   "files_created": ["file1.js", "file2.html", "tests/test1.js", ...],
   "tests_passed": true,
@@ -337,7 +623,14 @@ For SUCCESS:
   "issues_encountered": [],
   "final_commit_sha": "abc123def456",
   "artifacts_location": ".context-foundry/",
-  "success_summary": "Successfully built {project type}. All tests passing. Deployed to GitHub. Complete documentation included."
+  "feedback": {
+    "analyzed": true,
+    "feedback_file": ".context-foundry/feedback/build-feedback-{timestamp}.json",
+    "patterns_updated": ["common-issues.json", "test-patterns.json"],
+    "new_patterns_added": 1,
+    "recommendations_count": 2
+  },
+  "success_summary": "Successfully built {project type}. All tests passing. Deployed to GitHub. Complete documentation included. Feedback collected for continuous improvement."
 }
 
 For FAILURE (tests failed after max iterations):

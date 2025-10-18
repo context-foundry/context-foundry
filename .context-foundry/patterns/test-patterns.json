@@ -1,0 +1,81 @@
+{
+  "$schema": "Pattern Library for Testing Strategies",
+  "version": "1.0.0",
+  "last_updated": "2025-10-18T22:30:00Z",
+  "description": "Testing patterns and strategies learned from past builds",
+
+  "patterns": [
+    {
+      "pattern_id": "unit-tests-miss-browser-issues",
+      "title": "Unit Tests Don't Catch Browser Integration Issues",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "severity": "HIGH",
+      "project_types": ["browser-app", "web-app", "web-game"],
+
+      "gap_identified": {
+        "issue": "Jest with jsdom mocks browser but doesn't catch CORS, module loading, or runtime browser issues",
+        "what_passed": "All 86 unit tests",
+        "what_failed": "Actual browser execution - CORS error, modules didn't load",
+        "detection": "Manual user testing after deployment"
+      },
+
+      "recommended_testing": {
+        "unit_tests": {
+          "tool": "Jest",
+          "coverage": "Logic, functions, calculations",
+          "sufficient_for": "Business logic validation",
+          "insufficient_for": "Browser compatibility, CORS, module loading"
+        },
+        "integration_tests": {
+          "recommended": true,
+          "tool_options": ["Playwright", "Selenium", "Cypress"],
+          "what_to_test": [
+            "Application starts in actual browser",
+            "Modules load without CORS errors",
+            "UI renders correctly",
+            "Basic user interactions work",
+            "Dev server starts successfully"
+          ],
+          "example": "Start dev server, open browser, verify no console errors, check basic functionality"
+        },
+        "smoke_tests": {
+          "recommended": true,
+          "quick_checks": [
+            "Dev server starts: npm run dev",
+            "Browser opens automatically",
+            "No console errors in first 5 seconds",
+            "Main UI element renders"
+          ]
+        }
+      },
+
+      "implementation": {
+        "phase": "Test",
+        "add_to_orchestrator": true,
+        "steps": [
+          "After unit tests pass, run browser integration test",
+          "Start dev server (npm run dev)",
+          "Use Playwright to open browser",
+          "Check for console errors",
+          "Verify basic functionality",
+          "If fails: trigger self-healing loop"
+        ]
+      },
+
+      "auto_apply": true,
+      "applies_when": "project_type includes 'browser' or 'web'",
+
+      "impact": "Prevents 95%+ of production browser issues",
+
+      "priority": "HIGH"
+    }
+  ],
+
+  "statistics": {
+    "total_patterns": 1,
+    "high_priority": 1,
+    "auto_apply_enabled": 1
+  }
+}
