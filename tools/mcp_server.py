@@ -843,6 +843,189 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         }, indent=2)
 
 
+@mcp.tool()
+def autonomous_build_and_deploy_async(
+    task: str,
+    working_directory: str,
+    github_repo_name: Optional[str] = None,
+    existing_repo: Optional[str] = None,
+    mode: str = "new_project",
+    enable_test_loop: bool = True,
+    max_test_iterations: int = 3,
+    timeout_minutes: float = 90.0
+) -> str:
+    """
+    Fully autonomous build/test/fix/deploy (ASYNC - runs in background).
+
+    Same as autonomous_build_and_deploy() but NON-BLOCKING:
+    - Starts the build immediately
+    - Returns task_id right away
+    - Build runs in background while you continue working
+    - Use get_delegation_result(task_id) to check status
+    - Use list_delegations() to see all running builds
+
+    Perfect for "walk away" builds - you can work on other things while it builds.
+
+    Args:
+        task: What to build/fix/enhance
+        working_directory: Where to work
+        github_repo_name: Create new repo (optional)
+        existing_repo: Fix/enhance existing (optional)
+        mode: "new_project", "fix_bugs", "add_docs"
+        enable_test_loop: Enable self-healing test loop (default: True)
+        max_test_iterations: Max test/fix cycles (default: 3)
+        timeout_minutes: Max execution time (default: 90)
+
+    Returns:
+        JSON with task_id and status (immediately)
+
+    Examples:
+        # Start build in background
+        result = autonomous_build_and_deploy_async(
+            task="Build weather app with OpenWeatherMap API",
+            working_directory="/tmp/weather-app",
+            github_repo_name="weather-app",
+            enable_test_loop=True
+        )
+        # Returns: {"task_id": "abc-123", "status": "started", ...}
+
+        # Continue working...
+
+        # Check status later
+        status = get_delegation_result("abc-123")
+
+        # List all builds
+        all_builds = list_delegations()
+    """
+    try:
+        # Create orchestrator task configuration
+        task_config = {
+            "task": task,
+            "working_directory": working_directory,
+            "github_repo_name": github_repo_name,
+            "existing_repo": existing_repo,
+            "mode": mode,
+            "enable_test_loop": enable_test_loop,
+            "max_test_iterations": max_test_iterations
+        }
+
+        # Load orchestrator system prompt
+        orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
+        if not orchestrator_prompt_path.exists():
+            return json.dumps({
+                "status": "error",
+                "error": f"Orchestrator prompt not found at {orchestrator_prompt_path}. Please create tools/orchestrator_prompt.txt"
+            }, indent=2)
+
+        with open(orchestrator_prompt_path) as f:
+            system_prompt = f.read()
+
+        # Build task prompt
+        task_prompt = f"""AUTONOMOUS BUILD TASK
+
+CONFIGURATION:
+{json.dumps(task_config, indent=2)}
+
+Execute the full Scout → Architect → Builder → Test → Deploy workflow.
+{"Self-healing test loop is ENABLED. Fix and retry up to " + str(max_test_iterations) + " times if tests fail." if enable_test_loop else "Test loop is DISABLED. Test once and proceed."}
+
+Return JSON summary when complete.
+BEGIN AUTONOMOUS EXECUTION NOW.
+"""
+
+        # Build command
+        cmd = [
+            "claude", "--print",
+            "--permission-mode", "bypassPermissions",
+            "--strict-mcp-config",
+            "--system-prompt", system_prompt,
+            task_prompt
+        ]
+
+        # Validate/create working directory
+        working_dir_path = Path(working_directory)
+        if not working_dir_path.exists():
+            working_dir_path.mkdir(parents=True, exist_ok=True)
+
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+
+        # Start the process (NON-BLOCKING)
+        process = subprocess.Popen(
+            cmd,
+            cwd=working_directory,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            env={
+                **os.environ,
+                'PYTHONUNBUFFERED': '1',
+            }
+        )
+
+        # Store task info
+        active_tasks[task_id] = {
+            "process": process,
+            "cmd": cmd,
+            "cwd": working_directory,
+            "task": task,
+            "start_time": datetime.now(),
+            "timeout_minutes": timeout_minutes,
+            "status": "running",
+            "result": None,
+            "stdout": None,
+            "stderr": None,
+            "duration": None,
+            "task_config": task_config,
+            "build_type": "autonomous"  # Mark as autonomous build for special handling
+        }
+
+        # Extract project name for display
+        project_name = github_repo_name or Path(working_directory).name
+
+        return json.dumps({
+            "task_id": task_id,
+            "status": "started",
+            "project": project_name,
+            "task_summary": task[:100] + ("..." if len(task) > 100 else ""),
+            "working_directory": working_directory,
+            "github_repo": github_repo_name,
+            "timeout_minutes": timeout_minutes,
+            "enable_test_loop": enable_test_loop,
+            "message": f"""
+🚀 Autonomous build started!
+
+Project: {project_name}
+Task ID: {task_id}
+Location: {working_directory}
+Expected duration: 7-15 minutes
+
+You can continue working - the build runs in the background.
+
+Check status anytime:
+  • Ask: "What's the status of task {task_id}?"
+  • Or use: get_delegation_result("{task_id}")
+
+List all builds:
+  • Ask: "Show all my builds"
+  • Or use: list_delegations()
+
+I'll notify you when it's complete!
+""".strip()
+        }, indent=2)
+
+    except Exception as e:
+        import traceback
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "task": task,
+            "working_directory": working_directory
+        }, indent=2)
+
+
 @mcp.resource("logs://latest")
 def get_latest_logs() -> str:
     """Get the most recent build logs."""

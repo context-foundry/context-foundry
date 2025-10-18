@@ -11,11 +11,13 @@ When the user asks to build, create, make, or develop an application or project,
 - Describes an application or project: "weather app", "API", "game", "website"
 - Includes features or requirements
 
-**Examples that trigger `mcp__autonomous_build_and_deploy`:**
+**Examples that trigger `mcp__autonomous_build_and_deploy_async` (async by default):**
 - "Build a weather app"
 - "Create a REST API with authentication"
 - "Make a todo list application"
 - "Develop a game like Snake"
+
+**Note:** Use ASYNC version by default so user can continue working while build runs in background!
 
 **Examples that DON'T trigger (educational responses):**
 - "How do I build a weather app?" (question seeking guidance)

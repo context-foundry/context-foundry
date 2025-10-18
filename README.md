@@ -205,14 +205,25 @@ Use mcp__autonomous_build_and_deploy with:
 ```
 
 **What happens:**
-1. Scout researches requirements (1-2 min)
-2. Architect designs system (1-2 min)
-3. Builder implements code + tests (2-5 min)
-4. Tester validates (tests fail? auto-fixes up to 3x)
-5. Documentation created (1 min)
-6. Deployed to GitHub (30 sec)
+1. Build starts immediately in the background
+2. You get a task_id to check progress
+3. **You can continue working** while it builds!
+4. System completes autonomously:
+   - Scout researches requirements (1-2 min)
+   - Architect designs system (1-2 min)
+   - Builder implements code + tests (2-5 min)
+   - Tester validates (tests fail? auto-fixes up to 3x)
+   - Documentation created (1 min)
+   - Deployed to GitHub (30 sec)
 
 **Total:** ~7-15 minutes, zero human input required.
+
+**Check status anytime:**
+```
+What's the status of my build?
+```
+
+Claude will automatically check and report progress.
 
 #### Delegate a Simple Task
 
@@ -246,11 +257,95 @@ And mcp__get_delegation_result to collect results when ready
 
 ---
 
+## Background Builds (Non-Blocking Execution)
+
+**The best part:** Builds run in the background by default! You can continue working in your Claude Code session while projects build autonomously.
+
+### How It Works
+
+When you trigger a build (by saying "Build a weather app" or using the MCP tool directly), the system:
+
+1. **Starts immediately** - Spawns a background Claude Code process
+2. **Returns task_id** - Gives you a tracking ID
+3. **Runs autonomously** - Completes all phases without blocking you
+4. **Notifies when done** - You can check status anytime
+
+### Example Workflow
+
+```
+You: Build a todo app with React and localStorage
+
+Claude: 🚀 Autonomous build started!
+
+Project: todo-app
+Task ID: abc-123-def-456
+Location: /tmp/todo-app
+Expected duration: 7-15 minutes
+
+You can continue working - the build runs in the background.
+
+You: [Continue working on other things]
+
+[10 minutes later]
+
+You: What's the status of task abc-123-def-456?
+
+Claude: ✅ Build completed!
+
+GitHub: https://github.com/snedea/todo-app
+Tests: 25/25 passing
+Duration: 8.3 minutes
+```
+
+### Checking Build Status
+
+**Ask naturally:**
+```
+What's the status of my build?
+How's the todo app build going?
+Is task abc-123-def-456 done?
+```
+
+**Or use the MCP tool directly:**
+```
+Use mcp__get_delegation_result with task_id "abc-123-def-456"
+```
+
+### Listing All Active Builds
+
+```
+What builds are running?
+Show me all active tasks
+```
+
+Or:
+
+```
+Use mcp__list_delegations
+```
+
+### Benefits of Background Builds
+
+- ✅ **No blocking** - Keep working while builds run
+- ✅ **Parallel work** - Build multiple projects simultaneously
+- ✅ **Better UX** - Natural workflow, no waiting
+- ✅ **Check anytime** - Monitor progress when convenient
+
+**Note:** If you want synchronous execution (wait for completion), you can explicitly request the non-async version, but async is recommended for the best experience.
+
+---
+
 ## MCP Tools Reference
 
-### 🚀 `autonomous_build_and_deploy()`
+### 🚀 `autonomous_build_and_deploy_async()` (Recommended)
 
-Fully autonomous Scout → Architect → Builder → Test → Deploy workflow.
+Fully autonomous Scout → Architect → Builder → Test → Deploy workflow that runs in the **background** (non-blocking).
+
+**Why async is better:**
+- ✅ Continue working while build runs
+- ✅ Build multiple projects simultaneously
+- ✅ No session blocking (7-15 min builds don't freeze Claude)
+- ✅ Check status anytime
 
 **Parameters:**
 - `task` (required): What to build (e.g., "Build a todo app")
@@ -262,7 +357,20 @@ Fully autonomous Scout → Architect → Builder → Test → Deploy workflow.
 - `max_test_iterations` (default: 3): Max auto-fix attempts
 - `timeout_minutes` (default: 90.0): Total timeout
 
-**Returns:** JSON with status, files created, test results, GitHub URL, etc.
+**Returns:** JSON with task_id and status message (build continues in background)
+
+**Note:** When you naturally say "Build a weather app", Claude Code automatically uses this async version.
+
+### 🚀 `autonomous_build_and_deploy()` (Synchronous)
+
+Same as async version above, but **blocks** your Claude Code session until complete.
+
+**When to use:**
+- You specifically want to wait for the build
+- You're debugging and need immediate output
+- You prefer synchronous workflows
+
+**Returns:** JSON with complete results after build finishes (7-15 min wait)
 
 **Example:**
 ```python

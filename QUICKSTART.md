@@ -7,11 +7,11 @@
 ## What You'll Do
 
 1. One-time setup (2 minutes)
-2. Build your first app (3 minutes of your time, 7-15 min autonomous build)
+2. Build your first app (3 minutes of your time, 7-15 min build runs in background)
 3. See it deployed on GitHub
 
 **Total active time:** 5 minutes
-**Total wait time:** 7-15 minutes (system works autonomously)
+**Build time:** 7-15 minutes (runs in background while you work - no waiting!)
 
 ---
 
@@ -75,9 +75,28 @@ Build a simple todo app with the following features:
 
 **That's it!** No commands to memorize, no copy/paste needed.
 
-### What Happens Next (Autonomous)
+### What Happens Next (Runs in Background!)
 
-Claude Code will automatically:
+Claude Code will automatically start the build **in the background**:
+
+```
+🚀 Autonomous build started!
+
+Project: todo-app
+Task ID: abc-123-def-456
+Location: /tmp/todo-app
+Expected duration: 7-15 minutes
+
+You can continue working - the build runs in the background.
+```
+
+**You can now:**
+- ✅ Continue working on other things
+- ✅ Start another build in parallel
+- ✅ Close Claude and come back later
+- ✅ Check status anytime
+
+**The system autonomously:**
 1. **Scout** (1-2 min): Research best practices
 2. **Architect** (1-2 min): Design the app
 3. **Builder** (2-5 min): Write all code + tests
@@ -85,7 +104,12 @@ Claude Code will automatically:
 5. **Document** (1 min): Create README and docs
 6. **Deploy** (30 sec): Push to GitHub
 
-**Total time:** 7-15 minutes (you can walk away)
+**Total time:** 7-15 minutes (runs in background while you work)
+
+**Check status:**
+```
+What's the status of my build?
+```
 
 ---
 

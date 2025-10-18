@@ -583,6 +583,236 @@ Total: 14 minutes (56% time savings)
 
 ---
 
+## Background Builds
+
+**Important:** By default, all autonomous builds run in the **background** (non-blocking), so you can continue working while projects build.
+
+### Why Background Builds?
+
+**Before (blocking builds):**
+```
+You: Build a weather app
+Claude: [Building... your session is frozen for 10 minutes]
+You: [Can't do anything else, must wait]
+```
+
+**After (background builds):**
+```
+You: Build a weather app
+Claude: 🚀 Build started! Task ID: abc-123
+        You can continue working.
+You: [Immediately continue with other work]
+     [Check back in 10-15 minutes]
+```
+
+### How It Works
+
+When you request a build, the system:
+
+1. **Spawns a background process** - Fresh Claude Code instance starts
+2. **Returns immediately** - You get a task_id right away
+3. **Runs autonomously** - Complete workflow happens in background
+4. **No blocking** - Your Claude Code session stays responsive
+
+### Starting a Background Build
+
+**Natural language (easiest):**
+```
+Build a todo app with React
+```
+
+Claude automatically uses the async version!
+
+**Explicit MCP call:**
+```
+Use mcp__autonomous_build_and_deploy_async:
+- task: "Build a calculator app"
+- working_directory: "/tmp/calculator"
+- github_repo_name: "calculator-app"
+```
+
+**You'll get:**
+```json
+{
+  "task_id": "abc-123-def-456",
+  "status": "started",
+  "project": "calculator-app",
+  "message": "Build started! Expected duration: 7-15 minutes. You can continue working."
+}
+```
+
+### Checking Build Status
+
+**Ask naturally:**
+```
+What's the status of my build?
+How's the calculator app going?
+Is task abc-123-def-456 done?
+```
+
+**Use MCP tool:**
+```
+Use mcp__get_delegation_result with task_id "abc-123-def-456"
+```
+
+**If still running:**
+```json
+{
+  "status": "running",
+  "elapsed_seconds": 312.5,
+  "message": "Build in progress (5.2 minutes elapsed)"
+}
+```
+
+**If complete:**
+```json
+{
+  "status": "completed",
+  "duration_seconds": 487.3,
+  "stdout": "[Full build output]",
+  "stderr": "",
+  "return_code": 0
+}
+```
+
+### Listing All Active Builds
+
+**Natural language:**
+```
+What builds are running?
+Show me all my active tasks
+List all delegations
+```
+
+**MCP tool:**
+```
+Use mcp__list_delegations
+```
+
+**Response:**
+```json
+{
+  "tasks": [
+    {
+      "task_id": "abc-123",
+      "status": "running",
+      "elapsed_seconds": 245.7
+    },
+    {
+      "task_id": "def-456",
+      "status": "completed",
+      "elapsed_seconds": 512.3
+    },
+    {
+      "task_id": "ghi-789",
+      "status": "running",
+      "elapsed_seconds": 87.1
+    }
+  ]
+}
+```
+
+### Real-World Example
+
+**Scenario:** Build a full-stack app while working on documentation
+
+```
+[9:00 AM]
+You: Build a full-stack todo app with React frontend, Express backend, and PostgreSQL
+
+Claude: 🚀 Build started!
+        Task ID: fullstack-001
+        Expected: 15-20 minutes
+        You can continue working!
+
+[9:01 AM]
+You: [Switch to working on your documentation]
+     [Write blog post about the project]
+     [Answer emails]
+
+[9:15 AM]
+You: What's the status of fullstack-001?
+
+Claude: ✅ Build completed!
+        GitHub: https://github.com/you/todo-app
+        Files: 32 created
+        Tests: 45/45 passing
+        Duration: 14.2 minutes
+
+[9:16 AM]
+You: Great! Now deploy it to Vercel
+```
+
+**Time saved:** Instead of staring at the screen for 15 minutes, you worked on other tasks!
+
+### Multiple Simultaneous Builds
+
+You can start multiple builds at once:
+
+```
+Build a weather app in /tmp/weather
+Build a calculator in /tmp/calc
+Build a Snake game in /tmp/snake
+```
+
+All three run in parallel! Check status with:
+
+```
+List all my builds
+```
+
+### When to Use Synchronous (Blocking) Builds
+
+Most of the time, use async (default). Only use synchronous if:
+
+- You're debugging the workflow
+- You want to see live output as it happens
+- You have a very short build (< 2 min)
+
+**Request synchronous explicitly:**
+```
+Use the synchronous version of autonomous_build_and_deploy to build [...]
+I want to wait for this build to complete
+```
+
+### Best Practices
+
+**✅ Do:**
+- Start your build and continue working
+- Check back in 10-15 minutes
+- Use natural language to check status
+- Run multiple builds in parallel for different projects
+
+**❌ Don't:**
+- Sit and wait for async builds (defeats the purpose!)
+- Restart Claude Code while builds are running (you'll lose tracking)
+- Use synchronous builds unless you have a reason
+
+### Troubleshooting Background Builds
+
+**Q: I lost my task_id, how do I find it?**
+```
+Show me all my active builds
+List all delegations
+```
+
+**Q: Build seems stuck, how do I check?**
+```
+Use mcp__get_delegation_result with task_id "[your-id]"
+```
+
+If elapsed_seconds keeps increasing, it's still running.
+
+**Q: Can I cancel a background build?**
+
+Builds will timeout after `timeout_minutes` (default: 90). No manual cancellation needed.
+
+**Q: What happens if I restart Claude Code?**
+
+Background builds continue! But you lose the ability to track them in the current session. They'll complete and be available in the working_directory.
+
+---
+
 ## Understanding the Workflow
 
 ### The 6-Phase Autonomous Workflow
