@@ -28,6 +28,77 @@ Result: ✅ Complete game deployed to GitHub, all tests passing
 
 ---
 
+## 💬 Just Ask Naturally (No Commands to Memorize!)
+
+**The easiest way to use Context Foundry:** Just describe what you want in plain English.
+
+### ✅ Say This
+
+```
+Build a weather app with current weather and 5-day forecast
+using the OpenWeatherMap API
+```
+
+```
+Create a todo app with add, complete, and delete functionality
+```
+
+```
+Make a REST API with user authentication and PostgreSQL
+```
+
+**That's it!** Claude Code automatically uses Context Foundry's autonomous build system. No need to remember tool names or syntax.
+
+### 📚 Quick Start
+
+**1. One-time setup** (2 minutes) - See [QUICKSTART.md](QUICKSTART.md)
+
+**2. Start Claude Code:**
+```bash
+claude-code
+```
+
+**3. Just ask:**
+```
+Build a calculator app with basic and scientific functions
+```
+
+**4. Walk away** - System builds autonomously (7-15 min)
+
+**5. Get results** - Deployed to GitHub with tests and docs
+
+### 🎯 Say This, Not That
+
+| ✅ Say This (Easy) | ❌ Not This (Hard) |
+|-------------------|-------------------|
+| "Build a blog with React" | "Use mcp__autonomous_build_and_deploy with task: 'Build a blog', working_directory: '/tmp/blog', ..." |
+| "Create a Snake game" | "I need to call the autonomous build tool with parameters..." |
+| "Make a weather API" | "How do I use the MCP server to build an API?" |
+
+**Claude Code handles the MCP calls automatically when you ask to build something!**
+
+### 💡 Tips for Best Results
+
+**Be specific:**
+```
+Build a weather app with:
+- Current weather display
+- 5-day forecast
+- City search
+- Temperature unit toggle
+- Responsive design
+```
+
+**Include tech requirements:**
+```
+Create a REST API using Express.js, PostgreSQL, and JWT authentication
+with comprehensive tests and error handling
+```
+
+**Want to learn more?** → [QUICKSTART.md](QUICKSTART.md) for 5-minute tutorial
+
+---
+
 ## What's New in 2.0?
 
 ### Core Innovations

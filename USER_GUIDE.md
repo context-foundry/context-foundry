@@ -112,6 +112,169 @@ claude-code
 
 ---
 
+## How Claude Code Recognizes Build Requests
+
+**The easiest way to use Context Foundry:** Just ask naturally in plain English!
+
+### 🎯 Intent Detection
+
+Claude Code automatically uses Context Foundry's autonomous build system when you:
+
+✅ **Use action words:** "build", "create", "make", "develop", "implement"
+✅ **Describe an application or project:** "weather app", "REST API", "todo list"
+✅ **Include features or requirements:** List what you want it to do
+
+### ✅ Examples That Trigger Autonomous Build
+
+These natural requests will automatically use `mcp__autonomous_build_and_deploy`:
+
+```
+Build a weather app
+```
+
+```
+Create a REST API with user authentication
+```
+
+```
+Make a game like Snake
+```
+
+```
+Develop a todo list app with React
+```
+
+```
+Build a calculator with basic and scientific functions
+```
+
+```
+Create a blog platform with Markdown support
+```
+
+### ❌ Examples That Won't Trigger (Just Explains)
+
+These are questions that ask for information, not requests to build:
+
+```
+How do I build a weather app?
+→ This explains the process, doesn't build
+```
+
+```
+What's the best way to create an API?
+→ This discusses approaches, doesn't build
+```
+
+```
+Can you help me understand how to make a game?
+→ This teaches concepts, doesn't build
+```
+
+```
+Explain the steps to develop a todo app
+→ This provides guidance, doesn't build
+```
+
+### 💡 The Difference
+
+| Intent | Example | What Happens |
+|--------|---------|--------------|
+| **Build Request** | "Build a weather app" | ✅ Automatic autonomous build |
+| **Question** | "How do I build a weather app?" | ℹ️ Explains the process |
+| **Discussion** | "What's the best way to build apps?" | ℹ️ Discusses approaches |
+| **Learning** | "Teach me to build a weather app" | ℹ️ Educational response |
+
+### 🚀 No Need to Mention MCP Tools!
+
+You don't need to say:
+- ❌ "Use mcp__autonomous_build_and_deploy..."
+- ❌ "Call the autonomous build tool..."
+- ❌ "Execute the MCP command for..."
+
+Just say what you want:
+- ✅ "Build a weather app"
+- ✅ "Create a todo list"
+- ✅ "Make a calculator"
+
+**Claude Code handles the MCP calls automatically!**
+
+### 📝 Being Specific Gets Better Results
+
+**Vague (works, but basic):**
+```
+Build an app
+```
+
+**Specific (much better results):**
+```
+Build a weather app with:
+- Current weather display
+- 5-day forecast
+- City search with autocomplete
+- Temperature unit toggle (C/F)
+- Responsive design for mobile
+- Clean, modern UI
+```
+
+**Very specific (best results):**
+```
+Build a weather application using the OpenWeatherMap API with:
+- Current weather and 5-day forecast
+- Air Quality Index (AQI) display
+- City search with autocomplete
+- Geolocation to detect user's location
+- Temperature unit toggle
+- Responsive design
+- Express.js backend with caching
+- Comprehensive tests with Jest
+- Error handling for API failures
+```
+
+### 🎓 Learning the Pattern
+
+**Pattern:** `[Action] [What] [Optional: with features/tech]`
+
+Examples:
+- **Build** a **todo app** with **React and localStorage**
+- **Create** a **REST API** with **Express and PostgreSQL**
+- **Make** a **Snake game** with **HTML5 Canvas**
+- **Develop** a **blog platform** with **Markdown support and authentication**
+
+### 💬 What If You're Unsure?
+
+Just ask naturally! Worst case:
+- If it's a build request → Autonomous build starts
+- If it's a question → You get an explanation (then you can say "Actually, build it!")
+
+**Example conversation:**
+```
+You: "How do I build a weather app?"
+Claude: "Here's how to build a weather app..."
+You: "Actually, build it for me"
+Claude: [Starts autonomous build]
+```
+
+### 🔧 Advanced: Customize the Build
+
+You can still specify advanced options if needed:
+
+```
+Build a weather app, but use a 30-minute timeout and build it in /Users/me/projects/weather
+```
+
+```
+Create a REST API and skip the test loop for faster prototyping
+```
+
+```
+Make a todo app and deploy to my existing repo at github.com/me/todos
+```
+
+Claude Code will extract these requirements and use the right parameters.
+
+---
+
 ## Basic Usage
 
 ### Your First Build

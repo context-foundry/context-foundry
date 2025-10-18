@@ -472,6 +472,130 @@ For comprehensive technical explanations:
 
 ---
 
+## UX Improvements: Just Ask Naturally
+
+**Version 2.0.1+ Update:** We've streamlined the user experience based on real-world usage.
+
+### The Problem We Fixed
+
+**Before (2.0.0):**
+```
+User: "Build a weather app"
+Claude: "Here's how to use the MCP command... [copy this]"
+User: [pastes command back]
+Claude: [executes]
+```
+
+**After (2.0.1+):**
+```
+User: "Build a weather app"
+Claude: "I'll build that now." [executes immediately]
+→ No copy/paste, no technical syntax
+```
+
+### What Changed
+
+**1. Natural Language First**
+- README now starts with "Just Ask Naturally" section
+- No need to know MCP tool names
+- Examples show plain English, not syntax
+
+**2. QUICKSTART.md Added**
+- Dead simple 5-minute guide
+- Shows the easiest workflow first
+- Technical details moved to later sections
+
+**3. Intent Detection Documented**
+- USER_GUIDE explains how Claude recognizes build requests
+- Clear examples of what triggers autonomous builds
+- Distinction between questions vs build requests
+
+**4. System Prompt Integration**
+- `.claude-code/system-prompt.md` helps Claude auto-detect intent
+- Automatically uses MCP tools when appropriate
+- Infers reasonable defaults for parameters
+
+### How It Works Now
+
+**You say:**
+```
+Build a todo app with React and localStorage
+```
+
+**Claude automatically:**
+1. Detects intent: BUILD REQUEST
+2. Infers parameters:
+   - working_directory: /tmp/todo-app
+   - github_repo_name: todo-app
+   - enable_test_loop: true
+3. Executes: mcp__autonomous_build_and_deploy
+4. Reports: "Building now..."
+
+**No commands, no copy/paste, no syntax to memorize.**
+
+### Documentation Updates
+
+**New:**
+- `QUICKSTART.md` - 5-minute setup with natural language examples
+- `.claude-code/system-prompt.md` - Auto-trigger guidelines for Claude
+- "Natural Language Usage" section in README
+- "Intent Detection" section in USER_GUIDE
+
+**Updated:**
+- README: Natural language examples first, technical details later
+- USER_GUIDE: How Claude recognizes build requests
+- All examples now show "just ask" approach
+
+### Best Practices (Updated)
+
+**✅ Do This:**
+```
+Build a weather app
+Create a REST API with authentication
+Make a calculator with scientific functions
+```
+
+**❌ Don't Do This (Anymore):**
+```
+Use mcp__autonomous_build_and_deploy with task: "..."
+Call the MCP tool to build...
+Execute the autonomous build command...
+```
+
+Just ask naturally - Claude handles the rest!
+
+### Migration for Existing Users
+
+**If you've been using 2.0.0:**
+- Your old workflow still works
+- But try the new natural language approach
+- Much easier, same results
+
+**Example:**
+```
+Old way (still works):
+"Use mcp__autonomous_build_and_deploy with task: 'Build X', working_directory: '/tmp/x', ..."
+
+New way (easier):
+"Build X"
+```
+
+### Future UX Improvements
+
+**Planned:**
+- Video tutorials showing natural language workflow
+- Interactive examples in documentation
+- Slash command shortcuts (e.g., `/build weather app`)
+- Better error messages with plain English suggestions
+
+### Learn More
+
+- **QUICKSTART.md** - 5-minute tutorial with natural language
+- **README.md** - "Just Ask Naturally" section
+- **USER_GUIDE.md** - "Intent Detection" section
+
+---
+
 ## Summary
 
 Context Foundry 2.0 = **Autonomous AI development with self-healing**
