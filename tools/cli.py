@@ -186,7 +186,8 @@ def foundry():
 @click.option('--use-patterns/--no-patterns', default=True, help='Enable pattern injection')
 @click.option('--context-manager/--no-context-manager', default=True, help='Enable smart context management')
 @click.option('--project-dir', type=click.Path(), help='Custom project directory')
-def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir):
+@click.option('--legacy', is_flag=True, help='Use legacy sequential mode instead of multi-agent (for autonomous builds)')
+def build(project, task, autonomous, push, livestream, overnight, use_patterns, context_manager, project_dir, legacy):
     """
     Build a new project with Context Foundry.
 
@@ -273,6 +274,9 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
     builder_provider = os.getenv('BUILDER_PROVIDER', 'anthropic')
     builder_model = os.getenv('BUILDER_MODEL', 'claude-sonnet-4-20250514')
 
+    # Determine if multi-agent mode will be used
+    will_use_multi_agent = autonomous and not legacy
+
     settings = {
         "Project": project,
         "Task": task,
@@ -281,6 +285,7 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
         "Architect": f"{architect_provider} / {architect_model}",
         "Builder": f"{builder_provider} / {builder_model}",
         "Ralph Wiggum (autonomous)": "🤖 On" if autonomous else "👤 Off",
+        "Multi-Agent": "🚀 On (parallel)" if will_use_multi_agent else "Off (sequential)",
         "Livestream": "📡 Enabled" if livestream else "Disabled",
         "Auto-push to GitHub": "✓ On" if push else "Off",
         "Pattern injection": "✓ On" if use_patterns else "Off",
@@ -298,7 +303,8 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
             project_dir=Path(project_dir) if project_dir else None,
             use_patterns=use_patterns,
             enable_livestream=livestream,
-            auto_push=push
+            auto_push=push,
+            use_multi_agent=autonomous and not legacy
         )
 
         result = orchestrator.run()
@@ -320,10 +326,27 @@ def build(project, task, autonomous, push, livestream, overnight, use_patterns, 
                 has_index_html = os.path.exists(os.path.join(project_dir, "index.html"))
 
                 if has_package_json:
+                    # Detect correct npm command from package.json
+                    try:
+                        import json
+                        with open(os.path.join(project_dir, "package.json")) as f:
+                            package_data = json.load(f)
+                        scripts = package_data.get('scripts', {})
+
+                        # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                        if 'start' in scripts:
+                            npm_command = "npm start"
+                        elif 'dev' in scripts:
+                            npm_command = "npm run dev"
+                        else:
+                            npm_command = "npm start"  # default
+                    except:
+                        npm_command = "npm start"  # fallback
+
                     console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
                     console.print(f"   [dim]cd {project_dir}[/dim]")
                     console.print(f"   [dim]npm install[/dim]")
-                    console.print(f"   [dim]npm run dev[/dim]")
+                    console.print(f"   [dim]{npm_command}[/dim]")
                 elif has_index_html:
                     console.print(f"\n[bold green]🚀 Quick Start:[/bold green]")
                     console.print(f"   [dim]Open {project_dir}/index.html in your browser[/dim]")
@@ -1421,6 +1444,53 @@ def estimate(task_description):
 
     except Exception as e:
         console.print(f"[red]Error estimating cost: {e}[/red]")
+        sys.exit(1)
+
+
+@foundry.command()
+@click.argument('project_path', type=click.Path(exists=True))
+@click.option('--verify-file', default='verify.yml', help='Verification config file')
+@click.option('--artifacts-dir', type=click.Path(), help='Artifacts output directory')
+@click.option('--fail-fast/--no-fail-fast', default=True, help='Stop on first failure')
+def verify(project_path, verify_file, artifacts_dir, fail_fast):
+    """
+    Run verification on a generated project.
+
+    Executes verify.yml and reports pass/fail deterministically.
+    """
+    from ace.verifiers import VerificationHarness
+
+    project = Path(project_path)
+    artifacts = Path(artifacts_dir) if artifacts_dir else None
+
+    console.print(f"🔍 Running verification on {project.name}...")
+    console.print()
+
+    harness = VerificationHarness(project, artifacts)
+    result = harness.run(verify_file)
+
+    # Print results
+    for step in result.steps:
+        status = "✅" if step.passed else "❌"
+        console.print(f"{status} {step.step_name} ({step.duration_ms}ms)")
+
+        if not step.passed:
+            console.print(f"   Error {step.error_code}: {step.message}")
+            if step.stderr:
+                console.print(f"   stderr: {step.stderr[:200]}")
+
+    console.print()
+    console.print(f"Total duration: {result.total_duration_ms}ms")
+    console.print(f"Artifacts saved to: {result.artifacts_path}")
+
+    if result.passed:
+        console.print("✅ Verification PASSED")
+        sys.exit(0)
+    else:
+        console.print("❌ Verification FAILED")
+        if result.failed_step:
+            console.print(f"Failed at: {result.failed_step.step_name}")
+            console.print(f"Error: {result.failed_step.error_code} - {result.failed_step.message}")
         sys.exit(1)
 
 

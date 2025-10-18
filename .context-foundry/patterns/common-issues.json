@@ -1,0 +1,103 @@
+{
+  "$schema": "Pattern Library for Common Issues",
+  "version": "1.0.0",
+  "last_updated": "2025-10-18T22:30:00Z",
+  "description": "Common issues encountered across builds with proven solutions",
+
+  "patterns": [
+    {
+      "pattern_id": "cors-es6-modules",
+      "title": "CORS Error with ES6 Modules from file://",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "severity": "HIGH",
+      "project_types": ["browser-app", "es6-modules", "web-game", "web-app"],
+      "tech_stack": ["javascript", "html5", "es6-modules"],
+
+      "issue": {
+        "description": "Browser blocks ES6 module imports from file:// protocol",
+        "error_message": "Origin null is not allowed by Access-Control-Allow-Origin",
+        "symptoms": [
+          "Game/app stuck at loading screen",
+          "Console error: Failed to load resource",
+          "Module imports fail silently"
+        ],
+        "detected_in_phase": "Manual user testing",
+        "should_detect_in_phase": "Test"
+      },
+
+      "root_cause": "Browsers enforce CORS policy that blocks ES6 module loading from file:// for security. Unit tests with Jest+jsdom don't catch this because they mock the browser environment.",
+
+      "solution": {
+        "scout": {
+          "action": "Flag CORS risk in scout-report.md",
+          "check": "If project uses ES6 modules AND targets browser, warn about file:// restrictions",
+          "note": "Recommend dev server from the start"
+        },
+        "architect": {
+          "action": "Include dev server in architecture",
+          "specifics": [
+            "Add http-server to package.json devDependencies",
+            "Create npm run dev script with auto-open",
+            "Document server requirement in architecture.md"
+          ],
+          "example": {
+            "package.json": {
+              "devDependencies": {
+                "http-server": "^14.1.1"
+              },
+              "scripts": {
+                "dev": "http-server -p 8080 -o",
+                "start": "http-server -p 8080 -o"
+              }
+            }
+          }
+        },
+        "builder": {
+          "action": "Implement as per architecture",
+          "verification": "Builder should create package.json with dev server configured"
+        },
+        "test": {
+          "action": "Verify dev server starts and modules load",
+          "tests": [
+            "Check dev server package exists in package.json",
+            "Verify npm scripts include dev/start",
+            "Test server starts without errors",
+            "Validate modules load via HTTP (if browser testing available)"
+          ],
+          "integration_test": "If Playwright/Selenium available, test actual browser loading"
+        }
+      },
+
+      "prevention": {
+        "auto_apply": true,
+        "conditions": ["project_type includes 'browser' OR 'web'", "uses ES6 modules"],
+        "actions": [
+          "Scout: Add warning to scout-report.md",
+          "Architect: Include http-server by default",
+          "Test: Verify dev server configuration"
+        ]
+      },
+
+      "impact": "Critical - Breaks entire application. Users cannot run the app at all.",
+
+      "fix_time_estimate": "3-5 minutes",
+
+      "references": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
+        "https://v8.dev/features/modules#mjs"
+      ],
+
+      "success_rate": "100% when dev server included from start"
+    }
+  ],
+
+  "statistics": {
+    "total_patterns": 1,
+    "high_severity": 1,
+    "medium_severity": 0,
+    "low_severity": 0,
+    "auto_apply_enabled": 1
+  }
+}

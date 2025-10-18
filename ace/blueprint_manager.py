@@ -20,6 +20,7 @@ class BlueprintManager:
     CANONICAL_FILES = {
         "research": "RESEARCH.md",
         "spec": "SPEC.md",
+        "spec_yaml": "SPEC.yaml",
         "plan": "PLAN.md",
         "tasks": "TASKS.md"
     }
@@ -78,7 +79,8 @@ class BlueprintManager:
         tasks: str,
         session_id: str,
         mode: str,
-        task_description: str
+        task_description: str,
+        spec_yaml: Optional[str] = None
     ) -> None:
         """Save blueprint files to .context-foundry/.
 
@@ -90,6 +92,7 @@ class BlueprintManager:
             session_id: Session identifier
             mode: Session mode (build/fix/enhance)
             task_description: Task description
+            spec_yaml: Optional SPEC.yaml content (Phase 2+)
         """
         # Ensure directory exists
         self.context_dir.mkdir(parents=True, exist_ok=True)
@@ -100,6 +103,10 @@ class BlueprintManager:
         (self.context_dir / self.CANONICAL_FILES["plan"]).write_text(plan)
         (self.context_dir / self.CANONICAL_FILES["tasks"]).write_text(tasks)
 
+        # Save SPEC.yaml if provided (Phase 2+)
+        if spec_yaml:
+            (self.context_dir / self.CANONICAL_FILES["spec_yaml"]).write_text(spec_yaml)
+
         # Save to history
         session_history_dir = self.history_dir / f"{mode}_{session_id}"
         session_history_dir.mkdir(parents=True, exist_ok=True)
@@ -109,24 +116,29 @@ class BlueprintManager:
         (session_history_dir / "PLAN.md").write_text(plan)
         (session_history_dir / "TASKS.md").write_text(tasks)
 
+        # Save SPEC.yaml to history if provided
+        if spec_yaml:
+            (session_history_dir / "SPEC.yaml").write_text(spec_yaml)
+
         # Update manifest
         self._update_manifest(session_id, mode, task_description)
 
-    def load_canonical_blueprints(self) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    def load_canonical_blueprints(self) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
         """Load canonical (latest) blueprint files.
 
         Returns:
-            Tuple of (research, spec, plan, tasks) content, or None if not found
+            Tuple of (research, spec, spec_yaml, plan, tasks) content, or None if not found
         """
         if not self.is_foundry_project():
-            return None, None, None, None
+            return None, None, None, None, None
 
         research = self._read_file(self.context_dir / self.CANONICAL_FILES["research"])
         spec = self._read_file(self.context_dir / self.CANONICAL_FILES["spec"])
+        spec_yaml = self._read_file(self.context_dir / self.CANONICAL_FILES["spec_yaml"])
         plan = self._read_file(self.context_dir / self.CANONICAL_FILES["plan"])
         tasks = self._read_file(self.context_dir / self.CANONICAL_FILES["tasks"])
 
-        return research, spec, plan, tasks
+        return research, spec, spec_yaml, plan, tasks
 
     def get_session_history(self) -> List[Dict]:
         """Get session history from manifest.

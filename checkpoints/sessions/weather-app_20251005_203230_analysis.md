@@ -1,0 +1,43 @@
+# Session Analysis: weather-app_20251005_203230
+
+**Generated**: 2025-10-05 20:35:42
+
+## Summary
+
+- **Completion Rate**: 100.0%
+- **Tasks Completed**: 7/7
+- **Total Time**: 0.0 hours
+- **Total Cost**: $0.01
+
+## Performance Metrics
+
+### Context Usage
+- **Average**: 0.0%
+- **Maximum**: 0.0%
+- **Minimum**: 0.0%
+- **Compactions**: 0
+
+### Time
+- **Total Duration**: 0.0 minutes (0.0 hours)
+- **Avg per Task**: 0.0 minutes
+- **Tasks Completed**: 0
+
+### Tokens
+- **Total Tokens**: 23,647
+- **Input Tokens**: 12,179
+- **Output Tokens**: 11,468
+- **Tokens per Task**: 3,378
+
+### Cost
+- **Total Cost**: $0.01
+- **Cost per Task**: $0.00
+
+## Pattern Usage
+
+- **Patterns Used**: 0
+- **Avg Rating**: 0.0/5
+
+### Top Patterns
+
+## Recommendations
+

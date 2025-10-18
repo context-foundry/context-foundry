@@ -1,0 +1,67 @@
+{
+  "$schema": "Pattern Library for Architectural Patterns",
+  "version": "1.0.0",
+  "last_updated": "2025-10-18T22:30:00Z",
+  "description": "Proven architectural patterns from successful builds",
+
+  "patterns": [
+    {
+      "pattern_id": "entity-component-game-architecture",
+      "title": "Entity-Component Architecture for Games",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "success_rate": "100%",
+      "project_types": ["game", "simulation", "interactive-graphics"],
+
+      "description": "Separate entities (Player, Enemy, Projectile) from systems (Collision, Rendering, Input) for clean game architecture",
+
+      "structure": {
+        "entities": {
+          "description": "Game objects with state",
+          "examples": ["Player", "Enemy", "Projectile", "PowerUp"],
+          "base_class": "Entity (with x, y, width, height, active)",
+          "benefits": "Easy to test, reusable, clear responsibilities"
+        },
+        "systems": {
+          "description": "Logic that operates on entities",
+          "examples": ["CollisionManager", "InputManager", "WaveManager", "ScoreManager"],
+          "benefits": "Decoupled logic, testable independently"
+        },
+        "managers": {
+          "description": "Coordinate between entities and systems",
+          "examples": ["Game (main loop)", "Background", "ParticleSystem"]
+        }
+      },
+
+      "file_structure": {
+        "js/entities/": ["Entity.js", "Player.js", "Enemy.js", "Projectile.js"],
+        "js/managers/": ["CollisionManager.js", "InputManager.js", "ScoreManager.js"],
+        "js/systems/": ["Background.js", "ParticleSystem.js"],
+        "js/utils/": ["Constants.js"],
+        "js/": ["Game.js", "main.js"]
+      },
+
+      "benefits": [
+        "Clean separation of concerns",
+        "Easy to test each component independently",
+        "Reusable entity base class",
+        "Managers handle cross-cutting concerns",
+        "Scales well to complex games"
+      ],
+
+      "test_coverage": "100% - each entity and manager can be unit tested",
+
+      "applies_to": ["games", "simulations", "canvas-based apps"],
+
+      "auto_apply": true,
+      "priority": "MEDIUM"
+    }
+  ],
+
+  "statistics": {
+    "total_patterns": 1,
+    "high_success_rate": 1,
+    "auto_apply_enabled": 1
+  }
+}

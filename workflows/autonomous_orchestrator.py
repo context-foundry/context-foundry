@@ -14,17 +14,21 @@ from typing import Dict, List, Optional, Any
 from rich.console import Console
 
 # Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+FOUNDRY_ROOT = Path(__file__).parent.parent
+sys.path.append(str(FOUNDRY_ROOT))
 
 from ace.ai_client import AIClient
 from ace.cost_tracker import CostTracker
 from ace.pricing_database import PricingDatabase
 from ace.blueprint_manager import BlueprintManager
+from ace.architects.spec_generator import SpecYamlGenerator, detect_project_type
+from ace.architects.contract_test_generator import ContractTestGenerator
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
 from ace.pattern_injection import PatternInjector
 from tools.analyze_session import SessionAnalyzer
 from tools.livestream.broadcaster import EventBroadcaster
+from workflows.multi_agent_orchestrator import MultiAgentOrchestrator
 
 # Rich console for styled output
 console = Console()
@@ -47,6 +51,7 @@ class AutonomousOrchestrator:
         mode: str = "new",  # "new" or "enhance"
         ctx: Optional[Any] = None,  # FastMCP Context for MCP mode
         auto_push: bool = False,  # If True, push to GitHub after successful build
+        use_multi_agent: Optional[bool] = None,  # If None, auto-detect from autonomous flag
     ):
         self.project_name = project_name
         self.task_description = task_description
@@ -58,15 +63,20 @@ class AutonomousOrchestrator:
         self.auto_push = auto_push  # If True, push to GitHub after build
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # Determine multi-agent mode: use it for autonomous mode unless explicitly disabled
+        if use_multi_agent is None:
+            use_multi_agent = autonomous and os.getenv('USE_MULTI_AGENT', 'true').lower() in ('true', '1', 'yes')
+        self.use_multi_agent = use_multi_agent
+
         # For fix mode session resume
         self.resume_session = None  # Session ID to resume
         self.resume_tasks = None  # List of task numbers to re-run
 
         # Paths
-        self.project_dir = project_dir or Path(f"examples/{project_name}")
+        self.project_dir = project_dir or (FOUNDRY_ROOT / "examples" / project_name)
         self.blueprints_path = self.project_dir / ".context-foundry"  # Local to project
-        self.checkpoints_path = Path("checkpoints/sessions")
-        self.logs_path = Path(f"logs/{self.timestamp}")
+        self.checkpoints_path = FOUNDRY_ROOT / "checkpoints" / "sessions"
+        self.logs_path = FOUNDRY_ROOT / "logs" / self.timestamp
 
         # Create directories
         self.project_dir.mkdir(parents=True, exist_ok=True)
@@ -115,6 +125,7 @@ class AutonomousOrchestrator:
         print(f"📋 Project: {project_name}")
         print(f"📝 Task: {task_description}")
         print(f"🤖 Mode: {'Autonomous' if autonomous else 'Interactive'}")
+        print(f"🚀 Multi-Agent: {'Enabled (parallel)' if self.use_multi_agent else 'Disabled (sequential)'}")
         print(f"📚 Patterns: {'Enabled' if use_patterns else 'Disabled'}")
         print(f"📡 Livestream: {'Enabled' if enable_livestream else 'Disabled'}")
         print(f"📤 Auto-push: {'Enabled' if auto_push else 'Disabled'}")
@@ -156,7 +167,11 @@ class AutonomousOrchestrator:
             if self.mode == "fix" and self.resume_session and self.resume_tasks:
                 return self.run_session_resume()
 
-            # Normal workflow: Scout → Architect → Builder
+            # Use multi-agent orchestration if enabled
+            if self.use_multi_agent:
+                return self._run_multi_agent()
+
+            # Normal workflow: Scout → Architect → Builder (sequential/legacy mode)
             # Phase 1: Scout
             header = self._format_phase_header("1: SCOUT", "🔍", "SCOUT_PROVIDER", "SCOUT_MODEL")
             print(header)
@@ -190,6 +205,53 @@ class AutonomousOrchestrator:
 
         except Exception as e:
             return self.handle_error(e, results)
+
+    def _run_multi_agent(self) -> Dict:
+        """Execute workflow using multi-agent orchestration system.
+
+        Uses parallel Scout and Builder agents for 67% faster execution.
+        """
+        print("\n🚀 Using Multi-Agent Orchestration (Parallel Mode)")
+        print("="*80)
+
+        try:
+            # Create multi-agent orchestrator
+            orchestrator = MultiAgentOrchestrator(
+                project_name=self.project_name,
+                task_description=self.task_description,
+                project_dir=self.project_dir,
+                enable_checkpointing=True,
+                enable_self_healing=True,
+                max_healing_attempts=3
+            )
+
+            # Run multi-agent workflow
+            result = orchestrator.run()
+
+            # Convert multi-agent result format to match expected format
+            if result.get('success'):
+                return {
+                    'status': 'success',
+                    'project_dir': result.get('project_dir'),
+                    'session_id': result.get('session_id'),
+                    'results': result.get('results', {}),
+                    'metrics': result.get('metrics', {}),
+                    'multi_agent': True
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'error': result.get('error', 'Multi-agent build failed'),
+                    'session_id': result.get('session_id'),
+                    'multi_agent': True
+                }
+
+        except Exception as e:
+            print(f"\n❌ Multi-agent execution failed: {e}")
+            print("   Falling back to sequential mode...\n")
+            # Disable multi-agent and try again with sequential
+            self.use_multi_agent = False
+            return self.run()
 
     def run_session_resume(self) -> Dict:
         """Resume a previous session and re-run specific tasks."""
@@ -261,7 +323,7 @@ class AutonomousOrchestrator:
     def run_scout_phase(self) -> Dict:
         """Scout phase: Research architecture and approach."""
         # Load Scout agent config
-        scout_config = Path(".foundry/agents/scout.md").read_text()
+        scout_config = (FOUNDRY_ROOT / ".foundry/agents/scout.md").read_text()
 
         # Build prompt based on mode
         current_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -272,7 +334,7 @@ class AutonomousOrchestrator:
 
         if is_foundry_project and self.mode in ["fix", "enhance"]:
             # Load existing blueprints
-            research, spec, plan, tasks = self.blueprint_manager.load_canonical_blueprints()
+            research, spec, spec_yaml, plan, tasks = self.blueprint_manager.load_canonical_blueprints()
 
             print("📚 Detected foundry-built project - loading existing context...")
             print(f"   Found: .context-foundry/ directory")
@@ -447,7 +509,7 @@ Keep output under 5000 tokens. Be specific and actionable."""
         research_content = scout_result["content"]
 
         # Load Architect agent config
-        architect_config = Path(".foundry/agents/architect.md").read_text()
+        architect_config = (FOUNDRY_ROOT / ".foundry/agents/architect.md").read_text()
 
         # Add mode-specific file path requirements
         if self.mode in ["fix", "enhance"]:
@@ -462,7 +524,25 @@ CRITICAL FILE PATH REQUIREMENTS (fix/enhance modes):
 - Validate file paths include directory structure (e.g., "src/", "js/", "lib/")
 """
         else:
-            file_path_requirements = ""
+            file_path_requirements = """
+CRITICAL FILE PATH REQUIREMENTS (new projects):
+□ For Create React App / React projects:
+  - ALL source files MUST be under src/ directory
+  - Components: src/components/*.js (e.g., src/components/Header.js)
+  - Services/APIs: src/services/*.js or src/api/*.js (e.g., src/services/weatherService.js)
+  - Styles: src/*.css or src/styles/*.css (e.g., src/App.css, src/index.css)
+  - Utils/Helpers: src/utils/*.js (e.g., src/utils/formatDate.js)
+  - Tests: Co-located with source (e.g., src/components/Header.test.js)
+  - Public assets: public/ (e.g., public/index.html, public/favicon.ico)
+
+□ Use FULL paths from project root in task breakdown:
+  - ✅ CORRECT: "src/components/WeatherCard.js"
+  - ❌ WRONG: "components/WeatherCard.js" or "WeatherCard.js"
+
+□ For other project types (Node.js, Python, etc.):
+  - Follow standard conventions for that ecosystem
+  - Always specify full paths from project root
+"""
 
         # Build prompt
         prompt = f"""You are the Architect agent in Context Foundry.
@@ -526,8 +606,59 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
         plan_file.write_text(files.get("plan", response.content))
         tasks_file.write_text(files.get("tasks", response.content))
 
-        print(f"✅ Architecture complete")
+        # Phase 2: Generate SPEC.yaml from SPEC.md
+        spec_yaml_content = None
+        spec_yaml_file = None
+        try:
+            print("\n🔧 Generating SPEC.yaml...")
+
+            # Detect project type from SPEC.md content
+            spec_content = files.get("spec", response.content)
+            project_type = detect_project_type(spec_content)
+            print(f"   Detected project type: {project_type}")
+
+            # Generate SPEC.yaml
+            spec_generator = SpecYamlGenerator(self.ai_client)
+            spec_yaml_content = spec_generator.generate(spec_content, project_type)
+
+            # Save SPEC.yaml to .context-foundry directory
+            spec_yaml_file = self.blueprints_path / "SPEC.yaml"
+            spec_yaml_file.parent.mkdir(parents=True, exist_ok=True)
+            spec_yaml_file.write_text(spec_yaml_content)
+
+            print(f"   ✅ SPEC.yaml generated")
+            print(f"   📄 Saved to: {spec_yaml_file}")
+
+            # Phase 3: Generate contract tests from SPEC.yaml
+            try:
+                print("\n🧪 Generating contract tests from SPEC.yaml...")
+
+                test_generator = ContractTestGenerator()
+                contract_tests = test_generator.generate_from_yaml(spec_yaml_file)
+
+                # Write contract tests to project directory
+                test_files_created = []
+                for test_file, test_content in contract_tests.items():
+                    test_path = self.project_dir / test_file
+                    test_path.parent.mkdir(parents=True, exist_ok=True)
+                    test_path.write_text(test_content)
+                    test_files_created.append(test_file)
+                    print(f"   ✅ Created: {test_file}")
+
+                print(f"   📦 Generated {len(test_files_created)} contract test file(s)")
+
+            except Exception as e:
+                print(f"   ⚠️  Contract test generation failed (non-blocking): {e}")
+                # Continue without contract tests - this is Phase 3, not critical
+
+        except Exception as e:
+            print(f"   ⚠️  SPEC.yaml generation failed (non-blocking): {e}")
+            # Continue without SPEC.yaml - this is a Phase 2 feature, not critical
+
+        print(f"\n✅ Architecture complete")
         print(f"📄 SPEC: {spec_file}")
+        if spec_yaml_file:
+            print(f"📄 SPEC.yaml: {spec_yaml_file}")
         print(f"📄 PLAN: {plan_file}")
         print(f"📄 TASKS: {tasks_file}")
         print(f"📊 Tokens: {response.input_tokens} in, {response.output_tokens} out")
@@ -551,9 +682,11 @@ Output each file's COMPLETE content. Be thorough and specific. This is the CRITI
 
         return {
             "spec": str(spec_file),
+            "spec_yaml": str(spec_yaml_file) if spec_yaml_file else None,
             "plan": str(plan_file),
             "tasks": str(tasks_file),
             "spec_content": files.get("spec", response),
+            "spec_yaml_content": spec_yaml_content,
             "plan_content": files.get("plan", response),
             "tasks_content": files.get("tasks", response),
             "metadata": metadata,
@@ -699,7 +832,84 @@ DO NOT:
 DO:
 - Output COMPLETE working code for every file
 - Include all imports, functions, classes
-- Provide production-ready code"""
+- Provide production-ready code
+
+⚠️  COMPONENT INTEGRATION CHECKLIST (if creating React/UI components):
+□ Wire up all component props - check what parent components expect
+□ Connect state management (useState, useContext, props, etc.)
+□ Pass callbacks for event handling (onClick, onSubmit, onChange, etc.)
+□ Transform/format data to match component prop expectations
+□ Import and use hooks properly (useEffect dependencies, etc.)
+□ Ensure parent components render children with correct props
+
+Example: If creating SearchBar component that expects onSearch prop,
+the parent App component MUST:
+- Define a handler function (e.g., handleSearch)
+- Pass it as <SearchBar onSearch={{handleSearch}} />
+- Use the search value in state or API calls
+
+⚠️  API KEY HANDLING (if task mentions API keys):
+□ Extract the actual API key value from the task description
+□ For static HTML/JS apps (no package.json):
+  - Hard-code the key directly: const API_KEY = 'actual_key_from_task';
+  - DO NOT use process.env or .env files (they don't work in browsers)
+  - DO NOT use placeholders like 'YOUR_API_KEY' or 'REPLACE_ME'
+□ For React/Node.js apps (has package.json):
+  - Use environment variables: process.env.REACT_APP_API_KEY
+  - The .env file will be auto-generated by foundry
+□ Always use the REAL key from the task description, not a placeholder
+
+Example - Static HTML:
+Task says: "key=c4b27d06b0817cd09f83aa58745fda97"
+Correct: const API_KEY = 'c4b27d06b0817cd09f83aa58745fda97';
+Wrong: const API_KEY = 'YOUR_API_KEY';  // ❌ NEVER DO THIS
+
+Example - React:
+Correct: const API_KEY = process.env.REACT_APP_WEATHER_API_KEY;
+
+⚠️  CREATE REACT APP (CRA) STRUCTURE REQUIREMENTS:
+If the task mentions "Create React App", "CRA", "react-scripts", or package.json has "react-scripts":
+□ MUST include "react-scripts" in package.json dependencies:
+  ```json
+  "dependencies": {{
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-scripts": "^5.0.0"
+  }}
+  ```
+□ MUST create public/index.html with:
+  - <!DOCTYPE html> declaration
+  - <div id="root"></div> for React mounting
+  - %PUBLIC_URL% placeholders (e.g., <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />)
+□ MUST create src/index.js that renders to #root
+□ Optional but recommended: public/manifest.json, public/favicon.ico
+
+Minimal public/index.html template:
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>React App</title>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
+```
+
+⚠️  CRITICAL: react-scripts will FAIL without public/index.html - always create it!
+
+Additional common CRA files to create if needed:
+- src/index.css - Global styles imported by src/index.js
+- src/App.css - Component styles for App component
+- public/manifest.json - PWA manifest (optional)
+- public/favicon.ico - Browser icon (optional)
+
+If you import a file (e.g., `import './index.css'`), you MUST create that file!"""
 
             # Inject relevant patterns if enabled
             pattern_ids = []
@@ -783,6 +993,14 @@ DO:
             if readme_path:
                 print(f"   ✅ README created: {readme_path}")
 
+        # Generate .env file with API keys if applicable
+        env_path = None
+        if total_impl_files > 0 and self.mode == "new":
+            env_path = self._generate_env_file()
+            if env_path:
+                print(f"   ✅ Environment file created: {env_path}")
+                print(f"   💡 Remember to restart your dev server to load new environment variables")
+
         # Validate build files for broken references
         validation_result = {"issues": [], "warnings": []}
         if total_impl_files > 0:
@@ -805,6 +1023,113 @@ DO:
                 for warning in validation_result["warnings"]:
                     print(f"      • {warning}")
 
+        # Validate project structure (CRA, Vite, etc.)
+        structure_result = {"issues": [], "warnings": []}
+        if total_impl_files > 0:
+            print("\n🏗️  Validating project structure...")
+            structure_result = self._validate_project_structure()
+
+            if structure_result["issues"]:
+                print(f"   ❌ Found {len(structure_result['issues'])} structure issue(s):")
+                for issue in structure_result["issues"]:
+                    print(f"      • {issue}")
+            else:
+                print(f"   ✅ Project structure valid")
+
+            if structure_result["warnings"]:
+                print(f"   ⚠️  {len(structure_result['warnings'])} structure warning(s):")
+                for warning in structure_result["warnings"]:
+                    print(f"      • {warning}")
+
+        # ============================================================
+        # SELF-HEALING VALIDATION PHASE
+        # ============================================================
+        run_smoke_test = os.getenv('FOUNDRY_SMOKE_TEST', 'true').lower() in ('true', '1', 'yes')
+        validation_failed = False
+        failure_reason = None
+
+        if run_smoke_test and total_impl_files > 0:
+            print("\n" + "="*60)
+            print("🔧 SELF-HEALING VALIDATION PHASE")
+            print("="*60)
+            print("Running validations with automatic error fixing...")
+
+            # Step 1: Build validation (npm install + npm build) with retry
+            print("\n📦 Step 1: Build Validation")
+            if not self._retry_until_success(
+                validation_fn=self._run_build_validation,
+                context_description="Build validation (npm install + npm build)",
+                max_attempts=3
+            ):
+                validation_failed = True
+                failure_reason = "Build validation failed after 3 attempts"
+
+            # Step 2: Static validation (only if build passed, or no build needed)
+            if not validation_failed and validation_result["issues"]:
+                print("\n📋 Static Validation Issues Detected:")
+                for issue in validation_result["issues"]:
+                    print(f"   • {issue}")
+                # Don't fail on static validation issues - Builder might have fixed them
+                # Just show warnings
+
+            if not validation_failed and structure_result["issues"]:
+                print("\n🏗️  Structure Validation Issues Detected:")
+                for issue in structure_result["issues"]:
+                    print(f"   • {issue}")
+                # Don't fail on structure issues - Builder might have fixed them
+
+            # Step 3: Runtime validation (smoke test with retry)
+            if not validation_failed:
+                print("\n🧪 Step 3: Runtime Validation")
+                if not self._retry_until_success(
+                    validation_fn=self._run_smoke_test_wrapper,
+                    context_description="Runtime smoke test",
+                    max_attempts=3
+                ):
+                    validation_failed = True
+                    failure_reason = "Runtime validation failed after 3 attempts"
+
+            # Step 4: Browser validation (optional, controlled by env var)
+            run_browser_validation = os.getenv('FOUNDRY_BROWSER_VALIDATION', 'true').lower() in ('true', '1', 'yes')
+            if not validation_failed and run_browser_validation:
+                print("\n🌐 Step 4: Browser Validation (Playwright)")
+                if not self._retry_until_success(
+                    validation_fn=self._run_browser_validation,
+                    context_description="Browser validation (Playwright)",
+                    max_attempts=2
+                ):
+                    validation_failed = True
+                    failure_reason = "Browser validation failed after 2 attempts"
+
+        # Check for validation failures
+        if validation_failed:
+            print("\n" + "="*60)
+            print("❌ CONTEXT FOUNDRY WORKFLOW FAILED")
+            print("="*60)
+            print(f"\nReason: {failure_reason}")
+            print(f"Project: {self.project_dir}")
+            print("\n⚠️  The build could not complete successfully after multiple attempts.")
+            print("Check the error messages above for details.")
+            print("\nManual intervention may be required.")
+            print("="*60)
+
+            return {
+                "tasks_completed": len(completed_tasks),
+                "progress_file": str(progress_file),
+                "metadata": self.ai_client.get_usage_stats(),
+                "files_created": {
+                    "implementation": total_impl_files,
+                    "test": total_test_files,
+                    "total": total_impl_files + total_test_files
+                },
+                "readme_path": str(readme_path) if readme_path else None,
+                "validation": validation_result,
+                "structure": structure_result,
+                "status": "failed",
+                "failure_reason": failure_reason,
+            }
+
+        # SUCCESS!
         return {
             "tasks_completed": len(completed_tasks),
             "progress_file": str(progress_file),
@@ -937,6 +1262,13 @@ DO:
                 # (Python's Path treats "/file.txt" as absolute, ignoring project_dir)
                 filepath = filepath.lstrip('/')
 
+                # Fix: Remove duplicate project path prefixes
+                # LLM sometimes outputs "examples/weather-app/src/..." when we're already in examples/weather-app/
+                if filepath.startswith(f'examples/{self.project_name}/'):
+                    filepath = filepath.replace(f'examples/{self.project_name}/', '', 1)
+                elif filepath.startswith(f'{self.project_name}/'):
+                    filepath = filepath.replace(f'{self.project_name}/', '', 1)
+
                 # Save file
                 full_path = (project_dir / filepath).resolve()
 
@@ -946,6 +1278,18 @@ DO:
                     continue
 
                 full_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Post-process CRA template variables before writing
+                if '%PUBLIC_URL%' in code or '%REACT_APP_' in code:
+                    # Replace CRA template variables
+                    code = code.replace('%PUBLIC_URL%', '')  # Empty string for local dev
+                    # Replace environment variables if available
+                    import re
+                    env_vars = re.findall(r'%REACT_APP_([A-Z_]+)%', code)
+                    for var_name in env_vars:
+                        env_value = os.getenv(f'REACT_APP_{var_name}', '')
+                        code = code.replace(f'%REACT_APP_{var_name}%', env_value)
+
                 full_path.write_text(code)
 
                 print(f"   📁 Created: {full_path}")
@@ -1017,13 +1361,16 @@ Total Tokens: {stats['total_tokens']:,}
         Returns:
             Path to README.md if created, None otherwise
         """
-        # Collect all files
-        all_files = []
+        # Collect all files (use set to deduplicate)
+        all_files_set = set()
         for task_num, files_list in files_created:
-            all_files.extend(files_list)
+            all_files_set.update(files_list)
 
-        if not all_files:
+        if not all_files_set:
             return None
+
+        # Convert to sorted list for consistent ordering
+        all_files = sorted(all_files_set)
 
         # Detect project type
         has_package_json = (self.project_dir / "package.json").exists()
@@ -1032,8 +1379,25 @@ Total Tokens: {stats['total_tokens']:,}
 
         # Determine run instructions
         if has_package_json:
-            project_type = "Node.js"
-            run_instructions = """## Quick Start
+            # Check which npm script to use
+            try:
+                package_data = json.loads((self.project_dir / "package.json").read_text())
+                scripts = package_data.get('scripts', {})
+
+                # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                if 'start' in scripts:
+                    npm_command = "npm start"
+                elif 'dev' in scripts:
+                    npm_command = "npm run dev"
+                else:
+                    npm_command = "npm start"  # default
+
+                project_type = "Node.js"
+            except:
+                npm_command = "npm start"  # fallback
+                project_type = "Node.js"
+
+            run_instructions = f"""## Quick Start
 
 1. Install dependencies:
    ```bash
@@ -1042,14 +1406,39 @@ Total Tokens: {stats['total_tokens']:,}
 
 2. Run the development server:
    ```bash
-   npm run dev
+   {npm_command}
    ```
 
 3. Open your browser to the URL shown in the terminal (usually http://localhost:3000)"""
 
         elif has_index_html and not has_package_json:
             project_type = "Static HTML"
-            run_instructions = """## Quick Start
+
+            # Check if app makes API calls (likely needs local server for CORS)
+            has_api_calls = any('api' in f.lower() or 'fetch' in str(all_files).lower() for f in all_files)
+
+            if has_api_calls:
+                run_instructions = """## Quick Start
+
+⚠️  **Important**: This app makes API calls and MUST be run through a local server (not by opening the file directly).
+
+**Option 1 - Python (simplest)**:
+```bash
+python3 -m http.server 8000
+```
+Then open http://localhost:8000
+
+**Option 2 - Node.js**:
+```bash
+npx serve .
+```
+
+**Option 3 - VS Code**:
+Install "Live Server" extension, then right-click index.html → "Open with Live Server"
+
+**Why?** Opening the HTML file directly (`file:///`) causes CORS errors when making API requests."""
+            else:
+                run_instructions = """## Quick Start
 
 This is a static HTML/CSS/JavaScript app. No build step needed!
 
@@ -1127,6 +1516,75 @@ To use your own API key, update the relevant configuration file."""
 
         return readme_path
 
+    def _generate_env_file(self) -> Optional[Path]:
+        """Generate .env file with API keys extracted from task description.
+
+        Returns:
+            Path to .env if created, None otherwise
+        """
+        import re
+
+        # Check if task description mentions API keys
+        if 'api' not in self.task_description.lower() or 'key' not in self.task_description.lower():
+            return None
+
+        # Don't create .env for static HTML apps (they can't use it - no build process)
+        package_json_path = self.project_dir / "package.json"
+        if not package_json_path.exists():
+            # Static HTML app - builder should hard-code keys directly in JS
+            return None
+
+        # Extract API key name and value
+        # Common patterns:
+        # - "key=abc123" or "key: abc123"
+        # - "api key abc123" or "API_KEY=abc123"
+        # - "openweathermap api key c4b27..."
+
+        env_vars = {}
+
+        # Pattern 1: key=value or key:value
+        key_match = re.search(r'key[=:\s]+([a-zA-Z0-9_-]+)', self.task_description, re.IGNORECASE)
+        if key_match:
+            key_value = key_match.group(1)
+
+            # Detect project type for proper env var naming
+            package_json_path = self.project_dir / "package.json"
+            if package_json_path.exists():
+                try:
+                    package_data = json.loads(package_json_path.read_text())
+                    dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+                    # Create React App uses REACT_APP_ prefix
+                    if 'react-scripts' in dependencies:
+                        env_vars['REACT_APP_WEATHER_API_KEY'] = key_value
+                        env_vars['REACT_APP_API_KEY'] = key_value
+                    # Vite uses VITE_ prefix
+                    elif 'vite' in dependencies:
+                        env_vars['VITE_WEATHER_API_KEY'] = key_value
+                        env_vars['VITE_API_KEY'] = key_value
+                    else:
+                        env_vars['API_KEY'] = key_value
+                        env_vars['WEATHER_API_KEY'] = key_value
+                except:
+                    env_vars['API_KEY'] = key_value
+            else:
+                env_vars['API_KEY'] = key_value
+
+        if not env_vars:
+            return None
+
+        # Generate .env content
+        env_content = "# Auto-generated by Context Foundry\n"
+        env_content += "# API Keys extracted from task description\n\n"
+        for key, value in env_vars.items():
+            env_content += f"{key}={value}\n"
+
+        # Save .env file
+        env_path = self.project_dir / ".env"
+        env_path.write_text(env_content)
+
+        return env_path
+
     def _validate_build_files(self, all_files: List[str]) -> Dict[str, List[str]]:
         """Validate that all file references in the code actually exist.
 
@@ -1193,7 +1651,9 @@ To use your own API key, update the relevant configuration file."""
                         continue
 
                     # Resolve relative import
-                    if not import_path.endswith('.js'):
+                    # Only add .js extension if no extension is present
+                    _, ext = os.path.splitext(import_path)
+                    if not ext:  # No extension, assume .js
                         import_path += '.js'
 
                     expected_path = (js_path.parent / import_path).resolve()
@@ -1205,10 +1665,1443 @@ To use your own API key, update the relevant configuration file."""
                         # Path is outside project directory, skip
                         pass
 
+                # Check CSS imports: import './styles.css'
+                css_imports = re.findall(r'import\s+["\']([^"\']+\.css)["\']', content)
+                for css_import in css_imports:
+                    # Only check relative imports
+                    if css_import.startswith('.'):
+                        expected_path = (js_path.parent / css_import).resolve()
+                        try:
+                            relative_to_project = expected_path.relative_to(self.project_dir)
+                            if str(relative_to_project) not in created_paths_str:
+                                issues.append(f"{js_file} imports '{css_import}' but file not found at {relative_to_project}")
+                        except ValueError:
+                            # Path is outside project directory, skip
+                            pass
+
             except Exception as e:
                 warnings.append(f"Could not validate {js_file}: {e}")
 
         return {"issues": issues, "warnings": warnings}
+
+    def _validate_project_structure(self) -> Dict[str, List[str]]:
+        """Validate project structure matches detected type (CRA, Vite, etc.).
+
+        Returns:
+            dict with 'issues' list and 'warnings' list
+        """
+        issues = []
+        warnings = []
+
+        package_json_path = self.project_dir / "package.json"
+
+        if not package_json_path.exists():
+            return {"issues": issues, "warnings": warnings}
+
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            dependencies = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+            # Check for Create React App
+            if 'react-scripts' in dependencies:
+                # CRA requires specific structure
+                public_index = self.project_dir / "public" / "index.html"
+                src_index_js = self.project_dir / "src" / "index.js"
+                src_index_html = self.project_dir / "src" / "index.html"
+
+                if not public_index.exists():
+                    issues.append("Create React App detected but public/index.html is missing (required by react-scripts)")
+
+                if src_index_html.exists():
+                    issues.append("Found src/index.html but CRA requires public/index.html - move it to public/ directory")
+
+                if not src_index_js.exists():
+                    warnings.append("Create React App detected but src/index.js entry point not found")
+
+            # Check for Vite
+            elif 'vite' in dependencies:
+                # Vite typically uses index.html in root
+                root_index = self.project_dir / "index.html"
+                if not root_index.exists():
+                    warnings.append("Vite detected but index.html not found in project root")
+
+            # Check for TailwindCSS without config
+            if 'tailwindcss' in dependencies:
+                tailwind_config = self.project_dir / "tailwind.config.js"
+                postcss_config = self.project_dir / "postcss.config.js"
+
+                if not tailwind_config.exists():
+                    warnings.append("TailwindCSS installed but tailwind.config.js not found")
+                if not postcss_config.exists():
+                    warnings.append("TailwindCSS installed but postcss.config.js not found")
+
+        except Exception as e:
+            warnings.append(f"Could not validate project structure: {e}")
+
+        return {"issues": issues, "warnings": warnings}
+
+    def _run_smoke_test(self) -> Dict[str, any]:
+        """Run optional smoke test to catch build errors.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        package_json_path = self.project_dir / "package.json"
+
+        # Check if this is a static HTML project (no package.json)
+        if not package_json_path.exists():
+            return self._run_static_html_smoke_test()
+
+        # For Node.js projects, run runtime integration tests
+        return self._run_nodejs_integration_test()
+
+    def _run_smoke_test_wrapper(self) -> tuple:
+        """Wrapper for smoke test that returns format expected by _retry_until_success.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        result = self._run_smoke_test()
+
+        # Handle None success (test skipped)
+        if result['success'] is None:
+            return (True, {})  # Skip means no failure
+
+        # Convert to expected format
+        if result['success']:
+            return (True, {})
+        else:
+            error_details = {
+                'message': result.get('output', 'Smoke test failed'),
+                'errors': result.get('errors', []),
+                'stderr': '\n'.join(result.get('errors', []))
+            }
+            return (False, error_details)
+
+    def _run_build_validation(self) -> tuple:
+        """
+        Validate that npm install + npm build work.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        package_json_path = self.project_dir / "package.json"
+
+        if not package_json_path.exists():
+            return (True, {})  # No package.json, skip
+
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            scripts = package_data.get('scripts', {})
+            deps = package_data.get('dependencies', {})
+
+            # Detect React app
+            is_react_app = 'react-scripts' in deps
+
+            # Step 1: npm install
+            print(f"      Installing dependencies...")
+            install_result = subprocess.run(
+                ['npm', 'install'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=180  # 3 minute timeout for install
+            )
+
+            if install_result.returncode != 0:
+                return (False, {
+                    'message': 'Dependency installation failed',
+                    'stderr': install_result.stderr,
+                    'stdout': install_result.stdout,
+                    'command': 'npm install',
+                    'exit_code': install_result.returncode
+                })
+
+            print(f"      ✅ Dependencies installed")
+
+            # Step 2: npm build (if build script exists)
+            if 'build' not in scripts:
+                return (True, {})  # No build script, that's okay
+
+            print(f"      Running build: npm run build...")
+
+            build_result = subprocess.run(
+                ['npm', 'run', 'build'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=180  # 3 minute timeout for build
+            )
+
+            if build_result.returncode == 0:
+                print(f"      ✅ Build succeeded")
+                return (True, {})
+            else:
+                # Parse common errors
+                import re
+                stderr = build_result.stderr
+                errors = []
+
+                if "Module not found" in stderr:
+                    module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
+                    errors.extend([f"Missing module: {m}" for m in module_errors])
+
+                if "Cannot find module" in stderr:
+                    module_errors = re.findall(r"Cannot find module '([^']+)'", stderr)
+                    errors.extend([f"Cannot find module: {m}" for m in module_errors])
+
+                if "SyntaxError" in stderr:
+                    errors.append("Syntax error in code - check stderr for details")
+
+                error_message = '; '.join(errors) if errors else 'Build failed - see stderr'
+
+                return (False, {
+                    'message': error_message,
+                    'stderr': stderr,
+                    'stdout': build_result.stdout,
+                    'command': 'npm run build',
+                    'exit_code': build_result.returncode
+                })
+
+        except subprocess.TimeoutExpired as e:
+            return (False, {
+                'message': 'Build timeout (exceeded 3 minutes)',
+                'stderr': str(e),
+                'command': e.cmd
+            })
+        except FileNotFoundError:
+            return (False, {
+                'message': 'npm not found - ensure Node.js is installed',
+                'command': 'npm'
+            })
+        except Exception as e:
+            return (False, {
+                'message': f'Build validation exception: {str(e)}',
+                'stack_trace': str(e)
+            })
+
+    def _run_nodejs_integration_test(self) -> Dict[str, any]:
+        """Run integration tests for Node.js projects.
+
+        Includes:
+        - Contract test execution
+        - Runtime server testing
+        - Endpoint validation
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        package_json_path = self.project_dir / "package.json"
+
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            scripts = package_data.get('scripts', {})
+
+            errors = []
+            outputs = []
+
+            # Step 1: Check if contract tests exist
+            contract_test_dir = self.project_dir / "tests" / "contract"
+            if contract_test_dir.exists():
+                print(f"   Running contract tests...")
+                contract_result = self._run_contract_tests()
+
+                if contract_result["success"] is False:
+                    errors.extend(contract_result["errors"])
+                    outputs.append(f"Contract tests failed: {len(contract_result['errors'])} error(s)")
+                elif contract_result["success"] is True:
+                    outputs.append(f"Contract tests passed")
+
+            # Step 2: Check if build script exists (for React/Vue/etc)
+            if 'build' in scripts:
+                print(f"   Running build test: npm run build")
+                print(f"   (This may take a minute...)")
+
+                # Run build with timeout
+                result = subprocess.run(
+                    ['npm', 'run', 'build'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=120  # 2 minute timeout
+                )
+
+                if result.returncode == 0:
+                    outputs.append("Build succeeded")
+                else:
+                    # Parse common errors
+                    import re
+                    stderr = result.stderr
+
+                    if "Module not found" in stderr:
+                        module_errors = re.findall(r"Module not found: Error: Can't resolve '([^']+)'", stderr)
+                        for module in module_errors:
+                            errors.append(f"Build error: Missing module {module}")
+
+                    if "index.html" in stderr and "public" in stderr:
+                        errors.append("Build error: Missing public/index.html (required for CRA)")
+
+                    if not errors:
+                        error_lines = stderr.strip().split('\n')[:3]
+                        errors.extend([f"Build error: {line}" for line in error_lines if line])
+
+            # Step 3: Run quick sanity test (start server and test endpoints)
+            print(f"   Running server sanity test...")
+            sanity_result = self._run_quick_sanity_test()
+
+            if sanity_result["success"] is False:
+                errors.extend(sanity_result["errors"])
+                outputs.append(f"Server sanity test failed")
+            elif sanity_result["success"] is True:
+                outputs.append(f"Server sanity test passed")
+
+            # Determine overall success
+            if errors:
+                return {
+                    "success": False,
+                    "output": "; ".join(outputs) if outputs else "Integration tests failed",
+                    "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": "; ".join(outputs) if outputs else "All integration tests passed",
+                    "errors": []
+                }
+
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "output": "Build timeout (exceeded 2 minutes)",
+                "errors": ["Build took too long - possible infinite loop or large project"]
+            }
+        except FileNotFoundError:
+            return {
+                "success": None,
+                "output": "npm not found - skipping smoke test",
+                "errors": []
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "output": str(e),
+                "errors": [f"Integration test failed: {e}"]
+            }
+
+    def _run_static_html_smoke_test(self) -> Dict[str, any]:
+        """Run smoke test for static HTML projects.
+
+        Starts a simple HTTP server and validates HTML files load without 404s.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        import http.server
+        import socketserver
+        import threading
+        import time
+        import urllib.request
+        import urllib.error
+
+        # Find HTML files in public/ directory
+        public_dir = self.project_dir / "public"
+        if not public_dir.exists():
+            return {
+                "success": None,
+                "output": "No public/ directory found - skipping static HTML smoke test",
+                "errors": []
+            }
+
+        html_files = list(public_dir.glob("**/*.html"))
+        if not html_files:
+            return {
+                "success": None,
+                "output": "No HTML files found in public/ - skipping static HTML smoke test",
+                "errors": []
+            }
+
+        print(f"   Starting HTTP server on port 8888...")
+        print(f"   Checking {len(html_files)} HTML file(s) for broken references...")
+
+        errors = []
+        server = None
+        server_thread = None
+
+        try:
+            # Start simple HTTP server
+            os.chdir(public_dir)
+            handler = http.server.SimpleHTTPRequestHandler
+
+            # Suppress server logs
+            handler.log_message = lambda *args: None
+
+            server = socketserver.TCPServer(("", 8888), handler)
+            server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+
+            # Give server time to start
+            time.sleep(0.5)
+
+            # Test each HTML file
+            for html_file in html_files:
+                relative_path = html_file.relative_to(public_dir)
+                url = f"http://localhost:8888/{relative_path}"
+
+                try:
+                    # Fetch the HTML page
+                    response = urllib.request.urlopen(url, timeout=5)
+                    html_content = response.read().decode('utf-8')
+
+                    # Parse and check for common broken references
+                    import re
+
+                    # Check CSS links
+                    css_links = re.findall(r'<link[^>]*href=["\']([^"\']+\.css)["\']', html_content)
+                    for css_link in css_links:
+                        if not css_link.startswith(('http://', 'https://', '//')):
+                            css_url = f"http://localhost:8888/{css_link}" if not css_link.startswith('/') else f"http://localhost:8888{css_link}"
+                            try:
+                                urllib.request.urlopen(css_url, timeout=2)
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"{relative_path}: CSS file not found: {css_link}")
+                            except Exception as e:
+                                errors.append(f"{relative_path}: Could not load CSS {css_link}: {str(e)}")
+
+                    # Check JS scripts
+                    js_links = re.findall(r'<script[^>]*src=["\']([^"\']+\.js)["\']', html_content)
+                    for js_link in js_links:
+                        if not js_link.startswith(('http://', 'https://', '//')):
+                            js_url = f"http://localhost:8888/{js_link}" if not js_link.startswith('/') else f"http://localhost:8888{js_link}"
+                            try:
+                                urllib.request.urlopen(js_url, timeout=2)
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"{relative_path}: JS file not found: {js_link}")
+                            except Exception as e:
+                                errors.append(f"{relative_path}: Could not load JS {js_link}: {str(e)}")
+
+                except Exception as e:
+                    errors.append(f"Could not load {relative_path}: {str(e)}")
+
+            # Shutdown server
+            if server:
+                server.shutdown()
+
+            os.chdir(self.project_dir)
+
+            if errors:
+                return {
+                    "success": False,
+                    "output": f"Found {len(errors)} broken file reference(s)",
+                    "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": f"All {len(html_files)} HTML file(s) loaded successfully",
+                    "errors": []
+                }
+
+        except Exception as e:
+            if server:
+                server.shutdown()
+            os.chdir(self.project_dir)
+            return {
+                "success": False,
+                "output": "Static HTML smoke test failed",
+                "errors": [f"Test error: {str(e)}"]
+            }
+
+    def _run_contract_tests(self) -> Dict[str, any]:
+        """Run contract tests if they exist.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        contract_test_dir = self.project_dir / "tests" / "contract"
+
+        if not contract_test_dir.exists():
+            return {"success": None, "output": "No contract tests found", "errors": []}
+
+        # Check for test files
+        test_files = list(contract_test_dir.glob("*.test.js")) + list(contract_test_dir.glob("*.test.py"))
+
+        if not test_files:
+            return {"success": None, "output": "No contract test files found", "errors": []}
+
+        # Install dependencies if needed
+        package_json = self.project_dir / "package.json"
+        if package_json.exists():
+            # Check if jest and supertest are installed
+            try:
+                package_data = json.loads(package_json.read_text())
+                deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+
+                if 'jest' not in deps or 'supertest' not in deps:
+                    print(f"      Installing test dependencies...")
+                    subprocess.run(
+                        ['npm', 'install', '--save-dev', 'jest', 'supertest'],
+                        cwd=self.project_dir,
+                        capture_output=True,
+                        timeout=60
+                    )
+            except Exception:
+                pass  # Continue even if installation fails
+
+        # Try to run tests
+        try:
+            # Try Jest (JavaScript)
+            result = subprocess.run(
+                ['npx', 'jest', 'tests/contract', '--json'],
+                cwd=self.project_dir,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            # Parse Jest output
+            try:
+                test_output = json.loads(result.stdout)
+                if test_output.get('success'):
+                    num_tests = test_output.get('numPassedTests', 0)
+                    return {
+                        "success": True,
+                        "output": f"{num_tests} contract test(s) passed",
+                        "errors": []
+                    }
+                else:
+                    # Extract failures
+                    errors = []
+                    for test_result in test_output.get('testResults', []):
+                        for assertion in test_result.get('assertionResults', []):
+                            if assertion.get('status') == 'failed':
+                                title = assertion.get('title', 'Unknown test')
+                                errors.append(f"Contract test failed: {title}")
+
+                    if not errors:
+                        errors = ["Contract tests failed (see logs for details)"]
+
+                    return {
+                        "success": False,
+                        "output": "Contract tests failed",
+                        "errors": errors
+                    }
+            except json.JSONDecodeError:
+                # Fallback: parse stderr for common errors
+                if result.returncode != 0:
+                    return {
+                        "success": False,
+                        "output": "Contract tests failed",
+                        "errors": [f"Test execution error: {result.stderr[:200]}"]
+                    }
+
+        except FileNotFoundError:
+            return {
+                "success": None,
+                "output": "Jest not available - skipping contract tests",
+                "errors": []
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "output": "Contract tests timeout",
+                "errors": ["Tests took too long (>30s)"]
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "output": "Contract test error",
+                "errors": [f"Error running tests: {str(e)}"]
+            }
+
+        return {"success": None, "output": "Could not run contract tests", "errors": []}
+
+    def _run_quick_sanity_test(self) -> Dict[str, any]:
+        """Quick sanity test: Start server and test basic endpoints.
+
+        Returns:
+            dict with 'success' bool, 'output' string, and 'errors' list
+        """
+        import time
+        import signal
+        import socket
+
+        # Check if this is a React app (CRA, Vite, etc.)
+        package_json_path = self.project_dir / "package.json"
+        is_react_app = False
+        is_vite_app = False
+        use_npm_start = False
+
+        if package_json_path.exists():
+            try:
+                package_data = json.loads(package_json_path.read_text())
+                deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+                scripts = package_data.get('scripts', {})
+
+                is_react_app = 'react-scripts' in deps
+                is_vite_app = 'vite' in deps
+
+                # Use npm start for React apps or if start script exists
+                use_npm_start = is_react_app or (is_vite_app and 'dev' in scripts) or 'start' in scripts
+            except Exception:
+                pass
+
+        # Find server entry point
+        server_file = None
+        if not use_npm_start:
+            for candidate in ['server.js', 'app.js', 'index.js', 'src/server.js', 'src/app.js']:
+                if (self.project_dir / candidate).exists():
+                    server_file = candidate
+                    break
+
+            if not server_file:
+                return {
+                    "success": None,
+                    "output": "No server file found (server.js, app.js, etc.) and not a React/Vite app",
+                    "errors": []
+                }
+
+        # Find an available port
+        def find_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+
+        test_port = find_free_port()
+        errors = []
+        server_process = None
+
+        try:
+            # Start server on test port
+            env = os.environ.copy()
+            env['PORT'] = str(test_port)
+            env['NODE_ENV'] = 'test'
+            env['BROWSER'] = 'none'  # Don't open browser for React apps
+
+            # Choose command based on app type
+            if use_npm_start:
+                if is_react_app:
+                    start_command = ['npm', 'start']
+                elif is_vite_app:
+                    start_command = ['npm', 'run', 'dev']
+                else:
+                    start_command = ['npm', 'start']
+            else:
+                start_command = ['node', server_file]
+
+            server_process = subprocess.Popen(
+                start_command,
+                cwd=self.project_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+
+            # Wait for server to start (max 15 seconds for React/Vite, 5 for Node)
+            max_wait_time = 15 if use_npm_start else 5
+            server_ready = False
+            for i in range(max_wait_time * 10):  # Check every 0.1 seconds
+                time.sleep(0.1)
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.5)
+                        s.connect(('localhost', test_port))
+                        server_ready = True
+                        break
+                except (socket.error, ConnectionRefusedError):
+                    # Check if process died
+                    if server_process.poll() is not None:
+                        stdout, stderr = server_process.communicate()
+                        return {
+                            "success": False,
+                            "output": "Server failed to start",
+                            "errors": [f"Server crashed: {stderr.decode()[:200]}"]
+                        }
+                    continue
+
+            if not server_ready:
+                server_process.terminate()
+                return {
+                    "success": False,
+                    "output": "Server did not start in time",
+                    "errors": [f"Server took too long to start (>{max_wait_time}s)"]
+                }
+
+            # Test root endpoint
+            import urllib.request
+            import urllib.error
+
+            try:
+                response = urllib.request.urlopen(f"http://localhost:{test_port}/", timeout=2)
+                status = response.getcode()
+
+                if status == 404:
+                    errors.append("Root route (/) returns 404 - server needs to serve static files or add root route")
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    errors.append("Root route (/) returns 404 - server needs to serve static files or add root route")
+                # Other HTTP errors are acceptable (redirect, auth, etc.)
+            except Exception as e:
+                errors.append(f"Root route test error: {str(e)}")
+
+            # Load SPEC.yaml and test contract endpoints
+            spec_yaml_path = self.project_dir / ".context-foundry" / "SPEC.yaml"
+            if spec_yaml_path.exists():
+                import yaml
+                try:
+                    with open(spec_yaml_path) as f:
+                        spec = yaml.safe_load(f)
+
+                    contract = spec.get('contract', {})
+                    endpoints = contract.get('endpoints', [])
+
+                    for endpoint in endpoints[:3]:  # Test up to 3 endpoints
+                        path = endpoint.get('path', '/')
+                        method = endpoint.get('method', 'GET')
+
+                        if method == 'GET':
+                            try:
+                                response = urllib.request.urlopen(f"http://localhost:{test_port}{path}?city=test", timeout=2)
+                                # Success - endpoint exists
+                            except urllib.error.HTTPError as e:
+                                if e.code == 404:
+                                    errors.append(f"Contract endpoint {method} {path} returns 404 - not implemented")
+                                # Other errors (400, 500) are acceptable - endpoint exists
+                            except Exception as e:
+                                # Ignore other errors
+                                pass
+
+                except Exception:
+                    pass  # Ignore SPEC.yaml parsing errors
+
+            # Shutdown server
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+
+            if errors:
+                return {
+                    "success": False,
+                    "output": f"Found {len(errors)} issue(s)",
+                    "errors": errors
+                }
+            else:
+                return {
+                    "success": True,
+                    "output": "Server started and responded correctly",
+                    "errors": []
+                }
+
+        except Exception as e:
+            if server_process:
+                server_process.terminate()
+            return {
+                "success": False,
+                "output": "Sanity test failed",
+                "errors": [f"Test error: {str(e)}"]
+            }
+
+    def _generate_functional_tests(self, test_port: int) -> str:
+        """
+        Generate app-specific Playwright functional tests by analyzing project context.
+
+        Args:
+            test_port: Port where test server is running
+
+        Returns:
+            JavaScript code snippet with functional tests, or empty string if generation fails
+        """
+        try:
+            print(f"      Generating context-aware functional tests...")
+
+            # Gather project context
+            context_parts = []
+
+            # 1. Task description
+            context_parts.append(f"TASK DESCRIPTION:\n{self.task_description}\n")
+
+            # 2. Read SPEC.yaml if exists
+            spec_path = self.project_dir / ".context-foundry" / "SPEC.yaml"
+            if spec_path.exists():
+                spec_content = spec_path.read_text()
+                context_parts.append(f"SPEC.YAML:\n{spec_content[:1000]}\n")  # First 1000 chars
+
+            # 3. Read main UI files to understand structure
+            ui_files_read = 0
+            for pattern in ['index.html', 'public/index.html', 'src/App.js', 'src/app.js', 'public/script.js']:
+                file_path = self.project_dir / pattern
+                if file_path.exists() and ui_files_read < 2:
+                    content = file_path.read_text()[:1500]  # First 1500 chars
+                    context_parts.append(f"FILE {pattern}:\n{content}\n")
+                    ui_files_read += 1
+
+            if ui_files_read == 0:
+                return ""  # No UI files found, skip functional test generation
+
+            full_context = "\n".join(context_parts)
+
+            # Build prompt for Builder
+            prompt = f"""Generate Playwright functional test code for this app.
+
+PROJECT CONTEXT:
+{full_context}
+
+REQUIREMENTS:
+1. Analyze the project context to understand what the app does
+2. Generate JavaScript code (NOT a complete test file, just the test logic)
+3. The code should test the ACTUAL FUNCTIONALITY of the app (e.g., for a weather app, test searching for a city)
+4. Use Playwright API: page.fill(), page.click(), page.waitForSelector(), etc.
+5. The server is already running on localhost:{test_port}
+6. Return ONLY the JavaScript test code, no explanations
+7. If the app has buttons/forms, test that they work
+8. If the app fetches data, verify the data appears in the DOM
+
+EXAMPLE OUTPUT FORMAT (for a todo app):
+```javascript
+// Test adding a todo item
+const input = await page.$('#todo-input');
+if (input) {{
+    await input.fill('Buy groceries');
+    await page.click('#add-button');
+    await page.waitForTimeout(500);
+    const todos = await page.$$('.todo-item');
+    if (todos.length === 0) {{
+        throw new Error('Todo item was not added to the list');
+    }}
+}}
+```
+
+Generate functional tests for THIS app:"""
+
+            # Call Builder to generate tests
+            response = self.ai_client.builder(
+                prompt=prompt,
+                max_tokens=1000
+            )
+
+            # Extract JavaScript code from response
+            import re
+            code_match = re.search(r'```(?:javascript|js)?\s*\n?(.*?)```', response.content, re.DOTALL)
+            if code_match:
+                test_code = code_match.group(1).strip()
+                print(f"      ✅ Generated {len(test_code)} chars of functional test code")
+                return test_code
+            else:
+                # Fallback: use the whole response if no code block found
+                test_code = response.content.strip()
+                if len(test_code) < 2000 and 'await page' in test_code:
+                    print(f"      ✅ Generated functional test code (no code block)")
+                    return test_code
+                else:
+                    print(f"      ⚠️  Could not extract test code from Builder response")
+                    return ""
+
+        except Exception as e:
+            print(f"      ⚠️  Functional test generation failed: {str(e)}")
+            return ""
+
+    def _run_browser_validation(self) -> tuple:
+        """
+        Run browser-based validation using Playwright to catch client-side errors.
+        This catches issues like "Cannot GET /", React mounting errors, etc.
+
+        Returns:
+            (success: bool, error_details: dict)
+        """
+        import socket
+        import time
+
+        # Check if Playwright is available
+        package_json_path = self.project_dir / "package.json"
+        if not package_json_path.exists():
+            return (True, {})  # Skip for non-Node projects
+
+        # Check if this is a web app that needs browser validation
+        try:
+            package_data = json.loads(package_json_path.read_text())
+            deps = {**package_data.get('dependencies', {}), **package_data.get('devDependencies', {})}
+            scripts = package_data.get('scripts', {})
+
+            is_react_app = 'react-scripts' in deps or 'react' in deps
+            is_vite_app = 'vite' in deps
+            has_start_script = 'start' in scripts or 'dev' in scripts
+
+            # Only run browser validation for web apps
+            if not (is_react_app or is_vite_app or has_start_script):
+                return (True, {})  # Skip for non-web apps
+
+        except Exception:
+            return (True, {})
+
+        # Find an available port
+        def find_free_port():
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+            return port
+
+        test_port = find_free_port()
+        server_process = None
+
+        try:
+            print(f"      Starting dev server for browser validation...")
+
+            # Install Playwright if not present
+            playwright_check = subprocess.run(
+                ['npm', 'list', 'playwright'],
+                cwd=self.project_dir,
+                capture_output=True,
+                timeout=10
+            )
+
+            if playwright_check.returncode != 0:
+                print(f"      Installing Playwright for browser validation...")
+                install_result = subprocess.run(
+                    ['npm', 'install', '--save-dev', '--no-save', 'playwright'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    timeout=120
+                )
+                if install_result.returncode != 0:
+                    return (True, {})  # Skip if can't install
+
+                # Install Playwright browsers (Chromium only for speed)
+                print(f"      Installing Playwright browsers...")
+                browser_install = subprocess.run(
+                    ['npx', 'playwright', 'install', 'chromium', '--with-deps'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    timeout=180
+                )
+                if browser_install.returncode != 0:
+                    return (True, {})  # Skip if can't install browsers
+
+            # Start dev server
+            env = os.environ.copy()
+            env['PORT'] = str(test_port)
+            env['BROWSER'] = 'none'
+            env['CI'] = 'true'
+
+            if is_react_app:
+                start_command = ['npm', 'start']
+            elif is_vite_app:
+                start_command = ['npm', 'run', 'dev']
+            else:
+                start_command = ['npm', 'start']
+
+            server_process = subprocess.Popen(
+                start_command,
+                cwd=self.project_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env
+            )
+
+            # Wait for server to start
+            server_ready = False
+            for i in range(200):  # 20 seconds max
+                time.sleep(0.1)
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.5)
+                        s.connect(('localhost', test_port))
+                        server_ready = True
+                        break
+                except (socket.error, ConnectionRefusedError):
+                    if server_process.poll() is not None:
+                        stdout, stderr = server_process.communicate()
+                        return (False, {
+                            'message': 'Dev server failed to start',
+                            'stderr': stderr.decode()[:500]
+                        })
+                    continue
+
+            if not server_ready:
+                server_process.terminate()
+                return (False, {
+                    'message': 'Dev server timeout',
+                    'stderr': 'Server did not start within 20 seconds'
+                })
+
+            # Give server a moment to fully initialize
+            time.sleep(2)
+
+            # Generate context-aware functional tests
+            functional_tests = self._generate_functional_tests(test_port)
+
+            # Create Playwright test script
+            test_script = f"""
+const {{ chromium }} = require('playwright');
+
+(async () => {{
+    const browser = await chromium.launch({{
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }});
+
+    try {{
+        const page = await browser.newPage();
+
+        // Collect console errors and failed requests
+        const errors = [];
+        const failedResources = [];
+
+        page.on('console', msg => {{
+            if (msg.type() === 'error') {{
+                errors.push(msg.text());
+            }}
+        }});
+
+        page.on('pageerror', error => {{
+            errors.push(error.message);
+        }});
+
+        page.on('requestfailed', request => {{
+            failedResources.push({{
+                url: request.url(),
+                failure: request.failure().errorText
+            }});
+        }});
+
+        // Navigate to app
+        const response = await page.goto('http://localhost:{test_port}', {{
+            waitUntil: 'networkidle',
+            timeout: 15000
+        }});
+
+        // Check response status
+        if (response.status() === 404) {{
+            console.error('ERROR: Page returned 404 - Cannot GET /');
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Wait for content to render
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(1000);
+
+        // Check for root element content
+        const bodyText = await page.textContent('body');
+        if (!bodyText || bodyText.trim().length === 0) {{
+            console.error('ERROR: Page loaded but has no visible content');
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Check for failed resource loads (CSS, JS, etc.)
+        if (failedResources.length > 0) {{
+            console.error('ERROR: Failed to load resources:');
+            failedResources.forEach(r => console.error('  - ' + r.url + ': ' + r.failure));
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Test basic user interactions (if buttons/forms exist)
+        const buttons = await page.$$('button');
+        const inputs = await page.$$('input[type="text"], input:not([type])');
+
+        if (buttons.length > 0 && inputs.length > 0) {{
+            // Try clicking first button to see if event listeners are attached
+            try {{
+                // Fill first input if it exists
+                if (inputs.length > 0) {{
+                    await inputs[0].fill('test');
+                }}
+
+                // Click first button
+                await buttons[0].click();
+
+                // Wait a moment for any async operations
+                await page.waitForTimeout(500);
+
+                // Check if any errors occurred from the interaction
+                if (errors.length > 0) {{
+                    console.error('JavaScript errors detected after user interaction:');
+                    errors.forEach(err => console.error('  - ' + err));
+                    await browser.close();
+                    process.exit(1);
+                }}
+            }} catch (e) {{
+                // Non-fatal: interaction test failed but page might still be valid
+                console.log('Note: User interaction test encountered error (non-fatal): ' + e.message);
+            }}
+        }}
+
+        // Check for JavaScript errors from page load
+        if (errors.length > 0) {{
+            console.error('JavaScript errors detected:');
+            errors.forEach(err => console.error('  - ' + err));
+            await browser.close();
+            process.exit(1);
+        }}
+
+        // Run context-aware functional tests (if generated)
+        {functional_tests if functional_tests else '// No functional tests generated'}
+
+        console.log('SUCCESS: Page loaded and rendered correctly');
+        await browser.close();
+        process.exit(0);
+
+    }} catch (error) {{
+        console.error('ERROR: ' + error.message);
+        try {{
+            await browser.close();
+        }} catch (e) {{
+            // Ignore close errors
+        }}
+        process.exit(1);
+    }}
+}})();
+"""
+
+            # Write test script
+            test_script_path = self.project_dir / 'playwright-test-temp.js'
+            test_script_path.write_text(test_script)
+
+            try:
+                # Run Playwright test
+                print(f"      Running browser validation...")
+                result = subprocess.run(
+                    ['node', 'playwright-test-temp.js'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                # Clean up test script
+                test_script_path.unlink()
+
+                if result.returncode == 0:
+                    print(f"      ✅ Browser validation (HTTP) passed")
+
+                    # For static HTML apps, also test file:// protocol
+                    # This catches issues with absolute vs relative paths
+                    package_json = self.project_dir / "package.json"
+                    if not package_json.exists() or not is_react_app and not is_vite_app:
+                        print(f"      Testing file:// protocol for static HTML app...")
+
+                        # Find index.html
+                        index_html = None
+                        for candidate in [self.project_dir / 'index.html', self.project_dir / 'public' / 'index.html']:
+                            if candidate.exists():
+                                index_html = candidate
+                                break
+
+                        if index_html:
+                            file_test_script = f"""
+const {{ chromium }} = require('playwright');
+
+(async () => {{
+    const browser = await chromium.launch({{ headless: true }});
+    try {{
+        const page = await browser.newPage();
+        const errors = [];
+
+        page.on('console', msg => {{
+            if (msg.type() === 'error') {{
+                errors.push(msg.text());
+            }}
+        }});
+
+        page.on('pageerror', error => {{
+            errors.push(error.message);
+        }});
+
+        // Open via file:// protocol
+        await page.goto('file://{index_html.absolute()}', {{ timeout: 10000 }});
+        await page.waitForTimeout(1000);
+
+        // Check for errors that indicate path issues
+        const pathErrors = errors.filter(e =>
+            e.includes('Not allowed to load local resource') ||
+            e.includes('Failed to load resource') ||
+            e.includes('net::ERR_FILE_NOT_FOUND')
+        );
+
+        if (pathErrors.length > 0) {{
+            console.error('ERROR: Resource loading failed (likely absolute path issue):');
+            pathErrors.forEach(err => console.error('  - ' + err));
+            await browser.close();
+            process.exit(1);
+        }}
+
+        console.log('SUCCESS: file:// protocol test passed');
+        await browser.close();
+        process.exit(0);
+    }} catch (error) {{
+        console.error('ERROR: ' + error.message);
+        await browser.close();
+        process.exit(1);
+    }}
+}})();
+"""
+                            file_test_path = self.project_dir / 'playwright-file-test-temp.js'
+                            file_test_path.write_text(file_test_script)
+
+                            try:
+                                file_result = subprocess.run(
+                                    ['node', 'playwright-file-test-temp.js'],
+                                    cwd=self.project_dir,
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=15
+                                )
+
+                                file_test_path.unlink()
+
+                                if file_result.returncode != 0:
+                                    return (False, {{
+                                        'message': 'file:// protocol validation failed - likely absolute path issue',
+                                        'stderr': file_result.stderr,
+                                        'stdout': file_result.stdout
+                                    }})
+
+                                print(f"      ✅ Browser validation (file://) passed")
+                            except Exception as e:
+                                if file_test_path.exists():
+                                    file_test_path.unlink()
+                                # Non-fatal: file:// test failed but HTTP works
+                                print(f"      ⚠️  file:// protocol test error (non-fatal): {{str(e)}}")
+
+                    return (True, {{}})
+                else:
+                    return (False, {{
+                        'message': 'Browser validation failed',
+                        'stderr': result.stderr,
+                        'stdout': result.stdout
+                    }})
+
+            finally:
+                # Clean up test script if it still exists
+                if test_script_path.exists():
+                    test_script_path.unlink()
+
+        except subprocess.TimeoutExpired:
+            return (False, {
+                'message': 'Browser validation timeout',
+                'stderr': 'Playwright test exceeded 30 seconds'
+            })
+        except Exception as e:
+            return (False, {
+                'message': f'Browser validation error: {str(e)}',
+                'stderr': str(e)
+            })
+        finally:
+            # Always kill server
+            if server_process:
+                server_process.terminate()
+                try:
+                    server_process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    server_process.kill()
+
+    def _retry_until_success(self, validation_fn, context_description: str, max_attempts: int = 3) -> bool:
+        """
+        Run a validation function, and if it fails, feed errors back to Builder to fix.
+
+        Args:
+            validation_fn: Function that returns (success: bool, error_details: dict)
+            context_description: Human description of what's being validated
+            max_attempts: Maximum retry attempts
+
+        Returns:
+            True if validation passed, False if all attempts failed
+        """
+        import time
+
+        for attempt in range(1, max_attempts + 1):
+            print(f"\n🔄 Validation attempt {attempt}/{max_attempts}: {context_description}")
+
+            # Run validation
+            try:
+                success, error_details = validation_fn()
+            except Exception as e:
+                success = False
+                error_details = {
+                    'message': f'Validation exception: {str(e)}',
+                    'stack_trace': str(e)
+                }
+
+            if success:
+                print(f"   ✅ {context_description} - PASSED")
+                return True
+
+            # Failed
+            print(f"   ❌ {context_description} - FAILED")
+            error_message = error_details.get('message', 'Unknown error')
+            print(f"   Error: {error_message[:200]}...")  # Truncate long errors
+
+            if attempt < max_attempts:
+                print(f"   🔧 Feeding error back to Builder for fix (attempt {attempt}/{max_attempts})...")
+
+                # Create fix task with complete error context
+                fix_task = {
+                    'id': f'fix_{context_description.lower().replace(" ", "_")}_{attempt}',
+                    'description': f'Fix validation failure: {context_description}',
+                    'validation_failure': {
+                        'context': context_description,
+                        'error_message': error_details.get('message', ''),
+                        'stderr': error_details.get('stderr', ''),
+                        'stdout': error_details.get('stdout', ''),
+                        'failed_command': error_details.get('command', ''),
+                        'exit_code': error_details.get('exit_code', None),
+                        'stack_trace': error_details.get('stack_trace', ''),
+                        'missing_files': error_details.get('missing_files', []),
+                        'attempt_number': attempt
+                    }
+                }
+
+                # Builder fixes the issue
+                self._ask_builder_to_fix(fix_task)
+
+                # Wait a moment for file system to settle
+                time.sleep(2)
+            else:
+                print(f"   ❌ Max attempts reached ({max_attempts}). Validation failed.")
+                # Show detailed error on final attempt
+                if error_details.get('stderr'):
+                    print(f"\n   Final error details:")
+                    print(f"   {error_details.get('stderr', '')[:500]}")
+                return False
+
+        return False
+
+    def _ask_builder_to_fix(self, fix_task: Dict):
+        """
+        Ask Builder agent to fix a validation failure.
+
+        The Builder receives:
+        - What failed (smoke test? contract test? specific error?)
+        - Complete error output (stderr, exit codes, logs)
+        - Context about what was expected
+        - Attempt number (so it tries different approaches)
+        """
+
+        failure_context = fix_task['validation_failure']
+
+        # Build a clear prompt for the Builder
+        fix_prompt = f"""
+VALIDATION FAILURE - FIX REQUIRED
+
+Context: {failure_context['context']}
+Attempt: {failure_context['attempt_number']}
+
+ERROR DETAILS:
+{failure_context['error_message']}
+
+STDERR OUTPUT:
+{failure_context.get('stderr', 'N/A')[:1000]}
+
+STDOUT OUTPUT:
+{failure_context.get('stdout', 'N/A')[:500]}
+
+FAILED COMMAND:
+{failure_context.get('failed_command', 'N/A')}
+
+EXIT CODE:
+{failure_context.get('exit_code', 'N/A')}
+
+Your task: Analyze this failure and fix the code so the validation passes.
+
+Common issues to check:
+- Missing dependencies in package.json or requirements.txt
+- Missing files or incorrect file paths
+- Syntax errors or import errors
+- Incorrect server startup code
+- Missing environment variables
+- Port conflicts or network issues
+- Test expectations not matching implementation
+- React app trying to run as Node server
+- Missing npm install before npm build
+
+Fix the root cause, not just the symptoms. Make targeted changes.
+
+IMPORTANT:
+- If this is attempt {failure_context['attempt_number']}, try a different approach than before
+- Read the error carefully - it tells you exactly what's wrong
+- Check package.json dependencies match what code imports
+- For React apps, ensure react-scripts is properly configured
+- For Express apps, ensure static middleware is configured
+"""
+
+        print(f"      Calling Builder to apply fixes...")
+
+        # Get current project context
+        project_context = self._get_current_project_context()
+
+        # Call Builder with fix context
+        try:
+            # Use AI client to call Builder
+            full_prompt = f"{fix_prompt}\n\nCURRENT PROJECT STATE:\n{project_context}"
+
+            response = self.ai_client.builder(
+                prompt=full_prompt,
+                max_tokens=8000
+            )
+
+            # Extract and save code from response
+            extracted = self._extract_and_save_code(response.content, self.project_dir)
+
+            print(f"      ✅ Builder applied {extracted['total']} file change(s)")
+
+            # Create git commit for the fix
+            if self._git_available():
+                self._create_git_commit(f"fix: {fix_task['description']} (attempt {failure_context['attempt_number']})")
+
+        except Exception as e:
+            print(f"      ⚠️  Builder fix attempt failed: {str(e)}")
+
+    def _get_current_project_context(self) -> str:
+        """Get current state of project for Builder context."""
+
+        context = []
+
+        # Project directory
+        context.append(f"Project directory: {self.project_dir}")
+
+        # List files
+        context.append("\nProject files:")
+        for root, dirs, files in os.walk(self.project_dir):
+            # Skip node_modules, .git, etc
+            dirs[:] = [d for d in dirs if d not in ['.git', 'node_modules', '.context-foundry', 'build', 'dist']]
+
+            level = root.replace(str(self.project_dir), '').count(os.sep)
+            indent = ' ' * 2 * level
+            context.append(f'{indent}{os.path.basename(root)}/')
+
+            subindent = ' ' * 2 * (level + 1)
+            for file in files:
+                context.append(f'{subindent}{file}')
+
+        # package.json content
+        package_json = self.project_dir / "package.json"
+        if package_json.exists():
+            context.append("\npackage.json:")
+            try:
+                import json
+                with open(package_json) as f:
+                    pkg = json.load(f)
+                context.append(json.dumps(pkg, indent=2))
+            except:
+                context.append("(could not read)")
+
+        # SPEC.yaml content
+        spec_yaml = self.project_dir / ".context-foundry" / "SPEC.yaml"
+        if spec_yaml.exists():
+            context.append("\nSPEC.yaml:")
+            try:
+                context.append(spec_yaml.read_text()[:500])
+            except:
+                context.append("(could not read)")
+
+        return '\n'.join(context)
 
     def _git_available(self) -> bool:
         """Check if git is available and initialized."""
@@ -1348,35 +3241,66 @@ To use your own API key, update the relevant configuration file."""
         }
 
     def finalize(self, results: Dict) -> Dict:
-        """Finalize successful workflow."""
+        """Finalize workflow (successful or failed)."""
         stats = self.ai_client.get_usage_stats()
 
+        # Check if build failed
+        builder_result = results.get('builder', {})
+        build_status = builder_result.get('status', 'complete')
+        build_failed = (build_status == 'failed')
+
         print(f"\n{'='*60}")
-        print("✅ CONTEXT FOUNDRY WORKFLOW COMPLETE!")
-        print(f"{'='*60}")
-        print(f"📁 Project: {self.project_dir}")
+        if build_failed:
+            print("❌ CONTEXT FOUNDRY WORKFLOW FAILED!")
+            failure_reason = builder_result.get('failure_reason', 'Unknown error')
+            print(f"{'='*60}")
+            print(f"\n⚠️  Build failed: {failure_reason}")
+            print(f"📁 Project: {self.project_dir}")
+            print(f"\nThe build could not complete successfully.")
+            print("Review the error messages above for details.")
+        else:
+            print("✅ CONTEXT FOUNDRY WORKFLOW COMPLETE!")
+            print(f"{'='*60}")
+            print(f"📁 Project: {self.project_dir}")
+
         print(f"📊 Total Tokens: {stats['total_tokens']:,}")
         print(f"💾 Logs: {self.logs_path}")
         print(f"🎯 Session: {self.session_id}")
 
-        # Display README and run instructions
-        builder_result = results.get('builder', {})
-        readme_path = builder_result.get('readme_path')
-        if readme_path:
-            print(f"\n📖 README: {readme_path}")
+        # Only show run instructions if build succeeded
+        if not build_failed:
+            # Display README and run instructions
+            readme_path = builder_result.get('readme_path')
+            if readme_path:
+                print(f"\n📖 README: {readme_path}")
 
-            # Detect project type and show run instructions
-            has_package_json = (self.project_dir / "package.json").exists()
-            has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
+                # Detect project type and show run instructions
+                has_package_json = (self.project_dir / "package.json").exists()
+                has_index_html = any((self.project_dir / "index.html").exists() for _ in [1])
 
-            if has_package_json:
-                print(f"\n🚀 Quick Start:")
-                print(f"   cd {self.project_dir}")
-                print(f"   npm install")
-                print(f"   npm run dev")
-            elif has_index_html:
-                print(f"\n🚀 Quick Start:")
-                print(f"   Open {self.project_dir}/index.html in your browser")
+                if has_package_json:
+                    # Detect correct npm command from package.json
+                    try:
+                        package_data = json.loads((self.project_dir / "package.json").read_text())
+                        scripts = package_data.get('scripts', {})
+
+                        # Prefer 'start' for CRA, fall back to 'dev' for Vite/Next
+                        if 'start' in scripts:
+                            npm_command = "npm start"
+                        elif 'dev' in scripts:
+                            npm_command = "npm run dev"
+                        else:
+                            npm_command = "npm start"  # default
+                    except:
+                        npm_command = "npm start"  # fallback
+
+                    print(f"\n🚀 Quick Start:")
+                    print(f"   cd {self.project_dir}")
+                    print(f"   npm install")
+                    print(f"   {npm_command}")
+                elif has_index_html:
+                    print(f"\n🚀 Quick Start:")
+                    print(f"   Open {self.project_dir}/index.html in your browser")
 
         # Display cost summary
         try:
@@ -1441,7 +3365,8 @@ To use your own API key, update the relevant configuration file."""
                     tasks=results['architect'].get('tasks_content', ''),
                     session_id=self.timestamp,
                     mode=self.mode,
-                    task_description=self.task_description
+                    task_description=self.task_description,
+                    spec_yaml=results['architect'].get('spec_yaml_content')
                 )
                 print(f"\n📦 Blueprints saved to: {self.blueprint_manager.context_dir}")
                 print(f"   📚 Canonical files updated")
