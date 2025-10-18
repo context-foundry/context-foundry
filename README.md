@@ -3,7 +3,7 @@
 > **Autonomous AI Development through Claude Code MCP Integration**
 > Scout → Architect → Builder → Test → Deploy. Fully autonomous, self-healing, walk-away development.
 
-**Version 2.0 - October 2025**
+**Version 2.0.1 - October 2025**
 
 ---
 
@@ -858,4 +858,4 @@ Context Foundry 2.0 builds upon:
 
 **Context Foundry 2.0** - *Build complete software autonomously with self-healing AI workflows*
 
-**Version:** 2.0.0 | **Release Date:** October 2025 | **License:** MIT
+**Version:** 2.0.1 | **Release Date:** October 2025 | **License:** MIT

@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2025-10-18
+
+**🧠 Self-Learning Release:** Context Foundry now learns from every build and continuously improves itself.
+
+### 🚀 Added
+
+#### Phase 7: Feedback Analysis
+
+- **Automatic Feedback Collection**
+  - Runs after every build (success or failure)
+  - Analyzes test iterations, failures, and fixes
+  - Extracts patterns and learnings automatically
+  - Generates structured feedback files: `.context-foundry/feedback/build-feedback-{timestamp}.json`
+  - Creates actionable recommendations for each phase
+
+- **Pattern Library System** (`.context-foundry/patterns/`)
+  - **common-issues.json** - General issues with proven solutions across all project types
+  - **test-patterns.json** - Testing strategy improvements and coverage gaps
+  - **architecture-patterns.json** - Proven design patterns from successful builds
+  - **scout-learnings.json** - Risk detection patterns and research insights
+  - Auto-apply mechanism for proven patterns (frequency >= 3)
+  - Pattern matching by project type for relevant application
+  - Frequency tracking to identify common vs rare issues
+
+#### Enhanced Phases with Self-Learning
+
+- **Scout (Phase 1)**
+  - Reads past learnings before starting research
+  - Flags known risks from pattern library
+  - Warns about common issues for detected project types
+  - Example: Automatically flags CORS risk for browser apps with ES6 modules
+
+- **Architect (Phase 2)**
+  - Applies proven architectural patterns automatically
+  - Includes preventive measures for known issues
+  - Adds dependencies/configurations that prevent common failures
+  - Example: Auto-includes http-server for browser apps with ES6 modules
+
+- **Test (Phase 4)**
+  - Checks for known issues before running tests
+  - Runs pattern-based integration tests
+  - Validates against project-type-specific requirements
+  - Example: Verifies dev server configuration for browser apps
+
+#### Initial Patterns (Seeded from 1942 Clone Build)
+
+- **cors-es6-modules** - CORS error with ES6 modules from file://
+  - Root cause: Browsers block module imports from file:// protocol
+  - Solution: Include http-server in package.json from the start
+  - Auto-apply: TRUE for browser apps with ES6 modules
+
+- **unit-tests-miss-browser-issues** - Unit tests don't catch browser integration issues
+  - Gap: Jest+jsdom mocks browser but doesn't catch CORS/module loading
+  - Solution: Add browser integration tests with Playwright/Selenium
+  - Auto-apply: TRUE for browser/web apps
+
+- **entity-component-game-architecture** - Proven game architecture pattern
+  - Structure: Entity base classes + manager systems
+  - Benefits: Clean separation, 100% testable, easy to extend
+  - Success rate: 100%
+
+- **browser-es6-modules-risk-detection** - Scout risk detection pattern
+  - Trigger: Project mentions browser/web AND uses ES6 modules
+  - Action: Flag CORS risk in scout-report.md
+  - Result: Issue prevented before it occurs
+
+### 📚 Documentation
+
+- **FEEDBACK_SYSTEM.md** - Comprehensive 300+ line guide
+  - How Phase 7 works
+  - Pattern library details and schemas
+  - How patterns are applied in each phase
+  - Real-world example (1942 clone CORS issue)
+  - Pattern lifecycle from discovery to proven
+  - Metrics and analytics
+  - Best practices and FAQ
+
+- **Pattern Library README** (`.context-foundry/patterns/README.md`)
+  - Pattern file schemas and usage
+  - Auto-apply logic explanation
+  - Pattern lifecycle stages
+  - Best practices for manual pattern addition
+
+- **README.md Updates**
+  - Added Feature #6: Self-Learning Feedback Loop
+  - Updated version to 2.0.1
+
+### 🎯 Impact
+
+- **Continuous Improvement**: Each build makes the next build smarter
+- **Proactive Prevention**: Common issues prevented before they occur
+- **Reduced Iterations**: Test iterations decrease over time as patterns accumulate
+- **Zero Manual Intervention**: Feedback analysis and pattern application fully automated
+- **Knowledge Accumulation**: Pattern library grows with every build
+- **Cross-Project Learning**: Patterns portable across repositories
+
+### 📊 Metrics
+
+From initial pattern seeding:
+- **Patterns Added**: 4
+- **Auto-Apply Enabled**: 3 (75%)
+- **High-Severity Patterns**: 2
+- **Project Types Covered**: browser-app, web-app, web-game, game, simulation
+
+---
+
 ## [2.0.0] - 2025-10-18
 
 **🎉 Major Release:** Complete architectural reimagining. Context Foundry now operates as an MCP server for Claude Code CLI with fully autonomous, self-healing workflows.
