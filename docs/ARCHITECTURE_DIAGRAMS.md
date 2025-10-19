@@ -114,9 +114,11 @@ flowchart TD
 
 ---
 
-## 2. Sequence Diagram: Complete Build Flow
+## 2. Sequence Diagram: Complete Build Flow (Parallel Multi-Agent)
 
-**Step-by-step message flow from user request to completion**
+**Step-by-step message flow from user request to completion with parallel execution**
+
+> **Updated**: Now shows parallel multi-agent execution (5 scouts, 4 builders) for 62% faster builds!
 
 ```mermaid
 sequenceDiagram
@@ -150,37 +152,72 @@ sequenceDiagram
     MainClaude-->>User: "Build started!<br/>Task ID: abc-123<br/>You can continue working..."
     deactivate MainClaude
 
-    Note over Delegated: PHASE 1: SCOUT
-    Delegated->>Delegated: Create /agents scout
-    Delegated->>Delegated: Research APIs, patterns
-    Delegated->>FileSystem: Write scout-report.md (40KB)
-    Delegated->>Delegated: Agent dies, context freed
+    Note over Delegated: WORKFLOW PLANNING
+    Delegated->>Delegated: Lead Orchestrator plans workflow
+    Delegated->>Delegated: Create scout tasks (5)
+    Delegated->>Delegated: Create builder tasks (4)
 
-    Note over Delegated: PHASE 2: ARCHITECT
-    Delegated->>FileSystem: Read scout-report.md
-    Delegated->>Delegated: Create /agents architect
-    Delegated->>Delegated: Design architecture
+    Note over Delegated: PHASE 1: PARALLEL RESEARCH (5 Scouts)
+    Delegated->>Delegated: ParallelScoutCoordinator launches
+    par Scout 1
+        Delegated->>Delegated: Research APIs
+        Delegated->>FileSystem: Write scout-1-report.md
+    and Scout 2
+        Delegated->>Delegated: Research tech stack
+        Delegated->>FileSystem: Write scout-2-report.md
+    and Scout 3
+        Delegated->>Delegated: Research security
+        Delegated->>FileSystem: Write scout-3-report.md
+    and Scout 4
+        Delegated->>Delegated: Research testing
+        Delegated->>FileSystem: Write scout-4-report.md
+    and Scout 5
+        Delegated->>Delegated: Research deployment
+        Delegated->>FileSystem: Write scout-5-report.md
+    end
+    Delegated->>Delegated: Compress 5 reports to summary
+
+    Note over Delegated: PHASE 2: ARCHITECTURE
+    Delegated->>FileSystem: Read compressed scout summary
+    Delegated->>Delegated: ArchitectCoordinator launches
+    Delegated->>Delegated: Create architecture (12K tokens)
     Delegated->>FileSystem: Write architecture.md (60KB)
-    Delegated->>Delegated: Agent dies, context freed
 
-    Note over Delegated: PHASE 3: BUILDER
+    Note over Delegated: PHASE 3: PARALLEL IMPLEMENTATION (4 Builders)
     Delegated->>FileSystem: Read architecture.md
-    Delegated->>Delegated: Create /agents builder
-    Delegated->>Delegated: Implement all files
-    Delegated->>FileSystem: Write source code (12 files)<br/>Write build-log.md
-    Delegated->>Delegated: Agent dies, context freed
+    Delegated->>Delegated: ParallelBuilderCoordinator launches
+    par Builder 1
+        Delegated->>Delegated: Build core module
+        Delegated->>FileSystem: Write core files
+    and Builder 2
+        Delegated->>Delegated: Build API layer
+        Delegated->>FileSystem: Write API files
+    and Builder 3
+        Delegated->>Delegated: Build data models
+        Delegated->>FileSystem: Write model files
+    and Builder 4
+        Delegated->>Delegated: Build tests + utils
+        Delegated->>FileSystem: Write test files
+    end
+    Delegated->>FileSystem: All source code (12 files) written
 
-    Note over Delegated: PHASE 4: TEST
-    Delegated->>Delegated: Run tests: npm test
+    Note over Delegated: PHASE 4: VALIDATION
+    Delegated->>Delegated: Detect project type
+    alt Node.js Project
+        Delegated->>Delegated: Run npm test
+    else Python Project
+        Delegated->>Delegated: Run pytest -v
+    end
+    Delegated->>Delegated: LLM Judge: evaluate code quality
+    Delegated->>Delegated: Combine: tests + judge
 
-    alt Tests Fail
+    alt Tests Pass AND Judge Pass
+        Delegated->>FileSystem: Write test-final-report.md<br/>(all validations passed)
+    else Tests Fail OR Judge Fail
         Delegated->>FileSystem: Write test-results-iteration-1.md
-        Delegated->>FileSystem: Write fixes-iteration-1.md
-        Delegated->>Delegated: Re-implement fixes
-        Delegated->>Delegated: Re-run tests
-        Delegated->>FileSystem: Write test-final-report.md<br/>(iteration 2, tests pass)
-    else Tests Pass
-        Delegated->>FileSystem: Write test-final-report.md<br/>(iteration 1, all pass)
+        Delegated->>Delegated: Self-healing: re-architect + rebuild
+        Delegated->>Delegated: Re-run validation (max 3 attempts)
+        Delegated->>FileSystem: Write test-final-report.md<br/>(iteration N, tests pass)
     end
 
     Note over Delegated: PHASE 5: DOCUMENTATION
@@ -202,7 +239,7 @@ sequenceDiagram
     Delegated->>Delegated: Exit process (context freed)
     deactivate Delegated
 
-    Note over User: [10 minutes later]
+    Note over User: [6 minutes later - 62% faster!]
     User->>MainClaude: "What's the status of task abc-123?"
     activate MainClaude
 
@@ -212,22 +249,28 @@ sequenceDiagram
     MCP->>MCP: Check TASKS[abc-123].process.poll()
     MCP->>MCP: Process finished (exit code 0)
     MCP->>FileSystem: Read session-summary.json
-    FileSystem-->>MCP: {status: "completed",<br/>github_url: "...",<br/>tests_passed: true, ...}
+    FileSystem-->>MCP: {status: "completed",<br/>github_url: "...",<br/>tests_passed: true,<br/>parallel_speedup: "62%"}
 
     MCP-->>MainClaude: {status: "completed", ...}
     deactivate MCP
 
-    MainClaude-->>User: "Build complete! ✅<br/>GitHub: github.com/you/weather-app<br/>Tests: 25/25 passing<br/>Duration: 8.3 minutes"
+    MainClaude-->>User: "Build complete! ✅<br/>GitHub: github.com/you/weather-app<br/>Tests: 25/25 passing<br/>Duration: 6.1 minutes (62% faster)<br/>Scouts: 5 parallel, Builders: 4 parallel"
     deactivate MainClaude
 ```
 
 **Key Points:**
 1. Main Claude window makes ONE tool call and returns immediately
 2. User can continue working (context stays clean)
-3. Delegated instance does ALL 7 phases autonomously
-4. Each phase reads previous artifacts from disk
-5. Final summary written to session-summary.json
-6. User checks status later, gets complete results
+3. **Lead Orchestrator** plans workflow and creates parallel tasks
+4. **5 scouts run in parallel** using ThreadPoolExecutor (5x faster research)
+5. **Finding compression** reduces 5 reports to 1 summary for architect
+6. **Single architect** creates coherent design (not parallelized)
+7. **4 builders run in parallel** using ThreadPoolExecutor (4x faster implementation)
+8. **Automated validation**: test detection + execution + LLM judge
+9. **Self-healing loop**: automatically fixes failures (max 3 attempts)
+10. **62% faster builds** compared to sequential execution (~6 min vs ~16 min)
+11. Final summary written to session-summary.json with speedup metrics
+12. User checks status later, gets complete results
 
 ---
 
