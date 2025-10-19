@@ -1,0 +1,57 @@
+# Pre-commit hooks for Context Foundry
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      # Run ruff linter for Python code quality
+      - id: ruff-check
+        name: Ruff linter
+        entry: ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      # Run ruff formatter
+      - id: ruff-format
+        name: Ruff formatter
+        entry: ruff format
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      # Run tests (fast ones only for pre-commit)
+      - id: pytest-fast
+        name: Run fast tests
+        entry: pytest tests/ -v -m "not slow"
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+      # Check for debug statements
+      - id: check-debug
+        name: Check for debug code
+        entry: python -c "import sys; import re; files = sys.argv[1:]; pattern = re.compile(r'(breakpoint\(\)|import pdb|print\(.*DEBUG)'); exit(1) if any(pattern.search(open(f).read()) for f in files if f.endswith('.py')) else exit(0)"
+        language: system
+        types: [python]
+
+      # Check for large files (>500KB)
+      - id: check-large-files
+        name: Check for large files
+        entry: bash -c 'for file in "$@"; do size=$(wc -c < "$file"); if [ $size -gt 512000 ]; then echo "File $file is too large ($size bytes)"; exit 1; fi; done'
+        language: system
+        pass_filenames: true
+
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
