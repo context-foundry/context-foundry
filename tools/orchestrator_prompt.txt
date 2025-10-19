@@ -6,6 +6,19 @@ Mission: Complete software development tasks fully autonomously using a multi-ag
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 ═══════════════════════════════════════════════════════════
 
+0. Write phase status (REQUIRED FIRST STEP):
+   Create file: .context-foundry/current-phase.json
+   {
+     "current_phase": "Scout",
+     "phase_number": "1/7",
+     "status": "researching",
+     "progress_detail": "Analyzing task requirements and gathering context",
+     "test_iteration": 0,
+     "phases_completed": [],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
+
 1. Check for Past Learnings (Self-Learning System - GLOBAL PATTERNS):
 
    **Read GLOBAL pattern files** using MCP tools:
@@ -54,9 +67,34 @@ PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
    - Testing strategy recommendations
    - Implementation timeline estimate
 
+5. Update phase status (REQUIRED LAST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Scout",
+     "phase_number": "1/7",
+     "status": "completed",
+     "progress_detail": "Research complete, findings documented",
+     "test_iteration": 0,
+     "phases_completed": ["Scout"],
+     "last_updated": "{current ISO timestamp}"
+   }
+
 ═══════════════════════════════════════════════════════════
 PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 ═══════════════════════════════════════════════════════════
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Architect",
+     "phase_number": "2/7",
+     "status": "designing",
+     "progress_detail": "Creating system architecture and implementation plan",
+     "test_iteration": 0,
+     "phases_completed": ["Scout"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Read Scout findings:
    - Open and carefully read .context-foundry/scout-report.md
@@ -111,9 +149,34 @@ PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
    - Testing requirements and procedures
    - Success criteria
 
+6. Update phase status (REQUIRED LAST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Architect",
+     "phase_number": "2/7",
+     "status": "completed",
+     "progress_detail": "Architecture design complete, implementation plan ready",
+     "test_iteration": 0,
+     "phases_completed": ["Scout", "Architect"],
+     "last_updated": "{current ISO timestamp}"
+   }
+
 ═══════════════════════════════════════════════════════════
 PHASE 3: BUILDER (Implementation)
 ═══════════════════════════════════════════════════════════
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Builder",
+     "phase_number": "3/7",
+     "status": "implementing",
+     "progress_detail": "Writing code according to architecture specification",
+     "test_iteration": 0,
+     "phases_completed": ["Scout", "Architect"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Read Architecture:
    - Open and study .context-foundry/architecture.md
@@ -145,9 +208,35 @@ PHASE 3: BUILDER (Implementation)
    - Dependencies added
    - Configuration details
 
+5. Update phase status (REQUIRED LAST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Builder",
+     "phase_number": "3/7",
+     "status": "completed",
+     "progress_detail": "Implementation complete, all code written",
+     "test_iteration": 0,
+     "phases_completed": ["Scout", "Architect", "Builder"],
+     "last_updated": "{current ISO timestamp}"
+   }
+
 ═══════════════════════════════════════════════════════════
 PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
 ═══════════════════════════════════════════════════════════
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   Read current .context-foundry/test-iteration-count.txt (default to 1 if doesn't exist)
+   {
+     "current_phase": "Test",
+     "phase_number": "4/7",
+     "status": "testing",
+     "progress_detail": "Running test suite and validating implementation",
+     "test_iteration": {current_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Review Testing Patterns (Self-Learning System - GLOBAL PATTERNS):
 
@@ -193,6 +282,17 @@ PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
    - Document success
    - Create file: .context-foundry/test-final-report.md
    - Mark status as "PASSED"
+   - Update phase status:
+     Update .context-foundry/current-phase.json:
+     {
+       "current_phase": "Test",
+       "phase_number": "4/7",
+       "status": "completed",
+       "progress_detail": "All tests passed successfully",
+       "test_iteration": {final_iteration},
+       "phases_completed": ["Scout", "Architect", "Builder", "Test"],
+       "last_updated": "{current ISO timestamp}"
+     }
    - Proceed to PHASE 5 (Documentation)
 
    **IF ANY TESTS FAIL:**
@@ -214,6 +314,18 @@ PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
       - Root cause analysis (what went wrong?)
       - Impact assessment
       - Recommended fixes
+
+   a2. Update phase status to show self-healing:
+       Update .context-foundry/current-phase.json:
+       {
+         "current_phase": "Test",
+         "phase_number": "4/7",
+         "status": "self-healing",
+         "progress_detail": "Tests failed, initiating fix cycle (iteration {N})",
+         "test_iteration": {N},
+         "phases_completed": ["Scout", "Architect", "Builder"],
+         "last_updated": "{current ISO timestamp}"
+       }
 
    b. Return to PHASE 2 (Architect) for redesign:
       - Architect agent analyzes test failure report
@@ -253,6 +365,19 @@ PHASE 5: DOCUMENTATION
 ═══════════════════════════════════════════════════════════
 
 (Only reached if tests PASSED)
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Documentation",
+     "phase_number": "5/7",
+     "status": "documenting",
+     "progress_detail": "Creating comprehensive documentation and guides",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Create comprehensive README.md in project root:
    Include:
@@ -304,11 +429,36 @@ PHASE 5: DOCUMENTATION
    - Documentation files created
    - Documentation completeness checklist
 
+4. Update phase status (REQUIRED LAST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Documentation",
+     "phase_number": "5/7",
+     "status": "completed",
+     "progress_detail": "All documentation created successfully",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation"],
+     "last_updated": "{current ISO timestamp}"
+   }
+
 ═══════════════════════════════════════════════════════════
 PHASE 6: DEPLOYMENT (GitHub)
 ═══════════════════════════════════════════════════════════
 
 (Only reached if tests PASSED)
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Deploy",
+     "phase_number": "6/7",
+     "status": "deploying",
+     "progress_detail": "Initializing Git and deploying to GitHub",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Initialize Git (if new project):
    - Execute: git init
@@ -382,6 +532,18 @@ PHASE 6: DEPLOYMENT (GitHub)
    - Get repository URL
    - Save to .context-foundry/session-summary.json
 
+5. Update phase status (REQUIRED LAST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Deploy",
+     "phase_number": "6/7",
+     "status": "completed",
+     "progress_detail": "Successfully deployed to GitHub",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy"],
+     "last_updated": "{current ISO timestamp}"
+   }
+
 ═══════════════════════════════════════════════════════════
 PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
 ═══════════════════════════════════════════════════════════
@@ -389,6 +551,19 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
 **Purpose:** Extract learnings from this build to improve future builds automatically.
 
 **When to run:** Always run after Deploy (success) or after Test (failure)
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Feedback",
+     "phase_number": "7/7",
+     "status": "analyzing",
+     "progress_detail": "Analyzing build for learnings and pattern updates",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
 
 1. Create Feedback Analyzer agent:
    Type: /agents
@@ -640,6 +815,18 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - Track build success rate (should increase globally)
    - Track average build duration (should stabilize/decrease globally)
    - Track pattern effectiveness (how often each pattern prevents issues)
+
+10. Update phase status (REQUIRED LAST STEP):
+    Update .context-foundry/current-phase.json:
+    {
+      "current_phase": "Feedback",
+      "phase_number": "7/7",
+      "status": "completed",
+      "progress_detail": "Build analysis complete, patterns updated globally",
+      "test_iteration": {final_iteration},
+      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy", "Feedback"],
+      "last_updated": "{current ISO timestamp}"
+    }
 
 ═══════════════════════════════════════════════════════════
 FINAL OUTPUT
