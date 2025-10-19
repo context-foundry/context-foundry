@@ -16,7 +16,8 @@ Unlike traditional AI coding tools that require constant supervision, Context Fo
 - Designs architecture (Architect phase)
 - Implements code with tests (Builder phase)
 - Auto-fixes test failures (Test phase with self-healing)
-- Documents everything (Documentation phase)
+- **Captures screenshots automatically** (Screenshot phase - NEW!)
+- Documents everything with visual guides (Documentation phase)
 - Deploys to GitHub (Deployment phase)
 
 **Real Example:**
@@ -133,13 +134,21 @@ with comprehensive tests and error handling
    - Each phase reads from previous artifacts
    - Works across multiple sessions
 
-6. **🧠 Self-Learning Feedback Loop** ⭐ NEW!
+6. **🧠 Self-Learning Feedback Loop** ⭐
    - **Phase 7: Feedback Analysis** runs after every build
    - Extracts learnings and stores them in pattern library
    - Future builds apply past learnings automatically
    - Common issues prevented before they occur
    - System gets smarter with every project
    - See [FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md) for details
+
+7. **📸 Automated Screenshot Capture** ⭐ NEW!
+   - **Phase 4.5: Screenshot Capture** runs after tests pass
+   - Uses Playwright to capture application screenshots automatically
+   - Generates hero screenshot for README
+   - Creates step-by-step visual guides for documentation
+   - Screenshots stored in GitHub repository (docs/screenshots/)
+   - Graceful fallback for non-visual projects
 
 ### What Changed from 1.x?
 
@@ -320,7 +329,8 @@ Use mcp__autonomous_build_and_deploy with:
    - Architect designs system (1-2 min)
    - Builder implements code + tests (2-5 min)
    - Tester validates (tests fail? auto-fixes up to 3x)
-   - Documentation created (1 min)
+   - **Screenshot Capturer takes visual documentation (30-60 sec)**
+   - Documentation created with screenshots (1 min)
    - Deployed to GitHub (30 sec)
 
 **Total:** ~7-15 minutes, zero human input required.

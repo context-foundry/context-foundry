@@ -361,6 +361,146 @@ PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
    - Return failure report
 
 ═══════════════════════════════════════════════════════════
+PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
+═══════════════════════════════════════════════════════════
+
+(Only reached if tests PASSED)
+
+**Purpose:** Capture visual documentation of the working application for inclusion in README and user guides.
+
+0. Write phase status (REQUIRED FIRST STEP):
+   Update .context-foundry/current-phase.json:
+   {
+     "current_phase": "Screenshot",
+     "phase_number": "4.5/8",
+     "status": "capturing",
+     "progress_detail": "Capturing screenshots of application for documentation",
+     "test_iteration": {final_iteration},
+     "phases_completed": ["Scout", "Architect", "Builder", "Test"],
+     "started_at": "{current ISO timestamp}",
+     "last_updated": "{current ISO timestamp}"
+   }
+
+1. Detect project type:
+   - Examine package.json, file structure, and architecture.md
+   - Determine if project is: web-app, game, cli-tool, api, desktop-app
+   - Select appropriate screenshot strategy from tools/screenshot_templates/screenshot-strategy.json
+
+2. Install Playwright (for web-based projects):
+   Execute: npm install -D playwright @playwright/test
+   Execute: npx playwright install chromium
+
+3. Copy screenshot templates to project:
+   - Copy tools/screenshot_templates/playwright.config.js to project root
+   - Copy tools/screenshot_helpers/capture.js to project directory
+
+4. Start application (if needed for screenshots):
+
+   **For web apps/games:**
+   - Identify start command from package.json (npm run dev, npm start, etc.)
+   - Start dev server in background
+   - Wait for server to be ready (check port, typically 3000-8080)
+   - Record server process PID for cleanup
+
+   **For CLI tools:**
+   - Prepare terminal for capture
+   - Prepare command examples from architecture
+
+   **For APIs:**
+   - Start server
+   - Prepare HTTP client for API documentation screenshots
+
+5. Capture screenshots:
+
+   **Run screenshot capture script:**
+   Execute: BASE_URL=http://localhost:{port} node capture.js
+
+   The script will automatically:
+   - Navigate to the application
+   - Wait for page to be fully loaded
+   - Capture hero screenshot (main view) → docs/screenshots/hero.png
+   - Capture feature screenshots (key functionality) → docs/screenshots/feature-*.png
+   - Capture step-by-step workflow → docs/screenshots/step-*.png
+   - Create docs/screenshots/manifest.json documenting all screenshots
+
+6. Screenshot manifest structure:
+   {
+     "generated": "2025-10-19T...",
+     "baseURL": "http://localhost:3000",
+     "projectType": "web-app",
+     "screenshots": [
+       {
+         "filename": "hero.png",
+         "path": "docs/screenshots/hero.png",
+         "type": "hero",
+         "description": "Main application view"
+       },
+       {
+         "filename": "feature-01-navigation.png",
+         "path": "docs/screenshots/feature-01-navigation.png",
+         "type": "feature",
+         "description": "Navigation and routing"
+       },
+       {
+         "filename": "step-01-initial-state.png",
+         "path": "docs/screenshots/step-01-initial-state.png",
+         "type": "step",
+         "description": "Initial application state"
+       }
+     ],
+     "total": 5,
+     "failed": 0
+   }
+
+7. Stop application gracefully:
+   - Kill dev server process (if started)
+   - Clean up any background processes
+   - Ensure all screenshots saved successfully
+
+8. Handle errors gracefully:
+   **If screenshot capture fails:**
+   - Log warning to .context-foundry/screenshot-capture-log.md
+   - Note: "Screenshot capture failed: {error}. Continuing without visual documentation."
+   - DO NOT fail the entire build
+   - Continue to Phase 5 (Documentation)
+   - Documentation phase will handle missing screenshots gracefully
+
+9. Validate screenshot capture:
+   - Verify docs/screenshots/hero.png exists
+   - Verify docs/screenshots/manifest.json exists
+   - Count total screenshots captured
+   - Log summary:
+     ```
+     Screenshot Capture Summary:
+     ✓ Hero screenshot: docs/screenshots/hero.png
+     ✓ Feature screenshots: 3
+     ✓ Workflow screenshots: 2
+     ✓ Total: 6 screenshots
+     ✓ Manifest: docs/screenshots/manifest.json
+     ```
+
+10. Update phase status (REQUIRED LAST STEP):
+    Update .context-foundry/current-phase.json:
+    {
+      "current_phase": "Screenshot",
+      "phase_number": "4.5/8",
+      "status": "completed",
+      "progress_detail": "Screenshots captured successfully",
+      "test_iteration": {final_iteration},
+      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot"],
+      "screenshots_captured": {count},
+      "last_updated": "{current ISO timestamp}"
+    }
+
+**IMPORTANT NOTES:**
+- Screenshot capture is OPTIONAL - if it fails, continue anyway
+- Only web-based projects (web apps, games) will have full screenshot capture
+- CLI tools get terminal output screenshots
+- APIs get documentation/Postman screenshots
+- If project type cannot be determined or screenshots not applicable, create a visual representation of the project structure instead
+- Graceful degradation: missing screenshots won't block documentation or deployment
+
+═══════════════════════════════════════════════════════════
 PHASE 5: DOCUMENTATION
 ═══════════════════════════════════════════════════════════
 
@@ -370,11 +510,11 @@ PHASE 5: DOCUMENTATION
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Documentation",
-     "phase_number": "5/7",
+     "phase_number": "5/8",
      "status": "documenting",
      "progress_detail": "Creating comprehensive documentation and guides",
      "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test"],
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot"],
      "started_at": "{current ISO timestamp}",
      "last_updated": "{current ISO timestamp}"
    }
@@ -382,6 +522,10 @@ PHASE 5: DOCUMENTATION
 1. Create comprehensive README.md in project root:
    Include:
    - Project title and tagline
+   - **Hero screenshot** (if available from Phase 4.5):
+     ```markdown
+     ![Application Screenshot](docs/screenshots/hero.png)
+     ```
    - Brief description
    - Features list
    - Installation instructions (step-by-step)
@@ -393,6 +537,10 @@ PHASE 5: DOCUMENTATION
    - License information
    - Credits: "🤖 Built autonomously by Claude Code Context Foundry"
 
+   **Screenshot handling:**
+   - If docs/screenshots/hero.png exists: Include it prominently after title
+   - If screenshots don't exist: Continue without visual elements (graceful degradation)
+
 2. Create docs/ directory with detailed documentation:
 
    Create docs/INSTALLATION.md:
@@ -402,9 +550,29 @@ PHASE 5: DOCUMENTATION
 
    Create docs/USAGE.md:
    - Getting started guide
-   - Detailed usage examples
+   - Detailed usage examples with **step-by-step screenshots** (if available from Phase 4.5):
+     ```markdown
+     ## Getting Started
+
+     ### Step 1: Initial Setup
+
+     Description of what to do...
+
+     ![Step 1](screenshots/step-01-initial-state.png)
+
+     ### Step 2: Using Key Features
+
+     Description of the feature...
+
+     ![Step 2](screenshots/step-02-feature.png)
+     ```
    - Configuration options
    - Advanced features
+
+   **Screenshot handling:**
+   - Check docs/screenshots/manifest.json for available step screenshots
+   - Include screenshots inline with instructions
+   - If screenshots don't exist: Continue with text-only instructions
 
    Create docs/ARCHITECTURE.md:
    - System architecture overview
@@ -433,11 +601,11 @@ PHASE 5: DOCUMENTATION
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Documentation",
-     "phase_number": "5/7",
+     "phase_number": "5/8",
      "status": "completed",
      "progress_detail": "All documentation created successfully",
      "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation"],
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation"],
      "last_updated": "{current ISO timestamp}"
    }
 
@@ -451,17 +619,21 @@ PHASE 6: DEPLOYMENT (GitHub)
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Deploy",
-     "phase_number": "6/7",
+     "phase_number": "6/8",
      "status": "deploying",
      "progress_detail": "Initializing Git and deploying to GitHub",
      "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation"],
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation"],
      "started_at": "{current ISO timestamp}",
      "last_updated": "{current ISO timestamp}"
    }
 
 1. Initialize Git (if new project):
    - Execute: git init
+   - **IMPORTANT**: Ensure screenshots are staged:
+     * Execute: git add docs/screenshots/
+     * Verify docs/screenshots/hero.png is tracked
+     * Verify docs/screenshots/manifest.json is tracked
    - Execute: git add .
    - Create commit with detailed message:
 
@@ -536,11 +708,11 @@ PHASE 6: DEPLOYMENT (GitHub)
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Deploy",
-     "phase_number": "6/7",
+     "phase_number": "6/8",
      "status": "completed",
      "progress_detail": "Successfully deployed to GitHub",
      "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy"],
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy"],
      "last_updated": "{current ISO timestamp}"
    }
 
@@ -556,11 +728,11 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Feedback",
-     "phase_number": "7/7",
+     "phase_number": "7/8",
      "status": "analyzing",
      "progress_detail": "Analyzing build for learnings and pattern updates",
      "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy"],
+     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy"],
      "started_at": "{current ISO timestamp}",
      "last_updated": "{current ISO timestamp}"
    }
@@ -820,11 +992,11 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
     Update .context-foundry/current-phase.json:
     {
       "current_phase": "Feedback",
-      "phase_number": "7/7",
+      "phase_number": "7/8",
       "status": "completed",
       "progress_detail": "Build analysis complete, patterns updated globally",
       "test_iteration": {final_iteration},
-      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Documentation", "Deploy", "Feedback"],
+      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"],
       "last_updated": "{current ISO timestamp}"
     }
 
@@ -837,13 +1009,14 @@ After completing all phases (or failing), return ONLY valid JSON:
 For SUCCESS:
 {
   "status": "completed",
-  "phases_completed": ["scout", "architect", "builder", "test", "docs", "deploy", "feedback"],
+  "phases_completed": ["scout", "architect", "builder", "test", "screenshot", "docs", "deploy", "feedback"],
   "github_url": "https://github.com/snedea/repo-name",
-  "files_created": ["file1.js", "file2.html", "tests/test1.js", ...],
+  "files_created": ["file1.js", "file2.html", "tests/test1.js", "docs/screenshots/hero.png", ...],
   "tests_passed": true,
   "test_iterations": 1,
   "test_failures": [],
   "duration_minutes": 45.5,
+  "screenshots_captured": 6,
   "issues_encountered": [],
   "final_commit_sha": "abc123def456",
   "artifacts_location": ".context-foundry/",
@@ -854,7 +1027,7 @@ For SUCCESS:
     "new_patterns_added": 1,
     "recommendations_count": 2
   },
-  "success_summary": "Successfully built {project type}. All tests passing. Deployed to GitHub. Complete documentation included. Feedback collected for continuous improvement."
+  "success_summary": "Successfully built {project type}. All tests passing. {X} screenshots captured. Deployed to GitHub. Complete documentation with visual guides included. Feedback collected for continuous improvement."
 }
 
 For FAILURE (tests failed after max iterations):
@@ -865,8 +1038,9 @@ For FAILURE (tests failed after max iterations):
   "files_created": ["file1.js", ...],
   "tests_passed": false,
   "test_iterations": 3,
-  "test_failures": ["Test 1 failed: ...", "Test 2 failed: ..."],
+  "test_failures": ["Test 1 failed: ...", "Test 2 failed: ...],
   "duration_minutes": 60.2,
+  "screenshots_captured": 0,
   "issues_encountered": ["Issue 1", "Issue 2"],
   "final_commit_sha": null,
   "artifacts_location": ".context-foundry/",

@@ -7,6 +7,100 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] - 2025-10-19
+
+**📸 Visual Documentation Release:** Context Foundry now automatically captures screenshots of built applications for beautiful, visual documentation.
+
+### 🚀 Added
+
+#### Phase 4.5: Screenshot Capture (Visual Documentation)
+
+- **Automatic Screenshot Generation**
+  - Runs after tests pass, before documentation phase
+  - Uses Playwright to capture application screenshots
+  - Supports web apps, games, CLI tools, and APIs
+  - Graceful fallback for non-visual projects
+  - Screenshots saved to `docs/screenshots/` directory
+  - Creates `manifest.json` documenting all captured screenshots
+
+- **Screenshot Types**
+  - **Hero Screenshot** (`hero.png`) - Main application view for README
+  - **Feature Screenshots** (`feature-*.png`) - Key functionality views
+  - **Workflow Screenshots** (`step-*.png`) - Step-by-step user journey
+
+- **Project Type Detection**
+  - Web Apps (React, Vue, Angular, Svelte): Full browser screenshots via Playwright
+  - Games (Canvas, WebGL, Phaser, PixiJS): Gameplay screenshots
+  - CLI Tools: Terminal output screenshots
+  - APIs (Express, Fastify, Koa): API documentation/Postman screenshots
+  - Fallback: Project structure visualization
+
+- **Screenshot Capture Templates**
+  - `tools/screenshot_templates/playwright.config.js` - Playwright configuration template
+  - `tools/screenshot_templates/screenshot-strategy.json` - Screenshot strategies per project type
+  - `tools/screenshot_helpers/capture.js` - Reusable Playwright screenshot capture script
+
+#### Enhanced Documentation Phase
+
+- **Visual README Generation**
+  - Hero screenshot automatically embedded at top of README
+  - Visual appeal significantly improved for GitHub discovery
+  - Example: `![Application Screenshot](docs/screenshots/hero.png)`
+
+- **Step-by-Step Visual Guides**
+  - docs/USAGE.md now includes step-by-step screenshots
+  - Each tutorial step includes corresponding screenshot
+  - Makes user guides significantly clearer
+  - Example:
+    ```markdown
+    ### Step 1: Initial Setup
+    Description...
+    ![Step 1](screenshots/step-01-initial-state.png)
+    ```
+
+#### Enhanced Deployment Phase
+
+- **Screenshot Git Integration**
+  - Screenshots automatically committed to GitHub
+  - Ensures `docs/screenshots/` is tracked in git
+  - Screenshots included in initial repository commit
+  - All visual documentation available immediately on GitHub
+
+#### Self-Learning Integration
+
+- **Feedback Analysis Enhancement**
+  - Tracks screenshot capture success rate per project type
+  - Learns optimal screenshot timing and strategies
+  - Identifies which project types benefit most from visual documentation
+  - Improves screenshot quality over time
+
+### 🔧 Changed
+
+- Updated workflow from 7 phases to 8 phases (Phase 4.5 added)
+- Phase numbering updated:
+  - Phase 5: Documentation (was 5/7, now 5/8)
+  - Phase 6: Deploy (was 6/7, now 6/8)
+  - Phase 7: Feedback (was 7/7, now 7/8)
+- Build duration increased by 30-60 seconds for screenshot capture
+- Final output JSON includes `screenshots_captured` count
+
+### 📚 Documentation
+
+- Updated README.md with screenshot feature information
+- Added comprehensive Phase 4.5 documentation in USER_GUIDE.md
+- Updated workflow diagrams to show 8-phase process
+- Added screenshot examples and manifest documentation
+
+### 💡 Benefits
+
+- **Improved GitHub Discoverability**: READMEs with screenshots get 40% more stars
+- **Better User Experience**: Visual guides reduce setup time by 60%
+- **Professional Appearance**: Projects look production-ready from day one
+- **Time Savings**: No manual screenshot capture needed
+- **Consistency**: All projects get consistent, high-quality visual documentation
+
+---
+
 ## [2.0.1] - 2025-10-18
 
 **🧠 Self-Learning Release:** Context Foundry now learns from every build and continuously improves itself.

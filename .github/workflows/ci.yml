@@ -110,15 +110,54 @@ jobs:
         run: |
           python -c "import inspect; from mcp_server import server; print('Available functions:', [name for name, obj in inspect.getmembers(server) if inspect.isfunction(obj)])"
 
+  screenshot-tests:
+    name: Screenshot System Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Verify screenshot templates exist
+        run: |
+          test -f tools/screenshot_templates/playwright.config.js || exit 1
+          test -f tools/screenshot_templates/screenshot-strategy.json || exit 1
+          test -f tools/screenshot_helpers/capture.js || exit 1
+          echo "✅ All screenshot templates found"
+
+      - name: Validate screenshot-strategy.json
+        run: |
+          cat tools/screenshot_templates/screenshot-strategy.json | python -m json.tool > /dev/null
+          echo "✅ screenshot-strategy.json is valid JSON"
+
+      - name: Install Playwright (to verify installation works)
+        run: |
+          cd /tmp
+          npm init -y
+          npm install -D playwright @playwright/test
+          npx playwright install chromium --with-deps
+          echo "✅ Playwright installed successfully"
+
+      - name: Test screenshot capture script syntax
+        run: |
+          cd /tmp
+          cp $GITHUB_WORKSPACE/tools/screenshot_helpers/capture.js .
+          node -c capture.js
+          echo "✅ Screenshot capture script has valid syntax"
+
   build-status:
     name: Build Status
     runs-on: ubuntu-latest
-    needs: [lint, test, security, integration]
+    needs: [lint, test, security, integration, screenshot-tests]
     if: always()
     steps:
       - name: Check build status
         run: |
-          if [[ "${{ needs.lint.result }}" == "success" && "${{ needs.test.result }}" == "success" ]]; then
+          if [[ "${{ needs.lint.result }}" == "success" && "${{ needs.test.result }}" == "success" && "${{ needs.screenshot-tests.result }}" == "success" ]]; then
             echo "✅ CI Pipeline passed!"
             exit 0
           else
