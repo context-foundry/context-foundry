@@ -885,7 +885,6 @@ Break-even: ~5 projects per month
 |----------|-------------|----------|
 | **[CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
 | **[.mcp.json](.mcp.json)** | Project-shareable MCP configuration | Team leads |
-| **[INSTALL.md](INSTALL.md)** | Installation instructions | New users |
 
 ### 🏗️ Architecture & Technical Deep Dives
 
