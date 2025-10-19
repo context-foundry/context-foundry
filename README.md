@@ -160,6 +160,105 @@ with comprehensive tests and error handling
 
 ---
 
+## 📚 Understanding Context Foundry
+
+### How It Really Works (No Magic, Just Transparency)
+
+**Key Insight:** Context Foundry does NOT modify Claude Code. It uses **delegation** to spawn separate Claude instances that do the work.
+
+```
+Your Claude Window (stays clean)
+    ↓
+    "Build a weather app"
+    ↓
+MCP Server spawns → Fresh Claude Instance
+                    (runs all 7 phases)
+                    (builds entire project)
+                    ↓
+                    Returns summary
+    ↓
+Your Claude Window shows: "Build complete! ✅"
+```
+
+**Why your context usage stays low:** The heavy work happens in a separate Claude instance!
+
+### Where Are My Build Artifacts?
+
+**Every project gets a `.context-foundry/` directory:**
+
+```
+your-project/
+└── .context-foundry/
+    ├── architecture.md      ← Architect's complete plan (30-90KB!)
+    ├── scout-report.md      ← Research findings
+    ├── build-log.md         ← Implementation log
+    ├── test-final-report.md ← Test results
+    └── session-summary.json ← Build metadata
+```
+
+**Example - View VimQuest's architecture plan:**
+```bash
+cat /Users/name/homelab/vimquest/.context-foundry/architecture.md
+```
+
+### Pattern Library Location
+
+**Global patterns** (shared across ALL builds):
+```
+/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json
+├── test-patterns.json
+├── architecture-patterns.json
+└── scout-learnings.json
+```
+
+**How it works:**
+- Each build reads global patterns
+- Applies past learnings automatically
+- Discovers new patterns
+- Updates library for future builds
+
+**See what Context Foundry has learned:**
+```bash
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+```
+
+### Common Questions
+
+❓ **Did Context Foundry change Claude Code's system prompt?**
+✅ **No!** It spawns separate Claude instances via delegation. Your regular Claude Code usage is unaffected.
+
+❓ **Where can I find the architect's plan?**
+✅ `<your-project>/.context-foundry/architecture.md`
+
+❓ **Why is my context usage so low?**
+✅ The build runs in a **separate Claude instance**. Your main window just monitors progress.
+
+❓ **What happens to the agents after the build?**
+✅ They're ephemeral - disappear after the build. Only artifacts and patterns persist.
+
+❓ **Can I review the plan before building?**
+✅ Yes! Use `autonomous=False` to enable checkpoints, or review `architecture.md` after completion.
+
+### 📖 Full FAQ
+
+**Want comprehensive answers?** See **[FAQ.md](FAQ.md)** for:
+- Complete delegation model explanation
+- Where all prompts are located
+- How agents work and disappear
+- Build artifact locations
+- Pattern library details
+- Control options (autonomous vs manual)
+- And much more!
+
+**Additional Documentation:**
+- **[FAQ.md](FAQ.md)** - Comprehensive Q&A (transparency focus)
+- **[USER_GUIDE.md](USER_GUIDE.md)** - Step-by-step usage guide
+- **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** - Technical deep dive on delegation
+- **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** - How self-learning works
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -774,11 +873,15 @@ Break-even: ~5 projects per month
 | Document | Description |
 |----------|-------------|
 | **README.md** (this file) | Quick start and overview for v2.0 |
+| **FAQ.md** | Comprehensive Q&A - how it works, where things are, transparency |
+| **USER_GUIDE.md** | Step-by-step usage guide with examples |
+| **FEEDBACK_SYSTEM.md** | Self-learning pattern library documentation |
 | **ARCHITECTURE_DECISIONS.md** | Technical deep dive: what changed and why |
 | **CLAUDE_CODE_MCP_SETUP.md** | MCP server setup and troubleshooting |
+| **docs/DELEGATION_MODEL.md** | How delegation keeps context clean |
+| **docs/ARCHITECTURE.md** | Stateless conversation architecture |
 | **LEGACY_README.md** | Original Context Foundry 1.x documentation |
-| **USER_GUIDE.md** | Step-by-step usage guide *(coming soon)* |
-| **CHANGELOG.md** | Version history and release notes *(coming soon)* |
+| **CHANGELOG.md** | Version history and release notes |
 
 ---
 
