@@ -50,6 +50,29 @@ active_builds = {}
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
 
+def _read_phase_info(working_directory: str) -> Dict[str, Any]:
+    """
+    Read phase tracking information from .context-foundry/current-phase.json
+
+    Returns dict with phase info, or empty dict if file doesn't exist or is invalid.
+    """
+    try:
+        phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
+        if not phase_file.exists():
+            return {}
+
+        with open(phase_file, 'r') as f:
+            phase_data = json.load(f)
+
+        return phase_data
+    except (json.JSONDecodeError, FileNotFoundError, PermissionError):
+        # File doesn't exist yet, is invalid JSON, or can't be read
+        return {}
+    except Exception:
+        # Any other error - return empty dict
+        return {}
+
+
 @mcp.tool()
 async def context_foundry_build(
     task_description: str,
@@ -567,14 +590,28 @@ def get_delegation_result(task_id: str) -> str:
                 }, indent=2)
 
             # Still running within timeout
-            return json.dumps({
+            # Try to read phase information
+            phase_info = _read_phase_info(task_info["cwd"])
+
+            result = {
                 "task_id": task_id,
                 "status": "running",
                 "task": task_info["task"],
                 "elapsed_seconds": round(elapsed, 2),
                 "timeout_minutes": task_info["timeout_minutes"],
                 "progress": f"{round((elapsed / timeout_seconds) * 100, 1)}% of timeout elapsed"
-            }, indent=2)
+            }
+
+            # Add phase information if available
+            if phase_info:
+                result["current_phase"] = phase_info.get("current_phase", "Unknown")
+                result["phase_number"] = phase_info.get("phase_number", "?/7")
+                result["phase_status"] = phase_info.get("status", "unknown")
+                result["progress_detail"] = phase_info.get("progress_detail", "Working...")
+                result["test_iteration"] = phase_info.get("test_iteration", 0)
+                result["phases_completed"] = phase_info.get("phases_completed", [])
+
+            return json.dumps(result, indent=2)
 
         # Process completed - capture output if not already captured
         if task_info["result"] is None:

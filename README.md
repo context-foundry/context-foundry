@@ -16,7 +16,8 @@ Unlike traditional AI coding tools that require constant supervision, Context Fo
 - Designs architecture (Architect phase)
 - Implements code with tests (Builder phase)
 - Auto-fixes test failures (Test phase with self-healing)
-- Documents everything (Documentation phase)
+- **Captures screenshots automatically** (Screenshot phase - NEW!)
+- Documents everything with visual guides (Documentation phase)
 - Deploys to GitHub (Deployment phase)
 
 **Real Example:**
@@ -133,13 +134,21 @@ with comprehensive tests and error handling
    - Each phase reads from previous artifacts
    - Works across multiple sessions
 
-6. **🧠 Self-Learning Feedback Loop** ⭐ NEW!
+6. **🧠 Self-Learning Feedback Loop** ⭐
    - **Phase 7: Feedback Analysis** runs after every build
    - Extracts learnings and stores them in pattern library
    - Future builds apply past learnings automatically
    - Common issues prevented before they occur
    - System gets smarter with every project
    - See [FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md) for details
+
+7. **📸 Automated Screenshot Capture** ⭐ NEW!
+   - **Phase 4.5: Screenshot Capture** runs after tests pass
+   - Uses Playwright to capture application screenshots automatically
+   - Generates hero screenshot for README
+   - Creates step-by-step visual guides for documentation
+   - Screenshots stored in GitHub repository (docs/screenshots/)
+   - Graceful fallback for non-visual projects
 
 ### What Changed from 1.x?
 
@@ -320,7 +329,8 @@ Use mcp__autonomous_build_and_deploy with:
    - Architect designs system (1-2 min)
    - Builder implements code + tests (2-5 min)
    - Tester validates (tests fail? auto-fixes up to 3x)
-   - Documentation created (1 min)
+   - **Screenshot Capturer takes visual documentation (30-60 sec)**
+   - Documentation created with screenshots (1 min)
    - Deployed to GitHub (30 sec)
 
 **Total:** ~7-15 minutes, zero human input required.
@@ -870,18 +880,67 @@ Break-even: ~5 projects per month
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| **README.md** (this file) | Quick start and overview for v2.0 |
-| **FAQ.md** | Comprehensive Q&A - how it works, where things are, transparency |
-| **USER_GUIDE.md** | Step-by-step usage guide with examples |
-| **FEEDBACK_SYSTEM.md** | Self-learning pattern library documentation |
-| **ARCHITECTURE_DECISIONS.md** | Technical deep dive: what changed and why |
-| **CLAUDE_CODE_MCP_SETUP.md** | MCP server setup and troubleshooting |
-| **docs/DELEGATION_MODEL.md** | How delegation keeps context clean |
-| **docs/ARCHITECTURE.md** | Stateless conversation architecture |
-| **LEGACY_README.md** | Original Context Foundry 1.x documentation |
-| **CHANGELOG.md** | Version history and release notes |
+### 📘 Getting Started
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[README.md](README.md)** (this file) | Quick start and overview | Everyone |
+| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide | New users |
+| **[USER_GUIDE.md](USER_GUIDE.md)** | Step-by-step usage guide with examples | New users |
+| **[FAQ.md](FAQ.md)** | Comprehensive Q&A - transparency focused | Everyone |
+
+### 🔧 Setup & Configuration
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
+| **[.mcp.json](.mcp.json)** | Project-shareable MCP configuration | Team leads |
+
+### 🏗️ Architecture & Technical Deep Dives
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
+| **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
+| **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
+| **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** | Why delegation keeps main context clean | Technical users |
+| **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** | What changed in v2.0 and why | Technical users |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Stateless conversation architecture | Developers |
+
+### 🧠 Self-Learning & Patterns
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** | Self-learning pattern library documentation | All users |
+| **~/.context-foundry/patterns/common-issues.json** | Global pattern library (on your machine) | Curious users |
+
+### 📚 Reference & Legacy
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes | Everyone |
+| **[ROADMAP.md](ROADMAP.md)** | Future plans | Contributors |
+| **[LEGACY_README.md](LEGACY_README.md)** | Original Context Foundry 1.x documentation | v1.x users |
+
+### 💡 Recommended Reading Order
+
+**New Users:**
+1. [README.md](README.md) - Understand what Context Foundry does
+2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
+3. [USER_GUIDE.md](USER_GUIDE.md) - Learn how to use it
+4. [FAQ.md](FAQ.md) - Common questions answered
+
+**Developers/Contributors:**
+1. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - 🎨 START HERE! Visual overview
+2. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
+4. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
+5. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
+
+**Troubleshooting:**
+1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
+2. [FAQ.md](FAQ.md) - Common questions
+3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
 
 ---
 

@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Screenshot capture strategies for different project types",
+  "version": "1.0.0",
+  "strategies": {
+    "web-app": {
+      "description": "Standard web application (React, Vue, vanilla JS, etc.)",
+      "detection": {
+        "files": ["index.html", "package.json"],
+        "keywords": ["react", "vue", "angular", "svelte", "web", "spa"]
+      },
+      "setup": {
+        "install_playwright": true,
+        "start_command_hints": ["npm run dev", "npm start", "yarn dev", "pnpm dev"],
+        "default_port": 3000,
+        "wait_for_ready": 5000
+      },
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "Main homepage/landing view",
+          "filename": "hero.png",
+          "actions": [
+            {"type": "goto", "url": "/"},
+            {"type": "wait", "selector": "body", "timeout": 10000},
+            {"type": "screenshot", "fullPage": true}
+          ]
+        },
+        {
+          "name": "feature-navigation",
+          "description": "Navigation and routing",
+          "filename": "feature-01-navigation.png",
+          "actions": [
+            {"type": "goto", "url": "/"},
+            {"type": "wait", "time": 2000},
+            {"type": "screenshot", "fullPage": false}
+          ]
+        },
+        {
+          "name": "feature-interaction",
+          "description": "Interactive features",
+          "filename": "feature-02-interaction.png",
+          "actions": [
+            {"type": "goto", "url": "/"},
+            {"type": "click", "selector": "button:first-of-type", "optional": true},
+            {"type": "wait", "time": 1000},
+            {"type": "screenshot", "fullPage": false}
+          ]
+        }
+      ]
+    },
+    "game": {
+      "description": "Browser-based game (Canvas, WebGL, HTML5)",
+      "detection": {
+        "files": ["index.html", "game.js", "canvas"],
+        "keywords": ["game", "canvas", "webgl", "phaser", "pixijs"]
+      },
+      "setup": {
+        "install_playwright": true,
+        "start_command_hints": ["npm run dev", "http-server", "python -m http.server"],
+        "default_port": 8080,
+        "wait_for_ready": 3000
+      },
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "Game title screen or initial state",
+          "filename": "hero.png",
+          "actions": [
+            {"type": "goto", "url": "/"},
+            {"type": "wait", "selector": "canvas", "timeout": 10000},
+            {"type": "wait", "time": 2000},
+            {"type": "screenshot", "fullPage": true}
+          ]
+        },
+        {
+          "name": "gameplay",
+          "description": "Active gameplay screenshot",
+          "filename": "step-01-gameplay.png",
+          "actions": [
+            {"type": "goto", "url": "/"},
+            {"type": "wait", "selector": "canvas"},
+            {"type": "wait", "time": 3000},
+            {"type": "screenshot", "fullPage": false}
+          ]
+        }
+      ]
+    },
+    "cli-tool": {
+      "description": "Command-line interface tool",
+      "detection": {
+        "files": ["cli.js", "bin/"],
+        "keywords": ["cli", "command-line", "terminal"]
+      },
+      "setup": {
+        "install_playwright": false,
+        "use_terminal_capture": true
+      },
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "Terminal output showing help/usage",
+          "filename": "hero.png",
+          "terminal_commands": [
+            {"command": "node . --help", "wait": 1000}
+          ]
+        },
+        {
+          "name": "example-usage",
+          "description": "Example command execution",
+          "filename": "step-01-usage.png",
+          "terminal_commands": [
+            {"command": "node . example-command", "wait": 1000}
+          ]
+        }
+      ]
+    },
+    "api": {
+      "description": "REST API or GraphQL server",
+      "detection": {
+        "files": ["server.js", "app.js", "api/"],
+        "keywords": ["api", "express", "fastify", "koa", "rest", "graphql"]
+      },
+      "setup": {
+        "install_playwright": false,
+        "use_api_docs_screenshot": true,
+        "start_command_hints": ["npm run dev", "npm start", "node server.js"],
+        "default_port": 3000
+      },
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "API documentation or Swagger UI",
+          "filename": "hero.png",
+          "note": "Screenshot of API documentation if available, or create visual showing endpoints"
+        },
+        {
+          "name": "postman-example",
+          "description": "Example API request/response",
+          "filename": "step-01-api-example.png",
+          "note": "Use HTTP client to show request/response"
+        }
+      ]
+    },
+    "desktop-app": {
+      "description": "Electron or Tauri desktop application",
+      "detection": {
+        "files": ["electron-main.js", "src-tauri/"],
+        "keywords": ["electron", "tauri", "desktop"]
+      },
+      "setup": {
+        "install_playwright": true,
+        "electron_mode": true
+      },
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "Main application window",
+          "filename": "hero.png"
+        }
+      ]
+    },
+    "fallback": {
+      "description": "Default fallback for unrecognized project types",
+      "screenshots": [
+        {
+          "name": "hero",
+          "description": "Project structure or README preview",
+          "filename": "hero.png",
+          "note": "Create visual representation of project structure or screenshot README"
+        }
+      ]
+    }
+  }
+}

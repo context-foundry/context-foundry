@@ -393,9 +393,18 @@ Iteration 1: Run tests → Fail
   Builder: Implements fix
 Iteration 2: Run tests → Pass
 
+Phase 4.5 - Screenshot Capture (30-60 sec):
+- Installs Playwright automatically
+- Starts application dev server
+- Captures hero screenshot for README
+- Captures step-by-step workflow screenshots
+- Saves to docs/screenshots/
+- Creates manifest.json listing all screenshots
+
 Phase 5 - Documentation (1 min):
-- Creates comprehensive README
-- Documents usage and installation
+- Creates comprehensive README with hero screenshot
+- Documents usage with visual step-by-step guides
+- Includes screenshots in docs/USAGE.md
 
 Phase 6 - Deploy (30 sec):
 - Pushes to GitHub
@@ -815,7 +824,9 @@ Background builds continue! But you lose the ability to track them in the curren
 
 ## Understanding the Workflow
 
-### The 6-Phase Autonomous Workflow
+### The 8-Phase Autonomous Workflow
+
+Context Foundry runs through 8 phases to build complete, tested, documented, and visually documented projects automatically.
 
 #### Phase 1: Scout (Research & Context Gathering)
 
@@ -946,10 +957,62 @@ Test Iteration 2:
 
 **Max iterations:** If tests still fail after `max_test_iterations` (default: 3), system reports failure and stops.
 
+#### Phase 4.5: Screenshot Capture (Visual Documentation) 📸 NEW!
+
+**What happens:**
+- AI detects project type (web app, game, CLI, API, etc.)
+- AI installs Playwright automatically
+- AI copies screenshot capture templates to project
+- AI starts dev server (for web apps/games)
+- AI captures screenshots automatically:
+  - **Hero screenshot**: Main application view (docs/screenshots/hero.png)
+  - **Feature screenshots**: Key functionality views
+  - **Workflow screenshots**: Step-by-step user journey
+- AI creates manifest.json listing all screenshots
+- AI stops dev server gracefully
+- **If screenshot capture fails**: Logs warning, continues build (graceful degradation)
+
+**Project Type Detection:**
+- **Web Apps** (React, Vue, etc.): Full browser screenshots via Playwright
+- **Games** (Canvas, WebGL): Gameplay screenshots
+- **CLI Tools**: Terminal output screenshots
+- **APIs**: Documentation/Postman screenshots
+- **Other**: Project structure visualization or README preview
+
+**Example Screenshot Manifest:**
+```json
+{
+  "generated": "2025-10-19T14:30:00Z",
+  "projectType": "web-app",
+  "screenshots": [
+    {
+      "filename": "hero.png",
+      "type": "hero",
+      "description": "Main application view"
+    },
+    {
+      "filename": "feature-01-navigation.png",
+      "type": "feature"
+    },
+    {
+      "filename": "step-01-initial-state.png",
+      "type": "step"
+    }
+  ],
+  "total": 6
+}
+```
+
+**Why this phase is important:**
+- Visual documentation significantly improves README appeal
+- Step-by-step screenshots make tutorials much clearer
+- Screenshots stored in GitHub make projects more discoverable
+- Users can see what they're building before cloning
+
 #### Phase 5: Documentation
 
 **What happens:**
-- AI creates comprehensive README.md
+- AI creates comprehensive README.md **with hero screenshot**
 - AI creates docs/ directory with:
   - INSTALLATION.md
   - USAGE.md

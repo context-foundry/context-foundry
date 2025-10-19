@@ -1,0 +1,31 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp.json",
+  "mcpServers": {
+    "context-foundry": {
+      "command": "python3",
+      "args": [
+        "tools/mcp_server.py"
+      ],
+      "cwd": ".",
+      "env": {},
+      "disabled": false,
+      "description": "Context Foundry MCP Server - Autonomous AI Development",
+      "metadata": {
+        "version": "2.0.1",
+        "requiredPythonVersion": ">=3.10",
+        "tools": [
+          "context_foundry_build",
+          "context_foundry_enhance",
+          "context_foundry_status",
+          "delegate_to_claude_code",
+          "delegate_to_claude_code_async",
+          "get_delegation_result",
+          "list_delegations",
+          "autonomous_build_and_deploy",
+          "autonomous_build_and_deploy_async"
+        ]
+      }
+    }
+  },
+  "readme": "This MCP configuration enables Context Foundry's autonomous build system.\n\nPrerequisites:\n- Python 3.10 or higher\n- Claude Code CLI installed\n- Git and GitHub CLI (for deployment features)\n\nSetup:\n1. Install dependencies: pip install -r requirements-mcp.txt\n2. Configure GitHub: gh auth login\n3. Start Claude Code: claude-code\n4. Use naturally: 'Build a weather app' (no commands to remember!)\n\nFor detailed setup and usage, see:\n- QUICKSTART.md - 5-minute getting started guide\n- CLAUDE_CODE_MCP_SETUP.md - Complete setup and troubleshooting\n- docs/MCP_SERVER_ARCHITECTURE.md - Technical architecture\n- FAQ.md - Frequently asked questions\n\nNote: This config uses relative paths (cwd: '.') so it works when the\nproject is cloned to any location. Claude Code resolves paths relative\nto the location of this .mcp.json file."
+}
