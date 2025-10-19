@@ -1,10 +1,185 @@
 {
   "$schema": "Pattern Library for Architectural Patterns",
   "version": "1.0.0",
-  "last_updated": "2025-10-18T22:30:00Z",
+  "last_updated": "2025-10-19T00:05:00Z",
   "description": "Proven architectural patterns from successful builds",
 
   "patterns": [
+    {
+      "pattern_id": "vite-educational-spa",
+      "title": "Vite for Educational SPAs and Browser-Based Apps",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "success_rate": "100%",
+      "project_types": ["educational-web-app", "spa", "browser-app", "offline-first", "pwa"],
+
+      "description": "Use Vite as the build tool for browser-based SPAs to get instant dev server, ES6 module support, and CORS prevention",
+
+      "benefits": [
+        "Built-in dev server (prevents CORS issues with ES6 modules)",
+        "Fast startup time (121ms)",
+        "Hot Module Replacement (HMR) for instant updates",
+        "No configuration needed for ES6 modules",
+        "Small bundle sizes (20.2kb gzipped)",
+        "Fast build performance",
+        "Native ES6 module support"
+      ],
+
+      "prevents": {
+        "issue": "CORS errors with ES6 modules from file:// protocol",
+        "pattern_reference": "cors-es6-modules",
+        "how": "Vite serves files via HTTP (localhost), not file://"
+      },
+
+      "implementation": {
+        "architect": {
+          "add_to_package_json": {
+            "devDependencies": {
+              "vite": "^5.0.0"
+            },
+            "scripts": {
+              "dev": "vite",
+              "build": "vite build",
+              "preview": "vite preview"
+            }
+          },
+          "create_vite_config": "vite.config.js with basic setup"
+        },
+        "builder": {
+          "file_structure": "Standard Vite structure with index.html at root",
+          "module_syntax": "Use ES6 imports/exports throughout"
+        }
+      },
+
+      "evidence": {
+        "build": "satoshi-chore-tracker",
+        "startup_time": "121ms",
+        "bundle_size": "20.2kb gzipped",
+        "test_iterations": 1,
+        "production_bugs": 0,
+        "notes": "Zero CORS errors, perfect ES6 module loading"
+      },
+
+      "auto_apply": true,
+      "conditions": [
+        "project_type includes 'browser-app' OR 'web-app' OR 'spa'",
+        "uses ES6 modules"
+      ],
+      "priority": "HIGH"
+    },
+    {
+      "pattern_id": "hash-routing-offline-first",
+      "title": "Hash-Based Routing for Offline-First SPAs",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "success_rate": "100%",
+      "project_types": ["spa", "offline-first", "pwa", "static-hosting"],
+
+      "description": "Use hash-based routing (#/page) instead of History API for offline-capable SPAs",
+
+      "benefits": [
+        "Works with file:// protocol",
+        "No server configuration needed",
+        "Perfect for PWAs and offline-first apps",
+        "Simpler than History API (no server rewrite rules)",
+        "Compatible with static hosting (GitHub Pages, etc.)"
+      ],
+
+      "implementation": {
+        "code_example": {
+          "router_setup": "window.addEventListener('hashchange', routeHandler)",
+          "navigation": "window.location.hash = '#/page'",
+          "route_detection": "const route = window.location.hash.slice(1) || '/'"
+        }
+      },
+
+      "applies_when": [
+        "App must work offline",
+        "Static hosting without server config",
+        "PWA requirements",
+        "File protocol compatibility needed"
+      ],
+
+      "evidence": {
+        "build": "satoshi-chore-tracker",
+        "notes": "Perfect for educational apps with offline capabilities"
+      },
+
+      "auto_apply": true,
+      "conditions": [
+        "project_type includes 'offline-first' OR 'pwa'"
+      ],
+      "priority": "MEDIUM"
+    },
+    {
+      "pattern_id": "localstorage-educational-persistence",
+      "title": "localStorage for Educational App Persistence",
+      "first_seen": "2025-10-18",
+      "last_seen": "2025-10-18",
+      "frequency": 1,
+      "success_rate": "100%",
+      "project_types": ["educational-app", "offline-first", "single-user-app"],
+
+      "description": "Use localStorage for simple data persistence in educational apps (no backend needed)",
+
+      "benefits": [
+        "Simple synchronous API",
+        "No backend or database needed",
+        "100% offline capable",
+        "Sufficient for <5MB data",
+        "Perfect for kid-friendly apps (no account creation)",
+        "Instant data access",
+        "No network dependency"
+      ],
+
+      "use_cases": [
+        "User progress tracking",
+        "Achievement unlocks",
+        "Completed chores/tasks",
+        "Learning module completion",
+        "App settings and preferences",
+        "Transaction history (simulated)"
+      ],
+
+      "implementation": {
+        "storage_service": {
+          "methods": ["save(key, data)", "load(key)", "remove(key)", "clear()"],
+          "serialization": "JSON.stringify/parse for objects",
+          "error_handling": "Try/catch for quota exceeded, private browsing"
+        }
+      },
+
+      "limitations": {
+        "storage_limit": "~5-10MB depending on browser",
+        "security": "Not encrypted, visible in dev tools",
+        "scope": "Single user only, per-domain storage",
+        "sync": "No cross-device sync without backend"
+      },
+
+      "when_not_to_use": [
+        "Multi-user applications",
+        "Data >5MB",
+        "Sensitive personal information",
+        "Cross-device sync required",
+        "Real-time collaboration needed"
+      ],
+
+      "evidence": {
+        "build": "satoshi-chore-tracker",
+        "data_stored": "Chores, achievements, progress, settings, transaction history",
+        "notes": "Perfect for educational simulation, no real money involved"
+      },
+
+      "auto_apply": true,
+      "conditions": [
+        "project_type includes 'educational'",
+        "requires simple persistence",
+        "single-user app"
+      ],
+      "priority": "MEDIUM"
+    },
     {
       "pattern_id": "entity-component-game-architecture",
       "title": "Entity-Component Architecture for Games",
@@ -60,8 +235,12 @@
   ],
 
   "statistics": {
-    "total_patterns": 1,
-    "high_success_rate": 1,
-    "auto_apply_enabled": 1
+    "total_patterns": 4,
+    "high_success_rate": 4,
+    "auto_apply_enabled": 4,
+    "by_priority": {
+      "HIGH": 1,
+      "MEDIUM": 3
+    }
   }
 }

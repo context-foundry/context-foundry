@@ -199,28 +199,98 @@ When `reset_context()` is called:
 
 ### ❌ NOT Cleared (Persists)
 
-Context Foundry persists state to files:
-- **Research files** (`blueprints/specs/RESEARCH_*.md`)
-- **Specification files** (`blueprints/specs/SPEC_*.md`)
-- **Plan files** (`blueprints/plans/PLAN_*.md`)
-- **Task files** (`blueprints/tasks/TASKS_*.md`)
-- **Generated code** (in `examples/` or custom project directory)
+Context Foundry persists state to files in the `.context-foundry/` directory:
+
+**Build Artifacts** (Per-Project):
+- **Scout report** (`.context-foundry/scout-report.md`) - Research findings
+- **Architecture document** (`.context-foundry/architecture.md`) - System design
+- **Build log** (`.context-foundry/build-log.md`) - Implementation chronology
+- **Test results** (`.context-foundry/test-results-iteration-*.md`) - Test runs
+- **Fix strategies** (`.context-foundry/fixes-iteration-*.md`) - Self-healing plans
+- **Final test report** (`.context-foundry/test-final-report.md`) - Quality summary
+- **Session summary** (`.context-foundry/session-summary.json`) - Build metadata
+- **Feedback** (`.context-foundry/feedback/build-feedback-{timestamp}.json`)
+- **Project patterns** (`.context-foundry/patterns/*.json`) - This build's discoveries
+
+**Global Pattern Library** (Shared Across All Builds):
+- **Common issues** (`context-foundry/.context-foundry/patterns/common-issues.json`)
+- **Test patterns** (`context-foundry/.context-foundry/patterns/test-patterns.json`)
+- **Architecture patterns** (`context-foundry/.context-foundry/patterns/architecture-patterns.json`)
+- **Scout learnings** (`context-foundry/.context-foundry/patterns/scout-learnings.json`)
+
+**Project Code** (Your Actual Application):
+- **Source code** (`src/`, `lib/`, `components/`, etc.)
+- **Tests** (`tests/`, `__tests__/`, `*.test.js`, etc.)
+- **Documentation** (`README.md`, `docs/`)
+- **Configuration** (`package.json`, `tsconfig.json`, etc.)
 - **Git commits** (permanent history)
-- **Session logs** (`logs/{timestamp}/`)
-- **Progress checkpoints** (`checkpoints/sessions/`)
-- **Token counters** (for cost tracking across entire session)
 
 ### File-Based State Transfer
 
 Each phase reads the **previous phase's output from disk**:
 
 ```
-Scout writes → RESEARCH.md
-Architect reads ← RESEARCH.md, writes → PLAN.md
-Builder reads ← PLAN.md, writes → code files
+Phase 1: Scout writes → .context-foundry/scout-report.md
+Phase 2: Architect reads ← scout-report.md, writes → .context-foundry/architecture.md
+Phase 3: Builder reads ← architecture.md, writes → source code files
+Phase 4: Test runs tests, writes → .context-foundry/test-results-iteration-1.md
+Phase 5: Docs reads all, writes → README.md, guides
+Phase 6: Deploy reads all, creates → GitHub repository
+Phase 7: Feedback reads all, writes → pattern library updates
 ```
 
 This is why Context Foundry can reset context freely - **the important state is on disk**, not in conversation memory.
+
+### Artifact Locations Quick Reference
+
+**For VimQuest project:**
+```bash
+# View architect's plan
+cat /Users/name/homelab/vimquest/.context-foundry/architecture.md
+
+# View scout research
+cat /Users/name/homelab/vimquest/.context-foundry/scout-report.md
+
+# View build summary
+cat /Users/name/homelab/vimquest/.context-foundry/session-summary.json
+
+# View test results
+cat /Users/name/homelab/vimquest/.context-foundry/test-final-report.md
+```
+
+**Global pattern library:**
+```bash
+# See all learned issues
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+
+# See testing strategies
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.json
+```
+
+**Complete structure for any project:**
+```
+your-project/
+├── src/                                   ← Your actual code
+├── tests/                                 ← Test files
+├── README.md                              ← Documentation
+└── .context-foundry/                      ← Build artifacts
+    ├── scout-report.md                    ← Phase 1 output
+    ├── architecture.md                    ← Phase 2 output
+    ├── build-log.md                       ← Phase 3 output
+    ├── test-iteration-count.txt           ← Test loop counter
+    ├── test-results-iteration-1.md        ← Test run 1
+    ├── test-results-iteration-2.md        ← Test run 2 (if self-healing)
+    ├── fixes-iteration-1.md               ← Self-healing strategy
+    ├── test-final-report.md               ← Final quality report
+    ├── session-summary.json               ← Complete build metadata
+    ├── feedback/
+    │   └── build-feedback-{timestamp}.json  ← Learnings extracted
+    └── patterns/
+        ├── common-issues.json             ← Patterns discovered
+        ├── test-patterns.json
+        ├── architecture-patterns.json
+        └── scout-learnings.json
+```
 
 ## Comparison: Traditional vs Stateless Architecture
 

@@ -1034,6 +1034,349 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 ---
 
+## Build Artifacts & Documentation
+
+### Where to Find Everything
+
+**Every Context Foundry build creates a `.context-foundry/` directory in your project:**
+
+```
+your-project/
+├── src/                           ← Your actual code
+├── tests/                         ← Test files
+├── README.md                      ← Project documentation
+└── .context-foundry/              ← Build artifacts (plans, logs, patterns)
+    ├── scout-report.md            ← Phase 1: Research findings
+    ├── architecture.md            ← Phase 2: Complete technical design
+    ├── build-log.md               ← Phase 3: Implementation log
+    ├── test-iteration-count.txt   ← Current test iteration number
+    ├── test-results-iteration-1.md  ← Test run #1 results
+    ├── test-results-iteration-2.md  ← Test run #2 (if self-healing triggered)
+    ├── fixes-iteration-1.md       ← Fix strategy for iteration 1
+    ├── test-final-report.md       ← Final test summary
+    ├── session-summary.json       ← Complete build metadata
+    ├── feedback/
+    │   └── build-feedback-{timestamp}.json  ← Learnings from this build
+    └── patterns/
+        ├── common-issues.json     ← Patterns discovered
+        ├── test-patterns.json
+        ├── architecture-patterns.json
+        └── scout-learnings.json
+```
+
+### Key Files Explained
+
+#### `scout-report.md` (40-60KB)
+
+**What it contains:**
+- Task analysis and requirements breakdown
+- Technology stack recommendations
+- Architecture patterns to apply
+- Potential challenges identified
+- Prior art research
+- Patterns applied from pattern library
+
+**When to read:**
+- Understand why certain technologies were chosen
+- See what patterns were applied
+- Review risk assessment
+
+**Example:**
+```bash
+cat your-project/.context-foundry/scout-report.md
+```
+
+#### `architecture.md` (30-90KB)
+
+**What it contains:**
+- Complete system architecture
+- Detailed file structure
+- Module specifications and responsibilities
+- Data models and schemas
+- API design (if applicable)
+- Component hierarchy
+- State management design
+- Testing strategy
+- Implementation roadmap
+
+**When to read:**
+- **Before making changes** - understand the design
+- **When onboarding** - learn how the system works
+- **For documentation** - reference for future work
+
+**Example:**
+```bash
+# View VimQuest's architecture plan
+cat /Users/name/homelab/vimquest/.context-foundry/architecture.md
+
+# View Satoshi Chore Tracker's architecture
+cat /Users/name/homelab/satoshi-chore-tracker/.context-foundry/architecture.md
+```
+
+**Pro tip:** This file is comprehensive! It's like having a senior architect document your entire system.
+
+#### `build-log.md`
+
+**What it contains:**
+- Chronological implementation log
+- Files created in order
+- Key decisions during building
+- Challenges encountered and solutions
+
+**When to read:**
+- Understand the build sequence
+- Debug issues by seeing what was built when
+- Learn the Builder's approach
+
+#### `test-results-iteration-X.md`
+
+**What it contains:**
+- Complete test output for each iteration
+- Failed tests (if any)
+- Error messages and stack traces
+- Root cause analysis
+
+**When to read:**
+- Understand what tests failed and why
+- See how self-healing diagnosed issues
+- Debug persistent test failures
+
+#### `fixes-iteration-X.md`
+
+**What it contains:**
+- Architect's analysis of test failures
+- Specific code changes planned
+- Rationale for each fix
+
+**When to read:**
+- Understand how self-healing fixed issues
+- Learn problem-solving approach
+- See the redesign → re-implement process
+
+#### `session-summary.json`
+
+**What it contains:**
+```json
+{
+  "status": "completed",
+  "phases_completed": ["scout", "architect", "builder", "test", "docs", "deploy", "feedback"],
+  "github_url": "https://github.com/snedea/your-project",
+  "files_created": ["server.js", "tests/api.test.js", ...],
+  "tests_passed": true,
+  "test_iterations": 2,
+  "duration_minutes": 7.42,
+  "patterns_applied": ["vite-educational-spa", "hash-routing-offline-first"]
+}
+```
+
+**When to read:**
+- Quick build overview
+- Check test pass rate
+- See total duration
+- Get GitHub URL
+
+### Pattern Library Locations
+
+**Global Pattern Library** (shared across ALL builds):
+```
+/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json
+├── test-patterns.json
+├── architecture-patterns.json
+└── scout-learnings.json
+```
+
+**Per-Project Patterns** (this build's discoveries):
+```
+your-project/.context-foundry/patterns/
+└── [Same structure]
+```
+
+**How they work together:**
+1. Scout/Architect/Test phases READ global patterns
+2. Patterns auto-apply if conditions match
+3. New patterns discovered during build go to project directory
+4. Phase 7: Feedback promotes valuable patterns to global library
+5. Next build benefits from expanded pattern library
+
+**View global patterns:**
+```bash
+# See all known issues and solutions
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+
+# See testing strategies learned
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.json
+```
+
+### Reviewing Plans Before/After Build
+
+**Option 1: Review After Build (Recommended)**
+
+```bash
+# Build completes autonomously
+# Then review the plan:
+cat your-project/.context-foundry/architecture.md
+
+# If you want changes, just ask:
+claude-code
+You: "I reviewed the architecture. Can we change the database from SQLite to PostgreSQL?"
+```
+
+**Option 2: Checkpoint Mode (Review During Build)**
+
+```python
+# Use autonomous=False to pause at key phases
+autonomous_build_and_deploy(
+    task="Build a weather app",
+    autonomous=False  # ← Enables review checkpoints
+)
+```
+
+**What happens:**
+1. Scout completes → Pauses → Shows scout-report.md → Waits for "Continue"
+2. Architect completes → Pauses → Shows architecture.md → Waits for approval
+3. Test completes → Pauses → Shows results → Waits for "Deploy"
+
+**Example session:**
+```
+[Scout completes]
+Assistant: Scout phase complete! Review the findings:
+           cat .context-foundry/scout-report.md
+
+           Type "Continue" to proceed to Architect phase.
+
+You: cat .context-foundry/scout-report.md
+[Review findings]
+
+You: Continue
+
+[Architect completes]
+Assistant: Architect phase complete! Review the architecture plan:
+           cat .context-foundry/architecture.md
+
+           Type "Continue" to proceed to Builder phase, or request changes.
+
+You: cat .context-foundry/architecture.md
+[Review 90KB plan]
+
+You: Looks good! Continue
+```
+
+### Understanding the Delegation Model
+
+**Why your context usage stays low:**
+
+```
+┌──────────────────────────────────────┐
+│ Your Claude Code Window (Main)       │
+│                                       │
+│ You: "Build a weather app"           │
+│                                       │
+│ Context Used: ~1,000 tokens (0.5%)   │
+│                                       │
+│ Claude: [Delegates to MCP]           │
+│         ↓                             │
+└─────────┼────────────────────────────┘
+          │
+          ↓ Spawns
+┌──────────────────────────────────────┐
+│ Fresh Claude Instance (Delegated)    │
+│                                       │
+│ Receives: orchestrator_prompt.txt    │
+│                                       │
+│ Context Used: ~80,000 tokens (40%)   │
+│                                       │
+│ ├─ Phase 1: Scout (~10K tokens)      │
+│ ├─ Phase 2: Architect (~15K tokens)  │
+│ ├─ Phase 3: Builder (~30K tokens)    │
+│ ├─ Phase 4: Test (~8K tokens)        │
+│ ├─ Phase 5: Docs (~3K tokens)        │
+│ ├─ Phase 6: Deploy (~2K tokens)      │
+│ └─ Phase 7: Feedback (~5K tokens)    │
+│                                       │
+│ Returns: "Build complete! ✅"         │
+│          [Summary JSON]               │
+└──────────────────────────────────────┘
+          │
+          ↓ Returns
+┌──────────────────────────────────────┐
+│ Your Claude Code Window (Main)       │
+│                                       │
+│ Claude: "Build complete! ✅"          │
+│         GitHub: github.com/you/app   │
+│         Tests: 25/25 passing         │
+│                                       │
+│ Context Used: ~1,500 tokens (0.75%)  │
+└──────────────────────────────────────┘
+```
+
+**Key insights:**
+- ✅ Main window stays clean (< 1% context usage)
+- ✅ Delegated instance does all the work (can use 100% if needed)
+- ✅ Agents live in delegated instance (ephemeral)
+- ✅ Only artifacts persist (.context-foundry/ files)
+- ✅ Multiple builds can run in parallel (separate instances)
+
+### Agent Lifecycle
+
+**What happens to the agents?**
+
+```
+Build Starts
+    ↓
+Delegated Claude instance spawned
+    ↓
+Orchestrator reads orchestrator_prompt.txt
+    ↓
+Phase 1: Scout agent created via /agents
+    ├─ Researches requirements
+    ├─ Writes scout-report.md
+    └─ [Agent conversation DISCARDED]
+    ↓
+Phase 2: Architect agent created via /agents
+    ├─ Reads scout-report.md (file persists)
+    ├─ Designs system
+    ├─ Writes architecture.md
+    └─ [Agent conversation DISCARDED]
+    ↓
+Phase 3-7: Builder, Test, Docs, Deploy, Feedback agents
+    └─ [Same pattern: use artifacts, create artifacts, discard]
+    ↓
+Build Completes
+    ↓
+Delegated Claude instance terminates
+    ↓
+ALL agent conversations GONE
+```
+
+**What persists:**
+- ✅ All files in `.context-foundry/`
+- ✅ Your actual project code
+- ✅ Git commits
+- ✅ GitHub repository
+- ✅ Pattern library updates
+
+**What disappears:**
+- ❌ Agent conversation histories
+- ❌ Delegated Claude instance
+- ❌ Temporary state
+
+**Next build:** Fresh agents read the pattern library and start clean!
+
+### For More Details
+
+**Comprehensive FAQ:** See [FAQ.md](FAQ.md) for:
+- Complete delegation model explanation
+- Where all prompts are located (orchestrator_prompt.txt, etc.)
+- How Context Foundry DOESN'T change Claude's system prompt
+- Why context stays low (separate instances)
+- What happens to agents (ephemeral)
+- Control options (autonomous vs checkpoints)
+
+**Technical Deep Dive:** See [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) for architecture diagrams and implementation details.
+
+---
+
 ## Troubleshooting
 
 ### Prerequisites Setup

@@ -80,9 +80,88 @@ Next Build: Apply Past Learnings (Phases 1-4 read patterns)
 
 ## Pattern Library
 
-Location: `.context-foundry/patterns/`
+### Storage Locations
 
-### Files
+**Context Foundry has TWO pattern libraries with different purposes:**
+
+**1. Global Pattern Library** (shared across ALL builds)
+
+Location: `/Users/name/homelab/context-foundry/.context-foundry/patterns/`
+
+```
+context-foundry/                          ← Main Context Foundry repo
+└── .context-foundry/
+    └── patterns/                         ← GLOBAL PATTERNS (shared)
+        ├── common-issues.json            ← Issues across all builds
+        ├── test-patterns.json            ← Testing strategies
+        ├── architecture-patterns.json    ← Proven designs
+        └── scout-learnings.json          ← Research insights
+```
+
+**Purpose:**
+- ✅ Shared knowledge across ALL builds
+- ✅ Automatically READ by Scout/Architect/Test phases
+- ✅ Auto-apply when conditions match
+- ✅ Updated by Phase 7: Feedback (promotes valuable patterns)
+
+**2. Per-Project Pattern Library** (build-specific)
+
+Location: `your-project/.context-foundry/patterns/`
+
+```
+your-project/                             ← Your app directory
+└── .context-foundry/
+    ├── architecture.md
+    ├── scout-report.md
+    └── patterns/                         ← PROJECT PATTERNS (local)
+        ├── common-issues.json            ← Patterns discovered in THIS build
+        ├── test-patterns.json
+        ├── architecture-patterns.json
+        └── scout-learnings.json
+```
+
+**Purpose:**
+- ✅ Documents patterns discovered during THIS build
+- ✅ Analyzed by Phase 7: Feedback
+- ✅ Valuable patterns promoted to global library
+- ✅ Archive of what was learned from this project
+
+**How they work together:**
+
+```
+Build Starts
+    ↓
+Scout/Architect/Test READ global patterns
+    ↓
+    (Apply learnings from past builds)
+    ↓
+Build discovers new issues
+    ↓
+New patterns written to project/.context-foundry/patterns/
+    ↓
+Phase 7: Feedback analyzes patterns
+    ↓
+Valuable patterns promoted to global library
+    ↓
+Next build benefits from expanded global patterns
+```
+
+**View global patterns:**
+```bash
+# See all issues Context Foundry has learned
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+
+# See testing strategies
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.json
+```
+
+**View project-specific patterns:**
+```bash
+# See what VimQuest build discovered
+cat /Users/name/homelab/vimquest/.context-foundry/patterns/common-issues.json
+```
+
+### Pattern Files
 
 **common-issues.json**
 - General issues across all project types
