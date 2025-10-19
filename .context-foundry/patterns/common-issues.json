@@ -1,7 +1,7 @@
 {
   "$schema": "Pattern Library for Common Issues",
   "version": "1.0.0",
-  "last_updated": "2025-10-18T22:30:00Z",
+  "last_updated": "2025-10-19T00:05:00Z",
   "description": "Common issues encountered across builds with proven solutions",
 
   "patterns": [
@@ -9,8 +9,9 @@
       "pattern_id": "cors-es6-modules",
       "title": "CORS Error with ES6 Modules from file://",
       "first_seen": "2025-10-18",
-      "last_seen": "2025-10-18",
-      "frequency": 1,
+      "last_seen": "2025-10-19",
+      "frequency": 2,
+      "times_prevented": 1,
       "severity": "HIGH",
       "project_types": ["browser-app", "es6-modules", "web-game", "web-app"],
       "tech_stack": ["javascript", "html5", "es6-modules"],
@@ -89,7 +90,17 @@
         "https://v8.dev/features/modules#mjs"
       ],
 
-      "success_rate": "100% when dev server included from start"
+      "success_rate": "100% when dev server included from start",
+
+      "prevention_history": [
+        {
+          "build": "satoshi-chore-tracker",
+          "date": "2025-10-19",
+          "prevented_by": "vite-educational-spa pattern (Vite includes dev server)",
+          "result": "Zero CORS errors, perfect ES6 module loading",
+          "evidence": ".context-foundry/runtime-testing-satoshi-chore-tracker.md"
+        }
+      ]
     }
   ],
 

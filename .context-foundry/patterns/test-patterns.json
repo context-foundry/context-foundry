@@ -1,10 +1,92 @@
 {
   "$schema": "Pattern Library for Testing Strategies",
   "version": "1.0.0",
-  "last_updated": "2025-10-18T22:30:00Z",
+  "last_updated": "2025-10-19T00:15:00Z",
   "description": "Testing patterns and strategies learned from past builds",
 
   "patterns": [
+    {
+      "pattern_id": "test-vs-production-gap",
+      "title": "Tests Pass but Production is Broken - The E2E Gap",
+      "first_seen": "2025-10-19",
+      "last_seen": "2025-10-19",
+      "frequency": 1,
+      "severity": "CRITICAL",
+      "project_types": ["all"],
+
+      "issue": {
+        "description": "88% test pass rate, all critical tests passing, but core feature completely broken in production",
+        "example": "Satoshi's Chore Tracker: 60/68 tests passed, but 'Add Chore' button doesn't work at all",
+        "root_cause": "Tests validate individual functions in isolation, not full end-to-end user journeys in real browsers"
+      },
+
+      "why_tests_missed_it": {
+        "unit_tests": "Tested store.addChore() in isolation - function works when called directly",
+        "integration_tests": "Tested component rendering - components render correctly",
+        "missing": "Full user flow: Click button → Modal opens → Fill form → Submit → Chore appears",
+        "environment_gap": "jsdom mocks don't catch real DOM behavior, event handling issues, or browser-specific bugs"
+      },
+
+      "evidence": {
+        "test_results": "✅ 60/68 tests passed (88.2%)",
+        "production_reality": "❌ Core feature completely non-functional",
+        "conclusion": "Test pass rate ≠ Production quality"
+      },
+
+      "solution": {
+        "scout": {
+          "action": "Identify all critical user flows during research phase",
+          "document": "List critical paths: 'User must be able to X, Y, Z'",
+          "examples": ["Add item", "Complete checkout", "Save data", "Login"]
+        },
+        "test": {
+          "required_levels": [
+            "1. Unit Tests: Logic validation (current)",
+            "2. Integration Tests: Component interaction (current)",
+            "3. E2E Tests: Full user journey in real browser (MISSING - ADD THIS)",
+            "4. Manual Verification: Developer uses app like user (MISSING - ADD THIS)"
+          ],
+          "e2e_implementation": {
+            "tool": "Playwright or Cypress",
+            "for_each_critical_flow": [
+              "Write E2E test that simulates exact user interaction",
+              "Run in actual browser (not jsdom)",
+              "Verify complete journey from start to finish",
+              "Check for console errors",
+              "Confirm expected outcome visible in UI"
+            ],
+            "example": "test('User can add chore', async ({ page }) => { await page.click('Add Chore'); await page.fill('title', 'Test'); await page.click('Submit'); await expect(page.locator('text=Test')).toBeVisible(); });"
+          },
+          "manual_checklist": [
+            "Open app in real browser",
+            "Test each critical flow as first-time user",
+            "Verify no console errors",
+            "Confirm features work as expected",
+            "Don't mark 'production ready' until verified"
+          ]
+        },
+        "feedback": {
+          "action": "If production bug found despite passing tests, immediately create pattern",
+          "analyze": "What test level would have caught this?",
+          "update": "Add that test level requirement to future builds"
+        }
+      },
+
+      "prevention": {
+        "auto_apply": true,
+        "conditions": ["any app with user-facing features"],
+        "actions": [
+          "Test phase: Require E2E tests for critical flows",
+          "Test phase: Require manual verification checklist",
+          "Test phase: Don't mark complete without browser testing",
+          "Architect phase: Design E2E test scenarios upfront"
+        ]
+      },
+
+      "impact": "CRITICAL - Prevents shipping broken features that tests falsely validate",
+      "time_saved": "2-8 hours of post-deployment debugging + user trust erosion",
+      "priority": "CRITICAL"
+    },
     {
       "pattern_id": "unit-tests-miss-browser-issues",
       "title": "Unit Tests Don't Catch Browser Integration Issues",
@@ -74,8 +156,9 @@
   ],
 
   "statistics": {
-    "total_patterns": 1,
+    "total_patterns": 2,
+    "critical_priority": 1,
     "high_priority": 1,
-    "auto_apply_enabled": 1
+    "auto_apply_enabled": 2
   }
 }
