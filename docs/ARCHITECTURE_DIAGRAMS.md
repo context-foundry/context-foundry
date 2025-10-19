@@ -236,75 +236,89 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> OrchestratorActive: Delegated Instance Spawned
+    [*] --> Orch_Start: Instance Spawned
 
-    OrchestratorActive --> ScoutCreated: /agents scout
+    Orch_Start --> Scout_New: /agents scout
 
-    ScoutCreated --> ScoutResearching: Begin Research
-    ScoutResearching --> ScoutWriting: Research Complete
-    ScoutWriting --> ScoutDead: Write scout-report.md
+    Scout_New --> Scout_Work: Begin Research
+    Scout_Work --> Scout_Write: Research Done
+    Scout_Write --> Scout_Done: Write report.md
 
-    ScoutDead --> ArchitectCreated: /agents architect
+    Scout_Done --> Arch_New: /agents architect
 
-    ArchitectCreated --> ArchitectReading: Read scout-report.md
-    ArchitectReading --> ArchitectDesigning: Scout Knowledge Loaded
-    ArchitectDesigning --> ArchitectWriting: Design Complete
-    ArchitectWriting --> ArchitectDead: Write architecture.md
+    Arch_New --> Arch_Read: Read scout report
+    Arch_Read --> Arch_Design: Knowledge Loaded
+    Arch_Design --> Arch_Write: Design Done
+    Arch_Write --> Arch_Done: Write arch.md
 
-    ArchitectDead --> BuilderCreated: /agents builder
+    Arch_Done --> Build_New: /agents builder
 
-    BuilderCreated --> BuilderReading: Read architecture.md
-    BuilderReading --> BuilderImplementing: Architect Knowledge Loaded
-    BuilderImplementing --> BuilderWriting: Implementation Complete
-    BuilderWriting --> BuilderDead: Write source code + build-log.md
+    Build_New --> Build_Read: Read arch.md
+    Build_Read --> Build_Code: Plans Loaded
+    Build_Code --> Build_Write: Code Done
+    Build_Write --> Build_Done: Write files
 
-    BuilderDead --> TestRunning: Run Tests
+    Build_Done --> Test_Run: Run Tests
 
-    TestRunning --> TestsPassed: All Tests Pass
-    TestRunning --> TestsFailed: Tests Fail
+    Test_Run --> Test_Pass: All Pass
+    Test_Run --> Test_Fail: Failures
 
-    TestsFailed --> TestAnalyzing: Analyze Root Cause
-    TestAnalyzing --> TestFixing: Write fixes-iteration-N.md
-    TestFixing --> TestRebuilding: Re-implement Fixes
-    TestRebuilding --> TestRunning: Re-run Tests
+    Test_Fail --> Test_Analyze: Find Cause
+    Test_Analyze --> Test_Fix: Write fixes.md
+    Test_Fix --> Test_Rebuild: Re-implement
+    Test_Rebuild --> Test_Run: Re-run Tests
 
-    TestsPassed --> DocsCreating: Generate Documentation
+    Test_Pass --> Docs_Gen: Generate Docs
 
-    DocsCreating --> DocsWriting: README, guides generated
-    DocsWriting --> DeployStarting: Write docs to disk
+    Docs_Gen --> Docs_Write: README + guides
+    Docs_Write --> Deploy_Start: Write to disk
 
-    DeployStarting --> GitOperations: git init, add, commit
-    GitOperations --> GitHubCreation: gh repo create
-    GitHubCreation --> GitPush: git push origin main
-    GitPush --> FeedbackAnalysis: Deployment Complete
+    Deploy_Start --> Git_Ops: git init/commit
+    Git_Ops --> GH_Create: gh repo create
+    GH_Create --> Git_Push: git push
+    Git_Push --> FB_Analyze: Deploy Done
 
-    FeedbackAnalysis --> PatternExtraction: Analyze Build
-    PatternExtraction --> PatternUpdate: Extract Learnings
-    PatternUpdate --> SummaryWriting: Update Pattern Library
-    SummaryWriting --> ProcessExit: Write session-summary.json
+    FB_Analyze --> Ptn_Extract: Analyze Build
+    Ptn_Extract --> Ptn_Update: Extract Lessons
+    Ptn_Update --> Sum_Write: Update Library
+    Sum_Write --> Proc_Exit: Write summary.json
 
-    ProcessExit --> [*]: Delegated Process Terminates
+    Proc_Exit --> [*]: Process Exits
 
-    note right of ScoutDead
-        Agent context DISCARDED
+    note right of Scout_Done
+        Scout Agent: context DISCARDED
         scout-report.md PERSISTS
     end note
 
-    note right of ArchitectDead
-        Agent context DISCARDED
+    note right of Arch_Done
+        Architect Agent: context DISCARDED
         architecture.md PERSISTS
     end note
 
-    note right of BuilderDead
-        Agent context DISCARDED
-        Source code PERSISTS
+    note right of Build_Done
+        Builder Agent: context DISCARDED
+        Source code + build-log.md PERSIST
     end note
 
-    note right of ProcessExit
+    note right of Proc_Exit
         ALL agent contexts GONE
-        All files PERSIST
+        All files PERSIST on disk
         Pattern library UPDATED
     end note
+```
+
+**State Name Legend:**
+- **Orch_Start**: Orchestrator Active (delegated instance running)
+- **Scout_New/Work/Write/Done**: Scout Agent Created → Researching → Writing Report → Dead
+- **Arch_New/Read/Design/Write/Done**: Architect Agent Created → Reading → Designing → Writing → Dead
+- **Build_New/Read/Code/Write/Done**: Builder Agent Created → Reading → Implementing → Writing → Dead
+- **Test_Run/Pass/Fail/Analyze/Fix/Rebuild**: Test Phase (with self-healing loop)
+- **Docs_Gen/Write**: Documentation Generation → Writing
+- **Deploy_Start/Git_Ops/GH_Create/Git_Push**: Deployment Phase
+- **FB_Analyze**: Feedback Analysis
+- **Ptn_Extract/Update**: Pattern Extraction and Update
+- **Sum_Write**: Summary Writing
+- **Proc_Exit**: Process Exit
 ```
 
 **Agent Lifecycle Principles:**
