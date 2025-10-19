@@ -1,0 +1,317 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Context Foundry Global Pattern Schema",
+  "description": "Schema for cross-project pattern sharing in Context Foundry",
+  "version": "1.0.0",
+
+  "definitions": {
+    "commonIssuePattern": {
+      "type": "object",
+      "description": "A common issue pattern discovered during builds",
+      "required": ["pattern_id", "first_seen", "last_seen", "frequency", "project_types", "issue", "solution", "severity", "auto_apply"],
+      "properties": {
+        "pattern_id": {
+          "type": "string",
+          "description": "Unique identifier for the pattern (kebab-case)",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["python-fastapi-cors-missing", "react-vite-port-conflict"]
+        },
+        "first_seen": {
+          "type": "string",
+          "format": "date",
+          "description": "Date pattern was first discovered (YYYY-MM-DD)"
+        },
+        "last_seen": {
+          "type": "string",
+          "format": "date",
+          "description": "Date pattern was last encountered (YYYY-MM-DD)"
+        },
+        "frequency": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of times this pattern has been encountered"
+        },
+        "project_types": {
+          "type": "array",
+          "description": "Types of projects where this pattern applies",
+          "items": {
+            "type": "string",
+            "examples": ["python-api", "react-app", "fastapi", "tui-application"]
+          },
+          "minItems": 1
+        },
+        "issue": {
+          "type": "string",
+          "description": "Description of the issue or problem",
+          "minLength": 10
+        },
+        "solution": {
+          "type": "object",
+          "description": "Solutions for different agent phases",
+          "properties": {
+            "architect": {
+              "type": "string",
+              "description": "Architectural guidance to prevent the issue"
+            },
+            "builder": {
+              "type": "string",
+              "description": "Implementation instructions for the builder"
+            },
+            "tester": {
+              "type": "string",
+              "description": "Test cases to verify the fix"
+            }
+          },
+          "minProperties": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+          "description": "Severity of the issue"
+        },
+        "auto_apply": {
+          "type": "boolean",
+          "description": "Whether this pattern should be automatically applied"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Optional tags for categorization",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_errors": {
+          "type": "array",
+          "description": "Common error messages associated with this pattern",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+
+    "scoutLearning": {
+      "type": "object",
+      "description": "A learning from the Scout research phase",
+      "required": ["learning_id", "category", "project_types", "key_points"],
+      "properties": {
+        "learning_id": {
+          "type": "string",
+          "description": "Unique identifier for the learning (kebab-case)",
+          "pattern": "^[a-z0-9-]+$",
+          "examples": ["textual-framework-2025", "psutil-system-monitoring"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["library", "framework", "best-practice", "architecture", "tooling", "deployment"],
+          "description": "Category of the learning"
+        },
+        "project_types": {
+          "type": "array",
+          "description": "Types of projects where this learning applies",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "key_points": {
+          "type": "array",
+          "description": "Key takeaways from the research",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "recommendations": {
+          "type": "array",
+          "description": "Recommended approaches based on this learning",
+          "items": {
+            "type": "string"
+          }
+        },
+        "antipatterns": {
+          "type": "array",
+          "description": "What to avoid based on this learning",
+          "items": {
+            "type": "string"
+          }
+        },
+        "first_seen": {
+          "type": "string",
+          "format": "date",
+          "description": "When this learning was first recorded"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Confidence level in this learning"
+        }
+      }
+    },
+
+    "buildMetrics": {
+      "type": "object",
+      "description": "Metrics about build success/failure",
+      "required": ["metric_id", "project_type", "success_rate"],
+      "properties": {
+        "metric_id": {
+          "type": "string",
+          "description": "Unique identifier for the metric"
+        },
+        "project_type": {
+          "type": "string",
+          "description": "Type of project this metric applies to"
+        },
+        "success_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Success rate as decimal (0.0 to 1.0)"
+        },
+        "total_builds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total number of builds"
+        },
+        "avg_build_time_minutes": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Average build time in minutes"
+        },
+        "common_failure_points": {
+          "type": "array",
+          "description": "Most common points of failure",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+
+  "patternsFileSchema": {
+    "type": "object",
+    "description": "Common issues pattern file (common-issues.json)",
+    "required": ["patterns", "version", "last_updated", "total_builds"],
+    "properties": {
+      "patterns": {
+        "type": "array",
+        "description": "Array of common issue patterns",
+        "items": {
+          "$ref": "#/definitions/commonIssuePattern"
+        }
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$",
+        "description": "Schema version (e.g., '1.0')",
+        "examples": ["1.0", "1.1", "2.0"]
+      },
+      "last_updated": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 timestamp of last update"
+      },
+      "total_builds": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Total number of builds that contributed to these patterns"
+      }
+    }
+  },
+
+  "scoutLearningsFileSchema": {
+    "type": "object",
+    "description": "Scout learnings file (scout-learnings.json)",
+    "required": ["learnings", "version", "last_updated"],
+    "properties": {
+      "learnings": {
+        "type": "array",
+        "description": "Array of scout research learnings",
+        "items": {
+          "$ref": "#/definitions/scoutLearning"
+        }
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$",
+        "description": "Schema version"
+      },
+      "last_updated": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 timestamp of last update"
+      }
+    }
+  },
+
+  "buildMetricsFileSchema": {
+    "type": "object",
+    "description": "Build metrics file (build-metrics.json)",
+    "required": ["metrics", "version", "last_updated"],
+    "properties": {
+      "metrics": {
+        "type": "array",
+        "description": "Array of build metrics",
+        "items": {
+          "$ref": "#/definitions/buildMetrics"
+        }
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+$",
+        "description": "Schema version"
+      },
+      "last_updated": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 timestamp of last update"
+      }
+    }
+  },
+
+  "globalPatternDirectory": {
+    "description": "Global pattern directory structure at ~/.context-foundry/patterns/",
+    "files": {
+      "common-issues.json": {
+        "$ref": "#/patternsFileSchema"
+      },
+      "scout-learnings.json": {
+        "$ref": "#/scoutLearningsFileSchema"
+      },
+      "build-metrics.json": {
+        "$ref": "#/buildMetricsFileSchema"
+      }
+    }
+  },
+
+  "mergePolicy": {
+    "description": "Rules for merging patterns from project-specific to global storage",
+    "rules": [
+      {
+        "rule": "unique_pattern_id",
+        "description": "If pattern_id doesn't exist globally, add new pattern"
+      },
+      {
+        "rule": "increment_frequency",
+        "description": "If pattern_id exists, increment frequency and update last_seen"
+      },
+      {
+        "rule": "merge_project_types",
+        "description": "Merge project_types arrays, keeping unique values"
+      },
+      {
+        "rule": "preserve_highest_severity",
+        "description": "If severity differs, keep the highest (CRITICAL > HIGH > MEDIUM > LOW)"
+      },
+      {
+        "rule": "merge_solutions",
+        "description": "Merge solution objects, keeping most comprehensive guidance"
+      },
+      {
+        "rule": "version_check",
+        "description": "Only merge patterns with compatible schema versions"
+      }
+    ]
+  }
+}

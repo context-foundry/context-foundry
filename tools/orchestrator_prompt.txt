@@ -6,20 +6,23 @@ Mission: Complete software development tasks fully autonomously using a multi-ag
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 ═══════════════════════════════════════════════════════════
 
-1. Check for Past Learnings (Self-Learning System):
+1. Check for Past Learnings (Self-Learning System - GLOBAL PATTERNS):
 
-   Read pattern files if they exist:
-   - .context-foundry/patterns/scout-learnings.json
-   - .context-foundry/patterns/common-issues.json
+   **Read GLOBAL pattern files** using MCP tools:
+   - Use `read_global_patterns("scout-learnings")` to get learnings from ALL past projects
+   - Use `read_global_patterns("common-issues")` to get issues from ALL past builds
+
+   The global patterns are stored at ~/.context-foundry/patterns/ and shared across all projects.
 
    If patterns exist:
    - Identify project type from task description
    - Check for relevant past issues matching this project type
-   - Note warnings and recommendations from previous builds
-   - Flag high-risk patterns to watch for
+   - Note warnings and recommendations from previous builds across ALL projects
+   - Flag high-risk patterns to watch for (learned from any past project)
 
    Example: If building browser app with ES6 modules, patterns might warn:
    "⚠️ CORS Risk: ES6 modules fail from file:// - Include dev server in architecture"
+   (This learning comes from ANY past browser app build, not just this project)
 
 2. Create a Scout agent:
    Type: /agents
@@ -61,18 +64,18 @@ PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
    - Note all recommendations
    - **Note any flagged risks from pattern library**
 
-2. Apply Architectural Patterns (Self-Learning System):
+2. Apply Architectural Patterns (Self-Learning System - GLOBAL PATTERNS):
 
-   Read pattern files if they exist:
-   - .context-foundry/patterns/architecture-patterns.json
-   - .context-foundry/patterns/common-issues.json
+   **Read GLOBAL pattern files** using MCP tools:
+   - Use `read_global_patterns("common-issues")` to get architectural preventions from ALL past projects
+   - These patterns contain architectural solutions that worked across all builds
 
    If patterns exist and match project type:
-   - Apply proven architectural patterns
-   - Include preventive measures for known issues
+   - Apply proven architectural patterns from ANY past successful build
+   - Include preventive measures for known issues (learned from all projects)
    - Add dependencies/configurations that prevent common failures
 
-   Example: If Scout flagged CORS risk:
+   Example: If Scout flagged CORS risk (learned from past browser app builds):
    - Include http-server in package.json dependencies
    - Add "dev" script to npm scripts
    - Document server requirement in architecture
@@ -146,23 +149,22 @@ PHASE 3: BUILDER (Implementation)
 PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
 ═══════════════════════════════════════════════════════════
 
-1. Review Testing Patterns (Self-Learning System):
+1. Review Testing Patterns (Self-Learning System - GLOBAL PATTERNS):
 
-   Read pattern files if they exist:
-   - .context-foundry/patterns/test-patterns.json
-   - .context-foundry/patterns/common-issues.json
+   **Read GLOBAL pattern files** using MCP tools:
+   - Use `read_global_patterns("common-issues")` to get test patterns from ALL past projects
 
-   If patterns indicate additional testing needed:
-   - Check for browser compatibility issues (if web app)
-   - Check for CORS/module loading (if ES6 modules)
-   - Check for integration issues flagged by patterns
-   - Run environment-specific tests based on project type
+   If patterns indicate additional testing needed (learned from ANY past build):
+   - Check for browser compatibility issues (if web app) - learned from past web app failures
+   - Check for CORS/module loading (if ES6 modules) - learned from past browser app failures
+   - Check for integration issues flagged by patterns - learned from all project types
+   - Run environment-specific tests based on project type - learned from past similar projects
 
-   Example: If browser app with ES6 modules:
-   - Verify module loading works
-   - Check for CORS errors
-   - Test dev server starts properly
-   - Validate game/app runs in actual browser
+   Example: If browser app with ES6 modules (using learnings from past browser app builds):
+   - Verify module loading works (learned this is critical from past CORS failures)
+   - Check for CORS errors (high-frequency pattern from browser app builds)
+   - Test dev server starts properly (prevention from past deployment failures)
+   - Validate game/app runs in actual browser (integration test from past testing gaps)
 
 2. Create Tester agent:
    Type: /agents
@@ -507,38 +509,64 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
      ]
    }
 
-6. Update pattern library:
+6. Update GLOBAL pattern library (Cross-Project Learning):
 
-   **Read existing patterns (or create if first time):**
-   - .context-foundry/patterns/common-issues.json
-   - .context-foundry/patterns/test-patterns.json
-   - .context-foundry/patterns/architecture-patterns.json
-   - .context-foundry/patterns/scout-learnings.json
+   **CRITICAL:** Patterns must be saved to GLOBAL storage so ALL future builds benefit!
 
-   **For each issue in feedback:**
-   - Check if pattern already exists (match by ID or description)
-   - If exists: Increment frequency, update last_seen date
-   - If new: Add new pattern entry
-   - Update solution if improved
+   **First, save project-local patterns for merge:**
+   Create temporary pattern file with feedback:
+   - .context-foundry/patterns/common-issues.json (with new patterns from this build)
+   - .context-foundry/patterns/scout-learnings.json (with new learnings from this build)
 
-   **Example pattern update:**
-   ```json
-   {
-     "pattern_id": "cors-es6-modules",
-     "first_seen": "2025-10-18",
-     "last_seen": "2025-10-18",
-     "frequency": 1,
-     "project_types": ["browser-app", "es6-modules", "web-game"],
-     "issue": "ES6 modules fail with CORS from file://",
-     "solution": {
-       "scout": "Flag CORS risk in scout-report.md for browser apps with ES6 modules",
-       "architect": "Include http-server in package.json, add npm dev script",
-       "test": "Verify dev server starts, test module loading works"
-     },
-     "severity": "HIGH",
-     "auto_apply": true
-   }
+   **Then, merge to GLOBAL pattern storage** using MCP tools:
+   - Use `merge_project_patterns()` to merge project patterns into ~/.context-foundry/patterns/
+   - This automatically:
+     * Adds new patterns to global storage
+     * Increments frequency for existing patterns
+     * Updates last_seen dates
+     * Merges project_types
+     * Preserves highest severity
+     * Keeps most comprehensive solutions
+
+   **Example: Merging common-issues to global storage:**
    ```
+   1. Create .context-foundry/patterns/common-issues.json with new pattern:
+   {
+     "patterns": [{
+       "pattern_id": "cors-es6-modules",
+       "first_seen": "2025-10-18",
+       "last_seen": "2025-10-18",
+       "frequency": 1,
+       "project_types": ["browser-app", "es6-modules", "web-game"],
+       "issue": "ES6 modules fail with CORS from file://",
+       "solution": {
+         "scout": "Flag CORS risk for ES6 modules",
+         "architect": "Include http-server in package.json",
+         "test": "Verify module loading works"
+       },
+       "severity": "HIGH",
+       "auto_apply": true
+     }],
+     "version": "1.0",
+     "total_builds": 1
+   }
+
+   2. Call MCP tool to merge:
+   merge_project_patterns(
+     project_pattern_file="{working_dir}/.context-foundry/patterns/common-issues.json",
+     pattern_type="common-issues",
+     increment_build_count=true
+   )
+
+   3. The pattern is now in ~/.context-foundry/patterns/common-issues.json
+   4. ALL future builds (any project) will read this pattern and avoid CORS issues!
+   ```
+
+   **Result:** Next browser app build will automatically:
+   - Scout phase: Read this pattern and flag CORS risk
+   - Architect phase: Apply the solution (include http-server)
+   - Test phase: Verify module loading works
+   - Zero failures from this issue!
 
 7. Generate improvement recommendations:
 
@@ -581,28 +609,37 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
      "feedback": {
        "analyzed": true,
        "feedback_file": ".context-foundry/feedback/build-feedback-{timestamp}.json",
-       "patterns_updated": ["common-issues.json", "test-patterns.json"],
-       "new_patterns_added": 1,
-       "existing_patterns_updated": 0,
-       "high_priority_recommendations": 2
+       "patterns_merged_to_global": true,
+       "global_patterns_updated": ["~/.context-foundry/patterns/common-issues.json", "~/.context-foundry/patterns/scout-learnings.json"],
+       "new_patterns_added_globally": 1,
+       "existing_patterns_updated_globally": 0,
+       "high_priority_recommendations": 2,
+       "cross_project_learning_enabled": true
      }
    }
    ```
 
-9. Learning accumulation (over time):
+9. Learning accumulation (GLOBAL - over time across ALL projects):
 
-   As more builds complete:
-   - Pattern library grows with proven solutions
-   - Frequency counts show common vs rare issues
-   - High-frequency patterns get auto-applied by default
-   - Low-frequency patterns (< 3 occurrences) get pruned annually
-   - Success patterns get reinforced
+   As more builds complete (from ANY project):
+   - GLOBAL pattern library grows with proven solutions from all builds
+   - Frequency counts show common vs rare issues ACROSS ALL PROJECTS
+   - High-frequency patterns get auto-applied by default in ALL FUTURE BUILDS
+   - Low-frequency patterns (< 3 occurrences globally) get pruned annually
+   - Success patterns get reinforced globally
 
-   **Self-improvement metrics:**
-   - Track test iterations trend (should decrease over time)
-   - Track common issue prevention rate
-   - Track build success rate (should increase)
-   - Track average build duration (should stabilize/decrease)
+   **Cross-project self-improvement:**
+   - Pattern from browser app build #1 → Prevents issue in browser app build #50
+   - Pattern from API build #3 → Prevents issue in API build #25
+   - As pattern library grows, build success rate increases for ALL project types
+   - New projects benefit from learnings of ALL past projects
+
+   **Self-improvement metrics (tracked globally):**
+   - Track test iterations trend (should decrease over time across all projects)
+   - Track common issue prevention rate (across all project types)
+   - Track build success rate (should increase globally)
+   - Track average build duration (should stabilize/decrease globally)
+   - Track pattern effectiveness (how often each pattern prevents issues)
 
 ═══════════════════════════════════════════════════════════
 FINAL OUTPUT
