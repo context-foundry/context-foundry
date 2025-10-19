@@ -891,6 +891,7 @@ Break-even: ~5 projects per month
 
 | Document | Description | Audience |
 |----------|-------------|----------|
+| **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
 | **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** | Why delegation keeps main context clean | Technical users |
@@ -921,10 +922,11 @@ Break-even: ~5 projects per month
 4. [FAQ.md](FAQ.md) - Common questions answered
 
 **Developers/Contributors:**
-1. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
-2. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
-3. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
-4. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
+1. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - 🎨 START HERE! Visual overview
+2. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
+4. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
+5. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
 
 **Troubleshooting:**
 1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
