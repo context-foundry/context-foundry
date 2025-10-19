@@ -870,18 +870,66 @@ Break-even: ~5 projects per month
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| **README.md** (this file) | Quick start and overview for v2.0 |
-| **FAQ.md** | Comprehensive Q&A - how it works, where things are, transparency |
-| **USER_GUIDE.md** | Step-by-step usage guide with examples |
-| **FEEDBACK_SYSTEM.md** | Self-learning pattern library documentation |
-| **ARCHITECTURE_DECISIONS.md** | Technical deep dive: what changed and why |
-| **CLAUDE_CODE_MCP_SETUP.md** | MCP server setup and troubleshooting |
-| **docs/DELEGATION_MODEL.md** | How delegation keeps context clean |
-| **docs/ARCHITECTURE.md** | Stateless conversation architecture |
-| **LEGACY_README.md** | Original Context Foundry 1.x documentation |
-| **CHANGELOG.md** | Version history and release notes |
+### 📘 Getting Started
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[README.md](README.md)** (this file) | Quick start and overview | Everyone |
+| **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide | New users |
+| **[USER_GUIDE.md](USER_GUIDE.md)** | Step-by-step usage guide with examples | New users |
+| **[FAQ.md](FAQ.md)** | Comprehensive Q&A - transparency focused | Everyone |
+
+### 🔧 Setup & Configuration
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
+| **[.mcp.json](.mcp.json)** | Project-shareable MCP configuration | Team leads |
+| **[INSTALL.md](INSTALL.md)** | Installation instructions | New users |
+
+### 🏗️ Architecture & Technical Deep Dives
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
+| **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
+| **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** | Why delegation keeps main context clean | Technical users |
+| **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** | What changed in v2.0 and why | Technical users |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Stateless conversation architecture | Developers |
+
+### 🧠 Self-Learning & Patterns
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** | Self-learning pattern library documentation | All users |
+| **~/.context-foundry/patterns/common-issues.json** | Global pattern library (on your machine) | Curious users |
+
+### 📚 Reference & Legacy
+
+| Document | Description | Audience |
+|----------|-------------|----------|
+| **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes | Everyone |
+| **[ROADMAP.md](ROADMAP.md)** | Future plans | Contributors |
+| **[LEGACY_README.md](LEGACY_README.md)** | Original Context Foundry 1.x documentation | v1.x users |
+
+### 💡 Recommended Reading Order
+
+**New Users:**
+1. [README.md](README.md) - Understand what Context Foundry does
+2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
+3. [USER_GUIDE.md](USER_GUIDE.md) - Learn how to use it
+4. [FAQ.md](FAQ.md) - Common questions answered
+
+**Developers/Contributors:**
+1. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+2. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
+3. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
+4. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
+
+**Troubleshooting:**
+1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
+2. [FAQ.md](FAQ.md) - Common questions
+3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
 
 ---
 
