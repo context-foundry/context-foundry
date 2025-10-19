@@ -54,6 +54,15 @@ PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
    - Identify all testing requirements
    - **Note which past learnings are relevant**
 
+   **CRITICAL: API Integration Research (if project uses external APIs):**
+   - Research API's CORS policy by checking API documentation
+   - Look for indicators:
+     * "Server-side only" or "No browser requests"
+     * Requires API key in headers (usually means server-side only)
+     * Enterprise/aviation/financial APIs (usually restrictive)
+   - If API blocks CORS: Flag need for backend proxy in scout-report.md
+   - Pattern ID: cors-external-api-backend-proxy
+
 4. Save Scout findings:
    Create file: .context-foundry/scout-report.md
    Include:
@@ -137,6 +146,28 @@ PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
      * Test success criteria
      * Edge cases to test
      * **Integration tests if patterns indicate need**
+     * **E2E tests with real browser for SPAs (MANDATORY)**
+
+   **CRITICAL: API CORS Architecture (if Scout flagged CORS issue):**
+   - Design backend proxy server architecture:
+     * Add Node.js/Express backend for API proxy
+     * Store API keys in backend/.env (NOT frontend)
+     * Frontend calls backend, backend calls external API
+     * Backend adds CORS headers allowing frontend access
+   - Document architecture in architecture.md
+   - Pattern ID: cors-external-api-backend-proxy
+
+   **CRITICAL: React State Architecture (if using React):**
+   - Define state management patterns:
+     * When to use useEffect vs useCallback vs useMemo
+     * Initialization patterns (mount-only effects with empty deps [])
+     * Timestamp/counter patterns for triggering updates
+   - **Separate high-frequency from low-frequency state:**
+     * Data state (API data, user selections) → Zustand/Redux
+     * Display state (animation frames, scroll positions) → refs/Map
+     * NEVER update state management store > 10 times/second
+   - Document in architecture.md
+   - Pattern IDs: react-useeffect-infinite-loop, react-animation-state-separation
 
 5. Save Architecture:
    Create file: .context-foundry/architecture.md
@@ -198,6 +229,40 @@ PHASE 3: BUILDER (Implementation)
    - Add inline documentation and comments
    - Follow architecture specifications exactly
    - Handle edge cases and error conditions
+
+   **CRITICAL: React useEffect Validation (if using React):**
+   For EVERY useEffect in code, validate:
+   - Does effect call setState/action that updates a dependency? → INFINITE LOOP RISK
+   - If effect modifies state, is that state in dependency array? → REMOVE IT
+   - Is effect for initialization? → Use empty deps []
+   - Is effect for external trigger? → Depend on prop/timestamp, NOT state
+   - Add comment explaining why dependencies are safe
+
+   **Anti-patterns to AVOID:**
+   ❌ useEffect(() => { setState(state) }, [state, setState])
+   ❌ useEffect(() => { updateArray(array) }, [array, updateArray])
+   ❌ useEffect(() => { storeAction() }, [storeState, storeAction])
+
+   **Safe patterns:**
+   ✅ useEffect(() => { ... }, []) // Mount only
+   ✅ useEffect(() => { ... }, [externalProp]) // External trigger
+   ✅ useEffect(() => { ... }, [timestamp]) // Timestamp trigger
+   ✅ useEffect(() => { ... }, [lastUpdate]) // Update tracker, not data
+
+   Pattern ID: react-useeffect-infinite-loop
+
+   **CRITICAL: Animation State Separation (if using animations):**
+   If code uses requestAnimationFrame OR setInterval < 100ms:
+   - Does animation code call Zustand set() or Redux dispatch()? → PERFORMANCE ISSUE
+   - Are display positions stored in Zustand/Redux? → MOVE TO REF/MAP
+   - Is state updated > 10 times per second? → SEPARATE ANIMATION STATE
+
+   **Implementation:**
+   - Data state (stable) → Zustand/Redux
+   - Animation state (high-frequency) → refs/Map (doesn't trigger re-renders)
+   - Components read from both sources
+
+   Pattern ID: react-animation-state-separation
 
 4. Save build log:
    Create file: .context-foundry/build-log.md
@@ -275,6 +340,49 @@ PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
      * **Module loading (if ES6 modules)**
    - Validate against original requirements from Scout phase
    - Document ALL test results in detail
+
+   **CRITICAL: E2E Testing for SPAs (MANDATORY for web apps):**
+   SPAs MUST have at least ONE E2E test that:
+   - Starts actual dev server (NOT mocked)
+   - Opens real browser (Playwright/Cypress, NOT jsdom)
+   - Navigates to app URL
+   - Waits for content to load
+   - Checks for console errors
+   - Tests key user interaction (click, input, navigation)
+
+   **Why this is critical:**
+   - Unit tests DON'T catch: CORS errors, infinite loops, broken clicks
+   - Integration tests DON'T catch: Real browser issues, API integration
+   - E2E tests catch 80% of production bugs
+   - ONE simple E2E test would have caught ALL 4 flight tracker issues
+
+   **Example E2E test (Playwright):**
+   ```javascript
+   test('app loads and displays data', async ({ page }) => {
+     await page.goto('http://localhost:5173')
+     await page.waitForSelector('.primary-content')
+
+     // Check for console errors
+     const errors = []
+     page.on('console', msg => {
+       if (msg.type() === 'error') errors.push(msg.text())
+     })
+
+     expect(errors).toHaveLength(0)
+
+     // Verify content loaded
+     const content = await page.locator('.primary-content').count()
+     expect(content).toBeGreaterThan(0)
+
+     // Test interaction
+     await page.click('.some-button')
+     await page.waitForSelector('.expected-result')
+   })
+   ```
+
+   Pattern ID: e2e-testing-spa-real-browser
+
+   **Passing tests ≠ Working app. Always test in target environment (real browser for SPAs).**
 
 3. Analyze results:
 
