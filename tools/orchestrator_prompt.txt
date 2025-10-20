@@ -643,7 +643,7 @@ PHASE 5: DOCUMENTATION
    - Technologies used
    - Contributing guidelines (if applicable)
    - License information
-   - Credits: "🤖 Built autonomously by Claude Code Context Foundry"
+   - Credits: "🤖 Built autonomously by Context Foundry"
 
    **Screenshot handling:**
    - If docs/screenshots/hero.png exists: Include it prominently after title
@@ -768,7 +768,7 @@ PHASE 6: DEPLOYMENT (GitHub)
      - Architecture documentation
      - Test documentation
 
-     🤖 Generated autonomously by Claude Code Context Foundry
+     🤖 Built autonomously by Context Foundry
      Co-Authored-By: Claude <noreply@anthropic.com>"
 
 2. GitHub deployment (if github_repo_name provided):
@@ -801,7 +801,7 @@ PHASE 6: DEPLOYMENT (GitHub)
 
       Tests: PASSED (after {iteration_count} iteration(s))
 
-      🤖 Generated autonomously by Claude Code Context Foundry
+      🤖 Built autonomously by Context Foundry
       Co-Authored-By: Claude <noreply@anthropic.com>"
 
    d. Push changes:

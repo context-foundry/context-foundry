@@ -583,7 +583,6 @@ def get_delegation_result(task_id: str) -> str:
                 return json.dumps({
                     "task_id": task_id,
                     "status": "timeout",
-                    "task": task_info["task"],
                     "elapsed_seconds": elapsed,
                     "timeout_minutes": task_info["timeout_minutes"],
                     "message": f"Task exceeded timeout of {task_info['timeout_minutes']} minutes and was terminated."
@@ -596,7 +595,6 @@ def get_delegation_result(task_id: str) -> str:
             result = {
                 "task_id": task_id,
                 "status": "running",
-                "task": task_info["task"],
                 "elapsed_seconds": round(elapsed, 2),
                 "timeout_minutes": task_info["timeout_minutes"],
                 "progress": f"{round((elapsed / timeout_seconds) * 100, 1)}% of timeout elapsed"
