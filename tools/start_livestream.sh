@@ -35,6 +35,20 @@ if ! python3 -c "import fastapi" 2>/dev/null; then
     pip3 install fastapi uvicorn websockets requests
 fi
 
+# Initialize enhanced metrics database
+echo -e "${BLUE}💾 Initializing metrics database...${NC}"
+cd "$(dirname "$0")/livestream"
+python3 -c "
+import sys
+try:
+    from metrics_db import get_db
+    db = get_db()
+    print('✅ Database initialized at:', db.db_path)
+except Exception as e:
+    print('⚠️  Database initialization skipped:', e)
+"
+cd - > /dev/null
+
 # Kill any existing server on this port
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo -e "${YELLOW}⚠️  Port $PORT in use, attempting to free it...${NC}"
@@ -67,6 +81,8 @@ LOCAL_URL="http://localhost:$PORT"
 echo -e "\n${GREEN}✅ Server started successfully!${NC}"
 echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${BLUE}📡 Local URL:${NC}  $LOCAL_URL"
+echo -e "${BLUE}🔄 Enhanced metrics polling: 3-5 seconds${NC}"
+echo -e "${BLUE}💾 Metrics database: ~/.context-foundry/metrics.db${NC}"
 
 # Start ngrok if requested
 NGROK_URL=""

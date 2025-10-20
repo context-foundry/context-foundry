@@ -10,7 +10,7 @@ import json
 import asyncio
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -276,6 +276,235 @@ async def health():
     }
 
 
+# ============================================================================
+# Enhanced MCP Integration Endpoints
+# ============================================================================
+
+# Import enhanced modules
+try:
+    # Try relative imports first (when used as module)
+    from .mcp_client import get_client
+    from .metrics_db import get_db
+    from .config import TOKEN_BUDGET_LIMIT, get_token_status
+    MCP_ENHANCED = True
+except ImportError:
+    try:
+        # Fall back to direct imports (when run as script)
+        from mcp_client import get_client
+        from metrics_db import get_db
+        from config import TOKEN_BUDGET_LIMIT, get_token_status
+        MCP_ENHANCED = True
+    except ImportError:
+        print("⚠️  Enhanced MCP modules not available", file=sys.stderr)
+        MCP_ENHANCED = False
+
+
+@app.get("/api/mcp/tasks")
+async def get_mcp_tasks():
+    """Get all active MCP delegation tasks."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        mcp_client = get_client()
+        tasks = mcp_client.list_active_tasks()
+        return JSONResponse({"tasks": tasks, "count": len(tasks)})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/mcp/task/{task_id}")
+async def get_mcp_task(task_id: str):
+    """Get detailed status for an MCP delegation task."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        mcp_client = get_client()
+        task = mcp_client.get_task_status(task_id)
+        return JSONResponse(task)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/metrics/{task_id}")
+async def get_task_metrics(task_id: str):
+    """Get comprehensive metrics for a task."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        db = get_db()
+        mcp_client = get_client()
+
+        # Get task data
+        task_data = db.get_task(task_id)
+        if not task_data:
+            return JSONResponse({"error": "Task not found"}, status_code=404)
+
+        # Get metrics
+        metrics = db.get_metrics(task_id)
+        latest_metric = db.get_latest_metric(task_id)
+
+        # Get decisions
+        decisions = db.get_decisions(task_id)
+        decision_analytics = db.get_decision_analytics(task_id)
+
+        # Get agent performance
+        agent_performance = db.get_agent_performance(task_id)
+
+        # Get test iterations
+        test_iterations = db.get_test_iterations(task_id)
+
+        # Get pattern effectiveness
+        pattern_effectiveness = db.get_pattern_effectiveness(task_id)
+
+        # Get token estimate
+        token_estimate = mcp_client.estimate_token_usage(task_id)
+        token_status = get_token_status(token_estimate['estimated_tokens'])
+
+        return JSONResponse({
+            "task": task_data,
+            "metrics": {
+                "latest": latest_metric,
+                "history": metrics[-20:] if len(metrics) > 20 else metrics,  # Last 20
+                "token_usage": token_status,
+            },
+            "decisions": {
+                "recent": decisions[-10:] if len(decisions) > 10 else decisions,  # Last 10
+                "analytics": decision_analytics
+            },
+            "agent_performance": agent_performance,
+            "test_iterations": test_iterations,
+            "pattern_effectiveness": pattern_effectiveness
+        })
+    except Exception as e:
+        import traceback
+        return JSONResponse({
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }, status_code=500)
+
+
+@app.get("/api/metrics/historical")
+async def get_historical_metrics(limit: int = 100):
+    """Get historical metrics across all tasks."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        db = get_db()
+
+        # Get all tasks
+        tasks = db.get_all_tasks(limit)
+
+        # Get summary stats
+        stats = db.get_summary_stats()
+
+        return JSONResponse({
+            "tasks": tasks,
+            "summary": stats,
+            "total_tasks": len(tasks)
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/analytics/decisions")
+async def get_decision_analytics(task_id: Optional[str] = None):
+    """Get decision quality analytics."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        db = get_db()
+
+        analytics = db.get_decision_analytics(task_id)
+
+        return JSONResponse({
+            "analytics": analytics,
+            "task_id": task_id
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/analytics/agents")
+async def get_agent_analytics(agent_type: Optional[str] = None):
+    """Get agent performance analytics."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        db = get_db()
+
+        analytics = db.get_agent_analytics(agent_type)
+
+        return JSONResponse({
+            "analytics": analytics,
+            "agent_type": agent_type
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/token/status/{task_id}")
+async def get_token_usage_status(task_id: str):
+    """Get detailed token usage status for a task."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+
+    try:
+        mcp_client = get_client()
+
+        token_estimate = mcp_client.estimate_token_usage(task_id)
+        token_status = get_token_status(token_estimate['estimated_tokens'])
+
+        return JSONResponse(token_status)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ============================================================================
+# Background Metrics Collector
+# ============================================================================
+
+# Global metrics collector instance
+metrics_collector_task = None
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background services on server startup."""
+    global metrics_collector_task
+
+    if MCP_ENHANCED:
+        print("🔄 Starting metrics collector...", file=sys.stderr)
+        try:
+            try:
+                from .metrics_collector import MetricsCollector
+            except ImportError:
+                from metrics_collector import MetricsCollector
+            collector = MetricsCollector()
+            metrics_collector_task = asyncio.create_task(collector.start())
+            print("✅ Metrics collector started", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️  Failed to start metrics collector: {e}", file=sys.stderr)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background services on server shutdown."""
+    global metrics_collector_task
+
+    if metrics_collector_task:
+        print("🛑 Stopping metrics collector...", file=sys.stderr)
+        metrics_collector_task.cancel()
+        try:
+            await metrics_collector_task
+        except asyncio.CancelledError:
+            pass
+
+
 def main():
     """Start the livestream server."""
     port = int(os.getenv("LIVESTREAM_PORT", "8080"))
@@ -285,6 +514,10 @@ def main():
     print(f"📡 Starting server on http://{host}:{port}")
     print(f"🌐 Dashboard: http://localhost:{port}")
     print(f"📊 API Docs: http://localhost:{port}/docs")
+    if MCP_ENHANCED:
+        print(f"🔄 Enhanced MCP metrics: Enabled")
+    else:
+        print(f"⚠️  Enhanced MCP metrics: Disabled")
     print(f"\nPress Ctrl+C to stop")
 
     uvicorn.run(app, host=host, port=port, log_level="info")
