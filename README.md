@@ -29,6 +29,37 @@ Result: ✅ Complete game deployed to GitHub, all tests passing
 
 ---
 
+## 🎮 See It In Action: Evolution Quest
+
+**Real build example** - Watch Context Foundry autonomously build a complete game from a simple request:
+
+### Starting the Build
+
+![Evolution Quest - Build Starting](docs/screenshots/EvolutionQuestBeingBuilt.png)
+*User makes a request, then walks away. Context Foundry's autonomous workflow begins.*
+
+### Guided Progress Updates
+
+![Build Status Update 1](docs/screenshots/BuildStatusUpdate1.png)
+*Scout phase completes research. Architect phase designs the game architecture. Builder phase begins implementation.*
+
+![Build Status Update 2](docs/screenshots/BuildStatusUpdate2.png)
+*Tests running and passing. Self-healing test loop ensures quality. Screenshot capture phase documents the UI.*
+
+### Build Complete
+
+![Build Complete](docs/screenshots/BuildStatusComplete.png)
+*All phases complete automatically. Tests passing. Documentation generated. Ready for deployment.*
+
+### The Result
+
+![Evolution Quest - Ready to Play](docs/screenshots/App_Ready_to_Play.png)
+*Complete, working game deployed to GitHub with tests, documentation, and screenshots. Total time: 12 minutes. User interaction: Just the initial request.*
+
+**Key Takeaway:** User described what they wanted, walked away, came back to a finished, tested, documented, and deployed application.
+
+---
+
 ## 💬 Just Ask Naturally (No Commands to Memorize!)
 
 **The easiest way to use Context Foundry:** Just describe what you want in plain English.

@@ -106,6 +106,27 @@ You can continue working - the build runs in the background.
 
 **Total time:** 7-15 minutes (runs in background while you work)
 
+### Visual Example: Real Build in Progress
+
+**Here's what a real autonomous build looks like:**
+
+![Build Process - Starting](docs/screenshots/EvolutionQuestBeingBuilt.png)
+*Context Foundry begins the autonomous build process after your request*
+
+![Build Process - In Progress](docs/screenshots/BuildStatusUpdate1.png)
+*Guided workflow progresses through Scout → Architect → Builder phases automatically*
+
+![Build Process - Testing](docs/screenshots/BuildStatusUpdate2.png)
+*Self-healing test loop validates and fixes issues without your intervention*
+
+![Build Process - Complete](docs/screenshots/BuildStatusComplete.png)
+*All phases complete with tests passing and documentation generated*
+
+![Final Application](docs/screenshots/App_Ready_to_Play.png)
+*Deployed, working application ready to use - from simple request to finished product*
+
+**The entire process runs autonomously** - you can work on other things while it builds!
+
 **Check status:**
 ```
 What's the status of my build?
