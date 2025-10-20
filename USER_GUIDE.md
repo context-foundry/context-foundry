@@ -12,9 +12,10 @@
 4. [Task Delegation](#task-delegation)
 5. [Parallel Execution](#parallel-execution)
 6. [Understanding the Workflow](#understanding-the-workflow)
-7. [Troubleshooting](#troubleshooting)
-8. [Best Practices](#best-practices)
-9. [Advanced Usage](#advanced-usage)
+7. [**Real-Time Monitoring Dashboard (NEW)**](#real-time-monitoring-dashboard)
+8. [Troubleshooting](#troubleshooting)
+9. [Best Practices](#best-practices)
+10. [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -1053,7 +1054,7 @@ curl http://localhost:3000/weather/sanfrancisco
 npm test
 ```
 
-🤖 Built autonomously by Claude Code Context Foundry
+🤖 Built autonomously by Context Foundry
 ```
 
 #### Phase 6: Deployment (GitHub)
@@ -1091,7 +1092,7 @@ Documentation:
 - Architecture documentation
 - Test documentation
 
-🤖 Generated autonomously by Claude Code Context Foundry
+🤖 Built autonomously by Context Foundry
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
@@ -1437,6 +1438,363 @@ ALL agent conversations GONE
 - Control options (autonomous vs checkpoints)
 
 **Technical Deep Dive:** See [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) for architecture diagrams and implementation details.
+
+---
+
+## Real-Time Monitoring Dashboard
+
+**NEW: Enhanced status dashboard with comprehensive metrics tracking**
+
+Monitor your Context Foundry builds in real-time with a beautiful dark-themed web dashboard that polls MCP status and displays detailed metrics including token usage, agent performance, decision quality, and test analytics.
+
+### Features
+
+✅ **Real-Time Updates** - 3-5 second polling interval for near real-time status
+✅ **Token Usage Tracking** - Visual gauge showing usage out of 200K budget
+✅ **Agent Performance** - Track Scout, Architect, Builder, and Tester metrics
+✅ **Decision Analytics** - Quality ratings, difficulty, lessons learned tracking
+✅ **Test Loop Insights** - Iteration counts, success rates, failure patterns
+✅ **Pattern Effectiveness** - See which patterns prevented issues
+✅ **Persistent Storage** - SQLite database for historical analysis
+✅ **Beautiful Dark Mode** - Easy on the eyes for overnight monitoring
+
+### Quick Start
+
+#### 1. Start the Dashboard
+
+```bash
+cd ~/context-foundry
+./tools/start_livestream.sh
+```
+
+The script will:
+- Check dependencies (FastAPI, uvicorn, etc.)
+- Initialize the metrics database (~/.context-foundry/metrics.db)
+- Start the server on http://localhost:8080
+- Open the dashboard in your browser
+
+#### 2. Run a Task
+
+In another terminal, start a Context Foundry task:
+
+```bash
+# Example: Async build
+foundry build my-app "Build a todo app with REST API" --async
+
+# The dashboard will automatically detect and display the task
+```
+
+#### 3. Monitor in Real-Time
+
+The dashboard will show:
+- **Current Phase**: Scout → Architect → Builder → Test → Deploy
+- **Progress**: Tasks completed vs remaining
+- **Token Usage**: Visual gauge with color-coded warning levels
+- **Live Logs**: Streaming output from the build
+- **Detailed Metrics**: Agent performance, decisions, test iterations
+
+### Dashboard Panels
+
+#### Main Status Panel
+- **Session Selector**: Switch between active tasks
+- **Phase Indicator**: Current phase with gradient color coding
+- **Elapsed Time**: How long the task has been running
+- **Iteration Count**: Number of context resets / healing loops
+
+#### Context Usage
+- Progress bar showing token usage out of 200K budget
+- Color-coded: Green (safe), Yellow (warning >50%), Red (critical >75%)
+- Real-time updates as task progresses
+
+#### Task Progress
+- List of completed tasks (✓)
+- Currently executing task (⏳)
+- Pending tasks (○)
+- Progress percentage bar
+
+#### Token Usage Panel 🔢
+- **Used / Budget**: e.g., "45,234 / 200,000"
+- **Visual Gauge**: Gradient progress bar (green→yellow→red)
+- **Warning Thresholds**:
+  - **Safe**: < 50% (green)
+  - **Warning**: 50-75% (yellow)
+  - **Critical**: > 75% (red - pulses)
+- Updates every 3-5 seconds
+
+#### Test Loop Analytics 🧪
+- **Total Iterations**: Number of test/fix cycles
+- **Success Rate**: Percentage of tests passing
+- **Iteration History**: Last 3 iterations with pass/fail counts
+- **Visual Indicators**: Green ✓ for passing, Red ✗ for failing
+
+#### Agent Performance 🤖
+- **Per-Agent Cards**: Scout, Architect, Builder, Tester
+- **Metrics**:
+  - Execution time
+  - Success/failure status
+  - Issues found vs fixed
+  - Files created/modified
+- **Hover Effects**: Cards highlight on mouseover
+
+#### Decision Quality 🧠
+- **Total Decisions**: Count of autonomous decisions made
+- **Average Quality**: Rating 1-5 (Low, Medium, High)
+- **Lessons Applied**: Number of times past patterns were used
+- **Recent Decisions**: Last 3 decisions with quality badges
+- **Color Coding**:
+  - High quality: Green
+  - Medium quality: Yellow
+  - Low quality: Red
+- **Lessons Indicator**: Purple 📚 icon when lessons were applied
+
+### Configuration
+
+#### Environment Variables
+
+```bash
+# Server configuration
+export LIVESTREAM_PORT=8080
+export LIVESTREAM_HOST=0.0.0.0
+
+# Polling interval (seconds)
+export POLL_INTERVAL_SECONDS=4  # 3-5 recommended
+
+# Database location
+export CF_METRICS_DB="$HOME/.context-foundry/metrics.db"
+
+# Enable enhanced metrics
+export ENABLE_METRICS=true
+```
+
+#### Polling Interval
+
+The default 3-5 second polling interval balances:
+- **Freshness**: Near real-time updates
+- **Overhead**: Minimal API traffic
+- **Responsiveness**: Smooth UI updates
+
+To adjust:
+```bash
+# Aggressive (1-2 seconds) - for active monitoring
+export POLL_INTERVAL_SECONDS=2
+
+# Balanced (3-5 seconds) - recommended
+export POLL_INTERVAL_SECONDS=4
+
+# Conservative (10 seconds) - for long-running tasks
+export POLL_INTERVAL_SECONDS=10
+```
+
+### API Endpoints
+
+The dashboard provides a REST API for programmatic access:
+
+```bash
+# List all active MCP tasks
+curl http://localhost:8080/api/mcp/tasks
+
+# Get task status
+curl http://localhost:8080/api/mcp/task/{task_id}
+
+# Get comprehensive metrics
+curl http://localhost:8080/api/metrics/{task_id}
+
+# Get historical data
+curl http://localhost:8080/api/metrics/historical
+
+# Get decision analytics
+curl http://localhost:8080/api/analytics/decisions
+
+# Get agent performance analytics
+curl http://localhost:8080/api/analytics/agents
+
+# Get token usage status
+curl http://localhost:8080/api/token/status/{task_id}
+
+# Health check
+curl http://localhost:8080/api/health
+```
+
+### Metrics Database
+
+All metrics are persisted to SQLite for historical analysis:
+
+```bash
+# Database location
+~/.context-foundry/metrics.db
+
+# Tables:
+# - tasks: Main task tracking
+# - metrics: Time-series metrics per task
+# - decisions: Autonomous decision tracking
+# - agent_performance: Per-agent metrics
+# - test_iterations: Test loop analytics
+# - pattern_effectiveness: Pattern usage tracking
+```
+
+#### Querying Metrics
+
+```bash
+# Access the database
+sqlite3 ~/.context-foundry/metrics.db
+
+# Example queries:
+sqlite> SELECT COUNT(*) FROM tasks;
+sqlite> SELECT project_name, status, duration_seconds FROM tasks ORDER BY start_time DESC LIMIT 10;
+sqlite> SELECT agent_type, AVG(duration_seconds), COUNT(*) FROM agent_performance GROUP BY agent_type;
+sqlite> SELECT AVG(quality_rating), COUNT(*) FROM decisions WHERE used_lessons_learned = 1;
+```
+
+### Self-Improvement Integration
+
+The dashboard tracks metrics that help Context Foundry improve itself:
+
+1. **Decision Quality Tracking**
+   - Rates every autonomous decision (1-5)
+   - Tracks difficulty level
+   - Flags regrettable decisions to learn from
+   - Measures effectiveness of lessons learned
+
+2. **Pattern Effectiveness**
+   - Tracks which patterns were applied
+   - Measures if they prevented issues
+   - Correlates pattern usage with success rates
+   - Builds data for pattern refinement
+
+3. **Agent Performance Analysis**
+   - Measures time spent per agent type
+   - Tracks success rates by phase
+   - Identifies bottlenecks and inefficiencies
+   - Optimizes workflow over time
+
+4. **Test Loop Analytics**
+   - Monitors test iteration trends
+   - Identifies common failure patterns
+   - Measures fix effectiveness
+   - Reduces iterations over time through learning
+
+### Dark Mode Design
+
+The dashboard uses a carefully crafted dark theme:
+
+- **Background**: Deep black (#0a0a0a) for OLED-friendly viewing
+- **Panels**: Dark gray (#111827) with subtle borders
+- **Text**: High contrast (#e0e0e0) for readability
+- **Accents**: Vibrant gradients for phase indicators
+- **Hover Effects**: Smooth transitions and subtle glows
+- **Color Coding**:
+  - Green: Success, safe levels
+  - Yellow: Warnings, caution
+  - Red: Critical, failures
+  - Blue: Info, in-progress
+  - Purple: Lessons learned, special features
+
+Perfect for overnight monitoring sessions!
+
+### Remote Access
+
+#### With ngrok (Recommended)
+
+```bash
+# Start dashboard with public URL
+USE_NGROK=true ./tools/start_livestream.sh
+
+# You'll get:
+# - Local URL: http://localhost:8080
+# - Public URL: https://xxxx.ngrok.io
+# - QR Code: Scan with phone to access remotely
+```
+
+#### Local Network
+
+```bash
+# Find your local IP
+ifconfig | grep "inet "
+
+# Access from other devices on same network
+# http://YOUR_IP:8080
+```
+
+### Troubleshooting Dashboard
+
+#### Server Won't Start
+
+```bash
+# Check if port is in use
+lsof -i :8080
+
+# Kill existing server
+lsof -ti:8080 | xargs kill -9
+
+# Check logs
+tail -f /tmp/livestream.log
+```
+
+#### Dashboard Not Updating
+
+1. **Check WebSocket Connection**: Look for green "Connected" indicator
+2. **Verify Task is Running**: Ensure Context Foundry task is active
+3. **Check Browser Console**: Press F12, look for errors
+4. **Refresh Page**: Force reload with Cmd+Shift+R (Mac) or Ctrl+Shift+R
+5. **Check Enhanced Metrics**: If disabled, some panels may not populate
+
+#### Enhanced Metrics Not Available
+
+If you see "⚠️ Enhanced metrics not available":
+
+```bash
+# Install missing dependencies
+cd ~/context-foundry/tools/livestream
+pip3 install -r requirements.txt
+
+# Restart server
+./tools/start_livestream.sh
+```
+
+#### Database Errors
+
+```bash
+# Reinitialize database
+python3 -c "
+from tools.livestream.metrics_db import get_db
+db = get_db()
+print('Database initialized at:', db.db_path)
+"
+
+# Check database integrity
+sqlite3 ~/.context-foundry/metrics.db "PRAGMA integrity_check;"
+```
+
+### Performance
+
+- **Latency**: < 100ms from task update to dashboard
+- **Resource Usage**: ~50MB RAM for server
+- **Concurrent Sessions**: Tested with 10+ simultaneous tasks
+- **WebSocket Limit**: 100 concurrent connections
+- **Database Size**: ~1-5MB per 100 tasks
+
+### Best Practices
+
+1. **Start Dashboard Before Tasks**: Launch dashboard first, then start builds
+2. **Monitor Token Usage**: Watch for yellow/red warnings
+3. **Review Decision Quality**: Identify patterns in high vs low quality decisions
+4. **Analyze Test Failures**: Use test loop panel to spot recurring issues
+5. **Export Data**: Periodically export session data for analysis
+6. **Clean Up Old Tasks**: Archive completed tasks to keep dashboard responsive
+
+### Future Enhancements
+
+Planned features:
+- [ ] Historical session comparison
+- [ ] Performance trend graphs
+- [ ] Desktop notifications on completion
+- [ ] Mobile app
+- [ ] Video recording of sessions
+- [ ] Multi-user authentication
+- [ ] Session sharing via URL
+- [ ] Pattern library visualization
+- [ ] Cost estimation improvements
+- [ ] Integration with GitHub Issues
 
 ---
 

@@ -18,6 +18,85 @@
         .phase-complete { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
         .log-line { font-family: 'Monaco', monospace; font-size: 12px; }
         .context-bar { transition: width 0.5s ease; }
+
+        /* Enhanced dark mode panels */
+        .metric-card {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            transition: all 0.3s ease;
+        }
+        .metric-card:hover {
+            border-color: #374151;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+        }
+        .token-gauge {
+            background: #1f2937;
+            border-radius: 9999px;
+            overflow: hidden;
+            position: relative;
+            height: 1.5rem;
+        }
+        .token-fill {
+            height: 100%;
+            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
+            transition: width 0.5s ease;
+        }
+        .token-critical {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+        }
+        .decision-badge {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            display: inline-block;
+        }
+        .decision-quality-high {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+        .decision-quality-medium {
+            background: rgba(234, 179, 8, 0.1);
+            border-color: rgba(234, 179, 8, 0.3);
+            color: #eab308;
+        }
+        .decision-quality-low {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        .agent-card {
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        .agent-card:hover {
+            border-color: #4b5563;
+            transform: translateX(4px);
+        }
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring-circle {
+            stroke-dasharray: 251.2;
+            stroke-dashoffset: 251.2;
+            transition: stroke-dashoffset 0.5s ease;
+            stroke: #10b981;
+            fill: none;
+            stroke-width: 8;
+        }
     </style>
 </head>
 <body class="p-4">
@@ -172,6 +251,93 @@
         </div>
     </div>
 
+    <!-- Enhanced Metrics Section -->
+    <div class="mt-6">
+        <h2 class="text-2xl font-bold mb-4">📊 Detailed Metrics</h2>
+    </div>
+
+    <!-- Enhanced Metrics Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+        <!-- Token Usage Panel -->
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">🔢 Token Usage</h3>
+            <div class="mb-4">
+                <div class="flex justify-between text-sm mb-2">
+                    <span class="text-gray-400">Used / Budget</span>
+                    <span id="tokenCount" class="text-gray-100 font-bold">0 / 200,000</span>
+                </div>
+                <div id="tokenGauge" class="token-gauge">
+                    <div id="tokenFill" class="token-fill" style="width: 0%"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-xs font-bold">
+                        <span id="tokenPercent">0%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="text-center p-2 bg-gray-800 rounded">
+                    <div class="text-gray-500">Safe</div>
+                    <div class="text-green-400">< 50%</div>
+                </div>
+                <div class="text-center p-2 bg-gray-800 rounded">
+                    <div class="text-gray-500">Warning</div>
+                    <div class="text-yellow-400">50-75%</div>
+                </div>
+                <div class="text-center p-2 bg-gray-800 rounded">
+                    <div class="text-gray-500">Critical</div>
+                    <div class="text-red-400">> 75%</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Loop Analytics -->
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">🧪 Test Loop</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Iterations</span>
+                    <span id="testIterCount" class="font-bold text-blue-400">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Success Rate</span>
+                    <span id="testSuccessRate" class="font-bold text-green-400">--%</span>
+                </div>
+                <div id="testIterList" class="space-y-2 max-h-32 overflow-y-auto">
+                    <div class="text-gray-500 text-sm italic">No test iterations yet</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agent Performance -->
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">🤖 Agent Performance</h3>
+            <div id="agentList" class="space-y-2">
+                <div class="text-gray-500 text-sm italic">No agent data yet</div>
+            </div>
+        </div>
+
+        <!-- Decision Tracking -->
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">🧠 Decision Quality</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Total Decisions</span>
+                    <span id="decisionCount" class="font-bold text-blue-400">0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Avg Quality</span>
+                    <span id="decisionQuality" class="font-bold text-green-400">--</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">Lessons Applied</span>
+                    <span id="decisionLessons" class="font-bold text-purple-400">0</span>
+                </div>
+                <div id="decisionList" class="space-y-2 max-h-32 overflow-y-auto mt-3">
+                    <div class="text-gray-500 text-sm italic">No decisions yet</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         let ws = null;
         let currentSession = null;
@@ -311,6 +477,158 @@
                 'Last update: ' + new Date().toLocaleTimeString();
         }
 
+        // Update enhanced metrics
+        async function updateEnhancedMetrics(sessionId) {
+            try {
+                const response = await fetch(`/api/metrics/${sessionId}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    console.warn('Enhanced metrics not available:', data.error);
+                    return;
+                }
+
+                // Update token usage
+                if (data.metrics?.token_usage) {
+                    updateTokenUsage(data.metrics.token_usage);
+                }
+
+                // Update test iterations
+                if (data.test_iterations) {
+                    updateTestIterations(data.test_iterations);
+                }
+
+                // Update agent performance
+                if (data.agent_performance) {
+                    updateAgentPerformance(data.agent_performance);
+                }
+
+                // Update decisions
+                if (data.decisions) {
+                    updateDecisions(data.decisions);
+                }
+            } catch (error) {
+                console.warn('Error fetching enhanced metrics:', error);
+            }
+        }
+
+        // Update token usage panel
+        function updateTokenUsage(tokenData) {
+            const used = tokenData.used || 0;
+            const limit = tokenData.limit || 200000;
+            const percentage = tokenData.percentage || 0;
+
+            document.getElementById('tokenCount').textContent = `${used.toLocaleString()} / ${limit.toLocaleString()}`;
+            document.getElementById('tokenPercent').textContent = percentage.toFixed(1) + '%';
+            document.getElementById('tokenFill').style.width = percentage + '%';
+
+            // Apply critical class if needed
+            const gauge = document.getElementById('tokenGauge');
+            if (tokenData.level === 'critical') {
+                gauge.classList.add('token-critical');
+            } else {
+                gauge.classList.remove('token-critical');
+            }
+        }
+
+        // Update test iterations
+        function updateTestIterations(iterations) {
+            document.getElementById('testIterCount').textContent = iterations.length;
+
+            if (iterations.length === 0) {
+                document.getElementById('testSuccessRate').textContent = '--%';
+                return;
+            }
+
+            const lastIter = iterations[iterations.length - 1];
+            const passed = lastIter.tests_passed || 0;
+            const failed = lastIter.tests_failed || 0;
+            const total = passed + failed;
+            const successRate = total > 0 ? ((passed / total) * 100).toFixed(0) : 0;
+
+            document.getElementById('testSuccessRate').textContent = successRate + '%';
+
+            // Update list
+            const listDiv = document.getElementById('testIterList');
+            let html = '';
+            iterations.slice(-3).reverse().forEach(iter => {
+                const iterPassed = iter.tests_passed || 0;
+                const iterFailed = iter.tests_failed || 0;
+                const iterColor = iterFailed === 0 ? 'text-green-400' : 'text-red-400';
+                html += `<div class="bg-gray-800 p-2 rounded text-xs">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Iteration ${iter.iteration_number}</span>
+                        <span class="${iterColor}">${iterPassed}✓ ${iterFailed}✗</span>
+                    </div>
+                </div>`;
+            });
+            listDiv.innerHTML = html || '<div class="text-gray-500 text-sm italic">No test iterations</div>';
+        }
+
+        // Update agent performance
+        function updateAgentPerformance(agents) {
+            const listDiv = document.getElementById('agentList');
+            if (agents.length === 0) {
+                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No agent data yet</div>';
+                return;
+            }
+
+            let html = '';
+            agents.slice(-4).forEach(agent => {
+                const duration = agent.duration_seconds || 0;
+                const durationText = duration > 0 ? formatDuration(duration) : 'In progress';
+                const statusIcon = agent.success ? '✅' : agent.success === false ? '❌' : '⏳';
+
+                html += `<div class="agent-card">
+                    <div class="flex justify-between items-center">
+                        <span class="font-bold text-sm">${statusIcon} ${agent.agent_type}</span>
+                        <span class="text-xs text-gray-400">${durationText}</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        Issues: ${agent.issues_found || 0} found, ${agent.issues_fixed || 0} fixed
+                    </div>
+                </div>`;
+            });
+            listDiv.innerHTML = html;
+        }
+
+        // Update decisions
+        function updateDecisions(decisionData) {
+            const analytics = decisionData.analytics || {};
+            const decisions = decisionData.recent || [];
+
+            document.getElementById('decisionCount').textContent = analytics.total_decisions || 0;
+
+            const avgQuality = analytics.avg_quality || 0;
+            document.getElementById('decisionQuality').textContent = avgQuality > 0 ? avgQuality.toFixed(1) : '--';
+
+            document.getElementById('decisionLessons').textContent = analytics.lessons_used_count || 0;
+
+            // Update decision list
+            const listDiv = document.getElementById('decisionList');
+            if (decisions.length === 0) {
+                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No decisions yet</div>';
+                return;
+            }
+
+            let html = '';
+            decisions.slice(-3).reverse().forEach(decision => {
+                const quality = decision.quality_rating || 3;
+                const qualityClass = quality >= 4 ? 'decision-quality-high' :
+                                   quality >= 3 ? 'decision-quality-medium' : 'decision-quality-low';
+                const qualityText = quality >= 4 ? 'High' : quality >= 3 ? 'Med' : 'Low';
+
+                html += `<div class="bg-gray-800 p-2 rounded text-xs">
+                    <div class="flex justify-between items-start">
+                        <span class="text-gray-300">${decision.decision_type || 'Decision'}</span>
+                        <span class="decision-badge ${qualityClass}">${qualityText}</span>
+                    </div>
+                    ${decision.used_lessons_learned ? '<div class="text-purple-400 text-xs mt-1">📚 Used lessons</div>' : ''}
+                </div>`;
+            });
+            listDiv.innerHTML = html;
+        }
+
         // Update connection status
         function updateConnectionStatus(connected) {
             const statusDiv = document.getElementById('connectionStatus');
@@ -428,6 +746,9 @@
                 const logsResponse = await fetch(`/api/logs/${currentSession}?lines=50`);
                 const logsData = await logsResponse.json();
                 updateLogs(logsData.logs || []);
+
+                // Load enhanced metrics (new)
+                await updateEnhancedMetrics(currentSession);
 
             } catch (error) {
                 console.error('Error refreshing data:', error);

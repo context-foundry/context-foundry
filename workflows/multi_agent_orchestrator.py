@@ -17,6 +17,7 @@ Usage:
 
 import os
 import sys
+import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
@@ -36,6 +37,7 @@ from ace.orchestrator import (
     SelfHealingLoop
 )
 from ace.scouts import ParallelScoutCoordinator
+from ace.architects import ArchitectCoordinator
 from ace.builders import ParallelBuilderCoordinator
 from ace.validators.llm_judge import LLMJudge
 
@@ -100,6 +102,7 @@ class MultiAgentOrchestrator:
         # Initialize components (pass AI client)
         self.lead_orchestrator = LeadOrchestrator(self.ai_client)
         self.scout_coordinator = ParallelScoutCoordinator(self.ai_client)
+        self.architect_coordinator = ArchitectCoordinator(self.ai_client)
         self.builder_coordinator = ParallelBuilderCoordinator(self.ai_client)
         self.llm_judge = LLMJudge(self.ai_client)
 
@@ -117,6 +120,98 @@ class MultiAgentOrchestrator:
         print(f"💾 Session: {self.session_id}")
         print(f"📊 Checkpointing: {'Enabled' if enable_checkpointing else 'Disabled'}")
         print(f"🔧 Self-Healing: {'Enabled' if enable_self_healing else 'Disabled'}\n")
+
+    def _run_tests(self) -> Dict[str, Any]:
+        """
+        Execute tests for the project.
+
+        Detects project type and runs appropriate test command.
+
+        Returns:
+            Dict with test results including success status and output
+        """
+
+        print(f"\n🧪 Running tests...")
+
+        # Check for package.json (Node/JavaScript project)
+        package_json = self.project_dir / "package.json"
+        if package_json.exists():
+            # Check if test script exists
+            try:
+                import json
+                with open(package_json, 'r') as f:
+                    pkg_data = json.load(f)
+                    if 'scripts' in pkg_data and 'test' in pkg_data['scripts']:
+                        print(f"   📦 Detected Node.js project with test script")
+                        result = subprocess.run(
+                            ['npm', 'test'],
+                            cwd=self.project_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=120
+                        )
+
+                        return {
+                            'success': result.returncode == 0,
+                            'output': result.stdout,
+                            'error': result.stderr,
+                            'test_type': 'npm'
+                        }
+            except Exception as e:
+                print(f"   ⚠️  Error running npm test: {e}")
+                return {'success': False, 'error': str(e), 'test_type': 'npm'}
+
+        # Check for Python tests (pytest)
+        test_files = list(self.project_dir.glob('**/test_*.py')) + list(self.project_dir.glob('**/*_test.py'))
+        if test_files or (self.project_dir / 'tests').exists():
+            print(f"   🐍 Detected Python project with tests")
+            try:
+                result = subprocess.run(
+                    ['pytest', '-v'],
+                    cwd=self.project_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+
+                return {
+                    'success': result.returncode == 0,
+                    'output': result.stdout,
+                    'error': result.stderr,
+                    'test_type': 'pytest'
+                }
+            except FileNotFoundError:
+                # pytest not installed
+                print(f"   ⚠️  pytest not found, trying python -m pytest")
+                try:
+                    result = subprocess.run(
+                        ['python', '-m', 'pytest', '-v'],
+                        cwd=self.project_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=120
+                    )
+
+                    return {
+                        'success': result.returncode == 0,
+                        'output': result.stdout,
+                        'error': result.stderr,
+                        'test_type': 'pytest'
+                    }
+                except Exception as e:
+                    print(f"   ⚠️  Error running pytest: {e}")
+                    return {'success': False, 'error': str(e), 'test_type': 'pytest'}
+            except Exception as e:
+                print(f"   ⚠️  Error running pytest: {e}")
+                return {'success': False, 'error': str(e), 'test_type': 'pytest'}
+
+        # No tests found
+        print(f"   ⚠️  No test framework detected")
+        return {
+            'success': False,
+            'error': 'No test framework detected (looked for package.json with test script, pytest)',
+            'test_type': 'none'
+        }
 
     def run(self, resume_from: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -192,21 +287,27 @@ class MultiAgentOrchestrator:
 
             self.observer.log_phase_start('architect', {})
 
-            # For now, use compressed scout findings as architect result
-            # TODO: Integrate with existing Architect agent
-            architect_result = {
-                'summary': compressed_scout['compressed_summary'],
-                'strategy': self.workflow_plan.architect_strategy
-            }
+            # Execute architect with compressed scout findings
+            architect_result = self.architect_coordinator.execute(
+                user_request=self.task_description,
+                scout_findings=compressed_scout['compressed_summary'],
+                architect_strategy=self.workflow_plan.architect_strategy
+            )
 
             self.results['architect'] = architect_result
 
             if self.checkpoint_manager:
                 self.checkpoint_manager.save_checkpoint('architect', {
-                    'architect_result': architect_result
+                    'architect_result': architect_result.to_dict()
                 })
 
-            self.observer.log_phase_complete('architect', {'success': True})
+            self.observer.log_phase_complete('architect', {
+                'success': architect_result.success,
+                'token_usage': architect_result.total_tokens
+            })
+
+            # Get architecture document for builders
+            architecture_doc = architect_result.subagent_results[0].findings if architect_result.success else ""
 
             # Phase 4: Parallel Builder Implementation
             print("\n" + "="*80)
@@ -220,7 +321,7 @@ class MultiAgentOrchestrator:
             builder_result = self.builder_coordinator.execute_parallel(
                 tasks=self.workflow_plan.builder_tasks,
                 project_dir=self.project_dir,
-                architect_result=architect_result
+                architect_result={'summary': architecture_doc, 'full_result': architect_result}
             )
 
             self.results['builder'] = builder_result
@@ -257,23 +358,35 @@ class MultiAgentOrchestrator:
                         if result.success:
                             all_files.extend(result.files_written)
 
-                    # For now, just check if files were created
-                    # TODO: Add actual test execution
                     if not all_files:
                         return False, {'message': 'No files were generated'}
 
-                    # Use LLM judge
+                    # Run tests
+                    test_result = self._run_tests()
+
+                    # Use LLM judge for code quality
                     evaluation = self.llm_judge.evaluate(
                         requirements=self.task_description,
                         code_summary={
                             'description': f'{len(all_files)} files generated',
                             'files': all_files,
-                            'file_count': len(all_files)
+                            'file_count': len(all_files),
+                            'test_result': test_result
                         }
                     )
 
-                    passed = evaluation.get('overall', {}).get('pass', False)
-                    return passed, evaluation
+                    # Both tests and LLM judge must pass
+                    tests_passed = test_result.get('success', False)
+                    llm_judge_passed = evaluation.get('overall', {}).get('pass', False)
+
+                    overall_passed = tests_passed and llm_judge_passed
+
+                    return overall_passed, {
+                        'test_execution': test_result,
+                        'llm_evaluation': evaluation,
+                        'tests_passed': tests_passed,
+                        'llm_judge_passed': llm_judge_passed
+                    }
 
                 validation_passed = healing_loop.retry_until_success(
                     validation_fn=validate,
