@@ -722,185 +722,21 @@ def autonomous_build_and_deploy(
     """
     Fully autonomous build/test/fix/deploy with self-healing test loop.
 
-    Spawns fresh Claude instance that:
+    Spawns fresh Claude instance that runs in the BACKGROUND:
     - Creates Scout/Architect/Builder/Tester agents via /agents
-    - Implements complete project
+    - Implements complete project autonomously
     - Tests automatically
     - If tests fail: Goes back to Architect → Builder → Test (up to max_test_iterations)
     - If tests pass: Deploys to GitHub
-    - Zero human intervention
+    - Zero human intervention required
 
-    Args:
-        task: What to build/fix/enhance
-        working_directory: Where to work
-        github_repo_name: Create new repo (optional)
-        existing_repo: Fix/enhance existing (optional)
-        mode: "new_project", "fix_bugs", "add_docs"
-        enable_test_loop: Enable self-healing test loop (default: True)
-        max_test_iterations: Max test/fix cycles (default: 3)
-        timeout_minutes: Max execution time (default: 90)
-
-    Returns:
-        JSON with completion status, GitHub URL, test results
-
-    Examples:
-        # Build new project with testing
-        autonomous_build_and_deploy(
-            task="Build MVP Mario Bros HTML5 game with jump, run, coins",
-            working_directory="/Users/name/homelab/mario-game",
-            github_repo_name="mario-game-mvp",
-            enable_test_loop=True,
-            max_test_iterations=3
-        )
-
-        # Fix bugs without test loop (faster)
-        autonomous_build_and_deploy(
-            task="Fix TypeScript errors",
-            working_directory="/Users/name/homelab/my-app",
-            existing_repo="snedea/my-app",
-            mode="fix_bugs",
-            enable_test_loop=False
-        )
-    """
-    try:
-        # Create orchestrator task configuration
-        task_config = {
-            "task": task,
-            "working_directory": working_directory,
-            "github_repo_name": github_repo_name,
-            "existing_repo": existing_repo,
-            "mode": mode,
-            "enable_test_loop": enable_test_loop,
-            "max_test_iterations": max_test_iterations
-        }
-
-        # Load orchestrator system prompt
-        orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
-        if not orchestrator_prompt_path.exists():
-            return json.dumps({
-                "status": "error",
-                "error": f"Orchestrator prompt not found at {orchestrator_prompt_path}. Please create tools/orchestrator_prompt.txt"
-            }, indent=2)
-
-        with open(orchestrator_prompt_path) as f:
-            system_prompt = f.read()
-
-        # Build task prompt
-        task_prompt = f"""AUTONOMOUS BUILD TASK
-
-CONFIGURATION:
-{json.dumps(task_config, indent=2)}
-
-Execute the full Scout → Architect → Builder → Test → Deploy workflow.
-{"Self-healing test loop is ENABLED. Fix and retry up to " + str(max_test_iterations) + " times if tests fail." if enable_test_loop else "Test loop is DISABLED. Test once and proceed."}
-
-Return JSON summary when complete.
-BEGIN AUTONOMOUS EXECUTION NOW.
-"""
-
-        # Build command
-        cmd = [
-            "claude", "--print",
-            "--permission-mode", "bypassPermissions",
-            "--strict-mcp-config",
-            "--system-prompt", system_prompt,
-            task_prompt
-        ]
-
-        # Validate/create working directory
-        working_dir_path = Path(working_directory)
-        if not working_dir_path.exists():
-            working_dir_path.mkdir(parents=True, exist_ok=True)
-
-        # Execute (blocking - this is intentionally synchronous for autonomous work)
-        start_time = time.time()
-
-        result = subprocess.run(
-            cmd,
-            cwd=working_directory,
-            capture_output=True,
-            text=True,
-            timeout=timeout_minutes * 60,
-            stdin=subprocess.DEVNULL,
-            env={
-                **os.environ,
-                'PYTHONUNBUFFERED': '1',
-            }
-        )
-
-        duration = time.time() - start_time
-
-        # Parse result
-        try:
-            # Try to extract JSON from output
-            # The orchestrator should return pure JSON
-            output_json = json.loads(result.stdout.strip())
-        except json.JSONDecodeError:
-            # If not valid JSON, wrap the output
-            output_json = {
-                "status": "completed" if result.returncode == 0 else "failed",
-                "raw_output": result.stdout,
-                "raw_error": result.stderr,
-                "note": "Delegated instance did not return valid JSON"
-            }
-
-        # Add execution metadata
-        output_json["execution_duration_minutes"] = round(duration / 60, 2)
-        output_json["exit_code"] = result.returncode
-        output_json["task_config"] = task_config
-
-        return json.dumps(output_json, indent=2)
-
-    except subprocess.TimeoutExpired:
-        return json.dumps({
-            "status": "timeout",
-            "message": f"Task exceeded {timeout_minutes} minute timeout",
-            "task": task,
-            "working_directory": working_directory
-        }, indent=2)
-
-    except FileNotFoundError:
-        return json.dumps({
-            "status": "error",
-            "error": "claude command not found",
-            "message": "Make sure Claude CLI is installed and in PATH",
-            "path": os.environ.get('PATH', 'not set')
-        }, indent=2)
-
-    except Exception as e:
-        import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "task": task,
-            "working_directory": working_directory
-        }, indent=2)
-
-
-@mcp.tool()
-def autonomous_build_and_deploy_async(
-    task: str,
-    working_directory: str,
-    github_repo_name: Optional[str] = None,
-    existing_repo: Optional[str] = None,
-    mode: str = "new_project",
-    enable_test_loop: bool = True,
-    max_test_iterations: int = 3,
-    timeout_minutes: float = 90.0
-) -> str:
-    """
-    Fully autonomous build/test/fix/deploy (ASYNC - runs in background).
-
-    Same as autonomous_build_and_deploy() but NON-BLOCKING:
+    **NON-BLOCKING EXECUTION:**
     - Starts the build immediately
     - Returns task_id right away
     - Build runs in background while you continue working
     - Use get_delegation_result(task_id) to check status
     - Use list_delegations() to see all running builds
 
-    Perfect for "walk away" builds - you can work on other things while it builds.
-
     Args:
         task: What to build/fix/enhance
         working_directory: Where to work
@@ -912,11 +748,11 @@ def autonomous_build_and_deploy_async(
         timeout_minutes: Max execution time (default: 90)
 
     Returns:
-        JSON with task_id and status (immediately)
+        JSON with task_id and status (returns immediately)
 
     Examples:
         # Start build in background
-        result = autonomous_build_and_deploy_async(
+        result = autonomous_build_and_deploy(
             task="Build weather app with OpenWeatherMap API",
             working_directory="/tmp/weather-app",
             github_repo_name="weather-app",
@@ -924,7 +760,7 @@ def autonomous_build_and_deploy_async(
         )
         # Returns: {"task_id": "abc-123", "status": "started", ...}
 
-        # Continue working...
+        # Continue working while build runs...
 
         # Check status later
         status = get_delegation_result("abc-123")
@@ -1581,7 +1417,7 @@ if __name__ == "__main__":
     print("   - delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)", file=sys.stderr)
     print("   - get_delegation_result: Check status and get results of async tasks", file=sys.stderr)
     print("   - list_delegations: List all active and completed async tasks", file=sys.stderr)
-    print("   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy with self-healing", file=sys.stderr)
+    print("   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy (runs in background)", file=sys.stderr)
     print("   - read_global_patterns: Read patterns from global pattern storage", file=sys.stderr)
     print("   - save_global_patterns: Save patterns to global pattern storage", file=sys.stderr)
     print("   - merge_project_patterns: Merge project patterns into global storage", file=sys.stderr)
