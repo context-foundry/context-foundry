@@ -25,6 +25,7 @@ from ace.architects.spec_generator import SpecYamlGenerator, detect_project_type
 from ace.architects.contract_test_generator import ContractTestGenerator
 from foundry.patterns.pattern_manager import PatternLibrary
 from foundry.patterns.pattern_extractor import PatternExtractor
+from foundry.validation_cache import ValidationCache
 from ace.pattern_injection import PatternInjector
 from tools.analyze_session import SessionAnalyzer
 from tools.livestream.broadcaster import EventBroadcaster
@@ -112,6 +113,9 @@ class AutonomousOrchestrator:
         else:
             self.pattern_library = None
             self.pattern_injector = None
+
+        # Initialize validation cache (enabled by default for faster retries)
+        self.validation_cache = ValidationCache(self.project_dir)
 
         # Initialize livestream broadcaster
         if self.enable_livestream:
@@ -1059,7 +1063,8 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
             if not self._retry_until_success(
                 validation_fn=self._run_build_validation,
                 context_description="Build validation (npm install + npm build)",
-                max_attempts=3
+                max_attempts=3,
+                cache_key="build"
             ):
                 validation_failed = True
                 failure_reason = "Build validation failed after 3 attempts"
@@ -1084,7 +1089,8 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 if not self._retry_until_success(
                     validation_fn=self._run_smoke_test_wrapper,
                     context_description="Runtime smoke test",
-                    max_attempts=3
+                    max_attempts=3,
+                    cache_key="runtime"
                 ):
                     validation_failed = True
                     failure_reason = "Runtime validation failed after 3 attempts"
@@ -1096,7 +1102,8 @@ If you import a file (e.g., `import './index.css'`), you MUST create that file!"
                 if not self._retry_until_success(
                     validation_fn=self._run_browser_validation,
                     context_description="Browser validation (Playwright)",
-                    max_attempts=2
+                    max_attempts=2,
+                    cache_key="browser"
                 ):
                     validation_failed = True
                     failure_reason = "Browser validation failed after 2 attempts"
@@ -2902,7 +2909,7 @@ const {{ chromium }} = require('playwright');
                 except subprocess.TimeoutExpired:
                     server_process.kill()
 
-    def _retry_until_success(self, validation_fn, context_description: str, max_attempts: int = 3) -> bool:
+    def _retry_until_success(self, validation_fn, context_description: str, max_attempts: int = 3, cache_key: Optional[str] = None) -> bool:
         """
         Run a validation function, and if it fails, feed errors back to Builder to fix.
 
@@ -2910,6 +2917,7 @@ const {{ chromium }} = require('playwright');
             validation_fn: Function that returns (success: bool, error_details: dict)
             context_description: Human description of what's being validated
             max_attempts: Maximum retry attempts
+            cache_key: Optional cache key (build, runtime, browser) for validation caching
 
         Returns:
             True if validation passed, False if all attempts failed
@@ -2922,15 +2930,39 @@ const {{ chromium }} = require('playwright');
         for attempt in range(1, max_attempts + 1):
             print(f"\n🔄 Validation attempt {attempt}/{max_attempts}: {context_description}")
 
-            # Run validation
-            try:
-                success, error_details = validation_fn()
-            except Exception as e:
-                success = False
-                error_details = {
-                    'message': f'Validation exception: {str(e)}',
-                    'stack_trace': str(e)
-                }
+            # Check validation cache if cache_key provided
+            if cache_key and hasattr(self, 'validation_cache'):
+                cached_result = self.validation_cache.get_cached_result(cache_key)
+
+                if cached_result is not None:
+                    success, error_details = cached_result
+                    print(f"   📦 Cache hit! Using cached result (success: {success})")
+
+                    if success:
+                        return True
+                    else:
+                        # Cached failure - skip to fix phase
+                        print(f"   ⚠️  Cached validation failed, will retry with Builder fix...")
+                else:
+                    print(f"   📦 Cache miss, running validation...")
+
+            # Run validation (either cache miss or no caching)
+            if not cache_key or not hasattr(self, 'validation_cache') or cached_result is None:
+                try:
+                    success, error_details = validation_fn()
+                except Exception as e:
+                    success = False
+                    error_details = {
+                        'message': f'Validation exception: {str(e)}',
+                        'stack_trace': str(e)
+                    }
+
+                # Store result in cache
+                if cache_key and hasattr(self, 'validation_cache'):
+                    self.validation_cache.store_result(cache_key, success, error_details)
+            else:
+                # Use cached result (already set above)
+                pass
 
             if success:
                 print(f"   ✅ {context_description} - PASSED")
