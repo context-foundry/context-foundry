@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
+</div>
+
 # 🏭 Context Foundry 2.0
 
 > **Autonomous AI Development through Claude Code MCP Integration**
