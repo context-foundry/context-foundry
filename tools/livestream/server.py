@@ -48,54 +48,122 @@ class SessionMonitor:
         self.last_update: Dict[str, float] = {}
 
     def discover_sessions(self) -> List[Dict]:
-        """Discover all sessions from checkpoints."""
+        """Discover all sessions from checkpoints and live phase updates."""
         sessions = []
 
-        if not CHECKPOINTS_DIR.exists():
-            return sessions
+        # First, add live sessions from phase-update API
+        for session_id, session_data in self.sessions.items():
+            session_info = {
+                "id": session_id,
+                "project": session_id,
+                "task": session_data.get("progress_detail", ""),
+                "phase": session_data.get("current_phase", "unknown"),
+                "phase_number": session_data.get("phase_number", "?/7"),
+                "status": session_data.get("status", "unknown"),
+                "iterations": session_data.get("test_iteration", 0),
+                "start_time": session_data.get("started_at"),
+                "last_update": session_data.get("last_updated"),
+                "phases_completed": session_data.get("phases_completed", []),
+                "is_complete": session_data.get("status") == "completed",
+                "source": "live"
+            }
+            sessions.append(session_info)
 
-        for session_dir in CHECKPOINTS_DIR.iterdir():
-            if not session_dir.is_dir():
-                continue
+        # Then, add checkpoint-based sessions
+        if CHECKPOINTS_DIR.exists():
+            for session_dir in CHECKPOINTS_DIR.iterdir():
+                if not session_dir.is_dir():
+                    continue
 
-            state_file = session_dir / "state.json"
-            progress_file = session_dir / "progress.json"
+                state_file = session_dir / "state.json"
+                progress_file = session_dir / "progress.json"
 
-            if not state_file.exists():
-                continue
+                if not state_file.exists():
+                    continue
 
-            try:
-                with open(state_file) as f:
-                    state = json.load(f)
+                try:
+                    with open(state_file) as f:
+                        state = json.load(f)
 
-                progress = {}
-                if progress_file.exists():
-                    with open(progress_file) as f:
-                        progress = json.load(f)
+                    progress = {}
+                    if progress_file.exists():
+                        with open(progress_file) as f:
+                            progress = json.load(f)
 
-                session_info = {
-                    "id": session_dir.name,
-                    "project": state.get("project_name", "Unknown"),
-                    "task": state.get("task_description", ""),
-                    "phase": state.get("current_phase", "unknown"),
-                    "iterations": state.get("iterations", 0),
-                    "start_time": state.get("start_time"),
-                    "last_update": state.get("last_iteration_time"),
-                    "completed_tasks": len(progress.get("completed", [])),
-                    "total_tasks": len(progress.get("completed", []))
-                    + len(progress.get("remaining", [])),
-                    "is_complete": (session_dir / "COMPLETE").exists(),
-                }
+                    session_info = {
+                        "id": session_dir.name,
+                        "project": state.get("project_name", "Unknown"),
+                        "task": state.get("task_description", ""),
+                        "phase": state.get("current_phase", "unknown"),
+                        "iterations": state.get("iterations", 0),
+                        "start_time": state.get("start_time"),
+                        "last_update": state.get("last_iteration_time"),
+                        "completed_tasks": len(progress.get("completed", [])),
+                        "total_tasks": len(progress.get("completed", []))
+                        + len(progress.get("remaining", [])),
+                        "is_complete": (session_dir / "COMPLETE").exists(),
+                        "source": "checkpoint"
+                    }
 
-                sessions.append(session_info)
+                    sessions.append(session_info)
 
-            except Exception as e:
-                print(f"Error reading session {session_dir.name}: {e}")
+                except Exception as e:
+                    print(f"Error reading session {session_dir.name}: {e}")
 
         return sorted(sessions, key=lambda x: x.get("last_update", ""), reverse=True)
 
     def get_session_status(self, session_id: str) -> Dict:
-        """Get detailed status for a session."""
+        """Get detailed status for a session (live or checkpoint-based)."""
+
+        # First, check if this is a live session from phase-update API
+        if session_id in self.sessions:
+            live_data = self.sessions[session_id]
+
+            # Calculate elapsed time
+            elapsed_seconds = 0
+            if live_data.get("started_at"):
+                try:
+                    # Handle ISO format with Z timezone suffix
+                    started_at_str = live_data["started_at"].replace("Z", "+00:00")
+                    start_time = datetime.fromisoformat(started_at_str)
+                    # Make datetime.now() timezone-aware for comparison
+                    from datetime import timezone
+                    elapsed_seconds = (datetime.now(timezone.utc) - start_time).total_seconds()
+                except Exception as e:
+                    print(f"Error parsing started_at: {e}", file=sys.stderr)
+                    pass
+
+            # Count completed phases for progress
+            phases_completed = live_data.get("phases_completed", [])
+            total_phases = 7  # Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy
+
+            return {
+                "id": session_id,
+                "project": session_id,
+                "task": live_data.get("progress_detail", "In progress..."),
+                "phase": live_data.get("current_phase", "Unknown"),
+                "phase_number": live_data.get("phase_number", "?/7"),
+                "iterations": live_data.get("test_iteration", 0),
+                "start_time": live_data.get("started_at"),
+                "elapsed_seconds": int(elapsed_seconds),
+                "estimated_remaining_seconds": 0,  # TODO: Could estimate based on phase
+                "tasks": {
+                    "completed": phases_completed,
+                    "remaining": [],
+                    "total": total_phases,
+                    "progress_percent": int((len(phases_completed) / total_phases * 100)),
+                },
+                "context": {
+                    "percentage": 0,  # Live data doesn't have token info yet
+                    "tokens_used": 0,
+                },
+                "artifacts": {},
+                "is_complete": live_data.get("status") == "completed",
+                "notes": [],
+                "source": "live"
+            }
+
+        # Fall back to checkpoint-based session lookup
         session_dir = CHECKPOINTS_DIR / session_id
 
         if not session_dir.exists():
@@ -152,6 +220,7 @@ class SessionMonitor:
                 "artifacts": state.get("artifacts", {}),
                 "is_complete": (session_dir / "COMPLETE").exists(),
                 "notes": progress.get("notes", []),
+                "source": "checkpoint"
             }
 
         except Exception as e:
@@ -264,6 +333,50 @@ async def broadcast_event(session_id: str, event: Dict):
                 pass
 
     return {"broadcasted": len(connections.get(session_id, []))}
+
+
+@app.post("/api/phase-update")
+async def phase_update(phase_data: Dict):
+    """
+    Receive phase update from autonomous orchestrator.
+    Accepts current-phase.json data and broadcasts to connected clients.
+    """
+    # Extract session info from phase data or use working directory
+    session_id = phase_data.get("session_id", "autonomous-build")
+
+    # Update session monitor (preserve started_at if it exists)
+    existing_session = monitor.sessions.get(session_id, {})
+    monitor.sessions[session_id] = {
+        "session_id": session_id,
+        "current_phase": phase_data.get("current_phase", "Unknown"),
+        "phase_number": phase_data.get("phase_number", "?/7"),
+        "status": phase_data.get("status", "unknown"),
+        "progress_detail": phase_data.get("progress_detail", ""),
+        "test_iteration": phase_data.get("test_iteration", 0),
+        "phases_completed": phase_data.get("phases_completed", []),
+        "started_at": phase_data.get("started_at") or existing_session.get("started_at") or datetime.now().isoformat(),
+        "last_updated": datetime.now().isoformat()
+    }
+
+    # Broadcast to connected clients
+    broadcast_count = 0
+    if session_id in connections:
+        for connection in connections[session_id]:
+            try:
+                await connection.send_json({
+                    "type": "phase_update",
+                    "data": monitor.sessions[session_id]
+                })
+                broadcast_count += 1
+            except:
+                pass
+
+    return {
+        "status": "received",
+        "session_id": session_id,
+        "phase": phase_data.get("current_phase"),
+        "broadcasted_to": broadcast_count
+    }
 
 
 @app.get("/api/health")
