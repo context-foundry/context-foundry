@@ -4,9 +4,10 @@ Pattern Injector
 Inject relevant patterns into Claude prompts for better code generation.
 """
 
+import json
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -134,6 +135,181 @@ Consider these patterns when implementing. They've proven successful in similar 
 
         return section
 
+    def load_global_common_issues(self, tech_stack: List[str]) -> List[Dict[str, Any]]:
+        """Load relevant patterns from ~/.context-foundry/patterns/common-issues.json.
+
+        Filters patterns by:
+        - tech_stack matching (any overlap with pattern's tech_stack)
+        - auto_apply: true
+        - severity (returns HIGH > MEDIUM > LOW priority)
+
+        Args:
+            tech_stack: List of technologies (e.g., ["typescript", "express", "socket.io"])
+
+        Returns:
+            List of matching pattern dictionaries, sorted by severity
+        """
+        try:
+            # Load global common-issues patterns
+            global_pattern_file = Path.home() / ".context-foundry" / "patterns" / "common-issues.json"
+
+            if not global_pattern_file.exists():
+                return []
+
+            with open(global_pattern_file, 'r') as f:
+                data = json.load(f)
+
+            patterns = data.get("patterns", [])
+
+            # Normalize tech stack for matching (lowercase)
+            tech_stack_lower = [t.lower() for t in tech_stack]
+
+            # Filter patterns
+            matching_patterns = []
+            for pattern in patterns:
+                # Check auto_apply flag
+                if not pattern.get("auto_apply", False):
+                    continue
+
+                # Check tech_stack overlap
+                pattern_tech_stack = [t.lower() for t in pattern.get("tech_stack", [])]
+                if not any(tech in pattern_tech_stack for tech in tech_stack_lower):
+                    continue
+
+                matching_patterns.append(pattern)
+
+            # Sort by severity: HIGH > MEDIUM > LOW
+            severity_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+            matching_patterns.sort(
+                key=lambda p: severity_order.get(p.get("severity", "LOW"), 999)
+            )
+
+            return matching_patterns
+
+        except Exception as e:
+            print(f"Warning: Failed to load common-issues patterns: {e}")
+            return []
+
+    def format_common_issues_section(self, patterns: List[Dict[str, Any]]) -> str:
+        """Format common-issues patterns for prompt injection.
+
+        Args:
+            patterns: List of pattern dictionaries from common-issues.json
+
+        Returns:
+            Formatted string for prompt injection
+        """
+        if not patterns:
+            return ""
+
+        section = "\n## ⚠️ CRITICAL PATTERNS - Auto-Learned from Previous Builds\n\n"
+        section += "**IMPORTANT**: These patterns prevent known issues in your tech stack. Apply them proactively!\n\n"
+
+        for i, pattern in enumerate(patterns, 1):
+            severity = pattern.get("severity", "MEDIUM")
+            severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}.get(severity, "⚪")
+
+            title = pattern.get("title", "Unknown Pattern")
+            pattern_id = pattern.get("pattern_id", "unknown")
+
+            section += f"### {severity_emoji} Pattern #{i}: {title}\n\n"
+            section += f"**ID**: `{pattern_id}`  \n"
+            section += f"**Severity**: {severity}  \n"
+            section += f"**Impact**: {pattern.get('impact', 'Unknown')}  \n\n"
+
+            # Root cause
+            root_cause = pattern.get("root_cause", "")
+            if root_cause:
+                section += f"**Root Cause:**  \n{root_cause}\n\n"
+
+            # Solution for Architect phase
+            solution = pattern.get("solution", {})
+            architect_solution = solution.get("architect", {})
+            if architect_solution:
+                section += "**Architect Solution:**\n"
+                specifics = architect_solution.get("specifics", [])
+                for spec in specifics:
+                    section += f"- {spec}\n"
+                section += "\n"
+
+            # Solution for Builder phase
+            builder_solution = solution.get("builder", {})
+            if builder_solution:
+                section += "**Builder Checklist:**\n"
+                checklist = builder_solution.get("validation_checklist", [])
+                for item in checklist:
+                    section += f"- [ ] {item}\n"
+                section += "\n"
+
+            # Prevention actions
+            prevention = pattern.get("prevention", {})
+            actions = prevention.get("actions", [])
+            if actions:
+                section += "**Prevention Actions:**\n"
+                for action in actions:
+                    section += f"- {action}\n"
+                section += "\n"
+
+            section += "---\n\n"
+
+        section += "**Apply these patterns IMMEDIATELY in your implementation to prevent these issues!**\n\n"
+
+        return section
+
+    def extract_tech_stack(self, text: str) -> List[str]:
+        """Extract tech stack from text (spec, research, etc.).
+
+        Uses keyword matching to identify technologies mentioned in the text.
+
+        Args:
+            text: Text to search for technologies
+
+        Returns:
+            List of detected technologies (lowercase)
+        """
+        # Common technologies to detect
+        tech_keywords = [
+            # Languages
+            "typescript", "javascript", "python", "java", "go", "rust", "php",
+            # Backend frameworks
+            "express", "fastapi", "flask", "django", "spring", "gin",
+            # Frontend frameworks
+            "react", "vue", "angular", "next.js", "nextjs", "svelte",
+            # Databases
+            "postgresql", "postgres", "mysql", "mongodb", "sqlite", "redis",
+            # Real-time
+            "socket.io", "socketio", "websocket", "sse",
+            # Other
+            "nodejs", "node", "docker", "kubernetes", "graphql", "rest"
+        ]
+
+        text_lower = text.lower()
+        detected = []
+
+        for tech in tech_keywords:
+            if tech in text_lower:
+                # Normalize some variations
+                if tech in ("next.js", "nextjs"):
+                    detected.append("nextjs")
+                elif tech in ("postgres", "postgresql"):
+                    detected.append("postgresql")
+                elif tech in ("node", "nodejs"):
+                    detected.append("nodejs")
+                elif tech in ("socketio", "socket.io"):
+                    detected.append("socket.io")
+                else:
+                    detected.append(tech)
+
+        # Remove duplicates while preserving order
+        seen = set()
+        result = []
+        for tech in detected:
+            if tech not in seen:
+                seen.add(tech)
+                result.append(tech)
+
+        return result
+
     def inject_into_scout_prompt(
         self,
         base_prompt: str,
@@ -180,11 +356,30 @@ Consider these patterns when implementing. They've proven successful in similar 
         # Architect phase focuses on planning, so we look for design patterns
         search_query = f"design planning patterns for {task}"
 
-        return self.enhance_prompt(
+        # Get code patterns from SQLite database
+        enhanced_prompt, pattern_ids = self.enhance_prompt(
             base_prompt,
             search_query,
             language="python"
         )
+
+        # Also inject common-issues patterns based on tech stack
+        tech_stack = self.extract_tech_stack(research + " " + task)
+
+        if tech_stack:
+            common_issues = self.load_global_common_issues(tech_stack)
+
+            if common_issues:
+                common_issues_section = self.format_common_issues_section(common_issues)
+                enhanced_prompt = enhanced_prompt + "\n" + common_issues_section
+
+                # Log which patterns were injected
+                print(f"  📚 Injected {len(common_issues)} common-issues patterns for tech stack: {', '.join(tech_stack)}")
+                for pattern in common_issues:
+                    severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}.get(pattern.get("severity"), "⚪")
+                    print(f"     {severity_emoji} {pattern.get('pattern_id')}: {pattern.get('title')}")
+
+        return enhanced_prompt, pattern_ids
 
     def inject_into_builder_prompt(
         self,
@@ -207,11 +402,30 @@ Consider these patterns when implementing. They've proven successful in similar 
         # Builder phase focuses on implementation
         search_query = f"implementation code patterns for {task}"
 
-        return self.enhance_prompt(
+        # Get code patterns from SQLite database
+        enhanced_prompt, pattern_ids = self.enhance_prompt(
             base_prompt,
             search_query,
             language="python"
         )
+
+        # Also inject common-issues patterns based on tech stack
+        tech_stack = self.extract_tech_stack(spec + " " + task)
+
+        if tech_stack:
+            common_issues = self.load_global_common_issues(tech_stack)
+
+            if common_issues:
+                common_issues_section = self.format_common_issues_section(common_issues)
+                enhanced_prompt = enhanced_prompt + "\n" + common_issues_section
+
+                # Log which patterns were injected
+                print(f"  📚 Injected {len(common_issues)} common-issues patterns for tech stack: {', '.join(tech_stack)}")
+                for pattern in common_issues:
+                    severity_emoji = {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "🟢"}.get(pattern.get("severity"), "⚪")
+                    print(f"     {severity_emoji} {pattern.get('pattern_id')}: {pattern.get('title')}")
+
+        return enhanced_prompt, pattern_ids
 
     def get_pattern_summary(self, pattern_ids: List[int]) -> str:
         """Get summary of patterns used.
