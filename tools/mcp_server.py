@@ -228,6 +228,76 @@ For now, to modify existing code:
 """
 
 
+def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, dict]:
+    """
+    Truncate large output to fit within token limits while preserving critical info.
+
+    Args:
+        output: The stdout or stderr string to potentially truncate
+        max_tokens: Maximum tokens allowed (default 20000 to leave room for JSON structure)
+
+    Returns:
+        Tuple of (truncated_output, was_truncated, stats_dict)
+        - truncated_output: The output string (truncated if needed)
+        - was_truncated: Boolean indicating if truncation occurred
+        - stats_dict: Dictionary with total_lines, total_chars, etc.
+    """
+    if not output:
+        return output, False, {"total_lines": 0, "total_chars": 0}
+
+    # Rough heuristic: ~4 chars per token
+    max_chars = max_tokens * 4
+
+    lines = output.split('\n')
+    total_lines = len(lines)
+    total_chars = len(output)
+
+    # If output is small enough, return as-is
+    if total_chars <= max_chars:
+        return output, False, {
+            "total_lines": total_lines,
+            "total_chars": total_chars
+        }
+
+    # Calculate how many characters to keep from start and end
+    # Keep 45% from start, 45% from end, 10% for truncation message
+    chars_per_section = int(max_chars * 0.45)
+
+    # Find split points by character count
+    start_chars = 0
+    start_line_idx = 0
+    for i, line in enumerate(lines):
+        start_chars += len(line) + 1  # +1 for newline
+        if start_chars >= chars_per_section:
+            start_line_idx = i
+            break
+
+    end_chars = 0
+    end_line_idx = len(lines)
+    for i in range(len(lines) - 1, -1, -1):
+        end_chars += len(lines[i]) + 1  # +1 for newline
+        if end_chars >= chars_per_section:
+            end_line_idx = i
+            break
+
+    # Build truncated output
+    start_section = '\n'.join(lines[:start_line_idx])
+    end_section = '\n'.join(lines[end_line_idx:])
+
+    truncated_lines = end_line_idx - start_line_idx
+    truncation_message = f"\n\n{'='*60}\n[OUTPUT TRUNCATED]\nShowing: First {start_line_idx} lines + Last {len(lines) - end_line_idx} lines\nHidden: {truncated_lines} lines ({total_chars - len(start_section) - len(end_section):,} chars)\nTotal: {total_lines:,} lines ({total_chars:,} chars)\n{'='*60}\n\n"
+
+    truncated_output = start_section + truncation_message + end_section
+
+    return truncated_output, True, {
+        "total_lines": total_lines,
+        "total_chars": total_chars,
+        "truncated_lines": truncated_lines,
+        "kept_start_lines": start_line_idx,
+        "kept_end_lines": len(lines) - end_line_idx
+    }
+
+
 @mcp.tool()
 def context_foundry_status() -> str:
     """
@@ -268,7 +338,8 @@ def delegate_to_claude_code(
     task: str,
     working_directory: Optional[str] = None,
     timeout_minutes: float = 10.0,
-    additional_flags: Optional[str] = None
+    additional_flags: Optional[str] = None,
+    include_full_output: bool = False
 ) -> str:
     """
     Delegate a task to a fresh Claude Code CLI instance.
@@ -282,9 +353,11 @@ def delegate_to_claude_code(
         working_directory: Directory where claude-code should run (defaults to current directory)
         timeout_minutes: Maximum execution time in minutes (default: 10 minutes)
         additional_flags: Additional CLI flags as a string (e.g., "--model claude-sonnet-4")
+        include_full_output: If False (default), truncate large outputs to stay under token limits.
+                            If True, return complete stdout/stderr regardless of size.
 
     Returns:
-        Formatted output with status, duration, stdout, and stderr
+        Formatted output with status, duration, stdout, and stderr (truncated if needed)
 
     Examples:
         # Simple task delegation
@@ -362,8 +435,26 @@ Please provide a valid directory path or omit the working_directory parameter to
         status_emoji = "✅" if result.returncode == 0 else "❌"
         status_text = "Success" if result.returncode == 0 else f"Failed (exit code: {result.returncode})"
 
-        output = f"""{status_emoji} Claude Code Delegation {status_text}
+        # Apply output truncation if requested
+        if include_full_output:
+            stdout_display = result.stdout if result.stdout else "(empty)"
+            stderr_display = result.stderr if result.stderr else "(empty)"
+            truncation_notice = ""
+        else:
+            stdout_truncated, stdout_was_truncated, stdout_stats = _truncate_output(result.stdout or "", max_tokens=10000)
+            stderr_truncated, stderr_was_truncated, stderr_stats = _truncate_output(result.stderr or "", max_tokens=10000)
 
+            stdout_display = stdout_truncated if stdout_truncated else "(empty)"
+            stderr_display = stderr_truncated if stderr_truncated else "(empty)"
+
+            # Add truncation notice if either was truncated
+            if stdout_was_truncated or stderr_was_truncated:
+                truncation_notice = "\n⚠️  **Output Truncated**: Large outputs have been truncated to stay under token limits.\n   Use `include_full_output=True` parameter to see complete output.\n"
+            else:
+                truncation_notice = ""
+
+        output = f"""{status_emoji} Claude Code Delegation {status_text}
+{truncation_notice}
 **Task:** {task}
 **Working Directory:** {cwd}
 **Duration:** {duration_formatted}
@@ -372,12 +463,12 @@ Please provide a valid directory path or omit the working_directory parameter to
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📤 STDOUT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{result.stdout if result.stdout else "(empty)"}
+{stdout_display}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📥 STDERR:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{result.stderr if result.stderr else "(empty)"}
+{stderr_display}
 """
         return output
 
@@ -534,23 +625,28 @@ def delegate_to_claude_code_async(
 
 
 @mcp.tool()
-def get_delegation_result(task_id: str) -> str:
+def get_delegation_result(task_id: str, include_full_output: bool = False) -> str:
     """
     Get the status and results of an async delegation task.
 
     Args:
         task_id: The task ID returned from delegate_to_claude_code_async()
+        include_full_output: If False (default), truncate large outputs to stay under token limits.
+                            If True, return complete stdout/stderr regardless of size.
 
     Returns:
-        JSON string with task status and results (if complete)
+        JSON string with task status and results (if complete, with truncated output by default)
 
     Examples:
         # Check task status
         result = get_delegation_result("abc-123-def-456")
 
-        # If complete, result contains stdout/stderr
+        # If complete, result contains stdout/stderr (truncated by default)
         # If still running, shows elapsed time
         # If failed, shows error details
+
+        # Get full output (may exceed token limits for large builds)
+        result = get_delegation_result("abc-123-def-456", include_full_output=True)
     """
     try:
         # Check if task exists
@@ -622,18 +718,48 @@ def get_delegation_result(task_id: str) -> str:
             task_info["exit_code"] = process.returncode
             task_info["status"] = "completed" if process.returncode == 0 else "failed"
 
-        # Format result
-        result = {
-            "task_id": task_id,
-            "status": task_info["status"],
-            "task": task_info["task"],
-            "working_directory": task_info["cwd"],
-            "duration_seconds": round(task_info["duration"], 2),
-            "exit_code": task_info["exit_code"],
-            "command": " ".join(task_info["cmd"]),
-            "stdout": task_info["stdout"] or "(empty)",
-            "stderr": task_info["stderr"] or "(empty)",
-        }
+        # Format result with optional output truncation
+        if include_full_output:
+            # Return full output regardless of size
+            stdout_display = task_info["stdout"] or "(empty)"
+            stderr_display = task_info["stderr"] or "(empty)"
+            result = {
+                "task_id": task_id,
+                "status": task_info["status"],
+                "task": task_info["task"],
+                "working_directory": task_info["cwd"],
+                "duration_seconds": round(task_info["duration"], 2),
+                "exit_code": task_info["exit_code"],
+                "command": " ".join(task_info["cmd"]),
+                "stdout": stdout_display,
+                "stderr": stderr_display,
+                "output_truncated": False
+            }
+        else:
+            # Apply truncation to stay under token limits
+            stdout_truncated, stdout_was_truncated, stdout_stats = _truncate_output(task_info["stdout"] or "", max_tokens=10000)
+            stderr_truncated, stderr_was_truncated, stderr_stats = _truncate_output(task_info["stderr"] or "", max_tokens=10000)
+
+            result = {
+                "task_id": task_id,
+                "status": task_info["status"],
+                "task": task_info["task"],
+                "working_directory": task_info["cwd"],
+                "duration_seconds": round(task_info["duration"], 2),
+                "exit_code": task_info["exit_code"],
+                "command": " ".join(task_info["cmd"]),
+                "stdout": stdout_truncated or "(empty)",
+                "stderr": stderr_truncated or "(empty)",
+                "output_truncated": stdout_was_truncated or stderr_was_truncated
+            }
+
+            # Add stats if any truncation occurred
+            if stdout_was_truncated or stderr_was_truncated:
+                result["truncation_info"] = {
+                    "message": "Output truncated to stay under token limits. Use include_full_output=True to see complete output.",
+                    "stdout_stats": stdout_stats if stdout_was_truncated else None,
+                    "stderr_stats": stderr_stats if stderr_was_truncated else None
+                }
 
         return json.dumps(result, indent=2)
 
