@@ -29,25 +29,37 @@ This enables real-time monitoring at http://localhost:8080 during autonomous bui
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 ═══════════════════════════════════════════════════════════
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Create file: .context-foundry/current-phase.json
-   {
-     "session_id": "{project_directory_name}",
-     "current_phase": "Scout",
-     "phase_number": "1/7",
-     "status": "researching",
-     "progress_detail": "Analyzing task requirements and gathering context",
-     "test_iteration": 0,
-     "phases_completed": [],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+⚠️  CRITICAL: PHASE TRACKING (MANDATORY FIRST ACTION) ⚠️
+────────────────────────────────────────────────────────────
+BEFORE doing ANY other work in this phase, you MUST:
 
-   Then broadcast to livestream (if server running):
-   curl -s -X POST http://localhost:8080/api/phase-update \
-     -H "Content-Type: application/json" \
-     -d @.context-foundry/current-phase.json \
-     > /dev/null 2>&1 || true
+Step 1: Create phase tracking file
+Execute: cat > .context-foundry/current-phase.json << 'EOF'
+{
+  "session_id": "{project_directory_name}",
+  "current_phase": "Scout",
+  "phase_number": "1/7",
+  "status": "researching",
+  "progress_detail": "Analyzing task requirements and gathering context",
+  "test_iteration": 0,
+  "phases_completed": [],
+  "started_at": "{current ISO timestamp}",
+  "last_updated": "{current ISO timestamp}"
+}
+EOF
+
+Step 2: Verify file was created
+Execute: cat .context-foundry/current-phase.json
+Confirm you see the JSON content above.
+
+Step 3: Broadcast to livestream (if server running):
+Execute: curl -s -X POST http://localhost:8080/api/phase-update \
+  -H "Content-Type: application/json" \
+  -d @.context-foundry/current-phase.json \
+  > /dev/null 2>&1 || true
+
+✅ Phase tracking initialized. Now proceed with Scout work.
+────────────────────────────────────────────────────────────
 
 1. Check for Past Learnings (Self-Learning System - GLOBAL PATTERNS):
 
@@ -95,59 +107,81 @@ PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 
 4. Save Scout findings:
    Create file: .context-foundry/scout-report.md
+
+   ⚠️  KEEP IT CONCISE - Target 5-10KB, not 60KB!
+
    Include:
-   - Executive summary of task
-   - **Relevant past learnings applied (if any)**
-   - **Known risks flagged from pattern library**
-   - Detailed requirements analysis
-   - Technology recommendations with justifications
-   - Architecture recommendations
-   - Potential challenges and mitigations
-   - Testing strategy recommendations
-   - Implementation timeline estimate
+   - Executive summary of task (2-3 paragraphs max)
+   - **Relevant past learnings applied (if any)** (bullet points)
+   - **Known risks flagged from pattern library** (bullet points)
+   - Key requirements (bulleted list, not essay)
+   - Technology stack decision with brief justification
+   - Critical architecture recommendations (top 3-5 items)
+   - Main challenges and mitigations (top 3-5 items)
+   - Testing approach (brief outline)
+   - Timeline estimate (1 line)
 
-5. Update phase status (REQUIRED LAST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "session_id": "{project_directory_name}",
-     "current_phase": "Scout",
-     "phase_number": "1/7",
-     "status": "completed",
-     "progress_detail": "Research complete, findings documented",
-     "test_iteration": 0,
-     "phases_completed": ["Scout"],
-     "last_updated": "{current ISO timestamp}"
-   }
+   DO NOT write exhaustive documentation - Architect will expand details.
 
-   Then broadcast to livestream:
-   curl -s -X POST http://localhost:8080/api/phase-update \
-     -H "Content-Type: application/json" \
-     -d @.context-foundry/current-phase.json \
-     > /dev/null 2>&1 || true
+⚠️  CRITICAL: PHASE TRACKING UPDATE (MANDATORY LAST ACTION) ⚠️
+────────────────────────────────────────────────────────────
+IMMEDIATELY after saving scout-report.md, you MUST:
+
+Step 1: Update phase tracking to "completed"
+Execute: cat > .context-foundry/current-phase.json << 'EOF'
+{
+  "session_id": "{project_directory_name}",
+  "current_phase": "Scout",
+  "phase_number": "1/7",
+  "status": "completed",
+  "progress_detail": "Research complete, findings documented",
+  "test_iteration": 0,
+  "phases_completed": ["Scout"],
+  "last_updated": "{current ISO timestamp}"
+}
+EOF
+
+Step 2: Verify update
+Execute: cat .context-foundry/current-phase.json | grep "completed"
+Confirm status is "completed".
+
+Step 3: Broadcast to livestream:
+Execute: curl -s -X POST http://localhost:8080/api/phase-update \
+  -H "Content-Type: application/json" \
+  -d @.context-foundry/current-phase.json \
+  > /dev/null 2>&1 || true
+
+✅ Scout phase complete. Proceed to PHASE 2: ARCHITECT.
+────────────────────────────────────────────────────────────
 
 ═══════════════════════════════════════════════════════════
 PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 ═══════════════════════════════════════════════════════════
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "session_id": "{project_directory_name}",
-     "current_phase": "Architect",
-     "phase_number": "2/7",
-     "status": "designing",
-     "progress_detail": "Creating system architecture and implementation plan",
-     "test_iteration": 0,
-     "phases_completed": ["Scout"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+⚠️  CRITICAL: PHASE TRACKING (MANDATORY FIRST ACTION) ⚠️
+────────────────────────────────────────────────────────────
+BEFORE doing ANY architectural work, you MUST:
 
-   Then broadcast to livestream:
-   curl -s -X POST http://localhost:8080/api/phase-update \
-     -H "Content-Type: application/json" \
-     -d @.context-foundry/current-phase.json \
-     > /dev/null 2>&1 || true
+Step 1: Update phase tracking file
+Execute: cat > .context-foundry/current-phase.json << 'EOF'
+{
+  "session_id": "{project_directory_name}",
+  "current_phase": "Architect",
+  "phase_number": "2/7",
+  "status": "designing",
+  "progress_detail": "Creating system architecture and implementation plan",
+  "test_iteration": 0,
+  "phases_completed": ["Scout"],
+  "started_at": "{current ISO timestamp}",
+  "last_updated": "{current ISO timestamp}"
+}
+EOF
+
+Step 2: Verify and broadcast:
+Execute: cat .context-foundry/current-phase.json && curl -s -X POST http://localhost:8080/api/phase-update -H "Content-Type: application/json" -d @.context-foundry/current-phase.json > /dev/null 2>&1 || true
+
+✅ Phase tracking updated. Now proceed with Architect work.
+────────────────────────────────────────────────────────────
 
 1. Read Scout findings:
    - Open and carefully read .context-foundry/scout-report.md
