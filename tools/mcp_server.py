@@ -73,6 +73,28 @@ def _read_phase_info(working_directory: str) -> Dict[str, Any]:
         return {}
 
 
+def _get_context_foundry_parent_dir() -> Path:
+    """
+    Get the parent directory of Context Foundry installation.
+
+    This allows projects to be created as siblings of Context Foundry itself.
+
+    Example:
+        If Context Foundry is at: /Users/name/homelab/context-foundry
+        This returns: /Users/name/homelab
+
+        So new projects get created at: /Users/name/homelab/project-name
+
+    Returns:
+        Path to Context Foundry's parent directory
+    """
+    # __file__ is tools/mcp_server.py
+    # Parent of tools/ is context-foundry/
+    # Parent of context-foundry/ is what we want
+    cf_dir = Path(__file__).parent.parent.resolve()
+    return cf_dir.parent
+
+
 @mcp.tool()
 async def context_foundry_build(
     task_description: str,
@@ -895,10 +917,25 @@ def autonomous_build_and_deploy(
         all_builds = list_delegations()
     """
     try:
-        # Create orchestrator task configuration
+        # Determine final working directory FIRST
+        # If relative path or project name, create in Context Foundry's parent directory
+        # If absolute path, use as-is for flexibility
+        working_dir_input = Path(working_directory)
+        if working_dir_input.is_absolute():
+            # Absolute path provided - use as-is
+            final_working_dir = working_dir_input
+        else:
+            # Relative path or project name - create as sibling to Context Foundry
+            cf_parent = _get_context_foundry_parent_dir()
+            final_working_dir = cf_parent / working_directory
+
+        # Convert to string for use throughout
+        final_working_dir_str = str(final_working_dir)
+
+        # Create orchestrator task configuration with resolved path
         task_config = {
             "task": task,
-            "working_directory": working_directory,
+            "working_directory": final_working_dir_str,
             "github_repo_name": github_repo_name,
             "existing_repo": existing_repo,
             "mode": mode,
@@ -939,10 +976,9 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             task_prompt
         ]
 
-        # Validate/create working directory
-        working_dir_path = Path(working_directory)
-        if not working_dir_path.exists():
-            working_dir_path.mkdir(parents=True, exist_ok=True)
+        # Validate/create working directory (path already resolved above)
+        if not final_working_dir.exists():
+            final_working_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate unique task ID
         task_id = str(uuid.uuid4())
@@ -950,7 +986,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         # Start the process (NON-BLOCKING)
         process = subprocess.Popen(
             cmd,
-            cwd=working_directory,
+            cwd=final_working_dir_str,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
@@ -965,7 +1001,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         active_tasks[task_id] = {
             "process": process,
             "cmd": cmd,
-            "cwd": working_directory,
+            "cwd": final_working_dir_str,
             "task": task,
             "start_time": datetime.now(),
             "timeout_minutes": timeout_minutes,
@@ -979,14 +1015,14 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         }
 
         # Extract project name for display
-        project_name = github_repo_name or Path(working_directory).name
+        project_name = github_repo_name or final_working_dir.name
 
         return json.dumps({
             "task_id": task_id,
             "status": "started",
             "project": project_name,
             "task_summary": task[:100] + ("..." if len(task) > 100 else ""),
-            "working_directory": working_directory,
+            "working_directory": final_working_dir_str,
             "github_repo": github_repo_name,
             "timeout_minutes": timeout_minutes,
             "enable_test_loop": enable_test_loop,
@@ -995,7 +1031,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
 
 Project: {project_name}
 Task ID: {task_id}
-Location: {working_directory}
+Location: {final_working_dir_str}
 Expected duration: 7-15 minutes
 
 You can continue working - the build runs in the background.
@@ -1014,12 +1050,14 @@ I'll notify you when it's complete!
 
     except Exception as e:
         import traceback
+        # Try to use final_working_dir if available, otherwise use original input
+        error_working_dir = final_working_dir_str if 'final_working_dir_str' in locals() else working_directory
         return json.dumps({
             "status": "error",
             "error": str(e),
             "traceback": traceback.format_exc(),
             "task": task,
-            "working_directory": working_directory
+            "working_directory": error_working_dir
         }, indent=2)
 
 
