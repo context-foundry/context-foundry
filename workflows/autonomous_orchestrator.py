@@ -2916,6 +2916,9 @@ const {{ chromium }} = require('playwright');
         """
         import time
 
+        # Track errors for pattern extraction
+        previous_error_details = None
+
         for attempt in range(1, max_attempts + 1):
             print(f"\n🔄 Validation attempt {attempt}/{max_attempts}: {context_description}")
 
@@ -2931,7 +2934,44 @@ const {{ chromium }} = require('playwright');
 
             if success:
                 print(f"   ✅ {context_description} - PASSED")
+
+                # Extract pattern if this was a retry success (we fixed an error)
+                if attempt > 1 and previous_error_details and self.use_patterns:
+                    try:
+                        from foundry.patterns.failure_pattern_extractor import FailurePatternExtractor
+                        from ace.pattern_injection import PatternInjector
+
+                        # Extract tech stack from project
+                        tech_stack = []
+                        if hasattr(self, 'pattern_injector') and self.pattern_injector:
+                            # Try to get tech stack from pattern injector
+                            spec_text = ""
+                            if hasattr(self, 'architect_result'):
+                                spec_text = str(self.architect_result.get('spec', ''))
+                            tech_stack = self.pattern_injector.extract_tech_stack(spec_text)
+
+                        # Extract pattern
+                        extractor = FailurePatternExtractor(
+                            ai_client=self.ai_client if hasattr(self, 'ai_client') else None,
+                            project_dir=self.project_dir
+                        )
+
+                        pattern = extractor.extract_from_retry(
+                            error_details=previous_error_details,
+                            project_dir=self.project_dir,
+                            tech_stack=tech_stack or ["unknown"],
+                            context_description=context_description
+                        )
+
+                        if pattern:
+                            extractor.save_pattern(pattern, autonomous=self.autonomous)
+                    except Exception as e:
+                        print(f"   ⚠️  Pattern extraction failed (non-fatal): {e}")
+
                 return True
+
+            # Save error details for potential pattern extraction
+            previous_error_details = error_details
 
             # Failed
             print(f"   ❌ {context_description} - FAILED")
