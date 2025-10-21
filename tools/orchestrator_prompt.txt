@@ -818,7 +818,7 @@ PHASE 6: DEPLOYMENT (GitHub)
 2. GitHub deployment (if github_repo_name provided):
 
    a. Create repository:
-      Execute: gh repo create snedea/{github_repo_name} --public --description "{brief task description}"
+      Execute: gh repo create snedea/{github_repo_name} --private --description "{brief task description}"
 
    b. Configure remote:
       Execute: git remote add origin https://github.com/snedea/{github_repo_name}.git
