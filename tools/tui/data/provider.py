@@ -239,23 +239,57 @@ class TUIDataProvider:
             return None
 
     async def get_system_stats(self) -> SystemStats:
-        """Get system statistics (mock for now)"""
+        """Get system statistics from tracked builds"""
         # Check cache
         cache_key = "system_stats"
-        cached = self._get_cache(cache_key, ttl_seconds=5.0)
+        cached = self._get_cache(cache_key, ttl_seconds=3.0)
         if cached is not None:
             return cached
 
-        # TODO: Integrate with metrics DB when available
-        # For now, return mock data
+        # Calculate stats from tracked builds
+        total_builds = len(self._tracked_builds)
+        active_builds = 0
+        completed_builds = 0
+        failed_builds = 0
+        total_duration = 0.0
+        build_count_with_duration = 0
+
+        for build_dir in self._tracked_builds:
+            build_status = await self.get_current_build(Path(build_dir))
+            if build_status:
+                # Count by status
+                if build_status.status in ['running', 'in_progress', 'started', 'implementing']:
+                    active_builds += 1
+                elif build_status.status == 'completed':
+                    completed_builds += 1
+                elif build_status.status == 'failed':
+                    failed_builds += 1
+
+                # Calculate duration for completed/failed builds
+                if build_status.started_at and build_status.status in ['completed', 'failed']:
+                    now = datetime.now()
+                    if build_status.started_at.tzinfo is not None:
+                        from datetime import timezone
+                        now = datetime.now(timezone.utc)
+                        started = build_status.started_at.astimezone(timezone.utc)
+                    else:
+                        started = build_status.started_at
+
+                    duration = (now - started).total_seconds() / 60.0
+                    total_duration += duration
+                    build_count_with_duration += 1
+
+        avg_duration = total_duration / build_count_with_duration if build_count_with_duration > 0 else 0.0
+
+        # TODO: Get real token and cost data from metrics DB
         stats = SystemStats(
-            total_builds=0,
-            active_builds=1 if await self.get_current_build() else 0,
-            completed_builds=0,
-            failed_builds=0,
-            total_tokens_used=0,
-            total_cost_usd=0.0,
-            avg_build_duration_minutes=0.0,
+            total_builds=total_builds,
+            active_builds=active_builds,
+            completed_builds=completed_builds,
+            failed_builds=failed_builds,
+            total_tokens_used=0,  # TODO: Integrate with metrics DB
+            total_cost_usd=0.0,   # TODO: Integrate with metrics DB
+            avg_build_duration_minutes=avg_duration,
             last_updated=datetime.now()
         )
 
