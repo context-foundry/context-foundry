@@ -9,6 +9,7 @@ from textual.binding import Binding
 from ..widgets.build_table import BuildTable
 from ..widgets.phase_progress import PhaseProgressWidget
 from ..widgets.token_gauge import TokenGaugeWidget
+from ..widgets.phase_pipeline import PhasesPipelineWidget
 from ..data.provider import TUIDataProvider
 
 
@@ -34,13 +35,7 @@ class DashboardScreen(Screen):
 
         with Container():
             with Vertical():
-                yield Static(
-                    "[bold cyan]Context Foundry Build Monitor[/bold cyan]",
-                    id="title"
-                )
-                yield PhaseProgressWidget(id="phase-progress")
-                yield TokenGaugeWidget(id="token-gauge")
-                yield BuildTable(id="build-table")
+                yield PhasesPipelineWidget(id="phase-pipeline")
 
         yield Footer()
 
@@ -61,45 +56,28 @@ class DashboardScreen(Screen):
             # Get recent builds (includes all tracked builds)
             builds = await self.provider.get_recent_builds()
 
-            # Use the most recent build for the phase progress widget
+            # Update pipeline widget with most recent build
+            pipeline = self.query_one("#phase-pipeline", PhasesPipelineWidget)
+
             if builds:
                 most_recent = builds[0]
 
-                # Update progress widget
-                progress_widget = self.query_one("#phase-progress", PhaseProgressWidget)
-                progress_widget.current_phase = f"{most_recent.current_phase}"
+                # Get the actual build status object
+                from pathlib import Path
+                build_status = await self.provider.get_current_build(
+                    Path(self.provider._tracked_builds[0]) if self.provider._tracked_builds else None
+                )
 
-                # Calculate progress based on phase
-                phase_map = {
-                    "Scout": 14,
-                    "Architect": 28,
-                    "Builder": 57,
-                    "Test": 71,
-                    "Fix": 85,
-                    "Deploy": 95,
-                    "Complete": 100
-                }
-                phase_name = most_recent.current_phase.split()[0]  # Get first word
-                progress = phase_map.get(phase_name, 0)
-
-                progress_widget.progress_detail = most_recent.status
-                progress_widget.progress = progress
-
-                # Update token gauge (mock data for now)
-                # TODO: Get real token data from metrics
-                token_widget = self.query_one("#token-gauge", TokenGaugeWidget)
-                token_widget.tokens_used = 50000  # Mock
-                token_widget.tokens_total = 200000
+                if build_status:
+                    # Update pipeline with build data
+                    duration = most_recent.duration_minutes
+                    pipeline.update_from_build(build_status, duration)
+                else:
+                    # No build status available
+                    pipeline.update_from_build(None)
             else:
                 # No builds - show empty state
-                progress_widget = self.query_one("#phase-progress", PhaseProgressWidget)
-                progress_widget.current_phase = "No active builds"
-                progress_widget.progress_detail = "Press 'n' to launch a new build"
-                progress_widget.progress = 0
-
-            # Update build table
-            build_table = self.query_one("#build-table", BuildTable)
-            build_table.builds = builds
+                pipeline.update_from_build(None)
 
         except Exception as e:
             # Log error but don't crash
