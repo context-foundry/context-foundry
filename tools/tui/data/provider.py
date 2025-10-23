@@ -342,12 +342,12 @@ Session ID: {task_id}
 Execute the Context Foundry autonomous build orchestrator.
 """)
 
-            # Spawn claude-code process with orchestrator prompt
+            # Spawn claude process with orchestrator prompt
             log_file = Path(working_directory) / f".launch-{task_id}.log"
 
             process = subprocess.Popen(
                 [
-                    "claude-code",
+                    "claude",
                     "--print",
                     "--system-prompt", str(orchestrator_prompt),
                     f"Build project: {task}. Working directory: {working_directory}. GitHub repo: {github_repo_name or 'skip deployment'}. Session ID: {task_id}"
