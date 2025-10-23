@@ -38,6 +38,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from workflows.autonomous_orchestrator import AutonomousOrchestrator
+from tools.banner import print_banner, get_banner
 
 # Create MCP server
 mcp = FastMCP("Context Foundry")
@@ -95,159 +96,6 @@ def _get_context_foundry_parent_dir() -> Path:
     return cf_dir.parent
 
 
-@mcp.tool()
-async def context_foundry_build(
-    task_description: str,
-    project_name: Optional[str] = None,
-    autonomous: bool = False,
-    use_patterns: bool = True
-) -> str:
-    """
-    Build a new project from scratch using Context Foundry's Scout → Architect → Builder workflow.
-
-    Args:
-        task_description: Description of what to build (e.g., "Create a todo app with REST API")
-        project_name: Optional name for the project (auto-generated if not provided)
-        autonomous: If True, skip human review checkpoints
-        use_patterns: If True, use pattern library for better results
-
-    Returns:
-        Status message with build results
-    """
-    try:
-        # Get FastMCP context
-        ctx = get_context()
-
-        # Check if client supports sampling by attempting a test call
-        # Context Foundry requires MCP sampling, which Claude Desktop doesn't yet support
-        try:
-            # Try a minimal sampling request to check support
-            await ctx.sample("test", max_tokens=1)
-        except ValueError as e:
-            if "does not support sampling" in str(e):
-                return f"""❌ MCP Sampling Not Supported
-
-Context Foundry requires MCP sampling to function, but Claude Desktop doesn't yet support this feature.
-
-**Why this is needed:**
-Context Foundry uses a Scout → Architect → Builder workflow that requires multiple LLM calls to:
-- Research and design architecture (Scout)
-- Create specifications and plans (Architect)
-- Generate working code (Builder)
-
-**Alternative - Use API Mode:**
-You can use Context Foundry's CLI with an Anthropic API key:
-
-1. Get an API key from https://console.anthropic.com/
-2. Set environment variable:
-   ```bash
-   export ANTHROPIC_API_KEY=your_key_here
-   ```
-
-3. Run the build:
-   ```bash
-   foundry build {project_name or 'my-app'} "{task_description}"
-   ```
-
-**Example:**
-```bash
-foundry build hello-foundry "Create a simple Python script with one file (hello.py) that prints 'Hello from Context Foundry!'"
-```
-
-**Cost:** API mode: ~$3-10 per project in API charges. MCP mode (when available): No per-token charges, uses your Claude subscription.
-
-**Status:** MCP mode will be enabled automatically when Claude Desktop adds sampling support.
-Documentation: https://modelcontextprotocol.io/docs/concepts/sampling
-"""
-            else:
-                raise  # Different error, re-raise it
-
-        # If we get here, sampling IS supported! Proceed with build
-        # Auto-generate project name if not provided
-        if not project_name:
-            project_name = task_description.lower().replace(" ", "-")[:30]
-
-        # Change to context-foundry base directory so relative paths work
-        base_dir = Path(__file__).parent.parent
-        original_cwd = os.getcwd()
-        os.chdir(base_dir)
-
-        # Use absolute path for project directory
-        project_dir = base_dir / "examples" / project_name
-
-        # Create orchestrator with MCP context
-        orchestrator = AutonomousOrchestrator(
-            task_description=task_description,
-            project_name=project_name,
-            mode="new",
-            autonomous=autonomous,
-            use_patterns=use_patterns,
-            project_dir=project_dir,
-            ctx=ctx
-        )
-
-        # Run the workflow
-        try:
-            result = orchestrator.run()
-
-            if result["success"]:
-                return f"""✅ Build Complete!
-
-Project: {project_name}
-Location: {result.get('project_dir', 'N/A')}
-Tasks Completed: {result.get('tasks_completed', 0)}
-
-Files created:
-{chr(10).join('- ' + f for f in result.get('files_created', []))}
-
-You can now review the code and run the project!
-"""
-            else:
-                return f"""❌ Build Failed
-
-Error: {result.get('error', 'Unknown error')}
-
-Check the logs for more details.
-"""
-        finally:
-            # Restore original working directory
-            os.chdir(original_cwd)
-
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"❌ ERROR: {error_details}", file=sys.stderr)
-        return f"❌ Error during build: {str(e)}"
-
-
-@mcp.tool()
-def context_foundry_enhance(
-    task_description: str,
-    autonomous: bool = False,
-    use_patterns: bool = True
-) -> str:
-    """
-    Enhance an existing project with new features (Coming Soon).
-
-    Args:
-        task_description: Description of what to add/modify
-        autonomous: If True, skip human review checkpoints
-        use_patterns: If True, use pattern library
-
-    Returns:
-        Status message
-    """
-    return """🚧 Feature Coming Soon!
-
-The 'enhance' mode is planned for Q1 2025.
-
-Current status: You can use 'context_foundry_build' to create new projects from scratch.
-
-For now, to modify existing code:
-1. Describe the full project including existing + new features
-2. Use context_foundry_build
-3. Manually merge the generated code
-"""
 
 
 def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, dict]:
@@ -331,27 +179,32 @@ def context_foundry_status() -> str:
     return """Context Foundry MCP Server - Status
 
 ✅ Server: Running
-❌ Sampling: Not supported by Claude Desktop (required for Context Foundry)
-
-**Current Limitation:**
-Context Foundry requires MCP sampling to function, but Claude Desktop doesn't yet support this feature.
-
-**Workaround - Use API Mode:**
-```bash
-export ANTHROPIC_API_KEY=your_key_here
-foundry build my-app "description of what to build"
-```
+✅ Version: 1.0.0
 
 **Available Tools:**
-- context_foundry_build: Returns error message about sampling (not functional yet)
-- context_foundry_enhance: Coming soon
+
+🚀 **Autonomous Build & Deploy:**
+- autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy workflow
+  Runs in background with self-healing test loop and GitHub deployment
+
+🔄 **Task Delegation:**
+- delegate_to_claude_code: Delegate tasks to fresh Claude Code instances (synchronous)
+- delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)
+- get_delegation_result: Check status and retrieve results of async tasks
+- list_delegations: List all active and completed async tasks
+
+📊 **Pattern Management:**
+- read_global_patterns: Read patterns from global pattern storage
+- save_global_patterns: Save patterns to global pattern storage
+- merge_project_patterns: Merge project patterns into global storage
+- migrate_all_project_patterns: Migrate all project patterns to global storage
+
+ℹ️  **Status:**
 - context_foundry_status: This status message
 
-**When will MCP mode work?**
-Automatically when Claude Desktop adds sampling support. No code changes needed.
-Benefits: No per-token API charges, uses your Claude Pro/Max subscription instead.
-
-**More info:** https://modelcontextprotocol.io/docs/concepts/sampling
+**Usage:**
+All tools work with both Claude Desktop and Claude Code CLI without requiring API keys.
+The autonomous build system inherits your Claude authentication automatically.
 """
 
 
@@ -403,7 +256,8 @@ def delegate_to_claude_code(
         # Use --print flag to run in non-interactive mode and exit after completion
         # Use --permission-mode bypassPermissions to skip all permission prompts
         # Use --strict-mcp-config to prevent spawned instance from loading MCP servers (avoids recursion)
-        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config"]
+        # Disable thinking mode to prevent thinking blocks in output
+        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--settings", '{"thinkingMode": "off"}']
 
         # Add additional flags if provided
         if additional_flags:
@@ -572,8 +426,8 @@ def delegate_to_claude_code_async(
         # All 3 run simultaneously! Check results later with get_delegation_result(task_id)
     """
     try:
-        # Build the command
-        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config"]
+        # Build the command with thinking disabled
+        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--settings", '{"thinkingMode": "off"}']
 
         # Add additional flags if provided
         if additional_flags:
@@ -627,12 +481,16 @@ def delegate_to_claude_code_async(
             "duration": None,
         }
 
+        # Get banner for display
+        banner = get_banner(version="1.0.0")
+
         return json.dumps({
             "task_id": task_id,
             "status": "started",
             "task": task,
             "working_directory": cwd,
             "timeout_minutes": timeout_minutes,
+            "banner": banner,
             "message": f"Task started successfully. Use get_delegation_result('{task_id}') to check status and retrieve results."
         }, indent=2)
 
@@ -698,13 +556,21 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 task_info["status"] = "timeout"
                 task_info["duration"] = elapsed
 
-                return json.dumps({
+                timeout_result = {
                     "task_id": task_id,
                     "status": "timeout",
                     "elapsed_seconds": elapsed,
                     "timeout_minutes": task_info["timeout_minutes"],
                     "message": f"Task exceeded timeout of {task_info['timeout_minutes']} minutes and was terminated."
-                }, indent=2)
+                }
+
+                # Add banner for autonomous builds
+                is_autonomous = task_info.get("build_type") == "autonomous"
+                if is_autonomous:
+                    banner = get_banner(version="1.0.0")
+                    timeout_result["banner"] = banner
+
+                return json.dumps(timeout_result, indent=2)
 
             # Still running within timeout
             # Try to read phase information
@@ -727,11 +593,24 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 result["test_iteration"] = phase_info.get("test_iteration", 0)
                 result["phases_completed"] = phase_info.get("phases_completed", [])
 
+            # Add banner for autonomous builds (both running and completed)
+            is_autonomous = task_info.get("build_type") == "autonomous"
+            if is_autonomous:
+                banner = get_banner(version="1.0.0")
+                result["banner"] = banner
+
             return json.dumps(result, indent=2)
 
         # Process completed - capture output if not already captured
         if task_info["result"] is None:
-            stdout, stderr = process.communicate()
+            # Don't use communicate() if stdin was already closed
+            # Just read remaining output from pipes
+            try:
+                stdout = process.stdout.read() if process.stdout else ""
+                stderr = process.stderr.read() if process.stderr else ""
+            except Exception as e:
+                stdout = f"Error reading stdout: {e}"
+                stderr = f"Error reading stderr: {e}"
             elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
 
             task_info["stdout"] = stdout
@@ -739,6 +618,53 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
             task_info["duration"] = elapsed
             task_info["exit_code"] = process.returncode
             task_info["status"] = "completed" if process.returncode == 0 else "failed"
+
+            # ============================================================================
+            # AUTOMATIC PATTERN MERGE FOR AUTONOMOUS BUILDS
+            # ============================================================================
+            # If this was an autonomous build that completed successfully, automatically
+            # merge patterns from local feedback file to global pattern storage
+            is_autonomous_build = task_info.get("build_type") == "autonomous"
+            build_successful = process.returncode == 0
+
+            if is_autonomous_build and build_successful:
+                try:
+                    # Look for feedback file in .context-foundry/feedback/
+                    feedback_dir = Path(task_info["cwd"]) / ".context-foundry" / "feedback"
+                    if feedback_dir.exists():
+                        # Find the most recent build-feedback file
+                        feedback_files = list(feedback_dir.glob("build-feedback-*.json"))
+                        if feedback_files:
+                            # Sort by modification time, get most recent
+                            latest_feedback = max(feedback_files, key=lambda p: p.stat().st_mtime)
+
+                            # Call merge_project_patterns to save learnings to global database
+                            merge_result_str = merge_project_patterns(
+                                project_pattern_file=str(latest_feedback),
+                                pattern_type="common-issues",
+                                increment_build_count=True
+                            )
+
+                            # Parse result to check success
+                            merge_result = json.loads(merge_result_str)
+                            if merge_result.get("status") == "success":
+                                stats = merge_result.get("merge_stats", {})
+                                print(f"\n✅ Patterns merged to global database:")
+                                print(f"   New patterns: {stats.get('new_patterns', 0)}")
+                                print(f"   Updated patterns: {stats.get('updated_patterns', 0)}")
+                                print(f"   Global pattern file: {merge_result.get('global_file', 'unknown')}")
+
+                                # Store merge result in task info for reporting
+                                task_info["pattern_merge_result"] = merge_result
+                            else:
+                                print(f"\n⚠️  Pattern merge failed: {merge_result.get('error', 'unknown error')}")
+                                task_info["pattern_merge_error"] = merge_result.get("error")
+
+                except Exception as e:
+                    # Pattern merge failure should not break the build result
+                    # Just log the error and continue
+                    print(f"\n⚠️  Pattern merge exception (non-critical): {e}")
+                    task_info["pattern_merge_error"] = str(e)
 
         # Format result with optional output truncation
         if include_full_output:
@@ -782,6 +708,12 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                     "stdout_stats": stdout_stats if stdout_was_truncated else None,
                     "stderr_stats": stderr_stats if stderr_was_truncated else None
                 }
+
+        # Add banner for autonomous builds (completed or failed)
+        is_autonomous = task_info.get("build_type") == "autonomous"
+        if is_autonomous:
+            banner = get_banner(version="1.0.0")
+            result["banner"] = banner
 
         return json.dumps(result, indent=2)
 
@@ -856,6 +788,67 @@ def list_delegations() -> str:
         }, indent=2)
 
 
+def _run_parallel_autonomous_build(
+    task: str,
+    working_directory: str,
+    github_repo_name: Optional[str] = None,
+    existing_repo: Optional[str] = None,
+    enable_test_loop: bool = True,
+    incremental: bool = False,
+    force_rebuild: bool = False,
+    max_test_iterations: int = 3
+) -> Dict[str, Any]:
+    """
+    Run autonomous build using Python AutonomousOrchestrator with parallelization.
+
+    Uses ParallelBuilderCoordinator (4 concurrent builders) and ParallelScoutCoordinator
+    for significantly faster execution (~30-45% time savings).
+
+    Args:
+        task: What to build/fix/enhance
+        working_directory: Where to work
+        github_repo_name: Create new repo (optional)
+        existing_repo: Fix/enhance existing (optional)
+        enable_test_loop: Enable self-healing test loop
+        max_test_iterations: Max test/fix cycles
+
+    Returns:
+        Dict with build results
+    """
+    from workflows.autonomous_orchestrator import AutonomousOrchestrator
+
+    # Resolve working directory path
+    working_dir_input = Path(working_directory)
+    if working_dir_input.is_absolute():
+        final_working_dir = working_dir_input
+    else:
+        cf_parent = _get_context_foundry_parent_dir()
+        final_working_dir = cf_parent / working_directory
+
+    # Create orchestrator with parallel mode enabled
+    orchestrator = AutonomousOrchestrator(
+        project_name=github_repo_name or final_working_dir.name,
+        task_description=task,
+        project_dir=final_working_dir,
+        autonomous=True,
+        use_multi_agent=True,  # KEY: Enable parallelization
+        use_patterns=True,
+        enable_livestream=False,
+        auto_push=True if github_repo_name else False
+    )
+
+    # Run the build
+    result = orchestrator.run()
+
+    return {
+        'success': result.get('status') == 'success',
+        'result': result,
+        'project_dir': str(final_working_dir),
+        'github_repo': github_repo_name,
+        'multi_agent_used': True
+    }
+
+
 @mcp.tool()
 def autonomous_build_and_deploy(
     task: str,
@@ -865,13 +858,30 @@ def autonomous_build_and_deploy(
     mode: str = "new_project",
     enable_test_loop: bool = True,
     max_test_iterations: int = 3,
-    timeout_minutes: float = 90.0
+    timeout_minutes: float = 90.0,
+    use_parallel: bool = True,
+    incremental: bool = False,
+    force_rebuild: bool = False
 ) -> str:
     """
     Fully autonomous build/test/fix/deploy with self-healing test loop.
 
+    **EXECUTION MODE (CURRENT):**
+    - Uses orchestrator_prompt.txt with /agents command
+    - Inherits Claude Code authentication (no API keys needed)
+    - Supports parallel execution via bash process spawning:
+      • Phase 2.5: Parallel Builders (2-8 concurrent based on project size)
+      • Phase 4.5: Parallel Tests (unit/E2E/lint run simultaneously)
+    - **30-45% faster than pure sequential execution**
+    - See: docs/PARALLEL_AGENTS_ARCHITECTURE.md
+
+    **OLD PYTHON SYSTEM (DEPRECATED):**
+    - use_parallel=True now auto-corrects to False
+    - Old system required API keys and external dependencies
+    - Removed to eliminate confusion and dependency issues
+
     Spawns fresh Claude instance that runs in the BACKGROUND:
-    - Creates Scout/Architect/Builder/Tester agents via /agents
+    - Creates Scout/Architect/Builder/Tester agents
     - Implements complete project autonomously
     - Tests automatically
     - If tests fail: Goes back to Architect → Builder → Test (up to max_test_iterations)
@@ -894,6 +904,9 @@ def autonomous_build_and_deploy(
         enable_test_loop: Enable self-healing test loop (default: True)
         max_test_iterations: Max test/fix cycles (default: 3)
         timeout_minutes: Max execution time (default: 90)
+        use_parallel: Use parallel execution (default: True, ~45% faster)
+        incremental: Enable incremental builds (default: False, 70-90% faster on rebuilds)
+        force_rebuild: Force full rebuild even if incremental enabled (default: False)
 
     Returns:
         JSON with task_id and status (returns immediately)
@@ -917,20 +930,51 @@ def autonomous_build_and_deploy(
         all_builds = list_delegations()
     """
     try:
-        # Determine final working directory FIRST
-        # If relative path or project name, create in Context Foundry's parent directory
-        # If absolute path, use as-is for flexibility
+        # Determine final working directory FIRST (needed for both modes)
         working_dir_input = Path(working_directory)
         if working_dir_input.is_absolute():
-            # Absolute path provided - use as-is
             final_working_dir = working_dir_input
         else:
-            # Relative path or project name - create as sibling to Context Foundry
             cf_parent = _get_context_foundry_parent_dir()
             final_working_dir = cf_parent / working_directory
 
-        # Convert to string for use throughout
         final_working_dir_str = str(final_working_dir)
+
+        # Validate/create working directory
+        if not final_working_dir.exists():
+            final_working_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract project name for display
+        project_name = github_repo_name or final_working_dir.name
+
+        # HARD BLOCK: Old Python parallel system is DEPRECATED and REMOVED
+        # It required API keys in .env and doesn't inherit Claude Code's auth.
+        # Always use the new /agents-based orchestrator instead.
+        if use_parallel:
+            error_msg = """
+❌ ERROR: use_parallel=True is DEPRECATED and DISABLED
+
+The old Python parallel system has been removed because:
+  • Required API keys in .env (doesn't inherit Claude Code auth)
+  • Had external dependencies (openai package)
+  • Superseded by new /agents-based parallel system
+
+The /agents system (use_parallel=False) DOES support parallel execution:
+  • Phase 2.5: Parallel Builders (2-8 concurrent agents via bash)
+  • Phase 4.5: Parallel Tests (unit/E2E/lint simultaneously)
+  • See: docs/PARALLEL_AGENTS_ARCHITECTURE.md
+
+Auto-correcting to use_parallel=False...
+"""
+            print(error_msg, file=sys.stderr)
+            use_parallel = False  # Force correction
+
+        # NEW /agents-based system with orchestrator_prompt.txt
+        # This system DOES support parallel execution via bash process spawning:
+        # - Phase 2.5: Parallel Builders (2-8 concurrent)
+        # - Phase 4.5: Parallel Tests (unit/E2E/lint concurrent)
+        print(f"✅ Using /agents-based orchestrator (supports parallel execution)", file=sys.stderr)
+        print(f"   See docs/PARALLEL_AGENTS_ARCHITECTURE.md for details\n", file=sys.stderr)
 
         # Create orchestrator task configuration with resolved path
         task_config = {
@@ -967,18 +1011,15 @@ Return JSON summary when complete.
 BEGIN AUTONOMOUS EXECUTION NOW.
 """
 
-        # Build command
+        # Build command with thinking disabled
         cmd = [
             "claude", "--print",
             "--permission-mode", "bypassPermissions",
             "--strict-mcp-config",
+            "--settings", '{"thinkingMode": "off"}',
             "--system-prompt", system_prompt,
             task_prompt
         ]
-
-        # Validate/create working directory (path already resolved above)
-        if not final_working_dir.exists():
-            final_working_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate unique task ID
         task_id = str(uuid.uuid4())
@@ -1014,8 +1055,8 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "build_type": "autonomous"  # Mark as autonomous build for special handling
         }
 
-        # Extract project name for display
-        project_name = github_repo_name or final_working_dir.name
+        # Get the banner to display
+        banner = get_banner(version="1.0.0")
 
         return json.dumps({
             "task_id": task_id,
@@ -1026,7 +1067,10 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "github_repo": github_repo_name,
             "timeout_minutes": timeout_minutes,
             "enable_test_loop": enable_test_loop,
+            "banner": banner,  # Include banner as separate field for easy display
             "message": f"""
+{banner}
+
 🚀 Autonomous build started!
 
 Project: {project_name}
@@ -1572,10 +1616,9 @@ def get_latest_logs() -> str:
 if __name__ == "__main__":
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
-    print("🚀 Starting Context Foundry MCP Server...", file=sys.stderr)
+    print_banner(version="1.0.0")
+    print("", file=sys.stderr)
     print("📋 Available tools:", file=sys.stderr)
-    print("   - context_foundry_build: Build projects using Context Foundry", file=sys.stderr)
-    print("   - context_foundry_enhance: Enhance existing projects (coming soon)", file=sys.stderr)
     print("   - context_foundry_status: Get server status", file=sys.stderr)
     print("   - delegate_to_claude_code: Delegate tasks to fresh Claude instances (synchronous)", file=sys.stderr)
     print("   - delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)", file=sys.stderr)

@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
-Autonomous Context Foundry Orchestrator
+⚠️  DEPRECATED - MARKED FOR RETIREMENT ⚠️
+
+This file uses direct API calls to Anthropic/OpenAI which:
+- Requires API keys in .env file
+- Doesn't inherit Claude Code's authentication
+- Violates the "MCP rides on Claude Code config" design principle
+
+REPLACEMENT: Use orchestrator_prompt.txt with /agents command
+See: DEPRECATION_NOTICE.md
+
+---
+
+Autonomous Context Foundry Orchestrator (LEGACY)
 Fully automated Scout → Architect → Builder workflow using Claude API
 """
 

@@ -34,7 +34,8 @@ class ArchitectCoordinator:
         self,
         user_request: str,
         scout_findings: str,
-        architect_strategy: str
+        architect_strategy: str,
+        workflow_complexity: str = None
     ) -> PhaseResult:
         """
         Execute architect to create system architecture.
@@ -43,6 +44,7 @@ class ArchitectCoordinator:
             user_request: Original user request/task description
             scout_findings: Compressed findings from scout phase
             architect_strategy: Strategy guidance from lead orchestrator
+            workflow_complexity: Optional workflow complexity assessment
 
         Returns:
             PhaseResult with architecture document
@@ -50,18 +52,19 @@ class ArchitectCoordinator:
 
         print(f"\n🚀 Launching Architect...")
 
-        # Create architect task
+        # Create architect task with high priority (architecture is complex)
         task = SubagentTask(
             id="architect_main",
             type="architect",
             objective=user_request,
             output_format="Complete architecture document with file structure, modules, and implementation plan",
             tools=["reasoning"],
-            boundaries=architect_strategy
+            boundaries=architect_strategy,
+            priority=9  # High priority for architect phase
         )
 
-        # Execute architect
-        architect = ArchitectSubagent(self.ai_client, task, scout_findings)
+        # Execute architect with workflow complexity for routing
+        architect = ArchitectSubagent(self.ai_client, task, scout_findings, workflow_complexity)
         result = architect.execute()
 
         if result.success:

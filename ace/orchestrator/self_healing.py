@@ -86,8 +86,8 @@ class SelfHealingLoop:
                 if fix_tasks:
                     print(f"   🚀 Executing {len(fix_tasks)} fix tasks...")
 
-                    # Execute fixes in parallel
-                    fix_result = self.builder_coordinator.execute_parallel(
+                    # Execute fixes with dependency awareness
+                    fix_result = self.builder_coordinator.execute_with_dependencies(
                         tasks=fix_tasks,
                         project_dir=fix_context.get('project_dir'),
                         architect_result=fix_context.get('architect_result')

@@ -40,6 +40,7 @@ from ace.scouts import ParallelScoutCoordinator
 from ace.architects import ArchitectCoordinator
 from ace.builders import ParallelBuilderCoordinator
 from ace.validators.llm_judge import LLMJudge
+from ace.patterns.incremental_updater import IncrementalPatternUpdater
 
 
 class MultiAgentOrchestrator:
@@ -109,6 +110,7 @@ class MultiAgentOrchestrator:
         # Initialize production features
         self.checkpoint_manager = CheckpointManager(self.session_dir) if enable_checkpointing else None
         self.observer = WorkflowObserver(self.session_dir)
+        self.pattern_updater = IncrementalPatternUpdater()  # Real-time pattern learning
 
         # State
         self.workflow_plan: Optional[WorkflowPlan] = None
@@ -263,6 +265,11 @@ class MultiAgentOrchestrator:
 
             self.results['scout'] = scout_result
 
+            # Extract and merge patterns from Scout research (real-time learning)
+            scout_patterns = self.pattern_updater.extract_patterns_from_scout(scout_result)
+            if scout_patterns:
+                self.pattern_updater.merge_patterns(scout_patterns)
+
             # Compress scout findings
             compressed_scout = self.lead_orchestrator.compress_findings([
                 r.to_dict() for r in scout_result.subagent_results
@@ -287,11 +294,12 @@ class MultiAgentOrchestrator:
 
             self.observer.log_phase_start('architect', {})
 
-            # Execute architect with compressed scout findings
+            # Execute architect with compressed scout findings and complexity assessment
             architect_result = self.architect_coordinator.execute(
                 user_request=self.task_description,
                 scout_findings=compressed_scout['compressed_summary'],
-                architect_strategy=self.workflow_plan.architect_strategy
+                architect_strategy=self.workflow_plan.architect_strategy,
+                workflow_complexity=self.workflow_plan.complexity_assessment
             )
 
             self.results['architect'] = architect_result
@@ -318,7 +326,7 @@ class MultiAgentOrchestrator:
                 'subagent_count': len(self.workflow_plan.builder_tasks)
             })
 
-            builder_result = self.builder_coordinator.execute_parallel(
+            builder_result = self.builder_coordinator.execute_with_dependencies(
                 tasks=self.workflow_plan.builder_tasks,
                 project_dir=self.project_dir,
                 architect_result={'summary': architecture_doc, 'full_result': architect_result}
@@ -361,8 +369,35 @@ class MultiAgentOrchestrator:
                     if not all_files:
                         return False, {'message': 'No files were generated'}
 
-                    # Run tests
-                    test_result = self._run_tests()
+                    # Run tests in parallel for faster execution
+                    try:
+                        from ace.testing import ParallelTestRunner
+                        test_runner = ParallelTestRunner(self.project_dir)
+                        parallel_result = test_runner.run_all_tests_parallel(timeout_seconds=300)
+
+                        # Convert to legacy format
+                        test_result = {
+                            'success': parallel_result['success'],
+                            'output': f"Parallel tests: {parallel_result['total_tests']} run, {parallel_result['total_failures']} failed in {parallel_result['duration_seconds']:.1f}s",
+                            'test_type': 'parallel',
+                            'duration': parallel_result['duration_seconds'],
+                            'details': parallel_result
+                        }
+                        print(f"   ⚡ Parallel test execution: {parallel_result['duration_seconds']:.1f}s (bottleneck: {parallel_result.get('bottleneck_suite', 'unknown')})")
+                    except Exception as e:
+                        # Fall back to sequential tests if parallel fails
+                        print(f"   ⚠️  Parallel testing failed ({e}), falling back to sequential")
+                        test_result = self._run_tests()
+
+                    # Extract patterns from test failures (real-time learning)
+                    if not test_result.get('success', False):
+                        error_details = test_result.get('output', '') + "\n" + test_result.get('error', '')
+                        failure_patterns = self.pattern_updater.extract_patterns_from_test_failure(
+                            test_result, error_details
+                        )
+                        if failure_patterns:
+                            self.pattern_updater.merge_patterns(failure_patterns)
+                            print(f"   📚 Learned from test failures, patterns available for next iteration")
 
                     # Use LLM judge for code quality
                     evaluation = self.llm_judge.evaluate(
@@ -434,10 +469,14 @@ class MultiAgentOrchestrator:
             }
 
         except Exception as e:
+            import traceback
             print(f"\n❌ ERROR: {e}")
+            print("\n📋 Full Traceback:")
+            traceback.print_exc()
             self.observer.log_event('error', {
                 'message': str(e),
-                'type': type(e).__name__
+                'type': type(e).__name__,
+                'traceback': traceback.format_exc()
             })
             return {
                 'success': False,

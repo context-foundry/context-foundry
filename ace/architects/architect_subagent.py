@@ -97,21 +97,36 @@ CREATE A COMPLETE ARCHITECTURE DOCUMENT INCLUDING:
 
 Provide a clear, actionable architecture that builders can follow independently."""
 
-    def __init__(self, ai_client, task: SubagentTask, scout_findings: str):
+    def __init__(self, ai_client, task: SubagentTask, scout_findings: str, workflow_complexity: str = None):
         """Initialize Architect subagent.
 
         Args:
             ai_client: AIClient instance (provider-agnostic)
             task: SubagentTask to execute
             scout_findings: Compressed findings from scout phase
+            workflow_complexity: Optional workflow complexity assessment
         """
         self.ai_client = ai_client
         self.task = task
         self.scout_findings = scout_findings
+        self.workflow_complexity = workflow_complexity
 
         # Use architect provider/model from AIClient configuration
         self.provider_name = ai_client.config.architect.provider
         self.model_name = ai_client.config.architect.model
+
+        # Apply model routing if enabled
+        if ai_client.model_router:
+            routing_decision = ai_client.model_router.get_model_for_task(
+                phase='architect',
+                task=task,
+                workflow_complexity=workflow_complexity
+            )
+            if routing_decision.model != self.model_name:
+                print(f"   🔀 Model routing: {self.model_name} → {routing_decision.model}")
+                print(f"      Reason: {routing_decision.reason}")
+                self.model_name = routing_decision.model
+
         self.provider = ai_client.registry.get(self.provider_name)
 
     def execute(self) -> SubagentResult:

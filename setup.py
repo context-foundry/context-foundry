@@ -23,7 +23,7 @@ if requirements_file.exists():
 
 setup(
     name="context-foundry",
-    version="1.0.0",
+    version="2.0.1",
     description="The Anti-Vibe Coding System - Spec-first development through automated context engineering",
     long_description=long_description,
     long_description_content_type="text/markdown",

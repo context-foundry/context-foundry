@@ -83,6 +83,21 @@ Begin implementation now. Provide complete, working code with file paths."""
         # Use builder provider/model from AIClient configuration
         self.provider_name = ai_client.config.builder.provider
         self.model_name = ai_client.config.builder.model
+
+        # Apply model routing if enabled
+        if ai_client.model_router:
+            routing_decision = ai_client.model_router.get_model_for_task(
+                phase='builder',
+                task=task,
+                context={
+                    'has_dependencies': len(task.dependencies) > 0 if hasattr(task, 'dependencies') else False
+                }
+            )
+            if routing_decision.model != self.model_name:
+                print(f"   🔀 Model routing: {self.model_name} → {routing_decision.model}")
+                print(f"      Reason: {routing_decision.reason}")
+                self.model_name = routing_decision.model
+
         self.provider = ai_client.registry.get(self.provider_name)
 
     def execute(self) -> SubagentResult:
