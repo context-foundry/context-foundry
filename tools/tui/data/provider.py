@@ -297,16 +297,36 @@ class TUIDataProvider:
         return stats
 
     async def get_agent_metrics(self) -> List[AgentMetrics]:
-        """Get agent metrics (mock for now)"""
+        """Get agent metrics from current builds"""
         # Check cache
         cache_key = "agent_metrics"
         cached = self._get_cache(cache_key, ttl_seconds=2.0)
         if cached is not None:
             return cached
 
-        # TODO: Integrate with MCP/metrics DB
-        # For now, return empty list
+        # Show which agents/phases are currently active
         metrics: List[AgentMetrics] = []
+        phase_counts = {}
+
+        for build_dir in self._tracked_builds:
+            build_status = await self.get_current_build(Path(build_dir))
+            if build_status and build_status.status in ['running', 'in_progress', 'started', 'implementing']:
+                phase = build_status.current_phase.split()[0]  # Get first word (Scout, Architect, etc.)
+                if phase in phase_counts:
+                    phase_counts[phase] += 1
+                else:
+                    phase_counts[phase] = 1
+
+        # Convert to AgentMetrics format (showing active phases as "agents")
+        for phase, count in phase_counts.items():
+            metrics.append(AgentMetrics(
+                agent_name=f"{phase} Agent",
+                total_calls=count,
+                tokens_used=0,  # TODO: Integrate with metrics DB
+                cost_usd=0.0,   # TODO: Integrate with metrics DB
+                avg_latency_ms=0.0,
+                last_active=datetime.now()
+            ))
 
         self._set_cache(cache_key, metrics)
         return metrics
