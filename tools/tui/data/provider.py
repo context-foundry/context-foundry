@@ -25,6 +25,8 @@ class TUIDataProvider:
         self._file_observer: Optional[Observer] = None
         self._callbacks: List[Callable] = []
         self._running = False
+        self._tracked_builds: List[str] = []  # List of working directories to monitor
+        self._load_tracked_builds()
 
     async def start(self):
         """Start file watchers and background tasks"""
@@ -38,6 +40,42 @@ class TUIDataProvider:
             self._file_observer.stop()
             self._file_observer.join(timeout=2)
 
+    def _load_tracked_builds(self):
+        """Load tracked builds from cache file"""
+        cache_file = Path.home() / '.context-foundry' / 'tui-tracked-builds.json'
+        if cache_file.exists():
+            try:
+                with open(cache_file, 'r') as f:
+                    data = json.load(f)
+                    self._tracked_builds = data.get('builds', [])
+            except (json.JSONDecodeError, OSError):
+                self._tracked_builds = []
+        else:
+            self._tracked_builds = []
+
+    def _save_tracked_builds(self):
+        """Save tracked builds to cache file"""
+        cache_dir = Path.home() / '.context-foundry'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / 'tui-tracked-builds.json'
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump({'builds': self._tracked_builds}, f, indent=2)
+        except OSError:
+            pass  # Ignore write errors
+
+    def _add_tracked_build(self, working_directory: str):
+        """Add a build directory to tracking list"""
+        if working_directory not in self._tracked_builds:
+            self._tracked_builds.append(working_directory)
+            self._save_tracked_builds()
+            # Add file watcher for this directory
+            if self._file_observer:
+                cf_dir = Path(working_directory) / '.context-foundry'
+                if cf_dir.exists():
+                    event_handler = PhaseFileHandler(self._on_file_change)
+                    self._file_observer.schedule(event_handler, str(cf_dir), recursive=True)
+
     def _start_file_watcher(self):
         """Start watching .context-foundry directories"""
         event_handler = PhaseFileHandler(self._on_file_change)
@@ -47,6 +85,12 @@ class TUIDataProvider:
         for path in self.config.get_watch_paths():
             if path.exists():
                 self._file_observer.schedule(event_handler, str(path), recursive=True)
+
+        # Watch all tracked build directories
+        for build_dir in self._tracked_builds:
+            cf_dir = Path(build_dir) / '.context-foundry'
+            if cf_dir.exists():
+                self._file_observer.schedule(event_handler, str(cf_dir), recursive=True)
 
         self._file_observer.start()
 
@@ -162,43 +206,50 @@ class TUIDataProvider:
         return metrics
 
     async def get_recent_builds(self, limit: int = 10) -> List[BuildSummary]:
-        """Get recent build summaries"""
+        """Get recent build summaries from all tracked directories"""
         # Check cache
         cache_key = f"recent_builds:{limit}"
-        cached = self._get_cache(cache_key, ttl_seconds=2.0)
+        cached = self._get_cache(cache_key, ttl_seconds=1.0)
         if cached is not None:
             return cached
 
-        # For now, just return current build if available
         builds: List[BuildSummary] = []
-        current = await self.get_current_build()
 
-        if current:
-            # Calculate duration
-            duration = None
-            if current.started_at:
-                # Make now timezone-aware if started_at is timezone-aware
-                now = datetime.now()
-                if current.started_at.tzinfo is not None:
-                    # Use UTC for timezone-aware comparison
-                    from datetime import timezone
-                    now = datetime.now(timezone.utc)
-                    # Convert started_at to UTC if it has tzinfo
-                    started = current.started_at.astimezone(timezone.utc)
-                else:
-                    started = current.started_at
+        # Check all tracked build directories
+        for build_dir in self._tracked_builds:
+            build_status = await self.get_current_build(Path(build_dir))
+            if build_status:
+                # Calculate duration
+                duration = None
+                if build_status.started_at:
+                    # Make now timezone-aware if started_at is timezone-aware
+                    now = datetime.now()
+                    if build_status.started_at.tzinfo is not None:
+                        # Use UTC for timezone-aware comparison
+                        from datetime import timezone
+                        now = datetime.now(timezone.utc)
+                        # Convert started_at to UTC if it has tzinfo
+                        started = build_status.started_at.astimezone(timezone.utc)
+                    else:
+                        started = build_status.started_at
 
-                elapsed = now - started
-                duration = elapsed.total_seconds() / 60.0
+                    elapsed = now - started
+                    duration = elapsed.total_seconds() / 60.0
 
-            builds.append(BuildSummary(
-                session_id=current.session_id,
-                status=current.status,
-                current_phase=current.current_phase,
-                started_at=current.started_at,
-                duration_minutes=duration,
-                test_iterations=current.test_iteration
-            ))
+                builds.append(BuildSummary(
+                    session_id=build_status.session_id,
+                    status=build_status.status,
+                    current_phase=build_status.current_phase,
+                    started_at=build_status.started_at,
+                    duration_minutes=duration,
+                    test_iterations=build_status.test_iteration
+                ))
+
+        # Sort by started_at (most recent first)
+        builds.sort(key=lambda b: b.started_at or datetime.min, reverse=True)
+
+        # Limit to requested number
+        builds = builds[:limit]
 
         self._set_cache(cache_key, builds)
         return builds
@@ -317,6 +368,9 @@ Execute the Context Foundry autonomous build orchestrator.
                 "github_repo": github_repo_name,
                 "started_at": datetime.now()
             })
+
+            # Add to tracked builds list
+            self._add_tracked_build(working_directory)
 
             # Don't wait for completion - return immediately
             return {

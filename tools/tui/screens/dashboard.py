@@ -56,29 +56,53 @@ class DashboardScreen(Screen):
     async def refresh_data(self):
         """Refresh dashboard data"""
         try:
-            # Get current build
-            build = await self.provider.get_current_build()
+            # Get recent builds (includes all tracked builds)
+            builds = await self.provider.get_recent_builds()
 
-            if build:
+            # Use the most recent build for the phase progress widget
+            if builds:
+                most_recent = builds[0]
+
                 # Update progress widget
                 progress_widget = self.query_one("#phase-progress", PhaseProgressWidget)
-                progress_widget.current_phase = f"{build.current_phase} ({build.phase_number})"
-                progress_widget.progress_detail = build.progress_detail
-                progress_widget.progress = build.get_progress_percentage()
+                progress_widget.current_phase = f"{most_recent.current_phase}"
+
+                # Calculate progress based on phase
+                phase_map = {
+                    "Scout": 14,
+                    "Architect": 28,
+                    "Builder": 57,
+                    "Test": 71,
+                    "Fix": 85,
+                    "Deploy": 95,
+                    "Complete": 100
+                }
+                phase_name = most_recent.current_phase.split()[0]  # Get first word
+                progress = phase_map.get(phase_name, 0)
+
+                progress_widget.progress_detail = most_recent.status
+                progress_widget.progress = progress
 
                 # Update token gauge (mock data for now)
                 # TODO: Get real token data from metrics
                 token_widget = self.query_one("#token-gauge", TokenGaugeWidget)
                 token_widget.tokens_used = 50000  # Mock
                 token_widget.tokens_total = 200000
+            else:
+                # No builds - show empty state
+                progress_widget = self.query_one("#phase-progress", PhaseProgressWidget)
+                progress_widget.current_phase = "No active builds"
+                progress_widget.progress_detail = "Press 'n' to launch a new build"
+                progress_widget.progress = 0
 
-            # Get recent builds
-            builds = await self.provider.get_recent_builds()
+            # Update build table
             build_table = self.query_one("#build-table", BuildTable)
             build_table.builds = builds
 
         except Exception as e:
             # Log error but don't crash
+            import traceback
+            # You can log to a file here if needed
             pass
 
     def action_quit(self):
