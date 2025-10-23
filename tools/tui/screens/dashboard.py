@@ -47,6 +47,8 @@ class DashboardScreen(Screen):
     def on_mount(self):
         """Setup data refresh when screen mounts"""
         self.set_interval(1.5, self.refresh_data)
+        # Auto-detect new builds every 30 seconds
+        self.set_interval(30.0, self.auto_detect_builds)
         self.provider.subscribe(self.refresh_data)
 
     def on_unmount(self):
@@ -124,3 +126,7 @@ class DashboardScreen(Screen):
     def action_new_project(self):
         """Show new project screen"""
         self.app.push_screen("new_project")
+
+    def auto_detect_builds(self):
+        """Trigger auto-detection of running builds"""
+        self.provider._auto_detect_builds()

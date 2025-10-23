@@ -31,6 +31,10 @@ class TUIDataProvider:
     async def start(self):
         """Start file watchers and background tasks"""
         self._running = True
+
+        # Auto-detect running builds on startup
+        self._auto_detect_builds()
+
         self._start_file_watcher()
 
     async def stop(self):
@@ -75,6 +79,74 @@ class TUIDataProvider:
                 if cf_dir.exists():
                     event_handler = PhaseFileHandler(self._on_file_change)
                     self._file_observer.schedule(event_handler, str(cf_dir), recursive=True)
+
+    def _auto_detect_builds(self):
+        """Auto-detect running Context Foundry builds by scanning for claude processes"""
+        import subprocess as sp
+        try:
+            # Find all running claude processes
+            result = sp.run(
+                ["ps", "aux"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                return
+
+            # Look for claude processes
+            for line in result.stdout.split('\n'):
+                if 'claude' in line.lower() and 'grep' not in line:
+                    # Extract PID (second column)
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+
+                    try:
+                        pid = int(parts[1])
+                    except ValueError:
+                        continue
+
+                    # Get working directory of this process
+                    try:
+                        lsof_result = sp.run(
+                            ["lsof", "-p", str(pid)],
+                            capture_output=True,
+                            text=True,
+                            timeout=2
+                        )
+
+                        if lsof_result.returncode != 0:
+                            continue
+
+                        # Find cwd line
+                        for lsof_line in lsof_result.stdout.split('\n'):
+                            if 'cwd' in lsof_line:
+                                # Last column is the directory
+                                cwd = lsof_line.split()[-1]
+
+                                # Check if this directory has .context-foundry/current-phase.json
+                                phase_file = Path(cwd) / '.context-foundry' / 'current-phase.json'
+                                if phase_file.exists():
+                                    # Check if build is still running
+                                    try:
+                                        with open(phase_file, 'r') as f:
+                                            phase_data = json.load(f)
+                                            status = phase_data.get('status', '')
+
+                                            # Add if running or in_progress
+                                            if status in ['running', 'in_progress', 'started']:
+                                                self._add_tracked_build(cwd)
+                                    except (json.JSONDecodeError, OSError):
+                                        pass
+
+                    except (sp.TimeoutExpired, OSError):
+                        continue
+
+        except (sp.TimeoutExpired, OSError, FileNotFoundError):
+            # ps or lsof not available - skip auto-detection
+            pass
 
     def _start_file_watcher(self):
         """Start watching .context-foundry directories"""
