@@ -7,6 +7,7 @@ import json
 import asyncio
 import subprocess
 import uuid
+import os
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
@@ -235,7 +236,7 @@ class TUIDataProvider:
         Launch a new autonomous build using Context Foundry.
 
         This spawns a claude-code process in the background that will run
-        the autonomous build via the MCP server.
+        the autonomous build orchestrator.
 
         Args:
             task: Task description (e.g., "Build a tic-tac-toe game")
@@ -253,56 +254,84 @@ class TUIDataProvider:
             # Generate task ID
             task_id = str(uuid.uuid4())
 
-            # Build the MCP function call
-            # We'll use python to call the MCP server function directly
-            mcp_call = f"""
-import sys
-import json
-from pathlib import Path
+            # Get Context Foundry directory
+            cf_dir = Path.home() / 'homelab' / 'context-foundry'
+            orchestrator_prompt = cf_dir / 'tools' / 'orchestrator_prompt.txt'
 
-# Add Context Foundry to path
-sys.path.insert(0, str(Path.home() / 'homelab' / 'context-foundry'))
+            if not orchestrator_prompt.exists():
+                return {
+                    "error": f"Orchestrator prompt not found: {orchestrator_prompt}",
+                    "status": "failed"
+                }
 
-from tools.mcp_server import autonomous_build_and_deploy
+            # Build claude-code command
+            # Use the orchestrator prompt with environment variables
+            env = {
+                **dict(os.environ),
+                'CF_TASK': task,
+                'CF_WORKING_DIR': working_directory,
+                'CF_GITHUB_REPO': github_repo_name or '',
+                'CF_MODE': mode,
+                'CF_TEST_LOOP': 'true' if enable_test_loop else 'false',
+                'CF_MAX_TEST_ITERATIONS': str(max_test_iterations),
+                'CF_TIMEOUT_MINUTES': str(timeout_minutes),
+                'CF_SESSION_ID': task_id
+            }
 
-# Launch build
-result = autonomous_build_and_deploy(
-    task='''{task}''',
-    working_directory='''{working_directory}''',
-    github_repo_name={repr(github_repo_name)},
-    mode='{mode}',
-    enable_test_loop={enable_test_loop},
-    max_test_iterations={max_test_iterations},
-    timeout_minutes={timeout_minutes}
-)
+            # Create build prompt file
+            build_prompt = Path(working_directory) / f".launch-{task_id}.txt"
+            build_prompt.write_text(f"""Task: {task}
+Working Directory: {working_directory}
+GitHub Repo: {github_repo_name or 'none'}
+Mode: {mode}
+Enable Test Loop: {enable_test_loop}
+Max Test Iterations: {max_test_iterations}
+Session ID: {task_id}
 
-print(result)
-"""
+Execute the Context Foundry autonomous build orchestrator.
+""")
 
-            # Write script to temp file
-            script_path = Path(working_directory) / f".launch-{task_id}.py"
-            script_path.write_text(mcp_call)
+            # Spawn claude-code process with orchestrator prompt
+            log_file = Path(working_directory) / f".launch-{task_id}.log"
 
-            # Spawn background process
             process = subprocess.Popen(
-                ["python3", str(script_path)],
+                [
+                    "claude-code",
+                    "--print",
+                    "--system-prompt", str(orchestrator_prompt),
+                    f"Build project: {task}. Working directory: {working_directory}. GitHub repo: {github_repo_name or 'skip deployment'}. Session ID: {task_id}"
+                ],
                 cwd=working_directory,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
+                stdout=open(log_file, 'w'),
+                stderr=subprocess.STDOUT,
+                text=True,
+                env=env
             )
+
+            # Store build info for tracking
+            self._set_cache(f"launched_build:{task_id}", {
+                "task_id": task_id,
+                "working_directory": working_directory,
+                "pid": process.pid,
+                "task": task,
+                "github_repo": github_repo_name,
+                "started_at": datetime.now()
+            })
 
             # Don't wait for completion - return immediately
             return {
                 "task_id": task_id,
                 "status": "started",
                 "working_directory": working_directory,
-                "message": f"Build launched in background (PID: {process.pid})"
+                "message": f"Build launched in background (PID: {process.pid})",
+                "log_file": str(log_file)
             }
 
         except Exception as e:
+            import traceback
             return {
                 "error": str(e),
+                "traceback": traceback.format_exc(),
                 "status": "failed"
             }
 
