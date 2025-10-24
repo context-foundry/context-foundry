@@ -4,10 +4,10 @@
 
 # 🏭 Context Foundry 2.0
 
-> **Autonomous AI Development through Claude Code MCP Integration**
-> Scout → Architect → Builder → Test → Deploy. Fully autonomous, self-healing, walk-away development.
+> **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
+> Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.0.1 - October 2025**
+**Version 2.0.2 - October 2025**
 
 ---
 
@@ -30,6 +30,41 @@ User: "Build a Mario platformer game in JavaScript"
 [User walks away for 7 minutes]
 Result: ✅ Complete game deployed to GitHub, all tests passing
 ```
+
+---
+
+## 🚀 The Breakthrough: Meta-MCP Innovation
+
+**What makes Context Foundry unique?** Most MCP servers call external tools. Context Foundry does something radical: **it uses MCP to recursively spawn Claude Code itself**.
+
+```mermaid
+graph LR
+    A[Your Claude Session] -->|"Build a weather app"| B[MCP Server]
+    B -->|Spawns| C[Fresh Claude Instance #1]
+    C -->|Spawns| D[Fresh Claude Instance #2]
+    C -->|Spawns| E[Fresh Claude Instance #3]
+    D -->|100% Complete| C
+    E -->|100% Complete| C
+    C -->|✅ Deployed to GitHub| A
+
+    style A fill:#e1f5ff
+    style B fill:#fff3cd
+    style C fill:#d4edda
+    style D fill:#d4edda
+    style E fill:#d4edda
+```
+
+**The paradigm shift:**
+- **Traditional MCP**: Claude → MCP → External System (database, API, etc.)
+- **Context Foundry**: Claude → MCP → **Claude** (recursive spawning)
+
+**Why this matters:**
+- 🧠 **Fresh 200K context windows** - Each spawned Claude starts clean, no token accumulation
+- 🔄 **Parallel execution** - Multiple Claude instances work simultaneously
+- 🎯 **Autonomous decision-making** - Agents decide when to spawn new agents
+- 🏗️ **Self-orchestration** - AI orchestrates AI through meta-prompts
+
+**Learn more:** Read the complete technical breakdown in **[docs/INNOVATIONS.md](docs/INNOVATIONS.md)** - all 15 innovations explained with code examples.
 
 ---
 
@@ -135,55 +170,38 @@ with comprehensive tests and error handling
 
 ---
 
-## What's New in 2.0?
+## 🎨 What's New in 2.0? The 15 Innovations
 
-### Core Innovations
+Context Foundry 2.0 introduces **15 groundbreaking innovations** that transform AI software development. Here's a quick overview organized by category:
 
-1. **🔄 Self-Healing Test Loops**
-   - Tests fail? System automatically:
-     - Analyzes root cause
-     - Redesigns solution
-     - Re-implements fix
-     - Re-tests (up to 3 iterations)
-   - No human intervention needed
+### 🏗️ Architecture Innovations
 
-2. **🤖 Fully Autonomous Workflows**
-   - Start a build and walk away
-   - Uses Claude Code's native `/agents` feature
-   - No API calls, uses Claude Max subscription
-   - Complete projects in 7-15 minutes
+1. **Meta-MCP Innovation** - Use MCP to recursively spawn Claude Code instances (the breakthrough that enabled v2.0)
+2. **Subprocess Delegation** - Spawn fresh Claude instances via `subprocess.Popen()` with auth inheritance
+3. **Context Window Isolation** - Each agent gets a fresh 200K token window, no accumulation
+4. **File-Based Context System** - Shared memory via filesystem, `.context-foundry/` artifacts
+5. **Markdown-First Design** - `.md` files over JSON for human+AI readability
 
-3. **⚡ Parallel Task Delegation**
-   - Spawn multiple Claude instances simultaneously
-   - Build backend + frontend + database in parallel
-   - 3-10x speedup on multi-component projects
+### 🤖 Automation Innovations
 
-4. **📝 Meta-Prompt Orchestration**
-   - AI orchestrates itself through text-based instructions
-   - Workflows defined in plain language (no Python code)
-   - Easy to customize and extend
+6. **Self-Healing Test Loop** - Auto-fix test failures through redesign→rebuild→retest cycles
+7. **Parallel Execution Architecture** - Phase 2.5 and 4.5 spawn concurrent agents (30-45% faster)
+8. **Meta-Prompt Orchestration** - AI orchestrates AI via `orchestrator_prompt.txt` (no Python)
+9. **8-Phase Workflow** - Scout→Architect→Builder→Test→Screenshot→Docs→Deploy→Feedback
+10. **Async Task Management** - Non-blocking subprocess execution, work while builds run
 
-5. **📂 File-Based Context Preservation**
-   - No token limit issues
-   - Context stored in `.context-foundry/` directory
-   - Each phase reads from previous artifacts
-   - Works across multiple sessions
+### 🧠 Intelligence Innovations
 
-6. **🧠 Self-Learning Feedback Loop** ⭐
-   - **Phase 7: Feedback Analysis** runs after every build
-   - Extracts learnings and stores them in pattern library
-   - Future builds apply past learnings automatically
-   - Common issues prevented before they occur
-   - System gets smarter with every project
-   - See [FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md) for details
+11. **Global Pattern Learning** - Cross-project knowledge accumulation in `~/.context-foundry/patterns/`
+12. **Output Truncation Strategy** - 45-45-10 split keeps critical context visible
 
-7. **📸 Automated Screenshot Capture** ⭐ NEW!
-   - **Phase 4.5: Screenshot Capture** runs after tests pass
-   - Uses Playwright to capture application screenshots automatically
-   - Generates hero screenshot for README
-   - Creates step-by-step visual guides for documentation
-   - Screenshots stored in GitHub repository (docs/screenshots/)
-   - Graceful fallback for non-visual projects
+### 🎨 User Experience Innovations
+
+13. **Screenshot Capture Phase** - Playwright-based visual documentation (Phase 4.5)
+14. **TUI Real-time Monitoring** - Textual framework terminal dashboard
+15. **Livestream Integration** - WebSocket-based remote monitoring
+
+**Want the complete technical breakdown?** See **[docs/INNOVATIONS.md](docs/INNOVATIONS.md)** for in-depth explanations with code examples, real-world impact analysis, and paradigm shifts for each innovation.
 
 ### What Changed from 1.x?
 
@@ -201,6 +219,60 @@ with comprehensive tests and error handling
 **Want the technical details?** See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for comprehensive explanations of what changed and why.
 
 **Using Context Foundry 1.x?** The Python CLI is preserved in `LEGACY_README.md` and still functional.
+
+---
+
+## 🔄 How It Works: 8-Phase Architecture
+
+Context Foundry orchestrates autonomous builds through **8 distinct phases**, with parallel execution at key stages for maximum performance:
+
+```mermaid
+graph TD
+    START[User Request] --> P1[Phase 1: Scout]
+    P1 --> P2[Phase 2: Architect]
+    P2 --> P25[Phase 2.5: Parallel Builders]
+
+    P25 --> B1[Builder Agent #1]
+    P25 --> B2[Builder Agent #2]
+    P25 --> B3[Builder Agent #N...]
+
+    B1 --> P3[Phase 3: Integration]
+    B2 --> P3
+    B3 --> P3
+
+    P3 --> P4[Phase 4: Test]
+    P4 -->|Tests Pass| P45[Phase 4.5: Screenshot Capture]
+    P4 -->|Tests Fail| HEAL{Self-Healing Loop}
+
+    HEAL -->|Iteration < 3| P2
+    HEAL -->|Max Iterations| FAIL[Report Failure]
+
+    P45 --> P5[Phase 5: Documentation]
+    P5 --> P6[Phase 6: Deploy to GitHub]
+    P6 --> P7[Phase 7: Feedback Analysis]
+    P7 --> DONE[✅ Complete]
+
+    style P1 fill:#e3f2fd
+    style P2 fill:#fff3e0
+    style P25 fill:#fce4ec
+    style P3 fill:#f3e5f5
+    style P4 fill:#e8f5e9
+    style P45 fill:#fff9c4
+    style P5 fill:#e0f2f1
+    style P6 fill:#fce4ec
+    style P7 fill:#e1bee7
+    style HEAL fill:#ffebee
+    style DONE fill:#c8e6c9
+```
+
+**Key Features:**
+
+- **Phase 2.5**: Spawns 2-8 concurrent Builder agents based on project complexity
+- **Phase 4**: Self-healing loop with up to 3 auto-fix iterations
+- **Phase 4.5**: Parallel screenshot capture using Playwright
+- **Phase 7**: Extracts patterns and updates global knowledge base
+
+**Total Duration:** 7-15 minutes for most projects (autonomous, zero human intervention)
 
 ---
 
@@ -935,6 +1007,7 @@ Break-even: ~5 projects per month
 
 | Document | Description | Audience |
 |----------|-------------|----------|
+| **⭐ [docs/INNOVATIONS.md](docs/INNOVATIONS.md)** | **All 15 innovations explained with code examples** | **Everyone - START HERE!** |
 | **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
@@ -963,14 +1036,16 @@ Break-even: ~5 projects per month
 1. [README.md](README.md) - Understand what Context Foundry does
 2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
 3. [USER_GUIDE.md](USER_GUIDE.md) - Learn how to use it
-4. [FAQ.md](FAQ.md) - Common questions answered
+4. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - Deep dive into all 15 innovations
+5. [FAQ.md](FAQ.md) - Common questions answered
 
 **Developers/Contributors:**
-1. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - 🎨 START HERE! Visual overview
-2. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
-3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
-4. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
-5. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
+1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 15 innovations with code examples
+2. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
+3. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+4. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
+5. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
+6. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
 
 **Troubleshooting:**
 1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
@@ -999,7 +1074,7 @@ Break-even: ~5 projects per month
 
 ## Roadmap
 
-### v2.0.1 (Next Release)
+### v2.0.3 (Next Release)
 - [ ] Enhanced test failure analysis
 - [ ] Configurable test frameworks (Jest, pytest, etc.)
 - [ ] Better error recovery in deployment phase
@@ -1055,4 +1130,4 @@ Context Foundry 2.0 builds upon:
 
 **Context Foundry 2.0** - *Build complete software autonomously with self-healing AI workflows*
 
-**Version:** 2.0.1 | **Release Date:** October 2025 | **License:** MIT
+**Version:** 2.0.2 | **Release Date:** October 2025 | **License:** MIT
