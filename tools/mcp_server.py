@@ -765,6 +765,189 @@ def list_delegations() -> str:
         }, indent=2)
 
 
+def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
+    """
+    Detect if a directory contains an existing codebase and identify its characteristics.
+
+    Args:
+        directory: Path to the directory to analyze
+
+    Returns:
+        Dict with detection results:
+        {
+            "has_code": bool,
+            "project_type": str or None,
+            "languages": list[str],
+            "has_git": bool,
+            "git_clean": bool or None,
+            "project_files": list[str],
+            "confidence": str ("high", "medium", "low")
+        }
+    """
+    result = {
+        "has_code": False,
+        "project_type": None,
+        "languages": [],
+        "has_git": False,
+        "git_clean": None,
+        "project_files": [],
+        "confidence": "low"
+    }
+
+    if not directory.exists():
+        return result
+
+    # Check for git repository
+    git_dir = directory / ".git"
+    if git_dir.exists():
+        result["has_git"] = True
+        # Check if git repo is clean
+        try:
+            import subprocess
+            status_result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=str(directory),
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            # Empty output means clean repo
+            result["git_clean"] = len(status_result.stdout.strip()) == 0
+        except:
+            result["git_clean"] = None
+
+    # Define project indicator files
+    project_indicators = {
+        # JavaScript/TypeScript
+        "package.json": {"type": "nodejs", "language": "JavaScript", "confidence": "high"},
+        "package-lock.json": {"type": "nodejs", "language": "JavaScript", "confidence": "medium"},
+        "yarn.lock": {"type": "nodejs", "language": "JavaScript", "confidence": "medium"},
+        "tsconfig.json": {"type": "nodejs", "language": "TypeScript", "confidence": "high"},
+
+        # Python
+        "requirements.txt": {"type": "python", "language": "Python", "confidence": "high"},
+        "setup.py": {"type": "python", "language": "Python", "confidence": "high"},
+        "pyproject.toml": {"type": "python", "language": "Python", "confidence": "high"},
+        "Pipfile": {"type": "python", "language": "Python", "confidence": "high"},
+        "poetry.lock": {"type": "python", "language": "Python", "confidence": "medium"},
+
+        # Rust
+        "Cargo.toml": {"type": "rust", "language": "Rust", "confidence": "high"},
+        "Cargo.lock": {"type": "rust", "language": "Rust", "confidence": "medium"},
+
+        # Go
+        "go.mod": {"type": "golang", "language": "Go", "confidence": "high"},
+        "go.sum": {"type": "golang", "language": "Go", "confidence": "medium"},
+
+        # Java
+        "pom.xml": {"type": "maven", "language": "Java", "confidence": "high"},
+        "build.gradle": {"type": "gradle", "language": "Java", "confidence": "high"},
+        "build.gradle.kts": {"type": "gradle", "language": "Kotlin", "confidence": "high"},
+
+        # Ruby
+        "Gemfile": {"type": "ruby", "language": "Ruby", "confidence": "high"},
+        "Gemfile.lock": {"type": "ruby", "language": "Ruby", "confidence": "medium"},
+
+        # PHP
+        "composer.json": {"type": "php", "language": "PHP", "confidence": "high"},
+
+        # C/C++
+        "CMakeLists.txt": {"type": "cmake", "language": "C/C++", "confidence": "high"},
+        "Makefile": {"type": "make", "language": "C/C++", "confidence": "medium"},
+
+        # .NET
+        ".csproj": {"type": "dotnet", "language": "C#", "confidence": "high"},
+        ".sln": {"type": "dotnet", "language": "C#", "confidence": "high"},
+    }
+
+    # Check for project files
+    found_indicators = []
+    confidence_scores = []
+
+    for file_pattern, info in project_indicators.items():
+        # Handle glob patterns (like .csproj)
+        if file_pattern.startswith("."):
+            matches = list(directory.glob(f"*{file_pattern}"))
+            if matches:
+                found_indicators.append((file_pattern, info))
+                result["project_files"].extend([m.name for m in matches])
+        else:
+            file_path = directory / file_pattern
+            if file_path.exists():
+                found_indicators.append((file_pattern, info))
+                result["project_files"].append(file_pattern)
+
+    if found_indicators:
+        result["has_code"] = True
+
+        # Determine primary project type and languages
+        types = {}
+        languages = set()
+
+        for _, info in found_indicators:
+            proj_type = info["type"]
+            language = info["language"]
+            confidence = info["confidence"]
+
+            types[proj_type] = types.get(proj_type, 0) + (2 if confidence == "high" else 1)
+            languages.add(language)
+            confidence_scores.append(confidence)
+
+        # Primary type is the one with highest score
+        if types:
+            result["project_type"] = max(types.items(), key=lambda x: x[1])[0]
+
+        result["languages"] = sorted(list(languages))
+
+        # Overall confidence
+        if "high" in confidence_scores:
+            result["confidence"] = "high"
+        elif "medium" in confidence_scores:
+            result["confidence"] = "medium"
+
+    # Check for common source directories (increases confidence if project files found)
+    if result["has_code"]:
+        source_dirs = ["src", "lib", "app", "pkg", "cmd", "internal"]
+        for dir_name in source_dirs:
+            if (directory / dir_name).is_dir():
+                result["confidence"] = "high"
+                break
+
+    return result
+
+
+def _detect_task_intent(task: str) -> str:
+    """
+    Detect the user's intent from the task description.
+
+    Returns mode: "new_project", "fix_bug", "add_feature", "upgrade_deps", "refactor", "add_tests"
+    """
+    task_lower = task.lower()
+
+    # Fix/bug keywords
+    if any(word in task_lower for word in ["fix", "bug", "issue", "error", "broken", "repair"]):
+        return "fix_bug"
+
+    # Upgrade/dependency keywords
+    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "migrate to"]):
+        return "upgrade_deps"
+
+    # Refactor keywords
+    if any(word in task_lower for word in ["refactor", "restructure", "reorganize", "clean up"]):
+        return "refactor"
+
+    # Test keywords
+    if any(word in task_lower for word in ["add tests", "write tests", "test coverage", "unit test"]):
+        return "add_tests"
+
+    # Add feature/enhance keywords
+    if any(word in task_lower for word in ["add", "enhance", "improve", "implement", "create feature", "new feature"]):
+        return "add_feature"
+
+    # Default to new project if no enhancement keywords found
+    return "new_project"
+
+
 @mcp.tool()
 def autonomous_build_and_deploy(
     task: str,
@@ -892,15 +1075,93 @@ Auto-correcting to use_parallel=False...
         print(f"✅ Using /agents-based orchestrator (supports parallel execution)", file=sys.stderr)
         print(f"   See docs/PARALLEL_AGENTS_ARCHITECTURE.md for details\n", file=sys.stderr)
 
+        # ═══════════════════════════════════════════════════════════════════════
+        # ENHANCEMENT MODE: Detect existing codebase and task intent
+        # ═══════════════════════════════════════════════════════════════════════
+
+        print(f"🔍 Analyzing workspace...", file=sys.stderr)
+
+        # Detect existing codebase
+        codebase_info = _detect_existing_codebase(final_working_dir)
+
+        # Detect task intent from description
+        detected_intent = _detect_task_intent(task)
+
+        # Log detection results
+        if codebase_info["has_code"]:
+            print(f"   ✅ Existing codebase detected:", file=sys.stderr)
+            print(f"      Type: {codebase_info['project_type']}", file=sys.stderr)
+            print(f"      Languages: {', '.join(codebase_info['languages'])}", file=sys.stderr)
+            print(f"      Confidence: {codebase_info['confidence'].upper()}", file=sys.stderr)
+            if codebase_info["has_git"]:
+                git_status = "clean" if codebase_info["git_clean"] else "dirty"
+                print(f"      Git: {git_status}", file=sys.stderr)
+        else:
+            print(f"   📁 No existing codebase detected (empty/new directory)", file=sys.stderr)
+
+        print(f"   🎯 Detected intent: {detected_intent.replace('_', ' ').title()}", file=sys.stderr)
+
+        # Auto-adjust mode based on detection
+        original_mode = mode
+        auto_mode = mode  # Start with user-specified mode
+
+        # If user didn't explicitly set mode (left default), use detected intent
+        if mode == "new_project" and codebase_info["has_code"]:
+            # Existing code detected, use detected intent instead of new_project
+            auto_mode = detected_intent
+            if detected_intent != "new_project":
+                print(f"   🔄 Auto-adjusted mode: new_project → {detected_intent}", file=sys.stderr)
+
+        # Validate mode conflicts
+        warnings = []
+
+        if auto_mode == "new_project" and codebase_info["has_code"]:
+            warnings.append("⚠️  WARNING: Mode is 'new_project' but existing codebase detected!")
+            warnings.append("   Recommendation: Use mode='add_feature' or 'fix_bug' instead")
+
+        if auto_mode != "new_project" and not codebase_info["has_code"]:
+            warnings.append(f"⚠️  WARNING: Mode is '{auto_mode}' but no existing codebase found!")
+            warnings.append("   Recommendation: Use mode='new_project' instead")
+
+        if codebase_info["has_git"] and codebase_info["git_clean"] == False:
+            warnings.append("⚠️  WARNING: Git repository has uncommitted changes")
+            warnings.append("   Recommendation: Commit or stash changes before enhancement")
+
+        # Print warnings
+        if warnings:
+            print(f"\n", file=sys.stderr)
+            for warning in warnings:
+                print(f"   {warning}", file=sys.stderr)
+            print(f"\n", file=sys.stderr)
+
+        # Use auto-adjusted mode
+        final_mode = auto_mode
+
+        print(f"   ✨ Final mode: {final_mode.replace('_', ' ').title()}\n", file=sys.stderr)
+
+        # ═══════════════════════════════════════════════════════════════════════
+
         # Create orchestrator task configuration with resolved path
         task_config = {
             "task": task,
             "working_directory": final_working_dir_str,
             "github_repo_name": github_repo_name,
             "existing_repo": existing_repo,
-            "mode": mode,
+            "mode": final_mode,  # Use auto-adjusted mode
+            "original_mode": original_mode,  # Keep track of what user requested
             "enable_test_loop": enable_test_loop,
-            "max_test_iterations": max_test_iterations
+            "max_test_iterations": max_test_iterations,
+            # Enhancement mode: Include codebase detection results
+            "codebase_detection": {
+                "has_existing_code": codebase_info["has_code"],
+                "project_type": codebase_info["project_type"],
+                "languages": codebase_info["languages"],
+                "confidence": codebase_info["confidence"],
+                "has_git": codebase_info["has_git"],
+                "git_clean": codebase_info["git_clean"],
+                "project_files": codebase_info["project_files"][:10],  # Limit to first 10 files
+                "detected_intent": detected_intent
+            }
         }
 
         # Load orchestrator system prompt
