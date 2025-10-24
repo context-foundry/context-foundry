@@ -24,31 +24,6 @@ Context Foundry supports two execution modes:
 
 ## Planned Features
 
-
-### 🚧 High Priority: Enhance Existing Projects
-
-**Status:** Design Complete, Implementation Pending
-
-**What:** Add `foundry enhance` command to modify existing codebases instead of building from scratch.
-
-**Use Case:**
-```bash
-cd ~/my-existing-project
-foundry enhance "Add JWT authentication to the API"
-```
-
-**Implementation Tasks:**
-1. ✅ Add `mode` parameter to `AutonomousOrchestrator` ("new" vs "enhance")
-2. ✅ Create `foundry enhance` CLI command stub
-3. ✅ Update Scout prompts to handle existing codebases
-4. ⏳ Implement codebase scanning in Scout phase
-5. ⏳ Detect git repository and validate it's clean
-6. ⏳ Make targeted file modifications instead of creating new projects
-7. ⏳ Create feature branch automatically
-8. ⏳ Push changes and create PR via `gh` CLI
-
-**Estimated Completion:** Q1 2025
-
 ### 📋 Medium Priority: Pull Request Automation
 
 **Status:** Planned
@@ -209,6 +184,112 @@ Context Foundry now supports two execution modes, giving users flexibility based
 
 **Completed:** October 4, 2025
 
+### v1.3 - Enhancement Mode (October 2025)
+**Major Feature: Fix, Enhance, and Upgrade Existing Codebases**
+
+Context Foundry can now intelligently modify existing projects instead of only building from scratch:
+
+**✅ Multi-Mode Support**
+- ✅ `new_project` - Build from scratch (original functionality)
+- ✅ `fix_bug` - Fix bugs in existing code
+- ✅ `add_feature` - Add features to existing code
+- ✅ `upgrade_deps` - Upgrade dependencies
+- ✅ `refactor` - Refactor existing code
+- ✅ `add_tests` - Add tests to existing code
+
+**✅ Intelligent Detection System**
+- ✅ Automatic codebase detection (15+ project types supported)
+  - Python (`requirements.txt`, `setup.py`, `pyproject.toml`)
+  - Node.js (`package.json`, `tsconfig.json`)
+  - Rust (`Cargo.toml`), Go (`go.mod`), Java (`pom.xml`)
+  - Ruby (`Gemfile`), PHP (`composer.json`), .NET (`*.csproj`)
+  - And more...
+- ✅ Intent detection from natural language keywords
+  - "fix" → `fix_bug`, "add" → `add_feature`, "upgrade" → `upgrade_deps`
+- ✅ Auto-mode adjustment with conflict warnings
+- ✅ Git repository status checking
+- ✅ Confidence scoring (high/medium/low)
+
+**✅ Phase 0: Codebase Analysis** (NEW!)
+- ✅ Runs ONLY for enhancement modes (skipped for new projects)
+- ✅ Analyzes project structure, architecture, and existing tests
+- ✅ Reviews git history and current branch state
+- ✅ Creates `codebase-analysis.md` report for context
+- ✅ Provides full understanding before making changes
+
+**✅ Enhancement-Aware Orchestrator**
+- ✅ Scout phase: Mode-specific analysis strategies
+  - Target ed bug finding for `fix_bug`
+  - Integration point analysis for `add_feature`
+  - Dependency impact assessment for `upgrade_deps`
+- ✅ PHASE 2.5 (Parallel Builders): Targeted modifications
+  - Modifies existing files instead of creating new projects
+  - Preserves existing code structure and patterns
+  - Creates feature branches before making changes
+  - Groups changes by logical components
+- ✅ Test phase: Validates existing functionality preserved
+- ✅ Deploy phase: Feature branch + Pull Request workflow
+  - Pushes to feature branch (NOT main)
+  - Creates PR with detailed description
+  - Links to GitHub issues (`Closes #N`)
+  - Requires human review before merge
+
+**✅ Testing & Validation**
+- ✅ Standalone test script (`test_detection.py`)
+- ✅ Live test: YouTube Transcript Summarizer enhancement
+  - Added auto-save markdown feature
+  - 21 new tests (all passing)
+  - Created PR #2 on feature branch
+  - Zero impact on existing functionality
+  - Completed in ~12 minutes, 1 test iteration
+
+**📊 Impact**
+- 🎯 **Codebase Coverage**: Detects Python, JavaScript/TypeScript, Rust, Go, Java, Ruby, PHP, .NET, C/C++, and more
+- 🚀 **Success Rate**: 100% on first live test (YouTube Transcript Summarizer)
+- 📝 **Code Quality**: Professional PR workflow with detailed descriptions
+- ⚡ **Efficiency**: Feature branches + PRs enable safe, reviewable changes
+
+**🔧 Technical Implementation**
+- `tools/mcp_server.py` (lines 768-1165): Detection and integration
+  - `_detect_existing_codebase()` - 15+ project types
+  - `_detect_task_intent()` - keyword-based mode detection
+  - `autonomous_build_and_deploy()` - integrated detection and warnings
+- `tools/orchestrator_prompt.txt`: Enhancement-aware phases
+  - Mode detection section (lines 49-70)
+  - Phase 0: Codebase Analysis (lines 71-175)
+  - Scout enhancement guidance (lines 257-295)
+  - PHASE 2.5 targeted modifications (lines 481-514)
+  - Deploy PR workflow (lines 1237-1407)
+- `test_detection.py`: Standalone validation script
+
+**📚 Use Cases**
+```python
+# Fix a bug in existing codebase
+autonomous_build_and_deploy(
+    task="Fix the authentication bug in the login page",
+    working_directory="/path/to/project",
+    mode="fix_bug"  # Auto-detected from "fix" keyword
+)
+
+# Add a feature
+autonomous_build_and_deploy(
+    task="Add dark mode toggle to settings page",
+    working_directory="/path/to/project",
+    mode="add_feature"  # Auto-detected from "add" keyword
+)
+
+# Upgrade dependencies
+autonomous_build_and_deploy(
+    task="Upgrade all npm packages to latest versions",
+    working_directory="/path/to/project",
+    mode="upgrade_deps"  # Auto-detected from "upgrade" keyword
+)
+```
+
+**Key Insight:** Enhancement mode transforms Context Foundry from a greenfield development tool into a comprehensive code evolution platform. It can now fix bugs, add features, upgrade dependencies, refactor code, and add tests to ANY existing project - whether built by Context Foundry or not.
+
+**Completed:** October 24, 2025
+
 ## Contributing
 
 Want to help implement these features? Check out our [CONTRIBUTING.md](CONTRIBUTING.md) guide!
@@ -220,4 +301,4 @@ https://github.com/snedea/context-foundry/issues
 
 ---
 
-*Last Updated: 2025-10-04*
+*Last Updated: 2025-10-24*

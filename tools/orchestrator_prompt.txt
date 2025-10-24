@@ -47,6 +47,134 @@ This enables real-time monitoring at http://localhost:8080 during autonomous bui
 **Session ID**: Use the project directory name as session_id for tracking
 
 ═══════════════════════════════════════════════════════════
+🔧 ENHANCEMENT MODE DETECTION
+═══════════════════════════════════════════════════════════
+
+**IMPORTANT**: Check the CONFIGURATION.mode value to determine workflow:
+
+**Available Modes:**
+- `new_project`: Build from scratch (default workflow, all 7 phases)
+- `fix_bug`: Fix bugs in existing code (Phases 0→1→3→4→7)
+- `add_feature`: Add features to existing code (Phases 0→1→2→3→4→7)
+- `upgrade_deps`: Upgrade dependencies (Phases 0→3→4→7)
+- `refactor`: Refactor existing code (Phases 0→1→2→3→4→7)
+- `add_tests`: Add tests to existing code (Phases 0→1→4→7)
+
+**Check CONFIGURATION.codebase_detection for context:**
+- `has_existing_code`: true/false
+- `project_type`: python/nodejs/rust/etc
+- `languages`: [list of languages]
+- `confidence`: high/medium/low
+- `has_git`: true/false
+- `git_clean`: true/false/null
+
+═══════════════════════════════════════════════════════════
+PHASE 0: CODEBASE ANALYSIS (Enhancement Modes Only)
+═══════════════════════════════════════════════════════════
+
+**⚠️  SKIP THIS PHASE IF mode = "new_project"**
+
+**RUN THIS PHASE IF mode = "fix_bug", "add_feature", "upgrade_deps", "refactor", or "add_tests"**
+
+This phase analyzes the existing codebase before making changes.
+
+⚠️  CRITICAL: PHASE TRACKING ⚠️
+────────────────────────────────────────────────────────────
+Execute: cat > .context-foundry/current-phase.json << 'EOF'
+{
+  "session_id": "{project_directory_name}",
+  "current_phase": "Codebase Analysis",
+  "phase_number": "0/7",
+  "status": "analyzing",
+  "progress_detail": "Understanding existing codebase structure and architecture",
+  "test_iteration": 0,
+  "phases_completed": [],
+  "started_at": "{current ISO timestamp}",
+  "last_updated": "{current ISO timestamp}"
+}
+EOF
+
+Execute: curl -s -X POST http://localhost:8080/api/phase-update \
+  -H "Content-Type: application/json" \
+  -d @.context-foundry/current-phase.json \
+  > /dev/null 2>&1 || true
+────────────────────────────────────────────────────────────
+
+**Objectives:**
+1. **Understand Project Structure**
+   - List all directories and key files
+   - Identify entry points (main.py, index.js, main.rs, etc.)
+   - Find configuration files
+   - Locate tests directory
+
+2. **Analyze Architecture**
+   - Read package/dependency files (requirements.txt, package.json, Cargo.toml, etc.)
+   - Understand module/package structure
+   - Identify design patterns used
+   - Document API routes/endpoints (if applicable)
+
+3. **Review Existing Code** (targeted reading)
+   - **For fix_bug mode**: Find files related to the bug
+   - **For add_feature mode**: Find files that will be extended
+   - **For refactor mode**: Identify code to refactor
+   - **For add_tests mode**: Find untested code
+   - **For upgrade_deps mode**: Review dependency usage
+
+4. **Check Tests**
+   - Find existing test files
+   - Understand test framework used
+   - Note test coverage gaps
+
+5. **Git Analysis** (if has_git = true)
+   - Check current branch
+   - Review recent commits for context
+   - Note any uncommitted changes (warning if git_clean = false)
+
+6. **Document Findings**
+   Create `.context-foundry/codebase-analysis.md` with:
+   ```markdown
+   # Codebase Analysis Report
+
+   ## Project Overview
+   - Type: {project_type}
+   - Languages: {languages}
+   - Architecture: {describe structure}
+
+   ## Key Files
+   - Entry point: {file}
+   - Config: {files}
+   - Tests: {location}
+
+   ## Dependencies
+   {list main dependencies}
+
+   ## Code to Modify
+   **Task**: {task description}
+   **Files to change**: {list specific files}
+   **Approach**: {describe modification strategy}
+
+   ## Risks
+   {potential issues with changes}
+   ```
+
+7. **Update Phase Tracking**
+   Execute: cat > .context-foundry/current-phase.json << 'EOF'
+   {
+     "session_id": "{project_directory_name}",
+     "current_phase": "Codebase Analysis",
+     "phase_number": "0/7",
+     "status": "completed",
+     "progress_detail": "Codebase analysis complete, ready for implementation",
+     "test_iteration": 0,
+     "phases_completed": ["Codebase Analysis"],
+     "started_at": "{ISO timestamp from start}",
+     "last_updated": "{current ISO timestamp}"
+   }
+   EOF
+
+**✅ Phase 0 Complete. Proceed to Phase 1 (Scout).**
+
+═══════════════════════════════════════════════════════════
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 ═══════════════════════════════════════════════════════════
 
@@ -125,6 +253,45 @@ Execute: curl -s -X POST http://localhost:8080/api/phase-update \
      * Enterprise/aviation/financial APIs (usually restrictive)
    - If API blocks CORS: Flag need for backend proxy in scout-report.md
    - Pattern ID: cors-external-api-backend-proxy
+
+   **🔧 ENHANCEMENT MODE GUIDANCE:**
+
+   **IF mode = "fix_bug":**
+   - Review codebase-analysis.md for context
+   - Locate the specific bug/error
+   - Understand the affected code paths
+   - Identify root cause
+   - Research similar bug fixes
+   - Recommend fix approach with minimal changes
+
+   **IF mode = "add_feature":**
+   - Review codebase-analysis.md for architecture
+   - Identify where new feature fits in existing structure
+   - Understand coding patterns used in project
+   - Ensure new feature matches existing style
+   - Plan integration points
+   - Consider backward compatibility
+
+   **IF mode = "upgrade_deps":**
+   - Review current dependency versions
+   - Research breaking changes in new versions
+   - Check migration guides
+   - Identify code that needs updating
+   - Plan upgrade strategy (all-at-once vs incremental)
+
+   **IF mode = "refactor":**
+   - Understand code to refactor thoroughly
+   - Identify code smells and anti-patterns
+   - Research refactoring best practices
+   - Plan refactoring steps
+   - Ensure tests exist before refactoring
+
+   **IF mode = "add_tests":**
+   - Review existing test framework
+   - Identify untested code
+   - Understand test coverage gaps
+   - Research testing best practices for this stack
+   - Plan test cases
 
 4. Save Scout findings:
    Create file: .context-foundry/scout-report.md
@@ -310,6 +477,41 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 - Large projects (16+ files): Create 4-8 parallel tasks
 
 **NO SEQUENTIAL BUILDING ALLOWED** - This phase is REQUIRED, not optional
+
+**🔧 ENHANCEMENT MODE GUIDANCE:**
+
+   **IF mode != "new_project":**
+   - Review codebase-analysis.md and architect-plan.md for context
+   - Tasks should focus on MODIFYING existing files, not creating new ones
+   - Preserve existing code structure, naming conventions, and patterns
+   - Create feature branch BEFORE making any changes:
+     ```bash
+     git checkout -b enhancement/descriptive-name
+     ```
+   - Each task should modify related files together
+   - Make incremental commits per logical change group
+
+   **Task breakdown for enhancement modes:**
+   - **fix_bug**: Group tasks by affected subsystem
+     - Task 1: Fix authentication logic (auth.py, middleware.py)
+     - Task 2: Fix error handling (error_handler.py, validators.py)
+   - **add_feature**: Group tasks by feature component
+     - Task 1: Add backend API endpoint (routes.py, handlers.py)
+     - Task 2: Add frontend UI component (component.tsx, styles.css)
+   - **refactor**: Group tasks by module/layer
+     - Task 1: Refactor data access layer (database.py, models.py)
+     - Task 2: Refactor business logic (services.py, utils.py)
+   - **upgrade_deps**: Group tasks by dependency impact
+     - Task 1: Update package files (package.json, requirements.txt)
+     - Task 2: Fix breaking changes in auth module
+     - Task 3: Fix breaking changes in database module
+
+   **IMPORTANT for enhancement modes:**
+   - DO NOT delete existing code unless explicitly part of the fix
+   - DO NOT rewrite entire files - make targeted edits
+   - DO keep existing imports, constants, and helper functions
+   - DO add comments explaining why changes were made
+   - DO test each modification group before moving to next task
 
 1. Analyze architecture for parallelization:
    - Count total files/modules to create
@@ -1032,6 +1234,27 @@ PHASE 6: DEPLOYMENT (GitHub)
 
 (Only reached if tests PASSED)
 
+**🔧 ENHANCEMENT MODE GUIDANCE:**
+
+   **IF mode != "new_project":**
+   - You should already be on a feature branch (created in PHASE 2.5)
+   - **DO NOT push to main** - push to feature branch instead
+   - Create a Pull Request instead of direct deployment
+   - Include detailed PR description with:
+     * What was fixed/enhanced
+     * Test results
+     * Files changed
+     * Breaking changes (if any)
+
+   **Enhancement mode deployment workflow:**
+   1. Verify you're on feature branch: `git branch --show-current`
+   2. Commit all changes to feature branch
+   3. Push feature branch: `git push -u origin <feature-branch-name>`
+   4. Create PR to main: `gh pr create --base main --head <feature-branch-name>`
+   5. Skip repository creation steps (repo already exists)
+
+   **Skip to "Enhancement Mode Deployment" section below (after step 2)**
+
 0. Write phase status (REQUIRED FIRST STEP):
    Update .context-foundry/current-phase.json:
    {
@@ -1094,27 +1317,94 @@ PHASE 6: DEPLOYMENT (GitHub)
    d. Push to GitHub:
       Execute: git push -u origin main
 
-3. For existing repositories (if existing_repo provided):
+3. Enhancement Mode Deployment (IF mode != "new_project"):
 
-   a. Pull latest changes:
-      Execute: git pull origin main
+   **CRITICAL: Use feature branch workflow, NOT direct push to main**
 
-   b. Add changes:
+   a. Verify current branch:
+      ```bash
+      CURRENT_BRANCH=$(git branch --show-current)
+      echo "Current branch: $CURRENT_BRANCH"
+      ```
+      If on main/master, CREATE feature branch immediately:
+      ```bash
+      git checkout -b enhancement/fix-$(date +%Y%m%d-%H%M%S)
+      ```
+
+   b. Add all changes:
       Execute: git add .
 
-   c. Commit with detailed message:
-      git commit -m "Automated {mode} via Context Foundry
+   c. Commit with detailed message describing changes:
+      ```bash
+      git commit -m "$(cat <<'EOF'
+{mode}: {Brief description of fix/enhancement}
 
-      Changes:
-      {describe what was fixed/enhanced}
+**Changes made:**
+- {List specific files/modules modified}
+- {Describe key changes}
 
-      Tests: PASSED (after {iteration_count} iteration(s))
+**Testing:**
+- Tests: PASSED (after {iteration_count} iteration(s))
+- Test coverage: {coverage if available}
 
-      🤖 Built autonomously by Context Foundry
-      Co-Authored-By: Claude <noreply@anthropic.com>"
+**Mode:** {mode}
+**Codebase:** {project_type} ({languages})
 
-   d. Push changes:
-      Execute: git push origin main
+🤖 Built autonomously by Context Foundry
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+      ```
+
+   d. Push feature branch to remote:
+      ```bash
+      git push -u origin $CURRENT_BRANCH
+      ```
+
+   e. Create Pull Request:
+      ```bash
+      gh pr create \
+        --base main \
+        --head $CURRENT_BRANCH \
+        --title "{mode}: {Brief description}" \
+        --body "$(cat <<'EOF'
+## Summary
+{Describe what was fixed/enhanced and why}
+
+## Changes
+- {List key changes}
+- {Highlight any breaking changes}
+
+## Testing
+- ✅ All tests passed (after {iteration_count} iteration(s))
+- {List test types run: unit, e2e, lint, etc.}
+
+## Files Modified
+{List files changed with brief descriptions}
+
+## Mode
+**Enhancement Mode:** {mode}
+**Project Type:** {project_type}
+**Languages:** {languages}
+
+---
+🤖 Built autonomously by Context Foundry
+EOF
+)"
+      ```
+
+   f. Capture PR information:
+      ```bash
+      PR_URL=$(gh pr view --json url -q .url)
+      echo "Pull Request created: $PR_URL"
+      # Save to session-summary.json
+      ```
+
+   **After PR is created:**
+   - ✅ Enhancement complete - feature branch pushed
+   - ✅ PR ready for review
+   - ⏸️  DO NOT merge automatically - let human review
+   - Skip to step 5 (update phase status)
 
 4. Capture deployment information:
    - Get final commit SHA: git rev-parse HEAD
