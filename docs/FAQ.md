@@ -15,12 +15,13 @@
 4. [Token Management & Context Windows](#4-token-management--context-windows)
 5. [Parallelization & Coordination](#5-parallelization--coordination)
 6. [Authentication & API Usage](#6-authentication--api-usage)
-7. [Performance & Scaling](#7-performance--scaling)
-8. [Error Handling & Self-Healing](#8-error-handling--self-healing)
-9. [Pattern Learning System](#9-pattern-learning-system)
-10. [Advanced Technical Topics](#10-advanced-technical-topics)
-11. [Practical Usage & Limitations](#11-practical-usage--limitations)
-12. [Comparisons & Philosophy](#12-comparisons--philosophy)
+7. [MCP Server Architecture & Context Management](#7-mcp-server-architecture--context-management)
+8. [Performance & Scaling](#8-performance--scaling)
+9. [Error Handling & Self-Healing](#9-error-handling--self-healing)
+10. [Pattern Learning System](#10-pattern-learning-system)
+11. [Advanced Technical Topics](#11-advanced-technical-topics)
+12. [Practical Usage & Limitations](#12-practical-usage--limitations)
+13. [Comparisons & Philosophy](#13-comparisons--philosophy)
 
 ---
 
@@ -1383,9 +1384,1042 @@ Rate limit exceeded. Please wait 60 seconds.
 
 ---
 
-## 7. Performance & Scaling
+## 7. MCP Server Architecture & Context Management
 
-### Q28: What's the actual speedup for different project sizes?
+### Q28: What is the MCP server and why is it critical to Context Foundry?
+
+**A:** The **MCP (Model Context Protocol) server** is the orchestration layer that makes Context Foundry work with Claude Code/Desktop **without consuming your main context window**.
+
+**What It Is:**
+
+The MCP server is a Python service (`tools/mcp_server.py`, ~1200 lines) built with [FastMCP](https://github.com/jlowin/fastmcp) that:
+- Exposes Context Foundry functionality as **MCP tools** (like function calls)
+- Bridges between Claude Code/Desktop and Context Foundry's autonomous build system
+- Runs as a **stdio server** (communicates via standard input/output, not HTTP)
+- Loaded automatically by Claude Code/Desktop when configured in MCP settings
+
+**Why It's Critical:**
+
+```
+❌ WITHOUT MCP Server:
+──────────────────────────────
+You: "Build a weather app"
+Claude (in your main window):
+  - Scout researches... (20K tokens accumulated)
+  - Architect designs... (60K tokens accumulated)
+  - Builder implements... (150K tokens accumulated)
+  - Tester runs tests... (180K tokens accumulated)
+  - ⚠️ DANGER: Approaching 200K token limit
+  - Can't do much more in this conversation
+
+✅ WITH MCP Server:
+──────────────────────────────
+You: "Build a weather app using Context Foundry"
+Claude (in your main window):
+  - Calls MCP tool: autonomous_build_and_deploy()
+  - Returns task_id: "abc-123"
+  - Main window context: ~2K tokens (just the request + task ID)
+
+MCP Server (in background):
+  - Spawns SEPARATE claude process
+  - That process has FRESH 200K context window
+  - Scout, Architect, Builder, Tester all run there
+  - When done, returns SUMMARY (5KB) to main window
+
+Result:
+  - Your main window stays clean (~7K tokens total)
+  - You can continue other work
+  - 193K tokens still available in main window!
+```
+
+**Critical Features:**
+
+1. **Context Isolation:** Build happens in separate process, doesn't pollute main window
+2. **Background Execution:** Non-blocking, returns immediately
+3. **Authentication Inheritance:** Spawned processes use your Claude Code auth (no API keys)
+4. **Task Tracking:** Can monitor multiple builds simultaneously
+5. **Result Aggregation:** Returns concise summaries, not full build logs
+
+**Architecture Location:**
+- Source: [`tools/mcp_server.py`](https://github.com/context-foundry/context-foundry/blob/main/tools/mcp_server.py)
+- Configuration: `.claude/mcp-config.json` (in your home directory)
+- Prompts: `tools/orchestrator_prompt.txt` (passed to spawned processes)
+
+---
+
+### Q29: How does the MCP server free up your main Claude context window?
+
+**A:** Through **process delegation**—work happens in a separate `claude` process with its own fresh 200K context window.
+
+**The Delegation Pattern:**
+
+```mermaid
+sequenceDiagram
+    participant User as You (Main Window)
+    participant Main as Claude (Main Process)
+    participant MCP as MCP Server
+    participant Sub as Claude (Subprocess)
+
+    Note over User,Sub: Main window context: 5K tokens
+
+    User->>Main: "Build a weather app with Context Foundry"
+    Main->>MCP: Call tool: autonomous_build_and_deploy(...)
+    Note over MCP: MCP server receives call via stdio
+
+    MCP->>MCP: Build command:<br/>claude --system-prompt orchestrator_prompt.txt
+    MCP->>Sub: Spawn subprocess (background)
+    Note over Sub: Fresh 200K context window
+
+    MCP->>Main: Return: {"task_id": "abc-123", "status": "started"}
+    Main->>User: "Build started! Task ID: abc-123"
+    Note over User,Main: Main window context: Still ~5K tokens ✅
+
+    Note over Sub: Subprocess runs entire build:<br/>Scout → Architect → Builder → Test → Deploy
+
+    Sub->>Sub: Scout phase (20K tokens)
+    Sub->>Sub: Architect phase (40K tokens)
+    Sub->>Sub: Builder phase (60K tokens)
+    Sub->>Sub: Test phase (30K tokens)
+    Sub->>Sub: Deploy phase (10K tokens)
+    Note over Sub: Subprocess context: 160K tokens used<br/>(isolated from main window)
+
+    Sub->>MCP: Build complete! Summary: {...}
+    Note over Sub: Subprocess exits, context freed
+
+    User->>Main: "Check build status: abc-123"
+    Main->>MCP: Call tool: get_delegation_result("abc-123")
+    MCP->>Main: Return: Build summary (5KB)
+    Main->>User: "✅ Build complete!<br/>Tests: 25/25 passing<br/>GitHub: https://github.com/..."
+    Note over User,Main: Main window context: ~10K tokens total ✅
+```
+
+**Context Comparison:**
+
+| Metric | Without MCP | With MCP |
+|--------|-------------|----------|
+| **Main Window Context (during build)** | 150-180K tokens | ~5K tokens |
+| **Main Window Context (after build)** | 180-190K tokens | ~10K tokens |
+| **Available for Other Tasks** | 10-20K tokens | 190K tokens |
+| **Build Isolation** | ❌ Pollutes main conversation | ✅ Isolated subprocess |
+| **Can Continue Working** | ❌ No (approaching limit) | ✅ Yes (plenty of space) |
+
+**Real-World Example:**
+
+```
+Session WITHOUT MCP:
+──────────────────────────────
+You: "Build a weather app"
+[... 30 minutes of build messages ...]
+You: "Great! Now help me debug this other project"
+Claude: "I'm approaching my context limit. Can we start a new conversation?"
+❌ You lose conversation history
+
+Session WITH MCP:
+──────────────────────────────
+You: "Build a weather app with Context Foundry"
+Claude: "Started! Task ID: abc-123. I'll let you know when done."
+You: "While that runs, help me debug this other project"
+Claude: "Sure! What's the issue?"
+[... debugging conversation ...]
+Claude: "By the way, your weather app build completed successfully!"
+✅ You keep conversation context, build happens in background
+```
+
+**Key Insight:** MCP enables **"fire and forget"** builds—start a build, continue other work, check results later.
+
+---
+
+### Q30: What tools/functions does the MCP server provide?
+
+**A:** The MCP server exposes **10 tools** for autonomous builds, task delegation, and pattern management.
+
+**Core Build Tool:**
+
+**`autonomous_build_and_deploy()`**
+```python
+# Main autonomous build orchestrator
+autonomous_build_and_deploy(
+    task="Build a weather dashboard with OpenWeatherMap API",
+    working_directory="/path/to/project",
+    github_repo_name="weather-dashboard",  # Optional: create new repo
+    existing_repo=None,  # Or: enhance existing repo
+    mode="new_project",  # or "fix_bugs", "add_docs"
+    enable_test_loop=True,  # Self-healing
+    max_test_iterations=3,  # Max fix attempts
+    timeout_minutes=90.0,  # Max execution time
+    use_parallel=True,  # Parallel builders/tests
+    incremental=False,  # Incremental builds (experimental)
+    force_rebuild=False  # Force full rebuild
+)
+# Returns: {"task_id": "abc-123", "status": "started", ...}
+```
+
+**What it does:**
+- Spawns fresh Claude instance with `orchestrator_prompt.txt`
+- Runs complete 8-phase workflow (Scout → Deploy)
+- Self-healing test loop (up to `max_test_iterations`)
+- Parallel execution (Phase 2.5: builders, Phase 4.5: tests)
+- GitHub deployment
+- Returns task ID immediately (non-blocking)
+
+---
+
+**Task Delegation Tools:**
+
+**`delegate_to_claude_code()` (Synchronous)**
+```python
+# Delegate a task and wait for completion
+delegate_to_claude_code(
+    task="Analyze this codebase and suggest improvements",
+    working_directory="/path/to/project",
+    timeout_minutes=10.0,
+    additional_flags="--model claude-sonnet-4",  # Optional CLI flags
+    include_full_output=False  # Truncate large outputs
+)
+# Returns: Formatted output with stdout/stderr
+# Blocks until task completes
+```
+
+**What it does:**
+- Spawns `claude` CLI subprocess
+- Waits for completion (blocking)
+- Returns stdout + stderr
+- Useful for quick tasks (analysis, code generation, debugging)
+
+**`delegate_to_claude_code_async()` (Asynchronous)**
+```python
+# Start task in background, return immediately
+delegate_to_claude_code_async(
+    task="Run comprehensive test suite",
+    working_directory="/path/to/project",
+    timeout_minutes=20.0,
+    additional_flags=None
+)
+# Returns: {"task_id": "def-456", "status": "started", ...}
+# Non-blocking, task runs in background
+```
+
+**What it does:**
+- Spawns subprocess in background
+- Returns task ID immediately
+- Track status with `get_delegation_result()`
+- Enable parallel task execution
+
+**`get_delegation_result(task_id, include_full_output=False)`**
+```python
+# Check status of async task
+get_delegation_result("def-456")
+# Returns:
+# - If running: {"status": "running", "elapsed": "5m 30s", ...}
+# - If complete: {"status": "completed", "stdout": "...", "stderr": "...", ...}
+# - If failed: {"status": "failed", "error": "...", ...}
+```
+
+**What it does:**
+- Checks subprocess status
+- Returns current output (if running)
+- Returns final results (if complete)
+- Truncates large outputs (unless `include_full_output=True`)
+
+**`list_delegations()`**
+```python
+# List all active and completed tasks
+list_delegations()
+# Returns: {"tasks": [{"task_id": "...", "status": "...", ...}, ...]}
+```
+
+**What it does:**
+- Shows all background tasks
+- Status for each (running/completed/failed)
+- Elapsed time
+- Useful for monitoring multiple builds
+
+---
+
+**Pattern Management Tools:**
+
+**`read_global_patterns(pattern_type)`**
+```python
+# Read patterns from global storage
+read_global_patterns("common-issues")
+# Returns: JSON with patterns learned from ALL past builds
+
+read_global_patterns("scout-learnings")
+# Returns: JSON with scout discoveries across projects
+```
+
+**What it does:**
+- Reads from `~/.context-foundry/patterns/`
+- Returns patterns in JSON format
+- Used by Scout/Architect phases for learning
+
+**`save_global_patterns(pattern_type, patterns_data)`**
+```python
+# Save patterns to global storage
+patterns = json.dumps({"patterns": [...], "version": "1.0"})
+save_global_patterns("common-issues", patterns)
+```
+
+**What it does:**
+- Writes patterns to `~/.context-foundry/patterns/`
+- Creates backups before overwriting
+- Used by Deployer phase after successful builds
+
+**`merge_project_patterns(project_pattern_file, pattern_type)`**
+```python
+# Merge project-specific patterns into global storage
+merge_project_patterns(
+    project_pattern_file="/path/to/project/.context-foundry/patterns/common-issues.json",
+    pattern_type="common-issues"
+)
+```
+
+**What it does:**
+- Reads patterns from project file
+- Merges into global storage (increments frequency)
+- Deduplicates patterns
+- Cross-project learning mechanism
+
+**`migrate_all_project_patterns(projects_base_dir)`**
+```python
+# Migrate patterns from all projects in a directory
+migrate_all_project_patterns("/Users/name/homelab")
+# Scans all subdirectories for .context-foundry/patterns/
+# Merges all into ~/.context-foundry/patterns/
+```
+
+---
+
+**Utility Tool:**
+
+**`context_foundry_status()`**
+```python
+# Get MCP server status
+context_foundry_status()
+# Returns: Server version, available tools, capabilities
+```
+
+---
+
+**Tool Count Summary:**
+- **1** main autonomous build tool
+- **4** delegation tools (sync/async delegation, status check, list)
+- **4** pattern management tools
+- **1** status utility
+- **Total: 10 tools**
+
+---
+
+### Q31: How does the MCP server orchestrate agents with the Claude CLI?
+
+**A:** Through **subprocess spawning** with the `orchestrator_prompt.txt` as a system prompt.
+
+**The Orchestration Flow:**
+
+```
+Step 1: User Invokes MCP Tool
+─────────────────────────────────────────
+User (in main Claude window):
+> "Build a weather app using Context Foundry"
+
+Claude (main process):
+> Calling tool: autonomous_build_and_deploy(task="Build a weather app", ...)
+
+
+Step 2: MCP Server Receives Call
+─────────────────────────────────────────
+MCP Server (tools/mcp_server.py):
+1. Receives tool call via stdio (FastMCP handles protocol)
+2. Validates parameters
+3. Loads orchestrator_prompt.txt
+
+Code (simplified):
+orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
+with open(orchestrator_prompt_path) as f:
+    system_prompt = f.read()  # ~1200 lines, 8-phase workflow
+
+
+Step 3: Build Command
+─────────────────────────────────────────
+MCP Server builds command:
+
+cmd = [
+    "claude",
+    "--print",  # Non-interactive mode, exit after completion
+    "--permission-mode", "bypassPermissions",  # Skip permission prompts
+    "--strict-mcp-config",  # Don't load MCP servers (avoid recursion)
+    "--settings", '{"thinkingMode": "off"}',  # Disable thinking blocks
+    "--system-prompt", system_prompt,  # Pass orchestrator as system prompt
+    task_prompt  # User's task
+]
+
+
+Step 4: Spawn Subprocess in Background
+─────────────────────────────────────────
+MCP Server spawns:
+
+process = subprocess.Popen(
+    cmd,
+    cwd=working_directory,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    stdin=subprocess.DEVNULL,  # No input needed
+    env=os.environ  # Inherits PATH, Claude auth, etc.
+)
+
+Subprocess runs in background (non-blocking).
+MCP server tracks it in active_tasks dict.
+
+
+Step 5: Return Task ID Immediately
+─────────────────────────────────────────
+MCP Server returns to main Claude window:
+
+{
+  "task_id": "abc-123-def-456",
+  "status": "started",
+  "task": "Build a weather app",
+  "working_directory": "/path/to/project",
+  "message": "Build started! Use get_delegation_result('abc-123...') to check status."
+}
+
+Main window context: ~2K tokens (just the response).
+
+
+Step 6: Subprocess Executes Full Build
+─────────────────────────────────────────
+Spawned Claude process (fresh 200K context):
+
+1. Loads system prompt: orchestrator_prompt.txt
+2. Reads user task: "Build a weather app"
+3. Executes Phase 1: Scout
+   - Spawns Scout agent via /agents
+   - Scout researches, writes scout-report.md
+   - Scout agent dies
+4. Executes Phase 2: Architect
+   - Spawns Architect agent via /agents
+   - Reads scout-report.md
+   - Writes architecture.md, build-tasks.json
+   - Architect agent dies
+5. Executes Phase 2.5: Parallel Build
+   - Spawns 4 Builder agents (separate processes!)
+   - Each uses builder_task_prompt.txt
+   - All write code simultaneously
+   - All die when done
+6. Executes Phase 4.5: Parallel Test
+   - Spawns 3 Test agents (unit/e2e/lint)
+   - Each uses test_task_prompt.txt
+   - All run tests simultaneously
+   - All die when done
+7. If tests fail: Self-healing loop (back to Phase 2)
+8. If tests pass: Phase 5-7 (Docs, Deploy)
+9. Subprocess writes final summary to stdout
+10. Subprocess exits (context freed)
+
+
+Step 7: MCP Server Captures Results
+─────────────────────────────────────────
+MCP Server monitors subprocess:
+
+stdout, stderr = process.communicate()  # Wait for completion
+exit_code = process.returncode
+
+Stores results in active_tasks["abc-123"]:
+{
+  "status": "completed",
+  "stdout": "✅ Build successful! GitHub: https://...",
+  "stderr": "",
+  "duration": "18 minutes",
+  "exit_code": 0
+}
+
+
+Step 8: User Checks Results
+─────────────────────────────────────────
+User (in main window):
+> "Check the build status"
+
+Claude:
+> Calling tool: get_delegation_result("abc-123")
+
+MCP Server returns:
+{
+  "status": "completed",
+  "duration": "18 minutes",
+  "summary": "Build successful! 25/25 tests passing. GitHub: https://..."
+}
+
+Main window context: ~7K tokens total (original 2K + 5K summary).
+```
+
+**Key Mechanisms:**
+
+1. **System Prompt Injection:**
+   ```bash
+   claude --system-prompt "$(cat orchestrator_prompt.txt)" "Build app"
+   # Orchestrator's 8-phase workflow becomes Claude's system instruction
+   ```
+
+2. **Non-Interactive Execution:**
+   ```bash
+   --print  # Runs once, prints result, exits (no interactive loop)
+   ```
+
+3. **Permission Bypass:**
+   ```bash
+   --permission-mode bypassPermissions  # Autonomous, no user confirmations
+   ```
+
+4. **MCP Recursion Prevention:**
+   ```bash
+   --strict-mcp-config  # Spawned instance doesn't load MCP servers
+   # Prevents infinite recursion (MCP calling MCP calling MCP...)
+   ```
+
+5. **Authentication Inheritance:**
+   ```bash
+   env=os.environ  # Subprocess inherits parent environment
+   # Includes ~/.claude/config authentication
+   # No API keys needed
+   ```
+
+**Process Tree:**
+
+```
+Your Shell
+ └─ Claude Code (main window)
+     └─ MCP Server (stdio connection)
+         └─ Spawned Claude (subprocess, background)
+             ├─ Scout Agent (/agents, dies after phase)
+             ├─ Architect Agent (/agents, dies after phase)
+             ├─ Builder 1 (subprocess, /agents)
+             ├─ Builder 2 (subprocess, /agents)
+             ├─ Builder 3 (subprocess, /agents)
+             ├─ Builder 4 (subprocess, /agents)
+             ├─ Test Unit (subprocess, /agents)
+             ├─ Test E2E (subprocess, /agents)
+             └─ Test Lint (subprocess, /agents)
+```
+
+**Verdict:** MCP server is a **subprocess orchestrator**, not an API wrapper. It spawns real Claude CLI instances with custom system prompts.
+
+---
+
+### Q32: What's the architecture of the MCP server?
+
+**A:** **FastMCP-based stdio server** with tool decorators, subprocess management, and output truncation.
+
+**High-Level Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Claude Code / Desktop (Client)                              │
+│ - User interacts with main window                           │
+│ - Calls MCP tools as function calls                         │
+│ - Communicates via stdio (stdin/stdout)                     │
+└───────────────┬─────────────────────────────────────────────┘
+                │ stdio (JSON-RPC over pipes)
+                ↓
+┌─────────────────────────────────────────────────────────────┐
+│ MCP Server (tools/mcp_server.py)                            │
+│                                                              │
+│ ┌──────────────────────────────────────────────────────────┐│
+│ │ FastMCP Framework                                        ││
+│ │ - Handles MCP protocol (JSON-RPC)                        ││
+│ │ - Tool discovery                                         ││
+│ │ - Parameter validation                                   ││
+│ │ - Error handling                                         ││
+│ └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│ ┌──────────────────────────────────────────────────────────┐│
+│ │ Tool Implementations (@mcp.tool() decorators)            ││
+│ │                                                          ││
+│ │ ┌────────────────────────────────────────────────────┐  ││
+│ │ │ autonomous_build_and_deploy()                      │  ││
+│ │ │ - Loads orchestrator_prompt.txt                    │  ││
+│ │ │ - Spawns claude subprocess                         │  ││
+│ │ │ - Tracks in active_tasks                           │  ││
+│ │ │ - Returns task_id                                  │  ││
+│ │ └────────────────────────────────────────────────────┘  ││
+│ │                                                          ││
+│ │ ┌────────────────────────────────────────────────────┐  ││
+│ │ │ delegate_to_claude_code()                          │  ││
+│ │ │ - Builds claude CLI command                        │  ││
+│ │ │ - subprocess.run() - synchronous                   │  ││
+│ │ │ - Returns stdout/stderr                            │  ││
+│ │ └────────────────────────────────────────────────────┘  ││
+│ │                                                          ││
+│ │ ┌────────────────────────────────────────────────────┐  ││
+│ │ │ delegate_to_claude_code_async()                    │  ││
+│ │ │ - subprocess.Popen() - asynchronous                │  ││
+│ │ │ - Stores process in active_tasks                   │  ││
+│ │ │ - Returns task_id                                  │  ││
+│ │ └────────────────────────────────────────────────────┘  ││
+│ │                                                          ││
+│ │ ┌────────────────────────────────────────────────────┐  ││
+│ │ │ get_delegation_result()                            │  ││
+│ │ │ - Polls subprocess status                          │  ││
+│ │ │ - Reads stdout/stderr buffers                      │  ││
+│ │ │ - Truncates large outputs                          │  ││
+│ │ └────────────────────────────────────────────────────┘  ││
+│ │                                                          ││
+│ │ [... 6 more tools ...]                                  ││
+│ └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│ ┌──────────────────────────────────────────────────────────┐│
+│ │ Helper Functions                                         ││
+│ │ - _truncate_output() - Prevents token overflow           ││
+│ │ - _read_phase_info() - Reads current-phase.json          ││
+│ │ - _get_context_foundry_parent_dir() - Path resolution    ││
+│ └──────────────────────────────────────────────────────────┘│
+│                                                              │
+│ ┌──────────────────────────────────────────────────────────┐│
+│ │ State Management                                         ││
+│ │ - active_tasks: Dict[task_id, task_info]                 ││
+│ │ - Tracks running/completed subprocesses                  ││
+│ │ - Stores stdout/stderr buffers                           ││
+│ └──────────────────────────────────────────────────────────┘│
+└───────────────┬─────────────────────────────────────────────┘
+                │ subprocess.Popen() / subprocess.run()
+                ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Spawned Claude CLI Processes                                │
+│ - Each has fresh 200K context window                        │
+│ - Runs with orchestrator_prompt.txt or custom prompt        │
+│ - Writes to stdout/stderr                                   │
+│ - Exits when done                                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Component Breakdown:**
+
+**1. FastMCP Server Initialization:**
+```python
+# tools/mcp_server.py:44
+from fastmcp import FastMCP
+
+mcp = FastMCP("Context Foundry")
+
+# FastMCP handles:
+# - JSON-RPC protocol over stdio
+# - Tool registration (@mcp.tool() decorator)
+# - Parameter validation
+# - Error serialization
+```
+
+**2. Tool Decorator Pattern:**
+```python
+@mcp.tool()
+def autonomous_build_and_deploy(
+    task: str,
+    working_directory: str,
+    ...
+) -> str:
+    """
+    Docstring becomes tool description in MCP protocol.
+    Type hints enforce parameter types.
+    """
+    # Implementation
+    return json.dumps(result)  # Must return string
+```
+
+**3. Subprocess Management:**
+```python
+# Synchronous (blocking):
+result = subprocess.run(
+    cmd,
+    cwd=working_directory,
+    capture_output=True,
+    text=True,
+    timeout=timeout_seconds,
+    stdin=subprocess.DEVNULL,
+    env=os.environ
+)
+
+# Asynchronous (non-blocking):
+process = subprocess.Popen(
+    cmd,
+    cwd=working_directory,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    stdin=subprocess.DEVNULL,
+    env=os.environ
+)
+active_tasks[task_id] = {"process": process, ...}
+```
+
+**4. Output Truncation:**
+```python
+def _truncate_output(output: str, max_tokens: int = 20000):
+    """
+    Prevents large outputs from exceeding token limits.
+    Keeps first 45% + last 45%, truncates middle.
+    """
+    max_chars = max_tokens * 4  # ~4 chars per token
+    if len(output) <= max_chars:
+        return output, False, stats
+
+    # Keep start and end, truncate middle
+    start_section = output[:chars_per_section]
+    end_section = output[-chars_per_section:]
+    truncated = start_section + "\n[TRUNCATED]\n" + end_section
+    return truncated, True, stats
+```
+
+**5. Task Tracking State:**
+```python
+active_tasks: Dict[str, Dict[str, Any]] = {
+    "abc-123": {
+        "process": <Popen object>,
+        "cmd": ["claude", "--print", ...],
+        "cwd": "/path/to/project",
+        "start_time": 1706025600.0,
+        "status": "running",  # or "completed", "failed", "timeout"
+        "stdout": "...",
+        "stderr": "...",
+        "duration": None,  # or 1234.56 (seconds)
+        "task": "Build a weather app",
+        "build_type": "autonomous"  # or "delegation"
+    },
+    ...
+}
+```
+
+**6. Communication Protocol:**
+
+Claude Code/Desktop ↔ MCP Server uses stdio (standard input/output):
+
+```json
+// Claude Code sends (stdin to MCP server):
+{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "autonomous_build_and_deploy",
+    "arguments": {
+      "task": "Build a weather app",
+      "working_directory": "/tmp/weather-app",
+      ...
+    }
+  },
+  "id": 1
+}
+
+// MCP server responds (stdout to Claude Code):
+{
+  "jsonrpc": "2.0",
+  "result": "{\"task_id\": \"abc-123\", \"status\": \"started\", ...}",
+  "id": 1
+}
+```
+
+FastMCP handles all JSON-RPC serialization/deserialization.
+
+**File Structure:**
+
+```
+context-foundry/
+├── tools/
+│   ├── mcp_server.py                # Main MCP server (~1200 lines)
+│   ├── orchestrator_prompt.txt      # 8-phase workflow prompt
+│   ├── builder_task_prompt.txt      # Parallel builder prompt
+│   └── test_task_prompt.txt         # Parallel test prompt
+├── workflows/
+│   └── autonomous_orchestrator.py   # (Deprecated, kept for reference)
+└── .claude/
+    └── mcp-config.json              # User's MCP configuration (in home dir)
+```
+
+**Configuration Example:**
+
+```json
+// ~/.claude/mcp-config.json
+{
+  "mcpServers": {
+    "context-foundry": {
+      "command": "python3",
+      "args": ["/path/to/context-foundry/tools/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "/path/to/context-foundry"
+      }
+    }
+  }
+}
+```
+
+**Startup Sequence:**
+
+1. Claude Code/Desktop reads `~/.claude/mcp-config.json`
+2. Finds `context-foundry` server configuration
+3. Spawns: `python3 /path/to/context-foundry/tools/mcp_server.py`
+4. MCP server starts, listens on stdin
+5. Sends tool list to Claude Code (tool discovery)
+6. Claude Code displays tools as available functions
+7. User calls tool → MCP server executes → returns result
+
+**Verdict:** MCP server is a **thin orchestration layer** that translates tool calls into subprocess spawns. It's ~1200 lines of glue code, not a complex application.
+
+---
+
+### Q33: What prompts does the MCP server use?
+
+**A:** Three main prompts, each serving a different role in the autonomous build workflow.
+
+**1. Primary: `tools/orchestrator_prompt.txt` (8-Phase Orchestrator)**
+
+**Size:** ~1200 lines
+**Purpose:** Complete autonomous build workflow
+**Used by:** `autonomous_build_and_deploy()` tool
+**Link:** [View on GitHub](https://github.com/context-foundry/context-foundry/blob/main/tools/orchestrator_prompt.txt)
+
+**What it contains:**
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║                   CONTEXT FOUNDRY ORCHESTRATOR                 ║
+║         🚀 Stop Vibe Coding - Start Building 🚀              ║
+╚═══════════════════════════════════════════════════════════════╝
+
+YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT
+
+Mission: Complete software development tasks fully autonomously using a
+multi-agent Scout → Architect → Builder → Test → Deploy workflow with
+self-healing capabilities.
+
+═══════════════════════════════════════════════════════════
+PHASE 1: SCOUT (Research & Context Gathering)
+═══════════════════════════════════════════════════════════
+[... detailed instructions for Scout phase ...]
+
+═══════════════════════════════════════════════════════════
+PHASE 2: ARCHITECT (Design & Planning)
+═══════════════════════════════════════════════════════════
+[... detailed instructions for Architect phase ...]
+
+═══════════════════════════════════════════════════════════
+PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY)
+═══════════════════════════════════════════════════════════
+⚡ CRITICAL: ALWAYS USE PARALLEL BUILDERS - NO EXCEPTIONS
+
+[... bash spawning instructions with concrete examples ...]
+
+CF_PATH="$(cd "$(dirname "$(which claude)")/../.." && pwd)/context-foundry"
+BUILDER_PROMPT="$CF_PATH/tools/builder_task_prompt.txt"
+
+claude --print --system-prompt "$(cat "$BUILDER_PROMPT")" \
+  "TASK_ID: task-1 | DESCRIPTION: ... | FILES: ..." &
+PID_1=$!
+
+[... continues for all 8 phases ...]
+```
+
+**How MCP server loads it:**
+
+```python
+# tools/mcp_server.py:969
+orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
+with open(orchestrator_prompt_path) as f:
+    system_prompt = f.read()  # ~1200 lines loaded
+
+# Pass to claude CLI:
+cmd = [
+    "claude",
+    "--print",
+    "--system-prompt", system_prompt,  # Full orchestrator prompt
+    task_description
+]
+```
+
+**Key sections:**
+- Phase 1: Scout (research, pattern checking)
+- Phase 2: Architect (design, architecture.md)
+- Phase 2.5: Parallel Build Planning (NEW, spawns parallel builders)
+- Phase 3: Builder (deprecated, use 2.5 instead)
+- Phase 4: Test (sequential testing)
+- Phase 4.5: Parallel Test Execution (NEW, unit/e2e/lint concurrent)
+- Phase 4.75: Screenshot Capture (visual docs)
+- Phase 5: Documentation (README generation)
+- Phase 6: Integrator (git commit, create repo)
+- Phase 7: Deployer (push to GitHub)
+- Phase 8: Feedback Loop (pattern extraction)
+
+---
+
+**2. Secondary: `tools/builder_task_prompt.txt` (Parallel Builder Agent)**
+
+**Size:** ~161 lines
+**Purpose:** Individual builder agent for parallel execution
+**Used by:** Phase 2.5 (spawned by orchestrator)
+**Link:** [View on GitHub](https://github.com/context-foundry/context-foundry/blob/main/tools/builder_task_prompt.txt)
+
+**What it contains:**
+
+```
+YOU ARE A SPECIALIZED BUILDER AGENT (PARALLEL EXECUTION MODE)
+
+You are one of several Builder agents working in parallel on different
+parts of a project. Your job is to implement a SINGLE, SPECIFIC task
+from the architecture specification.
+
+═══════════════════════════════════════════════════════════
+CRITICAL RULES FOR PARALLEL EXECUTION
+═══════════════════════════════════════════════════════════
+
+✓ You are responsible for ONE task only (specified below)
+✓ Read architecture from .context-foundry/architecture.md
+✓ Read your specific task from .context-foundry/build-tasks.json
+✓ Other builders are working on other tasks simultaneously
+✓ Write your code files directly - no conflicts (each task has unique files)
+✓ Use /agents command for implementation (REQUIRED)
+✓ Log your progress to .context-foundry/builder-logs/task-{ID}.log
+✓ Mark task complete by creating .context-foundry/builder-logs/task-{ID}.done
+
+[... implementation steps ...]
+[... error handling ...]
+[... success criteria ...]
+```
+
+**How orchestrator spawns it:**
+
+```bash
+# In orchestrator_prompt.txt Phase 2.5:
+CF_PATH="$(cd "$(dirname "$(which claude)")/../.." && pwd)/context-foundry"
+BUILDER_PROMPT="$CF_PATH/tools/builder_task_prompt.txt"
+
+# Spawn Builder 1:
+claude --print --system-prompt "$(cat "$BUILDER_PROMPT")" \
+  "TASK_ID: task-1 | DESCRIPTION: Build game engine | FILES: game.js, engine.js" &
+
+# Spawn Builder 2:
+claude --print --system-prompt "$(cat "$BUILDER_PROMPT")" \
+  "TASK_ID: task-2 | DESCRIPTION: Build player system | FILES: player.js, input.js" &
+
+# Wait for all:
+wait $PID_1 $PID_2
+```
+
+**Task assignment format:**
+```
+TASK_ID: task-3 | DESCRIPTION: Create enemy AI system | FILES: src/enemy.js, src/ai.js
+```
+
+Builder parses this, reads `architecture.md`, implements files, creates `.done` marker.
+
+---
+
+**3. Secondary: `tools/test_task_prompt.txt` (Parallel Test Agent)**
+
+**Size:** ~208 lines
+**Purpose:** Individual test agent for parallel test execution
+**Used by:** Phase 4.5 (spawned by orchestrator)
+**Link:** [View on GitHub](https://github.com/context-foundry/context-foundry/blob/main/tools/test_task_prompt.txt)
+
+**What it contains:**
+
+```
+YOU ARE A SPECIALIZED TEST AGENT (PARALLEL EXECUTION MODE)
+
+You are one of several Test agents working in parallel on different test types.
+Your job is to run ONE SPECIFIC type of tests and report results.
+
+═══════════════════════════════════════════════════════════
+CRITICAL RULES FOR PARALLEL TEST EXECUTION
+═══════════════════════════════════════════════════════════
+
+✓ You are responsible for ONE test type only (unit, e2e, or lint)
+✓ Other test agents are running other test types simultaneously
+✓ Read architecture from .context-foundry/architecture.md for test commands
+✓ Use /agents command for test execution (REQUIRED)
+✓ Log results to .context-foundry/test-logs/{test-type}.log
+✓ Create .done file when complete: .context-foundry/test-logs/{test-type}.done
+
+[... test type specifications ...]
+[... execution steps ...]
+[... result reporting format ...]
+```
+
+**How orchestrator spawns it:**
+
+```bash
+# In orchestrator_prompt.txt Phase 4.5:
+CF_PATH="$(cd "$(dirname "$(which claude)")/../.." && pwd)/context-foundry"
+TEST_PROMPT="$CF_PATH/tools/test_task_prompt.txt"
+
+# Spawn unit tester:
+claude --print --system-prompt "$(cat "$TEST_PROMPT")" \
+  "TEST_TYPE: unit" > .context-foundry/test-logs/unit.log 2>&1 &
+
+# Spawn E2E tester:
+claude --print --system-prompt "$(cat "$TEST_PROMPT")" \
+  "TEST_TYPE: e2e" > .context-foundry/test-logs/e2e.log 2>&1 &
+
+# Spawn lint tester:
+claude --print --system-prompt "$(cat "$TEST_PROMPT")" \
+  "TEST_TYPE: lint" > .context-foundry/test-logs/lint.log 2>&1 &
+
+# Wait for all:
+wait $PID_UNIT $PID_E2E $PID_LINT
+```
+
+**Test type assignment format:**
+```
+TEST_TYPE: e2e
+```
+
+Tester parses this, runs appropriate tests, reports results in JSON format.
+
+---
+
+**Prompt Loading Flow:**
+
+```
+MCP Server Tool Call
+  ↓
+Load orchestrator_prompt.txt
+  ↓
+Spawn: claude --system-prompt orchestrator_prompt.txt
+  ↓
+Orchestrator runs Phase 2.5:
+  ↓
+  Load builder_task_prompt.txt
+  ↓
+  Spawn 4 builders: claude --system-prompt builder_task_prompt.txt
+  ↓
+  Builders implement code in parallel
+  ↓
+Orchestrator runs Phase 4.5:
+  ↓
+  Load test_task_prompt.txt
+  ↓
+  Spawn 3 testers: claude --system-prompt test_task_prompt.txt
+  ↓
+  Testers run tests in parallel
+```
+
+**Prompt Hierarchy:**
+
+```
+orchestrator_prompt.txt (Primary)
+  ├── Controls overall workflow (8 phases)
+  ├── Spawns builder_task_prompt.txt (Secondary)
+  │    └── Each builder implements 1 task
+  └── Spawns test_task_prompt.txt (Secondary)
+       └── Each tester runs 1 test type
+```
+
+**Why Three Separate Prompts?**
+
+1. **Orchestrator:** Needs full workflow knowledge (all 8 phases)
+2. **Builder:** Needs narrow focus (just implement assigned files)
+3. **Tester:** Needs test-specific knowledge (run tests, parse output)
+
+Separation keeps each prompt focused and reduces context usage.
+
+---
+
+## 8. Performance & Scaling
+
+### Q34: What's the actual speedup for different project sizes?
 
 **A:** Based on real benchmarks (median across 10 builds each):
 
@@ -1456,7 +2490,7 @@ Average across all project sizes: 30-45%
 
 ---
 
-### Q29: When does parallel mode activate? Can I force sequential?
+### Q35: When does parallel mode activate? Can I force sequential?
 
 **A:** **Parallel mode is MANDATORY** in v2.0+. No sequential fallback.
 
@@ -1526,7 +2560,7 @@ But you lose:
 
 ---
 
-### Q30: How many parallel builders is optimal? Is there a limit?
+### Q36: How many parallel builders is optimal? Is there a limit?
 
 **A:** **2-8 builders** depending on project size. More causes diminishing returns.
 
@@ -1624,7 +2658,7 @@ But Architect won't create >8 by default.
 
 ---
 
-### Q31: What's the memory usage when running multiple parallel builders?
+### Q37: What's the memory usage when running multiple parallel builders?
 
 **A:** **~200MB per builder process**, plus orchestrator overhead.
 
@@ -1726,9 +2760,9 @@ Recommended:
 
 ---
 
-## 8. Error Handling & Self-Healing
+## 9. Error Handling & Self-Healing
 
-### Q32: What happens if a parallel builder fails mid-execution?
+### Q38: What happens if a parallel builder fails mid-execution?
 
 **A:** **Build fails, self-healing loop does NOT activate** (yet).
 
@@ -1810,7 +2844,7 @@ claude --system-prompt tools/builder_task_prompt.txt \
 
 ---
 
-### Q33: How does the self-healing loop work? Walk me through an iteration.
+### Q39: How does the self-healing loop work? Walk me through an iteration.
 
 **A:** Self-healing is a **3-phase cycle** (Architect → Builder → Test) triggered by test failures.
 
@@ -1995,7 +3029,7 @@ Max iterations: 3 (default)
 
 ---
 
-### Q34: What's the maximum test iteration count? Can I change it?
+### Q40: What's the maximum test iteration count? Can I change it?
 
 **A:** **Default: 3 iterations.** Configurable via MCP parameter.
 
@@ -2099,9 +3133,9 @@ Each iteration is documented for post-mortem analysis.
 
 ---
 
-## 9. Pattern Learning System
+## 10. Pattern Learning System
 
-### Q35: How does the global pattern storage work? Where is it stored?
+### Q41: How does the global pattern storage work? Where is it stored?
 
 **A:** Patterns are stored in **`~/.context-foundry/patterns/`** (global, not per-project).
 
@@ -2204,7 +3238,7 @@ Extremely lightweight.
 
 ---
 
-### Q36: Does pattern learning work across different projects? How?
+### Q42: Does pattern learning work across different projects? How?
 
 **A:** **Yes!** This is the core value of global patterns.
 
@@ -2298,7 +3332,7 @@ Pattern updated:
 
 ---
 
-### Q37: What patterns are extracted? How does extraction work?
+### Q43: What patterns are extracted? How does extraction work?
 
 **A:** Extraction happens in **Phase 8: Feedback Loop** after successful builds.
 
@@ -2433,7 +3467,7 @@ User can review and optionally delete patterns from `~/.context-foundry/patterns
 
 ---
 
-### Q38: Is pattern learning private? Or does it upload data to Anthropic?
+### Q44: Is pattern learning private? Or does it upload data to Anthropic?
 
 **A:** **100% local.** No data leaves your machine.
 
@@ -2527,9 +3561,9 @@ rm -rf ~/.context-foundry/patterns/
 
 ---
 
-## 10. Advanced Technical Topics
+## 11. Advanced Technical Topics
 
-### Q39: Could parallel builders have race conditions when writing to the filesystem?
+### Q45: Could parallel builders have race conditions when writing to the filesystem?
 
 **A:** **No, because file assignments are mutually exclusive by design.**
 
@@ -2630,7 +3664,7 @@ No overlap.
 
 ---
 
-### Q40: Why bash process spawning instead of Python `multiprocessing` or `threading`?
+### Q46: Why bash process spawning instead of Python `multiprocessing` or `threading`?
 
 **A:** **Authentication inheritance is the killer feature.** Also simplicity.
 
@@ -2769,7 +3803,7 @@ But builders run for 5-10 minutes, so 2s is negligible.
 
 ---
 
-### Q41: How does Context Foundry compare to using `/agents` manually?
+### Q47: How does Context Foundry compare to using `/agents` manually?
 
 **A:** Context Foundry is **structured orchestration** of `/agents`, not just raw agent spawning.
 
@@ -2927,9 +3961,9 @@ claude-code
 
 ---
 
-## 11. Practical Usage & Limitations
+## 12. Practical Usage & Limitations
 
-### Q42: When should I NOT use Context Foundry?
+### Q48: When should I NOT use Context Foundry?
 
 **A:** Context Foundry is overkill for certain tasks.
 
@@ -3057,7 +4091,7 @@ autonomous_build_and_deploy("Build a social network boilerplate")
 
 ---
 
-### Q43: What are the cost implications? How much does a typical build cost?
+### Q49: What are the cost implications? How much does a typical build cost?
 
 **A:** **$1-5 per build** depending on project size (using Claude Sonnet 4.5).
 
@@ -3215,9 +4249,9 @@ After 10 builds: $239.50 saved
 
 ---
 
-## 12. Comparisons & Philosophy
+## 13. Comparisons & Philosophy
 
-### Q44: How does Context Foundry compare to Cursor Composer?
+### Q50: How does Context Foundry compare to Cursor Composer?
 
 **A:** **Different philosophies.** Cursor is **collaborative**, Context Foundry is **autonomous**.
 
@@ -3308,7 +4342,7 @@ Context Foundry:
 
 ---
 
-### Q45: Context Foundry vs GitHub Copilot Workspace?
+### Q51: Context Foundry vs GitHub Copilot Workspace?
 
 **A:** Both are **autonomous**, but different agent architectures.
 
@@ -3412,7 +4446,7 @@ Context Foundry:
 
 ---
 
-### Q46: What is Context Foundry's design philosophy? How does it differ from "vibe coding"?
+### Q52: What is Context Foundry's design philosophy? How does it differ from "vibe coding"?
 
 **A:** **"Stop vibe coding, start building."**
 
