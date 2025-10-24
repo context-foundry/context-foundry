@@ -929,7 +929,7 @@ def _detect_task_intent(task: str) -> str:
         return "fix_bug"
 
     # Upgrade/dependency keywords
-    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "migrate to"]):
+    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "update packages", "update all", "migrate to"]):
         return "upgrade_deps"
 
     # Refactor keywords

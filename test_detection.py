@@ -115,7 +115,7 @@ def _detect_task_intent(task: str) -> str:
 
     if any(word in task_lower for word in ["fix", "bug", "issue", "error", "broken", "repair"]):
         return "fix_bug"
-    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "migrate to"]):
+    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "update packages", "update all", "migrate to"]):
         return "upgrade_deps"
     if any(word in task_lower for word in ["refactor", "restructure", "reorganize", "clean up"]):
         return "refactor"
