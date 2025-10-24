@@ -37,7 +37,6 @@ except ImportError:
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from workflows.autonomous_orchestrator import AutonomousOrchestrator
 from tools.banner import print_banner
 
 # Create MCP server
@@ -764,67 +763,6 @@ def list_delegations() -> str:
             "error": str(e),
             "traceback": traceback.format_exc()
         }, indent=2)
-
-
-def _run_parallel_autonomous_build(
-    task: str,
-    working_directory: str,
-    github_repo_name: Optional[str] = None,
-    existing_repo: Optional[str] = None,
-    enable_test_loop: bool = True,
-    incremental: bool = False,
-    force_rebuild: bool = False,
-    max_test_iterations: int = 3
-) -> Dict[str, Any]:
-    """
-    Run autonomous build using Python AutonomousOrchestrator with parallelization.
-
-    Uses ParallelBuilderCoordinator (4 concurrent builders) and ParallelScoutCoordinator
-    for significantly faster execution (~30-45% time savings).
-
-    Args:
-        task: What to build/fix/enhance
-        working_directory: Where to work
-        github_repo_name: Create new repo (optional)
-        existing_repo: Fix/enhance existing (optional)
-        enable_test_loop: Enable self-healing test loop
-        max_test_iterations: Max test/fix cycles
-
-    Returns:
-        Dict with build results
-    """
-    from workflows.autonomous_orchestrator import AutonomousOrchestrator
-
-    # Resolve working directory path
-    working_dir_input = Path(working_directory)
-    if working_dir_input.is_absolute():
-        final_working_dir = working_dir_input
-    else:
-        cf_parent = _get_context_foundry_parent_dir()
-        final_working_dir = cf_parent / working_directory
-
-    # Create orchestrator with parallel mode enabled
-    orchestrator = AutonomousOrchestrator(
-        project_name=github_repo_name or final_working_dir.name,
-        task_description=task,
-        project_dir=final_working_dir,
-        autonomous=True,
-        use_multi_agent=True,  # KEY: Enable parallelization
-        use_patterns=True,
-        enable_livestream=False,
-        auto_push=True if github_repo_name else False
-    )
-
-    # Run the build
-    result = orchestrator.run()
-
-    return {
-        'success': result.get('status') == 'success',
-        'result': result,
-        'project_dir': str(final_working_dir),
-        'github_repo': github_repo_name,
-        'multi_agent_used': True
-    }
 
 
 @mcp.tool()

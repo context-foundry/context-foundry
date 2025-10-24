@@ -9,6 +9,8 @@
 
 **Version 2.0.2 - October 2025**
 
+> **📌 Version Note:** This is Context Foundry **v2.0+** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
+
 ---
 
 ## What is Context Foundry 2.0?

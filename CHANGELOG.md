@@ -585,10 +585,10 @@ From initial pattern seeding:
 
 **See:** [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for detailed migration guide
 
-**Keep 1.0.0 if:**
-- You need multi-provider support
-- You build < 5 projects/month
-- You prefer checkpoint reviews
+**Need v1.0 (legacy)?**
+- v1.0 codebase is preserved in [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy)
+- Download: [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final)
+- Use for: Multi-provider support, non-Claude LLMs
 
 ---
 

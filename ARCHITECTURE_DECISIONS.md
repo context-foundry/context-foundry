@@ -2112,7 +2112,7 @@ Use mcp__autonomous_build_and_deploy:
 | `foundry fix` | `mcp__autonomous_build_and_deploy` with `mode="fix"` | Self-healing included |
 | `foundry enhance` | `mcp__autonomous_build_and_deploy` with `mode="enhance"` | |
 | `foundry status` | `mcp__list_delegations` | For async tasks only |
-| Multi-provider | N/A (Claude only) | Use 1.x if you need other providers |
+| Multi-provider | N/A (Claude only) | See [v1.x-legacy branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) |
 | Cost tracking | Manual calculation | Not needed with Claude Max |
 | Pattern library | Scout research | More up-to-date than static patterns |
 
