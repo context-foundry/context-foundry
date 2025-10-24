@@ -470,9 +470,8 @@ Want more ideas? Try these:
 
 ## Need Help?
 
-- **Documentation:** `docs/MULTI_PROVIDER_GUIDE.md`
-- **Cost Estimator:** `foundry estimate "your task"`
-- **List Models:** `foundry models --list`
-- **Check Pricing:** `foundry pricing`
+- **Documentation:** See [README.md](../README.md) and [USER_GUIDE.md](../USER_GUIDE.md)
+- **MCP Setup:** See [CLAUDE_CODE_MCP_SETUP.md](../CLAUDE_CODE_MCP_SETUP.md)
+- **FAQ:** See [FAQ.md](../FAQ.md) and [docs/FAQ.md](FAQ.md)
 
 **Happy building!** 🏭

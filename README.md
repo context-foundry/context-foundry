@@ -1008,6 +1008,7 @@ Break-even: ~5 projects per month
 | Document | Description | Audience |
 |----------|-------------|----------|
 | **⭐ [docs/INNOVATIONS.md](docs/INNOVATIONS.md)** | **All 15 innovations explained with code examples** | **Everyone - START HERE!** |
+| **[docs/FAQ.md](docs/FAQ.md)** | Technical FAQ (52 questions): parallelization, token management, MCP architecture, prompt engineering | Developers, architects, AI engineers |
 | **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
@@ -1041,16 +1042,18 @@ Break-even: ~5 projects per month
 
 **Developers/Contributors:**
 1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 15 innovations with code examples
-2. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
-3. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
-4. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
-5. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
-6. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
+2. [docs/FAQ.md](docs/FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
+3. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
+4. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+5. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
+6. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
+7. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
 
 **Troubleshooting:**
 1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
 2. [FAQ.md](FAQ.md) - Common questions
-3. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
+3. [docs/FAQ.md](docs/FAQ.md) - Technical troubleshooting (parallel execution, test loops, etc.)
+4. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
 
 ---
 

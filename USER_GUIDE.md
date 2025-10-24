@@ -2294,14 +2294,12 @@ If a build fails, you can:
    - Adjust test strategies
 
 4. **Read the technical docs:**
-   - [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for deep dives
-   - [CONTEXT_FOUNDRY_2.0.md](CONTEXT_FOUNDRY_2.0.md) for 1.x vs 2.0 comparison
+   - [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for deep dives and 1.x vs 2.0 comparison
 
 ### Learning More
 
 - **README.md** - Quick reference and overview
-- **ARCHITECTURE_DECISIONS.md** - Technical deep dives
-- **CONTEXT_FOUNDRY_2.0.md** - What's new in 2.0
+- **ARCHITECTURE_DECISIONS.md** - Technical deep dives and what's new in 2.0
 - **CLAUDE_CODE_MCP_SETUP.md** - MCP setup and troubleshooting
 - **examples/** - Test scenarios and examples
 

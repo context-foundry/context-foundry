@@ -550,7 +550,6 @@ Theoretical and practical limits:
 
 - **[Ralph Wiggum Strategy](../RALPH_WIGGUM_IMPLEMENTATION.md)**: Overnight autonomous coding using context resets
 - **[Pattern Library](../foundry/patterns/README.md)**: Self-improving system built on stateless architecture
-- **[Multi-Provider Support](MULTI_PROVIDER_GUIDE.md)**: Works with any LLM provider using same reset strategy
 
 ## FAQ
 

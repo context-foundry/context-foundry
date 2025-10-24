@@ -5,6 +5,8 @@
 > Last Updated: 2025-01-23
 > Audience: Technical users familiar with distributed systems, AI agents, and software architecture
 
+> **Looking for user-friendly answers?** If you're new to Context Foundry or want quick, accessible answers about how it works, see the **[Main FAQ](../FAQ.md)** which focuses on transparency and demystifying the system.
+
 ---
 
 ## Table of Contents

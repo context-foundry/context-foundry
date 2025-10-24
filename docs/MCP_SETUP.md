@@ -291,7 +291,7 @@ No configuration changes needed - just choose which interface to use.
 
 ## Next Steps
 
-- [Tutorial](TUTORIAL.md) - Learn the Context Foundry workflow
+- [User Guide](../USER_GUIDE.md) - Learn the Context Foundry workflow
 - [README](../README.md) - Full documentation
 - [GitHub Issues](https://github.com/snedea/context-foundry/issues) - Report problems or request features
 

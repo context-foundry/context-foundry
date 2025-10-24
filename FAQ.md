@@ -5,6 +5,8 @@
 > **Philosophy:** "No Magic, Just Transparency"
 > This FAQ explains how Context Foundry works internally, where everything is stored, and demystifies the agent delegation model.
 
+> **Looking for technical details?** If you're a software developer, architect, or AI engineer looking for deep technical information about parallelization, token management, MCP server architecture, or prompt engineering, see the **[Technical FAQ](docs/FAQ.md)** with 52 in-depth questions and code examples.
+
 ---
 
 ## Table of Contents

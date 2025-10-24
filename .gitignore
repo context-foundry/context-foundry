@@ -13,6 +13,7 @@ logs/
 *.log
 
 # Session data
+blueprints/
 checkpoints/sessions/*.json
 checkpoints/artifacts/temp/
 checkpoints/ralph/*/

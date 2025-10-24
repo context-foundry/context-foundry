@@ -348,8 +348,7 @@ Now try:
 
 - **README.md** - Full feature overview
 - **USER_GUIDE.md** - Detailed usage guide
-- **ARCHITECTURE_DECISIONS.md** - How it works under the hood
-- **CONTEXT_FOUNDRY_2.0.md** - What's new in 2.0
+- **ARCHITECTURE_DECISIONS.md** - How it works under the hood, what's new in 2.0
 
 ### Advanced Features
 

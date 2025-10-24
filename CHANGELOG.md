@@ -280,9 +280,9 @@ From initial pattern seeding:
 
 - **LEGACY_README.md** - Archived Context Foundry 1.x documentation
 
-- **CONTEXT_FOUNDRY_2.0.md** - What's new overview
+- **ARCHITECTURE_DECISIONS.md** - What changed in 2.0 and why
   - Side-by-side comparison of 1.x vs 2.0
-  - Real-world examples
+  - Technical architecture decisions
   - Migration guide
   - FAQ
 
@@ -583,7 +583,7 @@ From initial pattern seeding:
 3. Verify with test build
 4. Migrate workflows to MCP tools
 
-**See:** [CONTEXT_FOUNDRY_2.0.md](CONTEXT_FOUNDRY_2.0.md) for detailed migration guide
+**See:** [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for detailed migration guide
 
 **Keep 1.0.0 if:**
 - You need multi-provider support
