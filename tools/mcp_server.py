@@ -38,7 +38,7 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from workflows.autonomous_orchestrator import AutonomousOrchestrator
-from tools.banner import print_banner, get_banner
+from tools.banner import print_banner
 
 # Create MCP server
 mcp = FastMCP("Context Foundry")
@@ -481,16 +481,12 @@ def delegate_to_claude_code_async(
             "duration": None,
         }
 
-        # Get banner for display
-        banner = get_banner(version="1.0.0")
-
         return json.dumps({
             "task_id": task_id,
             "status": "started",
             "task": task,
             "working_directory": cwd,
             "timeout_minutes": timeout_minutes,
-            "banner": banner,
             "message": f"Task started successfully. Use get_delegation_result('{task_id}') to check status and retrieve results."
         }, indent=2)
 
@@ -564,12 +560,6 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                     "message": f"Task exceeded timeout of {task_info['timeout_minutes']} minutes and was terminated."
                 }
 
-                # Add banner for autonomous builds
-                is_autonomous = task_info.get("build_type") == "autonomous"
-                if is_autonomous:
-                    banner = get_banner(version="1.0.0")
-                    timeout_result["banner"] = banner
-
                 return json.dumps(timeout_result, indent=2)
 
             # Still running within timeout
@@ -592,12 +582,6 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 result["progress_detail"] = phase_info.get("progress_detail", "Working...")
                 result["test_iteration"] = phase_info.get("test_iteration", 0)
                 result["phases_completed"] = phase_info.get("phases_completed", [])
-
-            # Add banner for autonomous builds (both running and completed)
-            is_autonomous = task_info.get("build_type") == "autonomous"
-            if is_autonomous:
-                banner = get_banner(version="1.0.0")
-                result["banner"] = banner
 
             return json.dumps(result, indent=2)
 
@@ -708,12 +692,6 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                     "stdout_stats": stdout_stats if stdout_was_truncated else None,
                     "stderr_stats": stderr_stats if stderr_was_truncated else None
                 }
-
-        # Add banner for autonomous builds (completed or failed)
-        is_autonomous = task_info.get("build_type") == "autonomous"
-        if is_autonomous:
-            banner = get_banner(version="1.0.0")
-            result["banner"] = banner
 
         return json.dumps(result, indent=2)
 
@@ -1055,9 +1033,6 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "build_type": "autonomous"  # Mark as autonomous build for special handling
         }
 
-        # Get the banner to display
-        banner = get_banner(version="1.0.0")
-
         return json.dumps({
             "task_id": task_id,
             "status": "started",
@@ -1067,10 +1042,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "github_repo": github_repo_name,
             "timeout_minutes": timeout_minutes,
             "enable_test_loop": enable_test_loop,
-            "banner": banner,  # Include banner as separate field for easy display
             "message": f"""
-{banner}
-
 🚀 Autonomous build started!
 
 Project: {project_name}
