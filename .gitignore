@@ -7,6 +7,10 @@ __pycache__/
 env/
 venv/
 .env
+*.egg-info/
+.pytest_cache/
+dist/
+build/
 
 # Logs
 logs/
@@ -36,6 +40,10 @@ foundry/patterns/*.db
 .idea/
 *.swp
 *.swo
+
+# Claude Code
+.claude/
+.claude-code/cache/
 
 # OS
 .DS_Store
