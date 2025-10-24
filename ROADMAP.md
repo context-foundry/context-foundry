@@ -184,7 +184,7 @@ Context Foundry now supports two execution modes, giving users flexibility based
 
 **Completed:** October 4, 2025
 
-### v1.3 - Enhancement Mode (October 2025)
+### v2.1.0 - Enhancement Mode (October 2025)
 **Major Feature: Fix, Enhance, and Upgrade Existing Codebases**
 
 Context Foundry can now intelligently modify existing projects instead of only building from scratch:

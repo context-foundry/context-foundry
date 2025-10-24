@@ -7,7 +7,7 @@
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.0.2 - October 2025**
+**Version 2.1.0 - October 2025**
 
 > **📌 Version Note:** This is Context Foundry **v2.0+** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
 
@@ -128,7 +128,7 @@ Make a REST API with user authentication and PostgreSQL
 
 **2. Start Claude Code:**
 ```bash
-claude-code
+claude
 ```
 
 **3. Just ask:**
@@ -414,7 +414,7 @@ gh auth login
 Start Claude Code CLI:
 
 ```bash
-claude-code
+claude
 ```
 
 Inside your Claude Code session:
@@ -865,7 +865,7 @@ python3.10 -m pip install -r requirements-mcp.txt
 3. Restart Claude Code:
    ```bash
    # Exit current session and restart
-   claude-code
+   claude
    ```
 
 4. Verify connection:
