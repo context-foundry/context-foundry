@@ -71,7 +71,7 @@ cat /path/to/your-project/.context-foundry/architecture.md
 code /path/to/your-project/.context-foundry/architecture.md
 
 # Or use Claude Code
-claude-code
+claude
 # Then: "Read /path/to/your-project/.context-foundry/architecture.md"
 ```
 
@@ -202,7 +202,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 
 **You can freely:**
 ```bash
-claude-code
+claude
 
 # Regular usage - Context Foundry NOT involved
 You: "Refactor this function to use async/await"
@@ -241,7 +241,7 @@ You: "Build a todo app"  ← Only THIS triggers Context Foundry
    ↓
    Receives tool call
    ↓
-   Spawns: subprocess.Popen(['claude-code', '--prompt', task])
+   Spawns: subprocess.Popen(['claude', '--prompt', task])
    ↓
    New Claude Code instance starts (FRESH context)
 
@@ -594,7 +594,7 @@ autonomous_build_and_deploy(
 **Level 3: Manual Orchestrator (Full Control)**
 ```bash
 cd /Users/name/homelab/your-project
-claude-code
+claude
 
 You: "Read /Users/name/homelab/context-foundry/tools/orchestrator_prompt.txt
       and execute Phase 1 (Scout) only"
@@ -610,7 +610,7 @@ You: "Now execute Phase 3 (Builder) with these modifications: ..."
 
 **Level 4: Traditional Claude Code (No Context Foundry)**
 ```bash
-claude-code
+claude
 
 You: "Help me build a weather app step by step"
 

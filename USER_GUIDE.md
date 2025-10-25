@@ -102,7 +102,7 @@ If you see "✗ Disconnected" or errors, see [Troubleshooting MCP Connection](#t
 
 ```bash
 # Start Claude Code
-claude-code
+claude
 
 # You should see MCP tools available
 # Try typing: "What MCP tools are available?"
@@ -284,7 +284,7 @@ Let's build a simple "Hello World" project to verify everything works.
 
 ```bash
 # Start Claude Code
-claude-code
+claude
 ```
 
 Inside your Claude Code session, say:
@@ -1315,7 +1315,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.
 cat your-project/.context-foundry/architecture.md
 
 # If you want changes, just ask:
-claude-code
+claude
 You: "I reviewed the architecture. Can we change the database from SQLite to PostgreSQL?"
 ```
 
@@ -1949,7 +1949,7 @@ Restart Claude Code:
 ```bash
 # Exit current session
 # Start fresh
-claude-code
+claude
 ```
 
 #### MCP Tools Not Showing Up
@@ -2317,7 +2317,7 @@ If a build fails, you can:
 
 **Start Claude Code:**
 ```bash
-claude-code
+claude
 ```
 
 **Build a project (autonomous):**

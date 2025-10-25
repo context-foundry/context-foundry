@@ -301,7 +301,7 @@ project/
 # Use Context Foundry MCP to build a medium-sized project
 # It should automatically use parallel mode if beneficial
 
-claude-code
+claude
 > "Build a tic-tac-toe game with Context Foundry"
 ```
 

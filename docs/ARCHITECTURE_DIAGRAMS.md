@@ -35,7 +35,7 @@ flowchart TD
 
     MCPServer --> GenerateTaskID[Generate Task ID<br/>UUID]
     GenerateTaskID --> BuildPrompt[Build Orchestrator Prompt<br/>tools/orchestrator_prompt.txt]
-    BuildPrompt --> SpawnProcess[Spawn Subprocess:<br/>claude-code --prompt ...]
+    BuildPrompt --> SpawnProcess[Spawn Subprocess:<br/>claude --prompt ...]
 
     SpawnProcess --> TaskTracking[Track in TASKS dict<br/>Status: running]
     TaskTracking --> ReturnTaskID[Return Task ID to<br/>Main Window]
@@ -141,7 +141,7 @@ sequenceDiagram
     MCP->>MCP: Load orchestrator_prompt.txt
     MCP->>MCP: Inject task parameters
 
-    MCP->>Delegated: spawn subprocess<br/>claude-code --prompt "..."
+    MCP->>Delegated: spawn subprocess<br/>claude --prompt "..."
     activate Delegated
 
     MCP->>MCP: Track in TASKS[abc-123]<br/>Status: running
@@ -555,7 +555,7 @@ sequenceDiagram
     MCP->>MCP: Generate task_id = "abc-123"
     MCP->>MCP: Build orchestrator prompt
 
-    MCP->>Sub: subprocess.Popen([<br/>  'claude-code',<br/>  '--prompt', '...',<br/>  '--permission-mode', 'bypassPermissions'<br/>])
+    MCP->>Sub: subprocess.Popen([<br/>  'claude',<br/>  '--prompt', '...',<br/>  '--permission-mode', 'bypassPermissions'<br/>])
     activate Sub
 
     MCP->>MCP: TASKS["abc-123"] = {<br/>  process: <subprocess>,<br/>  status: "running",<br/>  start_time: 1234567890<br/>}

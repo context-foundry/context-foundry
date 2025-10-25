@@ -6,8 +6,8 @@ This document provides test scenarios for the `delegate_to_claude_code` MCP tool
 
 Before running these tests, ensure:
 1. The MCP server is running (Terminal 1): `python3 /Users/name/homelab/context-foundry/tools/mcp_server.py`
-2. Claude Code CLI is connected to the MCP server (Terminal 2): Start `claude-code` normally
-3. The `claude-code` command is in your PATH
+2. Claude Code CLI is connected to the MCP server (Terminal 2): Start `claude` normally
+3. The `claude` command is in your PATH
 4. MCP settings are configured at `~/.config/claude-code/mcp_settings.json`
 
 ## Test Scenario 1: Simple Task Delegation
@@ -102,7 +102,7 @@ Use the mcp__delegate_to_claude_code tool with:
 - Command should include the `--model claude-sonnet-4` flag
 - Output should show the command that was executed
 
-**Note:** The actual flag behavior depends on what the claude-code CLI supports.
+**Note:** The actual flag behavior depends on what the claude CLI supports.
 
 ---
 
@@ -211,12 +211,12 @@ Use the mcp__delegate_to_claude_code tool with:
 
 ## Common Issues and Troubleshooting
 
-### Issue: "claude-code command not found"
+### Issue: "claude command not found"
 
 **Solution:**
-- Ensure claude-code CLI is installed
-- Add it to your PATH: `export PATH="/path/to/claude-code:$PATH"`
-- Verify: `which claude-code`
+- Ensure claude CLI is installed
+- Add it to your PATH: `export PATH="/path/to/claude:$PATH"`
+- Verify: `which claude`
 
 ### Issue: Timeout too short
 

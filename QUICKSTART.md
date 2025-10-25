@@ -57,7 +57,7 @@ gh auth login
 ### Start Claude Code
 
 ```bash
-claude-code
+claude
 ```
 
 ### Just Ask Naturally
@@ -414,7 +414,7 @@ A: Builds are autonomous but time out after the specified duration (default 90 m
 
 ---
 
-**Ready to build?** → Start Claude Code: `claude-code`
+**Ready to build?** → Start Claude Code: `claude`
 
 **Questions?** → See [USER_GUIDE.md](USER_GUIDE.md) for comprehensive help
 

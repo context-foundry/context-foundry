@@ -76,7 +76,7 @@ Result: Main context stays < 1%, can run multiple builds, continue working
 │ └─ os                    (Environment variables)            │
 │                                                              │
 │ Claude Code Integration                                     │
-│ ├─ claude-code CLI       (Delegated build instances)       │
+│ ├─ claude CLI            (Delegated build instances)       │
 │ ├─ --permission-mode     (Bypass interactive prompts)      │
 │ └─ --prompt              (Inject orchestrator prompt)       │
 │                                                              │
@@ -97,7 +97,7 @@ nest-asyncio>=1.5.0    # Async event loop nesting
 
 **External Tools:**
 ```bash
-claude-code            # Claude Code CLI (in PATH)
+claude                 # Claude Code CLI (in PATH)
 gh                     # GitHub CLI (for deployment)
 git                    # Version control
 python3.10+            # Python runtime
@@ -301,7 +301,7 @@ BEGIN EXECUTION NOW.
     # 5. Spawn delegated Claude Code instance
     process = subprocess.Popen(
         [
-            'claude-code',                              # Binary in PATH
+            'claude',                                   # Binary in PATH
             '--prompt', full_prompt,                    # User message to start
             '--permission-mode', 'bypassPermissions'    # No interactive prompts
         ],
@@ -344,7 +344,7 @@ BEGIN EXECUTION NOW.
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │ 1. SPAWN                                                     │
-│    subprocess.Popen(['claude-code', '--prompt', ...])        │
+│    subprocess.Popen(['claude', '--prompt', ...])             │
 │    ├─ New process created                                   │
 │    ├─ Own PID assigned                                      │
 │    ├─ Own context window (200K tokens)                      │
@@ -746,8 +746,8 @@ if exit_code != 0:
     if 'ModuleNotFoundError' in stderr:
         error_type = 'dependency_missing'
         suggestion = 'Install missing Python packages: pip install -r requirements-mcp.txt'
-    elif 'claude-code: command not found' in stderr:
-        error_type = 'claude_code_not_installed'
+    elif 'claude: command not found' in stderr:
+        error_type = 'claude_not_installed'
         suggestion = 'Install Claude Code CLI and add to PATH'
     elif 'Permission denied' in stderr:
         error_type = 'permission_error'
@@ -939,12 +939,12 @@ task_description = user_input.replace('"', '\\"').replace('$', '\\$')
 
 # Passed via --prompt flag (shell-safe)
 process = subprocess.Popen([
-    'claude-code',
+    'claude',
     '--prompt', task_description  # List argument (not shell string!)
 ])
 
 # NOT this (vulnerable to injection):
-# os.system(f'claude-code --prompt "{task_description}"')  # ❌ UNSAFE!
+# os.system(f'claude --prompt "{task_description}"')  # ❌ UNSAFE!
 ```
 
 ---
@@ -999,7 +999,7 @@ cd /Users/name/homelab/context-foundry
 python3 tools/mcp_server.py
 
 # 2. Start Claude Code in another terminal
-claude-code
+claude
 
 # 3. In Claude Code session, test each tool:
 > Use mcp__context_foundry_status
@@ -1057,12 +1057,12 @@ tail -f /tmp/context-foundry-mcp.log
 **Check running delegated instances:**
 ```bash
 # See all Claude Code processes
-ps aux | grep claude-code
+ps aux | grep claude
 
 # Output:
-# user  12345  ... claude-code (main session)
-# user  67890  ... claude-code --prompt "Read orchestrator..." (delegated)
-# user  67891  ... claude-code --prompt "Read orchestrator..." (another delegated)
+# user  12345  ... claude (main session)
+# user  67890  ... claude --prompt "Read orchestrator..." (delegated)
+# user  67891  ... claude --prompt "Read orchestrator..." (another delegated)
 
 # Kill a specific delegated instance
 kill 67890
@@ -1095,7 +1095,7 @@ Cause: MCP server not running or misconfigured
 Fix:
 1. Check MCP server is running: ps aux | grep mcp_server.py
 2. Check .mcp.json path is correct
-3. Restart Claude Code: exit and run claude-code again
+3. Restart Claude Code: exit and run claude again
 ```
 
 **2. "Process spawns but nothing happens"**

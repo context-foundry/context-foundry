@@ -2100,7 +2100,7 @@ Use mcp__autonomous_build_and_deploy:
 
 5. **Start using 2.0:**
    ```bash
-   claude-code
+   claude
    # Now use mcp__autonomous_build_and_deploy, mcp__delegate_to_claude_code, etc.
    ```
 

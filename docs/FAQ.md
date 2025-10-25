@@ -1299,7 +1299,7 @@ Context Foundry → claude CLI → /agents → Sub-agent
 claude auth status
 
 # If authenticated, Context Foundry works immediately:
-claude-code
+claude
 > "Build a to-do app with Context Foundry"
 ```
 
@@ -3861,7 +3861,7 @@ Let me debug...
 **Context Foundry Orchestration:**
 
 ```bash
-claude-code
+claude
 > "Build a weather dashboard with Context Foundry"
 
 [Automated orchestration begins]
@@ -3949,7 +3949,7 @@ Yes!
 
 ```bash
 # Use Context Foundry for initial build:
-claude-code
+claude
 > "Build weather dashboard with Context Foundry"
 [Automated build completes]
 
@@ -3983,7 +3983,7 @@ autonomous_build_and_deploy("Create a Python script to parse CSV files")
 
 # Better:
 # Just use Claude Code directly:
-claude-code
+claude
 > "Write a Python script to parse CSV files"
 # Done in 2 minutes
 ```

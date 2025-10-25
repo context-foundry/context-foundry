@@ -133,7 +133,7 @@
 │  Receives: autonomous_build_and_deploy(task, directory)     │
 │         ↓                                                    │
 │  Spawns: subprocess.Popen(                                  │
-│            ['claude-code', '--prompt', task_prompt]         │
+│            ['claude', '--prompt', task_prompt]              │
 │          )                                                   │
 │         ↓                                                    │
 │  Returns: Task ID to main window                            │
@@ -250,7 +250,7 @@ async def autonomous_build_and_deploy_async(
 
     # Spawn delegated Claude Code instance
     process = subprocess.Popen([
-        'claude-code',
+        'claude',
         '--prompt', orchestrator_prompt,
         '--permission-mode', 'bypassPermissions'
     ], cwd=working_directory)
@@ -541,7 +541,7 @@ MAX_TEST_ITERATIONS: {max_test_iterations}
     # Spawn delegated Claude Code instance
     process = subprocess.Popen(
         [
-            'claude-code',
+            'claude',
             '--prompt', full_prompt,
             '--permission-mode', 'bypassPermissions'  # No interactive prompts
         ],

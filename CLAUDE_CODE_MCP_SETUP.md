@@ -29,7 +29,7 @@ This guide explains how to set up and use the Context Foundry MCP server to dele
 ┌─────────────────────────────────────────────────────────────┐
 │                 Terminal 2: Claude Code CLI                  │
 │                                                              │
-│  $ claude-code                                              │
+│  $ claude                                                   │
 │  > Use mcp__delegate_to_claude_code to spawn tasks         │
 │                                                              │
 │  ┌──────────────────────────────────────────────┐          │
@@ -40,7 +40,7 @@ This guide explains how to set up and use the Context Foundry MCP server to dele
 │                      ↓                                       │
 │  ┌──────────────────────────────────────────────┐          │
 │  │ Spawns subprocess:                           │          │
-│  │ $ claude-code "Create hello.py"             │          │
+│  │ $ claude "Create hello.py"                  │          │
 │  │   (fresh instance, clean context)            │          │
 │  └──────────────────────────────────────────────┘          │
 │                      ↓                                       │
@@ -68,8 +68,8 @@ This guide explains how to set up and use the Context Foundry MCP server to dele
 
 3. **Claude Code CLI** (installed and in PATH)
    ```bash
-   which claude-code  # Should return a path
-   claude-code --version  # Should show version
+   which claude  # Should return a path
+   claude --version  # Should show version
    ```
 
 ### Optional
@@ -133,12 +133,12 @@ Expected contents:
 ### Step 4: Verify Claude Code CLI
 
 ```bash
-# Check if claude-code is in PATH
-which claude-code
+# Check if claude is in PATH
+which claude
 
 # If not found, you may need to:
 # 1. Install Claude Code CLI
-# 2. Add it to PATH: export PATH="/path/to/claude-code:$PATH"
+# 2. Add it to PATH: export PATH="/path/to/claude:$PATH"
 # 3. Add to your shell profile (~/.zshrc or ~/.bashrc)
 ```
 
@@ -171,7 +171,7 @@ You should see:
 Open a **new terminal** and start Claude Code:
 
 ```bash
-claude-code
+claude
 ```
 
 Claude Code will automatically detect the MCP server configuration and connect to it.
@@ -188,7 +188,7 @@ that prints "Hello World"
 ```
 
 The tool will:
-1. Spawn a fresh `claude-code` process
+1. Spawn a fresh `claude` process
 2. Pass the task to it
 3. Wait for completion
 4. Return the results
@@ -218,7 +218,7 @@ Use mcp__delegate_to_claude_code with:
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `task` | string | Yes | - | The task/prompt to give to the new Claude Code instance |
-| `working_directory` | string | No | Current directory | Directory where claude-code should run |
+| `working_directory` | string | No | Current directory | Directory where claude should run |
 | `timeout_minutes` | float | No | 10.0 | Maximum execution time in minutes |
 | `additional_flags` | string | No | None | Additional CLI flags (e.g., "--model claude-sonnet-4") |
 
@@ -318,44 +318,44 @@ python3.10 tools/mcp_server.py  # if you have 3.10 installed
 
 3. **Restart Claude Code:**
    - Exit the current Claude Code session
-   - Restart: `claude-code`
+   - Restart: `claude`
 
 4. **Check MCP server is running in Terminal 1**
 
-### Issue: "claude-code command not found"
+### Issue: "claude command not found"
 
-**Error when delegating:** `❌ Error: claude-code command not found`
+**Error when delegating:** `❌ Error: claude command not found`
 
 **Solutions:**
 
-1. **Find where claude-code is installed:**
+1. **Find where claude is installed:**
    ```bash
    # Try these locations:
-   ls -la ~/bin/claude-code
-   ls -la /usr/local/bin/claude-code
-   ls -la ~/.local/bin/claude-code
+   ls -la ~/bin/claude
+   ls -la /usr/local/bin/claude
+   ls -la ~/.local/bin/claude
    ```
 
 2. **Add to PATH temporarily:**
    ```bash
-   export PATH="/path/to/claude-code/directory:$PATH"
+   export PATH="/path/to/claude/directory:$PATH"
    ```
 
 3. **Add to PATH permanently:**
    ```bash
    # For Zsh (macOS default):
-   echo 'export PATH="/path/to/claude-code/directory:$PATH"' >> ~/.zshrc
+   echo 'export PATH="/path/to/claude/directory:$PATH"' >> ~/.zshrc
    source ~/.zshrc
 
    # For Bash:
-   echo 'export PATH="/path/to/claude-code/directory:$PATH"' >> ~/.bashrc
+   echo 'export PATH="/path/to/claude/directory:$PATH"' >> ~/.bashrc
    source ~/.bashrc
    ```
 
 4. **Verify:**
    ```bash
-   which claude-code
-   claude-code --version
+   which claude
+   claude --version
    ```
 
 ### Issue: Delegations timeout
@@ -416,7 +416,7 @@ python3.10 tools/mcp_server.py  # if you have 3.10 installed
 
 3. **Increase verbosity if possible:**
    ```
-   additional_flags: "--verbose"  # if supported by claude-code
+   additional_flags: "--verbose"  # if supported by claude
    ```
 
 ## Testing Your Setup
@@ -522,7 +522,7 @@ To temporarily disable without deleting the configuration:
 3. **Monitor resource usage:**
    ```bash
    # In a third terminal, monitor processes:
-   watch -n 1 'ps aux | grep claude-code'
+   watch -n 1 'ps aux | grep claude'
    ```
 
 ## Security Considerations
@@ -570,7 +570,7 @@ python3 tools/mcp_server.py
 
 ### Terminal 2 - Use Claude Code:
 ```bash
-claude-code
+claude
 # Then use: mcp__delegate_to_claude_code tool
 ```
 
