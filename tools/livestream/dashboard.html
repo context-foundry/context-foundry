@@ -270,7 +270,10 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
         <!-- Token Usage Panel -->
         <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">🔢 Token Usage</h3>
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🔢 Token Usage
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
+            </h3>
             <div class="mb-4">
                 <div class="flex justify-between text-sm mb-2">
                     <span class="text-gray-400">Used / Budget</span>
@@ -301,7 +304,10 @@
 
         <!-- Test Loop Analytics -->
         <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">🧪 Test Loop</h3>
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🧪 Test Loop
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
+            </h3>
             <div class="space-y-3">
                 <div class="flex justify-between">
                     <span class="text-gray-400">Iterations</span>
@@ -319,7 +325,10 @@
 
         <!-- Agent Performance -->
         <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">🤖 Agent Performance</h3>
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🤖 Agent Performance
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
+            </h3>
             <div id="agentList" class="space-y-2">
                 <div class="text-gray-500 text-sm italic">No agent data yet</div>
             </div>
@@ -327,7 +336,10 @@
 
         <!-- Decision Tracking -->
         <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">🧠 Decision Quality</h3>
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🧠 Decision Quality
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
+            </h3>
             <div class="space-y-3">
                 <div class="flex justify-between">
                     <span class="text-gray-400">Total Decisions</span>
@@ -351,6 +363,8 @@
     <script>
         let ws = null;
         let currentSession = null;
+        let enhancedMetricsRefreshing = false;
+        let lastEnhancedMetricsUpdate = null;
 
         // Format time duration
         function formatDuration(seconds) {
@@ -487,8 +501,15 @@
                 'Last update: ' + new Date().toLocaleTimeString();
         }
 
-        // Update enhanced metrics
+        // Update enhanced metrics with concurrency protection
         async function updateEnhancedMetrics(sessionId) {
+            // Prevent concurrent refreshes
+            if (enhancedMetricsRefreshing) {
+                return;
+            }
+
+            enhancedMetricsRefreshing = true;
+
             try {
                 const response = await fetch(`/api/metrics/${sessionId}`);
                 const data = await response.json();
@@ -498,28 +519,53 @@
                     return;
                 }
 
-                // Update token usage
+                // Update last refresh timestamp
+                lastEnhancedMetricsUpdate = Date.now();
+
+                // Update all metric panels
                 if (data.metrics?.token_usage) {
                     updateTokenUsage(data.metrics.token_usage);
                 }
 
-                // Update test iterations
                 if (data.test_iterations) {
                     updateTestIterations(data.test_iterations);
                 }
 
-                // Update agent performance
                 if (data.agent_performance) {
                     updateAgentPerformance(data.agent_performance);
                 }
 
-                // Update decisions
                 if (data.decisions) {
                     updateDecisions(data.decisions);
                 }
+
+                // Update "last updated" display
+                updateMetricsTimestamp();
+
             } catch (error) {
                 console.warn('Error fetching enhanced metrics:', error);
+            } finally {
+                enhancedMetricsRefreshing = false;
             }
+        }
+
+        // Update metrics timestamp display
+        function updateMetricsTimestamp() {
+            if (!lastEnhancedMetricsUpdate) return;
+
+            const elapsed = Math.floor((Date.now() - lastEnhancedMetricsUpdate) / 1000);
+            const timeText = elapsed < 60 ? `${elapsed}s ago` : `${Math.floor(elapsed / 60)}m ago`;
+
+            // Update all metric timestamp elements
+            document.querySelectorAll('.metric-timestamp').forEach(el => {
+                el.textContent = `Updated: ${timeText}`;
+
+                // Color code based on freshness
+                el.className = 'metric-timestamp text-xs float-right ';
+                if (elapsed < 5) el.className += 'text-green-400';
+                else if (elapsed < 30) el.className += 'text-yellow-400';
+                else el.className += 'text-red-400';
+            });
         }
 
         // Update token usage panel
@@ -676,6 +722,16 @@
 
                 if (data.type === 'status') {
                     updateStatus(data.data);
+                    // TRIGGER enhanced metrics refresh on WebSocket update
+                    if (currentSession) {
+                        updateEnhancedMetrics(currentSession);
+                    }
+                } else if (data.type === 'phase_update') {
+                    // Handle phase update specifically
+                    updateStatus(data.data);
+                    if (currentSession) {
+                        updateEnhancedMetrics(currentSession);
+                    }
                 } else if (data.type === 'complete') {
                     alert('🎉 Session complete!');
                 } else if (data.type === 'log') {
@@ -791,6 +847,16 @@
         // Initialize
         loadSessions();
         setInterval(loadSessions, 30000); // Refresh sessions every 30s
+
+        // Auto-refresh enhanced metrics every 5 seconds
+        setInterval(() => {
+            if (currentSession) {
+                updateEnhancedMetrics(currentSession);
+            }
+        }, 5000);
+
+        // Update timestamp display every second
+        setInterval(updateMetricsTimestamp, 1000);
 
     </script>
 </body>

@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import asyncio
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Set, Optional, Any
@@ -34,10 +35,27 @@ app.add_middleware(
 # Active WebSocket connections per session
 connections: Dict[str, Set[WebSocket]] = {}
 
+# Change detection: store last sent data hashes per connection
+last_sent_hashes: Dict[str, str] = {}
+
 # Base paths
 CHECKPOINTS_DIR = Path("checkpoints/ralph")
 LOGS_DIR = Path("logs")
 DASHBOARD_FILE = Path(__file__).parent / "dashboard.html"
+
+
+def hash_data(data: Dict) -> str:
+    """
+    Create SHA256 hash of data for change detection.
+
+    Args:
+        data: Dictionary to hash
+
+    Returns:
+        Hex digest of SHA256 hash
+    """
+    data_str = json.dumps(data, sort_keys=True)
+    return hashlib.sha256(data_str.encode()).hexdigest()
 
 
 class SessionMonitor:
@@ -285,7 +303,7 @@ async def get_logs(session_id: str, lines: int = 50):
 
 @app.websocket("/ws/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """WebSocket for real-time updates."""
+    """WebSocket for real-time updates with change detection."""
     await websocket.accept()
 
     # Add to connections
@@ -293,30 +311,45 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         connections[session_id] = set()
     connections[session_id].add(websocket)
 
+    # Track last hash for this connection (use id() for unique key)
+    connection_key = f"{session_id}_{id(websocket)}"
+    last_hash = None
+
     try:
         # Send initial status
         status = monitor.get_session_status(session_id)
+        current_hash = hash_data(status)
         await websocket.send_json({"type": "status", "data": status})
+        last_hash = current_hash
 
-        # Keep connection alive and send updates
+        # Keep connection alive and send updates ONLY if changed
         while True:
             # Poll for updates every second
             await asyncio.sleep(1)
 
             # Get latest status
             status = monitor.get_session_status(session_id)
-            await websocket.send_json({"type": "status", "data": status})
+            current_hash = hash_data(status)
+
+            # CHANGE DETECTION: Only send if data changed
+            if current_hash != last_hash:
+                await websocket.send_json({"type": "status", "data": status})
+                last_hash = current_hash
 
             # Check if session is complete
             if status.get("is_complete"):
                 await websocket.send_json(
                     {"type": "complete", "message": "Session completed!"}
                 )
+                break
 
     except WebSocketDisconnect:
         connections[session_id].remove(websocket)
         if not connections[session_id]:
             del connections[session_id]
+        # Clean up hash tracking
+        if connection_key in last_sent_hashes:
+            del last_sent_hashes[connection_key]
 
 
 @app.post("/api/broadcast/{session_id}")

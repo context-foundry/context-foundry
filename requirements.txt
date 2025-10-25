@@ -21,6 +21,9 @@ pyyaml>=6.0  # Configuration files
 requests>=2.31.0  # HTTP requests for pricing fetching
 beautifulsoup4>=4.12.0  # HTML parsing for pricing pages
 
+# Livestream Real-Time Monitoring
+watchdog>=3.0.0  # Filesystem event monitoring for live updates
+
 # Optional: Additional AI providers (install as needed)
 # openai>=1.0.0  # OpenAI GPT models
 # google-generativeai>=0.3.0  # Google Gemini models

@@ -33,21 +33,31 @@ class MCPClient:
 
     def _read_phase_file(self, working_directory: str) -> Optional[Dict]:
         """
-        Read .context-foundry/current-phase.json from task working directory.
+        Read .context-foundry/current-phase.json with freshness check.
 
         Args:
             working_directory: Path to the task's working directory
 
         Returns:
-            Phase info dict or None if not found
+            Phase info dict with freshness metadata or None if not found
         """
         try:
             phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
             if not phase_file.exists():
                 return None
 
+            # Check file modification time
+            mtime = phase_file.stat().st_mtime
+            age_seconds = time.time() - mtime
+
             with open(phase_file, 'r') as f:
-                return json.load(f)
+                data = json.load(f)
+
+            # Add freshness metadata
+            data['_file_age_seconds'] = age_seconds
+            data['_is_fresh'] = age_seconds < 10  # Fresh if < 10s old
+
+            return data
         except Exception as e:
             print(f"Error reading phase file: {e}")
             return None
@@ -68,10 +78,7 @@ class MCPClient:
 
     def get_task_status(self, task_id: str, use_cache: bool = True) -> Dict[str, Any]:
         """
-        Get status for a delegation task from MCP server.
-
-        This simulates calling the get_delegation_result() MCP tool.
-        In production, this would use the MCP protocol directly.
+        Get status prioritizing live current-phase.json over checkpoints.
 
         Args:
             task_id: Task ID from autonomous_build_and_deploy_async()
@@ -94,21 +101,35 @@ class MCPClient:
             if time.time() - cached_time < self.cache_ttl:
                 return cached_data
 
-        # In a real implementation, this would call the MCP server
-        # For now, we'll read from the working directory directly
-        # since we have filesystem access
+        # PRIORITY 1: Try reading from live working directory
+        # Common patterns: /Users/name/homelab/<project>
+        live_paths = [
+            Path.home() / "homelab" / task_id,
+            Path.cwd() / task_id,
+            Path.cwd()  # Current directory itself
+        ]
 
-        # The MCP server stores active_tasks with this structure:
-        # active_tasks[task_id] = {
-        #     "process": process,
-        #     "cmd": cmd,
-        #     "cwd": working_directory,
-        #     "task": task,
-        #     "start_time": datetime,
-        #     ...
-        # }
+        for live_path in live_paths:
+            if live_path.exists():
+                phase_data = self._read_phase_file(str(live_path))
+                if phase_data and phase_data.get('_is_fresh'):
+                    # Found fresh live data
+                    result = {
+                        "task_id": task_id,
+                        "status": phase_data.get('status', 'running'),
+                        "current_phase": phase_data.get('current_phase', 'Unknown'),
+                        "phase_number": phase_data.get('phase_number', '?/7'),
+                        "phases_completed": phase_data.get('phases_completed', []),
+                        "test_iteration": phase_data.get('test_iteration', 0),
+                        "started_at": phase_data.get('started_at'),
+                        "progress_detail": phase_data.get('progress_detail', ''),
+                        "source": "live",
+                        "data_age_seconds": phase_data.get('_file_age_seconds', 0)
+                    }
+                    self.cache[cache_key] = (result, time.time())
+                    return result
 
-        # We need to read from the checkpoints/status files instead
+        # PRIORITY 2: Fall back to checkpoint data
         result = self._read_from_checkpoint(task_id)
 
         # Cache the result

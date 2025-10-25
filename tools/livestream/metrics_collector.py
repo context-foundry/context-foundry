@@ -7,10 +7,13 @@ Background service that polls MCP server and stores metrics to SQLite
 import asyncio
 import time
 import json
+import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import traceback
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler, FileModifiedEvent
 
 # Import our modules
 try:
@@ -39,6 +42,68 @@ except ImportError:
         TRACK_PATTERN_EFFECTIVENESS,
         TOKEN_BUDGET_LIMIT
     )
+
+
+class PhaseFileWatcher(FileSystemEventHandler):
+    """
+    Watches .context-foundry/current-phase.json files for changes.
+    Triggers metrics collection when phase data updates.
+    """
+
+    def __init__(self, collector: 'MetricsCollector'):
+        super().__init__()
+        self.collector = collector
+        self.debounce_timers = {}  # Debounce rapid changes
+        self.debounce_delay = 0.1  # 100ms
+        self.loop = None  # asyncio event loop
+
+    def on_modified(self, event):
+        """Handle file modification events."""
+        if event.is_directory:
+            return
+
+        # Only watch current-phase.json files
+        if not event.src_path.endswith('current-phase.json'):
+            return
+
+        # Debounce rapid changes
+        file_path = event.src_path
+
+        # Cancel existing timer for this file
+        if file_path in self.debounce_timers:
+            self.debounce_timers[file_path].cancel()
+
+        # Create new timer
+        timer = threading.Timer(
+            self.debounce_delay,
+            self._handle_phase_update,
+            args=[file_path]
+        )
+        timer.start()
+        self.debounce_timers[file_path] = timer
+
+    def _handle_phase_update(self, file_path: str):
+        """Handle debounced phase file update."""
+        print(f"📂 Detected phase file change: {file_path}")
+
+        try:
+            # Read phase data
+            with open(file_path, 'r') as f:
+                phase_data = json.load(f)
+
+            # Extract session info
+            session_id = phase_data.get('session_id', 'unknown')
+
+            # Trigger metrics collection for this session
+            # Schedule coroutine in the collector's event loop
+            if self.collector.loop:
+                asyncio.run_coroutine_threadsafe(
+                    self.collector.collect_live_phase_update(session_id, phase_data),
+                    self.collector.loop
+                )
+        except Exception as e:
+            print(f"⚠️  Error handling phase update: {e}")
+            traceback.print_exc()
 
 
 class MetricsCollector:
@@ -73,11 +138,19 @@ class MetricsCollector:
         self.poll_interval = poll_interval
         self.running = False
         self.tracked_tasks = set()  # Tasks we're currently tracking
+        self.observer = None  # Watchdog observer
+        self.watcher = None   # FileSystemEventHandler
+        self.watched_dirs = set()  # Directories being watched
+        self.loop = None  # asyncio event loop
 
     async def start(self):
-        """Start the collector service."""
+        """Start the collector service with filesystem watching."""
         self.running = True
+        self.loop = asyncio.get_event_loop()  # Store event loop for cross-thread access
         print(f"🔄 Metrics Collector started (poll interval: {self.poll_interval}s)")
+
+        # Start filesystem watcher
+        self.start_file_watcher()
 
         while self.running:
             try:
@@ -92,7 +165,45 @@ class MetricsCollector:
     def stop(self):
         """Stop the collector service."""
         self.running = False
+
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+
         print("🛑 Metrics Collector stopped")
+
+    def start_file_watcher(self):
+        """Start watching for .context-foundry/current-phase.json changes."""
+        self.watcher = PhaseFileWatcher(self)
+        self.watcher.loop = self.loop  # Give watcher access to event loop
+        self.observer = Observer()
+
+        # Watch common build directories
+        watch_paths = [
+            Path.home() / "homelab",  # Common build location
+            Path.cwd(),                # Current directory
+        ]
+
+        # Also watch checkpoints directory if it exists
+        checkpoints_dir = Path("checkpoints/ralph")
+        if checkpoints_dir.exists():
+            watch_paths.append(checkpoints_dir)
+
+        for watch_path in watch_paths:
+            if watch_path.exists():
+                try:
+                    self.observer.schedule(
+                        self.watcher,
+                        str(watch_path),
+                        recursive=True
+                    )
+                    self.watched_dirs.add(str(watch_path))
+                    print(f"👁️  Watching: {watch_path}")
+                except Exception as e:
+                    print(f"⚠️  Could not watch {watch_path}: {e}")
+
+        self.observer.start()
+        print("✅ Filesystem watcher started")
 
     async def collect_metrics(self):
         """
@@ -171,6 +282,51 @@ class MetricsCollector:
             self.db.update_task(task['task_id'], updates)
         except Exception as e:
             print(f"⚠️  Error updating task {task['task_id']}: {e}")
+
+    async def collect_live_phase_update(self, session_id: str, phase_data: Dict):
+        """
+        Collect metrics from live phase update (triggered by file watcher).
+
+        Args:
+            session_id: Session ID from phase data
+            phase_data: Parsed current-phase.json content
+        """
+        print(f"📊 Collecting metrics for live session: {session_id}")
+
+        # Create simplified task object from phase data
+        task = {
+            'task_id': session_id,
+            'status': phase_data.get('status', 'running'),
+            'current_phase': phase_data.get('current_phase', 'Unknown'),
+            'phases_completed': phase_data.get('phases_completed', []),
+            'test_iteration': phase_data.get('test_iteration', 0),
+            'start_time': phase_data.get('started_at'),
+            # Try to infer working directory - look for .context-foundry nearby
+            'working_directory': str(Path.cwd())  # Default to current directory
+        }
+
+        # Try to find actual working directory from session_id
+        potential_paths = [
+            Path.home() / "homelab" / session_id,
+            Path.cwd() / session_id,
+            Path.cwd()  # Current directory might be the project itself
+        ]
+
+        for potential_path in potential_paths:
+            if (potential_path / ".context-foundry" / "current-phase.json").exists():
+                task['working_directory'] = str(potential_path)
+                break
+
+        # Initialize task if new
+        if session_id not in self.tracked_tasks:
+            await self.initialize_task(task)
+            self.tracked_tasks.add(session_id)
+
+        # Update task status
+        await self.update_task_status(task)
+
+        # Collect metrics
+        await self.collect_task_metrics(task)
 
     async def collect_task_metrics(self, task: Dict[str, Any]):
         """
