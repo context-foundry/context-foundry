@@ -1,62 +1,48 @@
 {
   "parallel_mode": true,
-  "total_tasks": 8,
+  "total_tasks": 6,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Create BAML schema definitions (phase_tracking.baml, scout.baml)",
-      "files": ["tools/baml_schemas/phase_tracking.baml", "tools/baml_schemas/scout.baml"],
+      "description": "Create cached_prompt_builder.py module",
+      "files": ["tools/prompts/cached_prompt_builder.py"],
       "dependencies": [],
-      "estimated_time": "10 minutes"
+      "estimated_time": "20 minutes"
     },
     {
       "id": "task-2",
-      "description": "Create BAML schema definitions (architect.baml, builder.baml, clients.baml)",
-      "files": ["tools/baml_schemas/architect.baml", "tools/baml_schemas/builder.baml", "tools/baml_schemas/clients.baml"],
+      "description": "Create cache_config.json and CacheConfig class",
+      "files": ["tools/prompts/cache_config.json", "tools/prompts/__init__.py"],
       "dependencies": [],
       "estimated_time": "10 minutes"
     },
     {
       "id": "task-3",
-      "description": "Create BAML integration helper module",
-      "files": ["tools/baml_integration.py"],
+      "description": "Create cache_analysis.py tool",
+      "files": ["tools/prompts/cache_analysis.py"],
       "dependencies": [],
       "estimated_time": "15 minutes"
     },
     {
       "id": "task-4",
-      "description": "Update requirements and create optional BAML requirements",
-      "files": ["requirements.txt", "requirements-baml.txt"],
+      "description": "Modify orchestrator_prompt.txt with cache boundary marker",
+      "files": ["tools/orchestrator_prompt.txt"],
       "dependencies": [],
       "estimated_time": "5 minutes"
     },
     {
       "id": "task-5",
-      "description": "Update MCP server with BAML integration",
+      "description": "Integrate cached prompts into mcp_server.py",
       "files": ["tools/mcp_server.py"],
-      "dependencies": ["task-3"],
+      "dependencies": ["task-1", "task-2"],
       "estimated_time": "15 minutes"
     },
     {
       "id": "task-6",
-      "description": "Create comprehensive unit tests for BAML integration",
-      "files": ["tests/test_baml_integration.py", "tests/test_baml_schemas.py"],
-      "dependencies": ["task-3"],
+      "description": "Create unit and integration tests",
+      "files": ["tests/test_cached_prompt_builder.py", "tests/test_cache_integration.py"],
+      "dependencies": ["task-1", "task-2"],
       "estimated_time": "20 minutes"
-    },
-    {
-      "id": "task-7",
-      "description": "Create BAML integration documentation",
-      "files": ["docs/BAML_INTEGRATION.md"],
-      "dependencies": ["task-1", "task-2", "task-3"],
-      "estimated_time": "15 minutes"
-    },
-    {
-      "id": "task-8",
-      "description": "Create example BAML project",
-      "files": ["examples/baml-example-project/README.md", "examples/baml-example-project/main.py"],
-      "dependencies": ["task-1", "task-2", "task-3"],
-      "estimated_time": "10 minutes"
     }
   ]
 }

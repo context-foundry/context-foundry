@@ -1258,7 +1258,7 @@ Auto-correcting to use_parallel=False...
             }
         }
 
-        # Load orchestrator system prompt
+        # Load orchestrator system prompt with caching support
         orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
         if not orchestrator_prompt_path.exists():
             return json.dumps({
@@ -1266,11 +1266,34 @@ Auto-correcting to use_parallel=False...
                 "error": f"Orchestrator prompt not found at {orchestrator_prompt_path}. Please create tools/orchestrator_prompt.txt"
             }, indent=2)
 
-        with open(orchestrator_prompt_path) as f:
-            system_prompt = f.read()
+        # Try to use cached prompt builder (with graceful fallback)
+        try:
+            from tools.prompts.cached_prompt_builder import build_cached_prompt
 
-        # Build task prompt
-        task_prompt = f"""AUTONOMOUS BUILD TASK
+            # Build prompt with caching enabled
+            system_prompt = build_cached_prompt(
+                task_config=task_config,
+                orchestrator_prompt_path=str(orchestrator_prompt_path),
+                enable_caching=True,  # Will auto-disable if not supported
+                cache_ttl="5m"
+            )
+
+        except Exception as e:
+            # Fallback to non-cached prompt if builder fails
+            print(f"⚠️  Cached prompt builder failed: {e}", file=sys.stderr)
+            print(f"   Falling back to standard prompt (no caching)\n", file=sys.stderr)
+
+            with open(orchestrator_prompt_path) as f:
+                orchestrator_content = f.read()
+
+            # Remove cache boundary marker if present
+            orchestrator_content = orchestrator_content.replace("<<CACHE_BOUNDARY_MARKER>>", "")
+            orchestrator_content = orchestrator_content.replace("END OF STATIC ORCHESTRATOR INSTRUCTIONS", "")
+
+            # Build task section
+            task_section = f"""
+
+AUTONOMOUS BUILD TASK
 
 CONFIGURATION:
 {json.dumps(task_config, indent=2)}
@@ -1281,15 +1304,17 @@ Execute the full Scout → Architect → Builder → Test → Deploy workflow.
 Return JSON summary when complete.
 BEGIN AUTONOMOUS EXECUTION NOW.
 """
+            system_prompt = orchestrator_content + task_section
 
         # Build command with thinking disabled
+        # Note: System prompt now includes both static (cached) and dynamic (task config) sections
         cmd = [
             "claude", "--print",
             "--permission-mode", "bypassPermissions",
             "--strict-mcp-config",
             "--settings", '{"thinkingMode": "off"}',
             "--system-prompt", system_prompt,
-            task_prompt
+            ""  # Empty user message (everything in system prompt now)
         ]
 
         # Generate unique task ID

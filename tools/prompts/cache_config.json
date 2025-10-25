@@ -1,0 +1,36 @@
+{
+  "version": "1.0.0",
+  "description": "Anthropic Prompt Caching Configuration",
+  "caching": {
+    "enabled": true,
+    "ttl": "5m",
+    "min_tokens": 1024,
+    "cache_boundary_line": 1650,
+    "models_supported": [
+      "claude-sonnet-4",
+      "claude-sonnet-3-5",
+      "claude-sonnet-3.5",
+      "claude-opus-4",
+      "claude-haiku-4",
+      "claude-haiku-3-5",
+      "claude-haiku-3.5"
+    ],
+    "extended_ttl_enabled": false,
+    "extended_ttl_duration": "1h"
+  },
+  "prompt_version": {
+    "hash": "auto",
+    "last_updated": "2025-01-13T00:00:00Z",
+    "comment": "Version hash calculated automatically from orchestrator_prompt.txt"
+  },
+  "metrics": {
+    "track_cache_hits": true,
+    "track_token_savings": true,
+    "track_cost_savings": true
+  },
+  "fallback": {
+    "on_error": "disable_caching",
+    "warn_on_small_section": true,
+    "min_section_size_bytes": 20000
+  }
+}
