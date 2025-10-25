@@ -10,7 +10,7 @@ import json
 import asyncio
 import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Set, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -420,6 +420,150 @@ async def health():
         "sessions": len(monitor.discover_sessions()),
         "connections": sum(len(conns) for conns in connections.values()),
     }
+
+
+# ============================================================================
+# Multi-Agent Monitoring Endpoints (NEW)
+# ============================================================================
+
+@app.get("/api/agents/{session_id}")
+async def get_session_agents(session_id: str):
+    """Get all agent instances for a session."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        agents = db.get_session_agents(session_id)
+        active_agents = [a for a in agents if a['status'] in ['spawning', 'active', 'idle']]
+
+        return JSONResponse({
+            "session_id": session_id,
+            "agents": agents,
+            "total_agents": len(agents),
+            "active_agents": len(active_agents)
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/agent/{agent_id}")
+async def get_agent_detail(agent_id: str):
+    """Get detailed status for a specific agent."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        agent = db.get_agent_instance(agent_id)
+
+        if not agent:
+            return JSONResponse({"error": "Agent not found"}, status_code=404)
+
+        # Calculate elapsed seconds if agent is still running
+        if agent['start_time'] and not agent['end_time']:
+            from datetime import datetime, timezone
+            start_time = datetime.fromisoformat(agent['start_time'].replace('Z', '+00:00'))
+            elapsed_seconds = int((datetime.now(timezone.utc) - start_time).total_seconds())
+            agent['elapsed_seconds'] = elapsed_seconds
+
+            # Estimate remaining time based on progress
+            if agent['progress_percent'] > 0:
+                estimated_total = elapsed_seconds / (agent['progress_percent'] / 100.0)
+                agent['estimated_remaining_seconds'] = int(estimated_total - elapsed_seconds)
+            else:
+                agent['estimated_remaining_seconds'] = 0
+
+        return JSONResponse(agent)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/instances")
+async def get_all_instances():
+    """Get all running Context Foundry instances with summary stats."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        instances = db.get_all_instances()
+
+        return JSONResponse({
+            "instances": instances,
+            "total_instances": len(instances)
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/agent-update")
+async def agent_update(agent_data: Dict):
+    """
+    Receive agent status updates from orchestrator/builders.
+    Creates or updates agent instance and broadcasts to connected clients.
+    """
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        session_id = agent_data.get("session_id")
+        agent_id = agent_data.get("agent_id")
+
+        if not session_id or not agent_id:
+            return JSONResponse({"error": "session_id and agent_id required"}, status_code=400)
+
+        # Check if agent exists
+        existing_agent = db.get_agent_instance(agent_id)
+
+        if existing_agent:
+            # Update existing agent
+            updates = {}
+            for key in ['status', 'phase', 'progress_percent', 'tokens_used', 'token_percentage', 'error_message']:
+                if key in agent_data:
+                    updates[key] = agent_data[key]
+
+            # Calculate token percentage if tokens_used provided
+            if 'tokens_used' in updates and existing_agent.get('tokens_limit'):
+                updates['token_percentage'] = (updates['tokens_used'] / existing_agent['tokens_limit']) * 100
+
+            # Set end_time if status is completed or failed
+            if updates.get('status') in ['completed', 'failed']:
+                updates['end_time'] = datetime.now().isoformat()
+                if existing_agent.get('start_time'):
+                    from datetime import datetime as dt
+                    start = dt.fromisoformat(existing_agent['start_time'].replace('Z', '+00:00'))
+                    end = dt.now(timezone.utc)
+                    updates['duration_seconds'] = int((end - start).total_seconds())
+
+            db.update_agent_instance(agent_id, updates)
+        else:
+            # Create new agent instance
+            db.create_agent_instance(agent_data)
+
+        # Broadcast agent update to connected clients
+        broadcast_count = 0
+        if session_id in connections:
+            event = {
+                "type": "agent_progress",
+                "session_id": session_id,
+                "data": agent_data
+            }
+            for connection in connections[session_id]:
+                try:
+                    await connection.send_json(event)
+                    broadcast_count += 1
+                except:
+                    pass
+
+        return JSONResponse({
+            "status": "updated",
+            "agent_id": agent_id,
+            "broadcasted_to": broadcast_count
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ============================================================================

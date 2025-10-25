@@ -1,583 +1,597 @@
-# Architecture: Livestream Real-Time Updates Fix
+# Architecture Specification: Multi-Agent Monitoring Dashboard
 
 ## System Architecture Overview
 
+### High-Level Design
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Autonomous Build Process                  │
-│                                                              │
-│  Orchestrator → writes .context-foundry/current-phase.json  │
-│         ↓                                                    │
-│         ↓ (curl POST /api/phase-update)                     │
-└─────────┼──────────────────────────────────────────────────┘
-          ↓
-┌─────────┴──────────────────────────────────────────────────┐
-│               Livestream Server (server.py)                 │
-│                                                              │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │ SessionMonitor  │      │ WebSocket Handler│            │
-│  │                 │      │                  │            │
-│  │ - sessions{}    │◄─────┤ - connections{}  │            │
-│  │ - last_update{} │      │ - change_hashes{}│ ← NEW      │
-│  └────────┬────────┘      └────────┬─────────┘            │
-│           │                         │                       │
-│           │ /api/phase-update       │                       │
-│           ↓                         ↓                       │
-│  ┌─────────────────────────────────────────┐              │
-│  │    Broadcast to WebSocket clients       │              │
-│  │    (only if data changed - NEW)         │              │
-│  └─────────────────┬───────────────────────┘              │
-└────────────────────┼────────────────────────────────────────┘
-                     ↓
-┌────────────────────┴────────────────────────────────────────┐
-│          Dashboard (dashboard.html)                          │
-│                                                              │
-│  WebSocket.onmessage → triggers:                            │
-│    1. updateStatus() (existing)                             │
-│    2. updateEnhancedMetrics() (NEW)                         │
-│                                                              │
-│  setInterval (5s) → updateEnhancedMetrics() (NEW)          │
-│                                                              │
-│  Displays: last updated timestamps (NEW)                    │
+│                    Browser (Frontend)                        │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ dashboard.html (Enhanced)                            │   │
+│  │ - Multi-Agent Panel (new)                           │   │
+│  │ - Multi-Instance Cards (new)                        │   │
+│  │ - Geek Stats Section (new)                          │   │
+│  │ - Phase Timeline (new)                              │   │
+│  │ - Per-Agent Progress Bars (new)                     │   │
+│  │ - Per-Agent Token Gauges (new)                      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│           ↕ WebSocket (agent events) + REST API              │
 └─────────────────────────────────────────────────────────────┘
-
+                              ↕
 ┌─────────────────────────────────────────────────────────────┐
-│        MetricsCollector (metrics_collector.py)               │
-│                                                              │
-│  Watchdog FileSystemEventHandler (NEW)                      │
-│    → Watches: .context-foundry/current-phase.json          │
-│    → on_modified() → collect_metrics()                      │
-│    → Debounced (100ms)                                      │
-│                                                              │
-│  Fallback: Poll checkpoints/ralph/* (existing)              │
+│              FastAPI Server (server.py)                      │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ New Endpoints:                                       │   │
+│  │ - GET /api/agents/{session_id}                      │   │
+│  │ - GET /api/agent/{agent_id}                         │   │
+│  │ - GET /api/instances                                │   │
+│  │ - POST /api/agent-update                            │   │
+│  │ Enhanced:                                            │   │
+│  │ - POST /api/phase-update (now tracks agents)        │   │
+│  │ - WebSocket /ws/{session_id} (agent events)         │   │
+│  └──────────────────────────────────────────────────────┘   │
+│           ↕ Database queries + Metrics collection            │
+└─────────────────────────────────────────────────────────────┘
+                              ↕
+┌─────────────────────────────────────────────────────────────┐
+│         MetricsDatabase (metrics_db.py - Enhanced)           │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │ New Table: agent_instances                          │   │
+│  │ - id, session_id, agent_id, agent_type              │   │
+│  │ - status, phase, progress_percent                   │   │
+│  │ - tokens_used, tokens_limit, token_percentage       │   │
+│  │ - start_time, end_time, parent_agent_id             │   │
+│  │ - error_message                                      │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              ↕
+┌─────────────────────────────────────────────────────────────┐
+│     MetricsCollector (metrics_collector.py - Enhanced)       │
+│  - Watches .context-foundry/current-phase.json              │
+│  - Parses orchestrator logs for agent spawning              │
+│  - Tracks per-agent token usage                             │
+│  - Emits agent WebSocket events                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## File Structure
+## Database Schema Changes
 
-```
-tools/livestream/
-├── server.py             (MODIFY - add change detection)
-├── dashboard.html        (MODIFY - add auto-refresh)
-├── metrics_collector.py  (MODIFY - add file watching)
-├── mcp_client.py        (MODIFY - prioritize live data)
-├── config.py            (READ - get settings)
-├── metrics_db.py        (READ - database access)
-└── broadcaster.py       (KEEP - no changes)
-
-requirements.txt          (MODIFY - add watchdog)
-```
-
-## Module Specifications
-
-### Module 1: Change Detection in WebSocket (server.py)
-
-**Location**: Lines 286-320
-
-**Changes**:
-1. Add global hash storage: `last_sent_hashes: Dict[str, str] = {}`
-2. Add hash function:
-```python
-import hashlib
-
-def hash_data(data: Dict) -> str:
-    """Create SHA256 hash of data for change detection."""
-    data_str = json.dumps(data, sort_keys=True)
-    return hashlib.sha256(data_str.encode()).hexdigest()
+### New Table: agent_instances
+```sql
+CREATE TABLE IF NOT EXISTS agent_instances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    agent_id TEXT UNIQUE NOT NULL,
+    agent_type TEXT NOT NULL,  -- 'Scout', 'Architect', 'Builder', 'Tester', etc.
+    agent_name TEXT,  -- 'Builder-1', 'Builder-2' for parallel builders
+    status TEXT NOT NULL,  -- 'spawning', 'active', 'idle', 'completed', 'failed'
+    phase TEXT,  -- Current phase the agent is working on
+    progress_percent REAL DEFAULT 0.0,
+    tokens_used INTEGER DEFAULT 0,
+    tokens_limit INTEGER DEFAULT 200000,
+    token_percentage REAL DEFAULT 0.0,
+    start_time TEXT,
+    end_time TEXT,
+    duration_seconds INTEGER,
+    parent_agent_id TEXT,  -- For nested agents
+    error_message TEXT,
+    metadata TEXT,  -- JSON for additional data
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES tasks(task_id)
+)
 ```
 
-3. Modify WebSocket loop:
-```python
-@app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    await websocket.accept()
+### Index for Performance
+```sql
+CREATE INDEX IF NOT EXISTS idx_agent_instances_session 
+ON agent_instances(session_id);
 
-    if session_id not in connections:
-        connections[session_id] = set()
-    connections[session_id].add(websocket)
-
-    # Track last hash for this connection
-    last_hash = None
-
-    try:
-        # Send initial status
-        status = monitor.get_session_status(session_id)
-        current_hash = hash_data(status)
-        await websocket.send_json({"type": "status", "data": status})
-        last_hash = current_hash
-
-        # Keep connection alive and send updates ONLY if changed
-        while True:
-            await asyncio.sleep(1)
-
-            status = monitor.get_session_status(session_id)
-            current_hash = hash_data(status)
-
-            # CHANGE DETECTION: Only send if data changed
-            if current_hash != last_hash:
-                await websocket.send_json({"type": "status", "data": status})
-                last_hash = current_hash
-
-            # Check if session is complete
-            if status.get("is_complete"):
-                await websocket.send_json({
-                    "type": "complete",
-                    "message": "Session completed!"
-                })
-                break
-    except WebSocketDisconnect:
-        connections[session_id].remove(websocket)
-        if not connections[session_id]:
-            del connections[session_id]
+CREATE INDEX IF NOT EXISTS idx_agent_instances_status 
+ON agent_instances(status);
 ```
 
-**Testing**: Send same data twice, verify only one transmission
+## API Endpoints
 
----
-
-### Module 2: Dashboard Auto-Refresh (dashboard.html)
-
-**Location**: Lines 491-793
-
-**Changes**:
-
-1. Add refresh state management (after line 353):
-```javascript
-let enhancedMetricsRefreshing = false;
-let lastEnhancedMetricsUpdate = null;
-```
-
-2. Modify `updateEnhancedMetrics()` to prevent concurrent calls:
-```javascript
-async function updateEnhancedMetrics(sessionId) {
-    // Prevent concurrent refreshes
-    if (enhancedMetricsRefreshing) {
-        return;
+### 1. GET /api/agents/{session_id}
+**Purpose**: List all agents for a session
+**Response**:
+```json
+{
+  "session_id": "context-foundry",
+  "agents": [
+    {
+      "agent_id": "scout-001",
+      "agent_type": "Scout",
+      "agent_name": "Scout",
+      "status": "completed",
+      "phase": "Research",
+      "progress_percent": 100.0,
+      "tokens_used": 15234,
+      "token_percentage": 7.6,
+      "start_time": "2025-01-13T10:05:00Z",
+      "end_time": "2025-01-13T10:10:00Z",
+      "duration_seconds": 300
+    },
+    {
+      "agent_id": "architect-001",
+      "agent_type": "Architect",
+      "agent_name": "Architect",
+      "status": "active",
+      "phase": "Design",
+      "progress_percent": 45.0,
+      "tokens_used": 8932,
+      "token_percentage": 4.5,
+      "start_time": "2025-01-13T10:10:00Z",
+      "end_time": null,
+      "duration_seconds": null
     }
-
-    enhancedMetricsRefreshing = true;
-
-    try {
-        const response = await fetch(`/api/metrics/${sessionId}`);
-        const data = await response.json();
-
-        if (data.error) {
-            console.warn('Enhanced metrics not available:', data.error);
-            return;
-        }
-
-        // Update last refresh timestamp
-        lastEnhancedMetricsUpdate = Date.now();
-
-        // Update all metric panels
-        if (data.metrics?.token_usage) {
-            updateTokenUsage(data.metrics.token_usage);
-        }
-        if (data.test_iterations) {
-            updateTestIterations(data.test_iterations);
-        }
-        if (data.agent_performance) {
-            updateAgentPerformance(data.agent_performance);
-        }
-        if (data.decisions) {
-            updateDecisions(data.decisions);
-        }
-
-        // Update "last updated" display
-        updateMetricsTimestamp();
-
-    } catch (error) {
-        console.warn('Error fetching enhanced metrics:', error);
-    } finally {
-        enhancedMetricsRefreshing = false;
-    }
+  ],
+  "total_agents": 2,
+  "active_agents": 1
 }
 ```
 
-3. Add timestamp display function:
-```javascript
-function updateMetricsTimestamp() {
-    if (!lastEnhancedMetricsUpdate) return;
-
-    const elapsed = Math.floor((Date.now() - lastEnhancedMetricsUpdate) / 1000);
-    const timeText = elapsed < 60 ? `${elapsed}s ago` : `${Math.floor(elapsed / 60)}m ago`;
-
-    // Add to each metric panel header
-    document.querySelectorAll('.metric-timestamp').forEach(el => {
-        el.textContent = `Updated: ${timeText}`;
-
-        // Color code based on freshness
-        el.className = 'metric-timestamp text-xs ';
-        if (elapsed < 5) el.className += 'text-green-400';
-        else if (elapsed < 30) el.className += 'text-yellow-400';
-        else el.className += 'text-red-400';
-    });
+### 2. GET /api/agent/{agent_id}
+**Purpose**: Get detailed status for specific agent
+**Response**:
+```json
+{
+  "agent_id": "builder-001",
+  "agent_type": "Builder",
+  "agent_name": "Builder-1",
+  "status": "active",
+  "phase": "Implementation",
+  "progress_percent": 67.0,
+  "tokens_used": 45678,
+  "tokens_limit": 200000,
+  "token_percentage": 22.8,
+  "start_time": "2025-01-13T10:15:00Z",
+  "elapsed_seconds": 450,
+  "estimated_remaining_seconds": 220,
+  "files_modified": ["dashboard.html", "server.py"],
+  "current_task": "Implementing multi-agent UI components"
 }
 ```
 
-4. Add HTML timestamp elements (modify metric panel headers):
+### 3. GET /api/instances
+**Purpose**: List all running Context Foundry instances
+**Response**:
+```json
+{
+  "instances": [
+    {
+      "session_id": "context-foundry",
+      "project_name": "context-foundry",
+      "status": "building",
+      "agents_active": 2,
+      "agents_total": 4,
+      "progress_percent": 65.0,
+      "start_time": "2025-01-13T10:00:00Z",
+      "elapsed_seconds": 900
+    },
+    {
+      "session_id": "flight-tracker",
+      "project_name": "flight-tracker",
+      "status": "testing",
+      "agents_active": 1,
+      "agents_total": 3,
+      "progress_percent": 85.0,
+      "start_time": "2025-01-13T09:30:00Z",
+      "elapsed_seconds": 2700
+    }
+  ],
+  "total_instances": 2
+}
+```
+
+### 4. POST /api/agent-update
+**Purpose**: Receive agent status updates from orchestrator/builders
+**Request Body**:
+```json
+{
+  "session_id": "context-foundry",
+  "agent_id": "builder-001",
+  "agent_type": "Builder",
+  "status": "active",
+  "progress_percent": 70.0,
+  "tokens_used": 50000,
+  "current_task": "Writing tests"
+}
+```
+**Response**:
+```json
+{
+  "status": "updated",
+  "agent_id": "builder-001",
+  "broadcasted_to": 3
+}
+```
+
+## WebSocket Events
+
+### Event: agent_spawned
+```json
+{
+  "type": "agent_spawned",
+  "session_id": "context-foundry",
+  "data": {
+    "agent_id": "builder-002",
+    "agent_type": "Builder",
+    "agent_name": "Builder-2",
+    "phase": "Parallel Build",
+    "timestamp": "2025-01-13T10:20:00Z"
+  }
+}
+```
+
+### Event: agent_progress
+```json
+{
+  "type": "agent_progress",
+  "session_id": "context-foundry",
+  "data": {
+    "agent_id": "builder-001",
+    "progress_percent": 75.0,
+    "tokens_used": 55000,
+    "token_percentage": 27.5,
+    "current_task": "Implementing geek stats section"
+  }
+}
+```
+
+### Event: agent_completed
+```json
+{
+  "type": "agent_completed",
+  "session_id": "context-foundry",
+  "data": {
+    "agent_id": "architect-001",
+    "success": true,
+    "duration_seconds": 420,
+    "files_created": 2,
+    "files_modified": 5
+  }
+}
+```
+
+### Event: agent_failed
+```json
+{
+  "type": "agent_failed",
+  "session_id": "context-foundry",
+  "data": {
+    "agent_id": "tester-001",
+    "error_message": "Tests failed: 3 failures in test_multi_agent.py",
+    "retry_count": 1,
+    "will_retry": true
+  }
+}
+```
+
+## Frontend UI Components
+
+### 1. Multi-Agent Panel (New Component)
+**Location**: After "Session Selector", before "Main Grid"
+**HTML Structure**:
 ```html
-<h3 class="text-lg font-bold text-gray-200 mb-4">
-    🔢 Token Usage
-    <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-</h3>
+<div id="multiAgentPanel" class="bg-gray-900 p-6 rounded-lg mb-6">
+    <h2 class="text-2xl font-bold mb-4">🤖 Active Agents</h2>
+    <div id="agentsList" class="space-y-3">
+        <!-- Agent cards dynamically inserted here -->
+    </div>
+</div>
 ```
 
-5. Modify WebSocket handler to trigger refresh (line 674):
-```javascript
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-
-    if (data.type === 'status') {
-        updateStatus(data.data);
-        // TRIGGER enhanced metrics refresh on WebSocket update
-        updateEnhancedMetrics(currentSession);
-    } else if (data.type === 'complete') {
-        alert('🎉 Session complete!');
-    } else if (data.type === 'log') {
-        const logsDiv = document.getElementById('logs');
-        const line = document.createElement('div');
-        line.className = 'log-line text-gray-300';
-        line.textContent = data.data;
-        logsDiv.appendChild(line);
-        logsDiv.scrollTop = logsDiv.scrollHeight;
-    }
-};
+**Agent Card Template**:
+```html
+<div class="agent-card bg-gradient-to-r from-gray-800 to-gray-900 p-4 rounded-lg border border-gray-700">
+    <div class="flex justify-between items-center mb-2">
+        <div class="flex items-center space-x-2">
+            <span class="status-badge {status-class}">●</span>
+            <span class="font-bold text-lg">{agent_name}</span>
+            <span class="text-xs text-gray-500">{agent_type}</span>
+        </div>
+        <span class="text-xs text-gray-400">{elapsed_time}</span>
+    </div>
+    
+    <!-- Horizontal Gradient Progress Bar -->
+    <div class="progress-container mb-2">
+        <div class="h-6 bg-gray-700 rounded-full overflow-hidden relative">
+            <div class="progress-bar-fill h-full bg-gradient-to-r from-green-400 via-blue-500 to-blue-600 transition-all duration-500"
+                 style="width: {progress_percent}%"></div>
+            <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
+                {progress_percent}%
+            </div>
+        </div>
+    </div>
+    
+    <!-- Per-Agent Token Gauge -->
+    <div class="token-gauge-mini mb-2">
+        <div class="flex justify-between text-xs mb-1">
+            <span class="text-gray-400">Tokens</span>
+            <span class="font-mono">{tokens_used} / {tokens_limit}</span>
+        </div>
+        <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div class="h-full {token-color-class} transition-all duration-300"
+                 style="width: {token_percentage}%"></div>
+        </div>
+    </div>
+    
+    <!-- Current Task -->
+    <div class="text-xs text-gray-400 truncate">
+        {current_task}
+    </div>
+</div>
 ```
 
-6. Add auto-refresh interval (after line 793):
-```javascript
-// Auto-refresh enhanced metrics every 5 seconds
-setInterval(() => {
-    if (currentSession) {
-        updateEnhancedMetrics(currentSession);
-    }
-}, 5000);
-
-// Update timestamp display every second
-setInterval(updateMetricsTimestamp, 1000);
+### 2. Multi-Instance Cards (New Component)
+**Location**: Top of page, replaces session selector
+**HTML Structure**:
+```html
+<div id="multiInstancePanel" class="mb-6 space-y-3">
+    <h2 class="text-2xl font-bold">📦 Active Instances</h2>
+    <!-- Instance cards dynamically inserted -->
+</div>
 ```
 
-**Testing**: Verify metrics refresh on WebSocket message and every 5s
-
----
-
-### Module 3: Filesystem Watching (metrics_collector.py)
-
-**Location**: Top of file + new class
-
-**Changes**:
-
-1. Add imports:
-```python
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
-import threading
+**Instance Card Template**:
+```html
+<div class="instance-card bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+    <div class="instance-header p-4 cursor-pointer hover:bg-gray-800 transition"
+         onclick="toggleInstance('{session_id}')">
+        <div class="flex justify-between items-center">
+            <div>
+                <h3 class="font-bold text-lg">{project_name}</h3>
+                <p class="text-xs text-gray-400">{session_id}</p>
+            </div>
+            <div class="text-right">
+                <div class="text-sm font-bold {status-color}">{status}</div>
+                <div class="text-xs text-gray-500">{agents_active}/{agents_total} agents</div>
+            </div>
+        </div>
+        <div class="mt-2 h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div class="h-full bg-blue-500" style="width: {progress_percent}%"></div>
+        </div>
+    </div>
+    <div id="instance-{session_id}-content" class="instance-content hidden p-4 bg-gray-950">
+        <!-- Multi-agent panel for this instance -->
+    </div>
+</div>
 ```
 
-2. Add FileSystemEventHandler class (after imports):
-```python
-class PhaseFileWatcher(FileSystemEventHandler):
-    """
-    Watches .context-foundry/current-phase.json files for changes.
-    Triggers metrics collection when phase data updates.
-    """
-
-    def __init__(self, collector: 'MetricsCollector'):
-        super().__init__()
-        self.collector = collector
-        self.debounce_timers = {}  # Debounce rapid changes
-        self.debounce_delay = 0.1  # 100ms
-
-    def on_modified(self, event):
-        """Handle file modification events."""
-        if event.is_directory:
-            return
-
-        # Only watch current-phase.json files
-        if not event.src_path.endswith('current-phase.json'):
-            return
-
-        # Debounce rapid changes
-        file_path = event.src_path
-
-        # Cancel existing timer for this file
-        if file_path in self.debounce_timers:
-            self.debounce_timers[file_path].cancel()
-
-        # Create new timer
-        timer = threading.Timer(
-            self.debounce_delay,
-            self._handle_phase_update,
-            args=[file_path]
-        )
-        timer.start()
-        self.debounce_timers[file_path] = timer
-
-    def _handle_phase_update(self, file_path: str):
-        """Handle debounced phase file update."""
-        print(f"📂 Detected phase file change: {file_path}")
-
-        try:
-            # Read phase data
-            with open(file_path, 'r') as f:
-                phase_data = json.load(f)
-
-            # Extract session info
-            session_id = phase_data.get('session_id', 'unknown')
-
-            # Trigger metrics collection for this session
-            # This will be called from the collector's context
-            asyncio.create_task(
-                self.collector.collect_live_phase_update(session_id, phase_data)
-            )
-        except Exception as e:
-            print(f"⚠️  Error handling phase update: {e}")
+### 3. Phase Timeline (New Component)
+**Location**: In main grid, left column
+**HTML Structure**:
+```html
+<div class="bg-gray-900 p-6 rounded-lg">
+    <h3 class="text-lg font-bold mb-4">📊 Phase Progress</h3>
+    <div id="phaseTimeline" class="space-y-3">
+        <!-- Phase items dynamically inserted -->
+    </div>
+</div>
 ```
 
-3. Modify MetricsCollector class:
-```python
-class MetricsCollector:
-    def __init__(self, ...):
-        # ... existing init ...
-        self.observer = None  # Watchdog observer
-        self.watcher = None   # FileSystemEventHandler
-        self.watched_dirs = set()  # Directories being watched
-
-    async def start(self):
-        """Start the collector service with filesystem watching."""
-        self.running = True
-        print(f"🔄 Metrics Collector started (poll interval: {self.poll_interval}s)")
-
-        # Start filesystem watcher
-        self.start_file_watcher()
-
-        # ... existing polling loop ...
-
-    def start_file_watcher(self):
-        """Start watching for .context-foundry/current-phase.json changes."""
-        self.watcher = PhaseFileWatcher(self)
-        self.observer = Observer()
-
-        # Watch common build directories
-        watch_paths = [
-            Path.home() / "homelab",  # Common build location
-            Path.cwd(),                # Current directory
-            Path("checkpoints/ralph")  # Checkpoint directory
-        ]
-
-        for watch_path in watch_paths:
-            if watch_path.exists():
-                self.observer.schedule(
-                    self.watcher,
-                    str(watch_path),
-                    recursive=True
-                )
-                self.watched_dirs.add(str(watch_path))
-                print(f"👁️  Watching: {watch_path}")
-
-        self.observer.start()
-        print("✅ Filesystem watcher started")
-
-    def stop(self):
-        """Stop the collector service."""
-        self.running = False
-
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-
-        print("🛑 Metrics Collector stopped")
-
-    async def collect_live_phase_update(self, session_id: str, phase_data: Dict):
-        """
-        Collect metrics from live phase update (triggered by file watcher).
-
-        Args:
-            session_id: Session ID from phase data
-            phase_data: Parsed current-phase.json content
-        """
-        print(f"📊 Collecting metrics for live session: {session_id}")
-
-        # Create simplified task object from phase data
-        task = {
-            'task_id': session_id,
-            'status': phase_data.get('status', 'running'),
-            'current_phase': phase_data.get('current_phase', 'Unknown'),
-            'phases_completed': phase_data.get('phases_completed', []),
-            'test_iteration': phase_data.get('test_iteration', 0),
-            'start_time': phase_data.get('started_at'),
-            # Try to infer working directory from session_id
-            'working_directory': str(Path.cwd() / session_id) if session_id else None
-        }
-
-        # Initialize task if new
-        if session_id not in self.tracked_tasks:
-            await self.initialize_task(task)
-            self.tracked_tasks.add(session_id)
-
-        # Update task status
-        await self.update_task_status(task)
-
-        # Collect metrics
-        await self.collect_task_metrics(task)
+**Phase Item Template**:
+```html
+<div class="phase-item flex items-center space-x-3">
+    <div class="phase-icon {status-class}">
+        {icon} <!-- ⏳ for active, ✓ for complete, ○ for pending -->
+    </div>
+    <div class="flex-1">
+        <div class="flex justify-between text-sm">
+            <span class="font-bold">{phase_name}</span>
+            <span class="text-gray-400">{duration}</span>
+        </div>
+        <div class="h-1 bg-gray-700 rounded-full mt-1">
+            <div class="h-full {phase-color}" style="width: {percent}%"></div>
+        </div>
+    </div>
+</div>
 ```
 
-**Testing**: Touch current-phase.json, verify metrics collected
-
----
-
-### Module 4: MCP Client Live Data Priority (mcp_client.py)
-
-**Location**: Lines 34-54, 119-142
-
-**Changes**:
-
-1. Modify `_read_phase_file()` to check modification time:
-```python
-def _read_phase_file(self, working_directory: str) -> Optional[Dict]:
-    """
-    Read .context-foundry/current-phase.json with freshness check.
-    """
-    try:
-        phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
-        if not phase_file.exists():
-            return None
-
-        # Check file modification time
-        mtime = phase_file.stat().st_mtime
-        age_seconds = time.time() - mtime
-
-        with open(phase_file, 'r') as f:
-            data = json.load(f)
-
-        # Add freshness metadata
-        data['_file_age_seconds'] = age_seconds
-        data['_is_fresh'] = age_seconds < 10  # Fresh if < 10s old
-
-        return data
-    except Exception as e:
-        print(f"Error reading phase file: {e}")
-        return None
+### 4. Geek Stats Section (New Component)
+**Location**: Bottom of page, after detailed metrics
+**HTML Structure**:
+```html
+<div class="mt-6">
+    <h2 class="text-2xl font-bold mb-4">🤓 Geek Stats</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Stat cards -->
+    </div>
+</div>
 ```
 
-2. Modify `get_task_status()` to prioritize live data:
-```python
-def get_task_status(self, task_id: str, use_cache: bool = True) -> Dict[str, Any]:
-    """Get status prioritizing live current-phase.json over checkpoints."""
-
-    # Check cache
-    cache_key = f"task_{task_id}"
-    if use_cache and cache_key in self.cache:
-        cached_data, cached_time = self.cache[cache_key]
-        if time.time() - cached_time < self.cache_ttl:
-            return cached_data
-
-    # PRIORITY 1: Try reading from live working directory
-    # Common patterns: /Users/name/homelab/<project>
-    live_paths = [
-        Path.home() / "homelab" / task_id,
-        Path.cwd() / task_id,
-        Path.cwd()  # Current directory itself
-    ]
-
-    for live_path in live_paths:
-        if live_path.exists():
-            phase_data = self._read_phase_file(str(live_path))
-            if phase_data and phase_data.get('_is_fresh'):
-                # Found fresh live data
-                result = {
-                    "task_id": task_id,
-                    "status": phase_data.get('status', 'running'),
-                    "current_phase": phase_data.get('current_phase', 'Unknown'),
-                    "phase_number": phase_data.get('phase_number', '?/7'),
-                    "phases_completed": phase_data.get('phases_completed', []),
-                    "test_iteration": phase_data.get('test_iteration', 0),
-                    "started_at": phase_data.get('started_at'),
-                    "progress_detail": phase_data.get('progress_detail', ''),
-                    "source": "live",
-                    "data_age_seconds": phase_data.get('_file_age_seconds', 0)
-                }
-                self.cache[cache_key] = (result, time.time())
-                return result
-
-    # PRIORITY 2: Fall back to checkpoint data
-    result = self._read_from_checkpoint(task_id)
-    self.cache[cache_key] = (result, time.time())
-    return result
+**Stat Cards**:
+```html
+<div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+    <h3 class="text-sm text-gray-400 mb-2">{stat_name}</h3>
+    <div class="text-3xl font-bold {color-class}">{value}</div>
+    <div class="text-xs text-gray-500 mt-1">{description}</div>
+</div>
 ```
 
-**Testing**: Create current-phase.json, verify it's read before checkpoints
+**Stats to Display**:
+- Total Agents Spawned
+- Parallel vs Sequential (ratio)
+- Token Efficiency (tokens per file)
+- Avg API Latency
+- Iteration Speed (iterations/hour)
+- Memory Usage (if available)
 
----
+## CSS Styling
+
+### Gradient Progress Bars
+```css
+.progress-bar-in-progress {
+    background: linear-gradient(to right, #10b981 0%, #3b82f6 50%, #2563eb 100%);
+    animation: shimmer 2s infinite;
+}
+
+.progress-bar-idle {
+    background: #4b5563;
+}
+
+.progress-bar-completed {
+    background: #10b981;
+}
+
+@keyframes shimmer {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+```
+
+### Token Color Classes
+```css
+.token-safe { background: #10b981; } /* green <50% */
+.token-warning { background: #eab308; } /* yellow 50-75% */
+.token-critical { background: #ef4444; } /* red >75% */
+```
+
+### Status Badges
+```css
+.status-active { color: #10b981; }
+.status-idle { color: #6b7280; }
+.status-completed { color: #3b82f6; }
+.status-failed { color: #ef4444; }
+```
 
 ## Implementation Steps (Ordered)
 
-1. **Add watchdog dependency**
-   - Modify requirements.txt: `watchdog>=3.0.0`
-   - Run: `pip install watchdog`
+### Step 1: Database Enhancement (metrics_db.py)
+1. Add `agent_instances` table creation in `_init_schema()`
+2. Add methods:
+   - `create_agent_instance(session_id, agent_data)`
+   - `update_agent_instance(agent_id, updates)`
+   - `get_agent_instance(agent_id)`
+   - `get_session_agents(session_id)`
+   - `get_all_instances()`
 
-2. **Implement change detection in server.py**
-   - Add hash_data() function
-   - Modify WebSocket loop with change detection
-   - Test: Send duplicate data, verify single transmission
+### Step 2: Backend API (server.py)
+1. Add endpoint `GET /api/agents/{session_id}`
+2. Add endpoint `GET /api/agent/{agent_id}`
+3. Add endpoint `GET /api/instances`
+4. Add endpoint `POST /api/agent-update`
+5. Enhance WebSocket handler to broadcast agent events
+6. Add agent event helpers (broadcast_agent_spawned, etc.)
 
-3. **Implement filesystem watching in metrics_collector.py**
-   - Add PhaseFileWatcher class
-   - Modify MetricsCollector.start() to initialize watcher
-   - Add collect_live_phase_update() method
-   - Test: Touch phase file, verify metrics collected
+### Step 3: Metrics Collector (metrics_collector.py)
+1. Add agent detection logic in `collect_live_phase_update()`
+2. Parse orchestrator output for agent spawning
+3. Track per-agent token usage
+4. Emit agent WebSocket events
+5. Update agent instances in database
 
-4. **Improve MCP client live data priority**
-   - Modify _read_phase_file() with freshness check
-   - Modify get_task_status() to prioritize live data
-   - Test: Create live phase file, verify it's used
+### Step 4: Frontend UI (dashboard.html)
+1. Add Multi-Agent Panel HTML structure
+2. Add Multi-Instance Cards HTML structure
+3. Add Phase Timeline component
+4. Add Geek Stats section
+5. Implement JavaScript functions:
+   - `renderAgentCard(agent)`
+   - `renderInstanceCard(instance)`
+   - `updateAgentProgress(agent_id, progress)`
+   - `updateAgentTokens(agent_id, tokens)`
+   - `renderPhaseTimeline(phases)`
+   - `renderGeekStats(stats)`
+6. Add WebSocket event handlers for agent events
+7. Add CSS animations and transitions
 
-5. **Implement dashboard auto-refresh**
-   - Add refresh state management variables
-   - Modify updateEnhancedMetrics() with concurrency protection
-   - Add updateMetricsTimestamp() function
-   - Modify WebSocket onmessage to trigger refresh
-   - Add setInterval for periodic refresh
-   - Add timestamp HTML elements
-   - Test: Verify 5s refresh and WebSocket triggers
-
-6. **Integration testing**
-   - Start livestream server
-   - Run autonomous build
-   - Verify real-time updates
-   - Check enhanced metrics refresh
-   - Validate no duplicate WebSocket messages
+### Step 5: Testing
+1. Unit tests for database methods
+2. Unit tests for API endpoints
+3. Integration tests for WebSocket events
+4. E2E tests with Playwright:
+   - Test multi-agent rendering
+   - Test progress bar animations
+   - Test token gauge colors
+   - Test instance card expansion
+   - Validate no broken graphs
+5. Error handling tests
 
 ## Testing Requirements
 
-### Unit Tests
-- `test_hash_data()` - Verify consistent hashing
-- `test_change_detection()` - Verify only changed data sent
-- `test_file_watcher_debounce()` - Verify 100ms debouncing
-- `test_live_data_priority()` - Verify live data chosen over checkpoint
+### Unit Tests (pytest)
+```python
+# tests/test_agent_instances.py
+def test_create_agent_instance()
+def test_update_agent_progress()
+def test_get_session_agents()
+def test_agent_token_tracking()
+
+# tests/test_api_agents.py
+def test_get_agents_endpoint()
+def test_get_agent_detail_endpoint()
+def test_get_instances_endpoint()
+def test_agent_update_endpoint()
+```
 
 ### Integration Tests
-- `test_websocket_real_time_update()` - E2E WebSocket flow
-- `test_metrics_collector_file_watch()` - Real file watching
-- `test_dashboard_auto_refresh()` - Frontend refresh triggers
+```python
+# tests/test_websocket_agents.py
+async def test_agent_spawned_event()
+async def test_agent_progress_event()
+async def test_agent_completed_event()
+```
 
-### Manual Tests
-1. Start server: `python tools/livestream/server.py`
-2. Start build: `context-foundry build <task>`
-3. Open dashboard: http://localhost:8080
-4. Verify updates appear < 1s after phase change
-5. Check enhanced metrics refresh every 5s
-6. Verify "last updated" timestamps
-7. Test with multiple browser tabs
+### E2E Tests (Playwright)
+```javascript
+// tests/e2e/test_dashboard.spec.js
+test('multi-agent panel renders correctly', async ({ page }) => {
+    await page.goto('http://localhost:8080');
+    await page.waitForSelector('#multiAgentPanel');
+    const agents = await page.locator('.agent-card').count();
+    expect(agents).toBeGreaterThan(0);
+});
+
+test('progress bars animate smoothly', async ({ page }) => {
+    // Verify CSS transitions work
+});
+
+test('no broken graphs or console errors', async ({ page }) => {
+    const errors = [];
+    page.on('console', msg => {
+        if (msg.type() === 'error') errors.push(msg.text());
+    });
+    await page.goto('http://localhost:8080');
+    await page.waitForTimeout(2000);
+    expect(errors).toHaveLength(0);
+});
+```
 
 ## Success Criteria
 
-✅ Dashboard updates within 1 second of current-phase.json change
-✅ WebSocket only sends when data actually changes (95%+ reduction)
-✅ Enhanced metrics auto-refresh every 5 seconds
-✅ "Last updated" timestamps visible and accurate
-✅ No duplicate data in network inspector
-✅ Works with live builds AND viewing past sessions
-✅ Graceful degradation if enhanced metrics unavailable
-✅ No memory leaks during 1-hour test run
+1. ✅ Agent instances table created and populated
+2. ✅ API endpoints return correct agent data
+3. ✅ WebSocket events broadcast agent updates
+4. ✅ Multi-agent panel displays all active agents
+5. ✅ Horizontal gradient progress bars animate
+6. ✅ Per-agent token gauges show color-coded warnings
+7. ✅ Multi-instance cards expand/collapse
+8. ✅ Phase timeline shows progress
+9. ✅ Geek stats display comprehensive metrics
+10. ✅ All tests pass (unit, integration, E2E)
+11. ✅ No console errors or broken graphs
+12. ✅ Backwards compatible with existing sessions
+13. ✅ Performance: <10 WebSocket updates per second per agent
+14. ✅ UI responsive and smooth on all viewports
+
+## Error Handling Strategy
+
+1. **Data Validation**: Check all incoming data for null/undefined before rendering
+2. **Fallback Values**: Use defaults when data missing ("No data", 0%, gray status)
+3. **Loading States**: Show spinners while fetching data
+4. **Error Boundaries**: Catch rendering errors and show friendly messages
+5. **Graceful Degradation**: If multi-agent features fail, fall back to single-agent view
+6. **Logging**: Log warnings for parsing failures but continue operation
+
+## Preventive Measures
+
+1. **No Broken Graphs**: Validate all chart data before passing to Chart.js
+2. **No Flickering**: Throttle WebSocket updates, use CSS transitions
+3. **Performance**: Batch DOM updates, use requestAnimationFrame
+4. **Memory Leaks**: Clean up event listeners on component unmount
+5. **Backwards Compatibility**: Feature detection, keep old APIs working
+
+This architecture ensures robust, production-ready multi-agent monitoring!
