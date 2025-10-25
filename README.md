@@ -374,6 +374,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 - **[USER_GUIDE.md](USER_GUIDE.md)** - Step-by-step usage guide
 - **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** - Technical deep dive on delegation
 - **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** - How self-learning works
+- **[docs/BAML_INTEGRATION.md](docs/BAML_INTEGRATION.md)** - Type-safe LLM outputs with BAML (v1.3.0+)
 
 ---
 
@@ -395,6 +396,9 @@ cd context-foundry
 
 # 2. Install MCP server dependencies (Python 3.10+ required)
 pip install -r requirements-mcp.txt
+
+# 2a. [Optional] Install BAML for type-safe LLM outputs
+pip install -r requirements-baml.txt
 
 # 3. Configure Claude Code to connect to MCP server
 claude mcp add --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py

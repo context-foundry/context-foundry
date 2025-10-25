@@ -1,421 +1,626 @@
-# Architecture Specification: Context Foundry Dashboard Redesign
+# BAML Integration Architecture
 
-## System Overview
+## System Architecture Overview
 
-Complete redesign of the livestream dashboard to provide detailed, phase-by-phase build monitoring with session management tabs and comprehensive progress tracking.
+Context Foundry will integrate BAML as an **optional reliability layer** for structured LLM outputs, focusing on high-impact areas where type safety eliminates parsing errors. This is NOT a full rewrite—BAML augments existing functionality.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Context Foundry MCP Server                │
+│                     (tools/mcp_server.py)                    │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  │ Spawns Claude instances with
+                  │ orchestrator_prompt.txt
+                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Autonomous Build Orchestrator                   │
+│         Scout → Architect → Builder → Test → Deploy         │
+└──────┬──────────────────────────────────────────────────────┘
+       │
+       │ NEW: Optional BAML layer for structured outputs
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  BAML Integration Layer                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Phase        │  │ Scout Report │  │ Architect    │      │
+│  │ Tracking     │  │ Schema       │  │ Blueprint    │      │
+│  │ (PhaseInfo)  │  │              │  │ Schema       │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                               │
+│  Compiled from: tools/baml_schemas/*.baml                    │
+│  Generated to: tools/baml_client/                            │
+└─────────────────────────────────────────────────────────────┘
+```
 
 ## File Structure
 
 ```
-tools/livestream/
-├── server.py          (MODIFY - Add new API endpoints)
-├── dashboard.html     (COMPLETE REDESIGN - New UI)
-└── metrics_db.py      (NO CHANGES - Schema sufficient)
+context-foundry/
+├── tools/
+│   ├── baml_schemas/                    # NEW: BAML definitions
+│   │   ├── phase_tracking.baml          # Phase tracking types
+│   │   ├── scout.baml                   # Scout report schema
+│   │   ├── architect.baml               # Architecture blueprint schema
+│   │   ├── builder.baml                 # Builder task results
+│   │   └── clients.baml                 # LLM client configurations
+│   │
+│   ├── baml_client/                     # NEW: Generated Python client (auto-compiled)
+│   │   ├── __init__.py
+│   │   ├── types.py                     # Generated type classes
+│   │   └── sync_client.py               # Generated sync client
+│   │
+│   ├── baml_integration.py              # NEW: BAML helper functions
+│   ├── mcp_server.py                    # MODIFIED: Add BAML support
+│   ├── orchestrator_prompt.txt          # MODIFIED: Optional BAML usage
+│   └── ...
+│
+├── requirements.txt                     # MODIFIED: Add baml-py
+├── requirements-baml.txt                # NEW: Optional BAML deps
+├── docs/
+│   ├── BAML_INTEGRATION.md             # NEW: BAML usage guide
+│   └── ...
+├── tests/
+│   ├── test_baml_integration.py        # NEW: BAML tests
+│   └── ...
+└── examples/
+    └── baml-example-project/            # NEW: Example using BAML
 ```
 
-## Component Architecture
+## Module Specifications
 
-### 1. Backend API Endpoints (server.py)
+### 1. BAML Schemas (`tools/baml_schemas/`)
 
-#### NEW ENDPOINTS:
+**phase_tracking.baml**
+```baml
+// Type-safe phase tracking to replace JSON strings
 
-**GET `/api/phases/{session_id}`**
-```python
-Response: {
-  "session_id": "context-foundry",
-  "total_phases": 7,
-  "phases_completed_count": 3,
-  "current_phase_number": 4,
-  "overall_progress_percent": 50.0,
-  "phases": [
-    {
-      "number": 0,
-      "name": "Codebase Analysis",
-      "emoji": "🔍",
-      "status": "completed",
-      "description": "Analyzed project structure and dependencies",
-      "completed_at": "2025-01-13T10:05:00Z"
-    },
-    {
-      "number": 1,
-      "name": "Scout",
-      "emoji": "🔍",
-      "status": "completed",
-      "description": "Researched requirements and patterns",
-      "completed_at": "2025-01-13T10:15:00Z"
-    },
-    {
-      "number": 2,
-      "name": "Architect",
-      "emoji": "🏗️",
-      "status": "completed",
-      "description": "Designed system architecture",
-      "completed_at": "2025-01-13T10:30:00Z"
-    },
-    {
-      "number": 3,
-      "name": "Builder",
-      "emoji": "🔨",
-      "status": "in_progress",
-      "description": "Writing code across multiple files",
-      "detail": "Creating new API endpoints, implementing business logic",
-      "note": "This is typically the longest phase!",
-      "progress_percent": 60
-    },
-    {
-      "number": 4,
-      "name": "Tester",
-      "emoji": "🧪",
-      "status": "pending",
-      "description": "Running tests and validating implementation"
-    },
-    {
-      "number": 5,
-      "name": "Test Loop",
-      "emoji": "🔄",
-      "status": "pending",
-      "description": "Auto-fix if tests fail (conditional)"
-    },
-    {
-      "number": 6,
-      "name": "Documentation",
-      "emoji": "📝",
-      "status": "pending",
-      "description": "Creating comprehensive docs (optional)"
-    },
-    {
-      "number": 7,
-      "name": "Deployer",
-      "emoji": "🚀",
-      "status": "pending",
-      "description": "Git commit and PR creation"
-    }
-  ]
+class PhaseInfo {
+  session_id string
+  current_phase PhaseType
+  phase_number string
+  status PhaseStatus
+  progress_detail string
+  test_iteration int
+  phases_completed PhaseType[]
+  started_at string
+  last_updated string
+}
+
+enum PhaseType {
+  CodebaseAnalysis
+  Scout
+  Architect
+  Builder
+  Test
+  Screenshot
+  Documentation
+  Deploy
+  Feedback
+  GitHub
+}
+
+enum PhaseStatus {
+  analyzing
+  researching
+  designing
+  building
+  testing
+  self_healing
+  capturing
+  documenting
+  deploying
+  completed
+  failed
+}
+
+function CreatePhaseInfo(
+  phase: PhaseType,
+  status: PhaseStatus,
+  detail: string,
+  iteration: int
+) -> PhaseInfo {
+  client GPT4
+  prompt #"
+    Create phase tracking info:
+    Phase: {{ phase }}
+    Status: {{ status }}
+    Detail: {{ detail }}
+    Test iteration: {{ iteration }}
+    
+    Return structured phase information.
+  "#
+}
+
+function ValidatePhaseInfo(json_string: string) -> PhaseInfo {
+  client GPT4
+  prompt #"
+    Validate and parse this phase info JSON:
+    {{ json_string }}
+    
+    Return as structured PhaseInfo object.
+  "#
 }
 ```
 
-**GET `/api/sessions/active`**
-```python
-Response: {
-  "sessions": [
-    {
-      "id": "context-foundry",
-      "project": "context-foundry",
-      "status": "running",
-      "current_phase": "Builder",
-      "phase_number": "3/7",
-      "progress_percent": 42.8,
-      "start_time": "2025-01-13T10:00:00Z",
-      "elapsed_seconds": 1800,
-      "estimated_remaining_seconds": 2400
-    }
-  ],
-  "count": 1
+**scout.baml**
+```baml
+// Structured Scout reports with guaranteed schema
+
+class ScoutReport {
+  executive_summary string @description("2-3 paragraphs max")
+  past_learnings_applied string[] @description("Bullet points")
+  known_risks string[] @description("Flagged from pattern library")
+  key_requirements string[] @description("Bulleted list, not essay")
+  tech_stack TechStack
+  architecture_recommendations string[] @description("Top 3-5 critical items")
+  main_challenges Challenge[] @description("Top 3-5 challenges")
+  testing_approach string @description("Brief outline")
+  timeline_estimate string @description("Single line estimate")
+}
+
+class TechStack {
+  languages string[]
+  frameworks string[]
+  dependencies string[]
+  justification string @description("Brief, 2-3 sentences")
+}
+
+class Challenge {
+  description string
+  severity Severity
+  mitigation string
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+function GenerateScoutReport(
+  task_description: string,
+  codebase_analysis: string,
+  past_patterns: string
+) -> ScoutReport {
+  client Claude35Sonnet
+  prompt #"
+    You are the Scout agent researching this task:
+    
+    {{ task_description }}
+    
+    Codebase analysis:
+    {{ codebase_analysis }}
+    
+    Past patterns to consider:
+    {{ past_patterns }}
+    
+    Provide comprehensive yet concise research findings.
+  "#
 }
 ```
 
-**GET `/api/sessions/completed`**
-```python
-Response: {
-  "sessions": [...],  # Same structure, status="completed"
-  "count": 15
+**architect.baml**
+```baml
+// Architecture blueprint with validated structure
+
+class ArchitectureBlueprint {
+  system_overview string
+  file_structure FileStructure[]
+  modules ModuleSpec[]
+  applied_patterns AppliedPattern[]
+  preventive_measures string[]
+  implementation_steps string[]
+  test_plan TestPlan
+  success_criteria string[]
+}
+
+class FileStructure {
+  path string
+  purpose string
+  dependencies string[]
+}
+
+class ModuleSpec {
+  name string
+  responsibility string
+  interfaces string[]
+  dependencies string[]
+}
+
+class AppliedPattern {
+  pattern_id string
+  pattern_name string
+  reason string
+}
+
+class TestPlan {
+  unit_tests string[]
+  integration_tests string[]
+  e2e_tests string[]
+  test_framework string
+  success_criteria string[]
+}
+
+function GenerateArchitecture(
+  scout_report: ScoutReport,
+  flagged_risks: string[]
+) -> ArchitectureBlueprint {
+  client Claude35Sonnet
+  prompt #"
+    You are the Architect agent designing the system.
+    
+    Scout findings:
+    Executive summary: {{ scout_report.executive_summary }}
+    Tech stack: {{ scout_report.tech_stack }}
+    Challenges: {{ scout_report.main_challenges }}
+    
+    Flagged risks to address:
+    {% for risk in flagged_risks %}
+    - {{ risk }}
+    {% endfor %}
+    
+    Create detailed technical architecture.
+  "#
 }
 ```
 
-**GET `/api/sessions/failed`**
-```python
-Response: {
-  "sessions": [...],  # Same structure, status="failed"
-  "count": 2
+**builder.baml**
+```baml
+// Builder task results with error tracking
+
+class BuildTaskResult {
+  task_id string
+  description string
+  status BuildStatus
+  files_created string[]
+  files_modified string[]
+  errors BuildError[]
+  warnings string[]
+  success bool
+  next_steps string[]
+}
+
+enum BuildStatus {
+  success
+  partial
+  failed
+}
+
+class BuildError {
+  file string
+  line int?
+  message string
+  severity ErrorSeverity
+}
+
+enum ErrorSeverity {
+  error
+  warning
+  info
+}
+
+function ExecuteBuildTask(
+  task_id: string,
+  task_description: string,
+  files_to_create: string[],
+  architecture: string
+) -> BuildTaskResult {
+  client Claude35Sonnet
+  prompt #"
+    Execute build task: {{ task_id }}
+    
+    Task: {{ task_description }}
+    
+    Files to create:
+    {% for file in files_to_create %}
+    - {{ file }}
+    {% endfor %}
+    
+    Architecture context:
+    {{ architecture }}
+    
+    Return structured result with files created and any errors.
+  "#
 }
 ```
 
-#### ENHANCED EXISTING ENDPOINTS:
+**clients.baml**
+```baml
+// LLM client configurations
 
-**GET `/api/status/{session_id}`** - Add phase breakdown to response
+client<llm> GPT4 {
+  provider openai
+  options {
+    model "gpt-4o"
+    api_key env.OPENAI_API_KEY
+  }
+}
+
+client<llm> Claude35Sonnet {
+  provider anthropic
+  options {
+    model "claude-3-5-sonnet-20241022"
+    api_key env.ANTHROPIC_API_KEY
+  }
+}
+
+client<llm> Claude35Haiku {
+  provider anthropic
+  options {
+    model "claude-3-5-haiku-20241022"
+    api_key env.ANTHROPIC_API_KEY
+  }
+}
+```
+
+### 2. BAML Integration Helper (`tools/baml_integration.py`)
+
+**Purpose**: Bridge between Context Foundry and BAML, handle compilation, fallbacks
+
+**Key Functions**:
+- `compile_baml_schemas()`: Compile .baml files to Python client
+- `get_baml_client()`: Get compiled BAML client (cached)
+- `update_phase_with_baml()`: Update phase tracking using BAML types
+- `generate_scout_report_baml()`: Generate structured Scout report
+- `generate_architecture_baml()`: Generate structured architecture
+- `validate_with_baml()`: Validate JSON against BAML schema
+- `fallback_to_json()`: Graceful fallback if BAML unavailable
+
+**Responsibilities**:
+- BAML compilation management
+- Type validation and error handling
+- Backward compatibility with JSON mode
+- Client caching for performance
+
+### 3. MCP Server Updates (`tools/mcp_server.py`)
+
+**Modifications**:
+- Add `baml_integration` import
+- Update `_read_phase_info()`: Try BAML validation first, fallback to JSON
+- Add new MCP tool: `update_phase_baml(phase, status, detail)`
+- Add new MCP tool: `validate_phase_tracking()`
+- Initialize BAML client on server startup (optional, non-blocking)
+
+**New MCP Tools**:
 ```python
-# Add to existing response:
-"phase_breakdown": {
-  "completed": ["Scout", "Architect"],
-  "current": "Builder",
-  "remaining": ["Tester", "Test Loop", "Documentation", "Deployer"]
-},
-"overall_progress_percent": 35.7,
-"estimated_remaining_seconds": 3900
+@mcp.tool()
+def update_phase_baml(
+    phase: str,
+    status: str, 
+    detail: str,
+    iteration: int = 0
+) -> dict:
+    """Update phase tracking using BAML type-safe schema"""
+    
+@mcp.tool()
+def validate_phase_tracking() -> dict:
+    """Validate current phase tracking with BAML"""
 ```
 
-### 2. Frontend UI Structure (dashboard.html)
+### 4. Orchestrator Prompt Updates (`tools/orchestrator_prompt.txt`)
 
-#### LAYOUT HIERARCHY:
+**Modifications**:
+- Add section on optional BAML usage
+- Update phase tracking instructions to mention BAML validation
+- Add note that BAML is internal optimization (transparent to users)
+- Keep JSON fallback instructions for backward compatibility
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ Header: 🏭 Context Foundry Build Monitor                   │
-├─────────────────────────────────────────────────────────────┤
-│ Top Metrics Bar:                                            │
-│   📊 ACTIVE: 2 | ✅ COMPLETED: 15 | ⏱️ AVG TIME: 12m 30s   │
-├─────────────────────────────────────────────────────────────┤
-│ Session Tabs:                                               │
-│   [🟢 Active] [✅ Completed] [❌ Failed] [📊 All]          │
-├─────────────────────────────────────────────────────────────┤
-│ Session Selector (filtered by tab):                         │
-│   Dropdown showing sessions matching current tab filter     │
-├─────────────────────────────────────────────────────────────┤
-│ Build Status Card:                                          │
-│   🚀 Build Status Update                                    │
-│   Task ID: abc-123                                          │
-│   Project: my-awesome-app                                   │
-│   Status: ✅ Running                                        │
-│   Overall Progress: 45.2% (8.5 minutes elapsed)            │
-│   Est. Remaining: ~10-15 minutes                            │
-├─────────────────────────────────────────────────────────────┤
-│ ✅ COMPLETED PHASES:                                        │
-│   1. Phase 0 - Codebase Analysis ✅                         │
-│      • Analyzed project structure                           │
-│      • Identified dependencies                              │
-│   2. Phase 1 - Scout ✅                                     │
-│      • Researched implementation patterns                   │
-├─────────────────────────────────────────────────────────────┤
-│ 🔨 CURRENT PHASE:                                           │
-│   Phase 3 - Builder (In Progress - The Big One!)           │
-│   Status: Writing code across multiple files                │
-│   Tasks in progress:                                        │
-│     • Creating new API endpoints                            │
-│     • Implementing business logic                           │
-│   Progress: 60% of phase complete                           │
-├─────────────────────────────────────────────────────────────┤
-│ 📋 UPCOMING PHASES:                                         │
-│   ⏱️ Phase 4 - Tester                                       │
-│   ⏱️ Phase 5 - Test Loop (if needed)                        │
-│   ⏱️ Phase 6 - Documentation                                │
-│   ⏱️ Phase 7 - Deployer                                     │
-├─────────────────────────────────────────────────────────────┤
-│ 💬 WHAT'S HAPPENING NOW:                                    │
-│   The Builder agents are actively implementing...           │
-│   Next: Once building completes, the Tester will run...     │
-├─────────────────────────────────────────────────────────────┤
-│ 📊 LIVE LOGS:                                               │
-│   [scrollable log viewer]                                   │
-└─────────────────────────────────────────────────────────────┘
-```
+**Integration Points**:
+- Phase tracking: "If BAML is available, use update_phase_baml()"
+- Scout phase: "Generate structured report using BAML schema if available"
+- Architect phase: "Validate architecture blueprint with BAML"
 
-#### COMPONENT BREAKDOWN:
+## Applied Patterns and Preventive Measures
 
-1. **TopMetricsBar Component**
-   - Displays aggregate statistics
-   - Always visible
-   - Updates when sessions change
+**Pattern 1: Gradual Adoption**
+- BAML is optional dependency
+- All features work without BAML (JSON fallback)
+- No breaking changes to existing workflows
+- Users don't need to learn BAML
 
-2. **SessionTabs Component**
-   - Four tabs: Active, Completed, Failed, All
-   - State managed in JavaScript
-   - Filters session list on click
+**Pattern 2: Compilation Caching**
+- Compile BAML schemas once at startup
+- Cache compiled client in memory
+- Recompile only if .baml files change
+- Pre-compile during installation for faster startup
 
-3. **SessionSelector Component**
-   - Dropdown filtered by active tab
-   - Triggers WebSocket reconnection on change
-   - Shows session count in tab
+**Pattern 3: Type-Safe Validation**
+- Use BAML to validate existing JSON files
+- Catch schema mismatches early
+- Better error messages than JSON parsing
+- Compile-time guarantees for new code
 
-4. **BuildStatusCard Component**
-   - Overall progress, elapsed time, remaining time
-   - Project name, task ID, status badge
-   - Prominent display at top
+**Pattern 4: Observability**
+- Optional Boundary Studio integration
+- Track BAML function calls
+- Monitor parsing success rates
+- A/B test BAML vs JSON modes
 
-5. **CompletedPhases Component**
-   - Expandable/collapsible section
-   - Each phase with description bullets
-   - Green checkmarks
-
-6. **CurrentPhase Component**
-   - Highlighted/emphasized styling
-   - Detailed description
-   - Progress bar within phase
-   - Special note for Builder ("The Big One!")
-
-7. **UpcomingPhases Component**
-   - Simple list with pending icons
-   - Phase names only
-
-8. **WhatsHappeningNow Component**
-   - Narrative description
-   - Current activities
-   - Next step preview
-
-9. **LiveLogs Component**
-   - Preserve existing logs viewer
-   - Scrollable, auto-scroll to bottom
-
-### 3. Data Models
-
-#### SessionFilter State (Frontend)
-```javascript
-const sessionFilters = {
-  active: session => session.status === 'running',
-  completed: session => session.status === 'completed',
-  failed: session => session.status === 'failed',
-  all: session => true
-};
-
-let currentFilter = 'active';  // Default to active sessions
-```
-
-#### Phase Definition (Frontend)
-```javascript
-const PHASE_DEFINITIONS = [
-  { number: 0, name: "Codebase Analysis", emoji: "🔍" },
-  { number: 1, name: "Scout", emoji: "🔍" },
-  { number: 2, name: "Architect", emoji: "🏗️" },
-  { number: 3, name: "Builder", emoji: "🔨", note: "This is typically the longest phase!" },
-  { number: 4, name: "Tester", emoji: "🧪" },
-  { number: 5, name: "Test Loop", emoji: "🔄" },
-  { number: 6, name: "Documentation", emoji: "📝" },
-  { number: 7, name: "Deployer", emoji: "🚀" }
-];
-```
+**Preventive Measures**:
+1. **No breaking changes**: JSON mode always available as fallback
+2. **Graceful degradation**: If BAML compilation fails, continue with JSON
+3. **Clear migration path**: Dual mode for 2-3 releases before deprecating JSON
+4. **Comprehensive tests**: Test both BAML and JSON modes
+5. **Performance monitoring**: Ensure BAML doesn't slow down builds
 
 ## Implementation Steps
 
-### Step 1: Backend Enhancements (server.py)
+### Phase 1: Foundation (Priority: HIGH)
+1. Add `baml-py==0.211.2` to requirements.txt
+2. Create `tools/baml_schemas/` directory
+3. Implement `phase_tracking.baml` schema
+4. Create `tools/baml_integration.py` helper module
+5. Implement BAML compilation and caching
+6. Add unit tests for BAML compilation
 
-1.1. Add helper function to calculate phase breakdown
+### Phase 2: Phase Tracking (Priority: HIGH)
+7. Implement PhaseInfo BAML validation
+8. Update `_read_phase_info()` with BAML validation
+9. Add `update_phase_baml()` MCP tool
+10. Test phase tracking with BAML vs JSON
+11. Verify backward compatibility
+
+### Phase 3: Scout Integration (Priority: HIGH)
+12. Implement `scout.baml` schema
+13. Add Scout report generation with BAML
+14. Update orchestrator prompt with Scout BAML usage
+15. Test Scout report parsing
+16. Validate structured output quality
+
+### Phase 4: Architect Integration (Priority: MEDIUM)
+17. Implement `architect.baml` schema
+18. Add architecture generation with BAML
+19. Update orchestrator prompt with Architect BAML usage
+20. Test architecture blueprint parsing
+
+### Phase 5: Builder Integration (Priority: MEDIUM)
+21. Implement `builder.baml` schema
+22. Add build task result validation
+23. Update parallel builder prompts
+24. Test builder output validation
+
+### Phase 6: Testing (Priority: HIGH)
+25. Comprehensive unit tests for all BAML schemas
+26. Integration tests: Scout → Architect → Builder with BAML
+27. Backward compatibility tests: JSON fallback
+28. Performance tests: BAML vs JSON overhead
+29. E2E test: Full build with BAML enabled
+
+### Phase 7: Documentation (Priority: HIGH)
+30. Create `docs/BAML_INTEGRATION.md`
+31. Update README.md with BAML benefits
+32. Add code examples to documentation
+33. Document migration path (JSON → BAML)
+34. Update CHANGELOG.md
+
+### Phase 8: Example Project (Priority: MEDIUM)
+35. Create `examples/baml-example-project/`
+36. Show BAML usage in generated projects
+37. Demonstrate type-safe LLM integration
+38. Include in Context Foundry showcase
+
+## Testing Requirements and Procedures
+
+### Unit Tests (`tests/test_baml_integration.py`)
+
 ```python
-def get_phase_breakdown(session_data: Dict) -> Dict:
-    """Calculate detailed phase breakdown from session data."""
-    # Parse current_phase.json data
-    # Return structured phase breakdown
+def test_baml_compilation():
+    """Test BAML schemas compile successfully"""
+
+def test_phase_info_validation():
+    """Test PhaseInfo BAML validation"""
+
+def test_scout_report_generation():
+    """Test structured Scout report"""
+
+def test_architecture_blueprint():
+    """Test architecture blueprint schema"""
+
+def test_builder_task_result():
+    """Test builder task result validation"""
+
+def test_fallback_to_json():
+    """Test graceful fallback if BAML unavailable"""
+
+def test_caching():
+    """Test BAML client caching"""
 ```
-
-1.2. Implement new endpoint `/api/phases/{session_id}`
-```python
-@app.get("/api/phases/{session_id}")
-async def get_session_phases(session_id: str):
-    # Get session data
-    # Calculate phase breakdown
-    # Return formatted response
-```
-
-1.3. Implement session filter endpoints
-```python
-@app.get("/api/sessions/active")
-async def get_active_sessions():
-    sessions = monitor.discover_sessions()
-    active = [s for s in sessions if s['status'] == 'running']
-    return JSONResponse({"sessions": active, "count": len(active)})
-
-# Similar for completed and failed
-```
-
-1.4. Enhance existing `/api/status/{session_id}` response
-```python
-# Add phase_breakdown, overall_progress_percent, estimated_remaining_seconds
-```
-
-### Step 2: Frontend Complete Redesign (dashboard.html)
-
-2.1. **HTML Structure Redesign**
-- Remove old main-grid layout
-- Create new single-column layout with sections
-- Add tab navigation HTML
-- Add phase sections (completed/current/upcoming)
-- Add "what's happening now" section
-- Preserve logs section at bottom
-
-2.2. **CSS Updates** (Preserve Terminal.css aesthetic!)
-- Add tab styling (.tab, .tab-active)
-- Add phase section styling (.phase-section)
-- Add completed phase styling (.phase-completed)
-- Add current phase styling (.phase-current, highlighted)
-- Add upcoming phase styling (.phase-upcoming, grayed)
-- Add progress bar styling for phase-level progress
-
-2.3. **JavaScript Refactoring**
-- Create `updatePhaseBreakdown(phaseData)` function
-- Create `updateSessionTabs(sessions)` function
-- Create `filterSessions(filter)` function
-- Create `renderCompletedPhases(phases)` function
-- Create `renderCurrentPhase(phase)` function
-- Create `renderUpcomingPhases(phases)` function
-- Create `renderWhatsHappeningNow(status)` function
-- Update WebSocket handler to call new render functions
-
-2.4. **State Management**
-```javascript
-let allSessions = [];
-let currentFilter = 'active';
-let selectedSession = null;
-
-function switchTab(filter) {
-  currentFilter = filter;
-  updateSessionSelector();
-  updateTabStyling();
-}
-
-function updateSessionSelector() {
-  const filtered = allSessions.filter(sessionFilters[currentFilter]);
-  populateSelector(filtered);
-}
-```
-
-### Step 3: Integration & Polish
-
-3.1. Ensure WebSocket updates trigger phase breakdown refresh
-3.2. Implement auto-refresh fallback (every 3 seconds)
-3.3. Add loading states for async operations
-3.4. Handle missing data gracefully (legacy sessions)
-3.5. Test responsive design (mobile, tablet, desktop)
-
-## Testing Plan
-
-### Unit Tests
-1. Backend endpoint responses match expected structure
-2. Phase breakdown calculation accuracy
-3. Session filtering logic correctness
-4. Progress percentage calculations
-5. Time estimation algorithm
 
 ### Integration Tests
-1. WebSocket updates trigger UI refresh
-2. Tab switching updates session list
-3. Session selection triggers data load
-4. Phase transitions update UI correctly
-5. Real-time progress updates work
 
-### End-to-End Tests
-1. Load dashboard with active session → See detailed phase breakdown
-2. Switch between tabs → Session list filters correctly
-3. Select different session → Data updates
-4. Monitor live build → Phases update in real-time
-5. Export functionality → Still works
-6. Legacy session (no phase data) → Graceful degradation
+```python
+def test_full_workflow_with_baml():
+    """Test Scout → Architect → Builder with BAML"""
 
-### Edge Cases
-1. Session with no current-phase.json → Shows "Unknown phase"
-2. Session mid-test-iteration → Shows test iteration count
-3. Failed session → Displays in Failed tab with error info
-4. Very long session (>1 hour) → Time displays correctly
-5. Rapid tab switching → No race conditions
+def test_backward_compatibility():
+    """Test JSON mode still works"""
 
-## Success Criteria
+def test_phase_tracking_accuracy():
+    """Test BAML phase tracking vs JSON"""
 
-✅ All existing functionality preserved (WebSocket, export, logs, metrics)
-✅ Terminal CSS aesthetic maintained throughout
-✅ New phase breakdown displays for all sessions with phase data
-✅ Session tabs work and filter correctly
-✅ Overall progress percentage calculates accurately
-✅ Time estimates are reasonable and update
-✅ "What's happening now" provides useful narrative
-✅ UI updates smoothly with WebSocket messages
-✅ No console errors or broken layouts
-✅ Responsive design works on all screen sizes
+def test_multi_model_support():
+    """Test BAML with different LLM providers"""
+```
 
-## Rollback Plan
+### Performance Tests
 
-If issues arise:
-1. Git revert to previous dashboard.html
-2. Remove new API endpoints (old endpoints still work)
-3. All data preserved (no database changes)
-4. Zero downtime (server restart not required)
+```python
+def test_compilation_overhead():
+    """Measure BAML compilation time"""
 
-## Next Steps
+def test_parsing_performance():
+    """Compare BAML vs JSON parsing speed"""
 
-Hand off to Builder for implementation with this exact specification.
+def test_memory_usage():
+    """Measure BAML client memory footprint"""
+```
+
+### Success Criteria
+
+**Must Pass:**
+- ✅ All unit tests pass (100% coverage for new code)
+- ✅ All integration tests pass
+- ✅ Backward compatibility maintained (JSON mode works)
+- ✅ No performance regression (< 5% overhead)
+- ✅ Documentation complete and accurate
+
+**Should Pass:**
+- ✅ Phase tracking parsing errors reduced to <1% (from 5%)
+- ✅ Scout report structure validation 100% successful
+- ✅ Architecture blueprint validation 100% successful
+- ✅ Compilation caching works (< 100ms cached client access)
+
+**Nice to Have:**
+- ✅ Example project demonstrates BAML value
+- ✅ Boundary Studio observability working
+- ✅ Migration guide clear and actionable
+
+## Deployment Strategy
+
+**Version**: v1.3.0 (feature release)
+
+**Branch Strategy**:
+1. Create feature branch: `enhancement/baml-integration`
+2. Implement all phases on feature branch
+3. Pass all tests (including self-healing loop)
+4. Create PR to main with comprehensive description
+5. Merge after review
+6. Tag release: `v1.3.0`
+
+**Release Notes Highlights**:
+- 🎯 BAML Integration for Type-Safe LLM Outputs
+- 📊 Improved Phase Tracking Reliability (5% → <1% errors)
+- 🔧 Structured Scout/Architect/Builder Outputs
+- 🔄 Backward Compatible (JSON fallback)
+- 📖 Comprehensive Documentation
+- ✅ Example Project Included
+
+**Migration Path**:
+- v1.3.0: BAML optional, JSON default (this release)
+- v1.4.0: BAML default, JSON fallback
+- v2.0.0: BAML required, JSON deprecated
+
+## Risk Mitigation
+
+**Risk 1: BAML Compilation Fails**
+- **Mitigation**: Catch compilation errors, fallback to JSON mode gracefully
+- **Detection**: Unit tests verify compilation, CI/CD catches failures
+
+**Risk 2: Breaking Changes**
+- **Mitigation**: Dual mode (BAML + JSON) for 2-3 releases
+- **Detection**: Comprehensive backward compatibility tests
+
+**Risk 3: Performance Regression**
+- **Mitigation**: Client caching, pre-compilation during install
+- **Detection**: Performance benchmarks in CI/CD
+
+**Risk 4: User Confusion**
+- **Mitigation**: BAML is internal implementation detail, transparent to users
+- **Detection**: Documentation review, user feedback
+
+**Risk 5: Dependency Issues**
+- **Mitigation**: Pin baml-py version, test on multiple Python versions
+- **Detection**: CI/CD matrix testing (Python 3.8, 3.9, 3.10, 3.11, 3.12)
+

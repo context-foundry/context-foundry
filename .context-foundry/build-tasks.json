@@ -1,0 +1,62 @@
+{
+  "parallel_mode": true,
+  "total_tasks": 8,
+  "tasks": [
+    {
+      "id": "task-1",
+      "description": "Create BAML schema definitions (phase_tracking.baml, scout.baml)",
+      "files": ["tools/baml_schemas/phase_tracking.baml", "tools/baml_schemas/scout.baml"],
+      "dependencies": [],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-2",
+      "description": "Create BAML schema definitions (architect.baml, builder.baml, clients.baml)",
+      "files": ["tools/baml_schemas/architect.baml", "tools/baml_schemas/builder.baml", "tools/baml_schemas/clients.baml"],
+      "dependencies": [],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-3",
+      "description": "Create BAML integration helper module",
+      "files": ["tools/baml_integration.py"],
+      "dependencies": [],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-4",
+      "description": "Update requirements and create optional BAML requirements",
+      "files": ["requirements.txt", "requirements-baml.txt"],
+      "dependencies": [],
+      "estimated_time": "5 minutes"
+    },
+    {
+      "id": "task-5",
+      "description": "Update MCP server with BAML integration",
+      "files": ["tools/mcp_server.py"],
+      "dependencies": ["task-3"],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-6",
+      "description": "Create comprehensive unit tests for BAML integration",
+      "files": ["tests/test_baml_integration.py", "tests/test_baml_schemas.py"],
+      "dependencies": ["task-3"],
+      "estimated_time": "20 minutes"
+    },
+    {
+      "id": "task-7",
+      "description": "Create BAML integration documentation",
+      "files": ["docs/BAML_INTEGRATION.md"],
+      "dependencies": ["task-1", "task-2", "task-3"],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-8",
+      "description": "Create example BAML project",
+      "files": ["examples/baml-example-project/README.md", "examples/baml-example-project/main.py"],
+      "dependencies": ["task-1", "task-2", "task-3"],
+      "estimated_time": "10 minutes"
+    }
+  ]
+}
