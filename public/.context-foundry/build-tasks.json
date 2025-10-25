@@ -1,0 +1,54 @@
+{
+  "parallel_mode": true,
+  "total_tasks": 6,
+  "tasks": [
+    {
+      "id": "task-1",
+      "description": "Create CSS foundation (reset, variables, base styles)",
+      "files": ["css/reset.css", "css/variables.css"],
+      "dependencies": [],
+      "estimated_time": "15 minutes",
+      "level": 0
+    },
+    {
+      "id": "task-2",
+      "description": "Create HTML structure with semantic markup and SEO",
+      "files": ["index.html"],
+      "dependencies": [],
+      "estimated_time": "20 minutes",
+      "level": 0
+    },
+    {
+      "id": "task-3",
+      "description": "Create JavaScript functionality (navigation and main)",
+      "files": ["js/navigation.js", "js/main.js"],
+      "dependencies": [],
+      "estimated_time": "15 minutes",
+      "level": 0
+    },
+    {
+      "id": "task-4",
+      "description": "Create main stylesheet with components and responsive design",
+      "files": ["css/styles.css"],
+      "dependencies": ["task-1"],
+      "estimated_time": "25 minutes",
+      "level": 1
+    },
+    {
+      "id": "task-5",
+      "description": "Create supporting files (robots.txt, favicon placeholder)",
+      "files": ["robots.txt", ".gitkeep-images"],
+      "dependencies": [],
+      "estimated_time": "5 minutes",
+      "level": 0
+    },
+    {
+      "id": "task-6",
+      "description": "Create README documentation",
+      "files": ["README.md"],
+      "dependencies": ["task-2", "task-4"],
+      "estimated_time": "10 minutes",
+      "level": 2
+    }
+  ]
+}

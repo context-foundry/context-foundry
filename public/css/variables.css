@@ -1,0 +1,155 @@
+/* Design Tokens & CSS Custom Properties */
+
+:root {
+  /* ========================================
+     Brand Colors
+     ======================================== */
+  --color-primary: #00d9ff;           /* Electric cyan */
+  --color-primary-hover: #00b8d9;     /* Darker cyan */
+  --color-primary-dark: #0096b3;      /* Even darker */
+
+  --color-secondary: #00ff00;         /* Bright green */
+  --color-secondary-hover: #00cc00;   /* Darker green */
+
+  --color-accent: #ff00ff;            /* Magenta */
+  --color-accent-2: #a855f7;          /* Purple */
+
+  /* ========================================
+     Background Colors
+     ======================================== */
+  --color-bg-primary: #0a0a0a;        /* Deepest black */
+  --color-bg-secondary: #111827;      /* Slightly lighter */
+  --color-bg-tertiary: #1f2937;       /* Card backgrounds */
+  --color-bg-code: #0d1117;           /* Code blocks */
+
+  /* ========================================
+     Text Colors
+     ======================================== */
+  --color-text-primary: #ffffff;      /* Pure white */
+  --color-text-secondary: #e0e0e0;    /* Light gray */
+  --color-text-tertiary: #9ca3af;     /* Medium gray */
+  --color-text-muted: #6b7280;        /* Muted gray */
+
+  /* ========================================
+     Border Colors
+     ======================================== */
+  --color-border: #374151;            /* Subtle borders */
+  --color-border-hover: #4b5563;      /* Hover state */
+
+  /* ========================================
+     Status Colors
+     ======================================== */
+  --color-success: #10b981;           /* Green */
+  --color-warning: #f59e0b;           /* Amber */
+  --color-error: #ef4444;             /* Red */
+  --color-info: #3b82f6;              /* Blue */
+
+  /* ========================================
+     Gradient Overlays
+     ======================================== */
+  --gradient-hero: linear-gradient(135deg,
+    rgba(0, 217, 255, 0.1) 0%,
+    rgba(168, 85, 247, 0.1) 100%);
+  --gradient-accent: linear-gradient(90deg,
+    var(--color-primary) 0%,
+    var(--color-accent-2) 100%);
+
+  /* ========================================
+     Font Families
+     ======================================== */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Monaco', 'Menlo', 'Courier New', monospace;
+
+  /* ========================================
+     Font Sizes - Fluid Typography
+     ======================================== */
+  --font-size-xs: clamp(0.75rem, 0.7rem + 0.2vw, 0.875rem);    /* 12-14px */
+  --font-size-sm: clamp(0.875rem, 0.8rem + 0.3vw, 1rem);       /* 14-16px */
+  --font-size-base: clamp(1rem, 0.95rem + 0.4vw, 1.125rem);    /* 16-18px */
+  --font-size-md: clamp(1.125rem, 1rem + 0.5vw, 1.25rem);      /* 18-20px */
+  --font-size-lg: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);      /* 20-24px */
+  --font-size-xl: clamp(1.5rem, 1.3rem + 0.8vw, 2rem);         /* 24-32px */
+  --font-size-2xl: clamp(2rem, 1.7rem + 1.2vw, 3rem);          /* 32-48px */
+  --font-size-3xl: clamp(2.5rem, 2rem + 2vw, 4rem);            /* 40-64px */
+
+  /* ========================================
+     Font Weights
+     ======================================== */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ========================================
+     Line Heights
+     ======================================== */
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ========================================
+     Letter Spacing
+     ======================================== */
+  --letter-spacing-tight: -0.025em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.025em;
+
+  /* ========================================
+     Spacing System (8px base)
+     ======================================== */
+  --space-1: 0.5rem;    /* 8px */
+  --space-2: 1rem;      /* 16px */
+  --space-3: 1.5rem;    /* 24px */
+  --space-4: 2rem;      /* 32px */
+  --space-5: 2.5rem;    /* 40px */
+  --space-6: 3rem;      /* 48px */
+  --space-8: 4rem;      /* 64px */
+  --space-10: 5rem;     /* 80px */
+  --space-12: 6rem;     /* 96px */
+  --space-16: 8rem;     /* 128px */
+
+  /* ========================================
+     Container Widths
+     ======================================== */
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+  --container-2xl: 1536px;
+
+  /* ========================================
+     Border Radius
+     ======================================== */
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.5rem;    /* 8px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-full: 9999px;
+
+  /* ========================================
+     Shadows
+     ======================================== */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 20px rgba(0, 217, 255, 0.3);
+
+  /* ========================================
+     Transitions
+     ======================================== */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 350ms ease;
+
+  /* ========================================
+     Z-Index Scale
+     ======================================== */
+  --z-base: 1;
+  --z-dropdown: 10;
+  --z-sticky: 100;
+  --z-fixed: 200;
+  --z-modal: 300;
+  --z-popover: 400;
+  --z-tooltip: 500;
+}
