@@ -3,14 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Context Foundry Livestream</title>
-    
+    <title>Context Foundry Build Monitor</title>
+
     <!-- Terminal CSS CDN -->
     <link rel="stylesheet" href="https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css">
-    
-    <!-- Chart.js without source map to prevent 404 warnings -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
+
     <style>
         /* === TERMINAL CSS THEME OVERRIDES === */
         :root {
@@ -24,890 +21,708 @@
             --global-line-height: 1.5em;
             --mono-font-stack: 'Monaco', 'Courier New', monospace;
         }
-        
+
         body {
             background: #0a0a0a;
             color: #e0e0e0;
             font-family: 'Monaco', 'Courier New', monospace;
             padding: 1rem;
+            max-width: 1400px;
+            margin: 0 auto;
         }
-        
-        /* === CUSTOM GRID LAYOUTS === */
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .main-grid {
-                grid-template-columns: 2fr 1fr;
-            }
-        }
-        
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .metrics-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        
-        /* === PANEL STYLING === */
-        section, article, aside {
+
+        /* === SECTIONS === */
+        section, article {
             background: #111827;
             border: 1px solid #1f2937;
             border-radius: 0.5rem;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
         }
-        
-        /* === PRESERVED: PHASE GRADIENTS === */
-        .phase-scout { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .phase-architect { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .phase-builder { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .phase-complete { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-        
-        /* === PRESERVED: ANIMATIONS === */
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
+
+        /* === TABS === */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
         }
-        
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        /* === PRESERVED: PROGRESS BARS === */
-        .context-bar { transition: width 0.5s ease; }
-        
-        .agent-progress-bar {
-            height: 1.5rem;
+
+        .tab {
             background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .agent-progress-fill-active {
-            background: linear-gradient(to right, #10b981 0%, #3b82f6 50%, #2563eb 100%);
-            background-size: 200% 100%;
-            animation: shimmer 3s ease-in-out infinite;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-idle {
-            background: #4b5563;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-completed {
-            background: #10b981;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        /* === PRESERVED: TOKEN GAUGES === */
-        .token-gauge {
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-            height: 1.5rem;
-        }
-        
-        .token-fill {
-            height: 100%;
-            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
-            transition: width 0.5s ease;
-        }
-        
-        .token-critical {
-            animation: pulse-red 2s infinite;
-        }
-        
-        .agent-token-safe { background: #10b981; }
-        .agent-token-warning { background: #eab308; }
-        .agent-token-critical { background: #ef4444; animation: pulse 2s infinite; }
-        
-        /* === PRESERVED: STATUS INDICATORS === */
-        .status-active { color: #10b981; }
-        .status-idle { color: #6b7280; }
-        .status-spawning { color: #3b82f6; }
-        .status-completed { color: #10b981; }
-        .status-failed { color: #ef4444; }
-        
-        /* === PRESERVED: AGENT CARDS === */
-        .agent-card {
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
             border: 1px solid #374151;
-            border-radius: 0.5rem;
+            border-radius: 0.25rem;
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #374151;
+            border-color: #4b5563;
+        }
+
+        .tab-active {
+            background: #10b981;
+            border-color: #10b981;
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* === PHASE SECTIONS === */
+        .phase-section {
+            margin: 1rem 0;
+        }
+
+        .phase-section-title {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 0.5rem;
+        }
+
+        .phase-item {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 0.25rem;
             padding: 0.75rem;
             margin-bottom: 0.5rem;
-            transition: all 0.3s ease;
         }
-        
-        .agent-card:hover {
-            border-color: #4b5563;
-            transform: translateX(4px);
+
+        .phase-completed {
+            border-left: 3px solid #10b981;
         }
-        
-        /* === PRESERVED: METRIC CARDS === */
-        .metric-card {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            transition: all 0.3s ease;
+
+        .phase-current {
+            border-left: 3px solid #3b82f6;
+            background: linear-gradient(135deg, #1f2937 0%, #1e3a5f 100%);
         }
-        
-        .metric-card:hover {
-            border-color: #374151;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+
+        .phase-pending {
+            border-left: 3px solid #6b7280;
+            opacity: 0.7;
         }
-        
-        /* === PRESERVED: DECISION BADGES === */
-        .decision-badge {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: #60a5fa;
+
+        .phase-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .phase-emoji {
+            font-size: 1.5rem;
+        }
+
+        .phase-name {
+            font-weight: bold;
+            font-size: 1rem;
+        }
+
+        .phase-description {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-left: 2.5rem;
+        }
+
+        .phase-detail {
+            font-size: 0.875rem;
+            color: #d1d5db;
+            margin-left: 2.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .phase-detail li {
+            margin: 0.25rem 0;
+        }
+
+        .phase-note {
+            font-size: 0.75rem;
+            color: #fbbf24;
+            margin-left: 2.5rem;
+            font-style: italic;
+        }
+
+        /* === BUILD STATUS CARD === */
+        .build-status-card {
+            background: linear-gradient(135deg, #1e3a5f 0%, #1f2937 100%);
+            border: 1px solid #3b82f6;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .status-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+
+        .status-value {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .status-badge {
+            display: inline-block;
             padding: 0.25rem 0.75rem;
             border-radius: 9999px;
             font-size: 0.75rem;
-            display: inline-block;
+            font-weight: bold;
         }
-        
-        .decision-quality-high {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: rgba(16, 185, 129, 0.3);
+
+        .status-running {
+            background: rgba(16, 185, 129, 0.2);
             color: #10b981;
         }
-        
-        .decision-quality-medium {
-            background: rgba(234, 179, 8, 0.1);
-            border-color: rgba(234, 179, 8, 0.3);
-            color: #eab308;
+
+        .status-complete {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
         }
-        
-        .decision-quality-low {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
+
+        .status-failed {
+            background: rgba(239, 68, 68, 0.2);
             color: #ef4444;
         }
-        
-        /* === PRESERVED: LOGS === */
-        .log-line {
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
+
+        /* === PROGRESS BAR === */
+        .progress-bar {
+            background: #1f2937;
+            border-radius: 9999px;
+            overflow: hidden;
+            height: 2rem;
+            position: relative;
         }
-        
+
+        .progress-fill {
+            background: linear-gradient(to right, #10b981, #3b82f6);
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .progress-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.875rem;
+        }
+
+        /* === METRICS BAR === */
+        .metrics-bar {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-item {
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #10b981;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: #9ca3af;
+        }
+
+        /* === LOGS === */
         #logs {
             background: #000000;
             padding: 1rem;
             border-radius: 0.5rem;
-            height: 24rem;
+            height: 20rem;
             overflow-y: auto;
             font-family: 'Monaco', monospace;
             font-size: 12px;
         }
-        
+
+        .log-line {
+            font-family: 'Monaco', monospace;
+            font-size: 12px;
+            color: #d1d5db;
+        }
+
         /* === UTILITY CLASSES === */
         .text-green { color: #10b981; }
-        .text-green-400 { color: #10b981; }
         .text-yellow { color: #eab308; }
-        .text-yellow-400 { color: #eab308; }
         .text-red { color: #ef4444; }
-        .text-red-400 { color: #ef4444; }
         .text-blue { color: #3b82f6; }
-        .text-blue-400 { color: #3b82f6; }
-        .text-gray { color: #6b7280; }
-        .text-gray-300 { color: #d1d5db; }
-        .text-gray-400 { color: #9ca3af; }
-        .text-gray-500 { color: #6b7280; }
-        .text-gray-600 { color: #4b5563; }
-        .text-purple-400 { color: #a855f7; }
-        
-        .bg-gray-800 { background: #1f2937; }
-        .bg-gray-700 { background: #374151; }
-        
+        .text-gray { color: #9ca3af; }
         .font-bold { font-weight: bold; }
-        .font-mono { font-family: 'Monaco', 'Courier New', monospace; }
         .text-sm { font-size: 0.875rem; }
         .text-xs { font-size: 0.75rem; }
         .text-lg { font-size: 1.125rem; }
-        
-        .flex { display: flex; }
-        .flex-between { justify-content: space-between; }
-        .flex-center { align-items: center; }
-        .items-center { align-items: center; }
-        .items-start { align-items: flex-start; }
-        .justify-between { justify-content: space-between; }
-        .space-x-2 > * + * { margin-left: 0.5rem; }
-        .space-y-2 > * + * { margin-top: 0.5rem; }
-        .space-y-3 > * + * { margin-top: 0.75rem; }
-        
-        .mb-1 { margin-bottom: 0.25rem; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mt-1 { margin-top: 0.25rem; }
-        .mr-2 { margin-right: 0.5rem; }
-        .p-2 { padding: 0.5rem; }
-        .p-4 { padding: 1rem; }
-        
-        .rounded { border-radius: 0.25rem; }
-        .rounded-lg { border-radius: 0.5rem; }
-        .rounded-full { border-radius: 9999px; }
-        .overflow-hidden { overflow: hidden; }
-        
-        .border { border: 1px solid #374151; }
-        .border-gray-700 { border-color: #374151; }
-        
-        .h-full { height: 100%; }
-        .h-2 { height: 0.5rem; }
-        .w-3 { width: 0.75rem; }
-        .h-3 { height: 0.75rem; }
-        
-        .absolute { position: absolute; }
-        .relative { position: relative; }
-        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-        
-        .transition-all { transition: all 0.3s ease; }
-        .duration-300 { transition-duration: 300ms; }
-        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .italic { font-style: italic; }
-        
-        .animate-pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        
+        .text-xl { font-size: 1.25rem; }
+        .text-2xl { font-size: 1.5rem; }
+        .mb-1 { margin-bottom: 0.5rem; }
+        .mb-2 { margin-bottom: 1rem; }
+        .mt-2 { margin-top: 1rem; }
+
         /* === RESPONSIVE === */
-        .main-content > section {
-            margin-bottom: 1.5rem;
-        }
-        
         @media (max-width: 768px) {
-            .main-grid {
+            .status-grid {
                 grid-template-columns: 1fr;
             }
-            .metrics-grid {
-                grid-template-columns: 1fr;
+            .tabs {
+                justify-content: stretch;
+            }
+            .tab {
+                flex: 1;
+                text-align: center;
             }
         }
     </style>
 </head>
 <body>
     <!-- Header -->
-    <header style="border: none; background: transparent; padding: 0;">
-        <h1 style="font-size: 2.25rem; font-weight: bold; margin-bottom: 0.5rem;">🏭 Context Foundry</h1>
-        <p style="color: #6b7280;">Real-time monitoring for overnight coding sessions</p>
+    <header style="border: none; background: transparent; padding: 0; margin-bottom: 1rem;">
+        <h1 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        </h1>
+        <h1 style="font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem;">
+            ⏸ Context Foundry Build Monitor 🏗️
+        </h1>
+        <h1 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        </h1>
+        <p style="color: #6b7280; margin-top: 0.5rem;">Real-time phase-by-phase build status monitoring</p>
     </header>
 
+    <!-- Top Metrics Bar -->
+    <div id="metricsBar" class="metrics-bar">
+        <div class="metric-item">
+            <div class="metric-value" id="metricActive">0</div>
+            <div class="metric-label">🟢 ACTIVE BUILDS</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value" id="metricCompleted">0</div>
+            <div class="metric-label">✅ COMPLETED</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value" id="metricFailed">0</div>
+            <div class="metric-label">❌ FAILED</div>
+        </div>
+        <div class="metric-item">
+            <div class="metric-value" id="metricAvgTime">--</div>
+            <div class="metric-label">⏱️ AVG TIME</div>
+        </div>
+    </div>
+
+    <!-- Session Tabs -->
+    <div class="tabs">
+        <button class="tab tab-active" onclick="switchTab('active')" id="tabActive">
+            🟢 Active
+        </button>
+        <button class="tab" onclick="switchTab('completed')" id="tabCompleted">
+            ✅ Completed
+        </button>
+        <button class="tab" onclick="switchTab('failed')" id="tabFailed">
+            ❌ Failed
+        </button>
+        <button class="tab" onclick="switchTab('all')" id="tabAll">
+            📊 All
+        </button>
+    </div>
+
     <!-- Session Selector -->
-    <section style="margin-top: 1.5rem;">
-        <label for="sessionSelector" style="display: block; font-weight: bold; margin-bottom: 0.5rem; font-size: 0.875rem;">Active Session:</label>
-        <select id="sessionSelector" style="width: 100%;">
+    <section>
+        <label for="sessionSelector" style="display: block; font-weight: bold; margin-bottom: 0.5rem; font-size: 0.875rem;">
+            Select Session:
+        </label>
+        <select id="sessionSelector" style="width: 100%; padding: 0.5rem; background: #1f2937; border: 1px solid #374151; color: #e0e0e0; border-radius: 0.25rem;">
             <option>Loading sessions...</option>
         </select>
     </section>
 
-    <!-- Multi-Agent Panel -->
-    <section id="multiAgentPanel" style="display: none;">
-        <div class="flex flex-between flex-center" style="margin-bottom: 1rem;">
-            <h2 style="font-size: 1.5rem; font-weight: bold;">🤖 Active Agents</h2>
-            <span id="agentCount" class="text-sm text-gray-400">0 agents</span>
+    <!-- Build Status Card -->
+    <section id="buildStatusCard" class="build-status-card" style="display: none;">
+        <h2 class="text-2xl font-bold mb-2">🚀 Build Status Update</h2>
+
+        <div style="margin: 1rem 0;">
+            <div class="mb-1">
+                <span class="text-gray">Task ID:</span>
+                <span class="font-bold" id="taskId">-</span>
+            </div>
+            <div class="mb-1">
+                <span class="text-gray">Project:</span>
+                <span class="font-bold" id="projectName">-</span>
+            </div>
+            <div class="mb-1">
+                <span class="text-gray">Status:</span>
+                <span class="status-badge status-running" id="statusBadge">Running</span>
+            </div>
         </div>
-        <div id="agentsList" class="space-y-3">
-            <div class="text-gray-500 text-sm italic">No agents active yet...</div>
+
+        <div class="mb-2">
+            <div class="text-sm text-gray mb-1">Overall Progress:</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="overallProgressBar" style="width: 0%"></div>
+                <div class="progress-text">
+                    <span id="overallProgressText">0%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-grid">
+            <div class="status-item">
+                <span class="status-label">Elapsed Time</span>
+                <span class="status-value text-blue" id="elapsedTime">0m</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Est. Remaining</span>
+                <span class="status-value text-yellow" id="remainingTime">~0m</span>
+            </div>
         </div>
     </section>
 
-    <!-- Main Grid -->
-    <div class="main-grid">
-        <!-- Left Column: Main Content -->
-        <div class="main-content">
-            <!-- Phase Indicator -->
-            <section id="phaseCard" class="phase-scout" style="color: white; padding: 1.5rem; border-radius: 0.5rem;">
-                <h2 id="phaseName" style="font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem;">INITIALIZING</h2>
-                <p id="phaseDescription" style="opacity: 0.9; font-size: 0.875rem;">Getting started...</p>
-                <div style="margin-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
-                    <div>
-                        <div style="opacity: 0.75;">Iteration</div>
-                        <div id="iteration" style="font-size: 1.5rem; font-weight: bold;">0</div>
-                    </div>
-                    <div>
-                        <div style="opacity: 0.75;">Elapsed</div>
-                        <div id="elapsed" style="font-size: 1.5rem; font-weight: bold;">0:00</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Context Usage -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Context Usage</h3>
-                <div style="position: relative; height: 2rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                    <div id="contextBar" class="context-bar" style="height: 100%; background: linear-gradient(to right, #10b981, #eab308, #ef4444); width: 0%;"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">
-                        <span id="contextPercent">0%</span>
-                    </div>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280; text-align: right;">
-                    Target: &lt;40% | Warning: &gt;50%
-                </div>
-            </section>
-
-            <!-- Task Progress -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Task Progress</h3>
-                <div style="margin-bottom: 1rem;">
-                    <div class="flex flex-between" style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                        <span id="taskCount">0 / 0 tasks</span>
-                        <span id="taskPercent">0%</span>
-                    </div>
-                    <div style="position: relative; height: 0.5rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                        <div id="taskBar" style="height: 100%; background: #3b82f6; width: 0%;"></div>
-                    </div>
-                </div>
-                <div class="space-y-2" style="max-height: 16rem; overflow-y: auto;">
-                    <div id="taskList" class="text-sm">
-                        <div class="text-gray-500 italic">No tasks yet...</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Live Logs -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Live Logs</h3>
-                <div id="logs">
-                    <div style="color: #4b5563;">Waiting for logs...</div>
-                </div>
-            </section>
+    <!-- Completed Phases -->
+    <section id="completedPhasesSection" style="display: none;">
+        <div class="phase-section-title">✅ COMPLETED PHASES:</div>
+        <div id="completedPhases">
+            <div class="text-gray text-sm">No phases completed yet...</div>
         </div>
-
-        <!-- Right Column: Sidebar -->
-        <aside class="sidebar">
-            <!-- Session Info -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Session Info</h3>
-                <div class="space-y-3 text-sm">
-                    <div>
-                        <div class="text-gray-500">Project</div>
-                        <div class="font-bold" id="projectName">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Task</div>
-                        <div class="text-xs" id="taskDesc">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Started</div>
-                        <div id="startTime">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Estimated Remaining</div>
-                        <div id="remaining" class="font-bold text-yellow-400">-</div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Statistics -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Statistics</h3>
-                <div class="space-y-2 text-sm">
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Iterations</span>
-                        <span id="statIterations" class="font-bold">0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Context Resets</span>
-                        <span id="statResets" class="font-bold">0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Tokens Used</span>
-                        <span id="statTokens" class="font-bold">~0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Est. Cost</span>
-                        <span id="statCost" class="font-bold text-green-400">$0.00</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Connection Status -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Connection</h3>
-                <div id="connectionStatus" class="flex items-center">
-                    <div class="w-3 h-3 rounded-full mr-2" style="background: #6b7280;"></div>
-                    <span class="text-sm">Connecting...</span>
-                </div>
-                <div id="lastUpdate" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;">Never</div>
-            </section>
-
-            <!-- Quick Actions -->
-            <nav style="border: none; background: #111827; padding: 1.5rem;">
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Actions</h3>
-                <div class="space-y-2">
-                    <button onclick="refreshData()" class="btn-primary" style="width: 100%;">
-                        🔄 Refresh
-                    </button>
-                    <button onclick="exportSession()" style="width: 100%; background: #374151; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; border: none; cursor: pointer;">
-                        💾 Export Data
-                    </button>
-                </div>
-            </nav>
-        </aside>
-    </div>
-
-    <!-- Metrics Header -->
-    <section style="margin-top: 1.5rem; border: none; background: transparent; padding: 0;">
-        <h2 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem;">📊 Detailed Metrics</h2>
     </section>
 
-    <!-- Metrics Grid -->
-    <div class="metrics-grid">
-        <!-- Token Usage Panel -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🔢 Token Usage</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
-            </h3>
-            <div style="margin-bottom: 1rem;">
-                <div class="flex flex-between text-sm" style="margin-bottom: 0.5rem;">
-                    <span class="text-gray-400">Used / Budget</span>
-                    <span id="tokenCount" class="font-bold" style="color: #e5e7eb;">0 / 200,000</span>
-                </div>
-                <div id="tokenGauge" class="token-gauge">
-                    <div id="tokenFill" class="token-fill" style="width: 0%"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold;">
-                        <span id="tokenPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.75rem;">
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray-500">Safe</div>
-                    <div class="text-green-400">< 50%</div>
-                </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray-500">Warning</div>
-                    <div class="text-yellow-400">50-75%</div>
-                </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray-500">Critical</div>
-                    <div class="text-red-400">> 75%</div>
-                </div>
-            </div>
-        </article>
+    <!-- Current Phase -->
+    <section id="currentPhaseSection" style="display: none;">
+        <div class="phase-section-title">🔨 CURRENT PHASE:</div>
+        <div id="currentPhase">
+            <div class="text-gray text-sm">No current phase...</div>
+        </div>
+    </section>
 
-        <!-- Test Loop Analytics -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🧪 Test Loop</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex flex-between">
-                    <span class="text-gray-400">Iterations</span>
-                    <span id="testIterCount" class="font-bold text-blue-400">0</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray-400">Success Rate</span>
-                    <span id="testSuccessRate" class="font-bold text-green-400">--%</span>
-                </div>
-                <div id="testIterList" class="space-y-2" style="max-height: 8rem; overflow-y: auto;">
-                    <div class="text-gray-500 text-sm italic">No test iterations yet</div>
-                </div>
-            </div>
-        </article>
+    <!-- Upcoming Phases -->
+    <section id="upcomingPhasesSection" style="display: none;">
+        <div class="phase-section-title">📋 UPCOMING PHASES:</div>
+        <div id="upcomingPhases">
+            <div class="text-gray text-sm">No upcoming phases...</div>
+        </div>
+    </section>
 
-        <!-- Agent Performance -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🤖 Agent Performance</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
-            </h3>
-            <div id="agentList" class="space-y-2">
-                <div class="text-gray-500 text-sm italic">No agent data yet</div>
-            </div>
-        </article>
+    <!-- What's Happening Now -->
+    <section id="whatsHappeningSection" style="display: none;">
+        <div class="phase-section-title">💬 WHAT'S HAPPENING NOW:</div>
+        <div id="whatsHappening" class="text-sm">
+            <div class="text-gray">Waiting for status update...</div>
+        </div>
+    </section>
 
-        <!-- Decision Tracking -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🧠 Decision Quality</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex flex-between">
-                    <span class="text-gray-400">Total Decisions</span>
-                    <span id="decisionCount" class="font-bold text-blue-400">0</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray-400">Avg Quality</span>
-                    <span id="decisionQuality" class="font-bold text-green-400">--</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray-400">Lessons Applied</span>
-                    <span id="decisionLessons" class="font-bold" style="color: #a855f7;">0</span>
-                </div>
-                <div id="decisionList" class="space-y-2" style="max-height: 8rem; overflow-y: auto; margin-top: 0.75rem;">
-                    <div class="text-gray-500 text-sm italic">No decisions yet</div>
-                </div>
-            </div>
-        </article>
-    </div>
+    <!-- Live Logs -->
+    <section>
+        <h3 class="text-xl font-bold mb-2">📊 LIVE LOGS:</h3>
+        <div id="logs">
+            <div style="color: #4b5563;">Waiting for logs...</div>
+        </div>
+    </section>
+
+    <!-- Export Button -->
+    <section style="border: none; background: transparent; padding: 0.5rem;">
+        <button onclick="exportSession()" style="width: 100%; background: #374151; color: white; padding: 0.75rem 1.5rem; border-radius: 0.25rem; border: none; cursor: pointer; font-weight: bold;">
+            💾 Export Session Data
+        </button>
+    </section>
 
     <script>
         let ws = null;
         let currentSession = null;
-        let enhancedMetricsRefreshing = false;
-        let lastEnhancedMetricsUpdate = null;
+        let allSessions = [];
+        let currentFilter = 'active';
 
         // Format time duration
         function formatDuration(seconds) {
             const hours = Math.floor(seconds / 3600);
             const mins = Math.floor((seconds % 3600) / 60);
-            return hours > 0 ? `${hours}:${mins.toString().padStart(2, '0')}h` : `${mins}m`;
+            const secs = Math.floor(seconds % 60);
+
+            if (hours > 0) {
+                return `${hours}h ${mins}m`;
+            } else if (mins > 0) {
+                return `${mins}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
         }
 
-        // Update phase card
-        function updatePhase(phase) {
-            const card = document.getElementById('phaseCard');
-            const name = document.getElementById('phaseName');
-            const desc = document.getElementById('phaseDescription');
+        // Switch tabs
+        function switchTab(filter) {
+            currentFilter = filter;
 
-            card.className = `phase-${phase}`;
-            card.style.cssText = 'color: white; padding: 1.5rem; border-radius: 0.5rem;';
-
-            const phaseInfo = {
-                scout: { name: '🔍 SCOUT', desc: 'Researching architecture and approach' },
-                architect: { name: '📐 ARCHITECT', desc: 'Creating specifications and plan' },
-                builder: { name: '🔨 BUILDER', desc: 'Implementing with tests' },
-                complete: { name: '✅ COMPLETE', desc: 'All tasks finished!' }
-            };
-
-            const info = phaseInfo[phase] || { name: 'UNKNOWN', desc: '' };
-            name.textContent = info.name;
-            desc.textContent = info.desc;
-        }
-
-        // Update task list
-        function updateTasks(tasks) {
-            const taskList = document.getElementById('taskList');
-            const completed = tasks.completed || [];
-            const remaining = tasks.remaining || [];
-
-            let html = '';
-
-            completed.forEach(task => {
-                html += `<div class="flex items-center text-green-400">
-                    <span class="mr-2">✓</span>
-                    <span>${task}</span>
-                </div>`;
+            // Update tab styling
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('tab-active');
             });
+            document.getElementById('tab' + filter.charAt(0).toUpperCase() + filter.slice(1)).classList.add('tab-active');
 
-            if (remaining.length > 0) {
-                html += `<div class="flex items-center text-yellow-400">
-                    <span class="mr-2">⏳</span>
-                    <span>${remaining[0]}</span>
-                </div>`;
+            // Reload sessions with filter
+            loadSessions();
+        }
 
-                remaining.slice(1).forEach(task => {
-                    html += `<div class="flex items-center text-gray-500">
-                        <span class="mr-2">○</span>
-                        <span>${task}</span>
-                    </div>`;
+        // Load sessions based on current filter
+        async function loadSessions() {
+            try {
+                let endpoint = '/api/sessions';
+                if (currentFilter === 'active') endpoint = '/api/sessions/active';
+                else if (currentFilter === 'completed') endpoint = '/api/sessions/completed';
+                else if (currentFilter === 'failed') endpoint = '/api/sessions/failed';
+
+                const response = await fetch(endpoint);
+                const data = await response.json();
+                allSessions = data.sessions || [];
+
+                // Update metrics bar
+                updateMetricsBar();
+
+                // Update session selector
+                const selector = document.getElementById('sessionSelector');
+                selector.innerHTML = '';
+
+                if (allSessions.length === 0) {
+                    selector.innerHTML = '<option>No sessions found</option>';
+                    return;
+                }
+
+                allSessions.forEach(session => {
+                    const option = document.createElement('option');
+                    option.value = session.id;
+                    const status = session.is_complete ? '✓' : session.status === 'failed' ? '✗' : '▶';
+                    option.textContent = `${status} ${session.project} (${session.phase || 'Unknown'})`;
+                    selector.appendChild(option);
                 });
+
+                // Auto-select first session if none selected
+                if (!currentSession && allSessions.length > 0) {
+                    currentSession = allSessions[0].id;
+                    selector.value = currentSession;
+                    loadSessionDetails(currentSession);
+                    connectWebSocket(currentSession);
+                }
+
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
+        // Update metrics bar
+        async function updateMetricsBar() {
+            try {
+                // Get counts for each category
+                const activeResp = await fetch('/api/sessions/active');
+                const activeData = await activeResp.json();
+                document.getElementById('metricActive').textContent = activeData.count || 0;
+
+                const completedResp = await fetch('/api/sessions/completed');
+                const completedData = await completedResp.json();
+                document.getElementById('metricCompleted').textContent = completedData.count || 0;
+
+                const failedResp = await fetch('/api/sessions/failed');
+                const failedData = await failedResp.json();
+                document.getElementById('metricFailed').textContent = failedData.count || 0;
+
+                // Calculate average time (from completed sessions)
+                if (completedData.sessions && completedData.sessions.length > 0) {
+                    const avgSeconds = completedData.sessions.reduce((sum, s) => sum + (s.elapsed_seconds || 0), 0) / completedData.sessions.length;
+                    document.getElementById('metricAvgTime').textContent = formatDuration(avgSeconds);
+                } else {
+                    document.getElementById('metricAvgTime').textContent = '--';
+                }
+            } catch (error) {
+                console.error('Error updating metrics bar:', error);
+            }
+        }
+
+        // Load session details
+        async function loadSessionDetails(sessionId) {
+            try {
+                // Get basic status
+                const statusResp = await fetch(`/api/status/${sessionId}`);
+                const status = await statusResp.json();
+
+                // Get phase breakdown
+                const phaseResp = await fetch(`/api/phases/${sessionId}`);
+                const phaseData = await phaseResp.json();
+
+                // Update UI
+                updateBuildStatusCard(status, phaseData);
+                updatePhaseBreakdown(phaseData);
+                updateWhatsHappening(status, phaseData);
+
+                // Load logs
+                const logsResp = await fetch(`/api/logs/${sessionId}?lines=50`);
+                const logsData = await logsResp.json();
+                updateLogs(logsData.logs || []);
+
+            } catch (error) {
+                console.error('Error loading session details:', error);
+            }
+        }
+
+        // Update build status card
+        function updateBuildStatusCard(status, phaseData) {
+            document.getElementById('buildStatusCard').style.display = 'block';
+            document.getElementById('taskId').textContent = status.id || '-';
+            document.getElementById('projectName').textContent = status.project || '-';
+
+            // Status badge
+            const badge = document.getElementById('statusBadge');
+            if (status.is_complete) {
+                badge.textContent = '✅ Complete';
+                badge.className = 'status-badge status-complete';
+            } else if (status.status === 'failed') {
+                badge.textContent = '❌ Failed';
+                badge.className = 'status-badge status-failed';
+            } else {
+                badge.textContent = '▶ Running';
+                badge.className = 'status-badge status-running';
             }
 
-            taskList.innerHTML = html || '<div class="text-gray-500 italic">No tasks yet...</div>';
+            // Progress
+            const progress = phaseData.overall_progress_percent || 0;
+            document.getElementById('overallProgressBar').style.width = progress + '%';
+            document.getElementById('overallProgressText').textContent = progress.toFixed(1) + '%';
 
-            // Update progress bar
-            const total = completed.length + remaining.length;
-            const percent = total > 0 ? (completed.length / total * 100) : 0;
-            document.getElementById('taskBar').style.width = percent + '%';
-            document.getElementById('taskCount').textContent = `${completed.length} / ${total} tasks`;
-            document.getElementById('taskPercent').textContent = Math.round(percent) + '%';
+            // Times
+            document.getElementById('elapsedTime').textContent = formatDuration(status.elapsed_seconds || 0);
+            if (status.estimated_remaining_seconds > 0) {
+                document.getElementById('remainingTime').textContent = '~' + formatDuration(status.estimated_remaining_seconds);
+            } else {
+                document.getElementById('remainingTime').textContent = '--';
+            }
+        }
+
+        // Update phase breakdown
+        function updatePhaseBreakdown(phaseData) {
+            if (!phaseData.phases || phaseData.phases.length === 0) {
+                // Legacy session
+                document.getElementById('completedPhasesSection').style.display = 'none';
+                document.getElementById('currentPhaseSection').style.display = 'none';
+                document.getElementById('upcomingPhasesSection').style.display = 'none';
+                return;
+            }
+
+            const completed = phaseData.phases.filter(p => p.status === 'completed');
+            const current = phaseData.phases.find(p => p.status === 'in_progress');
+            const upcoming = phaseData.phases.filter(p => p.status === 'pending');
+
+            // Completed phases
+            if (completed.length > 0) {
+                document.getElementById('completedPhasesSection').style.display = 'block';
+                const html = completed.map(phase => `
+                    <div class="phase-item phase-completed">
+                        <div class="phase-header">
+                            <span class="phase-emoji">${phase.emoji}</span>
+                            <span class="phase-name">Phase ${phase.number} - ${phase.name} ✅</span>
+                        </div>
+                        <div class="phase-description">${phase.description}</div>
+                    </div>
+                `).join('');
+                document.getElementById('completedPhases').innerHTML = html;
+            } else {
+                document.getElementById('completedPhasesSection').style.display = 'none';
+            }
+
+            // Current phase
+            if (current) {
+                document.getElementById('currentPhaseSection').style.display = 'block';
+                let html = `
+                    <div class="phase-item phase-current">
+                        <div class="phase-header">
+                            <span class="phase-emoji">${current.emoji}</span>
+                            <span class="phase-name">Phase ${current.number} - ${current.name} (In Progress)</span>
+                        </div>
+                        <div class="phase-description">${current.description}</div>
+                `;
+                if (current.detail) {
+                    html += `<div class="phase-detail">${current.detail}</div>`;
+                }
+                if (current.note) {
+                    html += `<div class="phase-note">💡 ${current.note}</div>`;
+                }
+                html += `</div>`;
+                document.getElementById('currentPhase').innerHTML = html;
+            } else {
+                document.getElementById('currentPhaseSection').style.display = 'none';
+            }
+
+            // Upcoming phases
+            if (upcoming.length > 0) {
+                document.getElementById('upcomingPhasesSection').style.display = 'block';
+                const html = upcoming.map(phase => `
+                    <div class="phase-item phase-pending">
+                        <div class="phase-header">
+                            <span class="phase-emoji">⏱️</span>
+                            <span class="phase-name">Phase ${phase.number} - ${phase.name}</span>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('upcomingPhases').innerHTML = html;
+            } else {
+                document.getElementById('upcomingPhasesSection').style.display = 'none';
+            }
+        }
+
+        // Update "what's happening now"
+        function updateWhatsHappening(status, phaseData) {
+            document.getElementById('whatsHappeningSection').style.display = 'block';
+
+            const current = phaseData.phases?.find(p => p.status === 'in_progress');
+            if (!current) {
+                document.getElementById('whatsHappening').innerHTML = '<div class="text-gray">Build initializing...</div>';
+                return;
+            }
+
+            let html = `<p class="mb-2">${current.description}</p>`;
+
+            if (current.detail) {
+                html += `<p class="text-sm text-gray mb-2">${current.detail}</p>`;
+            }
+
+            // What's next
+            const nextPhase = phaseData.phases?.find(p => p.number === current.number + 1);
+            if (nextPhase) {
+                html += `<p class="text-sm mt-2"><span class="text-blue font-bold">Next:</span> ${nextPhase.name} - ${nextPhase.description}</p>`;
+            }
+
+            document.getElementById('whatsHappening').innerHTML = html;
         }
 
         // Update logs
         function updateLogs(logs) {
             const logsDiv = document.getElementById('logs');
             const lines = logs.map(line => {
-                // Simple syntax highlighting
                 let html = line
-                    .replace(/✅/g, '<span class="text-green-400">✅</span>')
-                    .replace(/❌/g, '<span class="text-red-400">❌</span>')
-                    .replace(/🔄/g, '<span class="text-blue-400">🔄</span>')
-                    .replace(/⚠️/g, '<span class="text-yellow-400">⚠️</span>');
-
-                return `<div class="log-line text-gray-300">${html}</div>`;
+                    .replace(/✅/g, '<span class="text-green">✅</span>')
+                    .replace(/❌/g, '<span class="text-red">❌</span>')
+                    .replace(/🔄/g, '<span class="text-blue">🔄</span>')
+                    .replace(/⚠️/g, '<span class="text-yellow">⚠️</span>');
+                return `<div class="log-line">${html}</div>`;
             }).join('');
-
-            logsDiv.innerHTML = lines || '<div class="text-gray-600">No logs yet...</div>';
+            logsDiv.innerHTML = lines || '<div style="color: #4b5563;">No logs yet...</div>';
             logsDiv.scrollTop = logsDiv.scrollHeight;
-        }
-
-        // Update status
-        function updateStatus(status) {
-            if (status.error) {
-                console.error('Status error:', status.error);
-                return;
-            }
-
-            // Basic info
-            document.getElementById('projectName').textContent = status.project || '-';
-            document.getElementById('taskDesc').textContent = status.task || '-';
-            document.getElementById('iteration').textContent = status.iterations || 0;
-
-            // Time
-            if (status.start_time) {
-                document.getElementById('startTime').textContent =
-                    new Date(status.start_time).toLocaleString();
-            }
-
-            if (status.elapsed_seconds) {
-                document.getElementById('elapsed').textContent =
-                    formatDuration(status.elapsed_seconds);
-            }
-
-            if (status.estimated_remaining_seconds) {
-                document.getElementById('remaining').textContent =
-                    formatDuration(status.estimated_remaining_seconds);
-            }
-
-            // Phase
-            updatePhase(status.phase || 'unknown');
-
-            // Context
-            const contextPct = status.context?.percentage || 0;
-            document.getElementById('contextBar').style.width = contextPct + '%';
-            document.getElementById('contextPercent').textContent = contextPct + '%';
-
-            // Tasks
-            if (status.tasks) {
-                updateTasks(status.tasks);
-            }
-
-            // Stats
-            document.getElementById('statIterations').textContent = status.iterations || 0;
-            document.getElementById('statResets').textContent = status.iterations || 0;
-
-            // Connection status
-            updateConnectionStatus(true);
-            document.getElementById('lastUpdate').textContent =
-                'Last update: ' + new Date().toLocaleTimeString();
-        }
-
-        // Update enhanced metrics with concurrency protection
-        async function updateEnhancedMetrics(sessionId) {
-            // Prevent concurrent refreshes
-            if (enhancedMetricsRefreshing) {
-                return;
-            }
-
-            enhancedMetricsRefreshing = true;
-
-            try {
-                const response = await fetch(`/api/metrics/${sessionId}`);
-                const data = await response.json();
-
-                if (data.error) {
-                    console.warn('Enhanced metrics not available:', data.error);
-                    return;
-                }
-
-                // Update last refresh timestamp
-                lastEnhancedMetricsUpdate = Date.now();
-
-                // Update all metric panels
-                if (data.metrics?.token_usage) {
-                    updateTokenUsage(data.metrics.token_usage);
-                }
-
-                if (data.test_iterations) {
-                    updateTestIterations(data.test_iterations);
-                }
-
-                if (data.agent_performance) {
-                    updateAgentPerformance(data.agent_performance);
-                }
-
-                if (data.decisions) {
-                    updateDecisions(data.decisions);
-                }
-
-                // Update "last updated" display
-                updateMetricsTimestamp();
-
-            } catch (error) {
-                console.warn('Error fetching enhanced metrics:', error);
-            } finally {
-                enhancedMetricsRefreshing = false;
-            }
-        }
-
-        // Update metrics timestamp display
-        function updateMetricsTimestamp() {
-            if (!lastEnhancedMetricsUpdate) return;
-
-            const elapsed = Math.floor((Date.now() - lastEnhancedMetricsUpdate) / 1000);
-            const timeText = elapsed < 60 ? `${elapsed}s ago` : `${Math.floor(elapsed / 60)}m ago`;
-
-            // Update all metric timestamp elements
-            document.querySelectorAll('.metric-timestamp').forEach(el => {
-                el.textContent = `Updated: ${timeText}`;
-
-                // Color code based on freshness
-                el.className = 'metric-timestamp text-xs ';
-                if (elapsed < 5) el.className += 'text-green-400';
-                else if (elapsed < 30) el.className += 'text-yellow-400';
-                else el.className += 'text-red-400';
-            });
-        }
-
-        // Update token usage panel
-        function updateTokenUsage(tokenData) {
-            const used = tokenData.used || 0;
-            const limit = tokenData.limit || 200000;
-            const percentage = tokenData.percentage || 0;
-
-            document.getElementById('tokenCount').textContent = `${used.toLocaleString()} / ${limit.toLocaleString()}`;
-            document.getElementById('tokenPercent').textContent = percentage.toFixed(1) + '%';
-            document.getElementById('tokenFill').style.width = percentage + '%';
-
-            // Apply critical class if needed
-            const gauge = document.getElementById('tokenGauge');
-            if (tokenData.level === 'critical') {
-                gauge.classList.add('token-critical');
-            } else {
-                gauge.classList.remove('token-critical');
-            }
-        }
-
-        // Update test iterations
-        function updateTestIterations(iterations) {
-            document.getElementById('testIterCount').textContent = iterations.length;
-
-            if (iterations.length === 0) {
-                document.getElementById('testSuccessRate').textContent = '--%';
-                return;
-            }
-
-            const lastIter = iterations[iterations.length - 1];
-            const passed = lastIter.tests_passed || 0;
-            const failed = lastIter.tests_failed || 0;
-            const total = passed + failed;
-            const successRate = total > 0 ? ((passed / total) * 100).toFixed(0) : 0;
-
-            document.getElementById('testSuccessRate').textContent = successRate + '%';
-
-            // Update list
-            const listDiv = document.getElementById('testIterList');
-            let html = '';
-            iterations.slice(-3).reverse().forEach(iter => {
-                const iterPassed = iter.tests_passed || 0;
-                const iterFailed = iter.tests_failed || 0;
-                const iterColor = iterFailed === 0 ? 'text-green-400' : 'text-red-400';
-                html += `<div class="bg-gray-800 p-2 rounded text-xs">
-                    <div class="flex justify-between">
-                        <span class="text-gray-400">Iteration ${iter.iteration_number}</span>
-                        <span class="${iterColor}">${iterPassed}✓ ${iterFailed}✗</span>
-                    </div>
-                </div>`;
-            });
-            listDiv.innerHTML = html || '<div class="text-gray-500 text-sm italic">No test iterations</div>';
-        }
-
-        // Update agent performance
-        function updateAgentPerformance(agents) {
-            const listDiv = document.getElementById('agentList');
-            if (agents.length === 0) {
-                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No agent data yet</div>';
-                return;
-            }
-
-            let html = '';
-            agents.slice(-4).forEach(agent => {
-                const duration = agent.duration_seconds || 0;
-                const durationText = duration > 0 ? formatDuration(duration) : 'In progress';
-                const statusIcon = agent.success ? '✅' : agent.success === false ? '❌' : '⏳';
-
-                html += `<div class="agent-card">
-                    <div class="flex justify-between items-center">
-                        <span class="font-bold text-sm">${statusIcon} ${agent.agent_type}</span>
-                        <span class="text-xs text-gray-400">${durationText}</span>
-                    </div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        Issues: ${agent.issues_found || 0} found, ${agent.issues_fixed || 0} fixed
-                    </div>
-                </div>`;
-            });
-            listDiv.innerHTML = html;
-        }
-
-        // Update decisions
-        function updateDecisions(decisionData) {
-            const analytics = decisionData.analytics || {};
-            const decisions = decisionData.recent || [];
-
-            document.getElementById('decisionCount').textContent = analytics.total_decisions || 0;
-
-            const avgQuality = analytics.avg_quality || 0;
-            document.getElementById('decisionQuality').textContent = avgQuality > 0 ? avgQuality.toFixed(1) : '--';
-
-            document.getElementById('decisionLessons').textContent = analytics.lessons_used_count || 0;
-
-            // Update decision list
-            const listDiv = document.getElementById('decisionList');
-            if (decisions.length === 0) {
-                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No decisions yet</div>';
-                return;
-            }
-
-            let html = '';
-            decisions.slice(-3).reverse().forEach(decision => {
-                const quality = decision.quality_rating || 3;
-                const qualityClass = quality >= 4 ? 'decision-quality-high' :
-                                   quality >= 3 ? 'decision-quality-medium' : 'decision-quality-low';
-                const qualityText = quality >= 4 ? 'High' : quality >= 3 ? 'Med' : 'Low';
-
-                html += `<div class="bg-gray-800 p-2 rounded text-xs">
-                    <div class="flex justify-between items-start">
-                        <span class="text-gray-300">${decision.decision_type || 'Decision'}</span>
-                        <span class="decision-badge ${qualityClass}">${qualityText}</span>
-                    </div>
-                    ${decision.used_lessons_learned ? '<div class="text-purple-400 text-xs mt-1">📚 Used lessons</div>' : ''}
-                </div>`;
-            });
-            listDiv.innerHTML = html;
-        }
-
-        // Update connection status
-        function updateConnectionStatus(connected) {
-            const statusDiv = document.getElementById('connectionStatus');
-            if (connected) {
-                statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full mr-2 animate-pulse" style="background: #10b981;"></div>
-                    <span class="text-sm text-green-400">Connected</span>
-                `;
-            } else {
-                statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full mr-2" style="background: #ef4444;"></div>
-                    <span class="text-sm text-red-400">Disconnected</span>
-                `;
-            }
         }
 
         // Connect WebSocket
@@ -923,49 +738,23 @@
 
             ws.onopen = () => {
                 console.log('WebSocket connected');
-                updateConnectionStatus(true);
             };
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 
-                if (data.type === 'status') {
-                    updateStatus(data.data);
-                    // TRIGGER enhanced metrics refresh on WebSocket update
-                    if (currentSession) {
-                        updateEnhancedMetrics(currentSession);
-                    }
-                } else if (data.type === 'phase_update') {
-                    // Handle phase update specifically
-                    updateStatus(data.data);
-                    if (currentSession) {
-                        updateEnhancedMetrics(currentSession);
-                        loadMultiAgentData(currentSession);
-                    }
-                } else if (data.type === 'agent_progress') {
-                    // Handle agent progress update (NEW)
-                    if (currentSession) {
-                        loadMultiAgentData(currentSession);
-                    }
-                } else if (data.type === 'agent_spawned') {
-                    // Handle new agent spawned (NEW)
-                    console.log('New agent spawned:', data.data);
-                    if (currentSession) {
-                        loadMultiAgentData(currentSession);
-                    }
-                } else if (data.type === 'agent_completed') {
-                    // Handle agent completion (NEW)
-                    console.log('Agent completed:', data.data);
-                    if (currentSession) {
-                        loadMultiAgentData(currentSession);
-                    }
+                if (data.type === 'status' || data.type === 'phase_update') {
+                    // Reload full details
+                    loadSessionDetails(currentSession);
+                    // Refresh metrics
+                    updateMetricsBar();
                 } else if (data.type === 'complete') {
                     alert('🎉 Session complete!');
+                    loadSessions();
                 } else if (data.type === 'log') {
-                    // Append log line
                     const logsDiv = document.getElementById('logs');
                     const line = document.createElement('div');
-                    line.className = 'log-line text-gray-300';
+                    line.className = 'log-line';
                     line.textContent = data.data;
                     logsDiv.appendChild(line);
                     logsDiv.scrollTop = logsDiv.scrollHeight;
@@ -974,13 +763,10 @@
 
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
-                updateConnectionStatus(false);
             };
 
             ws.onclose = () => {
                 console.log('WebSocket disconnected');
-                updateConnectionStatus(false);
-
                 // Reconnect after 5 seconds
                 setTimeout(() => {
                     if (currentSession) {
@@ -988,67 +774,6 @@
                     }
                 }, 5000);
             };
-        }
-
-        // Load sessions
-        async function loadSessions() {
-            try {
-                const response = await fetch('/api/sessions');
-                const data = await response.json();
-
-                const selector = document.getElementById('sessionSelector');
-                selector.innerHTML = '';
-
-                if (data.sessions.length === 0) {
-                    selector.innerHTML = '<option>No active sessions</option>';
-                    return;
-                }
-
-                data.sessions.forEach(session => {
-                    const option = document.createElement('option');
-                    option.value = session.id;
-                    option.textContent = `${session.project} (${session.phase})`;
-                    if (session.is_complete) {
-                        option.textContent += ' ✓';
-                    }
-                    selector.appendChild(option);
-                });
-
-                // Auto-select first session
-                if (!currentSession && data.sessions.length > 0) {
-                    currentSession = data.sessions[0].id;
-                    selector.value = currentSession;
-                    connectWebSocket(currentSession);
-                }
-
-            } catch (error) {
-                console.error('Error loading sessions:', error);
-            }
-        }
-
-        // Refresh data
-        async function refreshData() {
-            if (!currentSession) return;
-
-            try {
-                const response = await fetch(`/api/status/${currentSession}`);
-                const status = await response.json();
-                updateStatus(status);
-
-                // Load logs
-                const logsResponse = await fetch(`/api/logs/${currentSession}?lines=50`);
-                const logsData = await logsResponse.json();
-                updateLogs(logsData.logs || []);
-
-                // Load enhanced metrics (new)
-                await updateEnhancedMetrics(currentSession);
-
-                // Load multi-agent data (new)
-                await loadMultiAgentData(currentSession);
-
-            } catch (error) {
-                console.error('Error refreshing data:', error);
-            }
         }
 
         // Export session data
@@ -1067,145 +792,28 @@
                 });
         }
 
-        // ========================================================================
-        // Multi-Agent Monitoring Functions (NEW)
-        // ========================================================================
-
-        async function loadMultiAgentData(sessionId) {
-            if (!sessionId) return;
-
-            try {
-                const response = await fetch(`/api/agents/${sessionId}`);
-                if (!response.ok) {
-                    // Multi-agent features not available, hide panel
-                    document.getElementById('multiAgentPanel').style.display = 'none';
-                    return;
-                }
-
-                const data = await response.json();
-                if (data.error) {
-                    console.warn('Multi-agent features not available:', data.error);
-                    document.getElementById('multiAgentPanel').style.display = 'none';
-                    return;
-                }
-
-                renderMultiAgentPanel(data);
-            } catch (error) {
-                console.warn('Error loading multi-agent data:', error);
-                document.getElementById('multiAgentPanel').style.display = 'none';
-            }
-        }
-
-        function renderMultiAgentPanel(data) {
-            const panel = document.getElementById('multiAgentPanel');
-            const agentsList = document.getElementById('agentsList');
-            const agentCount = document.getElementById('agentCount');
-
-            if (!data.agents || data.agents.length === 0) {
-                panel.style.display = 'none';
-                return;
-            }
-
-            panel.style.display = 'block';
-            agentCount.textContent = `${data.active_agents} / ${data.total_agents} agents`;
-
-            let html = '';
-            data.agents.forEach(agent => {
-                html += renderAgentCard(agent);
-            });
-
-            agentsList.innerHTML = html;
-        }
-
-        function renderAgentCard(agent) {
-            const statusClass = `status-${agent.status}`;
-            const progressPercent = agent.progress_percent || 0;
-            const tokensUsed = agent.tokens_used || 0;
-            const tokensLimit = agent.tokens_limit || 200000;
-            const tokenPercent = agent.token_percentage || 0;
-
-            // Determine progress bar class based on status
-            let progressFillClass = 'agent-progress-fill-active';
-            if (agent.status === 'idle') progressFillClass = 'agent-progress-fill-idle';
-            if (agent.status === 'completed') progressFillClass = 'agent-progress-fill-completed';
-
-            // Determine token gauge color
-            let tokenColorClass = 'agent-token-safe';
-            if (tokenPercent >= 75) tokenColorClass = 'agent-token-critical';
-            else if (tokenPercent >= 50) tokenColorClass = 'agent-token-warning';
-
-            // Calculate elapsed time
-            let elapsedText = '-';
-            if (agent.start_time && !agent.end_time) {
-                const start = new Date(agent.start_time);
-                const now = new Date();
-                const elapsed = Math.floor((now - start) / 1000);
-                elapsedText = formatDuration(elapsed);
-            } else if (agent.duration_seconds) {
-                elapsedText = formatDuration(agent.duration_seconds);
-            }
-
-            return `
-                <div class="agent-card p-4 rounded-lg border border-gray-700 transition-all" style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%);">
-                    <div class="flex justify-between items-center mb-2">
-                        <div class="flex items-center space-x-2">
-                            <span class="${statusClass}">●</span>
-                            <span class="font-bold text-lg">${agent.agent_name || agent.agent_type}</span>
-                            <span class="text-xs text-gray-500">${agent.agent_type}</span>
-                        </div>
-                        <span class="text-xs text-gray-400">${elapsedText}</span>
-                    </div>
-
-                    <!-- Horizontal Gradient Progress Bar -->
-                    <div class="agent-progress-bar mb-2">
-                        <div class="${progressFillClass} h-full"
-                             style="width: ${progressPercent}%"></div>
-                        <div class="absolute inset-0 flex items-center justify-center text-xs font-bold" style="color: white;">
-                            ${progressPercent.toFixed(0)}%
-                        </div>
-                    </div>
-
-                    <!-- Per-Agent Token Gauge -->
-                    <div class="mb-2">
-                        <div class="flex justify-between text-xs mb-1">
-                            <span class="text-gray-400">Tokens</span>
-                            <span class="font-mono text-gray-300">${tokensUsed.toLocaleString()} / ${tokensLimit.toLocaleString()}</span>
-                        </div>
-                        <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <div class="h-full ${tokenColorClass} transition-all duration-300"
-                                 style="width: ${tokenPercent}%"></div>
-                        </div>
-                    </div>
-
-                    <!-- Current Phase/Task -->
-                    <div class="text-xs text-gray-400 truncate">
-                        ${agent.phase || 'Initializing...'}
-                    </div>
-                </div>
-            `;
-        }
-
         // Session selector change
         document.getElementById('sessionSelector').addEventListener('change', (e) => {
             currentSession = e.target.value;
+            loadSessionDetails(currentSession);
             connectWebSocket(currentSession);
-            refreshData();
         });
 
         // Initialize
         loadSessions();
-        setInterval(loadSessions, 30000); // Refresh sessions every 30s
 
-        // Auto-refresh enhanced metrics every 5 seconds
+        // Auto-refresh sessions list every 30s
+        setInterval(loadSessions, 30000);
+
+        // Auto-refresh current session every 3s (fallback to WebSocket)
         setInterval(() => {
             if (currentSession) {
-                updateEnhancedMetrics(currentSession);
+                loadSessionDetails(currentSession);
             }
-        }, 5000);
+        }, 3000);
 
-        // Update timestamp display every second
-        setInterval(updateMetricsTimestamp, 1000);
-
+        // Refresh metrics every 10s
+        setInterval(updateMetricsBar, 10000);
     </script>
 </body>
 </html>

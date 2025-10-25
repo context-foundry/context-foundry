@@ -155,6 +155,27 @@ class SessionMonitor:
             phases_completed = live_data.get("phases_completed", [])
             total_phases = 7  # Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy
 
+            # Calculate overall progress percentage
+            phase_number_str = live_data.get("phase_number", "?/7")
+            try:
+                current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+            except:
+                current_phase_num = None
+
+            if current_phase_num is not None:
+                overall_progress = ((current_phase_num - 1 + 0.5) / total_phases) * 100
+            else:
+                overall_progress = (len(phases_completed) / total_phases) * 100
+
+            # Estimate remaining time
+            phases_done = len(phases_completed)
+            if phases_done > 0 and elapsed_seconds > 0:
+                avg_time_per_phase = elapsed_seconds / phases_done
+                remaining_phases = total_phases - phases_done
+                estimated_remaining_seconds = int(avg_time_per_phase * remaining_phases)
+            else:
+                estimated_remaining_seconds = 0
+
             return {
                 "id": session_id,
                 "project": session_id,
@@ -164,12 +185,18 @@ class SessionMonitor:
                 "iterations": live_data.get("test_iteration", 0),
                 "start_time": live_data.get("started_at"),
                 "elapsed_seconds": int(elapsed_seconds),
-                "estimated_remaining_seconds": 0,  # TODO: Could estimate based on phase
+                "estimated_remaining_seconds": estimated_remaining_seconds,
+                "overall_progress_percent": round(overall_progress, 1),
                 "tasks": {
                     "completed": phases_completed,
                     "remaining": [],
                     "total": total_phases,
                     "progress_percent": int((len(phases_completed) / total_phases * 100)),
+                },
+                "phase_breakdown": {
+                    "completed": phases_completed,
+                    "current": live_data.get("current_phase", "Unknown"),
+                    "remaining": []
                 },
                 "context": {
                     "percentage": 0,  # Live data doesn't have token info yet
@@ -420,6 +447,134 @@ async def health():
         "sessions": len(monitor.discover_sessions()),
         "connections": sum(len(conns) for conns in connections.values()),
     }
+
+
+# ============================================================================
+# Phase Tracking & Session Filtering Endpoints (Dashboard Redesign)
+# ============================================================================
+
+def get_phase_breakdown(session_data: Dict) -> Dict:
+    """
+    Calculate detailed phase breakdown from session data.
+    Returns structured information about completed, current, and upcoming phases.
+    """
+    # Phase definitions
+    PHASE_DEFINITIONS = [
+        {"number": 0, "name": "Codebase Analysis", "emoji": "🔍"},
+        {"number": 1, "name": "Scout", "emoji": "🔍"},
+        {"number": 2, "name": "Architect", "emoji": "🏗️"},
+        {"number": 3, "name": "Builder", "emoji": "🔨", "note": "This is typically the longest phase!"},
+        {"number": 4, "name": "Tester", "emoji": "🧪"},
+        {"number": 5, "name": "Test Loop", "emoji": "🔄"},
+        {"number": 6, "name": "Documentation", "emoji": "📝"},
+        {"number": 7, "name": "Deployer", "emoji": "🚀"}
+    ]
+
+    total_phases = len(PHASE_DEFINITIONS)
+    phases_completed = session_data.get("phases_completed", [])
+    current_phase = session_data.get("current_phase", "Unknown")
+    phase_number_str = session_data.get("phase_number", "?/7")
+
+    # Parse current phase number
+    try:
+        current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+    except:
+        current_phase_num = None
+
+    # Calculate overall progress
+    phases_completed_count = len(phases_completed)
+    if current_phase_num is not None:
+        # Add partial credit for current phase (0.5)
+        overall_progress = ((current_phase_num - 1 + 0.5) / total_phases) * 100
+    else:
+        overall_progress = (phases_completed_count / total_phases) * 100
+
+    # Build phase list
+    phases = []
+    for phase_def in PHASE_DEFINITIONS:
+        phase_name = phase_def["name"]
+        phase_info = {
+            "number": phase_def["number"],
+            "name": phase_name,
+            "emoji": phase_def["emoji"]
+        }
+
+        # Add note if present
+        if "note" in phase_def:
+            phase_info["note"] = phase_def["note"]
+
+        # Determine status
+        if phase_name in phases_completed:
+            phase_info["status"] = "completed"
+            phase_info["description"] = f"Completed {phase_name.lower()} phase"
+        elif phase_name == current_phase:
+            phase_info["status"] = "in_progress"
+            phase_info["description"] = session_data.get("progress_detail", "In progress...")
+            phase_info["detail"] = session_data.get("progress_detail", "")
+        else:
+            phase_info["status"] = "pending"
+            phase_info["description"] = f"{phase_name} phase pending"
+
+        phases.append(phase_info)
+
+    return {
+        "session_id": session_data.get("session_id", "unknown"),
+        "total_phases": total_phases,
+        "phases_completed_count": phases_completed_count,
+        "current_phase_number": current_phase_num,
+        "overall_progress_percent": round(overall_progress, 1),
+        "phases": phases
+    }
+
+
+@app.get("/api/phases/{session_id}")
+async def get_session_phases(session_id: str):
+    """Get detailed phase breakdown for a session."""
+    # Get session data from monitor
+    if session_id in monitor.sessions:
+        session_data = monitor.sessions[session_id]
+        phase_breakdown = get_phase_breakdown(session_data)
+        return JSONResponse(phase_breakdown)
+
+    # Fall back to checkpoint-based session
+    status = monitor.get_session_status(session_id)
+    if "error" in status:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+
+    # Create minimal phase breakdown for legacy sessions
+    return JSONResponse({
+        "session_id": session_id,
+        "total_phases": 7,
+        "phases_completed_count": 0,
+        "current_phase_number": None,
+        "overall_progress_percent": 0,
+        "phases": [],
+        "legacy": True
+    })
+
+
+@app.get("/api/sessions/active")
+async def get_active_sessions():
+    """Get only active/running sessions."""
+    sessions = monitor.discover_sessions()
+    active = [s for s in sessions if not s.get('is_complete') and s.get('status') != 'failed']
+    return JSONResponse({"sessions": active, "count": len(active)})
+
+
+@app.get("/api/sessions/completed")
+async def get_completed_sessions():
+    """Get only completed sessions."""
+    sessions = monitor.discover_sessions()
+    completed = [s for s in sessions if s.get('is_complete') or s.get('status') == 'completed']
+    return JSONResponse({"sessions": completed, "count": len(completed)})
+
+
+@app.get("/api/sessions/failed")
+async def get_failed_sessions():
+    """Get only failed sessions."""
+    sessions = monitor.discover_sessions()
+    failed = [s for s in sessions if s.get('status') == 'failed']
+    return JSONResponse({"sessions": failed, "count": len(failed)})
 
 
 # ============================================================================
