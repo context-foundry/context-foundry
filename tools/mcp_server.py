@@ -15,6 +15,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# Add parent directory to path for imports (must be before local imports!)
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # Import version management (single source of truth)
 from tools.version import get_version, VERSION_INFO
 
@@ -36,9 +39,6 @@ except ImportError:
     print("  foundry build my-app 'task description'", file=sys.stderr)
     print("", file=sys.stderr)
     sys.exit(1)
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.banner import print_banner
 
