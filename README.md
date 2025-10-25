@@ -2,22 +2,22 @@
   <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
 </div>
 
-# 🏭 Context Foundry 2.0
+# 🏭 Context Foundry
 
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
 **Version 2.1.0 - October 2025**
 
-> **📌 Version Note:** This is Context Foundry **v2.0+** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
+> **📌 Version Note:** This is Context Foundry **v2.x** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
 
 ---
 
-## What is Context Foundry 2.0?
+## What is Context Foundry?
 
-Context Foundry 2.0 is an **MCP (Model Context Protocol) server** that empowers Claude Code CLI to build complete software projects autonomously with **self-healing test loops** and **automatic GitHub deployment**.
+Context Foundry is an **MCP (Model Context Protocol) server** that empowers Claude Code CLI to build complete software projects autonomously with **self-healing test loops** and **automatic GitHub deployment**.
 
-Unlike traditional AI coding tools that require constant supervision, Context Foundry 2.0 lets you describe what you want and **walk away** while it:
+Unlike traditional AI coding tools that require constant supervision, Context Foundry lets you describe what you want and **walk away** while it:
 - Researches requirements (Scout phase)
 - Designs architecture (Architect phase)
 - Implements code with tests (Builder phase)
@@ -172,9 +172,9 @@ with comprehensive tests and error handling
 
 ---
 
-## 🎨 What's New in 2.0? The 15 Innovations
+## 🎨 Key Innovations
 
-Context Foundry 2.0 introduces **15 groundbreaking innovations** that transform AI software development. Here's a quick overview organized by category:
+Context Foundry introduces **15 groundbreaking innovations** that transform AI software development. Here's a quick overview organized by category:
 
 ### 🏗️ Architecture Innovations
 
@@ -1062,7 +1062,7 @@ Per project: $3-10 (pay-per-token)
 100 projects: $300-1000
 ```
 
-**Context Foundry 2.0 (Claude Max):**
+**Context Foundry (Claude Max):**
 ```
 Subscription: $20/month (unlimited)
 100 projects: $20/month
@@ -1148,7 +1148,7 @@ Break-even: ~5 projects per month
 
 ## Philosophy
 
-**Context Foundry 2.0 Philosophy:**
+**Context Foundry Philosophy:**
 - **Autonomous over supervised**: Walk away while it builds
 - **Self-healing over manual debugging**: Auto-fix test failures
 - **File-based over conversation-based**: No token limits
@@ -1202,7 +1202,7 @@ MIT License - See LICENSE file for details
 
 ## Credits
 
-Context Foundry 2.0 builds upon:
+Context Foundry builds upon:
 - **Anthropic's Claude Code** - Native agent capabilities and MCP protocol
 - **Context Foundry 1.x** - Original Scout/Architect/Builder workflow
 - **[Dexter Horthy's](https://youtu.be/IS_y40zY-hc) "anti-vibe coding"** - Systematic approach over chaotic iteration
@@ -1218,6 +1218,6 @@ Context Foundry 2.0 builds upon:
 
 ---
 
-**Context Foundry 2.0** - *Build complete software autonomously with self-healing AI workflows*
+**Context Foundry** - *Build complete software autonomously with self-healing AI workflows*
 
 **Version:** 2.1.0 | **Release Date:** October 2025 | **License:** MIT
