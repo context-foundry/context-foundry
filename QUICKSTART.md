@@ -42,9 +42,11 @@ pip install -r requirements-mcp.txt
 ### Connect to Claude Code
 
 ```bash
-# Add MCP server to Claude Code (use venv Python)
-claude mcp add --transport stdio context-foundry -- \
+# Add MCP server to Claude Code (use venv Python, add to project scope)
+claude mcp add --transport stdio context-foundry -s project -- \
   $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+
+# This adds the server to .mcp.json (shareable with your team)
 
 # Verify connection
 claude mcp list

@@ -77,13 +77,12 @@ If you get errors, see [Troubleshooting Installation](#troubleshooting-installat
 
 ```bash
 # Add MCP server to Claude Code configuration
-# Replace /full/path/to with your actual path
-claude mcp add --transport stdio context-foundry -- \
-  python3.10 /full/path/to/context-foundry/tools/mcp_server.py
+# Use $(pwd) for automatic absolute paths, add to project scope
+cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- \
+  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
-# Example:
-claude mcp add --transport stdio context-foundry -- \
-  python3.10 /Users/yourname/homelab/context-foundry/tools/mcp_server.py
+# The -s project flag adds it to .mcp.json (shareable with team)
 ```
 
 #### Step 4: Verify Connection
@@ -1918,9 +1917,10 @@ Check the path in your `mcp add` command:
 ls /full/path/to/context-foundry/tools/mcp_server.py
 
 # Re-add with correct path
-claude mcp remove context-foundry
-claude mcp add --transport stdio context-foundry -- \
-  python3.10 /correct/path/to/context-foundry/tools/mcp_server.py
+cd /path/to/context-foundry
+claude mcp remove context-foundry -s project
+claude mcp add --transport stdio context-foundry -s project -- \
+  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 ```
 
 #### Error: "MCP server disconnected"

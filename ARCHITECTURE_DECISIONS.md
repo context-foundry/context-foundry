@@ -2089,7 +2089,9 @@ Use mcp__autonomous_build_and_deploy:
 
 3. **Configure MCP connection:**
    ```bash
-   claude mcp add --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
+   cd /Users/name/homelab/context-foundry
+   claude mcp add --transport stdio context-foundry -s project -- \
+     $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
    ```
 
 4. **Verify connection:**

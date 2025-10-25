@@ -408,11 +408,12 @@ pip install -r requirements-mcp.txt
 pip install -r requirements-baml.txt
 
 # 4. Configure Claude Code to connect to MCP server
-# Use absolute path to your venv Python and mcp_server.py
-claude mcp add --transport stdio context-foundry -- /absolute/path/to/context-foundry/venv/bin/python /absolute/path/to/context-foundry/tools/mcp_server.py
+# Use absolute paths with $(pwd) and add to project scope (-s project)
+claude mcp add --transport stdio context-foundry -s project -- \
+  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
-# Example (replace with your actual path):
-# claude mcp add --transport stdio context-foundry -- /Users/name/homelab/context-foundry/venv/bin/python /Users/name/homelab/context-foundry/tools/mcp_server.py
+# This uses $(pwd) to automatically get absolute paths
+# The -s project flag adds it to .mcp.json (shared with team)
 
 # 5. Verify MCP connection
 claude mcp list

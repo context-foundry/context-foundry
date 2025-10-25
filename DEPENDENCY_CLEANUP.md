@@ -135,8 +135,10 @@ source venv/bin/activate
 # Install minimal dependencies
 pip install -r requirements-mcp.txt
 
-# Reconfigure Claude Code
-claude mcp add --transport stdio context-foundry -- /path/to/venv/bin/python /path/to/tools/mcp_server.py
+# Reconfigure Claude Code (use absolute paths)
+cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- \
+  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 ```
 
 This will save ~3-4GB of disk space!
