@@ -695,7 +695,7 @@ From initial pattern seeding:
 1. **Install MCP server:**
    ```bash
    pip install -r requirements-mcp.txt
-   claude mcp add --transport stdio context-foundry -- python3.10 /path/to/mcp_server.py
+   claude mcp add --transport stdio context-foundry -- python3.10 /path/to/tools/mcp_server.py
    ```
 
 2. **Change workflow:**
