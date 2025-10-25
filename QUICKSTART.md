@@ -1,4 +1,4 @@
-# Context Foundry 2.0 - 5-Minute Quickstart
+# Context Foundry - 5-Minute Quickstart
 
 **Get from zero to deployed app in 5 minutes**
 
@@ -25,16 +25,21 @@ cd ~/homelab  # or your preferred location
 git clone https://github.com/snedea/context-foundry.git
 cd context-foundry
 
+# Create virtual environment (recommended, required on Debian/Ubuntu)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
 # Install MCP server (requires Python 3.10+)
+# Minimal installation: ~50MB, completes in 15-20 seconds
 pip install -r requirements-mcp.txt
 ```
 
 ### Connect to Claude Code
 
 ```bash
-# Add MCP server to Claude Code
+# Add MCP server to Claude Code (use venv Python)
 claude mcp add --transport stdio context-foundry -- \
-  python3.10 $(pwd)/tools/mcp_server.py
+  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
 # Verify connection
 claude mcp list
@@ -404,7 +409,7 @@ A: Builds are autonomous but time out after the specified duration (default 90 m
 
 ## Summary
 
-**The magic of Context Foundry 2.0:**
+**The magic of Context Foundry:**
 
 1. **You:** "Build [describe your app]"
 2. **System:** [Builds autonomously for 7-15 minutes]
@@ -422,4 +427,4 @@ A: Builds are autonomous but time out after the specified duration (default 90 m
 
 ---
 
-*Context Foundry 2.0 - Build complete software autonomously*
+*Context Foundry - Build complete software autonomously*
