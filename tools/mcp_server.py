@@ -15,6 +15,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
+# Import version management (single source of truth)
+from tools.version import get_version, VERSION_INFO
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context
@@ -270,10 +273,10 @@ def context_foundry_status() -> str:
     Returns:
         Status information including version and capabilities
     """
-    return """Context Foundry MCP Server - Status
+    return f"""Context Foundry MCP Server - Status
 
 ✅ Server: Running
-✅ Version: 1.0.0
+✅ Version: {get_version()}
 
 **Available Tools:**
 
