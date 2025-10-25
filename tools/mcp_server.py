@@ -167,6 +167,88 @@ def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, d
     }
 
 
+def _write_full_output_to_file(working_directory: str, stdout: str, stderr: str, task_id: str) -> str:
+    """
+    Write full stdout and stderr to a file in .context-foundry directory.
+
+    Args:
+        working_directory: Directory where build is running
+        stdout: Full stdout string
+        stderr: Full stderr string
+        task_id: Task ID for filename
+
+    Returns:
+        Path to output file
+    """
+    try:
+        # Create .context-foundry directory if it doesn't exist
+        context_dir = Path(working_directory) / ".context-foundry"
+        context_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write output to file
+        output_file = context_dir / f"build-output-{task_id}.txt"
+
+        with open(output_file, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write("STDOUT\n")
+            f.write("="*80 + "\n\n")
+            f.write(stdout or "(empty)\n")
+            f.write("\n\n")
+            f.write("="*80 + "\n")
+            f.write("STDERR\n")
+            f.write("="*80 + "\n\n")
+            f.write(stderr or "(empty)\n")
+
+        return str(output_file)
+
+    except Exception as e:
+        # If file writing fails, return error message instead of failing completely
+        return f"Error writing output file: {e}"
+
+
+def _create_output_summary(output: str, max_lines: int = 50) -> tuple[str, dict]:
+    """
+    Create a smart summary of output showing first and last N lines.
+
+    Args:
+        output: Full output string
+        max_lines: Number of lines to show from start and end (default 50)
+
+    Returns:
+        Tuple of (summary_output, stats_dict)
+        - summary_output: Summarized output string
+        - stats_dict: Dictionary with total_lines, shown_lines, hidden_lines
+    """
+    if not output:
+        return "(empty)", {"total_lines": 0, "shown_lines": 0, "hidden_lines": 0}
+
+    lines = output.split('\n')
+    total_lines = len(lines)
+
+    # If output is small enough, return as-is
+    if total_lines <= (max_lines * 2):
+        return output, {
+            "total_lines": total_lines,
+            "shown_lines": total_lines,
+            "hidden_lines": 0
+        }
+
+    # Get first and last N lines
+    first_lines = lines[:max_lines]
+    last_lines = lines[-max_lines:]
+    hidden_lines = total_lines - (max_lines * 2)
+
+    # Build summary
+    separator = f"\n\n{'='*60}\n[{hidden_lines:,} lines hidden - see output_file for full content]\n{'='*60}\n\n"
+    summary = '\n'.join(first_lines) + separator + '\n'.join(last_lines)
+
+    return summary, {
+        "total_lines": total_lines,
+        "shown_lines": max_lines * 2,
+        "hidden_lines": hidden_lines
+    }
+
+
 @mcp.tool()
 def context_foundry_status() -> str:
     """
@@ -506,22 +588,26 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
 
     Args:
         task_id: The task ID returned from delegate_to_claude_code_async()
-        include_full_output: If False (default), truncate large outputs to stay under token limits.
-                            If True, return complete stdout/stderr regardless of size.
+        include_full_output: If False (default), return smart summary (first 50 + last 50 lines).
+                            If True, return complete stdout/stderr (may exceed MCP token limits).
 
     Returns:
-        JSON string with task status and results (if complete, with truncated output by default)
+        JSON string with task status and results:
+        - If running: Shows elapsed time and phase progress
+        - If complete (summary mode): Shows first 50 + last 50 lines of output
+        - If complete (full mode): Shows complete output (may exceed 25K token limit)
+        - Full output always saved to .context-foundry/build-output-{task_id}.txt
 
     Examples:
-        # Check task status
+        # Check task status (default: smart summary)
         result = get_delegation_result("abc-123-def-456")
+        # Returns: stdout_summary, stderr_summary, output_file path
 
-        # If complete, result contains stdout/stderr (truncated by default)
-        # If still running, shows elapsed time
-        # If failed, shows error details
-
-        # Get full output (may exceed token limits for large builds)
+        # Get full output (warning: may exceed MCP 25K token limit)
         result = get_delegation_result("abc-123-def-456", include_full_output=True)
+
+        # Read full output from file instead (recommended for large builds)
+        # Check result["output_file"] and use Read tool to view complete output
     """
     try:
         # Check if task exists
@@ -602,6 +688,15 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
             task_info["exit_code"] = process.returncode
             task_info["status"] = "completed" if process.returncode == 0 else "failed"
 
+            # Write full output to file for later review
+            output_file_path = _write_full_output_to_file(
+                working_directory=task_info["cwd"],
+                stdout=stdout,
+                stderr=stderr,
+                task_id=task_id
+            )
+            task_info["output_file"] = output_file_path
+
             # ============================================================================
             # AUTOMATIC PATTERN MERGE FOR AUTONOMOUS BUILDS
             # ============================================================================
@@ -649,48 +744,47 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                     print(f"\n⚠️  Pattern merge exception (non-critical): {e}")
                     task_info["pattern_merge_error"] = str(e)
 
-        # Format result with optional output truncation
+        # Format result with smart summary (default) or full output
         if include_full_output:
-            # Return full output regardless of size
+            # Return full output regardless of size (may exceed token limits)
             stdout_display = task_info["stdout"] or "(empty)"
             stderr_display = task_info["stderr"] or "(empty)"
             result = {
                 "task_id": task_id,
                 "status": task_info["status"],
-                "task": task_info["task"],
+                "task": task_info["task"][:500] + "..." if len(task_info["task"]) > 500 else task_info["task"],
                 "working_directory": task_info["cwd"],
                 "duration_seconds": round(task_info["duration"], 2),
                 "exit_code": task_info["exit_code"],
-                "command": " ".join(task_info["cmd"]),
+                "command": " ".join(task_info["cmd"])[:200] + "..." if len(" ".join(task_info["cmd"])) > 200 else " ".join(task_info["cmd"]),
                 "stdout": stdout_display,
                 "stderr": stderr_display,
-                "output_truncated": False
+                "output_mode": "full",
+                "output_file": task_info.get("output_file", "not_created")
             }
         else:
-            # Apply truncation to stay under token limits
-            stdout_truncated, stdout_was_truncated, stdout_stats = _truncate_output(task_info["stdout"] or "", max_tokens=10000)
-            stderr_truncated, stderr_was_truncated, stderr_stats = _truncate_output(task_info["stderr"] or "", max_tokens=10000)
+            # Use smart summary (first 50 + last 50 lines) to stay well under token limits
+            stdout_summary, stdout_stats = _create_output_summary(task_info["stdout"] or "", max_lines=50)
+            stderr_summary, stderr_stats = _create_output_summary(task_info["stderr"] or "", max_lines=50)
 
             result = {
                 "task_id": task_id,
                 "status": task_info["status"],
-                "task": task_info["task"],
+                "task": task_info["task"][:500] + "..." if len(task_info["task"]) > 500 else task_info["task"],
                 "working_directory": task_info["cwd"],
                 "duration_seconds": round(task_info["duration"], 2),
                 "exit_code": task_info["exit_code"],
-                "command": " ".join(task_info["cmd"]),
-                "stdout": stdout_truncated or "(empty)",
-                "stderr": stderr_truncated or "(empty)",
-                "output_truncated": stdout_was_truncated or stderr_was_truncated
-            }
-
-            # Add stats if any truncation occurred
-            if stdout_was_truncated or stderr_was_truncated:
-                result["truncation_info"] = {
-                    "message": "Output truncated to stay under token limits. Use include_full_output=True to see complete output.",
-                    "stdout_stats": stdout_stats if stdout_was_truncated else None,
-                    "stderr_stats": stderr_stats if stderr_was_truncated else None
+                "command": " ".join(task_info["cmd"])[:200] + "..." if len(" ".join(task_info["cmd"])) > 200 else " ".join(task_info["cmd"]),
+                "stdout_summary": stdout_summary,
+                "stderr_summary": stderr_summary,
+                "output_mode": "summary",
+                "output_file": task_info.get("output_file", "not_created"),
+                "output_summary_info": {
+                    "stdout": stdout_stats,
+                    "stderr": stderr_stats,
+                    "message": f"Showing first 50 + last 50 lines. Full output saved to: {task_info.get('output_file', 'not_created')}"
                 }
+            }
 
         return json.dumps(result, indent=2)
 
