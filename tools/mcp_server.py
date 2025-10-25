@@ -50,16 +50,29 @@ active_builds = {}
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
 
-def _read_phase_info(working_directory: str) -> Dict[str, Any]:
+def _read_phase_info(working_directory: str, task_start_time: Optional[datetime] = None) -> Dict[str, Any]:
     """
-    Read phase tracking information from .context-foundry/current-phase.json
+    Read phase tracking information from .context-foundry/current-phase.json with staleness validation.
 
-    Returns dict with phase info, or empty dict if file doesn't exist or is invalid.
+    Args:
+        working_directory: Path to project working directory
+        task_start_time: Optional datetime when task started (for staleness check)
+
+    Returns:
+        Dict with phase info, or empty dict if file doesn't exist, is invalid, or is stale.
     """
     try:
         phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
         if not phase_file.exists():
             return {}
+
+        # Validate file isn't stale from previous build
+        if task_start_time:
+            file_mtime = datetime.fromtimestamp(phase_file.stat().st_mtime)
+            if file_mtime < task_start_time:
+                # File was modified before this task started - it's stale!
+                # Return empty dict to avoid showing old phase data
+                return {}
 
         with open(phase_file, 'r') as f:
             phase_data = json.load(f)
@@ -648,8 +661,8 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 return json.dumps(timeout_result, indent=2)
 
             # Still running within timeout
-            # Try to read phase information
-            phase_info = _read_phase_info(task_info["cwd"])
+            # Try to read phase information (with staleness check)
+            phase_info = _read_phase_info(task_info["cwd"], task_info["start_time"])
 
             result = {
                 "task_id": task_id,
