@@ -54,3 +54,12 @@ tmp/
 temp/
 *.tmp
 ace/pricing.db
+
+# Internal Planning & Testing (private, not for public repo)
+NEXT_WEEK_PRIORITIES.md
+*_PRIORITIES.md
+*_ROADMAP.md
+INTERNAL_*.md
+test_results/
+smoke_test_*.txt
+.test_artifacts/
