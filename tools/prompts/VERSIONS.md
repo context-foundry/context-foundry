@@ -4,6 +4,34 @@ This directory tracks all versions of Context Foundry prompts for performance an
 
 ## Version History
 
+### v1.2.1 - No Livestream (2025-10-24)
+**Files:**
+- `archive/orchestrator_prompt_v1.2.1_no-livestream.txt` (1,648 lines, ~8,911 tokens)
+
+**Metrics:**
+- Lines: 1,648 (-10 from v1.2.0, -0.6%)
+- Words: 6,855 (-52 from v1.2.0, -0.8%)
+- Estimated tokens: 8,911 (-68 from v1.2.0, -0.8%)
+- **Total from baseline:** -1,936 tokens (-17.8%)
+
+**Changes:**
+1. ✅ Removed livestream integration entirely (~68 tokens)
+   - Removed LIVESTREAM INTEGRATION section (4 lines)
+   - Removed curl broadcast command from PHASE TRACKING TEMPLATE (5 lines)
+   - Removed broadcast reference in Scout phase (1 word)
+
+**Rationale:**
+- Livestream broadcasting is optional/not always used
+- Instructions were sent on every build regardless of server status
+- Removing saves tokens and reduces noise
+
+**Performance:**
+- TBD - will track and compare against v1.2.0
+
+**Status:** Active - ready for testing
+
+---
+
 ### v1.2.0 - Consolidated (2025-10-24)
 **Files:**
 - `archive/orchestrator_prompt_v1.2.0_consolidated.txt` (1,658 lines, ~8,979 tokens)
