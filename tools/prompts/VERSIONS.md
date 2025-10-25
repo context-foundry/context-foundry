@@ -4,6 +4,40 @@ This directory tracks all versions of Context Foundry prompts for performance an
 
 ## Version History
 
+### v1.2.0 - Consolidated (2025-10-24)
+**Files:**
+- `archive/orchestrator_prompt_v1.2.0_consolidated.txt` (1,658 lines, ~8,979 tokens)
+
+**Metrics:**
+- Lines: 1,658 (-161 from v1.1.0, -9.7%)
+- Words: 6,907 (-694 from v1.1.0, -9.1%)
+- Estimated tokens: 8,979 (-902 from v1.1.0, -9.1%)
+- **Total from baseline:** -1,868 tokens (-17.2%)
+
+**Changes:**
+1. ✅ Consolidated 4 enhancement mode blocks (~600 tokens)
+   - Created single Enhancement Mode Reference section
+   - Replaced verbose per-phase guidance with references
+2. ✅ Simplified livestream broadcasting (~150 tokens)
+   - Reduced from 18 lines to 3 lines
+   - Curl command in template, just reference it
+3. ✅ Consolidated git workflow (~200 tokens)
+   - Created Git Workflow Reference section
+   - Replaced verbose commit/PR templates with compact versions
+4. ✅ Removed redundant phase references (~150 tokens)
+   - "Phase 1 (Scout)" → "Scout"
+   - "Proceed to Phase 2" → "Proceed to Architect"
+5. ✅ Removed decorative separators (~100 tokens)
+   - Removed closing separators after section titles
+   - Kept opening separators for visual structure
+
+**Performance:**
+- TBD - will track and compare against v1.1.0
+
+**Status:** Active - ready for testing
+
+---
+
 ### v1.1.0 - Quick Wins (2025-10-24)
 **Files:**
 - `archive/orchestrator_prompt_v1.1.0_quick-wins.txt` (1819 lines, ~10-11k tokens)

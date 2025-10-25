@@ -3,781 +3,441 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Context Foundry Build Monitor</title>
+    <title>Context Foundry - Build Monitor</title>
 
-    <!-- Terminal CSS CDN -->
+    <!-- Terminal CSS -->
     <link rel="stylesheet" href="https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css">
 
     <style>
-        /* === TERMINAL CSS THEME OVERRIDES === */
-        :root {
-            --background-color: #0a0a0a;
-            --font-color: #e0e0e0;
-            --primary-color: #00ff00;
-            --secondary-color: #33ff33;
-            --invert-font-color: #000000;
-            --block-background-color: #111111;
-            --global-font-size: 14px;
-            --global-line-height: 1.5em;
-            --mono-font-stack: 'Monaco', 'Courier New', monospace;
-        }
-
         body {
-            background: #0a0a0a;
-            color: #e0e0e0;
-            font-family: 'Monaco', 'Courier New', monospace;
-            padding: 1rem;
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 1rem;
         }
 
-        /* === SECTIONS === */
-        section, article {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+        /* Progress bars using ASCII blocks */
+        .progress-ascii {
+            font-family: monospace;
+            background: #000;
+            padding: 0.5rem;
+            border: 1px solid var(--secondary-color);
+            margin: 0.5rem 0;
         }
 
-        /* === TABS === */
-        .tabs {
+        .progress-label {
             display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
         }
 
-        .tab {
-            background: #1f2937;
-            border: 1px solid #374151;
-            border-radius: 0.25rem;
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            font-size: 0.875rem;
-            transition: all 0.2s;
+        .bar-container {
+            font-family: monospace;
+            white-space: pre;
+            line-height: 1.2;
         }
 
-        .tab:hover {
-            background: #374151;
-            border-color: #4b5563;
-        }
-
-        .tab-active {
-            background: #10b981;
-            border-color: #10b981;
-            color: #000;
-            font-weight: bold;
-        }
-
-        /* === PHASE SECTIONS === */
-        .phase-section {
+        /* Phase cards */
+        .phase-card {
+            border: 1px solid var(--secondary-color);
+            padding: 1rem;
             margin: 1rem 0;
-        }
-
-        .phase-section-title {
-            font-size: 1.25rem;
-            font-weight: bold;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid #374151;
-            padding-bottom: 0.5rem;
-        }
-
-        .phase-item {
-            background: #1f2937;
-            border: 1px solid #374151;
-            border-radius: 0.25rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
+            background: #0a0a0a;
         }
 
         .phase-completed {
-            border-left: 3px solid #10b981;
-        }
-
-        .phase-current {
-            border-left: 3px solid #3b82f6;
-            background: linear-gradient(135deg, #1f2937 0%, #1e3a5f 100%);
-        }
-
-        .phase-pending {
-            border-left: 3px solid #6b7280;
+            border-color: #0f0;
             opacity: 0.7;
         }
 
-        .phase-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
+        .phase-current {
+            border-color: #0ff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
         }
 
-        .phase-emoji {
-            font-size: 1.5rem;
+        .phase-pending {
+            border-color: #555;
+            opacity: 0.5;
         }
 
-        .phase-name {
-            font-weight: bold;
-            font-size: 1rem;
+        /* Agent list */
+        .agent-item {
+            background: #111;
+            border-left: 3px solid var(--secondary-color);
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            font-family: monospace;
         }
 
-        .phase-description {
-            font-size: 0.875rem;
-            color: #9ca3af;
-            margin-left: 2.5rem;
+        .agent-active {
+            border-left-color: #0f0;
         }
 
-        .phase-detail {
-            font-size: 0.875rem;
-            color: #d1d5db;
-            margin-left: 2.5rem;
-            margin-top: 0.5rem;
+        /* Status badges */
+        .status-running { color: #0f0; }
+        .status-complete { color: #0ff; }
+        .status-failed { color: #f00; }
+
+        /* Session selector */
+        select {
+            width: 100%;
+            background: #000;
+            color: var(--font-color);
+            border: 1px solid var(--secondary-color);
+            padding: 0.5rem;
+            font-family: monospace;
         }
 
-        .phase-detail li {
-            margin: 0.25rem 0;
-        }
-
-        .phase-note {
-            font-size: 0.75rem;
-            color: #fbbf24;
-            margin-left: 2.5rem;
-            font-style: italic;
-        }
-
-        /* === BUILD STATUS CARD === */
-        .build-status-card {
-            background: linear-gradient(135deg, #1e3a5f 0%, #1f2937 100%);
-            border: 1px solid #3b82f6;
-        }
-
-        .status-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-
-        .status-item {
-            display: flex;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-
-        .status-label {
-            font-size: 0.75rem;
-            color: #9ca3af;
-        }
-
-        .status-value {
-            font-size: 1.25rem;
-            font-weight: bold;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: bold;
-        }
-
-        .status-running {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-        }
-
-        .status-complete {
-            background: rgba(16, 185, 129, 0.2);
-            color: #10b981;
-        }
-
-        .status-failed {
-            background: rgba(239, 68, 68, 0.2);
-            color: #ef4444;
-        }
-
-        /* === PROGRESS BAR === */
-        .progress-bar {
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            height: 2rem;
-            position: relative;
-        }
-
-        .progress-fill {
-            background: linear-gradient(to right, #10b981, #3b82f6);
-            height: 100%;
-            transition: width 0.5s ease;
-        }
-
-        .progress-text {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 0.875rem;
-        }
-
-        /* === METRICS BAR === */
-        .metrics-bar {
-            background: #1f2937;
-            border: 1px solid #374151;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .metric-item {
-            text-align: center;
-        }
-
-        .metric-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #10b981;
-        }
-
-        .metric-label {
-            font-size: 0.75rem;
-            color: #9ca3af;
-        }
-
-        /* === LOGS === */
+        /* Logs */
         #logs {
-            background: #000000;
+            background: #000;
+            border: 1px solid var(--secondary-color);
             padding: 1rem;
-            border-radius: 0.5rem;
-            height: 20rem;
+            height: 300px;
             overflow-y: auto;
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
+            font-family: monospace;
+            font-size: 0.85rem;
         }
 
         .log-line {
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
-            color: #d1d5db;
-        }
-
-        /* === UTILITY CLASSES === */
-        .text-green { color: #10b981; }
-        .text-yellow { color: #eab308; }
-        .text-red { color: #ef4444; }
-        .text-blue { color: #3b82f6; }
-        .text-gray { color: #9ca3af; }
-        .font-bold { font-weight: bold; }
-        .text-sm { font-size: 0.875rem; }
-        .text-xs { font-size: 0.75rem; }
-        .text-lg { font-size: 1.125rem; }
-        .text-xl { font-size: 1.25rem; }
-        .text-2xl { font-size: 1.5rem; }
-        .mb-1 { margin-bottom: 0.5rem; }
-        .mb-2 { margin-bottom: 1rem; }
-        .mt-2 { margin-top: 1rem; }
-
-        /* === RESPONSIVE === */
-        @media (max-width: 768px) {
-            .status-grid {
-                grid-template-columns: 1fr;
-            }
-            .tabs {
-                justify-content: stretch;
-            }
-            .tab {
-                flex: 1;
-                text-align: center;
-            }
+            margin: 0.1rem 0;
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header style="border: none; background: transparent; padding: 0; margin-bottom: 1rem;">
-        <h1 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        </h1>
-        <h1 style="font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem;">
-            ⏸ Context Foundry Build Monitor 🏗️
-        </h1>
-        <h1 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 0.5rem;">
-            ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        </h1>
-        <p style="color: #6b7280; margin-top: 0.5rem;">Real-time phase-by-phase build status monitoring</p>
-    </header>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>⚡ Context Foundry - Build Monitor</h1>
+            <p>Real-time autonomous build tracking</p>
+        </header>
 
-    <!-- Top Metrics Bar -->
-    <div id="metricsBar" class="metrics-bar">
-        <div class="metric-item">
-            <div class="metric-value" id="metricActive">0</div>
-            <div class="metric-label">🟢 ACTIVE BUILDS</div>
-        </div>
-        <div class="metric-item">
-            <div class="metric-value" id="metricCompleted">0</div>
-            <div class="metric-label">✅ COMPLETED</div>
-        </div>
-        <div class="metric-item">
-            <div class="metric-value" id="metricFailed">0</div>
-            <div class="metric-label">❌ FAILED</div>
-        </div>
-        <div class="metric-item">
-            <div class="metric-value" id="metricAvgTime">--</div>
-            <div class="metric-label">⏱️ AVG TIME</div>
-        </div>
-    </div>
+        <hr>
 
-    <!-- Session Tabs -->
-    <div class="tabs">
-        <button class="tab tab-active" onclick="switchTab('active')" id="tabActive">
-            🟢 Active
-        </button>
-        <button class="tab" onclick="switchTab('completed')" id="tabCompleted">
-            ✅ Completed
-        </button>
-        <button class="tab" onclick="switchTab('failed')" id="tabFailed">
-            ❌ Failed
-        </button>
-        <button class="tab" onclick="switchTab('all')" id="tabAll">
-            📊 All
-        </button>
-    </div>
+        <!-- Session Selector -->
+        <section>
+            <h3>📋 Select Session</h3>
+            <select id="sessionSelector" onchange="selectSession()">
+                <option value="">Loading sessions...</option>
+            </select>
+        </section>
 
-    <!-- Session Selector -->
-    <section>
-        <label for="sessionSelector" style="display: block; font-weight: bold; margin-bottom: 0.5rem; font-size: 0.875rem;">
-            Select Session:
-        </label>
-        <select id="sessionSelector" style="width: 100%; padding: 0.5rem; background: #1f2937; border: 1px solid #374151; color: #e0e0e0; border-radius: 0.25rem;">
-            <option>Loading sessions...</option>
-        </select>
-    </section>
+        <!-- Build Status Overview -->
+        <section id="statusSection" style="display: none;">
+            <h2>🚀 Build Status Update</h2>
 
-    <!-- Build Status Card -->
-    <section id="buildStatusCard" class="build-status-card" style="display: none;">
-        <h2 class="text-2xl font-bold mb-2">🚀 Build Status Update</h2>
-
-        <div style="margin: 1rem 0;">
-            <div class="mb-1">
-                <span class="text-gray">Task ID:</span>
-                <span class="font-bold" id="taskId">-</span>
+            <div class="terminal-card">
+                <p><strong>Task ID:</strong> <span id="taskId">-</span></p>
+                <p><strong>Status:</strong> <span id="status" class="status-running">Running</span></p>
+                <p><strong>Elapsed Time:</strong> <span id="elapsedTime">0m 0s</span></p>
+                <p><strong>Progress:</strong> <span id="progressPercent">0%</span> of timeout</p>
             </div>
-            <div class="mb-1">
-                <span class="text-gray">Project:</span>
-                <span class="font-bold" id="projectName">-</span>
-            </div>
-            <div class="mb-1">
-                <span class="text-gray">Status:</span>
-                <span class="status-badge status-running" id="statusBadge">Running</span>
-            </div>
-        </div>
 
-        <div class="mb-2">
-            <div class="text-sm text-gray mb-1">Overall Progress:</div>
-            <div class="progress-bar">
-                <div class="progress-fill" id="overallProgressBar" style="width: 0%"></div>
-                <div class="progress-text">
-                    <span id="overallProgressText">0%</span>
+            <!-- Overall Progress Bar -->
+            <div class="progress-ascii">
+                <div class="progress-label">
+                    <span>Overall Progress</span>
+                    <span id="overallPercent">0%</span>
+                </div>
+                <div class="bar-container" id="overallBar">
+[                                        ] 0%
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="status-grid">
-            <div class="status-item">
-                <span class="status-label">Elapsed Time</span>
-                <span class="status-value text-blue" id="elapsedTime">0m</span>
+        <!-- Current Phase -->
+        <section id="currentPhaseSection" style="display: none;">
+            <h2>🔨 Current Phase</h2>
+            <div class="phase-card phase-current" id="currentPhaseCard">
+                <h3 id="currentPhaseName">-</h3>
+                <p id="currentPhaseStatus">-</p>
+
+                <!-- Phase progress bar -->
+                <div class="progress-ascii">
+                    <div class="progress-label">
+                        <span>Phase Progress</span>
+                        <span id="currentPhasePercent">0%</span>
+                    </div>
+                    <div class="bar-container" id="currentPhaseBar">
+[                                        ] 0%
+                    </div>
+                </div>
+
+                <div id="currentPhaseDetails"></div>
             </div>
-            <div class="status-item">
-                <span class="status-label">Est. Remaining</span>
-                <span class="status-value text-yellow" id="remainingTime">~0m</span>
+        </section>
+
+        <!-- Phase List -->
+        <section id="phasesSection" style="display: none;">
+            <h2>📊 All Phases</h2>
+            <div id="phasesList"></div>
+        </section>
+
+        <!-- Agents (if available) -->
+        <section id="agentsSection" style="display: none;">
+            <h2>🤖 Active Agents</h2>
+            <p><strong>Total Agents:</strong> <span id="agentCount">0</span></p>
+            <div id="agentsList"></div>
+        </section>
+
+        <!-- Live Logs -->
+        <section>
+            <h2>📜 Live Logs</h2>
+            <div id="logs">
+                <span style="color: #555;">Waiting for logs...</span>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Completed Phases -->
-    <section id="completedPhasesSection" style="display: none;">
-        <div class="phase-section-title">✅ COMPLETED PHASES:</div>
-        <div id="completedPhases">
-            <div class="text-gray text-sm">No phases completed yet...</div>
-        </div>
-    </section>
+        <hr>
 
-    <!-- Current Phase -->
-    <section id="currentPhaseSection" style="display: none;">
-        <div class="phase-section-title">🔨 CURRENT PHASE:</div>
-        <div id="currentPhase">
-            <div class="text-gray text-sm">No current phase...</div>
-        </div>
-    </section>
-
-    <!-- Upcoming Phases -->
-    <section id="upcomingPhasesSection" style="display: none;">
-        <div class="phase-section-title">📋 UPCOMING PHASES:</div>
-        <div id="upcomingPhases">
-            <div class="text-gray text-sm">No upcoming phases...</div>
-        </div>
-    </section>
-
-    <!-- What's Happening Now -->
-    <section id="whatsHappeningSection" style="display: none;">
-        <div class="phase-section-title">💬 WHAT'S HAPPENING NOW:</div>
-        <div id="whatsHappening" class="text-sm">
-            <div class="text-gray">Waiting for status update...</div>
-        </div>
-    </section>
-
-    <!-- Live Logs -->
-    <section>
-        <h3 class="text-xl font-bold mb-2">📊 LIVE LOGS:</h3>
-        <div id="logs">
-            <div style="color: #4b5563;">Waiting for logs...</div>
-        </div>
-    </section>
-
-    <!-- Export Button -->
-    <section style="border: none; background: transparent; padding: 0.5rem;">
-        <button onclick="exportSession()" style="width: 100%; background: #374151; color: white; padding: 0.75rem 1.5rem; border-radius: 0.25rem; border: none; cursor: pointer; font-weight: bold;">
-            💾 Export Session Data
-        </button>
-    </section>
+        <footer>
+            <p>Last updated: <span id="lastUpdate">-</span></p>
+            <button onclick="exportData()">💾 Export Session Data</button>
+        </footer>
+    </div>
 
     <script>
         let ws = null;
         let currentSession = null;
         let allSessions = [];
-        let currentFilter = 'active';
 
-        // Format time duration
+        // Format duration
         function formatDuration(seconds) {
-            const hours = Math.floor(seconds / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            const secs = Math.floor(seconds % 60);
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
 
-            if (hours > 0) {
-                return `${hours}h ${mins}m`;
-            } else if (mins > 0) {
-                return `${mins}m ${secs}s`;
-            } else {
-                return `${secs}s`;
-            }
+            if (h > 0) return `${h}h ${m}m`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
         }
 
-        // Switch tabs
-        function switchTab(filter) {
-            currentFilter = filter;
-
-            // Update tab styling
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('tab-active');
-            });
-            document.getElementById('tab' + filter.charAt(0).toUpperCase() + filter.slice(1)).classList.add('tab-active');
-
-            // Reload sessions with filter
-            loadSessions();
+        // Create ASCII progress bar
+        function createProgressBar(percent, width = 40) {
+            const filled = Math.round((percent / 100) * width);
+            const empty = width - filled;
+            const bar = '█'.repeat(filled) + '░'.repeat(empty);
+            return `[${bar}] ${percent.toFixed(0)}%`;
         }
 
-        // Load sessions based on current filter
+        // Load sessions
         async function loadSessions() {
             try {
-                let endpoint = '/api/sessions';
-                if (currentFilter === 'active') endpoint = '/api/sessions/active';
-                else if (currentFilter === 'completed') endpoint = '/api/sessions/completed';
-                else if (currentFilter === 'failed') endpoint = '/api/sessions/failed';
-
-                const response = await fetch(endpoint);
+                const response = await fetch('/api/sessions');
                 const data = await response.json();
                 allSessions = data.sessions || [];
 
-                // Update metrics bar
-                updateMetricsBar();
-
-                // Update session selector
                 const selector = document.getElementById('sessionSelector');
-                selector.innerHTML = '';
+                selector.innerHTML = allSessions.length > 0
+                    ? allSessions.map(s => `<option value="${s.id}">${s.id} - ${s.project || 'Unknown'}</option>`).join('')
+                    : '<option value="">No sessions found</option>';
 
-                if (allSessions.length === 0) {
-                    selector.innerHTML = '<option>No sessions found</option>';
-                    return;
+                // Auto-select first active session
+                const activeSession = allSessions.find(s => s.status === 'running');
+                if (activeSession && !currentSession) {
+                    selector.value = activeSession.id;
+                    selectSession();
                 }
-
-                allSessions.forEach(session => {
-                    const option = document.createElement('option');
-                    option.value = session.id;
-                    const status = session.is_complete ? '✓' : session.status === 'failed' ? '✗' : '▶';
-                    option.textContent = `${status} ${session.project} (${session.phase || 'Unknown'})`;
-                    selector.appendChild(option);
-                });
-
-                // Auto-select first session if none selected
-                if (!currentSession && allSessions.length > 0) {
-                    currentSession = allSessions[0].id;
-                    selector.value = currentSession;
-                    loadSessionDetails(currentSession);
-                    connectWebSocket(currentSession);
-                }
-
             } catch (error) {
                 console.error('Error loading sessions:', error);
             }
         }
 
-        // Update metrics bar
-        async function updateMetricsBar() {
+        // Select session
+        function selectSession() {
+            const selector = document.getElementById('sessionSelector');
+            currentSession = selector.value;
+
+            if (currentSession) {
+                loadSessionStatus();
+                connectWebSocket();
+            }
+        }
+
+        // Load session status
+        async function loadSessionStatus() {
+            if (!currentSession) return;
+
             try {
-                // Get counts for each category
-                const activeResp = await fetch('/api/sessions/active');
-                const activeData = await activeResp.json();
-                document.getElementById('metricActive').textContent = activeData.count || 0;
-
-                const completedResp = await fetch('/api/sessions/completed');
-                const completedData = await completedResp.json();
-                document.getElementById('metricCompleted').textContent = completedData.count || 0;
-
-                const failedResp = await fetch('/api/sessions/failed');
-                const failedData = await failedResp.json();
-                document.getElementById('metricFailed').textContent = failedData.count || 0;
-
-                // Calculate average time (from completed sessions)
-                if (completedData.sessions && completedData.sessions.length > 0) {
-                    const avgSeconds = completedData.sessions.reduce((sum, s) => sum + (s.elapsed_seconds || 0), 0) / completedData.sessions.length;
-                    document.getElementById('metricAvgTime').textContent = formatDuration(avgSeconds);
-                } else {
-                    document.getElementById('metricAvgTime').textContent = '--';
-                }
+                const response = await fetch(`/api/status/${currentSession}`);
+                const data = await response.json();
+                updateStatus(data);
             } catch (error) {
-                console.error('Error updating metrics bar:', error);
+                console.error('Error loading status:', error);
             }
         }
 
-        // Load session details
-        async function loadSessionDetails(sessionId) {
-            try {
-                // Get basic status
-                const statusResp = await fetch(`/api/status/${sessionId}`);
-                const status = await statusResp.json();
+        // Update status display
+        function updateStatus(data) {
+            // Show sections
+            document.getElementById('statusSection').style.display = 'block';
+            document.getElementById('currentPhaseSection').style.display = 'block';
+            document.getElementById('phasesSection').style.display = 'block';
 
-                // Get phase breakdown
-                const phaseResp = await fetch(`/api/phases/${sessionId}`);
-                const phaseData = await phaseResp.json();
+            // Basic info
+            document.getElementById('taskId').textContent = data.session_id || '-';
+            document.getElementById('status').textContent = data.status || 'Unknown';
+            document.getElementById('status').className = `status-${data.status || 'running'}`;
+            document.getElementById('elapsedTime').textContent = formatDuration(data.elapsed_seconds || 0);
 
-                // Update UI
-                updateBuildStatusCard(status, phaseData);
-                updatePhaseBreakdown(phaseData);
-                updateWhatsHappening(status, phaseData);
-
-                // Load logs
-                const logsResp = await fetch(`/api/logs/${sessionId}?lines=50`);
-                const logsData = await logsResp.json();
-                updateLogs(logsData.logs || []);
-
-            } catch (error) {
-                console.error('Error loading session details:', error);
-            }
-        }
-
-        // Update build status card
-        function updateBuildStatusCard(status, phaseData) {
-            document.getElementById('buildStatusCard').style.display = 'block';
-            document.getElementById('taskId').textContent = status.id || '-';
-            document.getElementById('projectName').textContent = status.project || '-';
-
-            // Status badge
-            const badge = document.getElementById('statusBadge');
-            if (status.is_complete) {
-                badge.textContent = '✅ Complete';
-                badge.className = 'status-badge status-complete';
-            } else if (status.status === 'failed') {
-                badge.textContent = '❌ Failed';
-                badge.className = 'status-badge status-failed';
-            } else {
-                badge.textContent = '▶ Running';
-                badge.className = 'status-badge status-running';
-            }
-
-            // Progress
-            const progress = phaseData.overall_progress_percent || 0;
-            document.getElementById('overallProgressBar').style.width = progress + '%';
-            document.getElementById('overallProgressText').textContent = progress.toFixed(1) + '%';
-
-            // Times
-            document.getElementById('elapsedTime').textContent = formatDuration(status.elapsed_seconds || 0);
-            if (status.estimated_remaining_seconds > 0) {
-                document.getElementById('remainingTime').textContent = '~' + formatDuration(status.estimated_remaining_seconds);
-            } else {
-                document.getElementById('remainingTime').textContent = '--';
-            }
-        }
-
-        // Update phase breakdown
-        function updatePhaseBreakdown(phaseData) {
-            if (!phaseData.phases || phaseData.phases.length === 0) {
-                // Legacy session
-                document.getElementById('completedPhasesSection').style.display = 'none';
-                document.getElementById('currentPhaseSection').style.display = 'none';
-                document.getElementById('upcomingPhasesSection').style.display = 'none';
-                return;
-            }
-
-            const completed = phaseData.phases.filter(p => p.status === 'completed');
-            const current = phaseData.phases.find(p => p.status === 'in_progress');
-            const upcoming = phaseData.phases.filter(p => p.status === 'pending');
-
-            // Completed phases
-            if (completed.length > 0) {
-                document.getElementById('completedPhasesSection').style.display = 'block';
-                const html = completed.map(phase => `
-                    <div class="phase-item phase-completed">
-                        <div class="phase-header">
-                            <span class="phase-emoji">${phase.emoji}</span>
-                            <span class="phase-name">Phase ${phase.number} - ${phase.name} ✅</span>
-                        </div>
-                        <div class="phase-description">${phase.description}</div>
-                    </div>
-                `).join('');
-                document.getElementById('completedPhases').innerHTML = html;
-            } else {
-                document.getElementById('completedPhasesSection').style.display = 'none';
-            }
+            // Calculate progress based on elapsed time and timeout
+            const timeout = (data.timeout_minutes || 60) * 60;
+            const progress = Math.min(100, ((data.elapsed_seconds || 0) / timeout) * 100);
+            document.getElementById('progressPercent').textContent = progress.toFixed(1) + '%';
+            document.getElementById('overallPercent').textContent = progress.toFixed(0) + '%';
+            document.getElementById('overallBar').textContent = createProgressBar(progress);
 
             // Current phase
-            if (current) {
-                document.getElementById('currentPhaseSection').style.display = 'block';
-                let html = `
-                    <div class="phase-item phase-current">
-                        <div class="phase-header">
-                            <span class="phase-emoji">${current.emoji}</span>
-                            <span class="phase-name">Phase ${current.number} - ${current.name} (In Progress)</span>
-                        </div>
-                        <div class="phase-description">${current.description}</div>
-                `;
-                if (current.detail) {
-                    html += `<div class="phase-detail">${current.detail}</div>`;
-                }
-                if (current.note) {
-                    html += `<div class="phase-note">💡 ${current.note}</div>`;
-                }
-                html += `</div>`;
-                document.getElementById('currentPhase').innerHTML = html;
-            } else {
-                document.getElementById('currentPhaseSection').style.display = 'none';
-            }
+            const currentPhase = data.current_phase || 'Unknown';
+            const phaseStatus = data.phase_status || '-';
+            document.getElementById('currentPhaseName').textContent = `Phase: ${currentPhase}`;
+            document.getElementById('currentPhaseStatus').textContent = `Status: ${phaseStatus}`;
 
-            // Upcoming phases
-            if (upcoming.length > 0) {
-                document.getElementById('upcomingPhasesSection').style.display = 'block';
-                const html = upcoming.map(phase => `
-                    <div class="phase-item phase-pending">
-                        <div class="phase-header">
-                            <span class="phase-emoji">⏱️</span>
-                            <span class="phase-name">Phase ${phase.number} - ${phase.name}</span>
-                        </div>
+            // Phase progress (estimate based on typical phase durations)
+            const phasePercent = estimatePhaseProgress(currentPhase, data.elapsed_seconds || 0);
+            document.getElementById('currentPhasePercent').textContent = phasePercent.toFixed(0) + '%';
+            document.getElementById('currentPhaseBar').textContent = createProgressBar(phasePercent);
+
+            // Phase list
+            renderPhaseList(data);
+
+            // Try to load agents
+            loadAgents();
+
+            // Update timestamp
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Estimate phase progress
+        function estimatePhaseProgress(phase, elapsed) {
+            // Simple heuristic - can be improved with real data
+            const phaseEstimates = {
+                'Scout': 180,        // ~3 min
+                'Architect': 240,    // ~4 min
+                'Builder': 480,      // ~8 min (longest)
+                'Test': 180,         // ~3 min
+                'Deployer': 60       // ~1 min
+            };
+
+            const estimate = phaseEstimates[phase] || 300;
+            return Math.min(100, (elapsed / estimate) * 100);
+        }
+
+        // Render phase list
+        function renderPhaseList(data) {
+            const allPhases = [
+                'Codebase Analysis',
+                'Scout',
+                'Architect',
+                'Builder',
+                'Test',
+                'Deployer'
+            ];
+
+            const completed = data.phases_completed || [];
+            const current = data.current_phase || '';
+
+            const html = allPhases.map(phase => {
+                let status = 'pending';
+                let icon = '⏱️';
+
+                if (completed.includes(phase)) {
+                    status = 'completed';
+                    icon = '✅';
+                } else if (phase === current) {
+                    status = 'current';
+                    icon = '🔨';
+                }
+
+                return `
+                    <div class="phase-card phase-${status}">
+                        <h4>${icon} ${phase}</h4>
+                        <p>${status.charAt(0).toUpperCase() + status.slice(1)}</p>
                     </div>
-                `).join('');
-                document.getElementById('upcomingPhases').innerHTML = html;
-            } else {
-                document.getElementById('upcomingPhasesSection').style.display = 'none';
-            }
-        }
-
-        // Update "what's happening now"
-        function updateWhatsHappening(status, phaseData) {
-            document.getElementById('whatsHappeningSection').style.display = 'block';
-
-            const current = phaseData.phases?.find(p => p.status === 'in_progress');
-            if (!current) {
-                document.getElementById('whatsHappening').innerHTML = '<div class="text-gray">Build initializing...</div>';
-                return;
-            }
-
-            let html = `<p class="mb-2">${current.description}</p>`;
-
-            if (current.detail) {
-                html += `<p class="text-sm text-gray mb-2">${current.detail}</p>`;
-            }
-
-            // What's next
-            const nextPhase = phaseData.phases?.find(p => p.number === current.number + 1);
-            if (nextPhase) {
-                html += `<p class="text-sm mt-2"><span class="text-blue font-bold">Next:</span> ${nextPhase.name} - ${nextPhase.description}</p>`;
-            }
-
-            document.getElementById('whatsHappening').innerHTML = html;
-        }
-
-        // Update logs
-        function updateLogs(logs) {
-            const logsDiv = document.getElementById('logs');
-            const lines = logs.map(line => {
-                let html = line
-                    .replace(/✅/g, '<span class="text-green">✅</span>')
-                    .replace(/❌/g, '<span class="text-red">❌</span>')
-                    .replace(/🔄/g, '<span class="text-blue">🔄</span>')
-                    .replace(/⚠️/g, '<span class="text-yellow">⚠️</span>');
-                return `<div class="log-line">${html}</div>`;
+                `;
             }).join('');
-            logsDiv.innerHTML = lines || '<div style="color: #4b5563;">No logs yet...</div>';
-            logsDiv.scrollTop = logsDiv.scrollHeight;
+
+            document.getElementById('phasesList').innerHTML = html;
         }
 
-        // Connect WebSocket
-        function connectWebSocket(sessionId) {
+        // Load agents
+        async function loadAgents() {
+            if (!currentSession) return;
+
+            try {
+                const response = await fetch(`/api/agents/${currentSession}`);
+                if (!response.ok) {
+                    document.getElementById('agentsSection').style.display = 'none';
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.agents && data.agents.length > 0) {
+                    document.getElementById('agentsSection').style.display = 'block';
+                    document.getElementById('agentCount').textContent = data.total_agents || 0;
+
+                    const html = data.agents.map(agent => {
+                        const percent = agent.progress_percent || 0;
+                        const bar = createProgressBar(percent, 30);
+
+                        return `
+                            <div class="agent-item agent-active">
+                                <div><strong>${agent.agent_name || agent.agent_type}</strong> - ${agent.status}</div>
+                                <div style="font-size: 0.85rem; margin-top: 0.25rem;">${bar}</div>
+                                <div style="font-size: 0.8rem; color: #888;">${agent.phase || 'Working...'}</div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    document.getElementById('agentsList').innerHTML = html;
+                } else {
+                    document.getElementById('agentsSection').style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('agentsSection').style.display = 'none';
+            }
+        }
+
+        // WebSocket connection
+        function connectWebSocket() {
             if (ws) {
                 ws.close();
             }
 
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/${sessionId}`;
+            if (!currentSession) return;
 
-            ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-            };
+            ws = new WebSocket(`ws://${window.location.host}/ws/${currentSession}`);
 
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
 
-                if (data.type === 'status' || data.type === 'phase_update') {
-                    // Reload full details
-                    loadSessionDetails(currentSession);
-                    // Refresh metrics
-                    updateMetricsBar();
-                } else if (data.type === 'complete') {
-                    alert('🎉 Session complete!');
-                    loadSessions();
+                if (data.type === 'status') {
+                    updateStatus(data.data);
                 } else if (data.type === 'log') {
-                    const logsDiv = document.getElementById('logs');
-                    const line = document.createElement('div');
-                    line.className = 'log-line';
-                    line.textContent = data.data;
-                    logsDiv.appendChild(line);
-                    logsDiv.scrollTop = logsDiv.scrollHeight;
+                    addLog(data.data);
+                } else if (data.type === 'complete') {
+                    console.log('Session complete!');
+                    loadSessions();
                 }
             };
 
             ws.onerror = (error) => {
                 console.error('WebSocket error:', error);
             };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                // Reconnect after 5 seconds
-                setTimeout(() => {
-                    if (currentSession) {
-                        connectWebSocket(currentSession);
-                    }
-                }, 5000);
-            };
         }
 
-        // Export session data
-        function exportSession() {
+        // Add log line
+        function addLog(text) {
+            const logsDiv = document.getElementById('logs');
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            line.textContent = text;
+            logsDiv.appendChild(line);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        // Export data
+        function exportData() {
             if (!currentSession) return;
 
             fetch(`/api/status/${currentSession}`)
@@ -792,28 +452,14 @@
                 });
         }
 
-        // Session selector change
-        document.getElementById('sessionSelector').addEventListener('change', (e) => {
-            currentSession = e.target.value;
-            loadSessionDetails(currentSession);
-            connectWebSocket(currentSession);
-        });
-
         // Initialize
         loadSessions();
-
-        // Auto-refresh sessions list every 30s
-        setInterval(loadSessions, 30000);
-
-        // Auto-refresh current session every 3s (fallback to WebSocket)
+        setInterval(loadSessions, 30000); // Refresh sessions every 30s
         setInterval(() => {
             if (currentSession) {
-                loadSessionDetails(currentSession);
+                loadSessionStatus();
             }
-        }, 3000);
-
-        // Refresh metrics every 10s
-        setInterval(updateMetricsBar, 10000);
+        }, 3000); // Refresh status every 3s
     </script>
 </body>
 </html>
