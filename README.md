@@ -399,6 +399,7 @@ python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # 3. Install MCP server dependencies (Python 3.10+ required)
+# This is a minimal installation - only ~50MB, installs in 15-20 seconds
 pip install -r requirements-mcp.txt
 
 # 3a. [Optional] Install BAML for type-safe LLM outputs
@@ -845,10 +846,11 @@ Temporarily disable without deleting configuration:
 # Make sure you're in the virtual environment
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Then install dependencies
+# Then install dependencies (minimal installation, ~50MB)
 pip install -r requirements-mcp.txt
 # Or specifically:
 pip install fastmcp>=2.0.0 nest-asyncio>=1.5.0
+# Note: Previous versions required ~3-4GB of ML libraries - no longer needed!
 ```
 
 **Error:** `externally-managed-environment` (Debian/Ubuntu systems)

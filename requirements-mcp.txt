@@ -1,12 +1,17 @@
-# MCP Server Mode Dependencies
+# MCP Server Mode Dependencies (Minimal)
 # Install with: pip install -r requirements-mcp.txt
 #
 # Note: MCP mode requires Python 3.10 or higher
-# Check your version: python --version
-
-# Base dependencies
--r requirements.txt
+# Check your version: python3 --version
+#
+# This is the MINIMAL installation for Context Foundry v2.x MCP server.
+# Total size: ~50MB (vs ~3-4GB with legacy ML dependencies)
+#
+# Installation time: 15-20 seconds (vs 5-10 minutes with PyTorch/CUDA)
 
 # MCP Server SDK
 fastmcp>=2.0.0  # Model Context Protocol server framework
 nest-asyncio>=1.5.0  # Enable nested event loops for sync/async compatibility
+
+# That's it! Everything else is Python standard library.
+# The MCP server delegates all Claude API calls to Claude Code/Desktop.

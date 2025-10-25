@@ -1,34 +1,12 @@
-# Context Foundry Dependencies
+# Context Foundry v2.x Dependencies
+#
+# For MCP Server (recommended): This file includes minimal dependencies
+# Same as: requirements-mcp.txt
 
-# Core
-anthropic>=0.40.0  # Claude API client
+# MCP Server SDK
+fastmcp>=2.0.0  # Model Context Protocol server framework
+nest-asyncio>=1.5.0  # Enable nested event loops for sync/async compatibility
 
-# CLI Framework
-click>=8.0.0  # Command-line interface framework
-rich>=13.0.0  # Beautiful terminal output
-tabulate>=0.9.0  # Table formatting
-
-# Utilities
-python-dotenv>=1.0.0  # Environment variable management
-urllib3>=2.0.0  # Security fix: upgraded to 2.x (LibreSSL warning present on macOS but non-blocking)
-
-# Pattern Library
-sentence-transformers>=2.2.0  # Semantic search embeddings
-numpy>=1.24.0  # Numerical operations
-pyyaml>=6.0  # Configuration files
-
-# Multi-Provider Support
-requests>=2.31.0  # HTTP requests for pricing fetching
-beautifulsoup4>=4.12.0  # HTML parsing for pricing pages
-
-# Livestream Real-Time Monitoring
-watchdog>=3.0.0  # Filesystem event monitoring for live updates
-
-# BAML Integration (Optional - for type-safe LLM outputs)
-# baml-py>=0.211.0  # BAML Python bindings (install separately: pip install -r requirements-baml.txt)
-
-# Optional: Additional AI providers (install as needed)
-# openai>=1.0.0  # OpenAI GPT models
-# google-generativeai>=0.3.0  # Google Gemini models
-# groq>=0.4.0  # Groq models
-# mistralai>=0.0.11  # Mistral models
+# Note: This is a MINIMAL installation (~50MB total)
+# Previous versions included ~3-4GB of ML libraries that are no longer needed
+# See requirements-legacy.txt for the old v1.x Python CLI dependencies (deprecated)

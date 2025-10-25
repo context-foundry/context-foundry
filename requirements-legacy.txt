@@ -1,0 +1,48 @@
+# ⚠️ LEGACY: Context Foundry v1.x Python CLI Dependencies
+#
+# This file contains dependencies for the deprecated v1.x Python CLI.
+# Most users DO NOT need this file!
+#
+# For v2.x MCP Server (recommended): Use requirements-mcp.txt instead
+# For v2.x MCP Server (minimal):     Only ~50MB of dependencies
+#
+# This legacy file includes ~3-4GB of ML libraries (PyTorch, CUDA, sentence-transformers)
+# that were planned for a "Pattern Library" feature that was never completed.
+#
+# Only install this if you specifically need the old v1.x CLI (not recommended).
+# Last updated: October 2025
+
+# Context Foundry v1.x Dependencies
+
+# Core
+anthropic>=0.40.0  # Claude API client
+
+# CLI Framework
+click>=8.0.0  # Command-line interface framework
+rich>=13.0.0  # Beautiful terminal output
+tabulate>=0.9.0  # Table formatting
+
+# Utilities
+python-dotenv>=1.0.0  # Environment variable management
+urllib3>=2.0.0  # Security fix: upgraded to 2.x (LibreSSL warning present on macOS but non-blocking)
+
+# Pattern Library
+sentence-transformers>=2.2.0  # Semantic search embeddings
+numpy>=1.24.0  # Numerical operations
+pyyaml>=6.0  # Configuration files
+
+# Multi-Provider Support
+requests>=2.31.0  # HTTP requests for pricing fetching
+beautifulsoup4>=4.12.0  # HTML parsing for pricing pages
+
+# Livestream Real-Time Monitoring
+watchdog>=3.0.0  # Filesystem event monitoring for live updates
+
+# BAML Integration (Optional - for type-safe LLM outputs)
+# baml-py>=0.211.0  # BAML Python bindings (install separately: pip install -r requirements-baml.txt)
+
+# Optional: Additional AI providers (install as needed)
+# openai>=1.0.0  # OpenAI GPT models
+# google-generativeai>=0.3.0  # Google Gemini models
+# groq>=0.4.0  # Groq models
+# mistralai>=0.0.11  # Mistral models
