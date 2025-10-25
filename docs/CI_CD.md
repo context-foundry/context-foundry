@@ -334,6 +334,84 @@ act -j test
    - Review security warnings
    - Monitor test execution time
 
+## Nightly Releases
+
+### Automatic Nightly Builds
+
+The nightly release workflow automatically creates pre-release builds every day at midnight UTC (00:00).
+
+### How It Works
+
+1. **Daily Schedule**: Runs automatically at 00:00 UTC
+2. **Smart Commit Detection**:
+   - Checks for new commits since the last nightly release
+   - If no previous nightly exists, checks since the last stable release
+   - Skips release if there are 0 new commits
+   - Creates release if there are 1+ new commits
+3. **Version Format**: `v2.1.0-nightly.YYYYMMDD` (base version + date)
+4. **Release Notes**: Auto-generated and categorized by commit type:
+   - 🚀 Features (`feat:` commits)
+   - 🐛 Bug Fixes (`fix:` commits)
+   - 📚 Documentation (`docs:` commits)
+   - ♻️ Refactoring (`refactor:` commits)
+   - 🔧 Maintenance (`chore:` commits)
+   - 📝 Other Changes
+5. **Pre-release**: Marked as pre-release (won't override "Latest" stable)
+6. **Authentication**: Uses `GH_TOKEN` secret (personal access token with workflow permissions)
+
+### Manual Trigger
+
+You can manually trigger a nightly release from GitHub Actions:
+
+```bash
+# Via GitHub UI
+1. Go to Actions tab
+2. Select "Nightly Release" workflow
+3. Click "Run workflow"
+4. Optionally enable "Force release" to create one even without new commits
+
+# Via GitHub CLI
+gh workflow run nightly-release.yml
+gh workflow run nightly-release.yml -f force=true  # Force release
+```
+
+### Using Nightly Releases
+
+```bash
+# Clone a specific nightly version
+git clone --branch v2.1.0-nightly.20251025 https://github.com/context-foundry/context-foundry.git
+
+# Or checkout if already cloned
+git fetch --all --tags
+git checkout v2.1.0-nightly.20251025
+
+# List all nightly releases
+gh release list --exclude-drafts | grep nightly
+```
+
+### Important Notes
+
+- ⚠️ Nightly builds are unstable and intended for testing purposes only
+- All commits pushed to `main` are automatically included in the next nightly
+- Commits from any computer/contributor will be included
+- Empty commits won't trigger a release (smart detection)
+- Pre-releases won't interfere with stable release versioning
+- Requires `GH_TOKEN` secret to be configured in repository settings
+
+### Setup Requirements
+
+The workflow requires a personal access token with `workflow` permissions:
+
+1. **Create Personal Access Token**:
+   - Go to GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens
+   - Create token with `workflow` permission
+   - Copy the token
+
+2. **Add to Repository**:
+   - Go to repository Settings → Secrets and variables → Actions
+   - Create new secret named `GH_TOKEN`
+   - Paste your personal access token
+
 ## Future Enhancements
 
 Planned improvements to the CI/CD system:
@@ -344,7 +422,6 @@ Planned improvements to the CI/CD system:
 - [ ] Automated changelog generation
 - [ ] Dependency update bot (Dependabot)
 - [ ] Docker image builds for CI
-- [ ] Nightly builds for early issue detection
 
 ## References
 
