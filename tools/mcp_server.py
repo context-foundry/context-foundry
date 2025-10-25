@@ -1103,7 +1103,13 @@ def autonomous_build_and_deploy(
 
     Args:
         task: What to build/fix/enhance
-        working_directory: Where to work
+        working_directory: Where to create/work on the project
+            - **Relative path** (recommended): Creates project as sibling of context-foundry
+              Example: "weather-app" → /Users/name/homelab/weather-app
+              (if context-foundry is at /Users/name/homelab/context-foundry)
+            - **Absolute path**: Uses exact path specified
+              Example: "/tmp/weather-app" → /tmp/weather-app
+            **Core Feature:** Use relative paths to keep all projects organized together!
         github_repo_name: Create new repo (optional)
         existing_repo: Fix/enhance existing (optional)
         mode: "new_project", "fix_bugs", "add_docs"
@@ -1118,14 +1124,25 @@ def autonomous_build_and_deploy(
         JSON with task_id and status (returns immediately)
 
     Examples:
-        # Start build in background
+        # Recommended: Use relative path (creates as sibling of context-foundry)
         result = autonomous_build_and_deploy(
             task="Build weather app with OpenWeatherMap API",
-            working_directory="/tmp/weather-app",
+            working_directory="weather-app",  # Relative path!
             github_repo_name="weather-app",
             enable_test_loop=True
         )
+        # If context-foundry is at /Users/name/homelab/context-foundry
+        # This creates: /Users/name/homelab/weather-app
         # Returns: {"task_id": "abc-123", "status": "started", ...}
+
+        # Alternative: Use absolute path (if you need specific location)
+        result = autonomous_build_and_deploy(
+            task="Build temporary test project",
+            working_directory="/tmp/test-project",  # Absolute path
+            github_repo_name="test-project",
+            enable_test_loop=True
+        )
+        # This creates: /tmp/test-project exactly
 
         # Continue working while build runs...
 
