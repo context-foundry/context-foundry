@@ -200,6 +200,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "${{ steps.version.outputs.version }}" -m "Nightly build ${{ steps.version.outputs.date_formatted }}"
           git push origin "${{ steps.version.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Create GitHub Release
         if: steps.check_commits.outputs.has_commits == 'true'
@@ -211,7 +213,7 @@ jobs:
           prerelease: true
           draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Summary
         if: steps.check_commits.outputs.has_commits == 'true'
