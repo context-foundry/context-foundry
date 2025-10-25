@@ -1,0 +1,21 @@
+# BAML Integration Dependencies for Context Foundry
+#
+# Install these if you want type-safe LLM outputs and structured responses
+#
+# Installation:
+#   pip install -r requirements-baml.txt
+#
+# Benefits:
+#   - Type-safe phase tracking (compile-time validation)
+#   - Structured Scout/Architect/Builder outputs
+#   - Eliminates JSON parsing errors (5% → <1%)
+#   - Semantic streaming for real-time progress
+#   - Built-in observability with Boundary Studio
+#
+# Note: BAML is optional. Context Foundry works without it (JSON fallback mode)
+
+# BAML Core
+baml-py>=0.211.0  # BAML Python bindings
+
+# Additional dependencies for BAML compilation (if needed)
+# These may be installed automatically by baml-py

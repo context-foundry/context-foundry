@@ -24,6 +24,9 @@ beautifulsoup4>=4.12.0  # HTML parsing for pricing pages
 # Livestream Real-Time Monitoring
 watchdog>=3.0.0  # Filesystem event monitoring for live updates
 
+# BAML Integration (Optional - for type-safe LLM outputs)
+# baml-py>=0.211.0  # BAML Python bindings (install separately: pip install -r requirements-baml.txt)
+
 # Optional: Additional AI providers (install as needed)
 # openai>=1.0.0  # OpenAI GPT models
 # google-generativeai>=0.3.0  # Google Gemini models

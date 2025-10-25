@@ -3,764 +3,221 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Context Foundry Livestream</title>
-    <!-- Tailwind CSS CDN with production mode config -->
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
-    <script>
-        // Suppress Tailwind CDN production warning for development/monitoring dashboards
-        tailwind.config = {
-            corePlugins: {
-                preflight: true,
-            }
-        }
-    </script>
-    <!-- Chart.js without source map to prevent 404 warnings -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <title>Context Foundry - Build Monitor</title>
+
+    <!-- Terminal CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css">
+
     <style>
         body {
-            background: #0a0a0a;
-            color: #e0e0e0;
-            font-family: 'Monaco', 'Courier New', monospace;
-        }
-        .phase-scout { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .phase-architect { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .phase-builder { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .phase-complete { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-        .log-line { font-family: 'Monaco', monospace; font-size: 12px; }
-        .context-bar { transition: width 0.5s ease; }
-
-        /* Enhanced dark mode panels */
-        .metric-card {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
             padding: 1rem;
-            transition: all 0.3s ease;
         }
-        .metric-card:hover {
-            border-color: #374151;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+
+        /* Progress bars using ASCII blocks */
+        .progress-ascii {
+            font-family: monospace;
+            background: #000;
+            padding: 0.5rem;
+            border: 1px solid var(--secondary-color);
+            margin: 0.5rem 0;
         }
-        .token-gauge {
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-            height: 1.5rem;
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
         }
-        .token-fill {
-            height: 100%;
-            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
-            transition: width 0.5s ease;
+
+        .bar-container {
+            font-family: monospace;
+            white-space: pre;
+            line-height: 1.2;
         }
-        .token-critical {
-            animation: pulse-red 2s infinite;
+
+        /* Phase cards */
+        .phase-card {
+            border: 1px solid var(--secondary-color);
+            padding: 1rem;
+            margin: 1rem 0;
+            background: #0a0a0a;
         }
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+
+        .phase-completed {
+            border-color: #0f0;
+            opacity: 0.7;
         }
-        .decision-badge {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: #60a5fa;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            display: inline-block;
+
+        .phase-current {
+            border-color: #0ff;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
         }
-        .decision-quality-high {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: rgba(16, 185, 129, 0.3);
-            color: #10b981;
+
+        .phase-pending {
+            border-color: #555;
+            opacity: 0.5;
         }
-        .decision-quality-medium {
-            background: rgba(234, 179, 8, 0.1);
-            border-color: rgba(234, 179, 8, 0.3);
-            color: #eab308;
+
+        /* Agent list */
+        .agent-item {
+            background: #111;
+            border-left: 3px solid var(--secondary-color);
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            font-family: monospace;
         }
-        .decision-quality-low {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
+
+        .agent-active {
+            border-left-color: #0f0;
         }
-        .agent-card {
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-            border: 1px solid #374151;
-            border-radius: 0.5rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            transition: all 0.3s ease;
+
+        /* Status badges */
+        .status-running { color: #0f0; }
+        .status-complete { color: #0ff; }
+        .status-failed { color: #f00; }
+
+        /* Session selector */
+        select {
+            width: 100%;
+            background: #000;
+            color: var(--font-color);
+            border: 1px solid var(--secondary-color);
+            padding: 0.5rem;
+            font-family: monospace;
         }
-        .agent-card:hover {
-            border-color: #4b5563;
-            transform: translateX(4px);
+
+        /* Logs */
+        #logs {
+            background: #000;
+            border: 1px solid var(--secondary-color);
+            padding: 1rem;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
         }
-        .progress-ring {
-            transform: rotate(-90deg);
-        }
-        .progress-ring-circle {
-            stroke-dasharray: 251.2;
-            stroke-dashoffset: 251.2;
-            transition: stroke-dashoffset 0.5s ease;
-            stroke: #10b981;
-            fill: none;
-            stroke-width: 8;
+
+        .log-line {
+            margin: 0.1rem 0;
         }
     </style>
 </head>
-<body class="p-4">
-    <!-- Header -->
-    <div class="mb-6">
-        <h1 class="text-4xl font-bold mb-2">🏭 Context Foundry</h1>
-        <p class="text-gray-400">Real-time monitoring for overnight coding sessions</p>
-    </div>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>⚡ Context Foundry - Build Monitor</h1>
+            <p>Real-time autonomous build tracking</p>
+        </header>
 
-    <!-- Session Selector -->
-    <div class="mb-6 bg-gray-900 p-4 rounded-lg">
-        <label class="block text-sm font-bold mb-2">Active Session:</label>
-        <select id="sessionSelector" class="w-full bg-gray-800 text-white p-2 rounded">
-            <option>Loading sessions...</option>
-        </select>
-    </div>
+        <hr>
 
-    <!-- Main Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <!-- Left Column: Phase & Progress -->
-        <div class="lg:col-span-2 space-y-6">
-            <!-- Phase Indicator -->
-            <div id="phaseCard" class="phase-scout p-6 rounded-lg text-white">
-                <h2 class="text-2xl font-bold mb-2" id="phaseName">INITIALIZING</h2>
-                <p class="text-sm opacity-90" id="phaseDescription">Getting started...</p>
-                <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                        <div class="opacity-75">Iteration</div>
-                        <div class="text-2xl font-bold" id="iteration">0</div>
-                    </div>
-                    <div>
-                        <div class="opacity-75">Elapsed</div>
-                        <div class="text-2xl font-bold" id="elapsed">0:00</div>
-                    </div>
-                </div>
+        <!-- Session Selector -->
+        <section>
+            <h3>📋 Select Session</h3>
+            <select id="sessionSelector" onchange="selectSession()">
+                <option value="">Loading sessions...</option>
+            </select>
+        </section>
+
+        <!-- Build Status Overview -->
+        <section id="statusSection" style="display: none;">
+            <h2>🚀 Build Status Update</h2>
+
+            <div class="terminal-card">
+                <p><strong>Task ID:</strong> <span id="taskId">-</span></p>
+                <p><strong>Status:</strong> <span id="status" class="status-running">Running</span></p>
+                <p><strong>Elapsed Time:</strong> <span id="elapsedTime">0m 0s</span></p>
+                <p><strong>Progress:</strong> <span id="progressPercent">0%</span> of timeout</p>
             </div>
 
-            <!-- Context Usage -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Context Usage</h3>
-                <div class="relative h-8 bg-gray-800 rounded-full overflow-hidden">
-                    <div id="contextBar" class="context-bar h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500" style="width: 0%"></div>
-                    <div class="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                        <span id="contextPercent">0%</span>
-                    </div>
+            <!-- Overall Progress Bar -->
+            <div class="progress-ascii">
+                <div class="progress-label">
+                    <span>Overall Progress</span>
+                    <span id="overallPercent">0%</span>
                 </div>
-                <div class="mt-2 text-xs text-gray-500 text-right">
-                    Target: &lt;40% | Warning: &gt;50%
+                <div class="bar-container" id="overallBar">
+[                                        ] 0%
                 </div>
             </div>
+        </section>
 
-            <!-- Task Progress -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Task Progress</h3>
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span id="taskCount">0 / 0 tasks</span>
-                        <span id="taskPercent">0%</span>
+        <!-- Current Phase -->
+        <section id="currentPhaseSection" style="display: none;">
+            <h2>🔨 Current Phase</h2>
+            <div class="phase-card phase-current" id="currentPhaseCard">
+                <h3 id="currentPhaseName">-</h3>
+                <p id="currentPhaseStatus">-</p>
+
+                <!-- Phase progress bar -->
+                <div class="progress-ascii">
+                    <div class="progress-label">
+                        <span>Phase Progress</span>
+                        <span id="currentPhasePercent">0%</span>
                     </div>
-                    <div class="relative h-2 bg-gray-800 rounded-full overflow-hidden">
-                        <div id="taskBar" class="h-full bg-blue-500" style="width: 0%"></div>
+                    <div class="bar-container" id="currentPhaseBar">
+[                                        ] 0%
                     </div>
                 </div>
 
-                <!-- Task List -->
-                <div class="space-y-2 max-h-64 overflow-y-auto">
-                    <div id="taskList" class="text-sm">
-                        <div class="text-gray-500 italic">No tasks yet...</div>
-                    </div>
-                </div>
+                <div id="currentPhaseDetails"></div>
             </div>
+        </section>
 
-            <!-- Live Logs -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Live Logs</h3>
-                <div id="logs" class="bg-black p-4 rounded h-96 overflow-y-auto font-mono text-xs space-y-1">
-                    <div class="text-gray-600">Waiting for logs...</div>
-                </div>
-            </div>
-        </div>
+        <!-- Phase List -->
+        <section id="phasesSection" style="display: none;">
+            <h2>📊 All Phases</h2>
+            <div id="phasesList"></div>
+        </section>
 
-        <!-- Right Column: Stats & Info -->
-        <div class="space-y-6">
-            <!-- Status Card -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Session Info</h3>
-                <div class="space-y-3 text-sm">
-                    <div>
-                        <div class="text-gray-500">Project</div>
-                        <div class="font-bold" id="projectName">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Task</div>
-                        <div class="text-xs" id="taskDesc">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Started</div>
-                        <div id="startTime">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray-500">Estimated Remaining</div>
-                        <div id="remaining" class="font-bold text-yellow-400">-</div>
-                    </div>
-                </div>
-            </div>
+        <!-- Agents (if available) -->
+        <section id="agentsSection" style="display: none;">
+            <h2>🤖 Active Agents</h2>
+            <p><strong>Total Agents:</strong> <span id="agentCount">0</span></p>
+            <div id="agentsList"></div>
+        </section>
 
-            <!-- Statistics -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Statistics</h3>
-                <div class="space-y-2 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Iterations</span>
-                        <span id="statIterations" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Context Resets</span>
-                        <span id="statResets" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Tokens Used</span>
-                        <span id="statTokens" class="font-bold">~0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Est. Cost</span>
-                        <span id="statCost" class="font-bold text-green-400">$0.00</span>
-                    </div>
-                </div>
+        <!-- Live Logs -->
+        <section>
+            <h2>📜 Live Logs</h2>
+            <div id="logs">
+                <span style="color: #555;">Waiting for logs...</span>
             </div>
+        </section>
 
-            <!-- Connection Status -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Connection</h3>
-                <div id="connectionStatus" class="flex items-center">
-                    <div class="w-3 h-3 rounded-full bg-gray-500 mr-2"></div>
-                    <span class="text-sm">Connecting...</span>
-                </div>
-                <div class="mt-2 text-xs text-gray-500" id="lastUpdate">Never</div>
-            </div>
+        <hr>
 
-            <!-- Quick Actions -->
-            <div class="bg-gray-900 p-6 rounded-lg">
-                <h3 class="text-lg font-bold mb-3">Actions</h3>
-                <div class="space-y-2">
-                    <button onclick="refreshData()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
-                        🔄 Refresh
-                    </button>
-                    <button onclick="exportSession()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
-                        💾 Export Data
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Enhanced Metrics Section -->
-    <div class="mt-6">
-        <h2 class="text-2xl font-bold mb-4">📊 Detailed Metrics</h2>
-    </div>
-
-    <!-- Enhanced Metrics Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
-        <!-- Token Usage Panel -->
-        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">
-                🔢 Token Usage
-                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-            </h3>
-            <div class="mb-4">
-                <div class="flex justify-between text-sm mb-2">
-                    <span class="text-gray-400">Used / Budget</span>
-                    <span id="tokenCount" class="text-gray-100 font-bold">0 / 200,000</span>
-                </div>
-                <div id="tokenGauge" class="token-gauge">
-                    <div id="tokenFill" class="token-fill" style="width: 0%"></div>
-                    <div class="absolute inset-0 flex items-center justify-center text-xs font-bold">
-                        <span id="tokenPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-            <div class="grid grid-cols-3 gap-2 text-xs">
-                <div class="text-center p-2 bg-gray-800 rounded">
-                    <div class="text-gray-500">Safe</div>
-                    <div class="text-green-400">< 50%</div>
-                </div>
-                <div class="text-center p-2 bg-gray-800 rounded">
-                    <div class="text-gray-500">Warning</div>
-                    <div class="text-yellow-400">50-75%</div>
-                </div>
-                <div class="text-center p-2 bg-gray-800 rounded">
-                    <div class="text-gray-500">Critical</div>
-                    <div class="text-red-400">> 75%</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Test Loop Analytics -->
-        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">
-                🧪 Test Loop
-                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex justify-between">
-                    <span class="text-gray-400">Iterations</span>
-                    <span id="testIterCount" class="font-bold text-blue-400">0</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-400">Success Rate</span>
-                    <span id="testSuccessRate" class="font-bold text-green-400">--%</span>
-                </div>
-                <div id="testIterList" class="space-y-2 max-h-32 overflow-y-auto">
-                    <div class="text-gray-500 text-sm italic">No test iterations yet</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Agent Performance -->
-        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">
-                🤖 Agent Performance
-                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-            </h3>
-            <div id="agentList" class="space-y-2">
-                <div class="text-gray-500 text-sm italic">No agent data yet</div>
-            </div>
-        </div>
-
-        <!-- Decision Tracking -->
-        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
-            <h3 class="text-lg font-bold text-gray-200 mb-4">
-                🧠 Decision Quality
-                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex justify-between">
-                    <span class="text-gray-400">Total Decisions</span>
-                    <span id="decisionCount" class="font-bold text-blue-400">0</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-400">Avg Quality</span>
-                    <span id="decisionQuality" class="font-bold text-green-400">--</span>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-gray-400">Lessons Applied</span>
-                    <span id="decisionLessons" class="font-bold text-purple-400">0</span>
-                </div>
-                <div id="decisionList" class="space-y-2 max-h-32 overflow-y-auto mt-3">
-                    <div class="text-gray-500 text-sm italic">No decisions yet</div>
-                </div>
-            </div>
-        </div>
+        <footer>
+            <p>Last updated: <span id="lastUpdate">-</span></p>
+            <button onclick="exportData()">💾 Export Session Data</button>
+        </footer>
     </div>
 
     <script>
         let ws = null;
         let currentSession = null;
-        let enhancedMetricsRefreshing = false;
-        let lastEnhancedMetricsUpdate = null;
+        let allSessions = [];
 
-        // Format time duration
+        // Format duration
         function formatDuration(seconds) {
-            const hours = Math.floor(seconds / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            return hours > 0 ? `${hours}:${mins.toString().padStart(2, '0')}h` : `${mins}m`;
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+
+            if (h > 0) return `${h}h ${m}m`;
+            if (m > 0) return `${m}m ${s}s`;
+            return `${s}s`;
         }
 
-        // Update phase card
-        function updatePhase(phase) {
-            const card = document.getElementById('phaseCard');
-            const name = document.getElementById('phaseName');
-            const desc = document.getElementById('phaseDescription');
-
-            card.className = `p-6 rounded-lg text-white phase-${phase}`;
-
-            const phaseInfo = {
-                scout: { name: '🔍 SCOUT', desc: 'Researching architecture and approach' },
-                architect: { name: '📐 ARCHITECT', desc: 'Creating specifications and plan' },
-                builder: { name: '🔨 BUILDER', desc: 'Implementing with tests' },
-                complete: { name: '✅ COMPLETE', desc: 'All tasks finished!' }
-            };
-
-            const info = phaseInfo[phase] || { name: 'UNKNOWN', desc: '' };
-            name.textContent = info.name;
-            desc.textContent = info.desc;
-        }
-
-        // Update task list
-        function updateTasks(tasks) {
-            const taskList = document.getElementById('taskList');
-            const completed = tasks.completed || [];
-            const remaining = tasks.remaining || [];
-
-            let html = '';
-
-            completed.forEach(task => {
-                html += `<div class="flex items-center text-green-400">
-                    <span class="mr-2">✓</span>
-                    <span>${task}</span>
-                </div>`;
-            });
-
-            if (remaining.length > 0) {
-                html += `<div class="flex items-center text-yellow-400">
-                    <span class="mr-2">⏳</span>
-                    <span>${remaining[0]}</span>
-                </div>`;
-
-                remaining.slice(1).forEach(task => {
-                    html += `<div class="flex items-center text-gray-500">
-                        <span class="mr-2">○</span>
-                        <span>${task}</span>
-                    </div>`;
-                });
-            }
-
-            taskList.innerHTML = html || '<div class="text-gray-500 italic">No tasks yet...</div>';
-
-            // Update progress bar
-            const total = completed.length + remaining.length;
-            const percent = total > 0 ? (completed.length / total * 100) : 0;
-            document.getElementById('taskBar').style.width = percent + '%';
-            document.getElementById('taskCount').textContent = `${completed.length} / ${total} tasks`;
-            document.getElementById('taskPercent').textContent = Math.round(percent) + '%';
-        }
-
-        // Update logs
-        function updateLogs(logs) {
-            const logsDiv = document.getElementById('logs');
-            const lines = logs.map(line => {
-                // Simple syntax highlighting
-                let html = line
-                    .replace(/✅/g, '<span class="text-green-400">✅</span>')
-                    .replace(/❌/g, '<span class="text-red-400">❌</span>')
-                    .replace(/🔄/g, '<span class="text-blue-400">🔄</span>')
-                    .replace(/⚠️/g, '<span class="text-yellow-400">⚠️</span>');
-
-                return `<div class="log-line text-gray-300">${html}</div>`;
-            }).join('');
-
-            logsDiv.innerHTML = lines || '<div class="text-gray-600">No logs yet...</div>';
-            logsDiv.scrollTop = logsDiv.scrollHeight;
-        }
-
-        // Update status
-        function updateStatus(status) {
-            if (status.error) {
-                console.error('Status error:', status.error);
-                return;
-            }
-
-            // Basic info
-            document.getElementById('projectName').textContent = status.project || '-';
-            document.getElementById('taskDesc').textContent = status.task || '-';
-            document.getElementById('iteration').textContent = status.iterations || 0;
-
-            // Time
-            if (status.start_time) {
-                document.getElementById('startTime').textContent =
-                    new Date(status.start_time).toLocaleString();
-            }
-
-            if (status.elapsed_seconds) {
-                document.getElementById('elapsed').textContent =
-                    formatDuration(status.elapsed_seconds);
-            }
-
-            if (status.estimated_remaining_seconds) {
-                document.getElementById('remaining').textContent =
-                    formatDuration(status.estimated_remaining_seconds);
-            }
-
-            // Phase
-            updatePhase(status.phase || 'unknown');
-
-            // Context
-            const contextPct = status.context?.percentage || 0;
-            document.getElementById('contextBar').style.width = contextPct + '%';
-            document.getElementById('contextPercent').textContent = contextPct + '%';
-
-            // Tasks
-            if (status.tasks) {
-                updateTasks(status.tasks);
-            }
-
-            // Stats
-            document.getElementById('statIterations').textContent = status.iterations || 0;
-            document.getElementById('statResets').textContent = status.iterations || 0;
-
-            // Connection status
-            updateConnectionStatus(true);
-            document.getElementById('lastUpdate').textContent =
-                'Last update: ' + new Date().toLocaleTimeString();
-        }
-
-        // Update enhanced metrics with concurrency protection
-        async function updateEnhancedMetrics(sessionId) {
-            // Prevent concurrent refreshes
-            if (enhancedMetricsRefreshing) {
-                return;
-            }
-
-            enhancedMetricsRefreshing = true;
-
-            try {
-                const response = await fetch(`/api/metrics/${sessionId}`);
-                const data = await response.json();
-
-                if (data.error) {
-                    console.warn('Enhanced metrics not available:', data.error);
-                    return;
-                }
-
-                // Update last refresh timestamp
-                lastEnhancedMetricsUpdate = Date.now();
-
-                // Update all metric panels
-                if (data.metrics?.token_usage) {
-                    updateTokenUsage(data.metrics.token_usage);
-                }
-
-                if (data.test_iterations) {
-                    updateTestIterations(data.test_iterations);
-                }
-
-                if (data.agent_performance) {
-                    updateAgentPerformance(data.agent_performance);
-                }
-
-                if (data.decisions) {
-                    updateDecisions(data.decisions);
-                }
-
-                // Update "last updated" display
-                updateMetricsTimestamp();
-
-            } catch (error) {
-                console.warn('Error fetching enhanced metrics:', error);
-            } finally {
-                enhancedMetricsRefreshing = false;
-            }
-        }
-
-        // Update metrics timestamp display
-        function updateMetricsTimestamp() {
-            if (!lastEnhancedMetricsUpdate) return;
-
-            const elapsed = Math.floor((Date.now() - lastEnhancedMetricsUpdate) / 1000);
-            const timeText = elapsed < 60 ? `${elapsed}s ago` : `${Math.floor(elapsed / 60)}m ago`;
-
-            // Update all metric timestamp elements
-            document.querySelectorAll('.metric-timestamp').forEach(el => {
-                el.textContent = `Updated: ${timeText}`;
-
-                // Color code based on freshness
-                el.className = 'metric-timestamp text-xs float-right ';
-                if (elapsed < 5) el.className += 'text-green-400';
-                else if (elapsed < 30) el.className += 'text-yellow-400';
-                else el.className += 'text-red-400';
-            });
-        }
-
-        // Update token usage panel
-        function updateTokenUsage(tokenData) {
-            const used = tokenData.used || 0;
-            const limit = tokenData.limit || 200000;
-            const percentage = tokenData.percentage || 0;
-
-            document.getElementById('tokenCount').textContent = `${used.toLocaleString()} / ${limit.toLocaleString()}`;
-            document.getElementById('tokenPercent').textContent = percentage.toFixed(1) + '%';
-            document.getElementById('tokenFill').style.width = percentage + '%';
-
-            // Apply critical class if needed
-            const gauge = document.getElementById('tokenGauge');
-            if (tokenData.level === 'critical') {
-                gauge.classList.add('token-critical');
-            } else {
-                gauge.classList.remove('token-critical');
-            }
-        }
-
-        // Update test iterations
-        function updateTestIterations(iterations) {
-            document.getElementById('testIterCount').textContent = iterations.length;
-
-            if (iterations.length === 0) {
-                document.getElementById('testSuccessRate').textContent = '--%';
-                return;
-            }
-
-            const lastIter = iterations[iterations.length - 1];
-            const passed = lastIter.tests_passed || 0;
-            const failed = lastIter.tests_failed || 0;
-            const total = passed + failed;
-            const successRate = total > 0 ? ((passed / total) * 100).toFixed(0) : 0;
-
-            document.getElementById('testSuccessRate').textContent = successRate + '%';
-
-            // Update list
-            const listDiv = document.getElementById('testIterList');
-            let html = '';
-            iterations.slice(-3).reverse().forEach(iter => {
-                const iterPassed = iter.tests_passed || 0;
-                const iterFailed = iter.tests_failed || 0;
-                const iterColor = iterFailed === 0 ? 'text-green-400' : 'text-red-400';
-                html += `<div class="bg-gray-800 p-2 rounded text-xs">
-                    <div class="flex justify-between">
-                        <span class="text-gray-400">Iteration ${iter.iteration_number}</span>
-                        <span class="${iterColor}">${iterPassed}✓ ${iterFailed}✗</span>
-                    </div>
-                </div>`;
-            });
-            listDiv.innerHTML = html || '<div class="text-gray-500 text-sm italic">No test iterations</div>';
-        }
-
-        // Update agent performance
-        function updateAgentPerformance(agents) {
-            const listDiv = document.getElementById('agentList');
-            if (agents.length === 0) {
-                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No agent data yet</div>';
-                return;
-            }
-
-            let html = '';
-            agents.slice(-4).forEach(agent => {
-                const duration = agent.duration_seconds || 0;
-                const durationText = duration > 0 ? formatDuration(duration) : 'In progress';
-                const statusIcon = agent.success ? '✅' : agent.success === false ? '❌' : '⏳';
-
-                html += `<div class="agent-card">
-                    <div class="flex justify-between items-center">
-                        <span class="font-bold text-sm">${statusIcon} ${agent.agent_type}</span>
-                        <span class="text-xs text-gray-400">${durationText}</span>
-                    </div>
-                    <div class="text-xs text-gray-500 mt-1">
-                        Issues: ${agent.issues_found || 0} found, ${agent.issues_fixed || 0} fixed
-                    </div>
-                </div>`;
-            });
-            listDiv.innerHTML = html;
-        }
-
-        // Update decisions
-        function updateDecisions(decisionData) {
-            const analytics = decisionData.analytics || {};
-            const decisions = decisionData.recent || [];
-
-            document.getElementById('decisionCount').textContent = analytics.total_decisions || 0;
-
-            const avgQuality = analytics.avg_quality || 0;
-            document.getElementById('decisionQuality').textContent = avgQuality > 0 ? avgQuality.toFixed(1) : '--';
-
-            document.getElementById('decisionLessons').textContent = analytics.lessons_used_count || 0;
-
-            // Update decision list
-            const listDiv = document.getElementById('decisionList');
-            if (decisions.length === 0) {
-                listDiv.innerHTML = '<div class="text-gray-500 text-sm italic">No decisions yet</div>';
-                return;
-            }
-
-            let html = '';
-            decisions.slice(-3).reverse().forEach(decision => {
-                const quality = decision.quality_rating || 3;
-                const qualityClass = quality >= 4 ? 'decision-quality-high' :
-                                   quality >= 3 ? 'decision-quality-medium' : 'decision-quality-low';
-                const qualityText = quality >= 4 ? 'High' : quality >= 3 ? 'Med' : 'Low';
-
-                html += `<div class="bg-gray-800 p-2 rounded text-xs">
-                    <div class="flex justify-between items-start">
-                        <span class="text-gray-300">${decision.decision_type || 'Decision'}</span>
-                        <span class="decision-badge ${qualityClass}">${qualityText}</span>
-                    </div>
-                    ${decision.used_lessons_learned ? '<div class="text-purple-400 text-xs mt-1">📚 Used lessons</div>' : ''}
-                </div>`;
-            });
-            listDiv.innerHTML = html;
-        }
-
-        // Update connection status
-        function updateConnectionStatus(connected) {
-            const statusDiv = document.getElementById('connectionStatus');
-            if (connected) {
-                statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full bg-green-500 mr-2 animate-pulse"></div>
-                    <span class="text-sm text-green-400">Connected</span>
-                `;
-            } else {
-                statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                    <span class="text-sm text-red-400">Disconnected</span>
-                `;
-            }
-        }
-
-        // Connect WebSocket
-        function connectWebSocket(sessionId) {
-            if (ws) {
-                ws.close();
-            }
-
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws/${sessionId}`;
-
-            ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                updateConnectionStatus(true);
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-
-                if (data.type === 'status') {
-                    updateStatus(data.data);
-                    // TRIGGER enhanced metrics refresh on WebSocket update
-                    if (currentSession) {
-                        updateEnhancedMetrics(currentSession);
-                    }
-                } else if (data.type === 'phase_update') {
-                    // Handle phase update specifically
-                    updateStatus(data.data);
-                    if (currentSession) {
-                        updateEnhancedMetrics(currentSession);
-                    }
-                } else if (data.type === 'complete') {
-                    alert('🎉 Session complete!');
-                } else if (data.type === 'log') {
-                    // Append log line
-                    const logsDiv = document.getElementById('logs');
-                    const line = document.createElement('div');
-                    line.className = 'log-line text-gray-300';
-                    line.textContent = data.data;
-                    logsDiv.appendChild(line);
-                    logsDiv.scrollTop = logsDiv.scrollHeight;
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                updateConnectionStatus(false);
-            };
-
-            ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                updateConnectionStatus(false);
-
-                // Reconnect after 5 seconds
-                setTimeout(() => {
-                    if (currentSession) {
-                        connectWebSocket(currentSession);
-                    }
-                }, 5000);
-            };
+        // Create ASCII progress bar
+        function createProgressBar(percent, width = 40) {
+            const filled = Math.round((percent / 100) * width);
+            const empty = width - filled;
+            const bar = '█'.repeat(filled) + '░'.repeat(empty);
+            return `[${bar}] ${percent.toFixed(0)}%`;
         }
 
         // Load sessions
@@ -768,61 +225,219 @@
             try {
                 const response = await fetch('/api/sessions');
                 const data = await response.json();
+                allSessions = data.sessions || [];
 
                 const selector = document.getElementById('sessionSelector');
-                selector.innerHTML = '';
+                selector.innerHTML = allSessions.length > 0
+                    ? allSessions.map(s => `<option value="${s.id}">${s.id} - ${s.project || 'Unknown'}</option>`).join('')
+                    : '<option value="">No sessions found</option>';
 
-                if (data.sessions.length === 0) {
-                    selector.innerHTML = '<option>No active sessions</option>';
-                    return;
+                // Auto-select first active session
+                const activeSession = allSessions.find(s => s.status === 'running');
+                if (activeSession && !currentSession) {
+                    selector.value = activeSession.id;
+                    selectSession();
                 }
-
-                data.sessions.forEach(session => {
-                    const option = document.createElement('option');
-                    option.value = session.id;
-                    option.textContent = `${session.project} (${session.phase})`;
-                    if (session.is_complete) {
-                        option.textContent += ' ✓';
-                    }
-                    selector.appendChild(option);
-                });
-
-                // Auto-select first session
-                if (!currentSession && data.sessions.length > 0) {
-                    currentSession = data.sessions[0].id;
-                    selector.value = currentSession;
-                    connectWebSocket(currentSession);
-                }
-
             } catch (error) {
                 console.error('Error loading sessions:', error);
             }
         }
 
-        // Refresh data
-        async function refreshData() {
+        // Select session
+        function selectSession() {
+            const selector = document.getElementById('sessionSelector');
+            currentSession = selector.value;
+
+            if (currentSession) {
+                loadSessionStatus();
+                connectWebSocket();
+            }
+        }
+
+        // Load session status
+        async function loadSessionStatus() {
             if (!currentSession) return;
 
             try {
                 const response = await fetch(`/api/status/${currentSession}`);
-                const status = await response.json();
-                updateStatus(status);
-
-                // Load logs
-                const logsResponse = await fetch(`/api/logs/${currentSession}?lines=50`);
-                const logsData = await logsResponse.json();
-                updateLogs(logsData.logs || []);
-
-                // Load enhanced metrics (new)
-                await updateEnhancedMetrics(currentSession);
-
+                const data = await response.json();
+                updateStatus(data);
             } catch (error) {
-                console.error('Error refreshing data:', error);
+                console.error('Error loading status:', error);
             }
         }
 
-        // Export session data
-        function exportSession() {
+        // Update status display
+        function updateStatus(data) {
+            // Show sections
+            document.getElementById('statusSection').style.display = 'block';
+            document.getElementById('currentPhaseSection').style.display = 'block';
+            document.getElementById('phasesSection').style.display = 'block';
+
+            // Basic info
+            document.getElementById('taskId').textContent = data.session_id || '-';
+            document.getElementById('status').textContent = data.status || 'Unknown';
+            document.getElementById('status').className = `status-${data.status || 'running'}`;
+            document.getElementById('elapsedTime').textContent = formatDuration(data.elapsed_seconds || 0);
+
+            // Calculate progress based on elapsed time and timeout
+            const timeout = (data.timeout_minutes || 60) * 60;
+            const progress = Math.min(100, ((data.elapsed_seconds || 0) / timeout) * 100);
+            document.getElementById('progressPercent').textContent = progress.toFixed(1) + '%';
+            document.getElementById('overallPercent').textContent = progress.toFixed(0) + '%';
+            document.getElementById('overallBar').textContent = createProgressBar(progress);
+
+            // Current phase
+            const currentPhase = data.current_phase || 'Unknown';
+            const phaseStatus = data.phase_status || '-';
+            document.getElementById('currentPhaseName').textContent = `Phase: ${currentPhase}`;
+            document.getElementById('currentPhaseStatus').textContent = `Status: ${phaseStatus}`;
+
+            // Phase progress (estimate based on typical phase durations)
+            const phasePercent = estimatePhaseProgress(currentPhase, data.elapsed_seconds || 0);
+            document.getElementById('currentPhasePercent').textContent = phasePercent.toFixed(0) + '%';
+            document.getElementById('currentPhaseBar').textContent = createProgressBar(phasePercent);
+
+            // Phase list
+            renderPhaseList(data);
+
+            // Try to load agents
+            loadAgents();
+
+            // Update timestamp
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Estimate phase progress
+        function estimatePhaseProgress(phase, elapsed) {
+            // Simple heuristic - can be improved with real data
+            const phaseEstimates = {
+                'Scout': 180,        // ~3 min
+                'Architect': 240,    // ~4 min
+                'Builder': 480,      // ~8 min (longest)
+                'Test': 180,         // ~3 min
+                'Deployer': 60       // ~1 min
+            };
+
+            const estimate = phaseEstimates[phase] || 300;
+            return Math.min(100, (elapsed / estimate) * 100);
+        }
+
+        // Render phase list
+        function renderPhaseList(data) {
+            const allPhases = [
+                'Codebase Analysis',
+                'Scout',
+                'Architect',
+                'Builder',
+                'Test',
+                'Deployer'
+            ];
+
+            const completed = data.phases_completed || [];
+            const current = data.current_phase || '';
+
+            const html = allPhases.map(phase => {
+                let status = 'pending';
+                let icon = '⏱️';
+
+                if (completed.includes(phase)) {
+                    status = 'completed';
+                    icon = '✅';
+                } else if (phase === current) {
+                    status = 'current';
+                    icon = '🔨';
+                }
+
+                return `
+                    <div class="phase-card phase-${status}">
+                        <h4>${icon} ${phase}</h4>
+                        <p>${status.charAt(0).toUpperCase() + status.slice(1)}</p>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('phasesList').innerHTML = html;
+        }
+
+        // Load agents
+        async function loadAgents() {
+            if (!currentSession) return;
+
+            try {
+                const response = await fetch(`/api/agents/${currentSession}`);
+                if (!response.ok) {
+                    document.getElementById('agentsSection').style.display = 'none';
+                    return;
+                }
+
+                const data = await response.json();
+                if (data.agents && data.agents.length > 0) {
+                    document.getElementById('agentsSection').style.display = 'block';
+                    document.getElementById('agentCount').textContent = data.total_agents || 0;
+
+                    const html = data.agents.map(agent => {
+                        const percent = agent.progress_percent || 0;
+                        const bar = createProgressBar(percent, 30);
+
+                        return `
+                            <div class="agent-item agent-active">
+                                <div><strong>${agent.agent_name || agent.agent_type}</strong> - ${agent.status}</div>
+                                <div style="font-size: 0.85rem; margin-top: 0.25rem;">${bar}</div>
+                                <div style="font-size: 0.8rem; color: #888;">${agent.phase || 'Working...'}</div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    document.getElementById('agentsList').innerHTML = html;
+                } else {
+                    document.getElementById('agentsSection').style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('agentsSection').style.display = 'none';
+            }
+        }
+
+        // WebSocket connection
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            if (!currentSession) return;
+
+            ws = new WebSocket(`ws://${window.location.host}/ws/${currentSession}`);
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'status') {
+                    updateStatus(data.data);
+                } else if (data.type === 'log') {
+                    addLog(data.data);
+                } else if (data.type === 'complete') {
+                    console.log('Session complete!');
+                    loadSessions();
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Add log line
+        function addLog(text) {
+            const logsDiv = document.getElementById('logs');
+            const line = document.createElement('div');
+            line.className = 'log-line';
+            line.textContent = text;
+            logsDiv.appendChild(line);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        // Export data
+        function exportData() {
             if (!currentSession) return;
 
             fetch(`/api/status/${currentSession}`)
@@ -837,27 +452,14 @@
                 });
         }
 
-        // Session selector change
-        document.getElementById('sessionSelector').addEventListener('change', (e) => {
-            currentSession = e.target.value;
-            connectWebSocket(currentSession);
-            refreshData();
-        });
-
         // Initialize
         loadSessions();
         setInterval(loadSessions, 30000); // Refresh sessions every 30s
-
-        // Auto-refresh enhanced metrics every 5 seconds
         setInterval(() => {
             if (currentSession) {
-                updateEnhancedMetrics(currentSession);
+                loadSessionStatus();
             }
-        }, 5000);
-
-        // Update timestamp display every second
-        setInterval(updateMetricsTimestamp, 1000);
-
+        }, 3000); // Refresh status every 3s
     </script>
 </body>
 </html>

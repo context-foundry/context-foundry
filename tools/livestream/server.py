@@ -10,7 +10,7 @@ import json
 import asyncio
 import hashlib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Set, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
@@ -155,6 +155,27 @@ class SessionMonitor:
             phases_completed = live_data.get("phases_completed", [])
             total_phases = 7  # Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy
 
+            # Calculate overall progress percentage
+            phase_number_str = live_data.get("phase_number", "?/7")
+            try:
+                current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+            except:
+                current_phase_num = None
+
+            if current_phase_num is not None:
+                overall_progress = ((current_phase_num - 1 + 0.5) / total_phases) * 100
+            else:
+                overall_progress = (len(phases_completed) / total_phases) * 100
+
+            # Estimate remaining time
+            phases_done = len(phases_completed)
+            if phases_done > 0 and elapsed_seconds > 0:
+                avg_time_per_phase = elapsed_seconds / phases_done
+                remaining_phases = total_phases - phases_done
+                estimated_remaining_seconds = int(avg_time_per_phase * remaining_phases)
+            else:
+                estimated_remaining_seconds = 0
+
             return {
                 "id": session_id,
                 "project": session_id,
@@ -164,12 +185,18 @@ class SessionMonitor:
                 "iterations": live_data.get("test_iteration", 0),
                 "start_time": live_data.get("started_at"),
                 "elapsed_seconds": int(elapsed_seconds),
-                "estimated_remaining_seconds": 0,  # TODO: Could estimate based on phase
+                "estimated_remaining_seconds": estimated_remaining_seconds,
+                "overall_progress_percent": round(overall_progress, 1),
                 "tasks": {
                     "completed": phases_completed,
                     "remaining": [],
                     "total": total_phases,
                     "progress_percent": int((len(phases_completed) / total_phases * 100)),
+                },
+                "phase_breakdown": {
+                    "completed": phases_completed,
+                    "current": live_data.get("current_phase", "Unknown"),
+                    "remaining": []
                 },
                 "context": {
                     "percentage": 0,  # Live data doesn't have token info yet
@@ -420,6 +447,278 @@ async def health():
         "sessions": len(monitor.discover_sessions()),
         "connections": sum(len(conns) for conns in connections.values()),
     }
+
+
+# ============================================================================
+# Phase Tracking & Session Filtering Endpoints (Dashboard Redesign)
+# ============================================================================
+
+def get_phase_breakdown(session_data: Dict) -> Dict:
+    """
+    Calculate detailed phase breakdown from session data.
+    Returns structured information about completed, current, and upcoming phases.
+    """
+    # Phase definitions
+    PHASE_DEFINITIONS = [
+        {"number": 0, "name": "Codebase Analysis", "emoji": "🔍"},
+        {"number": 1, "name": "Scout", "emoji": "🔍"},
+        {"number": 2, "name": "Architect", "emoji": "🏗️"},
+        {"number": 3, "name": "Builder", "emoji": "🔨", "note": "This is typically the longest phase!"},
+        {"number": 4, "name": "Tester", "emoji": "🧪"},
+        {"number": 5, "name": "Test Loop", "emoji": "🔄"},
+        {"number": 6, "name": "Documentation", "emoji": "📝"},
+        {"number": 7, "name": "Deployer", "emoji": "🚀"}
+    ]
+
+    total_phases = len(PHASE_DEFINITIONS)
+    phases_completed = session_data.get("phases_completed", [])
+    current_phase = session_data.get("current_phase", "Unknown")
+    phase_number_str = session_data.get("phase_number", "?/7")
+
+    # Parse current phase number
+    try:
+        current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+    except:
+        current_phase_num = None
+
+    # Calculate overall progress
+    phases_completed_count = len(phases_completed)
+    if current_phase_num is not None:
+        # Add partial credit for current phase (0.5)
+        overall_progress = ((current_phase_num - 1 + 0.5) / total_phases) * 100
+    else:
+        overall_progress = (phases_completed_count / total_phases) * 100
+
+    # Build phase list
+    phases = []
+    for phase_def in PHASE_DEFINITIONS:
+        phase_name = phase_def["name"]
+        phase_info = {
+            "number": phase_def["number"],
+            "name": phase_name,
+            "emoji": phase_def["emoji"]
+        }
+
+        # Add note if present
+        if "note" in phase_def:
+            phase_info["note"] = phase_def["note"]
+
+        # Determine status
+        if phase_name in phases_completed:
+            phase_info["status"] = "completed"
+            phase_info["description"] = f"Completed {phase_name.lower()} phase"
+        elif phase_name == current_phase:
+            phase_info["status"] = "in_progress"
+            phase_info["description"] = session_data.get("progress_detail", "In progress...")
+            phase_info["detail"] = session_data.get("progress_detail", "")
+        else:
+            phase_info["status"] = "pending"
+            phase_info["description"] = f"{phase_name} phase pending"
+
+        phases.append(phase_info)
+
+    return {
+        "session_id": session_data.get("session_id", "unknown"),
+        "total_phases": total_phases,
+        "phases_completed_count": phases_completed_count,
+        "current_phase_number": current_phase_num,
+        "overall_progress_percent": round(overall_progress, 1),
+        "phases": phases
+    }
+
+
+@app.get("/api/phases/{session_id}")
+async def get_session_phases(session_id: str):
+    """Get detailed phase breakdown for a session."""
+    # Get session data from monitor
+    if session_id in monitor.sessions:
+        session_data = monitor.sessions[session_id]
+        phase_breakdown = get_phase_breakdown(session_data)
+        return JSONResponse(phase_breakdown)
+
+    # Fall back to checkpoint-based session
+    status = monitor.get_session_status(session_id)
+    if "error" in status:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+
+    # Create minimal phase breakdown for legacy sessions
+    return JSONResponse({
+        "session_id": session_id,
+        "total_phases": 7,
+        "phases_completed_count": 0,
+        "current_phase_number": None,
+        "overall_progress_percent": 0,
+        "phases": [],
+        "legacy": True
+    })
+
+
+@app.get("/api/sessions/active")
+async def get_active_sessions():
+    """Get only active/running sessions."""
+    sessions = monitor.discover_sessions()
+    active = [s for s in sessions if not s.get('is_complete') and s.get('status') != 'failed']
+    return JSONResponse({"sessions": active, "count": len(active)})
+
+
+@app.get("/api/sessions/completed")
+async def get_completed_sessions():
+    """Get only completed sessions."""
+    sessions = monitor.discover_sessions()
+    completed = [s for s in sessions if s.get('is_complete') or s.get('status') == 'completed']
+    return JSONResponse({"sessions": completed, "count": len(completed)})
+
+
+@app.get("/api/sessions/failed")
+async def get_failed_sessions():
+    """Get only failed sessions."""
+    sessions = monitor.discover_sessions()
+    failed = [s for s in sessions if s.get('status') == 'failed']
+    return JSONResponse({"sessions": failed, "count": len(failed)})
+
+
+# ============================================================================
+# Multi-Agent Monitoring Endpoints (NEW)
+# ============================================================================
+
+@app.get("/api/agents/{session_id}")
+async def get_session_agents(session_id: str):
+    """Get all agent instances for a session."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        agents = db.get_session_agents(session_id)
+        active_agents = [a for a in agents if a['status'] in ['spawning', 'active', 'idle']]
+
+        return JSONResponse({
+            "session_id": session_id,
+            "agents": agents,
+            "total_agents": len(agents),
+            "active_agents": len(active_agents)
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/agent/{agent_id}")
+async def get_agent_detail(agent_id: str):
+    """Get detailed status for a specific agent."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        agent = db.get_agent_instance(agent_id)
+
+        if not agent:
+            return JSONResponse({"error": "Agent not found"}, status_code=404)
+
+        # Calculate elapsed seconds if agent is still running
+        if agent['start_time'] and not agent['end_time']:
+            from datetime import datetime, timezone
+            start_time = datetime.fromisoformat(agent['start_time'].replace('Z', '+00:00'))
+            elapsed_seconds = int((datetime.now(timezone.utc) - start_time).total_seconds())
+            agent['elapsed_seconds'] = elapsed_seconds
+
+            # Estimate remaining time based on progress
+            if agent['progress_percent'] > 0:
+                estimated_total = elapsed_seconds / (agent['progress_percent'] / 100.0)
+                agent['estimated_remaining_seconds'] = int(estimated_total - elapsed_seconds)
+            else:
+                agent['estimated_remaining_seconds'] = 0
+
+        return JSONResponse(agent)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/instances")
+async def get_all_instances():
+    """Get all running Context Foundry instances with summary stats."""
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        instances = db.get_all_instances()
+
+        return JSONResponse({
+            "instances": instances,
+            "total_instances": len(instances)
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/agent-update")
+async def agent_update(agent_data: Dict):
+    """
+    Receive agent status updates from orchestrator/builders.
+    Creates or updates agent instance and broadcasts to connected clients.
+    """
+    if not MCP_ENHANCED:
+        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+
+    try:
+        db = get_db()
+        session_id = agent_data.get("session_id")
+        agent_id = agent_data.get("agent_id")
+
+        if not session_id or not agent_id:
+            return JSONResponse({"error": "session_id and agent_id required"}, status_code=400)
+
+        # Check if agent exists
+        existing_agent = db.get_agent_instance(agent_id)
+
+        if existing_agent:
+            # Update existing agent
+            updates = {}
+            for key in ['status', 'phase', 'progress_percent', 'tokens_used', 'token_percentage', 'error_message']:
+                if key in agent_data:
+                    updates[key] = agent_data[key]
+
+            # Calculate token percentage if tokens_used provided
+            if 'tokens_used' in updates and existing_agent.get('tokens_limit'):
+                updates['token_percentage'] = (updates['tokens_used'] / existing_agent['tokens_limit']) * 100
+
+            # Set end_time if status is completed or failed
+            if updates.get('status') in ['completed', 'failed']:
+                updates['end_time'] = datetime.now().isoformat()
+                if existing_agent.get('start_time'):
+                    from datetime import datetime as dt
+                    start = dt.fromisoformat(existing_agent['start_time'].replace('Z', '+00:00'))
+                    end = dt.now(timezone.utc)
+                    updates['duration_seconds'] = int((end - start).total_seconds())
+
+            db.update_agent_instance(agent_id, updates)
+        else:
+            # Create new agent instance
+            db.create_agent_instance(agent_data)
+
+        # Broadcast agent update to connected clients
+        broadcast_count = 0
+        if session_id in connections:
+            event = {
+                "type": "agent_progress",
+                "session_id": session_id,
+                "data": agent_data
+            }
+            for connection in connections[session_id]:
+                try:
+                    await connection.send_json(event)
+                    broadcast_count += 1
+                except:
+                    pass
+
+        return JSONResponse({
+            "status": "updated",
+            "agent_id": agent_id,
+            "broadcasted_to": broadcast_count
+        })
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 # ============================================================================

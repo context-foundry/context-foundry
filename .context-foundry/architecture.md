@@ -1,583 +1,626 @@
-# Architecture: Livestream Real-Time Updates Fix
+# BAML Integration Architecture
 
 ## System Architecture Overview
 
+Context Foundry will integrate BAML as an **optional reliability layer** for structured LLM outputs, focusing on high-impact areas where type safety eliminates parsing errors. This is NOT a full rewrite—BAML augments existing functionality.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Autonomous Build Process                  │
-│                                                              │
-│  Orchestrator → writes .context-foundry/current-phase.json  │
-│         ↓                                                    │
-│         ↓ (curl POST /api/phase-update)                     │
-└─────────┼──────────────────────────────────────────────────┘
-          ↓
-┌─────────┴──────────────────────────────────────────────────┐
-│               Livestream Server (server.py)                 │
-│                                                              │
-│  ┌─────────────────┐      ┌──────────────────┐            │
-│  │ SessionMonitor  │      │ WebSocket Handler│            │
-│  │                 │      │                  │            │
-│  │ - sessions{}    │◄─────┤ - connections{}  │            │
-│  │ - last_update{} │      │ - change_hashes{}│ ← NEW      │
-│  └────────┬────────┘      └────────┬─────────┘            │
-│           │                         │                       │
-│           │ /api/phase-update       │                       │
-│           ↓                         ↓                       │
-│  ┌─────────────────────────────────────────┐              │
-│  │    Broadcast to WebSocket clients       │              │
-│  │    (only if data changed - NEW)         │              │
-│  └─────────────────┬───────────────────────┘              │
-└────────────────────┼────────────────────────────────────────┘
-                     ↓
-┌────────────────────┴────────────────────────────────────────┐
-│          Dashboard (dashboard.html)                          │
-│                                                              │
-│  WebSocket.onmessage → triggers:                            │
-│    1. updateStatus() (existing)                             │
-│    2. updateEnhancedMetrics() (NEW)                         │
-│                                                              │
-│  setInterval (5s) → updateEnhancedMetrics() (NEW)          │
-│                                                              │
-│  Displays: last updated timestamps (NEW)                    │
-└─────────────────────────────────────────────────────────────┘
-
+│                    Context Foundry MCP Server                │
+│                     (tools/mcp_server.py)                    │
+└─────────────────┬───────────────────────────────────────────┘
+                  │
+                  │ Spawns Claude instances with
+                  │ orchestrator_prompt.txt
+                  ▼
 ┌─────────────────────────────────────────────────────────────┐
-│        MetricsCollector (metrics_collector.py)               │
-│                                                              │
-│  Watchdog FileSystemEventHandler (NEW)                      │
-│    → Watches: .context-foundry/current-phase.json          │
-│    → on_modified() → collect_metrics()                      │
-│    → Debounced (100ms)                                      │
-│                                                              │
-│  Fallback: Poll checkpoints/ralph/* (existing)              │
+│              Autonomous Build Orchestrator                   │
+│         Scout → Architect → Builder → Test → Deploy         │
+└──────┬──────────────────────────────────────────────────────┘
+       │
+       │ NEW: Optional BAML layer for structured outputs
+       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  BAML Integration Layer                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │ Phase        │  │ Scout Report │  │ Architect    │      │
+│  │ Tracking     │  │ Schema       │  │ Blueprint    │      │
+│  │ (PhaseInfo)  │  │              │  │ Schema       │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                               │
+│  Compiled from: tools/baml_schemas/*.baml                    │
+│  Generated to: tools/baml_client/                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ## File Structure
 
 ```
-tools/livestream/
-├── server.py             (MODIFY - add change detection)
-├── dashboard.html        (MODIFY - add auto-refresh)
-├── metrics_collector.py  (MODIFY - add file watching)
-├── mcp_client.py        (MODIFY - prioritize live data)
-├── config.py            (READ - get settings)
-├── metrics_db.py        (READ - database access)
-└── broadcaster.py       (KEEP - no changes)
-
-requirements.txt          (MODIFY - add watchdog)
+context-foundry/
+├── tools/
+│   ├── baml_schemas/                    # NEW: BAML definitions
+│   │   ├── phase_tracking.baml          # Phase tracking types
+│   │   ├── scout.baml                   # Scout report schema
+│   │   ├── architect.baml               # Architecture blueprint schema
+│   │   ├── builder.baml                 # Builder task results
+│   │   └── clients.baml                 # LLM client configurations
+│   │
+│   ├── baml_client/                     # NEW: Generated Python client (auto-compiled)
+│   │   ├── __init__.py
+│   │   ├── types.py                     # Generated type classes
+│   │   └── sync_client.py               # Generated sync client
+│   │
+│   ├── baml_integration.py              # NEW: BAML helper functions
+│   ├── mcp_server.py                    # MODIFIED: Add BAML support
+│   ├── orchestrator_prompt.txt          # MODIFIED: Optional BAML usage
+│   └── ...
+│
+├── requirements.txt                     # MODIFIED: Add baml-py
+├── requirements-baml.txt                # NEW: Optional BAML deps
+├── docs/
+│   ├── BAML_INTEGRATION.md             # NEW: BAML usage guide
+│   └── ...
+├── tests/
+│   ├── test_baml_integration.py        # NEW: BAML tests
+│   └── ...
+└── examples/
+    └── baml-example-project/            # NEW: Example using BAML
 ```
 
 ## Module Specifications
 
-### Module 1: Change Detection in WebSocket (server.py)
+### 1. BAML Schemas (`tools/baml_schemas/`)
 
-**Location**: Lines 286-320
+**phase_tracking.baml**
+```baml
+// Type-safe phase tracking to replace JSON strings
 
-**Changes**:
-1. Add global hash storage: `last_sent_hashes: Dict[str, str] = {}`
-2. Add hash function:
-```python
-import hashlib
+class PhaseInfo {
+  session_id string
+  current_phase PhaseType
+  phase_number string
+  status PhaseStatus
+  progress_detail string
+  test_iteration int
+  phases_completed PhaseType[]
+  started_at string
+  last_updated string
+}
 
-def hash_data(data: Dict) -> str:
-    """Create SHA256 hash of data for change detection."""
-    data_str = json.dumps(data, sort_keys=True)
-    return hashlib.sha256(data_str.encode()).hexdigest()
-```
+enum PhaseType {
+  CodebaseAnalysis
+  Scout
+  Architect
+  Builder
+  Test
+  Screenshot
+  Documentation
+  Deploy
+  Feedback
+  GitHub
+}
 
-3. Modify WebSocket loop:
-```python
-@app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    await websocket.accept()
+enum PhaseStatus {
+  analyzing
+  researching
+  designing
+  building
+  testing
+  self_healing
+  capturing
+  documenting
+  deploying
+  completed
+  failed
+}
 
-    if session_id not in connections:
-        connections[session_id] = set()
-    connections[session_id].add(websocket)
+function CreatePhaseInfo(
+  phase: PhaseType,
+  status: PhaseStatus,
+  detail: string,
+  iteration: int
+) -> PhaseInfo {
+  client GPT4
+  prompt #"
+    Create phase tracking info:
+    Phase: {{ phase }}
+    Status: {{ status }}
+    Detail: {{ detail }}
+    Test iteration: {{ iteration }}
+    
+    Return structured phase information.
+  "#
+}
 
-    # Track last hash for this connection
-    last_hash = None
-
-    try:
-        # Send initial status
-        status = monitor.get_session_status(session_id)
-        current_hash = hash_data(status)
-        await websocket.send_json({"type": "status", "data": status})
-        last_hash = current_hash
-
-        # Keep connection alive and send updates ONLY if changed
-        while True:
-            await asyncio.sleep(1)
-
-            status = monitor.get_session_status(session_id)
-            current_hash = hash_data(status)
-
-            # CHANGE DETECTION: Only send if data changed
-            if current_hash != last_hash:
-                await websocket.send_json({"type": "status", "data": status})
-                last_hash = current_hash
-
-            # Check if session is complete
-            if status.get("is_complete"):
-                await websocket.send_json({
-                    "type": "complete",
-                    "message": "Session completed!"
-                })
-                break
-    except WebSocketDisconnect:
-        connections[session_id].remove(websocket)
-        if not connections[session_id]:
-            del connections[session_id]
-```
-
-**Testing**: Send same data twice, verify only one transmission
-
----
-
-### Module 2: Dashboard Auto-Refresh (dashboard.html)
-
-**Location**: Lines 491-793
-
-**Changes**:
-
-1. Add refresh state management (after line 353):
-```javascript
-let enhancedMetricsRefreshing = false;
-let lastEnhancedMetricsUpdate = null;
-```
-
-2. Modify `updateEnhancedMetrics()` to prevent concurrent calls:
-```javascript
-async function updateEnhancedMetrics(sessionId) {
-    // Prevent concurrent refreshes
-    if (enhancedMetricsRefreshing) {
-        return;
-    }
-
-    enhancedMetricsRefreshing = true;
-
-    try {
-        const response = await fetch(`/api/metrics/${sessionId}`);
-        const data = await response.json();
-
-        if (data.error) {
-            console.warn('Enhanced metrics not available:', data.error);
-            return;
-        }
-
-        // Update last refresh timestamp
-        lastEnhancedMetricsUpdate = Date.now();
-
-        // Update all metric panels
-        if (data.metrics?.token_usage) {
-            updateTokenUsage(data.metrics.token_usage);
-        }
-        if (data.test_iterations) {
-            updateTestIterations(data.test_iterations);
-        }
-        if (data.agent_performance) {
-            updateAgentPerformance(data.agent_performance);
-        }
-        if (data.decisions) {
-            updateDecisions(data.decisions);
-        }
-
-        // Update "last updated" display
-        updateMetricsTimestamp();
-
-    } catch (error) {
-        console.warn('Error fetching enhanced metrics:', error);
-    } finally {
-        enhancedMetricsRefreshing = false;
-    }
+function ValidatePhaseInfo(json_string: string) -> PhaseInfo {
+  client GPT4
+  prompt #"
+    Validate and parse this phase info JSON:
+    {{ json_string }}
+    
+    Return as structured PhaseInfo object.
+  "#
 }
 ```
 
-3. Add timestamp display function:
-```javascript
-function updateMetricsTimestamp() {
-    if (!lastEnhancedMetricsUpdate) return;
+**scout.baml**
+```baml
+// Structured Scout reports with guaranteed schema
 
-    const elapsed = Math.floor((Date.now() - lastEnhancedMetricsUpdate) / 1000);
-    const timeText = elapsed < 60 ? `${elapsed}s ago` : `${Math.floor(elapsed / 60)}m ago`;
+class ScoutReport {
+  executive_summary string @description("2-3 paragraphs max")
+  past_learnings_applied string[] @description("Bullet points")
+  known_risks string[] @description("Flagged from pattern library")
+  key_requirements string[] @description("Bulleted list, not essay")
+  tech_stack TechStack
+  architecture_recommendations string[] @description("Top 3-5 critical items")
+  main_challenges Challenge[] @description("Top 3-5 challenges")
+  testing_approach string @description("Brief outline")
+  timeline_estimate string @description("Single line estimate")
+}
 
-    // Add to each metric panel header
-    document.querySelectorAll('.metric-timestamp').forEach(el => {
-        el.textContent = `Updated: ${timeText}`;
+class TechStack {
+  languages string[]
+  frameworks string[]
+  dependencies string[]
+  justification string @description("Brief, 2-3 sentences")
+}
 
-        // Color code based on freshness
-        el.className = 'metric-timestamp text-xs ';
-        if (elapsed < 5) el.className += 'text-green-400';
-        else if (elapsed < 30) el.className += 'text-yellow-400';
-        else el.className += 'text-red-400';
-    });
+class Challenge {
+  description string
+  severity Severity
+  mitigation string
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+function GenerateScoutReport(
+  task_description: string,
+  codebase_analysis: string,
+  past_patterns: string
+) -> ScoutReport {
+  client Claude35Sonnet
+  prompt #"
+    You are the Scout agent researching this task:
+    
+    {{ task_description }}
+    
+    Codebase analysis:
+    {{ codebase_analysis }}
+    
+    Past patterns to consider:
+    {{ past_patterns }}
+    
+    Provide comprehensive yet concise research findings.
+  "#
 }
 ```
 
-4. Add HTML timestamp elements (modify metric panel headers):
-```html
-<h3 class="text-lg font-bold text-gray-200 mb-4">
-    🔢 Token Usage
-    <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
-</h3>
+**architect.baml**
+```baml
+// Architecture blueprint with validated structure
+
+class ArchitectureBlueprint {
+  system_overview string
+  file_structure FileStructure[]
+  modules ModuleSpec[]
+  applied_patterns AppliedPattern[]
+  preventive_measures string[]
+  implementation_steps string[]
+  test_plan TestPlan
+  success_criteria string[]
+}
+
+class FileStructure {
+  path string
+  purpose string
+  dependencies string[]
+}
+
+class ModuleSpec {
+  name string
+  responsibility string
+  interfaces string[]
+  dependencies string[]
+}
+
+class AppliedPattern {
+  pattern_id string
+  pattern_name string
+  reason string
+}
+
+class TestPlan {
+  unit_tests string[]
+  integration_tests string[]
+  e2e_tests string[]
+  test_framework string
+  success_criteria string[]
+}
+
+function GenerateArchitecture(
+  scout_report: ScoutReport,
+  flagged_risks: string[]
+) -> ArchitectureBlueprint {
+  client Claude35Sonnet
+  prompt #"
+    You are the Architect agent designing the system.
+    
+    Scout findings:
+    Executive summary: {{ scout_report.executive_summary }}
+    Tech stack: {{ scout_report.tech_stack }}
+    Challenges: {{ scout_report.main_challenges }}
+    
+    Flagged risks to address:
+    {% for risk in flagged_risks %}
+    - {{ risk }}
+    {% endfor %}
+    
+    Create detailed technical architecture.
+  "#
+}
 ```
 
-5. Modify WebSocket handler to trigger refresh (line 674):
-```javascript
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
+**builder.baml**
+```baml
+// Builder task results with error tracking
 
-    if (data.type === 'status') {
-        updateStatus(data.data);
-        // TRIGGER enhanced metrics refresh on WebSocket update
-        updateEnhancedMetrics(currentSession);
-    } else if (data.type === 'complete') {
-        alert('🎉 Session complete!');
-    } else if (data.type === 'log') {
-        const logsDiv = document.getElementById('logs');
-        const line = document.createElement('div');
-        line.className = 'log-line text-gray-300';
-        line.textContent = data.data;
-        logsDiv.appendChild(line);
-        logsDiv.scrollTop = logsDiv.scrollHeight;
-    }
-};
+class BuildTaskResult {
+  task_id string
+  description string
+  status BuildStatus
+  files_created string[]
+  files_modified string[]
+  errors BuildError[]
+  warnings string[]
+  success bool
+  next_steps string[]
+}
+
+enum BuildStatus {
+  success
+  partial
+  failed
+}
+
+class BuildError {
+  file string
+  line int?
+  message string
+  severity ErrorSeverity
+}
+
+enum ErrorSeverity {
+  error
+  warning
+  info
+}
+
+function ExecuteBuildTask(
+  task_id: string,
+  task_description: string,
+  files_to_create: string[],
+  architecture: string
+) -> BuildTaskResult {
+  client Claude35Sonnet
+  prompt #"
+    Execute build task: {{ task_id }}
+    
+    Task: {{ task_description }}
+    
+    Files to create:
+    {% for file in files_to_create %}
+    - {{ file }}
+    {% endfor %}
+    
+    Architecture context:
+    {{ architecture }}
+    
+    Return structured result with files created and any errors.
+  "#
+}
 ```
 
-6. Add auto-refresh interval (after line 793):
-```javascript
-// Auto-refresh enhanced metrics every 5 seconds
-setInterval(() => {
-    if (currentSession) {
-        updateEnhancedMetrics(currentSession);
-    }
-}, 5000);
+**clients.baml**
+```baml
+// LLM client configurations
 
-// Update timestamp display every second
-setInterval(updateMetricsTimestamp, 1000);
+client<llm> GPT4 {
+  provider openai
+  options {
+    model "gpt-4o"
+    api_key env.OPENAI_API_KEY
+  }
+}
+
+client<llm> Claude35Sonnet {
+  provider anthropic
+  options {
+    model "claude-3-5-sonnet-20241022"
+    api_key env.ANTHROPIC_API_KEY
+  }
+}
+
+client<llm> Claude35Haiku {
+  provider anthropic
+  options {
+    model "claude-3-5-haiku-20241022"
+    api_key env.ANTHROPIC_API_KEY
+  }
+}
 ```
 
-**Testing**: Verify metrics refresh on WebSocket message and every 5s
+### 2. BAML Integration Helper (`tools/baml_integration.py`)
 
----
+**Purpose**: Bridge between Context Foundry and BAML, handle compilation, fallbacks
 
-### Module 3: Filesystem Watching (metrics_collector.py)
+**Key Functions**:
+- `compile_baml_schemas()`: Compile .baml files to Python client
+- `get_baml_client()`: Get compiled BAML client (cached)
+- `update_phase_with_baml()`: Update phase tracking using BAML types
+- `generate_scout_report_baml()`: Generate structured Scout report
+- `generate_architecture_baml()`: Generate structured architecture
+- `validate_with_baml()`: Validate JSON against BAML schema
+- `fallback_to_json()`: Graceful fallback if BAML unavailable
 
-**Location**: Top of file + new class
+**Responsibilities**:
+- BAML compilation management
+- Type validation and error handling
+- Backward compatibility with JSON mode
+- Client caching for performance
 
-**Changes**:
+### 3. MCP Server Updates (`tools/mcp_server.py`)
 
-1. Add imports:
+**Modifications**:
+- Add `baml_integration` import
+- Update `_read_phase_info()`: Try BAML validation first, fallback to JSON
+- Add new MCP tool: `update_phase_baml(phase, status, detail)`
+- Add new MCP tool: `validate_phase_tracking()`
+- Initialize BAML client on server startup (optional, non-blocking)
+
+**New MCP Tools**:
 ```python
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileModifiedEvent
-import threading
+@mcp.tool()
+def update_phase_baml(
+    phase: str,
+    status: str, 
+    detail: str,
+    iteration: int = 0
+) -> dict:
+    """Update phase tracking using BAML type-safe schema"""
+    
+@mcp.tool()
+def validate_phase_tracking() -> dict:
+    """Validate current phase tracking with BAML"""
 ```
 
-2. Add FileSystemEventHandler class (after imports):
+### 4. Orchestrator Prompt Updates (`tools/orchestrator_prompt.txt`)
+
+**Modifications**:
+- Add section on optional BAML usage
+- Update phase tracking instructions to mention BAML validation
+- Add note that BAML is internal optimization (transparent to users)
+- Keep JSON fallback instructions for backward compatibility
+
+**Integration Points**:
+- Phase tracking: "If BAML is available, use update_phase_baml()"
+- Scout phase: "Generate structured report using BAML schema if available"
+- Architect phase: "Validate architecture blueprint with BAML"
+
+## Applied Patterns and Preventive Measures
+
+**Pattern 1: Gradual Adoption**
+- BAML is optional dependency
+- All features work without BAML (JSON fallback)
+- No breaking changes to existing workflows
+- Users don't need to learn BAML
+
+**Pattern 2: Compilation Caching**
+- Compile BAML schemas once at startup
+- Cache compiled client in memory
+- Recompile only if .baml files change
+- Pre-compile during installation for faster startup
+
+**Pattern 3: Type-Safe Validation**
+- Use BAML to validate existing JSON files
+- Catch schema mismatches early
+- Better error messages than JSON parsing
+- Compile-time guarantees for new code
+
+**Pattern 4: Observability**
+- Optional Boundary Studio integration
+- Track BAML function calls
+- Monitor parsing success rates
+- A/B test BAML vs JSON modes
+
+**Preventive Measures**:
+1. **No breaking changes**: JSON mode always available as fallback
+2. **Graceful degradation**: If BAML compilation fails, continue with JSON
+3. **Clear migration path**: Dual mode for 2-3 releases before deprecating JSON
+4. **Comprehensive tests**: Test both BAML and JSON modes
+5. **Performance monitoring**: Ensure BAML doesn't slow down builds
+
+## Implementation Steps
+
+### Phase 1: Foundation (Priority: HIGH)
+1. Add `baml-py==0.211.2` to requirements.txt
+2. Create `tools/baml_schemas/` directory
+3. Implement `phase_tracking.baml` schema
+4. Create `tools/baml_integration.py` helper module
+5. Implement BAML compilation and caching
+6. Add unit tests for BAML compilation
+
+### Phase 2: Phase Tracking (Priority: HIGH)
+7. Implement PhaseInfo BAML validation
+8. Update `_read_phase_info()` with BAML validation
+9. Add `update_phase_baml()` MCP tool
+10. Test phase tracking with BAML vs JSON
+11. Verify backward compatibility
+
+### Phase 3: Scout Integration (Priority: HIGH)
+12. Implement `scout.baml` schema
+13. Add Scout report generation with BAML
+14. Update orchestrator prompt with Scout BAML usage
+15. Test Scout report parsing
+16. Validate structured output quality
+
+### Phase 4: Architect Integration (Priority: MEDIUM)
+17. Implement `architect.baml` schema
+18. Add architecture generation with BAML
+19. Update orchestrator prompt with Architect BAML usage
+20. Test architecture blueprint parsing
+
+### Phase 5: Builder Integration (Priority: MEDIUM)
+21. Implement `builder.baml` schema
+22. Add build task result validation
+23. Update parallel builder prompts
+24. Test builder output validation
+
+### Phase 6: Testing (Priority: HIGH)
+25. Comprehensive unit tests for all BAML schemas
+26. Integration tests: Scout → Architect → Builder with BAML
+27. Backward compatibility tests: JSON fallback
+28. Performance tests: BAML vs JSON overhead
+29. E2E test: Full build with BAML enabled
+
+### Phase 7: Documentation (Priority: HIGH)
+30. Create `docs/BAML_INTEGRATION.md`
+31. Update README.md with BAML benefits
+32. Add code examples to documentation
+33. Document migration path (JSON → BAML)
+34. Update CHANGELOG.md
+
+### Phase 8: Example Project (Priority: MEDIUM)
+35. Create `examples/baml-example-project/`
+36. Show BAML usage in generated projects
+37. Demonstrate type-safe LLM integration
+38. Include in Context Foundry showcase
+
+## Testing Requirements and Procedures
+
+### Unit Tests (`tests/test_baml_integration.py`)
+
 ```python
-class PhaseFileWatcher(FileSystemEventHandler):
-    """
-    Watches .context-foundry/current-phase.json files for changes.
-    Triggers metrics collection when phase data updates.
-    """
+def test_baml_compilation():
+    """Test BAML schemas compile successfully"""
 
-    def __init__(self, collector: 'MetricsCollector'):
-        super().__init__()
-        self.collector = collector
-        self.debounce_timers = {}  # Debounce rapid changes
-        self.debounce_delay = 0.1  # 100ms
+def test_phase_info_validation():
+    """Test PhaseInfo BAML validation"""
 
-    def on_modified(self, event):
-        """Handle file modification events."""
-        if event.is_directory:
-            return
+def test_scout_report_generation():
+    """Test structured Scout report"""
 
-        # Only watch current-phase.json files
-        if not event.src_path.endswith('current-phase.json'):
-            return
+def test_architecture_blueprint():
+    """Test architecture blueprint schema"""
 
-        # Debounce rapid changes
-        file_path = event.src_path
+def test_builder_task_result():
+    """Test builder task result validation"""
 
-        # Cancel existing timer for this file
-        if file_path in self.debounce_timers:
-            self.debounce_timers[file_path].cancel()
+def test_fallback_to_json():
+    """Test graceful fallback if BAML unavailable"""
 
-        # Create new timer
-        timer = threading.Timer(
-            self.debounce_delay,
-            self._handle_phase_update,
-            args=[file_path]
-        )
-        timer.start()
-        self.debounce_timers[file_path] = timer
-
-    def _handle_phase_update(self, file_path: str):
-        """Handle debounced phase file update."""
-        print(f"📂 Detected phase file change: {file_path}")
-
-        try:
-            # Read phase data
-            with open(file_path, 'r') as f:
-                phase_data = json.load(f)
-
-            # Extract session info
-            session_id = phase_data.get('session_id', 'unknown')
-
-            # Trigger metrics collection for this session
-            # This will be called from the collector's context
-            asyncio.create_task(
-                self.collector.collect_live_phase_update(session_id, phase_data)
-            )
-        except Exception as e:
-            print(f"⚠️  Error handling phase update: {e}")
+def test_caching():
+    """Test BAML client caching"""
 ```
-
-3. Modify MetricsCollector class:
-```python
-class MetricsCollector:
-    def __init__(self, ...):
-        # ... existing init ...
-        self.observer = None  # Watchdog observer
-        self.watcher = None   # FileSystemEventHandler
-        self.watched_dirs = set()  # Directories being watched
-
-    async def start(self):
-        """Start the collector service with filesystem watching."""
-        self.running = True
-        print(f"🔄 Metrics Collector started (poll interval: {self.poll_interval}s)")
-
-        # Start filesystem watcher
-        self.start_file_watcher()
-
-        # ... existing polling loop ...
-
-    def start_file_watcher(self):
-        """Start watching for .context-foundry/current-phase.json changes."""
-        self.watcher = PhaseFileWatcher(self)
-        self.observer = Observer()
-
-        # Watch common build directories
-        watch_paths = [
-            Path.home() / "homelab",  # Common build location
-            Path.cwd(),                # Current directory
-            Path("checkpoints/ralph")  # Checkpoint directory
-        ]
-
-        for watch_path in watch_paths:
-            if watch_path.exists():
-                self.observer.schedule(
-                    self.watcher,
-                    str(watch_path),
-                    recursive=True
-                )
-                self.watched_dirs.add(str(watch_path))
-                print(f"👁️  Watching: {watch_path}")
-
-        self.observer.start()
-        print("✅ Filesystem watcher started")
-
-    def stop(self):
-        """Stop the collector service."""
-        self.running = False
-
-        if self.observer:
-            self.observer.stop()
-            self.observer.join()
-
-        print("🛑 Metrics Collector stopped")
-
-    async def collect_live_phase_update(self, session_id: str, phase_data: Dict):
-        """
-        Collect metrics from live phase update (triggered by file watcher).
-
-        Args:
-            session_id: Session ID from phase data
-            phase_data: Parsed current-phase.json content
-        """
-        print(f"📊 Collecting metrics for live session: {session_id}")
-
-        # Create simplified task object from phase data
-        task = {
-            'task_id': session_id,
-            'status': phase_data.get('status', 'running'),
-            'current_phase': phase_data.get('current_phase', 'Unknown'),
-            'phases_completed': phase_data.get('phases_completed', []),
-            'test_iteration': phase_data.get('test_iteration', 0),
-            'start_time': phase_data.get('started_at'),
-            # Try to infer working directory from session_id
-            'working_directory': str(Path.cwd() / session_id) if session_id else None
-        }
-
-        # Initialize task if new
-        if session_id not in self.tracked_tasks:
-            await self.initialize_task(task)
-            self.tracked_tasks.add(session_id)
-
-        # Update task status
-        await self.update_task_status(task)
-
-        # Collect metrics
-        await self.collect_task_metrics(task)
-```
-
-**Testing**: Touch current-phase.json, verify metrics collected
-
----
-
-### Module 4: MCP Client Live Data Priority (mcp_client.py)
-
-**Location**: Lines 34-54, 119-142
-
-**Changes**:
-
-1. Modify `_read_phase_file()` to check modification time:
-```python
-def _read_phase_file(self, working_directory: str) -> Optional[Dict]:
-    """
-    Read .context-foundry/current-phase.json with freshness check.
-    """
-    try:
-        phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
-        if not phase_file.exists():
-            return None
-
-        # Check file modification time
-        mtime = phase_file.stat().st_mtime
-        age_seconds = time.time() - mtime
-
-        with open(phase_file, 'r') as f:
-            data = json.load(f)
-
-        # Add freshness metadata
-        data['_file_age_seconds'] = age_seconds
-        data['_is_fresh'] = age_seconds < 10  # Fresh if < 10s old
-
-        return data
-    except Exception as e:
-        print(f"Error reading phase file: {e}")
-        return None
-```
-
-2. Modify `get_task_status()` to prioritize live data:
-```python
-def get_task_status(self, task_id: str, use_cache: bool = True) -> Dict[str, Any]:
-    """Get status prioritizing live current-phase.json over checkpoints."""
-
-    # Check cache
-    cache_key = f"task_{task_id}"
-    if use_cache and cache_key in self.cache:
-        cached_data, cached_time = self.cache[cache_key]
-        if time.time() - cached_time < self.cache_ttl:
-            return cached_data
-
-    # PRIORITY 1: Try reading from live working directory
-    # Common patterns: /Users/name/homelab/<project>
-    live_paths = [
-        Path.home() / "homelab" / task_id,
-        Path.cwd() / task_id,
-        Path.cwd()  # Current directory itself
-    ]
-
-    for live_path in live_paths:
-        if live_path.exists():
-            phase_data = self._read_phase_file(str(live_path))
-            if phase_data and phase_data.get('_is_fresh'):
-                # Found fresh live data
-                result = {
-                    "task_id": task_id,
-                    "status": phase_data.get('status', 'running'),
-                    "current_phase": phase_data.get('current_phase', 'Unknown'),
-                    "phase_number": phase_data.get('phase_number', '?/7'),
-                    "phases_completed": phase_data.get('phases_completed', []),
-                    "test_iteration": phase_data.get('test_iteration', 0),
-                    "started_at": phase_data.get('started_at'),
-                    "progress_detail": phase_data.get('progress_detail', ''),
-                    "source": "live",
-                    "data_age_seconds": phase_data.get('_file_age_seconds', 0)
-                }
-                self.cache[cache_key] = (result, time.time())
-                return result
-
-    # PRIORITY 2: Fall back to checkpoint data
-    result = self._read_from_checkpoint(task_id)
-    self.cache[cache_key] = (result, time.time())
-    return result
-```
-
-**Testing**: Create current-phase.json, verify it's read before checkpoints
-
----
-
-## Implementation Steps (Ordered)
-
-1. **Add watchdog dependency**
-   - Modify requirements.txt: `watchdog>=3.0.0`
-   - Run: `pip install watchdog`
-
-2. **Implement change detection in server.py**
-   - Add hash_data() function
-   - Modify WebSocket loop with change detection
-   - Test: Send duplicate data, verify single transmission
-
-3. **Implement filesystem watching in metrics_collector.py**
-   - Add PhaseFileWatcher class
-   - Modify MetricsCollector.start() to initialize watcher
-   - Add collect_live_phase_update() method
-   - Test: Touch phase file, verify metrics collected
-
-4. **Improve MCP client live data priority**
-   - Modify _read_phase_file() with freshness check
-   - Modify get_task_status() to prioritize live data
-   - Test: Create live phase file, verify it's used
-
-5. **Implement dashboard auto-refresh**
-   - Add refresh state management variables
-   - Modify updateEnhancedMetrics() with concurrency protection
-   - Add updateMetricsTimestamp() function
-   - Modify WebSocket onmessage to trigger refresh
-   - Add setInterval for periodic refresh
-   - Add timestamp HTML elements
-   - Test: Verify 5s refresh and WebSocket triggers
-
-6. **Integration testing**
-   - Start livestream server
-   - Run autonomous build
-   - Verify real-time updates
-   - Check enhanced metrics refresh
-   - Validate no duplicate WebSocket messages
-
-## Testing Requirements
-
-### Unit Tests
-- `test_hash_data()` - Verify consistent hashing
-- `test_change_detection()` - Verify only changed data sent
-- `test_file_watcher_debounce()` - Verify 100ms debouncing
-- `test_live_data_priority()` - Verify live data chosen over checkpoint
 
 ### Integration Tests
-- `test_websocket_real_time_update()` - E2E WebSocket flow
-- `test_metrics_collector_file_watch()` - Real file watching
-- `test_dashboard_auto_refresh()` - Frontend refresh triggers
 
-### Manual Tests
-1. Start server: `python tools/livestream/server.py`
-2. Start build: `context-foundry build <task>`
-3. Open dashboard: http://localhost:8080
-4. Verify updates appear < 1s after phase change
-5. Check enhanced metrics refresh every 5s
-6. Verify "last updated" timestamps
-7. Test with multiple browser tabs
+```python
+def test_full_workflow_with_baml():
+    """Test Scout → Architect → Builder with BAML"""
 
-## Success Criteria
+def test_backward_compatibility():
+    """Test JSON mode still works"""
 
-✅ Dashboard updates within 1 second of current-phase.json change
-✅ WebSocket only sends when data actually changes (95%+ reduction)
-✅ Enhanced metrics auto-refresh every 5 seconds
-✅ "Last updated" timestamps visible and accurate
-✅ No duplicate data in network inspector
-✅ Works with live builds AND viewing past sessions
-✅ Graceful degradation if enhanced metrics unavailable
-✅ No memory leaks during 1-hour test run
+def test_phase_tracking_accuracy():
+    """Test BAML phase tracking vs JSON"""
+
+def test_multi_model_support():
+    """Test BAML with different LLM providers"""
+```
+
+### Performance Tests
+
+```python
+def test_compilation_overhead():
+    """Measure BAML compilation time"""
+
+def test_parsing_performance():
+    """Compare BAML vs JSON parsing speed"""
+
+def test_memory_usage():
+    """Measure BAML client memory footprint"""
+```
+
+### Success Criteria
+
+**Must Pass:**
+- ✅ All unit tests pass (100% coverage for new code)
+- ✅ All integration tests pass
+- ✅ Backward compatibility maintained (JSON mode works)
+- ✅ No performance regression (< 5% overhead)
+- ✅ Documentation complete and accurate
+
+**Should Pass:**
+- ✅ Phase tracking parsing errors reduced to <1% (from 5%)
+- ✅ Scout report structure validation 100% successful
+- ✅ Architecture blueprint validation 100% successful
+- ✅ Compilation caching works (< 100ms cached client access)
+
+**Nice to Have:**
+- ✅ Example project demonstrates BAML value
+- ✅ Boundary Studio observability working
+- ✅ Migration guide clear and actionable
+
+## Deployment Strategy
+
+**Version**: v1.3.0 (feature release)
+
+**Branch Strategy**:
+1. Create feature branch: `enhancement/baml-integration`
+2. Implement all phases on feature branch
+3. Pass all tests (including self-healing loop)
+4. Create PR to main with comprehensive description
+5. Merge after review
+6. Tag release: `v1.3.0`
+
+**Release Notes Highlights**:
+- 🎯 BAML Integration for Type-Safe LLM Outputs
+- 📊 Improved Phase Tracking Reliability (5% → <1% errors)
+- 🔧 Structured Scout/Architect/Builder Outputs
+- 🔄 Backward Compatible (JSON fallback)
+- 📖 Comprehensive Documentation
+- ✅ Example Project Included
+
+**Migration Path**:
+- v1.3.0: BAML optional, JSON default (this release)
+- v1.4.0: BAML default, JSON fallback
+- v2.0.0: BAML required, JSON deprecated
+
+## Risk Mitigation
+
+**Risk 1: BAML Compilation Fails**
+- **Mitigation**: Catch compilation errors, fallback to JSON mode gracefully
+- **Detection**: Unit tests verify compilation, CI/CD catches failures
+
+**Risk 2: Breaking Changes**
+- **Mitigation**: Dual mode (BAML + JSON) for 2-3 releases
+- **Detection**: Comprehensive backward compatibility tests
+
+**Risk 3: Performance Regression**
+- **Mitigation**: Client caching, pre-compilation during install
+- **Detection**: Performance benchmarks in CI/CD
+
+**Risk 4: User Confusion**
+- **Mitigation**: BAML is internal implementation detail, transparent to users
+- **Detection**: Documentation review, user feedback
+
+**Risk 5: Dependency Issues**
+- **Mitigation**: Pin baml-py version, test on multiple Python versions
+- **Detection**: CI/CD matrix testing (Python 3.8, 3.9, 3.10, 3.11, 3.12)
+

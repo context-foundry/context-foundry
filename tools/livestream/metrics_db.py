@@ -159,6 +159,32 @@ class MetricsDatabase:
                 )
             """)
 
+            # Agent instances table - NEW for multi-agent monitoring
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS agent_instances (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    agent_id TEXT UNIQUE NOT NULL,
+                    agent_type TEXT NOT NULL,
+                    agent_name TEXT,
+                    status TEXT NOT NULL,
+                    phase TEXT,
+                    progress_percent REAL DEFAULT 0.0,
+                    tokens_used INTEGER DEFAULT 0,
+                    tokens_limit INTEGER DEFAULT 200000,
+                    token_percentage REAL DEFAULT 0.0,
+                    start_time TEXT,
+                    end_time TEXT,
+                    duration_seconds INTEGER,
+                    parent_agent_id TEXT,
+                    error_message TEXT,
+                    metadata TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES tasks(task_id)
+                )
+            """)
+
             # Create indexes for performance
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_metrics_task_id
@@ -175,6 +201,14 @@ class MetricsDatabase:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_test_iter_task_id
                 ON test_iterations(task_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_instances_session
+                ON agent_instances(session_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_instances_status
+                ON agent_instances(status)
             """)
 
     # ============================================================================
@@ -489,6 +523,129 @@ class MetricsDatabase:
                     LIMIT 100
                 """)
 
+            return [dict(row) for row in cursor.fetchall()]
+
+    # ============================================================================
+    # Agent Instances (Multi-Agent Monitoring)
+    # ============================================================================
+
+    def create_agent_instance(self, agent_data: Dict[str, Any]) -> str:
+        """Create a new agent instance record."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO agent_instances (
+                    session_id, agent_id, agent_type, agent_name, status,
+                    phase, progress_percent, tokens_used, tokens_limit,
+                    token_percentage, start_time, parent_agent_id, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                agent_data['session_id'],
+                agent_data['agent_id'],
+                agent_data['agent_type'],
+                agent_data.get('agent_name', agent_data['agent_type']),
+                agent_data.get('status', 'spawning'),
+                agent_data.get('phase'),
+                agent_data.get('progress_percent', 0.0),
+                agent_data.get('tokens_used', 0),
+                agent_data.get('tokens_limit', 200000),
+                agent_data.get('token_percentage', 0.0),
+                agent_data.get('start_time', datetime.now().isoformat()),
+                agent_data.get('parent_agent_id'),
+                json.dumps(agent_data.get('metadata', {}))
+            ))
+        return agent_data['agent_id']
+
+    def update_agent_instance(self, agent_id: str, updates: Dict[str, Any]):
+        """Update agent instance record."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Always update the updated_at timestamp
+            updates['updated_at'] = datetime.now().isoformat()
+
+            # Build dynamic UPDATE query
+            set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
+            values = list(updates.values()) + [agent_id]
+
+            cursor.execute(f"""
+                UPDATE agent_instances SET {set_clause}
+                WHERE agent_id = ?
+            """, values)
+
+    def get_agent_instance(self, agent_id: str) -> Optional[Dict]:
+        """Get agent instance by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM agent_instances WHERE agent_id = ?", (agent_id,))
+            row = cursor.fetchone()
+            if row:
+                result = dict(row)
+                # Parse JSON metadata
+                if result.get('metadata'):
+                    result['metadata'] = json.loads(result['metadata'])
+                return result
+            return None
+
+    def get_session_agents(self, session_id: str) -> List[Dict]:
+        """Get all agent instances for a session."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT * FROM agent_instances
+                WHERE session_id = ?
+                ORDER BY created_at ASC
+            """, (session_id,))
+            agents = [dict(row) for row in cursor.fetchall()]
+            # Parse JSON metadata for each agent
+            for agent in agents:
+                if agent.get('metadata'):
+                    agent['metadata'] = json.loads(agent['metadata'])
+            return agents
+
+    def get_active_agents(self, session_id: Optional[str] = None) -> List[Dict]:
+        """Get all active agent instances (optionally filtered by session)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if session_id:
+                cursor.execute("""
+                    SELECT * FROM agent_instances
+                    WHERE session_id = ? AND status IN ('spawning', 'active', 'idle')
+                    ORDER BY created_at ASC
+                """, (session_id,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM agent_instances
+                    WHERE status IN ('spawning', 'active', 'idle')
+                    ORDER BY session_id, created_at ASC
+                """)
+            agents = [dict(row) for row in cursor.fetchall()]
+            # Parse JSON metadata
+            for agent in agents:
+                if agent.get('metadata'):
+                    agent['metadata'] = json.loads(agent['metadata'])
+            return agents
+
+    def get_all_instances(self) -> List[Dict]:
+        """Get all unique session instances with summary stats."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT
+                    t.task_id as session_id,
+                    t.project_name,
+                    t.status,
+                    t.current_phase,
+                    t.start_time,
+                    t.duration_seconds,
+                    COUNT(DISTINCT a.agent_id) as agents_total,
+                    SUM(CASE WHEN a.status IN ('spawning', 'active', 'idle') THEN 1 ELSE 0 END) as agents_active,
+                    AVG(a.progress_percent) as progress_percent
+                FROM tasks t
+                LEFT JOIN agent_instances a ON t.task_id = a.session_id
+                GROUP BY t.task_id
+                ORDER BY t.start_time DESC
+            """)
             return [dict(row) for row in cursor.fetchall()]
 
     # ============================================================================
