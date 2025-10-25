@@ -1,0 +1,226 @@
+name: Nightly Release
+
+on:
+  # Run daily at midnight UTC
+  schedule:
+    - cron: '0 0 * * *'
+
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force release even if no new commits'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  nightly-release:
+    name: Create Nightly Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for proper tag comparison
+
+      - name: Get latest stable release
+        id: stable
+        run: |
+          # Get latest stable release tag (exclude nightlies)
+          STABLE_TAG=$(git tag --list 'v*' --sort=-v:refname | grep -v 'nightly' | head -n1)
+          echo "Latest stable tag: $STABLE_TAG"
+          echo "tag=$STABLE_TAG" >> $GITHUB_OUTPUT
+
+          # Extract version without 'v' prefix for nightly naming
+          STABLE_VERSION=${STABLE_TAG#v}
+          echo "version=$STABLE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get latest nightly release
+        id: nightly
+        run: |
+          # Get latest nightly tag
+          NIGHTLY_TAG=$(git tag --list 'v*-nightly.*' --sort=-v:refname | head -n1)
+          if [ -z "$NIGHTLY_TAG" ]; then
+            echo "No previous nightly found, will create first one"
+            echo "tag=" >> $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "Latest nightly tag: $NIGHTLY_TAG"
+            echo "tag=$NIGHTLY_TAG" >> $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for new commits
+        id: check_commits
+        run: |
+          if [ "${{ github.event.inputs.force }}" == "true" ]; then
+            echo "Force flag set, skipping commit check"
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+            echo "count=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Determine reference point for comparison
+          if [ "${{ steps.nightly.outputs.exists }}" == "true" ]; then
+            REF="${{ steps.nightly.outputs.tag }}"
+            echo "Checking commits since last nightly: $REF"
+          else
+            REF="${{ steps.stable.outputs.tag }}"
+            echo "No previous nightly, checking commits since stable: $REF"
+          fi
+
+          # Count commits since reference
+          COMMIT_COUNT=$(git rev-list --count ${REF}..HEAD)
+          echo "Commits since $REF: $COMMIT_COUNT"
+
+          if [ "$COMMIT_COUNT" -eq "0" ]; then
+            echo "No new commits since last nightly, skipping release"
+            echo "has_commits=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found $COMMIT_COUNT new commits, proceeding with release"
+            echo "has_commits=true" >> $GITHUB_OUTPUT
+          fi
+
+          echo "count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Exit if no commits
+        if: steps.check_commits.outputs.has_commits == 'false'
+        run: |
+          echo "✅ No new commits since last nightly release"
+          echo "Skipping nightly release creation to avoid duplicates"
+          exit 0
+
+      - name: Generate nightly version
+        if: steps.check_commits.outputs.has_commits == 'true'
+        id: version
+        run: |
+          DATE=$(date +'%Y%m%d')
+          NIGHTLY_VERSION="v${{ steps.stable.outputs.version }}-nightly.${DATE}"
+          echo "Nightly version: $NIGHTLY_VERSION"
+          echo "version=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "date_formatted=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        if: steps.check_commits.outputs.has_commits == 'true'
+        id: release_notes
+        run: |
+          # Determine reference point for changelog
+          if [ "${{ steps.nightly.outputs.exists }}" == "true" ]; then
+            REF="${{ steps.nightly.outputs.tag }}"
+          else
+            REF="${{ steps.stable.outputs.tag }}"
+          fi
+
+          # Create release notes file
+          cat > release_notes.md << 'NOTES_EOF'
+          ## Context Foundry Nightly Build - ${{ steps.version.outputs.date_formatted }}
+
+          **Base Version:** ${{ steps.stable.outputs.tag }}
+          **Commits since last release:** ${{ steps.check_commits.outputs.count }}
+
+          NOTES_EOF
+
+          # Extract commits and categorize
+          echo "" >> release_notes.md
+
+          # Features
+          FEATURES=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --grep="^feat" --grep="^feature" -i)
+          if [ -n "$FEATURES" ]; then
+            echo "### 🚀 Features" >> release_notes.md
+            echo "$FEATURES" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Bug fixes
+          FIXES=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --grep="^fix" -i)
+          if [ -n "$FIXES" ]; then
+            echo "### 🐛 Bug Fixes" >> release_notes.md
+            echo "$FIXES" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Documentation
+          DOCS=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --grep="^docs" -i)
+          if [ -n "$DOCS" ]; then
+            echo "### 📚 Documentation" >> release_notes.md
+            echo "$DOCS" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Refactoring
+          REFACTOR=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --grep="^refactor" -i)
+          if [ -n "$REFACTOR" ]; then
+            echo "### ♻️ Refactoring" >> release_notes.md
+            echo "$REFACTOR" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Maintenance/Chores
+          CHORES=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --grep="^chore" -i)
+          if [ -n "$CHORES" ]; then
+            echo "### 🔧 Maintenance" >> release_notes.md
+            echo "$CHORES" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # All other commits (uncategorized)
+          OTHER=$(git log ${REF}..HEAD --pretty=format:"- %s (%h) - @%an" --invert-grep --grep="^feat" --grep="^fix" --grep="^docs" --grep="^refactor" --grep="^chore" -i)
+          if [ -n "$OTHER" ]; then
+            echo "### 📝 Other Changes" >> release_notes.md
+            echo "$OTHER" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Add changelog link
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Full Changelog:** ${REF}...${{ steps.version.outputs.version }}" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Installation:**" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "git clone https://github.com/context-foundry/context-foundry.git" >> release_notes.md
+          echo "cd context-foundry" >> release_notes.md
+          echo "git checkout ${{ steps.version.outputs.version }}" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "⚠️ **This is a nightly pre-release build** - Use stable releases for production." >> release_notes.md
+
+          cat release_notes.md
+
+      - name: Create git tag
+        if: steps.check_commits.outputs.has_commits == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.version }}" -m "Nightly build ${{ steps.version.outputs.date_formatted }}"
+          git push origin "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        if: steps.check_commits.outputs.has_commits == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "Context Foundry Nightly - ${{ steps.version.outputs.date_formatted }}"
+          body_path: release_notes.md
+          prerelease: true
+          draft: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: steps.check_commits.outputs.has_commits == 'true'
+        run: |
+          echo "✅ Nightly release created successfully!"
+          echo ""
+          echo "📦 Version: ${{ steps.version.outputs.version }}"
+          echo "📅 Date: ${{ steps.version.outputs.date_formatted }}"
+          echo "📝 Commits: ${{ steps.check_commits.outputs.count }}"
+          echo "🏷️ Tag: ${{ steps.version.outputs.version }}"
+          echo ""
+          echo "View release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"

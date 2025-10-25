@@ -389,6 +389,8 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 
 ### Installation
 
+#### Stable Release (Recommended)
+
 ```bash
 # 1. Clone Context Foundry
 git clone https://github.com/context-foundry/context-foundry.git
@@ -426,6 +428,34 @@ gh auth login
 ```
 
 **Detailed setup guide:** See [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) for troubleshooting and advanced configuration.
+
+#### Nightly Builds (Bleeding Edge)
+
+For the latest features and fixes before they're in a stable release:
+
+```bash
+# 1. Clone and checkout the latest nightly
+git clone https://github.com/context-foundry/context-foundry.git
+cd context-foundry
+
+# 2. List available nightly releases
+git tag --list 'v*-nightly.*' --sort=-v:refname | head -5
+
+# 3. Checkout specific nightly (example)
+git checkout v2.1.0-nightly.20251025
+
+# 4. Continue with standard setup (venv, pip install, etc.)
+```
+
+**About Nightly Releases:**
+- 🌙 **Built daily** at midnight UTC if there are new commits
+- 🏷️ **Format:** `v{VERSION}-nightly.{YYYYMMDD}` (e.g., `v2.1.0-nightly.20251025`)
+- ⚡ **Latest features** that haven't been released in stable yet
+- 🔬 **Pre-release quality** - May contain bugs, use stable releases for production
+- 📋 **Auto-generated release notes** - Grouped by commit type (feat, fix, docs, etc.)
+- 🔄 **Retained for 30 days** then automatically cleaned up
+
+**View nightly releases:** [GitHub Releases (Pre-releases)](https://github.com/context-foundry/context-foundry/releases?q=prerelease%3Atrue)
 
 ### Basic Usage
 
