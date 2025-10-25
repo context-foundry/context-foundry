@@ -1,5 +1,50 @@
 # BAML Integration Guide
 
+## 💰 CRITICAL: Cost & Subscription Information
+
+**READ THIS FIRST to understand what runs on your subscription vs API keys:**
+
+### What Runs on Your Claude Code Subscription (FREE)
+
+**99%+ of Context Foundry runs entirely on your Claude Code subscription ($20/month unlimited):**
+
+- ✅ **ALL Scout Agent work** - Codebase research, requirements (~15K tokens)
+- ✅ **ALL Architect Agent work** - System design, planning (~25K tokens)
+- ✅ **ALL Builder Agent work** - Code implementation (~100K tokens)
+- ✅ **ALL Test Agent work** - Running tests, analyzing failures (~20K tokens)
+- ✅ **ALL Self-Healing** - Auto-fixing test failures (~30K tokens per iteration)
+- ✅ **ALL Screenshot work** - Visual documentation (~5K tokens)
+- ✅ **ALL Documentation** - README generation (~10K tokens)
+- ✅ **ALL Deployment** - GitHub deployment (~5K tokens)
+
+**This is where ALL the heavy lifting happens - 100% covered by your subscription.**
+
+### What BAML Does (OPTIONAL - Requires API Key)
+
+**BAML is a thin validation layer on top** that adds type-safety:
+
+- ⚙️ Phase tracking validation (~10-15 small calls per build)
+- ⚙️ Scout report structure validation (1 call)
+- ⚙️ Architecture blueprint validation (1 call)
+- ⚙️ Build result validation (5-10 calls)
+
+**Total: ~17,000 tokens = ~$0.20 per build**
+
+### Cost Breakdown
+
+| What | Runs On | Your Cost |
+|------|---------|-----------|
+| **Main Build System** (Scout, Architect, Builder, Test, etc.) | Claude Code subscription | **$0** (included in $20/month) |
+| **BAML Type Validation** (optional) | Separate API key | **~$0.20/build** |
+
+**Bottom Line:**
+- Without BAML: **$0 per build** (everything on subscription)
+- With BAML: **~$0.20 per build** (just for type validation)
+
+**Most users should start WITHOUT BAML** - the JSON fallback mode works perfectly fine!
+
+---
+
 ## Overview
 
 Context Foundry integrates **BAML (Basically a Made-up Language)** to provide type-safe, structured LLM outputs across the autonomous build pipeline. BAML eliminates JSON parsing errors and provides compile-time guarantees for phase tracking, Scout reports, architecture blueprints, and builder outputs.
@@ -10,6 +55,8 @@ Context Foundry integrates **BAML (Basically a Made-up Language)** to provide ty
 - 📡 **Semantic Streaming**: Real-time progress updates with structured data
 - 🔍 **Observability**: Built-in monitoring with Boundary Studio
 - 🔄 **Backward Compatible**: Graceful fallback to JSON mode
+
+**IMPORTANT: BAML is OPTIONAL** - Context Foundry works perfectly without it using JSON validation
 
 ## What is BAML?
 

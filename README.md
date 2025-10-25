@@ -957,6 +957,89 @@ context-foundry/
 
 ---
 
+## 💰 Cost Model & BAML Integration
+
+### **CRITICAL: What Runs on Your Subscription vs API Keys**
+
+Context Foundry has **two layers** - understanding this is essential:
+
+#### **Layer 1: Core Build System (FREE - Uses Your Claude Code Subscription)**
+
+**ALL the main work runs on your Claude Code subscription:**
+- ✅ **Scout Agent** - Codebase research, requirement analysis
+- ✅ **Architect Agent** - System design, architecture planning
+- ✅ **Builder Agents** (2-8 parallel) - ALL code implementation
+- ✅ **Test Agent** - Running tests, analyzing failures
+- ✅ **Self-Healing Loop** - Auto-fixing test failures (redesign → rebuild → retest)
+- ✅ **Screenshot Agent** - Visual documentation capture
+- ✅ **Documentation Agent** - README and guide generation
+- ✅ **Deploy Agent** - GitHub deployment
+
+**These agents account for 99%+ of the token usage** and run entirely under your **$20/month Claude Max subscription** (unlimited usage).
+
+#### **Layer 2: BAML Type-Safety (OPTIONAL - Requires API Key)**
+
+**BAML is an optional add-on for type-safe validation:**
+- ⚙️ Phase tracking validation (~10-15 calls/build)
+- ⚙️ Scout report structure validation (1 call/build)
+- ⚙️ Architecture blueprint validation (1 call/build)
+- ⚙️ Build result validation (5-10 calls/build)
+
+**BAML token usage: ~17,000 tokens per build**
+
+**BAML cost: ~$0.20 per build** (20 cents)
+
+**What you get:**
+- Guaranteed valid JSON structures
+- Compile-time schema validation
+- Type-safe outputs
+- Multi-provider support (Claude/GPT/Gemini)
+
+**What you lose if disabled:**
+- Simple JSON validation instead (works fine!)
+- No type checking (but JSON parsing still works)
+
+### Cost Comparison Table
+
+| Component | Runs On | Cost | Token Usage | What It Does |
+|-----------|---------|------|-------------|--------------|
+| **Scout Agent** | Claude Code subscription | $0 (included) | ~15,000 tokens | Research & requirements |
+| **Architect Agent** | Claude Code subscription | $0 (included) | ~25,000 tokens | System design |
+| **Builder Agents (2-8×)** | Claude Code subscription | $0 (included) | ~100,000 tokens | **All code implementation** |
+| **Test Agent** | Claude Code subscription | $0 (included) | ~20,000 tokens | Test execution & analysis |
+| **Self-Healing (1-3×)** | Claude Code subscription | $0 (included) | ~30,000 tokens/iteration | Auto-fix test failures |
+| **Screenshot Agent** | Claude Code subscription | $0 (included) | ~5,000 tokens | Visual docs |
+| **Docs Agent** | Claude Code subscription | $0 (included) | ~10,000 tokens | README generation |
+| **Deploy Agent** | Claude Code subscription | $0 (included) | ~5,000 tokens | GitHub deployment |
+| **BAML Validation** | API key (optional) | **~$0.20/build** | ~17,000 tokens | Type-safe validation |
+
+**Total per build:**
+- **With BAML:** $0.20 (subscription covers 99%, BAML adds $0.20)
+- **Without BAML:** $0 (100% covered by subscription)
+
+### BAML: Keep or Disable?
+
+**Disable BAML (Recommended for most users):**
+```bash
+# Simply don't set API keys in .env
+# BAML automatically falls back to JSON mode
+# Zero additional cost
+```
+
+**Enable BAML (If you want type safety):**
+```bash
+# Set API key in .env
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# Cost: ~$0.20 per build
+# ~$2/month for 10 builds
+# ~$10/month for 50 builds
+```
+
+**Our recommendation:** Try Context Foundry without BAML first. If you need stronger type guarantees, enable it later.
+
+---
+
 ## Performance & Cost
 
 ### Performance Metrics
