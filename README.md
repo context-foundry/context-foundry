@@ -409,15 +409,17 @@ pip install -r requirements-baml.txt
 
 # 4. Configure Claude Code to connect to MCP server
 # Use absolute paths with $(pwd) and add to project scope (-s project)
-claude mcp add --transport stdio context-foundry -s project -- \
-  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
 # This uses $(pwd) to automatically get absolute paths
-# The -s project flag adds it to .mcp.json (shared with team)
+# The -s project flag creates .mcp.json in the project directory (shareable with team)
 
-# 5. Verify MCP connection
-claude mcp list
-# Should show: ✓ Connected: context-foundry
+# 5. Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
+
+# Note: Project-scoped servers don't appear in `claude mcp list` (that shows global config)
+# They're automatically detected when you run `claude` in this directory
 
 # 6. Authenticate with GitHub (for deployment)
 gh auth login

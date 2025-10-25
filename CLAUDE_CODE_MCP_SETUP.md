@@ -77,6 +77,56 @@ This guide explains how to set up and use the Context Foundry MCP server to dele
 - **API Keys**: If using models that require API keys (Anthropic, OpenAI, etc.)
 - **Git**: For version control of generated code
 
+## Configuration Approaches
+
+Claude Code MCP servers can be configured in two ways:
+
+### 1. Project-Scoped Configuration (Recommended)
+
+**File**: `.mcp.json` (in your project directory)
+
+**Advantages**:
+- ✅ Shareable with team via version control
+- ✅ Different settings per project
+- ✅ Portable across machines
+- ✅ Automatically detected when you run `claude` in the project directory
+
+**Setup command**:
+```bash
+cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+```
+
+**Verification**:
+```bash
+cat .mcp.json  # Should show your MCP server configuration
+```
+
+**Note**: Project-scoped servers won't appear in `claude mcp list` (which only shows global config). They're automatically detected when you run `claude` in the project directory.
+
+### 2. Global Configuration
+
+**File**: `~/.config/claude-code/mcp_settings.json`
+
+**Advantages**:
+- ✅ Available in all projects
+- ✅ No need to be in specific directory
+- ✅ Appears in `claude mcp list`
+
+**Setup command**:
+```bash
+claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py
+```
+
+**Verification**:
+```bash
+claude mcp list  # Should show: ✓ Connected: context-foundry
+```
+
+**Important**: Global config requires absolute paths. If you move the context-foundry directory, you must update the paths.
+
+---
+
 ## Installation
 
 ### Step 1: Install Dependencies
@@ -105,30 +155,33 @@ grep -n "delegate_to_claude_code" tools/mcp_server.py
 
 ### Step 3: Configure Claude Code MCP Settings
 
-The MCP settings file has been created at `~/.config/claude-code/mcp_settings.json`:
+Choose **either** project-scoped (recommended) or global configuration:
+
+#### Option A: Project-Scoped (Recommended)
 
 ```bash
-# Verify the config exists
-cat ~/.config/claude-code/mcp_settings.json
+cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 ```
 
-Expected contents:
-```json
-{
-  "mcpServers": {
-    "context-foundry": {
-      "command": "python3",
-      "args": [
-        "/Users/name/homelab/context-foundry/tools/mcp_server.py"
-      ],
-      "env": {},
-      "disabled": false
-    }
-  }
-}
+Verify:
+```bash
+cat .mcp.json  # Should show the configuration
 ```
 
-**Important:** The paths in this file are absolute. If you move the `context-foundry` directory, update the path in `mcp_settings.json`.
+#### Option B: Global Configuration
+
+```bash
+# Use absolute paths
+claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py
+```
+
+Verify:
+```bash
+claude mcp list  # Should show: ✓ Connected: context-foundry
+```
+
+**See "Configuration Approaches" section above for detailed comparison and when to use each option.**
 
 ### Step 4: Verify Claude Code CLI
 

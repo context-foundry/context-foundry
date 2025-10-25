@@ -43,14 +43,16 @@ pip install -r requirements-mcp.txt
 
 ```bash
 # Add MCP server to Claude Code (use venv Python, add to project scope)
-claude mcp add --transport stdio context-foundry -s project -- \
-  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
-# This adds the server to .mcp.json (shareable with your team)
+# This creates .mcp.json in the project directory (shareable with your team)
 
-# Verify connection
-claude mcp list
-# Should show: ✓ Connected: context-foundry
+# Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
+
+# Note: Project-scoped servers don't appear in `claude mcp list` (that shows global config)
+# They're automatically detected when you run `claude` in this directory
 ```
 
 ### Authenticate with GitHub

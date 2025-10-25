@@ -2090,14 +2090,14 @@ Use mcp__autonomous_build_and_deploy:
 3. **Configure MCP connection:**
    ```bash
    cd /Users/name/homelab/context-foundry
-   claude mcp add --transport stdio context-foundry -s project -- \
-     $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+   claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
    ```
 
-4. **Verify connection:**
+4. **Verify configuration:**
    ```bash
-   claude mcp list
-   # Should show: ✓ Connected: context-foundry
+   cat .mcp.json
+   # Should show the server configuration
+   # Note: Project-scoped servers don't appear in `claude mcp list`
    ```
 
 5. **Start using 2.0:**

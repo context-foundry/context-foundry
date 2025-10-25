@@ -79,20 +79,20 @@ If you get errors, see [Troubleshooting Installation](#troubleshooting-installat
 # Add MCP server to Claude Code configuration
 # Use $(pwd) for automatic absolute paths, add to project scope
 cd /path/to/context-foundry
-claude mcp add --transport stdio context-foundry -s project -- \
-  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 
-# The -s project flag adds it to .mcp.json (shareable with team)
+# The -s project flag creates .mcp.json in the project directory (shareable with team)
 ```
 
 #### Step 4: Verify Connection
 
 ```bash
-# List MCP servers
-claude mcp list
+# Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
 
-# Should show:
-# ✓ Connected: context-foundry
+# Note: Project-scoped servers don't appear in `claude mcp list` (that shows global config)
+# They're automatically detected when you run `claude` in this directory
 ```
 
 If you see "✗ Disconnected" or errors, see [Troubleshooting MCP Connection](#troubleshooting-mcp-connection).
@@ -1919,8 +1919,7 @@ ls /full/path/to/context-foundry/tools/mcp_server.py
 # Re-add with correct path
 cd /path/to/context-foundry
 claude mcp remove context-foundry -s project
-claude mcp add --transport stdio context-foundry -s project -- \
-  $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 ```
 
 #### Error: "MCP server disconnected"
@@ -1967,7 +1966,7 @@ claude
 ```
 
 If not showing:
-1. Verify MCP connection: `claude mcp list`
+1. Verify MCP configuration: `cat .mcp.json` (project-scoped) or `claude mcp list` (global)
 2. Check for errors in configuration
 3. Restart Claude Code
 
@@ -2343,8 +2342,12 @@ Use mcp__list_delegations to monitor
 Use mcp__get_delegation_result to collect results
 ```
 
-**Check MCP status:**
+**Check MCP configuration:**
 ```bash
+# For project-scoped config
+cat .mcp.json
+
+# For global config
 claude mcp list
 ```
 
