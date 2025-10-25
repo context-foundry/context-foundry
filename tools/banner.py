@@ -5,9 +5,12 @@ Displays ASCII art logo with version information
 """
 
 import sys
+import os
 
-# Version will be read from setup.py
-VERSION = "2.0.0"
+# Add parent directory to path to import __version__
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from __version__ import __version__ as VERSION
 
 
 def get_banner(version: str = VERSION) -> str:

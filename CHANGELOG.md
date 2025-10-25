@@ -7,6 +7,94 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2025-10-24
+
+**🔧 Enhancement Mode Release:** Context Foundry can now fix, enhance, and upgrade existing codebases in addition to building from scratch.
+
+### 🚀 Added
+
+#### Multi-Mode Support
+- **Enhancement Modes**: Six distinct operation modes
+  - `new_project` - Build from scratch (original functionality)
+  - `fix_bug` - Fix bugs in existing code
+  - `add_feature` - Add features to existing code
+  - `upgrade_deps` - Upgrade dependencies
+  - `refactor` - Refactor existing code
+  - `add_tests` - Add tests to existing code
+
+#### Intelligent Detection System
+- **Automatic Codebase Detection** (15+ project types)
+  - Python (`requirements.txt`, `setup.py`, `pyproject.toml`)
+  - Node.js (`package.json`, `tsconfig.json`)
+  - Rust (`Cargo.toml`), Go (`go.mod`), Java (`pom.xml`)
+  - Ruby (`Gemfile`), PHP (`composer.json`), .NET (`*.csproj`)
+  - And more...
+- **Intent Detection** - Natural language keyword detection
+  - "fix" → `fix_bug`, "add" → `add_feature`, "upgrade" → `upgrade_deps`
+- **Auto-Mode Adjustment** - Smart detection with conflict warnings
+- **Git Repository Status** - Validates repository cleanliness before modifications
+- **Confidence Scoring** - High/medium/low confidence in detection results
+
+#### Phase 0: Codebase Analysis (NEW!)
+- **Runs ONLY for enhancement modes** (skipped for new projects)
+- **Analyzes project structure**, architecture, and existing tests
+- **Reviews git history** and current branch state
+- **Creates `codebase-analysis.md`** report for context
+- **Provides full understanding** before making changes
+
+#### Enhancement-Aware Orchestrator
+- **Scout Phase** - Mode-specific analysis strategies
+  - Targeted bug finding for `fix_bug`
+  - Integration point analysis for `add_feature`
+  - Dependency impact assessment for `upgrade_deps`
+- **PHASE 2.5 (Parallel Builders)** - Targeted modifications
+  - Modifies existing files instead of creating new projects
+  - Preserves existing code structure and patterns
+  - Creates feature branches before making changes
+  - Groups changes by logical components
+- **Test Phase** - Validates existing functionality preserved
+- **Deploy Phase** - Feature branch + Pull Request workflow
+  - Pushes to feature branch (NOT main)
+  - Creates PR with detailed description
+  - Links to GitHub issues (`Closes #N`)
+  - Requires human review before merge
+
+### 🛠️ Fixed
+- **Intent Detection**: Added "update packages" and "update all" keywords to upgrade_deps detection
+- **Version Consistency**: Centralized version management with `__version__.py`
+
+### 📚 Changed
+- **tools/mcp_server.py** (lines 768-1165): Detection and integration
+  - `_detect_existing_codebase()` - 15+ project types
+  - `_detect_task_intent()` - keyword-based mode detection
+  - `autonomous_build_and_deploy()` - integrated detection and warnings
+- **tools/orchestrator_prompt.txt**: Enhancement-aware phases
+  - Mode detection section (lines 49-70)
+  - Phase 0: Codebase Analysis (lines 71-175)
+  - Scout enhancement guidance (lines 257-295)
+  - PHASE 2.5 targeted modifications (lines 481-514)
+  - Deploy PR workflow (lines 1237-1407)
+- **tools/banner.py**: Now imports version from `__version__.py`
+- **README.md**: Updated version references and roadmap to v2.1.0
+- **.mcp.json**: Updated version metadata to 2.1.0
+
+### 📊 Impact
+- **Codebase Coverage**: Detects Python, JavaScript/TypeScript, Rust, Go, Java, Ruby, PHP, .NET, C/C++, and more
+- **Success Rate**: 100% on first live test (YouTube Transcript Summarizer)
+- **Code Quality**: Professional PR workflow with detailed descriptions
+- **Efficiency**: Feature branches + PRs enable safe, reviewable changes
+
+### 🎓 Live Testing
+- **Test Project**: YouTube Transcript Summarizer
+- **Feature Added**: Auto-save markdown summaries to local directory
+- **Results**:
+  - 21 new tests (all passing)
+  - Created PR #2 on feature branch
+  - Zero impact on existing functionality
+  - Completed in ~12 minutes, 1 test iteration
+
+---
+
 ## [2.0.2] - 2025-10-19
 
 **📸 Visual Documentation Release:** Context Foundry now automatically captures screenshots of built applications for beautiful, visual documentation.

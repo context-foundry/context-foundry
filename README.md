@@ -1079,12 +1079,10 @@ Break-even: ~5 projects per month
 
 ## Roadmap
 
-### v2.0.3 (Next Release)
+### v2.2.0 (Next Release)
 - [ ] Enhanced test failure analysis
 - [ ] Configurable test frameworks (Jest, pytest, etc.)
 - [ ] Better error recovery in deployment phase
-
-### v2.1 (Future)
 - [ ] Pattern library (save successful builds as reusable patterns)
 - [ ] Multi-project orchestration (build related projects together)
 - [ ] Cost tracking for API mode users
@@ -1135,4 +1133,4 @@ Context Foundry 2.0 builds upon:
 
 **Context Foundry 2.0** - *Build complete software autonomously with self-healing AI workflows*
 
-**Version:** 2.0.2 | **Release Date:** October 2025 | **License:** MIT
+**Version:** 2.1.0 | **Release Date:** October 2025 | **License:** MIT

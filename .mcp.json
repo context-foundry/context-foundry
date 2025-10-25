@@ -11,7 +11,7 @@
       "disabled": false,
       "description": "Context Foundry MCP Server - Autonomous AI Development",
       "metadata": {
-        "version": "2.0.1",
+        "version": "2.1.0",
         "requiredPythonVersion": ">=3.10",
         "tools": [
           "context_foundry_build",
