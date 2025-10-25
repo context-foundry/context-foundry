@@ -28,7 +28,7 @@ client<llm> GPT35Turbo {
 client<llm> Claude35Sonnet {
   provider anthropic
   options {
-    model "claude-3-5-sonnet-20241022"
+    model "claude-sonnet-4-5-20250929"
     api_key env.ANTHROPIC_API_KEY
     max_tokens 8000
   }

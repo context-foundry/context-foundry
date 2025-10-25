@@ -81,6 +81,13 @@ def compile_baml_schemas(force: bool = False) -> tuple[bool, Optional[str]]:
     return True, None
 
 
+def clear_baml_cache():
+    """Clear cached BAML client to force reload with new environment variables."""
+    global BAML_CLIENT, BAML_COMPILATION_ERROR
+    BAML_CLIENT = None
+    BAML_COMPILATION_ERROR = None
+
+
 def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
     """
     Get BAML runtime client (cached).
@@ -96,7 +103,7 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
     if not BAML_AVAILABLE:
         return None
 
-    # Return cached client
+    # Return cached client (unless force reload requested)
     if BAML_CLIENT is not None and not force_recompile:
         return BAML_CLIENT
 
@@ -122,11 +129,27 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
         for schema_file in schema_files:
             files_dict[schema_file.name] = schema_file.read_text()
 
-        # Pass empty dict for env_vars (can be configured later if needed)
+        # BAML reads API keys from env.VARIABLE_NAME in client configs
+        # We need to pass actual env vars so BAML can access them
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        openai_key = os.getenv('OPENAI_API_KEY')
+
+        env_vars_for_baml = {}
+
+        if anthropic_key:
+            # Set in both places for maximum compatibility
+            os.environ['ANTHROPIC_API_KEY'] = anthropic_key
+            env_vars_for_baml['ANTHROPIC_API_KEY'] = anthropic_key
+
+        if openai_key:
+            os.environ['OPENAI_API_KEY'] = openai_key
+            env_vars_for_baml['OPENAI_API_KEY'] = openai_key
+
+        # Pass env vars to BAML so it can access API keys via env.ANTHROPIC_API_KEY
         BAML_CLIENT = BamlRuntime.from_files(
             root_path=str(schemas_dir),
             files=files_dict,
-            env_vars={}
+            env_vars=env_vars_for_baml
         )
 
         return BAML_CLIENT

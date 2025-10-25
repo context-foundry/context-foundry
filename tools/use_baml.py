@@ -30,7 +30,8 @@ from tools.baml_integration import (
     generate_scout_report_baml,
     generate_architecture_baml,
     validate_build_result_baml,
-    get_baml_error
+    get_baml_error,
+    clear_baml_cache
 )
 
 
@@ -90,9 +91,31 @@ def main():
 
     # Update phase command
     elif args.command == 'update-phase':
+        # Clear cache to pick up any new environment variables
+        clear_baml_cache()
+
+        # Normalize status to capitalized form for BAML compatibility
+        # BAML enums require capitalized values (Researching not researching)
+        status_map = {
+            'analyzing': 'Analyzing',
+            'researching': 'Researching',
+            'designing': 'Designing',
+            'building': 'Building',
+            'testing': 'Testing',
+            'self-healing': 'SelfHealing',
+            'capturing': 'Capturing',
+            'documenting': 'Documenting',
+            'deploying': 'Deploying',
+            'completed': 'Completed',
+            'failed': 'Failed'
+        }
+
+        # Normalize the status input
+        normalized_status = status_map.get(args.status.lower(), args.status)
+
         result = update_phase_with_baml(
             phase=args.phase,
-            status=args.status,
+            status=normalized_status,
             detail=args.detail,
             session_id=args.session_id,
             iteration=args.iteration
