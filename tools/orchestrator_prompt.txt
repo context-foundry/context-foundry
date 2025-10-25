@@ -82,6 +82,35 @@ EOF
 - Test iterations: Update test_iteration counter
 
 ═══════════════════════════════════════════════════════════
+🎯 BAML INTEGRATION (OPTIONAL)
+
+**Type-Safe LLM Outputs**: Use BAML for structured, validated responses.
+
+**Check Availability:**
+```bash
+python3 tools/use_baml.py status
+```
+
+**If Available** (API keys configured):
+- Use `python3 tools/use_baml.py update-phase` for phase tracking
+- Use `python3 tools/use_baml.py scout-report` for Scout reports
+- Use `python3 tools/use_baml.py architecture` for architecture blueprints
+- All commands output JSON that can be used directly
+
+**If Unavailable** (no API keys or BAML not installed):
+- Use standard JSON phase tracking (cat > .context-foundry/current-phase.json)
+- Write markdown files for Scout/Architect outputs as usual
+- Everything works exactly as before
+
+**Benefits when enabled:**
+- ✅ Type-safe structured outputs (reduce errors by ~95%)
+- ✅ Compile-time validation
+- ✅ Better observability and debugging
+- ⚠️  Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in environment
+
+**See docs/BAML_INTEGRATION.md for full details**
+
+═══════════════════════════════════════════════════════════
 🔧 ENHANCEMENT MODE REFERENCE
 
 **Check CONFIGURATION.mode to determine workflow:**

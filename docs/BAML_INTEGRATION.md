@@ -42,7 +42,7 @@ Context Foundry works without BAML using JSON fallback mode:
 pip install -r requirements.txt
 ```
 
-### Option 2: Full Installation (With BAML)
+### Option 2: Full Installation (With BAML) **RECOMMENDED**
 
 For type-safe structured outputs and improved reliability:
 
@@ -52,11 +52,28 @@ pip install -r requirements.txt
 
 # Install BAML dependencies
 pip install -r requirements-baml.txt
+
+# Set API key (choose one or both)
+export ANTHROPIC_API_KEY="your-api-key-here"  # For Claude models
+export OPENAI_API_KEY="your-api-key-here"     # For GPT models
+
+# Verify BAML is working
+python3 tools/use_baml.py status
 ```
 
 **Requirements:**
 - Python 3.8+
-- baml-py >= 0.211.0
+- baml-py >= 0.211.0 (installed via requirements-baml.txt)
+- At least one API key: ANTHROPIC_API_KEY or OPENAI_API_KEY
+
+**Expected Output:**
+```
+✅ BAML is available and ready to use
+
+API Keys configured:
+  ANTHROPIC_API_KEY: ✅ Set
+  OPENAI_API_KEY: ❌ Not set
+```
 
 ## Architecture
 
@@ -257,6 +274,78 @@ if validated:
         print(f"Created: {validated['files_created']}")
     else:
         print(f"Errors: {validated['errors']}")
+```
+
+## CLI Tool for Orchestrator
+
+The `tools/use_baml.py` CLI provides easy BAML integration for bash scripts and the orchestrator:
+
+### Check BAML Status
+
+```bash
+python3 tools/use_baml.py status
+```
+
+**Output:**
+```
+✅ BAML is available and ready to use
+
+API Keys configured:
+  ANTHROPIC_API_KEY: ✅ Set
+  OPENAI_API_KEY: ❌ Not set
+```
+
+### Update Phase Tracking
+
+```bash
+python3 tools/use_baml.py update-phase Scout researching "Analyzing requirements" \
+  --session-id my-project --iteration 0
+```
+
+**Output:** JSON phase info object
+
+### Generate Scout Report
+
+```bash
+python3 tools/use_baml.py scout-report \
+  "Build a web app" \
+  "New Python/Flask project" \
+  --patterns "Use pytest for testing"
+```
+
+**Output:** JSON Scout report (if BAML available with API keys)
+
+### Generate Architecture
+
+```bash
+SCOUT_JSON=$(cat scout-report.json)
+python3 tools/use_baml.py architecture \
+  "$SCOUT_JSON" \
+  '["CORS issues", "Security vulnerabilities"]'
+```
+
+**Output:** JSON Architecture blueprint
+
+### Validate Build Result
+
+```bash
+BUILD_JSON=$(cat build-result.json)
+python3 tools/use_baml.py validate-build "$BUILD_JSON"
+```
+
+**Output:** Validated build result
+
+### Usage in Orchestrator Scripts
+
+```bash
+# Check if BAML is available
+if python3 tools/use_baml.py status > /dev/null 2>&1; then
+  echo "Using BAML for type-safe outputs"
+  PHASE_INFO=$(python3 tools/use_baml.py update-phase Scout researching "Starting")
+else
+  echo "Using JSON fallback mode"
+  PHASE_INFO='{"current_phase": "Scout", "status": "researching"}'
+fi
 ```
 
 ## Graceful Fallback

@@ -170,21 +170,34 @@ def update_phase_with_baml(
     if is_baml_available():
         try:
             client = get_baml_client()
-            # Call BAML CreatePhaseInfo function
-            # phase_info = client.CreatePhaseInfo(
-            #     session_id=session_id,
-            #     phase=phase,
-            #     status=status,
-            #     detail=detail,
-            #     iteration=iteration
-            # )
-            # return phase_info.dict()
+            if client is None:
+                raise Exception("BAML client not available")
 
-            # Placeholder: BAML not fully integrated yet
-            pass
+            # Call BAML CreatePhaseInfo function
+            ctx = client.create_context_manager()
+            result = client.call_function_sync(
+                function_name="CreatePhaseInfo",
+                args={
+                    "session_id": session_id,
+                    "phase": phase,
+                    "status": status,
+                    "detail": detail,
+                    "iteration": iteration
+                },
+                ctx=ctx,
+                tb=None,
+                cb=None,
+                collectors=[],
+                env_vars={},
+                tags=None
+            )
+
+            # Parse the result
+            return result.parsed()
+
         except Exception as e:
             # Fall through to JSON mode
-            print(f"BAML validation failed, using JSON fallback: {e}", file=sys.stderr)
+            print(f"⚠️  BAML validation failed, using JSON fallback: {e}", file=sys.stderr)
 
     # JSON fallback
     return {
@@ -260,18 +273,31 @@ def generate_scout_report_baml(
 
     try:
         client = get_baml_client()
-        # scout_report = client.GenerateScoutReport(
-        #     task_description=task_description,
-        #     codebase_analysis=codebase_analysis,
-        #     past_patterns=past_patterns
-        # )
-        # return scout_report.dict()
+        if client is None:
+            return None
 
-        # Placeholder: BAML not fully integrated yet
-        return None
+        # Call BAML GenerateScoutReport function
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="GenerateScoutReport",
+            args={
+                "task_description": task_description,
+                "codebase_analysis": codebase_analysis,
+                "past_patterns": past_patterns
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars={},
+            tags=None
+        )
+
+        # Parse and return the result
+        return result.parsed()
 
     except Exception as e:
-        print(f"BAML Scout report generation failed: {e}", file=sys.stderr)
+        print(f"⚠️  BAML Scout report generation failed: {e}", file=sys.stderr)
         return None
 
 
@@ -294,17 +320,30 @@ def generate_architecture_baml(
 
     try:
         client = get_baml_client()
-        # architecture = client.GenerateArchitecture(
-        #     scout_report_json=scout_report_json,
-        #     flagged_risks=flagged_risks
-        # )
-        # return architecture.dict()
+        if client is None:
+            return None
 
-        # Placeholder: BAML not fully integrated yet
-        return None
+        # Call BAML GenerateArchitecture function
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="GenerateArchitecture",
+            args={
+                "scout_report_json": scout_report_json,
+                "flagged_risks": flagged_risks
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars={},
+            tags=None
+        )
+
+        # Parse and return the result
+        return result.parsed()
 
     except Exception as e:
-        print(f"BAML Architecture generation failed: {e}", file=sys.stderr)
+        print(f"⚠️  BAML Architecture generation failed: {e}", file=sys.stderr)
         return None
 
 
@@ -323,14 +362,29 @@ def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
 
     try:
         client = get_baml_client()
-        # build_result = client.ValidateBuildResult(result_json=result_json)
-        # return build_result.dict()
+        if client is None:
+            return None
 
-        # Placeholder: BAML not fully integrated yet
-        return None
+        # Call BAML ValidateBuildResult function
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="ValidateBuildResult",
+            args={
+                "result_json": result_json
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars={},
+            tags=None
+        )
+
+        # Parse and return the result
+        return result.parsed()
 
     except Exception as e:
-        print(f"BAML build result validation failed: {e}", file=sys.stderr)
+        print(f"⚠️  BAML build result validation failed: {e}", file=sys.stderr)
         return None
 
 

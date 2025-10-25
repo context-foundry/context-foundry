@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.0] - 2025-01-13
+
+**🔌 BAML Full Integration:** Complete implementation of BAML type-safe LLM outputs in the autonomous build system.
+
+### 🚀 Added
+
+#### BAML Runtime Integration
+- **Full BamlRuntime API Implementation** (`tools/baml_integration.py`)
+  - Updated to use baml-py v0.211.2 `BamlRuntime` API
+  - Implemented `update_phase_with_baml()` for type-safe phase tracking
+  - Implemented `generate_scout_report_baml()` for structured Scout reports
+  - Implemented `generate_architecture_baml()` for architecture blueprints
+  - Implemented `validate_build_result_baml()` for Builder validation
+  - All functions call actual BAML LLM functions (not placeholders)
+
+#### CLI Tool for Orchestrator
+- **New CLI Tool** (`tools/use_baml.py`)
+  - Status checking: `python3 tools/use_baml.py status`
+  - Phase tracking: `python3 tools/use_baml.py update-phase`
+  - Scout reports: `python3 tools/use_baml.py scout-report`
+  - Architecture: `python3 tools/use_baml.py architecture`
+  - Build validation: `python3 tools/use_baml.py validate-build`
+  - Easy bash integration for orchestrator scripts
+  - Graceful fallback to JSON when API keys not configured
+
+#### Orchestrator Integration
+- **BAML Section Added** to `tools/orchestrator_prompt.txt`
+  - Instructions for using BAML CLI tool
+  - Graceful fallback guidance
+  - API key requirements documented
+  - Optional usage pattern (doesn't break existing builds)
+
+#### Documentation
+- **Enhanced BAML Guide** (`docs/BAML_INTEGRATION.md`)
+  - API key setup instructions
+  - CLI tool usage examples
+  - Orchestrator integration patterns
+  - Complete end-to-end examples
+
+### 🔧 Changed
+
+#### BAML Schema Fixes
+- **Fixed Enum Naming** for BAML v0.211.2 compatibility
+  - `PhaseStatus`: lowercase → Capitalized with `@alias`
+  - `BuildStatus`: lowercase → Capitalized with `@alias`
+  - `ErrorSeverity`: lowercase → Capitalized with `@alias`
+  - All enums now comply with BAML naming requirements
+  - Backward compatible via `@alias` annotations
+
+#### Integration Layer
+- **Replaced Placeholder Code** with actual implementations
+  - All commented-out function calls now active
+  - Real BamlRuntime calls using `call_function_sync()`
+  - Proper context manager usage
+  - Result parsing with `.parsed()`
+
+### ✨ Features
+
+- **Type-Safe Phase Tracking**: Real-time BAML-validated phase updates
+- **Structured Scout Reports**: Guaranteed schema compliance for Scout findings
+- **Validated Architecture**: Type-checked architecture blueprints
+- **Build Result Validation**: Type-safe Builder task results
+- **CLI Interface**: Easy bash integration without Python imports
+- **API Key Detection**: Automatic detection and status reporting
+- **Graceful Degradation**: Falls back to JSON if BAML/API keys unavailable
+
+### 📊 Technical Details
+
+- **BAML Version**: v0.211.2
+- **API**: BamlRuntime (replaces deprecated BamlSyncClient)
+- **LLM Providers**: Anthropic Claude, OpenAI GPT (configurable)
+- **Required Env Vars**: `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`
+- **Backward Compatible**: 100% - works without BAML/API keys
+
+### ⚠️ Breaking Changes
+
+**None** - This release is fully backward compatible. BAML is optional.
+
+---
+
 ## [1.3.0] - 2025-01-13
 
 **🎯 BAML Integration Release:** Type-safe LLM outputs with BAML (Basically a Made-up Language) for improved reliability and structured responses.
