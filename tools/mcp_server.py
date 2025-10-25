@@ -1314,7 +1314,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "--strict-mcp-config",
             "--settings", '{"thinkingMode": "off"}',
             "--system-prompt", system_prompt,
-            ""  # Empty user message (everything in system prompt now)
+            "BEGIN AUTONOMOUS EXECUTION"  # Trigger message for orchestrator
         ]
 
         # Generate unique task ID
