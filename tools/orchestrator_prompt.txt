@@ -418,6 +418,24 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 **Enhancement modes:** See §Enhancement Mode Reference for build planning guidance. Create feature branch first: `git checkout -b enhancement/descriptive-name`
 
+**PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
+Update .context-foundry/current-phase.json:
+```bash
+cat > .context-foundry/current-phase.json << 'EOF'
+{
+  "session_id": "{project_directory_name}",
+  "current_phase": "Builder",
+  "phase_number": "3/7",
+  "status": "planning",
+  "progress_detail": "Planning parallel build tasks",
+  "test_iteration": 0,
+  "phases_completed": ["Scout", "Architect"],
+  "started_at": "{current ISO timestamp}",
+  "last_updated": "{current ISO timestamp}"
+}
+EOF
+```
+
 1. Analyze architecture for parallelization:
    - Count total files/modules to create
    - Identify dependencies between modules
