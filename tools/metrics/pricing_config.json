@@ -1,0 +1,65 @@
+{
+  "version": "2025-01-13",
+  "description": "Model pricing configuration for cost calculation",
+  "models": {
+    "claude-sonnet-4-20250514": {
+      "display_name": "Claude Sonnet 4",
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_write_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    },
+    "claude-sonnet-3-5-20241022": {
+      "display_name": "Claude Sonnet 3.5",
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_write_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    },
+    "claude-opus-4-20250514": {
+      "display_name": "Claude Opus 4",
+      "input_per_mtok": 15.00,
+      "output_per_mtok": 75.00,
+      "cache_write_per_mtok": 18.75,
+      "cache_read_per_mtok": 1.50
+    },
+    "claude-3-5-sonnet-20241022": {
+      "display_name": "Claude 3.5 Sonnet (Legacy)",
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_write_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    },
+    "gpt-4-turbo-2024-04-09": {
+      "display_name": "GPT-4 Turbo",
+      "input_per_mtok": 10.00,
+      "output_per_mtok": 30.00,
+      "cache_write_per_mtok": 0.00,
+      "cache_read_per_mtok": 0.00
+    },
+    "gpt-4o-2024-11-20": {
+      "display_name": "GPT-4o",
+      "input_per_mtok": 2.50,
+      "output_per_mtok": 10.00,
+      "cache_write_per_mtok": 0.00,
+      "cache_read_per_mtok": 0.00
+    },
+    "default": {
+      "display_name": "Default Model",
+      "input_per_mtok": 3.00,
+      "output_per_mtok": 15.00,
+      "cache_write_per_mtok": 3.75,
+      "cache_read_per_mtok": 0.30
+    }
+  },
+  "budget": {
+    "daily_limit_usd": 50.0,
+    "monthly_limit_usd": 500.0,
+    "alert_threshold_pct": 80,
+    "warning_threshold_pct": 90
+  },
+  "retention": {
+    "metrics_retention_days": 90,
+    "cleanup_enabled": true
+  }
+}

@@ -321,13 +321,40 @@ class MCPClient:
                 except Exception:
                     pass
 
-        # TODO: Extract token usage from Claude Code logs
-        # This would require parsing the session logs
-        metrics["token_usage"] = {
-            "total": 0,  # Would need to parse from logs
-            "percentage": 0.0,
-            "by_phase": {}
-        }
+        # Extract real token usage from metrics DB
+        try:
+            from tools.metrics.metrics_db import get_metrics_db
+
+            metrics_db = get_metrics_db()
+            build_metrics = metrics_db.get_build_metrics(task_id)
+
+            if build_metrics:
+                total_tokens = build_metrics.get('total_tokens', 0)
+                metrics["token_usage"] = {
+                    "total": total_tokens,
+                    "input": build_metrics.get('total_tokens_input', 0),
+                    "output": build_metrics.get('total_tokens_output', 0),
+                    "cached": build_metrics.get('total_tokens_cached', 0),
+                    "percentage": (total_tokens / 200000) * 100,
+                    "by_phase": {
+                        phase['phase_name']: phase.get('tokens_input', 0) + phase.get('tokens_output', 0)
+                        for phase in build_metrics.get('phases', [])
+                    }
+                }
+            else:
+                # Fallback to zeros if no data
+                metrics["token_usage"] = {
+                    "total": 0,
+                    "percentage": 0.0,
+                    "by_phase": {}
+                }
+        except ImportError:
+            # Metrics module not available - use placeholder
+            metrics["token_usage"] = {
+                "total": 0,
+                "percentage": 0.0,
+                "by_phase": {}
+            }
 
         return metrics
 

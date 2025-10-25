@@ -370,13 +370,25 @@ class MetricsCollector:
             # Get token estimate
             token_data = self.mcp_client.estimate_token_usage(task_id)
 
+            # Get real latency from metrics DB
+            avg_latency_ms = 0
+            try:
+                from tools.metrics.metrics_db import get_metrics_db
+
+                metrics_db = get_metrics_db()
+                phase_stats = metrics_db.get_phase_totals(task.get('current_phase', 'Unknown'), days=7)
+                avg_latency_ms = phase_stats.get('avg_latency_ms', 0)
+            except ImportError:
+                # Metrics module not available
+                pass
+
             # Store metric
             self.db.add_metric(task_id, {
                 'timestamp': datetime.now().isoformat(),
                 'phase': task.get('current_phase', 'Unknown'),
                 'token_usage': token_data['estimated_tokens'],
                 'token_percentage': token_data['percentage'],
-                'latency_ms': 0,  # TODO: Calculate from logs
+                'latency_ms': avg_latency_ms,
                 'context_resets': task.get('iterations', 0),
                 'elapsed_seconds': task.get('elapsed_seconds', 0),
                 'estimated_remaining_seconds': task.get('estimated_remaining_seconds', 0)

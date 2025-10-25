@@ -14,6 +14,19 @@ from watchdog.events import FileSystemEventHandler
 from .models import BuildStatus, SystemStats, AgentMetrics, BuildSummary
 from ..config import TUIConfig
 
+# Import metrics database
+try:
+    import sys
+    from pathlib import Path as PathLib
+    metrics_path = PathLib(__file__).parent.parent.parent / 'metrics'
+    if str(metrics_path) not in sys.path:
+        sys.path.insert(0, str(metrics_path))
+    from tools.metrics.metrics_db import get_metrics_db
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    get_metrics_db = None
+
 
 class TUIDataProvider:
     """Centralized data provider for TUI with caching"""
@@ -281,14 +294,27 @@ class TUIDataProvider:
 
         avg_duration = total_duration / build_count_with_duration if build_count_with_duration > 0 else 0.0
 
-        # TODO: Get real token and cost data from metrics DB
+        # Get real token and cost data from metrics DB
+        total_tokens_used = 0
+        total_cost_usd = 0.0
+
+        if METRICS_AVAILABLE and get_metrics_db:
+            try:
+                metrics_db = get_metrics_db()
+                total_metrics = metrics_db.get_total_metrics(days=30)
+                total_tokens_used = total_metrics.get('total_tokens', 0)
+                total_cost_usd = total_metrics.get('total_cost', 0.0)
+            except Exception as e:
+                # Gracefully degrade if metrics DB unavailable
+                pass
+
         stats = SystemStats(
             total_builds=total_builds,
             active_builds=active_builds,
             completed_builds=completed_builds,
             failed_builds=failed_builds,
-            total_tokens_used=0,  # TODO: Integrate with metrics DB
-            total_cost_usd=0.0,   # TODO: Integrate with metrics DB
+            total_tokens_used=total_tokens_used,
+            total_cost_usd=total_cost_usd,
             avg_build_duration_minutes=avg_duration,
             last_updated=datetime.now()
         )
@@ -319,12 +345,28 @@ class TUIDataProvider:
 
         # Convert to AgentMetrics format (showing active phases as "agents")
         for phase, count in phase_counts.items():
+            # Get real token/cost data for this phase from metrics DB
+            tokens_used = 0
+            cost_usd = 0.0
+            avg_latency_ms = 0.0
+
+            if METRICS_AVAILABLE and get_metrics_db:
+                try:
+                    metrics_db = get_metrics_db()
+                    phase_metrics = metrics_db.get_phase_totals(phase, days=30)
+                    tokens_used = phase_metrics.get('total_tokens', 0)
+                    cost_usd = phase_metrics.get('total_cost', 0.0)
+                    avg_latency_ms = phase_metrics.get('avg_latency_ms', 0.0)
+                except Exception:
+                    # Gracefully degrade
+                    pass
+
             metrics.append(AgentMetrics(
                 agent_name=f"{phase} Agent",
                 total_calls=count,
-                tokens_used=0,  # TODO: Integrate with metrics DB
-                cost_usd=0.0,   # TODO: Integrate with metrics DB
-                avg_latency_ms=0.0,
+                tokens_used=tokens_used,
+                cost_usd=cost_usd,
+                avg_latency_ms=avg_latency_ms,
                 last_active=datetime.now()
             ))
 
