@@ -103,6 +103,18 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
     if not BAML_AVAILABLE:
         return None
 
+    # CRITICAL: Ensure API keys are in os.environ BEFORE creating client
+    # BAML captures environment at client creation time
+    anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+    openai_key = os.getenv('OPENAI_API_KEY')
+
+    if anthropic_key and 'ANTHROPIC_API_KEY' not in os.environ:
+        os.environ['ANTHROPIC_API_KEY'] = anthropic_key
+        print(f"[BAML] Set ANTHROPIC_API_KEY in os.environ before client creation", file=sys.stderr)
+
+    if openai_key and 'OPENAI_API_KEY' not in os.environ:
+        os.environ['OPENAI_API_KEY'] = openai_key
+
     # Return cached client (unless force reload requested)
     if BAML_CLIENT is not None and not force_recompile:
         return BAML_CLIENT
@@ -124,33 +136,41 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
             return None
 
         # Create dict mapping filenames to their contents
-        # BamlRuntime.from_files expects: from_files(root_path, files_dict, env_vars)
         files_dict = {}
         for schema_file in schema_files:
             files_dict[schema_file.name] = schema_file.read_text()
 
-        # BAML reads API keys from env.VARIABLE_NAME in client configs
-        # We need to pass actual env vars so BAML can access them
-        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
-        openai_key = os.getenv('OPENAI_API_KEY')
-
+        # CRITICAL: Build env_vars with explicit debugging
         env_vars_for_baml = {}
 
-        if anthropic_key:
-            # Set in both places for maximum compatibility
-            os.environ['ANTHROPIC_API_KEY'] = anthropic_key
-            env_vars_for_baml['ANTHROPIC_API_KEY'] = anthropic_key
+        # Add all current environment variables
+        for key, value in os.environ.items():
+            env_vars_for_baml[key] = value
 
-        if openai_key:
-            os.environ['OPENAI_API_KEY'] = openai_key
-            env_vars_for_baml['OPENAI_API_KEY'] = openai_key
+        # Ensure API keys are explicitly present
+        if 'ANTHROPIC_API_KEY' in os.environ:
+            env_vars_for_baml['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
+            print(f"[BAML] Explicitly added ANTHROPIC_API_KEY: {os.environ['ANTHROPIC_API_KEY'][:20]}...", file=sys.stderr)
 
-        # Pass env vars to BAML so it can access API keys via env.ANTHROPIC_API_KEY
+        if 'OPENAI_API_KEY' in os.environ:
+            env_vars_for_baml['OPENAI_API_KEY'] = os.environ['OPENAI_API_KEY']
+            print(f"[BAML] Explicitly added OPENAI_API_KEY", file=sys.stderr)
+
+        print(f"[BAML] Creating BamlRuntime with {len(env_vars_for_baml)} env vars", file=sys.stderr)
+        print(f"[BAML] ANTHROPIC_API_KEY in env_vars_for_baml: {'ANTHROPIC_API_KEY' in env_vars_for_baml}", file=sys.stderr)
+        print(f"[BAML] env_vars_for_baml keys: {list(env_vars_for_baml.keys())[:10]}...", file=sys.stderr)
+
+        # Pass environment to BAML
         BAML_CLIENT = BamlRuntime.from_files(
             root_path=str(schemas_dir),
             files=files_dict,
             env_vars=env_vars_for_baml
         )
+
+        print(f"[BAML] BamlRuntime created successfully", file=sys.stderr)
+
+        # TEST: Try to inspect the runtime's environment
+        print(f"[BAML] Runtime type: {type(BAML_CLIENT)}", file=sys.stderr)
 
         return BAML_CLIENT
 
@@ -192,12 +212,29 @@ def update_phase_with_baml(
     # Try BAML first
     if is_baml_available():
         try:
-            client = get_baml_client()
+            # Force reload to pick up current environment
+            client = get_baml_client(force_recompile=True)
             if client is None:
                 raise Exception("BAML client not available")
 
+            # Debug: Check environment at function call time
+            print(f"[BAML DEBUG] About to call CreatePhaseInfo...", file=sys.stderr)
+            print(f"[BAML DEBUG] ANTHROPIC_API_KEY in os.environ at call time: {'ANTHROPIC_API_KEY' in os.environ}", file=sys.stderr)
+            if 'ANTHROPIC_API_KEY' in os.environ:
+                key = os.environ['ANTHROPIC_API_KEY']
+                print(f"[BAML DEBUG] Key value: {key[:20]}...", file=sys.stderr)
+
             # Call BAML CreatePhaseInfo function
             ctx = client.create_context_manager()
+
+            print(f"[BAML DEBUG] Calling function with args: session_id={session_id}, phase={phase}, status={status}", file=sys.stderr)
+
+            # CRITICAL: Try passing env vars at call time as well
+            call_env_vars = {}
+            if 'ANTHROPIC_API_KEY' in os.environ:
+                call_env_vars['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
+                print(f"[BAML DEBUG] Passing ANTHROPIC_API_KEY at call time: {os.environ['ANTHROPIC_API_KEY'][:20]}...", file=sys.stderr)
+
             result = client.call_function_sync(
                 function_name="CreatePhaseInfo",
                 args={
@@ -211,12 +248,42 @@ def update_phase_with_baml(
                 tb=None,
                 cb=None,
                 collectors=[],
-                env_vars={},
+                env_vars=call_env_vars,  # Pass env vars at call time
                 tags=None
             )
 
-            # Parse the result
-            return result.parsed()
+            print(f"[BAML DEBUG] Function call succeeded!", file=sys.stderr)
+
+            # BAML v0.211.2 API: unstable_internal_repr returns JSON string
+            # Format: {"Success":{"content":"...", ...}} or similar
+            try:
+                internal_repr_str = result.unstable_internal_repr()
+                internal_repr = json.loads(internal_repr_str)
+
+                # Extract the content field from the Success wrapper
+                if "Success" in internal_repr and "content" in internal_repr["Success"]:
+                    content = internal_repr["Success"]["content"]
+
+                    # The content is JSON inside markdown code blocks
+                    # Strip ```json and ``` markers
+                    if content.startswith("```json"):
+                        content = content[7:]  # Remove ```json\n
+                    if content.startswith("```"):
+                        content = content[3:]  # Remove ```\n
+                    if content.endswith("```"):
+                        content = content[:-3]  # Remove \n```
+
+                    # Parse the actual JSON
+                    parsed_data = json.loads(content.strip())
+                    print(f"[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr)
+                    return parsed_data
+                else:
+                    print(f"[BAML DEBUG] Unexpected internal_repr format", file=sys.stderr)
+                    return internal_repr
+
+            except Exception as e:
+                print(f"[BAML DEBUG] Failed to parse internal_repr: {e}", file=sys.stderr)
+                raise
 
         except Exception as e:
             # Fall through to JSON mode
@@ -316,8 +383,22 @@ def generate_scout_report_baml(
             tags=None
         )
 
-        # Parse and return the result
-        return result.parsed()
+        # Parse the result using unstable_internal_repr
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            # Strip markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            return json.loads(content.strip())
+
+        return internal_repr
 
     except Exception as e:
         print(f"⚠️  BAML Scout report generation failed: {e}", file=sys.stderr)
@@ -362,8 +443,22 @@ def generate_architecture_baml(
             tags=None
         )
 
-        # Parse and return the result
-        return result.parsed()
+        # Parse the result using unstable_internal_repr
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            # Strip markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            return json.loads(content.strip())
+
+        return internal_repr
 
     except Exception as e:
         print(f"⚠️  BAML Architecture generation failed: {e}", file=sys.stderr)
@@ -403,8 +498,22 @@ def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
             tags=None
         )
 
-        # Parse and return the result
-        return result.parsed()
+        # Parse the result using unstable_internal_repr
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            # Strip markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            return json.loads(content.strip())
+
+        return internal_repr
 
     except Exception as e:
         print(f"⚠️  BAML build result validation failed: {e}", file=sys.stderr)
