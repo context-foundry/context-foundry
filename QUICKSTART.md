@@ -22,7 +22,7 @@
 ```bash
 # Clone Context Foundry
 cd ~/homelab  # or your preferred location
-git clone https://github.com/snedea/context-foundry.git
+git clone https://github.com/context-foundry/context-foundry.git
 
 # IMPORTANT: Change into the context-foundry directory
 cd context-foundry

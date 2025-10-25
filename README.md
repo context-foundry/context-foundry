@@ -391,7 +391,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 
 ```bash
 # 1. Clone Context Foundry
-git clone https://github.com/snedea/context-foundry.git
+git clone https://github.com/context-foundry/context-foundry.git
 
 # IMPORTANT: Change into the context-foundry directory
 cd context-foundry
