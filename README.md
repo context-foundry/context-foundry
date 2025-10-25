@@ -394,20 +394,28 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 git clone https://github.com/snedea/context-foundry.git
 cd context-foundry
 
-# 2. Install MCP server dependencies (Python 3.10+ required)
+# 2. Create virtual environment (recommended, required on Debian-based systems)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 3. Install MCP server dependencies (Python 3.10+ required)
 pip install -r requirements-mcp.txt
 
-# 2a. [Optional] Install BAML for type-safe LLM outputs
+# 3a. [Optional] Install BAML for type-safe LLM outputs
 pip install -r requirements-baml.txt
 
-# 3. Configure Claude Code to connect to MCP server
-claude mcp add --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
+# 4. Configure Claude Code to connect to MCP server
+# Use absolute path to your venv Python and mcp_server.py
+claude mcp add --transport stdio context-foundry -- /absolute/path/to/context-foundry/venv/bin/python /absolute/path/to/context-foundry/tools/mcp_server.py
 
-# 4. Verify MCP connection
+# Example (replace with your actual path):
+# claude mcp add --transport stdio context-foundry -- /Users/name/homelab/context-foundry/venv/bin/python /Users/name/homelab/context-foundry/tools/mcp_server.py
+
+# 5. Verify MCP connection
 claude mcp list
 # Should show: ✓ Connected: context-foundry
 
-# 5. Authenticate with GitHub (for deployment)
+# 6. Authenticate with GitHub (for deployment)
 gh auth login
 ```
 
@@ -834,9 +842,25 @@ Temporarily disable without deleting configuration:
 
 **Solution:**
 ```bash
+# Make sure you're in the virtual environment
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Then install dependencies
 pip install -r requirements-mcp.txt
 # Or specifically:
 pip install fastmcp>=2.0.0 nest-asyncio>=1.5.0
+```
+
+**Error:** `externally-managed-environment` (Debian/Ubuntu systems)
+
+**Solution:**
+```bash
+# Create a virtual environment first (best practice)
+python3 -m venv venv
+source venv/bin/activate
+
+# Then install dependencies
+pip install -r requirements-mcp.txt
 ```
 
 **Error:** Python version too old
@@ -847,7 +871,9 @@ pip install fastmcp>=2.0.0 nest-asyncio>=1.5.0
 python3 --version
 
 # Use specific version if available
-python3.10 -m pip install -r requirements-mcp.txt
+python3.10 -m venv venv
+source venv/bin/activate
+pip install -r requirements-mcp.txt
 ```
 
 ### Claude Code Doesn't See MCP Tools
