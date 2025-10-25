@@ -1,151 +1,118 @@
 # Codebase Analysis Report
 
 ## Project Overview
-- **Type**: Python web application (livestream monitoring dashboard)
-- **Languages**: Python (backend), HTML/JavaScript (frontend)
-- **Architecture**: WebSocket-based real-time monitoring dashboard for Context Foundry autonomous builds
+- Type: Python web application (FastAPI backend + HTML/JS frontend)
+- Languages: Python, HTML, JavaScript
+- Architecture: Real-time monitoring dashboard with WebSocket updates
 
 ## Key Files
-- **Entry point**: tools/livestream/server.py
-- **Frontend**: tools/livestream/dashboard.html (TARGET FILE FOR REDESIGN)
-- **Config**: tools/livestream/config.py
-- **Tests**: tools/livestream/tests/
 
-## Current Dashboard Architecture
+### Backend
+- **server.py**: Main FastAPI server with WebSocket support
+  - Live session monitoring via /api/phase-update endpoint
+  - Multi-agent monitoring endpoints
+  - Enhanced MCP metrics integration
+  - WebSocket real-time updates with change detection
+  
+- **metrics_db.py**: SQLite database for comprehensive metrics
+  - Tasks, metrics, decisions, agent performance tracking
+  - Multi-agent instance tracking table
+  - Pattern effectiveness tracking
 
-### HTML Structure (dashboard.html)
-- **Size**: 1,053 lines
-- **CSS Framework**: Tailwind CSS (via CDN)
-  - CDN link: https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio
-  - Uses utility classes extensively (bg-gray-900, p-6, rounded-lg, etc.)
-- **Custom CSS**: Extensive custom styling (lines 19-149)
-  - Phase indicator gradients (.phase-scout, .phase-architect, .phase-builder, .phase-complete)
-  - Metric cards with hover effects
-  - Token gauges with gradient fills
-  - Agent cards with animations
-  - Multi-agent progress bars with shimmer animations
-  - Keyframe animations (shimmer, pulse-red, pulse)
+### Frontend
+- **dashboard.html**: Current dashboard UI
+  - Terminal CSS aesthetic (must preserve)
+  - Basic phase display with colored cards
+  - Multi-agent panel (hidden by default)
+  - Task progress tracking
+  - Live logs viewer
+  - Enhanced metrics panels (token usage, test loop, agent performance, decision tracking)
 
-### Key Features (MUST PRESERVE)
-1. **Multi-Agent Monitoring Panel** (lines 166-175)
-   - Shows active agents with status indicators
-   - Horizontal gradient progress bars per agent
-   - Per-agent token usage gauges with color warnings
-   - Real-time updates via WebSocket
+## Current Functionality
 
-2. **Phase Indicator** (lines 182-195)
-   - Dynamic gradient backgrounds based on phase
-   - Iteration counter and elapsed time
+### Session Tracking
+- Discovers sessions from both live phase-update API and checkpoint files
+- Real-time WebSocket updates for active sessions
+- Change detection to minimize unnecessary updates
 
-3. **Context Usage Bar** (lines 198-209)
-   - Gradient progress bar (green → yellow → red)
-   - Percentage overlay
+### Phase Tracking
+- Phases: Scout, Architect, Builder (displayed as colored cards)
+- Phase status updates via /api/phase-update endpoint
+- Current implementation shows ONE active phase card at top
 
-4. **Session Selector** (lines 159-164)
-   - Dropdown for multiple sessions
+### Multi-Agent Support
+- Agent instance tracking in database
+- Agent progress monitoring with token usage per agent
+- WebSocket broadcasts for agent updates
+- Hidden panel (only shows if agents exist)
 
-5. **Live Logs Viewer** (lines 233-238)
-   - Monospace font, auto-scroll
-   - Syntax highlighting for emojis
+## Current Dashboard Layout
 
-6. **Statistics & Metrics** (lines 315-411)
-   - Token usage panel with gauge
-   - Test loop analytics
-   - Agent performance tracking
-   - Decision quality tracking
+1. **Header**: Project title
+2. **Session Selector**: Dropdown to choose active session
+3. **Multi-Agent Panel**: (hidden) Shows active agents if any
+4. **Main Grid**: Two columns
+   - Left: Phase card, Context usage, Task progress, Live logs
+   - Right: Session info, Statistics, Connection status, Actions
+5. **Detailed Metrics**: Token usage, Test loop, Agent performance, Decision quality
 
-7. **WebSocket Integration** (lines 754-832)
-   - Real-time updates
-   - Auto-reconnect logic
-   - Phase update handling
+## Issues with Current Design
+
+1. **Lacks detailed phase breakdown**
+   - Only shows current phase, not completed/upcoming phases
+   - No phase-by-phase progress view
+   - Missing "what's happening now" narrative
+
+2. **No session tabs**
+   - Can't filter by active/completed/failed sessions
+   - Session selector is simple dropdown, not categorized
+
+3. **Limited progress visibility**
+   - No overall progress percentage
+   - No estimated time remaining
+   - No detailed phase descriptions
+
+4. **Missing critical features from requirements**
+   - No phase completion checklist
+   - No upcoming phases preview
+   - No detailed "what's happening now" section
+   - No metrics at top showing overall status
 
 ## Code to Modify
 
-### Task: Replace Tailwind CSS with Terminal CSS
-
 **Files to change**:
-- `tools/livestream/dashboard.html` (complete redesign)
+1. `tools/livestream/dashboard.html` - Complete UI redesign
+2. `tools/livestream/server.py` - Add new API endpoints for phase breakdown
+3. `tools/livestream/metrics_db.py` - Schema looks sufficient, may need minor updates
 
 **Approach**:
-1. **Remove Tailwind**:
-   - Delete Tailwind CDN script tag (line 8)
-   - Delete Tailwind config (lines 9-16)
-   - Remove ALL utility classes from HTML elements
-
-2. **Add Terminal CSS**:
-   - Add CDN link: `<link rel="stylesheet" href="https://unpkg.com/terminal.css" />`
-   - Terminal CSS is CLASSLESS - styles semantic HTML automatically
-
-3. **Restructure HTML**:
-   - Convert `<div class="...">` to semantic HTML (`<section>`, `<article>`, `<header>`, etc.)
-   - Rely on Terminal CSS's default styling for base elements
-   - Keep custom CSS for:
-     * Gradient progress bars (critical feature)
-     * Animations (shimmer, pulse)
-     * Token gauges
-     * Multi-agent cards
-     * Status indicators
-
-4. **Custom CSS Strategy**:
-   - Keep existing keyframes and animations
-   - Adapt color scheme to Terminal CSS theme (green-on-black retro)
-   - Maintain all gradient effects
-   - Ensure responsive layouts work
-
-5. **Layout Adaptation**:
-   - Replace Tailwind grid classes with custom grid CSS or Terminal CSS layout
-   - Maintain 3-column desktop / 1-column mobile layout
-   - Keep all panels and sections visible
-
-6. **JavaScript**:
-   - NO CHANGES to JavaScript code (lines 413-1051)
-   - All functionality must remain intact
-   - WebSocket, API calls, rendering functions unchanged
+- Scrap existing dashboard layout completely
+- Build new phase-tracking focused UI
+- Add new API endpoints to serve phase breakdown data
+- Parse current-phase.json for detailed phase info
+- Implement session tabs (Active/Completed/Failed/All)
+- Add overall progress metrics at top
+- Create phase-by-phase breakdown sections
 
 ## Risks
 
-### High Risk
-- **Breaking multi-agent monitoring**: Complex layout with progress bars and token gauges
-- **Loss of gradient animations**: Custom animations must be preserved
-- **Responsive layout issues**: Terminal CSS may not have built-in grid system
-- **Color scheme mismatch**: Need to ensure good contrast and readability
+1. **Breaking existing functionality**
+   - Must preserve WebSocket updates
+   - Must preserve Terminal CSS aesthetic
+   - Must preserve export functionality
+   - Must maintain backwards compatibility with existing APIs
 
-### Medium Risk
-- **Button/form styling**: Terminal CSS styles may not match expectations
-- **Spacing issues**: Tailwind's utility spacing vs Terminal CSS defaults
-- **WebSocket updates triggering layout shifts**: Ensure smooth transitions
+2. **Data availability**
+   - current-phase.json may not exist for all sessions
+   - Need graceful degradation if phase data unavailable
 
-### Low Risk
-- **Log viewer**: Simple monospace styling, should work fine
-- **Session selector**: Standard dropdown, Terminal CSS handles it
+3. **Real-time updates**
+   - New UI must update smoothly when phases change
+   - Tab switching must maintain WebSocket connection
+   - Progress calculations must be accurate
 
-## Prevention Strategy
-
-### Before Implementation
-1. **Study Terminal CSS docs**: Understand its classless approach and available CSS variables
-2. **Plan semantic HTML structure**: Map current Tailwind components to semantic equivalents
-3. **Identify custom CSS requirements**: Extract what Terminal CSS won't cover
-
-### During Implementation
-1. **Preserve all custom animations**: Copy keyframes verbatim
-2. **Test incrementally**: Ensure each section renders before moving to next
-3. **Maintain JavaScript untouched**: Only modify HTML/CSS
-
-### Testing
-1. **Visual regression**: Compare layouts side-by-side
-2. **Functional testing**: All buttons, dropdowns, WebSocket updates work
-3. **Responsive testing**: Mobile and desktop layouts
-4. **Animation testing**: Progress bars animate smoothly
-5. **Real data testing**: Test with actual session data if possible
-
-## Success Criteria
-- ✅ Zero Tailwind CSS references remain
-- ✅ Terminal CSS loaded via CDN
-- ✅ All multi-agent monitoring features work
-- ✅ Gradient progress bars animate correctly
-- ✅ Token gauges show color warnings
-- ✅ WebSocket updates trigger UI changes
-- ✅ Retro terminal aesthetic achieved
-- ✅ Responsive on desktop and mobile
-- ✅ All JavaScript functionality preserved
-- ✅ Clean, semantic HTML structure
+## Dependencies
+- FastAPI, uvicorn (backend)
+- Terminal CSS (frontend styling)
+- Chart.js (for potential visualizations)
+- WebSocket for real-time updates

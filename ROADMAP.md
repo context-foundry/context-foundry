@@ -24,21 +24,6 @@ Context Foundry supports two execution modes:
 
 ## Planned Features
 
-### 📋 Medium Priority: Pull Request Automation
-
-**Status:** Planned
-
-**What:** Automatically create PRs after successful builds/enhancements.
-
-**Features:**
-- Create branch from current branch
-- Push changes to remote
-- Generate PR description from SPEC and changes
-- Use `gh pr create` for GitHub integration
-- Support for other git platforms (GitLab, Bitbucket)
-
-**Estimated Completion:** Q2 2025
-
 ### 🎯 Medium Priority: Better Codebase Understanding
 
 **Status:** Research Phase
@@ -287,6 +272,141 @@ autonomous_build_and_deploy(
 ```
 
 **Key Insight:** Enhancement mode transforms Context Foundry from a greenfield development tool into a comprehensive code evolution platform. It can now fix bugs, add features, upgrade dependencies, refactor code, and add tests to ANY existing project - whether built by Context Foundry or not.
+
+**Completed:** October 24, 2025
+
+### v2.2.0 - GitHub Agent (October 2025)
+**Major Feature: Comprehensive GitHub Integration & Automation**
+
+Context Foundry now sets up complete GitHub project infrastructure automatically:
+
+**✅ Phase 7.5: GitHub Integration Agent**
+- ✅ Dedicated GitHub agent with specialized prompt
+- ✅ Intelligent project type detection
+- ✅ Autonomous GitHub configuration
+- ✅ Full CI/CD workflow generation
+- ✅ Professional project setup from day 1
+
+**✅ Issue Tracking & Project Management**
+- ✅ Automatic issue creation from Scout reports
+- ✅ Issue-commit-PR linking
+- ✅ Issue closure on completion
+- ✅ Standard labels for project organization
+- ✅ Issue/PR templates for collaboration
+
+**✅ CI/CD Automation (GitHub Actions)**
+- ✅ Test workflow generation (automatic)
+- ✅ Deployment workflow for web apps (GitHub Pages)
+- ✅ Docker build & publish workflow (GHCR)
+- ✅ Context-aware workflow creation based on project type
+- ✅ Branch protection rules for new projects
+
+**✅ Release Management**
+- ✅ Automatic version detection from package files
+- ✅ Git tag creation and push
+- ✅ GitHub release with generated changelog
+- ✅ Test results and build metadata in release notes
+- ✅ Links to documentation and artifacts
+
+**✅ Deployment Integration**
+- ✅ GitHub Pages auto-setup for web applications
+- ✅ Live demo link added to README
+- ✅ Automatic deployment on push to main
+- ✅ Multi-platform Docker builds (if applicable)
+
+**✅ Enhancement Mode Integration**
+- ✅ Draft PR creation for tracking progress
+- ✅ PR updates as build progresses
+- ✅ Automatic PR readiness marking
+- ✅ Issue-PR linking with "Closes #N"
+
+**🏗️ Technical Implementation**
+- `tools/github_agent_prompt.txt` - Comprehensive agent instructions (800+ lines)
+  - Phase 1: Project type detection (web app, CLI, API, library, container)
+  - Phase 2: Issue creation and tracking
+  - Phase 3: Labels and templates
+  - Phase 4: CI/CD workflows (test, deploy, docker)
+  - Phase 5: Release creation with changelog
+  - Phase 6: GitHub Pages setup
+  - Phase 7: Branch protection
+  - Phase 8: Issue updates and closure
+- `tools/orchestrator_prompt.txt` - Phase 7.5 integration (lines 1736-1849)
+- `docs/SESSION_SUMMARY_SCHEMA.md` - Extended schema with GitHub metadata
+- `docs/GITHUB_AGENT_PROPOSAL.md` - Complete feature specification
+
+**📊 Session Summary Schema v2.0**
+New `github` metadata object includes:
+```json
+{
+  "github": {
+    "issue_number": 1,
+    "issue_url": "https://github.com/owner/repo/issues/1",
+    "release_version": "1.0.0",
+    "release_url": "https://github.com/owner/repo/releases/tag/v1.0.0",
+    "pages_url": "https://owner.github.io/repo",
+    "workflows_created": true,
+    "actions_url": "https://github.com/owner/repo/actions",
+    "branch_protection_enabled": true
+  }
+}
+```
+
+**🎯 What Users Get Automatically**
+
+**For New Projects:**
+1. 🎫 Tracking issue created with Scout report
+2. ⚙️ GitHub Actions CI/CD workflows
+3. 🏷️ Standard labels (context-foundry, autonomous-build, etc.)
+4. 📋 Issue/PR templates for collaboration
+5. 📦 GitHub release with changelog
+6. 🌐 GitHub Pages deployment (web apps)
+7. 🔒 Branch protection on main
+8. 📚 Professional README with badges and links
+
+**For Enhancements:**
+1. 🎫 Tracking issue for the fix/feature
+2. 🔀 Draft PR with progress tracking
+3. 🔗 Issue-PR-commit linking
+4. ✅ Automatic PR readiness marking
+5. 📝 Test results in PR description
+
+**📈 Benefits**
+- **Professional Setup**: Projects look mature from day 1
+- **Full Automation**: CI/CD runs automatically on every push
+- **Better Tracking**: Complete audit trail (Issue → PR → Release)
+- **Easy Deployment**: GitHub Pages live immediately
+- **Collaboration Ready**: Templates and guidelines in place
+- **Showcase Quality**: Autonomous builds are deployment-ready
+
+**🎓 Design Decisions**
+1. **Dedicated Agent**: Sophisticated decision-making based on project type
+2. **Intelligent Detection**: Reads Scout/Architect context to customize setup
+3. **Graceful Degradation**: Optional features don't block build completion
+4. **Context-Aware**: Different workflows for web apps vs APIs vs libraries
+5. **Enhancement-Friendly**: Respects existing project settings
+6. **Error Resilient**: Continues on non-critical failures
+
+**📝 Example: Web App Build**
+
+Before GitHub Agent:
+```
+✅ Code written → ✅ Tests pass → ✅ Pushed to GitHub → Done
+```
+
+After GitHub Agent:
+```
+✅ Code written → ✅ Tests pass → ✅ Pushed to GitHub
+  ↓
+✅ Issue #1 created
+✅ CI workflow configured (test + deploy)
+✅ GitHub Pages enabled
+✅ Release v1.0.0 created with changelog
+✅ Issue #1 closed with summary
+✅ Live demo: https://user.github.io/app
+✅ Professional project ready for collaboration
+```
+
+**Key Insight:** The GitHub Agent elevates Context Foundry builds from "code pushed to GitHub" to "fully automated, deployment-ready, professionally managed projects." Every build now includes comprehensive CI/CD, release management, and collaboration infrastructure - no manual setup required.
 
 **Completed:** October 24, 2025
 

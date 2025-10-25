@@ -1,724 +1,421 @@
-# Architecture: Tailwind → Terminal CSS Migration
+# Architecture Specification: Context Foundry Dashboard Redesign
 
 ## System Overview
 
-**Goal**: Replace Tailwind CSS with Terminal CSS while preserving ALL functionality and achieving retro terminal aesthetic.
-
-**Scope**: Single file modification - `tools/livestream/dashboard.html`
-
-**Approach**: 
-1. Remove Tailwind CSS CDN and all utility classes
-2. Add Terminal CSS CDN
-3. Restructure HTML with semantic elements
-4. Preserve ALL custom CSS (animations, gradients, effects)
-5. Add custom layout CSS (Terminal CSS has no grid system)
-6. Override Terminal CSS theme variables for dark terminal aesthetic
-7. Keep JavaScript 100% unchanged
+Complete redesign of the livestream dashboard to provide detailed, phase-by-phase build monitoring with session management tabs and comprehensive progress tracking.
 
 ## File Structure
 
 ```
-tools/livestream/dashboard.html (MODIFIED)
-├── <head>
-│   ├── Terminal CSS CDN (NEW)
-│   ├── Chart.js CDN (UNCHANGED)
-│   └── <style> Custom CSS (EXPANDED)
-│       ├── Terminal CSS variable overrides (NEW)
-│       ├── Custom grid layouts (NEW)
-│       ├── Phase gradients (PRESERVED)
-│       ├── Agent animations (PRESERVED)
-│       ├── Progress bars (PRESERVED)
-│       ├── Token gauges (PRESERVED)
-│       └── Keyframe animations (PRESERVED)
-└── <body>
-    ├── <header> Page title (NEW semantic structure)
-    ├── <section class="session-selector"> (NEW)
-    ├── <section class="multi-agent-panel"> (NEW)
-    ├── <div class="main-grid"> (NEW custom grid)
-    │   ├── <div class="main-content"> (NEW)
-    │   │   ├── <section class="phase-indicator">
-    │   │   ├── <section class="context-usage">
-    │   │   ├── <section class="task-progress">
-    │   │   └── <section class="live-logs">
-    │   └── <aside class="sidebar"> (NEW)
-    │       ├── <section class="session-info">
-    │       ├── <section class="statistics">
-    │       ├── <section class="connection-status">
-    │       └── <nav class="quick-actions">
-    ├── <section class="metrics-header"> (NEW)
-    ├── <div class="metrics-grid"> (NEW custom grid)
-    │   ├── <article class="token-usage">
-    │   ├── <article class="test-loop">
-    │   ├── <article class="agent-performance">
-    │   └── <article class="decision-tracking">
-    └── <script> JavaScript (100% UNCHANGED)
+tools/livestream/
+├── server.py          (MODIFY - Add new API endpoints)
+├── dashboard.html     (COMPLETE REDESIGN - New UI)
+└── metrics_db.py      (NO CHANGES - Schema sufficient)
 ```
 
-## Detailed Component Specifications
+## Component Architecture
 
-### 1. HEAD Section
+### 1. Backend API Endpoints (server.py)
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Context Foundry Livestream</title>
-    
-    <!-- Terminal CSS CDN (NEW) -->
-    <link rel="stylesheet" href="https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css">
-    
-    <!-- Chart.js (UNCHANGED) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
-    <style>
-        /* === TERMINAL CSS THEME OVERRIDES === */
-        :root {
-            --background-color: #0a0a0a;
-            --font-color: #e0e0e0;
-            --primary-color: #00ff00;
-            --secondary-color: #33ff33;
-            --invert-font-color: #000000;
-            --block-background-color: #111111;
-            --global-font-size: 14px;
-            --global-line-height: 1.5em;
-            --mono-font-stack: 'Monaco', 'Courier New', monospace;
-        }
-        
-        /* === CUSTOM GRID LAYOUTS === */
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .main-grid {
-                grid-template-columns: 2fr 1fr;
-            }
-        }
-        
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .metrics-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        
-        /* === PANEL STYLING === */
-        section, article, aside {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        /* === PRESERVED: PHASE GRADIENTS === */
-        .phase-scout { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-        .phase-architect { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-        .phase-builder { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-        .phase-complete { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-        
-        /* === PRESERVED: ANIMATIONS === */
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
-        
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        /* === PRESERVED: PROGRESS BARS === */
-        .agent-progress-bar {
-            height: 1.5rem;
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .agent-progress-fill-active {
-            background: linear-gradient(to right, #10b981 0%, #3b82f6 50%, #2563eb 100%);
-            background-size: 200% 100%;
-            animation: shimmer 3s ease-in-out infinite;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-idle {
-            background: #4b5563;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-completed {
-            background: #10b981;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        /* === PRESERVED: TOKEN GAUGES === */
-        .token-gauge {
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-            height: 1.5rem;
-        }
-        
-        .token-fill {
-            height: 100%;
-            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
-            transition: width 0.5s ease;
-        }
-        
-        .token-critical {
-            animation: pulse-red 2s infinite;
-        }
-        
-        .agent-token-safe { background: #10b981; }
-        .agent-token-warning { background: #eab308; }
-        .agent-token-critical { background: #ef4444; animation: pulse 2s infinite; }
-        
-        /* === PRESERVED: STATUS INDICATORS === */
-        .status-active { color: #10b981; }
-        .status-idle { color: #6b7280; }
-        .status-spawning { color: #3b82f6; }
-        .status-completed { color: #10b981; }
-        .status-failed { color: #ef4444; }
-        
-        /* === PRESERVED: AGENT CARDS === */
-        .agent-card {
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-            border: 1px solid #374151;
-            border-radius: 0.5rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            transition: all 0.3s ease;
-        }
-        
-        .agent-card:hover {
-            border-color: #4b5563;
-            transform: translateX(4px);
-        }
-        
-        /* === PRESERVED: METRIC CARDS === */
-        .metric-card {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .metric-card:hover {
-            border-color: #374151;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
-        }
-        
-        /* === PRESERVED: DECISION BADGES === */
-        .decision-badge {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
-            color: #60a5fa;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            display: inline-block;
-        }
-        
-        .decision-quality-high {
-            background: rgba(16, 185, 129, 0.1);
-            border-color: rgba(16, 185, 129, 0.3);
-            color: #10b981;
-        }
-        
-        .decision-quality-medium {
-            background: rgba(234, 179, 8, 0.1);
-            border-color: rgba(234, 179, 8, 0.3);
-            color: #eab308;
-        }
-        
-        .decision-quality-low {
-            background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-        
-        /* === PRESERVED: LOGS === */
-        .log-line {
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
-        }
-        
-        #logs {
-            background: #000000;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            height: 24rem;
-            overflow-y: auto;
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
-        }
-        
-        /* === UTILITY CLASSES === */
-        .text-green { color: #10b981; }
-        .text-yellow { color: #eab308; }
-        .text-red { color: #ef4444; }
-        .text-blue { color: #3b82f6; }
-        .text-gray { color: #6b7280; }
-        
-        .font-bold { font-weight: bold; }
-        .text-sm { font-size: 0.875rem; }
-        .text-xs { font-size: 0.75rem; }
-        
-        .flex { display: flex; }
-        .flex-between { justify-content: space-between; }
-        .flex-center { align-items: center; }
-        .space-y-2 > * + * { margin-top: 0.5rem; }
-        .space-y-3 > * + * { margin-top: 0.75rem; }
-        
-        /* === RESPONSIVE === */
-        .main-content > section {
-            margin-bottom: 1.5rem;
-        }
-        
-        @media (max-width: 768px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
-            .metrics-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
-</head>
+#### NEW ENDPOINTS:
+
+**GET `/api/phases/{session_id}`**
+```python
+Response: {
+  "session_id": "context-foundry",
+  "total_phases": 7,
+  "phases_completed_count": 3,
+  "current_phase_number": 4,
+  "overall_progress_percent": 50.0,
+  "phases": [
+    {
+      "number": 0,
+      "name": "Codebase Analysis",
+      "emoji": "🔍",
+      "status": "completed",
+      "description": "Analyzed project structure and dependencies",
+      "completed_at": "2025-01-13T10:05:00Z"
+    },
+    {
+      "number": 1,
+      "name": "Scout",
+      "emoji": "🔍",
+      "status": "completed",
+      "description": "Researched requirements and patterns",
+      "completed_at": "2025-01-13T10:15:00Z"
+    },
+    {
+      "number": 2,
+      "name": "Architect",
+      "emoji": "🏗️",
+      "status": "completed",
+      "description": "Designed system architecture",
+      "completed_at": "2025-01-13T10:30:00Z"
+    },
+    {
+      "number": 3,
+      "name": "Builder",
+      "emoji": "🔨",
+      "status": "in_progress",
+      "description": "Writing code across multiple files",
+      "detail": "Creating new API endpoints, implementing business logic",
+      "note": "This is typically the longest phase!",
+      "progress_percent": 60
+    },
+    {
+      "number": 4,
+      "name": "Tester",
+      "emoji": "🧪",
+      "status": "pending",
+      "description": "Running tests and validating implementation"
+    },
+    {
+      "number": 5,
+      "name": "Test Loop",
+      "emoji": "🔄",
+      "status": "pending",
+      "description": "Auto-fix if tests fail (conditional)"
+    },
+    {
+      "number": 6,
+      "name": "Documentation",
+      "emoji": "📝",
+      "status": "pending",
+      "description": "Creating comprehensive docs (optional)"
+    },
+    {
+      "number": 7,
+      "name": "Deployer",
+      "emoji": "🚀",
+      "status": "pending",
+      "description": "Git commit and PR creation"
+    }
+  ]
+}
 ```
 
-### 2. Body Structure (Semantic HTML)
+**GET `/api/sessions/active`**
+```python
+Response: {
+  "sessions": [
+    {
+      "id": "context-foundry",
+      "project": "context-foundry",
+      "status": "running",
+      "current_phase": "Builder",
+      "phase_number": "3/7",
+      "progress_percent": 42.8,
+      "start_time": "2025-01-13T10:00:00Z",
+      "elapsed_seconds": 1800,
+      "estimated_remaining_seconds": 2400
+    }
+  ],
+  "count": 1
+}
+```
 
-```html
-<body style="padding: 1rem;">
-    <!-- Header -->
-    <header>
-        <h1>🏭 Context Foundry</h1>
-        <p style="color: #6b7280;">Real-time monitoring for overnight coding sessions</p>
-    </header>
+**GET `/api/sessions/completed`**
+```python
+Response: {
+  "sessions": [...],  # Same structure, status="completed"
+  "count": 15
+}
+```
 
-    <!-- Session Selector -->
-    <section class="session-selector">
-        <label for="sessionSelector" style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Active Session:</label>
-        <select id="sessionSelector" style="width: 100%;">
-            <option>Loading sessions...</option>
-        </select>
-    </section>
+**GET `/api/sessions/failed`**
+```python
+Response: {
+  "sessions": [...],  # Same structure, status="failed"
+  "count": 2
+}
+```
 
-    <!-- Multi-Agent Panel -->
-    <section id="multiAgentPanel" class="multi-agent-panel" style="display: none;">
-        <div class="flex flex-between flex-center" style="margin-bottom: 1rem;">
-            <h2>🤖 Active Agents</h2>
-            <span id="agentCount" class="text-sm text-gray">0 agents</span>
-        </div>
-        <div id="agentsList" class="space-y-3">
-            <div class="text-gray text-sm" style="font-style: italic;">No agents active yet...</div>
-        </div>
-    </section>
+#### ENHANCED EXISTING ENDPOINTS:
 
-    <!-- Main Grid -->
-    <div class="main-grid">
-        <!-- Left Column: Main Content -->
-        <div class="main-content">
-            <!-- Phase Indicator -->
-            <section id="phaseCard" class="phase-scout" style="color: white; padding: 1.5rem; border-radius: 0.5rem;">
-                <h2 id="phaseName" style="font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem;">INITIALIZING</h2>
-                <p id="phaseDescription" style="opacity: 0.9; font-size: 0.875rem;">Getting started...</p>
-                <div style="margin-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
-                    <div>
-                        <div style="opacity: 0.75;">Iteration</div>
-                        <div id="iteration" style="font-size: 1.5rem; font-weight: bold;">0</div>
-                    </div>
-                    <div>
-                        <div style="opacity: 0.75;">Elapsed</div>
-                        <div id="elapsed" style="font-size: 1.5rem; font-weight: bold;">0:00</div>
-                    </div>
-                </div>
-            </section>
+**GET `/api/status/{session_id}`** - Add phase breakdown to response
+```python
+# Add to existing response:
+"phase_breakdown": {
+  "completed": ["Scout", "Architect"],
+  "current": "Builder",
+  "remaining": ["Tester", "Test Loop", "Documentation", "Deployer"]
+},
+"overall_progress_percent": 35.7,
+"estimated_remaining_seconds": 3900
+```
 
-            <!-- Context Usage -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Context Usage</h3>
-                <div style="position: relative; height: 2rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                    <div id="contextBar" style="height: 100%; background: linear-gradient(to right, #10b981, #eab308, #ef4444); width: 0%; transition: width 0.5s ease;"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">
-                        <span id="contextPercent">0%</span>
-                    </div>
-                </div>
-                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280; text-align: right;">
-                    Target: &lt;40% | Warning: &gt;50%
-                </div>
-            </section>
+### 2. Frontend UI Structure (dashboard.html)
 
-            <!-- Task Progress -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Task Progress</h3>
-                <div style="margin-bottom: 1rem;">
-                    <div class="flex flex-between" style="font-size: 0.875rem; margin-bottom: 0.25rem;">
-                        <span id="taskCount">0 / 0 tasks</span>
-                        <span id="taskPercent">0%</span>
-                    </div>
-                    <div style="position: relative; height: 0.5rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                        <div id="taskBar" style="height: 100%; background: #3b82f6; width: 0%;"></div>
-                    </div>
-                </div>
-                <div class="space-y-2" style="max-height: 16rem; overflow-y: auto;">
-                    <div id="taskList" class="text-sm">
-                        <div class="text-gray" style="font-style: italic;">No tasks yet...</div>
-                    </div>
-                </div>
-            </section>
+#### LAYOUT HIERARCHY:
 
-            <!-- Live Logs -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Live Logs</h3>
-                <div id="logs">
-                    <div style="color: #4b5563;">Waiting for logs...</div>
-                </div>
-            </section>
-        </div>
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Header: 🏭 Context Foundry Build Monitor                   │
+├─────────────────────────────────────────────────────────────┤
+│ Top Metrics Bar:                                            │
+│   📊 ACTIVE: 2 | ✅ COMPLETED: 15 | ⏱️ AVG TIME: 12m 30s   │
+├─────────────────────────────────────────────────────────────┤
+│ Session Tabs:                                               │
+│   [🟢 Active] [✅ Completed] [❌ Failed] [📊 All]          │
+├─────────────────────────────────────────────────────────────┤
+│ Session Selector (filtered by tab):                         │
+│   Dropdown showing sessions matching current tab filter     │
+├─────────────────────────────────────────────────────────────┤
+│ Build Status Card:                                          │
+│   🚀 Build Status Update                                    │
+│   Task ID: abc-123                                          │
+│   Project: my-awesome-app                                   │
+│   Status: ✅ Running                                        │
+│   Overall Progress: 45.2% (8.5 minutes elapsed)            │
+│   Est. Remaining: ~10-15 minutes                            │
+├─────────────────────────────────────────────────────────────┤
+│ ✅ COMPLETED PHASES:                                        │
+│   1. Phase 0 - Codebase Analysis ✅                         │
+│      • Analyzed project structure                           │
+│      • Identified dependencies                              │
+│   2. Phase 1 - Scout ✅                                     │
+│      • Researched implementation patterns                   │
+├─────────────────────────────────────────────────────────────┤
+│ 🔨 CURRENT PHASE:                                           │
+│   Phase 3 - Builder (In Progress - The Big One!)           │
+│   Status: Writing code across multiple files                │
+│   Tasks in progress:                                        │
+│     • Creating new API endpoints                            │
+│     • Implementing business logic                           │
+│   Progress: 60% of phase complete                           │
+├─────────────────────────────────────────────────────────────┤
+│ 📋 UPCOMING PHASES:                                         │
+│   ⏱️ Phase 4 - Tester                                       │
+│   ⏱️ Phase 5 - Test Loop (if needed)                        │
+│   ⏱️ Phase 6 - Documentation                                │
+│   ⏱️ Phase 7 - Deployer                                     │
+├─────────────────────────────────────────────────────────────┤
+│ 💬 WHAT'S HAPPENING NOW:                                    │
+│   The Builder agents are actively implementing...           │
+│   Next: Once building completes, the Tester will run...     │
+├─────────────────────────────────────────────────────────────┤
+│ 📊 LIVE LOGS:                                               │
+│   [scrollable log viewer]                                   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-        <!-- Right Column: Sidebar -->
-        <aside class="sidebar">
-            <!-- Session Info -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Session Info</h3>
-                <div class="space-y-3 text-sm">
-                    <div>
-                        <div class="text-gray">Project</div>
-                        <div class="font-bold" id="projectName">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray">Task</div>
-                        <div class="text-xs" id="taskDesc">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray">Started</div>
-                        <div id="startTime">-</div>
-                    </div>
-                    <div>
-                        <div class="text-gray">Estimated Remaining</div>
-                        <div id="remaining" class="font-bold text-yellow">-</div>
-                    </div>
-                </div>
-            </section>
+#### COMPONENT BREAKDOWN:
 
-            <!-- Statistics -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Statistics</h3>
-                <div class="space-y-2 text-sm">
-                    <div class="flex flex-between">
-                        <span class="text-gray">Iterations</span>
-                        <span id="statIterations" class="font-bold">0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray">Context Resets</span>
-                        <span id="statResets" class="font-bold">0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray">Tokens Used</span>
-                        <span id="statTokens" class="font-bold">~0</span>
-                    </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray">Est. Cost</span>
-                        <span id="statCost" class="font-bold text-green">$0.00</span>
-                    </div>
-                </div>
-            </section>
+1. **TopMetricsBar Component**
+   - Displays aggregate statistics
+   - Always visible
+   - Updates when sessions change
 
-            <!-- Connection Status -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Connection</h3>
-                <div id="connectionStatus" class="flex flex-center">
-                    <div style="width: 0.75rem; height: 0.75rem; border-radius: 9999px; background: #6b7280; margin-right: 0.5rem;"></div>
-                    <span class="text-sm">Connecting...</span>
-                </div>
-                <div id="lastUpdate" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;">Never</div>
-            </section>
+2. **SessionTabs Component**
+   - Four tabs: Active, Completed, Failed, All
+   - State managed in JavaScript
+   - Filters session list on click
 
-            <!-- Quick Actions -->
-            <nav>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Actions</h3>
-                <div class="space-y-2">
-                    <button onclick="refreshData()" class="btn-primary" style="width: 100%;">
-                        🔄 Refresh
-                    </button>
-                    <button onclick="exportSession()" style="width: 100%;">
-                        💾 Export Data
-                    </button>
-                </div>
-            </nav>
-        </aside>
-    </div>
+3. **SessionSelector Component**
+   - Dropdown filtered by active tab
+   - Triggers WebSocket reconnection on change
+   - Shows session count in tab
 
-    <!-- Metrics Header -->
-    <section style="margin-top: 1.5rem; border: none; background: transparent; padding: 0;">
-        <h2 style="font-size: 1.5rem; font-weight: bold;">📊 Detailed Metrics</h2>
-    </section>
+4. **BuildStatusCard Component**
+   - Overall progress, elapsed time, remaining time
+   - Project name, task ID, status badge
+   - Prominent display at top
 
-    <!-- Metrics Grid -->
-    <div class="metrics-grid">
-        <!-- Token Usage Panel -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                🔢 Token Usage
-                <span class="metric-timestamp text-xs text-gray">Not updated</span>
-            </h3>
-            <div style="margin-bottom: 1rem;">
-                <div class="flex flex-between text-sm" style="margin-bottom: 0.5rem;">
-                    <span class="text-gray">Used / Budget</span>
-                    <span id="tokenCount" class="font-bold" style="color: #e5e7eb;">0 / 200,000</span>
-                </div>
-                <div id="tokenGauge" class="token-gauge">
-                    <div id="tokenFill" class="token-fill" style="width: 0%"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold;">
-                        <span id="tokenPercent">0%</span>
-                    </div>
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.75rem;">
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray">Safe</div>
-                    <div class="text-green">< 50%</div>
-                </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray">Warning</div>
-                    <div class="text-yellow">50-75%</div>
-                </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
-                    <div class="text-gray">Critical</div>
-                    <div class="text-red">> 75%</div>
-                </div>
-            </div>
-        </article>
+5. **CompletedPhases Component**
+   - Expandable/collapsible section
+   - Each phase with description bullets
+   - Green checkmarks
 
-        <!-- Test Loop Analytics -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                🧪 Test Loop
-                <span class="metric-timestamp text-xs text-gray">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex flex-between">
-                    <span class="text-gray">Iterations</span>
-                    <span id="testIterCount" class="font-bold text-blue">0</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray">Success Rate</span>
-                    <span id="testSuccessRate" class="font-bold text-green">--%</span>
-                </div>
-                <div id="testIterList" class="space-y-2" style="max-height: 8rem; overflow-y: auto;">
-                    <div class="text-gray text-sm" style="font-style: italic;">No test iterations yet</div>
-                </div>
-            </div>
-        </article>
+6. **CurrentPhase Component**
+   - Highlighted/emphasized styling
+   - Detailed description
+   - Progress bar within phase
+   - Special note for Builder ("The Big One!")
 
-        <!-- Agent Performance -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                🤖 Agent Performance
-                <span class="metric-timestamp text-xs text-gray">Not updated</span>
-            </h3>
-            <div id="agentList" class="space-y-2">
-                <div class="text-gray text-sm" style="font-style: italic;">No agent data yet</div>
-            </div>
-        </article>
+7. **UpcomingPhases Component**
+   - Simple list with pending icons
+   - Phase names only
 
-        <!-- Decision Tracking -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                🧠 Decision Quality
-                <span class="metric-timestamp text-xs text-gray">Not updated</span>
-            </h3>
-            <div class="space-y-3">
-                <div class="flex flex-between">
-                    <span class="text-gray">Total Decisions</span>
-                    <span id="decisionCount" class="font-bold text-blue">0</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray">Avg Quality</span>
-                    <span id="decisionQuality" class="font-bold text-green">--</span>
-                </div>
-                <div class="flex flex-between">
-                    <span class="text-gray">Lessons Applied</span>
-                    <span id="decisionLessons" class="font-bold" style="color: #a855f7;">0</span>
-                </div>
-                <div id="decisionList" class="space-y-2" style="max-height: 8rem; overflow-y: auto; margin-top: 0.75rem;">
-                    <div class="text-gray text-sm" style="font-style: italic;">No decisions yet</div>
-                </div>
-            </div>
-        </article>
-    </div>
+8. **WhatsHappeningNow Component**
+   - Narrative description
+   - Current activities
+   - Next step preview
 
-    <!-- JavaScript (100% UNCHANGED) -->
-    <script>
-        // ALL JAVASCRIPT FROM LINES 413-1051 COPIED VERBATIM
-        // NO MODIFICATIONS TO JAVASCRIPT CODE
-    </script>
-</body>
-</html>
+9. **LiveLogs Component**
+   - Preserve existing logs viewer
+   - Scrollable, auto-scroll to bottom
+
+### 3. Data Models
+
+#### SessionFilter State (Frontend)
+```javascript
+const sessionFilters = {
+  active: session => session.status === 'running',
+  completed: session => session.status === 'completed',
+  failed: session => session.status === 'failed',
+  all: session => true
+};
+
+let currentFilter = 'active';  // Default to active sessions
+```
+
+#### Phase Definition (Frontend)
+```javascript
+const PHASE_DEFINITIONS = [
+  { number: 0, name: "Codebase Analysis", emoji: "🔍" },
+  { number: 1, name: "Scout", emoji: "🔍" },
+  { number: 2, name: "Architect", emoji: "🏗️" },
+  { number: 3, name: "Builder", emoji: "🔨", note: "This is typically the longest phase!" },
+  { number: 4, name: "Tester", emoji: "🧪" },
+  { number: 5, name: "Test Loop", emoji: "🔄" },
+  { number: 6, name: "Documentation", emoji: "📝" },
+  { number: 7, name: "Deployer", emoji: "🚀" }
+];
 ```
 
 ## Implementation Steps
 
-### Step 1: Backup Original File
-```bash
-cp tools/livestream/dashboard.html tools/livestream/dashboard.html.tailwind.backup
+### Step 1: Backend Enhancements (server.py)
+
+1.1. Add helper function to calculate phase breakdown
+```python
+def get_phase_breakdown(session_data: Dict) -> Dict:
+    """Calculate detailed phase breakdown from session data."""
+    # Parse current_phase.json data
+    # Return structured phase breakdown
 ```
 
-### Step 2: Remove Tailwind CSS
-- Delete lines 7-16 (Tailwind CDN and config)
-- Remove ALL Tailwind utility classes from HTML elements
+1.2. Implement new endpoint `/api/phases/{session_id}`
+```python
+@app.get("/api/phases/{session_id}")
+async def get_session_phases(session_id: str):
+    # Get session data
+    # Calculate phase breakdown
+    # Return formatted response
+```
 
-### Step 3: Add Terminal CSS
-- Add Terminal CSS CDN in `<head>`
-- Add Terminal CSS variable overrides in `<style>`
+1.3. Implement session filter endpoints
+```python
+@app.get("/api/sessions/active")
+async def get_active_sessions():
+    sessions = monitor.discover_sessions()
+    active = [s for s in sessions if s['status'] == 'running']
+    return JSONResponse({"sessions": active, "count": len(active)})
 
-### Step 4: Restructure HTML
-- Replace `<div>` with semantic elements (`<section>`, `<article>`, `<aside>`, `<header>`, `<nav>`)
-- Add custom classes for layout (.main-grid, .metrics-grid)
-- Use inline styles where needed for precise control
+# Similar for completed and failed
+```
 
-### Step 5: Custom CSS
-- Preserve ALL existing custom CSS (phases, animations, gauges)
-- Add grid layout CSS
-- Add utility classes for common patterns
+1.4. Enhance existing `/api/status/{session_id}` response
+```python
+# Add phase_breakdown, overall_progress_percent, estimated_remaining_seconds
+```
 
-### Step 6: Testing
-- Open in browser
-- Verify Terminal CSS loaded
-- Check all panels render
-- Test WebSocket connectivity
-- Verify animations work
-- Test responsive layout
+### Step 2: Frontend Complete Redesign (dashboard.html)
+
+2.1. **HTML Structure Redesign**
+- Remove old main-grid layout
+- Create new single-column layout with sections
+- Add tab navigation HTML
+- Add phase sections (completed/current/upcoming)
+- Add "what's happening now" section
+- Preserve logs section at bottom
+
+2.2. **CSS Updates** (Preserve Terminal.css aesthetic!)
+- Add tab styling (.tab, .tab-active)
+- Add phase section styling (.phase-section)
+- Add completed phase styling (.phase-completed)
+- Add current phase styling (.phase-current, highlighted)
+- Add upcoming phase styling (.phase-upcoming, grayed)
+- Add progress bar styling for phase-level progress
+
+2.3. **JavaScript Refactoring**
+- Create `updatePhaseBreakdown(phaseData)` function
+- Create `updateSessionTabs(sessions)` function
+- Create `filterSessions(filter)` function
+- Create `renderCompletedPhases(phases)` function
+- Create `renderCurrentPhase(phase)` function
+- Create `renderUpcomingPhases(phases)` function
+- Create `renderWhatsHappeningNow(status)` function
+- Update WebSocket handler to call new render functions
+
+2.4. **State Management**
+```javascript
+let allSessions = [];
+let currentFilter = 'active';
+let selectedSession = null;
+
+function switchTab(filter) {
+  currentFilter = filter;
+  updateSessionSelector();
+  updateTabStyling();
+}
+
+function updateSessionSelector() {
+  const filtered = allSessions.filter(sessionFilters[currentFilter]);
+  populateSelector(filtered);
+}
+```
+
+### Step 3: Integration & Polish
+
+3.1. Ensure WebSocket updates trigger phase breakdown refresh
+3.2. Implement auto-refresh fallback (every 3 seconds)
+3.3. Add loading states for async operations
+3.4. Handle missing data gracefully (legacy sessions)
+3.5. Test responsive design (mobile, tablet, desktop)
 
 ## Testing Plan
 
-### Manual Visual Testing
-1. **Page Load**
-   - ✅ Terminal CSS loaded successfully (check Network tab)
-   - ✅ No Tailwind references in HTML
-   - ✅ Retro terminal aesthetic visible
+### Unit Tests
+1. Backend endpoint responses match expected structure
+2. Phase breakdown calculation accuracy
+3. Session filtering logic correctness
+4. Progress percentage calculations
+5. Time estimation algorithm
 
-2. **Layout**
-   - ✅ Desktop: 2-column grid (main content + sidebar)
-   - ✅ Mobile: Single column layout
-   - ✅ All sections visible and properly spaced
+### Integration Tests
+1. WebSocket updates trigger UI refresh
+2. Tab switching updates session list
+3. Session selection triggers data load
+4. Phase transitions update UI correctly
+5. Real-time progress updates work
 
-3. **Components**
-   - ✅ Header displays correctly
-   - ✅ Session selector renders
-   - ✅ Multi-agent panel shows/hides correctly
-   - ✅ Phase indicator with gradient background
-   - ✅ Progress bars with gradients
-   - ✅ Token gauges with color coding
-   - ✅ Logs viewer with monospace font
-   - ✅ Metrics panels in grid layout
-   - ✅ Buttons styled correctly
+### End-to-End Tests
+1. Load dashboard with active session → See detailed phase breakdown
+2. Switch between tabs → Session list filters correctly
+3. Select different session → Data updates
+4. Monitor live build → Phases update in real-time
+5. Export functionality → Still works
+6. Legacy session (no phase data) → Graceful degradation
 
-4. **Animations**
-   - ✅ Shimmer animation on progress bars
-   - ✅ Pulse animation on critical warnings
-   - ✅ Hover effects on agent cards
-   - ✅ Smooth width transitions
-
-### Functional Testing
-1. **Session Management**
-   - ✅ Session dropdown populates
-   - ✅ Changing session reconnects WebSocket
-
-2. **Real-time Updates**
-   - ✅ WebSocket connects successfully
-   - ✅ Phase updates trigger UI changes
-   - ✅ Progress bars update smoothly
-   - ✅ Logs append in real-time
-   - ✅ Token gauges update
-
-3. **User Interactions**
-   - ✅ Refresh button works
-   - ✅ Export button downloads JSON
-   - ✅ Session selector changes work
-
-4. **Multi-Agent Monitoring**
-   - ✅ Agent cards render
-   - ✅ Per-agent progress bars animate
-   - ✅ Token gauges show correct colors
-   - ✅ Status indicators update
-
-### Browser Compatibility
-- ✅ Chrome/Edge (latest)
-- ✅ Firefox (latest)
-- ✅ Safari (latest)
-
-### Responsive Testing
-- ✅ Desktop (1920x1080)
-- ✅ Tablet (768x1024)
-- ✅ Mobile (375x667)
+### Edge Cases
+1. Session with no current-phase.json → Shows "Unknown phase"
+2. Session mid-test-iteration → Shows test iteration count
+3. Failed session → Displays in Failed tab with error info
+4. Very long session (>1 hour) → Time displays correctly
+5. Rapid tab switching → No race conditions
 
 ## Success Criteria
 
-### Must Have (Critical)
-- ✅ Zero Tailwind CSS references
-- ✅ Terminal CSS CDN loaded
-- ✅ All functionality preserved
-- ✅ WebSocket updates work
-- ✅ Gradient progress bars animate
-- ✅ Token gauges show colors
-- ✅ Responsive layout works
-- ✅ No JavaScript errors
-
-### Should Have (Important)
-- ✅ Retro terminal aesthetic
-- ✅ Semantic HTML structure
-- ✅ Clean, readable code
-- ✅ Good color contrast
-- ✅ Smooth animations
-
-### Nice to Have (Optional)
-- ✅ Improved accessibility
-- ✅ Better mobile UX
-- ✅ Performance improvements
+✅ All existing functionality preserved (WebSocket, export, logs, metrics)
+✅ Terminal CSS aesthetic maintained throughout
+✅ New phase breakdown displays for all sessions with phase data
+✅ Session tabs work and filter correctly
+✅ Overall progress percentage calculates accurately
+✅ Time estimates are reasonable and update
+✅ "What's happening now" provides useful narrative
+✅ UI updates smoothly with WebSocket messages
+✅ No console errors or broken layouts
+✅ Responsive design works on all screen sizes
 
 ## Rollback Plan
 
-If implementation fails:
-```bash
-# Restore backup
-cp tools/livestream/dashboard.html.tailwind.backup tools/livestream/dashboard.html
+If issues arise:
+1. Git revert to previous dashboard.html
+2. Remove new API endpoints (old endpoints still work)
+3. All data preserved (no database changes)
+4. Zero downtime (server restart not required)
 
-# Restart server
-# Test original version works
-```
+## Next Steps
 
-## Notes
-
-- JavaScript code is 100% unchanged (lines 413-1051)
-- All custom CSS preserved (animations, gradients, effects)
-- Terminal CSS provides base styling only
-- Custom grid system required (Terminal CSS has none)
-- Inline styles used where necessary for precise control
-- Semantic HTML improves accessibility and structure
+Hand off to Builder for implementation with this exact specification.
