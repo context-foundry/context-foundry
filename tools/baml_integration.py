@@ -36,8 +36,8 @@ BAML_CLIENT = None
 BAML_COMPILATION_ERROR = None
 
 try:
-    # Try to import baml-py
-    from baml_py import BamlSyncClient, BamlException
+    # Try to import baml-py (v0.211+ uses BamlRuntime)
+    from baml_py import BamlRuntime
     BAML_AVAILABLE = True
 except ImportError as e:
     BAML_AVAILABLE = False
@@ -56,10 +56,10 @@ def get_baml_client_dir() -> Path:
 
 def compile_baml_schemas(force: bool = False) -> tuple[bool, Optional[str]]:
     """
-    Compile BAML schemas to Python client.
+    Validate BAML schemas exist (compilation happens in BamlRuntime.from_directory).
 
     Args:
-        force: Force recompilation even if client exists
+        force: Unused (kept for backward compatibility)
 
     Returns:
         Tuple of (success: bool, error_message: Optional[str])
@@ -68,46 +68,28 @@ def compile_baml_schemas(force: bool = False) -> tuple[bool, Optional[str]]:
         return False, BAML_COMPILATION_ERROR
 
     schemas_dir = get_baml_schemas_dir()
-    client_dir = get_baml_client_dir()
 
     # Check if schemas exist
     if not schemas_dir.exists():
         return False, f"BAML schemas directory not found: {schemas_dir}"
 
-    # Check if compilation needed
-    if not force and client_dir.exists() and (client_dir / "__init__.py").exists():
-        # Client already compiled
-        return True, None
+    # Check for .baml files
+    schema_files = list(schemas_dir.glob("*.baml"))
+    if not schema_files:
+        return False, "No .baml files found in schemas directory"
 
-    try:
-        # Run BAML compiler
-        # Note: BAML compiler may need to be installed separately
-        # For now, we'll use baml-py's built-in compilation if available
-
-        # Create client directory
-        client_dir.mkdir(exist_ok=True)
-
-        # BAML compilation happens automatically when importing generated client
-        # Just verify schemas are valid by checking they exist
-        schema_files = list(schemas_dir.glob("*.baml"))
-        if not schema_files:
-            return False, "No .baml files found in schemas directory"
-
-        return True, None
-
-    except Exception as e:
-        return False, f"BAML compilation failed: {e}"
+    return True, None
 
 
 def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
     """
-    Get BAML client (cached).
+    Get BAML runtime client (cached).
 
     Args:
-        force_recompile: Force recompilation of schemas
+        force_recompile: Force recreation of runtime (clears cache)
 
     Returns:
-        BAML client instance or None if unavailable
+        BamlRuntime instance or None if unavailable
     """
     global BAML_CLIENT, BAML_COMPILATION_ERROR
 
@@ -118,24 +100,39 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
     if BAML_CLIENT is not None and not force_recompile:
         return BAML_CLIENT
 
-    # Compile schemas
-    success, error = compile_baml_schemas(force=force_recompile)
+    # Validate schemas exist
+    success, error = compile_baml_schemas()
     if not success:
         BAML_COMPILATION_ERROR = error
         return None
 
     try:
-        # Import generated client
-        # Note: This assumes BAML generates a client in baml_client/
-        # The actual import path may vary based on BAML version
+        # Initialize BamlRuntime from schema files
+        schemas_dir = get_baml_schemas_dir()
 
-        # For now, return a placeholder indicating BAML is available
-        # Actual client initialization would happen here
-        BAML_CLIENT = "BAML_CLIENT_PLACEHOLDER"
+        # Get all .baml files
+        schema_files = list(schemas_dir.glob("*.baml"))
+        if not schema_files:
+            BAML_COMPILATION_ERROR = "No .baml files found in schemas directory"
+            return None
+
+        # Create dict mapping filenames to their contents
+        # BamlRuntime.from_files expects: from_files(root_path, files_dict, env_vars)
+        files_dict = {}
+        for schema_file in schema_files:
+            files_dict[schema_file.name] = schema_file.read_text()
+
+        # Pass empty dict for env_vars (can be configured later if needed)
+        BAML_CLIENT = BamlRuntime.from_files(
+            root_path=str(schemas_dir),
+            files=files_dict,
+            env_vars={}
+        )
+
         return BAML_CLIENT
 
     except Exception as e:
-        BAML_COMPILATION_ERROR = f"Failed to load BAML client: {e}"
+        BAML_COMPILATION_ERROR = f"Failed to initialize BamlRuntime: {e}"
         return None
 
 

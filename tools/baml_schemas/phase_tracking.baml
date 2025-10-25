@@ -27,17 +27,17 @@ enum PhaseType {
 }
 
 enum PhaseStatus {
-  analyzing
-  researching
-  designing
-  building
-  testing
-  self_healing @alias("self-healing")
-  capturing
-  documenting
-  deploying
-  completed
-  failed
+  Analyzing @alias("analyzing")
+  Researching @alias("researching")
+  Designing @alias("designing")
+  Building @alias("building")
+  Testing @alias("testing")
+  SelfHealing @alias("self-healing")
+  Capturing @alias("capturing")
+  Documenting @alias("documenting")
+  Deploying @alias("deploying")
+  Completed @alias("completed")
+  Failed @alias("failed")
 }
 
 function CreatePhaseInfo(

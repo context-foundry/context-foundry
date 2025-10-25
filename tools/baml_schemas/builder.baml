@@ -15,9 +15,9 @@ class BuildTaskResult {
 }
 
 enum BuildStatus {
-  success @description("Task completed successfully")
-  partial @description("Task partially completed with issues")
-  failed @description("Task failed")
+  Success @alias("success") @description("Task completed successfully")
+  Partial @alias("partial") @description("Task partially completed with issues")
+  Failed @alias("failed") @description("Task failed")
 }
 
 class BuildError {
@@ -29,9 +29,9 @@ class BuildError {
 }
 
 enum ErrorSeverity {
-  error @description("Fatal error, build cannot continue")
-  warning @description("Non-fatal warning")
-  info @description("Informational message")
+  Error @alias("error") @description("Fatal error, build cannot continue")
+  Warning @alias("warning") @description("Non-fatal warning")
+  Info @alias("info") @description("Informational message")
 }
 
 function ExecuteBuildTask(
