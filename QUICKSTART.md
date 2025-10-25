@@ -23,7 +23,12 @@
 # Clone Context Foundry
 cd ~/homelab  # or your preferred location
 git clone https://github.com/snedea/context-foundry.git
+
+# IMPORTANT: Change into the context-foundry directory
 cd context-foundry
+
+# Verify you're in the right place (should show: .../context-foundry)
+pwd
 
 # Create virtual environment (recommended, required on Debian/Ubuntu)
 python3 -m venv venv
@@ -370,6 +375,7 @@ Once comfortable with basics:
 
 | Problem | Solution |
 |---------|----------|
+| requirements-mcp.txt not found | `cd context-foundry` - you need to be in the cloned directory |
 | MCP not connected | `claude mcp list` then re-run setup |
 | Python version error | Install Python 3.10+: `brew install python@3.10` |
 | Build timeout | Add: "Use 30 minute timeout" to request |
