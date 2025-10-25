@@ -4,169 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Context Foundry Livestream</title>
-    
-    <!-- Terminal CSS CDN -->
-    <link rel="stylesheet" href="https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css">
-    
+    <!-- Tailwind CSS CDN with production mode config -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
+    <script>
+        // Suppress Tailwind CDN production warning for development/monitoring dashboards
+        tailwind.config = {
+            corePlugins: {
+                preflight: true,
+            }
+        }
+    </script>
     <!-- Chart.js without source map to prevent 404 warnings -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    
     <style>
-        /* === TERMINAL CSS THEME OVERRIDES === */
-        :root {
-            --background-color: #0a0a0a;
-            --font-color: #e0e0e0;
-            --primary-color: #00ff00;
-            --secondary-color: #33ff33;
-            --invert-font-color: #000000;
-            --block-background-color: #111111;
-            --global-font-size: 14px;
-            --global-line-height: 1.5em;
-            --mono-font-stack: 'Monaco', 'Courier New', monospace;
-        }
-        
         body {
             background: #0a0a0a;
             color: #e0e0e0;
             font-family: 'Monaco', 'Courier New', monospace;
-            padding: 1rem;
         }
-        
-        /* === CUSTOM GRID LAYOUTS === */
-        .main-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .main-grid {
-                grid-template-columns: 2fr 1fr;
-            }
-        }
-        
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 1.5rem;
-            margin-top: 1.5rem;
-        }
-        
-        @media (min-width: 1024px) {
-            .metrics-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-        
-        /* === PANEL STYLING === */
-        section, article, aside {
-            background: #111827;
-            border: 1px solid #1f2937;
-            border-radius: 0.5rem;
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-        }
-        
-        /* === PRESERVED: PHASE GRADIENTS === */
         .phase-scout { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .phase-architect { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
         .phase-builder { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
         .phase-complete { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
-        
-        /* === PRESERVED: ANIMATIONS === */
-        @keyframes shimmer {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
-        
-        @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
-            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-        
-        /* === PRESERVED: PROGRESS BARS === */
+        .log-line { font-family: 'Monaco', monospace; font-size: 12px; }
         .context-bar { transition: width 0.5s ease; }
-        
-        .agent-progress-bar {
-            height: 1.5rem;
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .agent-progress-fill-active {
-            background: linear-gradient(to right, #10b981 0%, #3b82f6 50%, #2563eb 100%);
-            background-size: 200% 100%;
-            animation: shimmer 3s ease-in-out infinite;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-idle {
-            background: #4b5563;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        .agent-progress-fill-completed {
-            background: #10b981;
-            transition: width 0.5s ease;
-            height: 100%;
-        }
-        
-        /* === PRESERVED: TOKEN GAUGES === */
-        .token-gauge {
-            background: #1f2937;
-            border-radius: 9999px;
-            overflow: hidden;
-            position: relative;
-            height: 1.5rem;
-        }
-        
-        .token-fill {
-            height: 100%;
-            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
-            transition: width 0.5s ease;
-        }
-        
-        .token-critical {
-            animation: pulse-red 2s infinite;
-        }
-        
-        .agent-token-safe { background: #10b981; }
-        .agent-token-warning { background: #eab308; }
-        .agent-token-critical { background: #ef4444; animation: pulse 2s infinite; }
-        
-        /* === PRESERVED: STATUS INDICATORS === */
-        .status-active { color: #10b981; }
-        .status-idle { color: #6b7280; }
-        .status-spawning { color: #3b82f6; }
-        .status-completed { color: #10b981; }
-        .status-failed { color: #ef4444; }
-        
-        /* === PRESERVED: AGENT CARDS === */
-        .agent-card {
-            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-            border: 1px solid #374151;
-            border-radius: 0.5rem;
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-            transition: all 0.3s ease;
-        }
-        
-        .agent-card:hover {
-            border-color: #4b5563;
-            transform: translateX(4px);
-        }
-        
-        /* === PRESERVED: METRIC CARDS === */
+
+        /* Enhanced dark mode panels */
         .metric-card {
             background: #111827;
             border: 1px solid #1f2937;
@@ -174,13 +37,29 @@
             padding: 1rem;
             transition: all 0.3s ease;
         }
-        
         .metric-card:hover {
             border-color: #374151;
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
         }
-        
-        /* === PRESERVED: DECISION BADGES === */
+        .token-gauge {
+            background: #1f2937;
+            border-radius: 9999px;
+            overflow: hidden;
+            position: relative;
+            height: 1.5rem;
+        }
+        .token-fill {
+            height: 100%;
+            background: linear-gradient(to right, #10b981 0%, #eab308 50%, #ef4444 100%);
+            transition: width 0.5s ease;
+        }
+        .token-critical {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.6); }
+        }
         .decision-badge {
             background: rgba(59, 130, 246, 0.1);
             border: 1px solid rgba(59, 130, 246, 0.3);
@@ -190,217 +69,180 @@
             font-size: 0.75rem;
             display: inline-block;
         }
-        
         .decision-quality-high {
             background: rgba(16, 185, 129, 0.1);
             border-color: rgba(16, 185, 129, 0.3);
             color: #10b981;
         }
-        
         .decision-quality-medium {
             background: rgba(234, 179, 8, 0.1);
             border-color: rgba(234, 179, 8, 0.3);
             color: #eab308;
         }
-        
         .decision-quality-low {
             background: rgba(239, 68, 68, 0.1);
             border-color: rgba(239, 68, 68, 0.3);
             color: #ef4444;
         }
-        
-        /* === PRESERVED: LOGS === */
-        .log-line {
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
-        }
-        
-        #logs {
-            background: #000000;
-            padding: 1rem;
+        .agent-card {
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            border: 1px solid #374151;
             border-radius: 0.5rem;
-            height: 24rem;
-            overflow-y: auto;
-            font-family: 'Monaco', monospace;
-            font-size: 12px;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
         }
-        
-        /* === UTILITY CLASSES === */
-        .text-green { color: #10b981; }
-        .text-green-400 { color: #10b981; }
-        .text-yellow { color: #eab308; }
-        .text-yellow-400 { color: #eab308; }
-        .text-red { color: #ef4444; }
-        .text-red-400 { color: #ef4444; }
-        .text-blue { color: #3b82f6; }
-        .text-blue-400 { color: #3b82f6; }
-        .text-gray { color: #6b7280; }
-        .text-gray-300 { color: #d1d5db; }
-        .text-gray-400 { color: #9ca3af; }
-        .text-gray-500 { color: #6b7280; }
-        .text-gray-600 { color: #4b5563; }
-        .text-purple-400 { color: #a855f7; }
-        
-        .bg-gray-800 { background: #1f2937; }
-        .bg-gray-700 { background: #374151; }
-        
-        .font-bold { font-weight: bold; }
-        .font-mono { font-family: 'Monaco', 'Courier New', monospace; }
-        .text-sm { font-size: 0.875rem; }
-        .text-xs { font-size: 0.75rem; }
-        .text-lg { font-size: 1.125rem; }
-        
-        .flex { display: flex; }
-        .flex-between { justify-content: space-between; }
-        .flex-center { align-items: center; }
-        .items-center { align-items: center; }
-        .items-start { align-items: flex-start; }
-        .justify-between { justify-content: space-between; }
-        .space-x-2 > * + * { margin-left: 0.5rem; }
-        .space-y-2 > * + * { margin-top: 0.5rem; }
-        .space-y-3 > * + * { margin-top: 0.75rem; }
-        
-        .mb-1 { margin-bottom: 0.25rem; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mt-1 { margin-top: 0.25rem; }
-        .mr-2 { margin-right: 0.5rem; }
-        .p-2 { padding: 0.5rem; }
-        .p-4 { padding: 1rem; }
-        
-        .rounded { border-radius: 0.25rem; }
-        .rounded-lg { border-radius: 0.5rem; }
-        .rounded-full { border-radius: 9999px; }
-        .overflow-hidden { overflow: hidden; }
-        
-        .border { border: 1px solid #374151; }
-        .border-gray-700 { border-color: #374151; }
-        
-        .h-full { height: 100%; }
-        .h-2 { height: 0.5rem; }
-        .w-3 { width: 0.75rem; }
-        .h-3 { height: 0.75rem; }
-        
-        .absolute { position: absolute; }
-        .relative { position: relative; }
-        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-        
-        .transition-all { transition: all 0.3s ease; }
-        .duration-300 { transition-duration: 300ms; }
-        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .italic { font-style: italic; }
-        
-        .animate-pulse {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        .agent-card:hover {
+            border-color: #4b5563;
+            transform: translateX(4px);
         }
-        
-        /* === RESPONSIVE === */
-        .main-content > section {
-            margin-bottom: 1.5rem;
+        .progress-ring {
+            transform: rotate(-90deg);
         }
-        
-        @media (max-width: 768px) {
-            .main-grid {
-                grid-template-columns: 1fr;
-            }
-            .metrics-grid {
-                grid-template-columns: 1fr;
-            }
+        .progress-ring-circle {
+            stroke-dasharray: 251.2;
+            stroke-dashoffset: 251.2;
+            transition: stroke-dashoffset 0.5s ease;
+            stroke: #10b981;
+            fill: none;
+            stroke-width: 8;
         }
+
+        /* Multi-Agent Monitoring Styles */
+        .agent-progress-bar {
+            height: 1.5rem;
+            background: #1f2937;
+            border-radius: 9999px;
+            overflow: hidden;
+            position: relative;
+        }
+        .agent-progress-fill-active {
+            background: linear-gradient(to right, #10b981 0%, #3b82f6 50%, #2563eb 100%);
+            background-size: 200% 100%;
+            animation: shimmer 3s ease-in-out infinite;
+            transition: width 0.5s ease;
+        }
+        .agent-progress-fill-idle {
+            background: #4b5563;
+            transition: width 0.5s ease;
+        }
+        .agent-progress-fill-completed {
+            background: #10b981;
+            transition: width 0.5s ease;
+        }
+        @keyframes shimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        .agent-token-safe { background: #10b981; }
+        .agent-token-warning { background: #eab308; }
+        .agent-token-critical { background: #ef4444; animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .status-active { color: #10b981; }
+        .status-idle { color: #6b7280; }
+        .status-spawning { color: #3b82f6; }
+        .status-completed { color: #10b981; }
+        .status-failed { color: #ef4444; }
     </style>
 </head>
-<body>
+<body class="p-4">
     <!-- Header -->
-    <header style="border: none; background: transparent; padding: 0;">
-        <h1 style="font-size: 2.25rem; font-weight: bold; margin-bottom: 0.5rem;">🏭 Context Foundry</h1>
-        <p style="color: #6b7280;">Real-time monitoring for overnight coding sessions</p>
-    </header>
+    <div class="mb-6">
+        <h1 class="text-4xl font-bold mb-2">🏭 Context Foundry</h1>
+        <p class="text-gray-400">Real-time monitoring for overnight coding sessions</p>
+    </div>
 
     <!-- Session Selector -->
-    <section style="margin-top: 1.5rem;">
-        <label for="sessionSelector" style="display: block; font-weight: bold; margin-bottom: 0.5rem; font-size: 0.875rem;">Active Session:</label>
-        <select id="sessionSelector" style="width: 100%;">
+    <div class="mb-6 bg-gray-900 p-4 rounded-lg">
+        <label class="block text-sm font-bold mb-2">Active Session:</label>
+        <select id="sessionSelector" class="w-full bg-gray-800 text-white p-2 rounded">
             <option>Loading sessions...</option>
         </select>
-    </section>
+    </div>
 
-    <!-- Multi-Agent Panel -->
-    <section id="multiAgentPanel" style="display: none;">
-        <div class="flex flex-between flex-center" style="margin-bottom: 1rem;">
-            <h2 style="font-size: 1.5rem; font-weight: bold;">🤖 Active Agents</h2>
+    <!-- Multi-Agent Panel (NEW) -->
+    <div id="multiAgentPanel" class="mb-6 bg-gray-900 p-6 rounded-lg" style="display: none;">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl font-bold">🤖 Active Agents</h2>
             <span id="agentCount" class="text-sm text-gray-400">0 agents</span>
         </div>
         <div id="agentsList" class="space-y-3">
             <div class="text-gray-500 text-sm italic">No agents active yet...</div>
         </div>
-    </section>
+    </div>
 
     <!-- Main Grid -->
-    <div class="main-grid">
-        <!-- Left Column: Main Content -->
-        <div class="main-content">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column: Phase & Progress -->
+        <div class="lg:col-span-2 space-y-6">
             <!-- Phase Indicator -->
-            <section id="phaseCard" class="phase-scout" style="color: white; padding: 1.5rem; border-radius: 0.5rem;">
-                <h2 id="phaseName" style="font-size: 1.5rem; font-weight: bold; margin-bottom: 0.5rem;">INITIALIZING</h2>
-                <p id="phaseDescription" style="opacity: 0.9; font-size: 0.875rem;">Getting started...</p>
-                <div style="margin-top: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
+            <div id="phaseCard" class="phase-scout p-6 rounded-lg text-white">
+                <h2 class="text-2xl font-bold mb-2" id="phaseName">INITIALIZING</h2>
+                <p class="text-sm opacity-90" id="phaseDescription">Getting started...</p>
+                <div class="mt-4 grid grid-cols-2 gap-4 text-sm">
                     <div>
-                        <div style="opacity: 0.75;">Iteration</div>
-                        <div id="iteration" style="font-size: 1.5rem; font-weight: bold;">0</div>
+                        <div class="opacity-75">Iteration</div>
+                        <div class="text-2xl font-bold" id="iteration">0</div>
                     </div>
                     <div>
-                        <div style="opacity: 0.75;">Elapsed</div>
-                        <div id="elapsed" style="font-size: 1.5rem; font-weight: bold;">0:00</div>
+                        <div class="opacity-75">Elapsed</div>
+                        <div class="text-2xl font-bold" id="elapsed">0:00</div>
                     </div>
                 </div>
-            </section>
+            </div>
 
             <!-- Context Usage -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Context Usage</h3>
-                <div style="position: relative; height: 2rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                    <div id="contextBar" class="context-bar" style="height: 100%; background: linear-gradient(to right, #10b981, #eab308, #ef4444); width: 0%;"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: bold;">
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Context Usage</h3>
+                <div class="relative h-8 bg-gray-800 rounded-full overflow-hidden">
+                    <div id="contextBar" class="context-bar h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500" style="width: 0%"></div>
+                    <div class="absolute inset-0 flex items-center justify-center text-sm font-bold">
                         <span id="contextPercent">0%</span>
                     </div>
                 </div>
-                <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280; text-align: right;">
+                <div class="mt-2 text-xs text-gray-500 text-right">
                     Target: &lt;40% | Warning: &gt;50%
                 </div>
-            </section>
+            </div>
 
             <!-- Task Progress -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Task Progress</h3>
-                <div style="margin-bottom: 1rem;">
-                    <div class="flex flex-between" style="font-size: 0.875rem; margin-bottom: 0.25rem;">
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Task Progress</h3>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
                         <span id="taskCount">0 / 0 tasks</span>
                         <span id="taskPercent">0%</span>
                     </div>
-                    <div style="position: relative; height: 0.5rem; background: #1f2937; border-radius: 9999px; overflow: hidden;">
-                        <div id="taskBar" style="height: 100%; background: #3b82f6; width: 0%;"></div>
+                    <div class="relative h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div id="taskBar" class="h-full bg-blue-500" style="width: 0%"></div>
                     </div>
                 </div>
-                <div class="space-y-2" style="max-height: 16rem; overflow-y: auto;">
+
+                <!-- Task List -->
+                <div class="space-y-2 max-h-64 overflow-y-auto">
                     <div id="taskList" class="text-sm">
                         <div class="text-gray-500 italic">No tasks yet...</div>
                     </div>
                 </div>
-            </section>
+            </div>
 
             <!-- Live Logs -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Live Logs</h3>
-                <div id="logs">
-                    <div style="color: #4b5563;">Waiting for logs...</div>
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Live Logs</h3>
+                <div id="logs" class="bg-black p-4 rounded h-96 overflow-y-auto font-mono text-xs space-y-1">
+                    <div class="text-gray-600">Waiting for logs...</div>
                 </div>
-            </section>
+            </div>
         </div>
 
-        <!-- Right Column: Sidebar -->
-        <aside class="sidebar">
-            <!-- Session Info -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Session Info</h3>
+        <!-- Right Column: Stats & Info -->
+        <div class="space-y-6">
+            <!-- Status Card -->
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Session Info</h3>
                 <div class="space-y-3 text-sm">
                     <div>
                         <div class="text-gray-500">Project</div>
@@ -419,153 +261,153 @@
                         <div id="remaining" class="font-bold text-yellow-400">-</div>
                     </div>
                 </div>
-            </section>
+            </div>
 
             <!-- Statistics -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Statistics</h3>
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Statistics</h3>
                 <div class="space-y-2 text-sm">
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Iterations</span>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Iterations</span>
                         <span id="statIterations" class="font-bold">0</span>
                     </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Context Resets</span>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Context Resets</span>
                         <span id="statResets" class="font-bold">0</span>
                     </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Tokens Used</span>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Tokens Used</span>
                         <span id="statTokens" class="font-bold">~0</span>
                     </div>
-                    <div class="flex flex-between">
-                        <span class="text-gray-400">Est. Cost</span>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Est. Cost</span>
                         <span id="statCost" class="font-bold text-green-400">$0.00</span>
                     </div>
                 </div>
-            </section>
+            </div>
 
             <!-- Connection Status -->
-            <section>
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Connection</h3>
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Connection</h3>
                 <div id="connectionStatus" class="flex items-center">
-                    <div class="w-3 h-3 rounded-full mr-2" style="background: #6b7280;"></div>
+                    <div class="w-3 h-3 rounded-full bg-gray-500 mr-2"></div>
                     <span class="text-sm">Connecting...</span>
                 </div>
-                <div id="lastUpdate" style="margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;">Never</div>
-            </section>
+                <div class="mt-2 text-xs text-gray-500" id="lastUpdate">Never</div>
+            </div>
 
             <!-- Quick Actions -->
-            <nav style="border: none; background: #111827; padding: 1.5rem;">
-                <h3 style="font-size: 1.125rem; font-weight: bold; margin-bottom: 0.75rem;">Actions</h3>
+            <div class="bg-gray-900 p-6 rounded-lg">
+                <h3 class="text-lg font-bold mb-3">Actions</h3>
                 <div class="space-y-2">
-                    <button onclick="refreshData()" class="btn-primary" style="width: 100%;">
+                    <button onclick="refreshData()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
                         🔄 Refresh
                     </button>
-                    <button onclick="exportSession()" style="width: 100%; background: #374151; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; border: none; cursor: pointer;">
+                    <button onclick="exportSession()" class="w-full bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded text-sm">
                         💾 Export Data
                     </button>
                 </div>
-            </nav>
-        </aside>
+            </div>
+        </div>
     </div>
 
-    <!-- Metrics Header -->
-    <section style="margin-top: 1.5rem; border: none; background: transparent; padding: 0;">
-        <h2 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem;">📊 Detailed Metrics</h2>
-    </section>
+    <!-- Enhanced Metrics Section -->
+    <div class="mt-6">
+        <h2 class="text-2xl font-bold mb-4">📊 Detailed Metrics</h2>
+    </div>
 
-    <!-- Metrics Grid -->
-    <div class="metrics-grid">
+    <!-- Enhanced Metrics Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
         <!-- Token Usage Panel -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🔢 Token Usage</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🔢 Token Usage
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
             </h3>
-            <div style="margin-bottom: 1rem;">
-                <div class="flex flex-between text-sm" style="margin-bottom: 0.5rem;">
+            <div class="mb-4">
+                <div class="flex justify-between text-sm mb-2">
                     <span class="text-gray-400">Used / Budget</span>
-                    <span id="tokenCount" class="font-bold" style="color: #e5e7eb;">0 / 200,000</span>
+                    <span id="tokenCount" class="text-gray-100 font-bold">0 / 200,000</span>
                 </div>
                 <div id="tokenGauge" class="token-gauge">
                     <div id="tokenFill" class="token-fill" style="width: 0%"></div>
-                    <div style="position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: bold;">
+                    <div class="absolute inset-0 flex items-center justify-center text-xs font-bold">
                         <span id="tokenPercent">0%</span>
                     </div>
                 </div>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.75rem;">
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
+            <div class="grid grid-cols-3 gap-2 text-xs">
+                <div class="text-center p-2 bg-gray-800 rounded">
                     <div class="text-gray-500">Safe</div>
                     <div class="text-green-400">< 50%</div>
                 </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
+                <div class="text-center p-2 bg-gray-800 rounded">
                     <div class="text-gray-500">Warning</div>
                     <div class="text-yellow-400">50-75%</div>
                 </div>
-                <div style="text-align: center; padding: 0.5rem; background: #1f2937; border-radius: 0.25rem;">
+                <div class="text-center p-2 bg-gray-800 rounded">
                     <div class="text-gray-500">Critical</div>
                     <div class="text-red-400">> 75%</div>
                 </div>
             </div>
-        </article>
+        </div>
 
         <!-- Test Loop Analytics -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🧪 Test Loop</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🧪 Test Loop
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
             </h3>
             <div class="space-y-3">
-                <div class="flex flex-between">
+                <div class="flex justify-between">
                     <span class="text-gray-400">Iterations</span>
                     <span id="testIterCount" class="font-bold text-blue-400">0</span>
                 </div>
-                <div class="flex flex-between">
+                <div class="flex justify-between">
                     <span class="text-gray-400">Success Rate</span>
                     <span id="testSuccessRate" class="font-bold text-green-400">--%</span>
                 </div>
-                <div id="testIterList" class="space-y-2" style="max-height: 8rem; overflow-y: auto;">
+                <div id="testIterList" class="space-y-2 max-h-32 overflow-y-auto">
                     <div class="text-gray-500 text-sm italic">No test iterations yet</div>
                 </div>
             </div>
-        </article>
+        </div>
 
         <!-- Agent Performance -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🤖 Agent Performance</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🤖 Agent Performance
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
             </h3>
             <div id="agentList" class="space-y-2">
                 <div class="text-gray-500 text-sm italic">No agent data yet</div>
             </div>
-        </article>
+        </div>
 
         <!-- Decision Tracking -->
-        <article style="border: 1px solid #1f2937;">
-            <h3 class="flex flex-between" style="font-size: 1.125rem; font-weight: bold; color: #e5e7eb; margin-bottom: 1rem;">
-                <span>🧠 Decision Quality</span>
-                <span class="metric-timestamp text-xs text-gray-500">Not updated</span>
+        <div class="bg-gray-900 p-6 rounded-lg border border-gray-800">
+            <h3 class="text-lg font-bold text-gray-200 mb-4">
+                🧠 Decision Quality
+                <span class="metric-timestamp text-xs text-gray-500 float-right">Not updated</span>
             </h3>
             <div class="space-y-3">
-                <div class="flex flex-between">
+                <div class="flex justify-between">
                     <span class="text-gray-400">Total Decisions</span>
                     <span id="decisionCount" class="font-bold text-blue-400">0</span>
                 </div>
-                <div class="flex flex-between">
+                <div class="flex justify-between">
                     <span class="text-gray-400">Avg Quality</span>
                     <span id="decisionQuality" class="font-bold text-green-400">--</span>
                 </div>
-                <div class="flex flex-between">
+                <div class="flex justify-between">
                     <span class="text-gray-400">Lessons Applied</span>
-                    <span id="decisionLessons" class="font-bold" style="color: #a855f7;">0</span>
+                    <span id="decisionLessons" class="font-bold text-purple-400">0</span>
                 </div>
-                <div id="decisionList" class="space-y-2" style="max-height: 8rem; overflow-y: auto; margin-top: 0.75rem;">
+                <div id="decisionList" class="space-y-2 max-h-32 overflow-y-auto mt-3">
                     <div class="text-gray-500 text-sm italic">No decisions yet</div>
                 </div>
             </div>
-        </article>
+        </div>
     </div>
 
     <script>
@@ -587,8 +429,7 @@
             const name = document.getElementById('phaseName');
             const desc = document.getElementById('phaseDescription');
 
-            card.className = `phase-${phase}`;
-            card.style.cssText = 'color: white; padding: 1.5rem; border-radius: 0.5rem;';
+            card.className = `p-6 rounded-lg text-white phase-${phase}`;
 
             const phaseInfo = {
                 scout: { name: '🔍 SCOUT', desc: 'Researching architecture and approach' },
@@ -770,7 +611,7 @@
                 el.textContent = `Updated: ${timeText}`;
 
                 // Color code based on freshness
-                el.className = 'metric-timestamp text-xs ';
+                el.className = 'metric-timestamp text-xs float-right ';
                 if (elapsed < 5) el.className += 'text-green-400';
                 else if (elapsed < 30) el.className += 'text-yellow-400';
                 else el.className += 'text-red-400';
@@ -899,12 +740,12 @@
             const statusDiv = document.getElementById('connectionStatus');
             if (connected) {
                 statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full mr-2 animate-pulse" style="background: #10b981;"></div>
+                    <div class="w-3 h-3 rounded-full bg-green-500 mr-2 animate-pulse"></div>
                     <span class="text-sm text-green-400">Connected</span>
                 `;
             } else {
                 statusDiv.innerHTML = `
-                    <div class="w-3 h-3 rounded-full mr-2" style="background: #ef4444;"></div>
+                    <div class="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
                     <span class="text-sm text-red-400">Disconnected</span>
                 `;
             }
@@ -1146,7 +987,7 @@
             }
 
             return `
-                <div class="agent-card p-4 rounded-lg border border-gray-700 transition-all" style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%);">
+                <div class="agent-card bg-gradient-to-r from-gray-800 to-gray-900 p-4 rounded-lg border border-gray-700 hover:border-gray-600 transition-all">
                     <div class="flex justify-between items-center mb-2">
                         <div class="flex items-center space-x-2">
                             <span class="${statusClass}">●</span>
@@ -1160,7 +1001,7 @@
                     <div class="agent-progress-bar mb-2">
                         <div class="${progressFillClass} h-full"
                              style="width: ${progressPercent}%"></div>
-                        <div class="absolute inset-0 flex items-center justify-center text-xs font-bold" style="color: white;">
+                        <div class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white">
                             ${progressPercent.toFixed(0)}%
                         </div>
                     </div>

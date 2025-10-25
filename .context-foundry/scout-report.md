@@ -1,200 +1,316 @@
-# Scout Report: Multi-Agent Monitoring Dashboard Enhancement
+# Scout Report: Tailwind → Terminal CSS Migration
 
 ## Executive Summary
-Enhance Context Foundry's livestream dashboard to support advanced multi-agent monitoring, per-agent token tracking, multi-instance support, and comprehensive geek stats. The current dashboard provides basic single-session monitoring; the goal is production-ready, robust visualization of parallel autonomous builds with complete visibility into agent-level operations.
+**Task**: Replace Tailwind CSS with Terminal CSS in the Context Foundry livestream dashboard while preserving all functionality and achieving a retro terminal aesthetic.
 
-## Key Requirements Analysis
+**Complexity**: Medium-High
+- Extensive custom styling must be preserved
+- Complex multi-agent monitoring UI with gradients and animations
+- WebSocket-driven real-time updates require stable DOM structure
+- No backend changes needed
 
-### 1. Multi-Agent Monitoring Panel
-**Current State**: Dashboard shows single session with basic phase tracking
-**Target**: Display all running agents (Scout, Architect, Builder 1-N, Tester) with individual status, progress, and metrics
-**Complexity**: MEDIUM - Requires agent instance tracking, real-time updates per agent
-**Implementation Path**: Add agent_instances table, WebSocket agent events, UI components per agent
-
-### 2. Horizontal Gradient Progress Bars
-**Current State**: Basic progress bars exist (context, tasks)
-**Target**: Beautiful horizontal bars per agent with smooth gradients (green→blue in-progress, gray idle, green complete)
-**Complexity**: LOW - Primarily CSS/JavaScript frontend work
-**Implementation Path**: CSS gradient definitions, JavaScript animation handlers, per-agent progress calculation
-
-### 3. Per-Agent Token Tracking
-**Current State**: Global token tracking only
-**Target**: Each agent shows current token count, budget percentage, visual warnings (green <50%, yellow 50-75%, red >75%)
-**Complexity**: MEDIUM - Requires parsing agent output for token usage, storing per-agent metrics
-**Implementation Path**: Enhance metrics collector to parse agent logs, store agent-level token data, display gauges per agent
-
-### 4. Multi-Instance Support
-**Current State**: Session selector shows one instance at a time
-**Target**: Simultaneous monitoring of multiple Context Foundry builds in expandable cards
-**Complexity**: HIGH - Complex state management, needs instance discovery, concurrent WebSocket connections
-**Implementation Path**: Instance registry, multi-WebSocket management, accordion/card UI for instances
-
-### 5. Enhanced Time Tracking
-**Current State**: Session-level elapsed time
-**Target**: Per-agent elapsed time, estimated remaining, percentage complete, phase-level time tracking
-**Complexity**: MEDIUM - Requires timestamp tracking per agent/phase, estimation algorithms
-**Implementation Path**: Agent start/end timestamps, phase duration calculation, progress estimation based on phase
-
-### 6. Phase Tracking Dashboard
-**Current State**: Single phase indicator
-**Target**: Visual progress bar per phase (Scout→Architect→Builder→Test→Deploy), time per phase, success/failure indicators
-**Complexity**: MEDIUM - Needs phase history, duration tracking, status per phase
-**Implementation Path**: Phase timeline component, phase duration storage, visual indicators (✓/✗ per phase)
-
-### 7. Real-Time Updates
-**Current State**: WebSocket working for sessions
-**Target**: Smooth WebSocket updates for all new metrics without flickering
-**Complexity**: LOW - Enhance existing WebSocket handlers
-**Implementation Path**: Add agent-level WebSocket events, throttle updates (max 10/sec), validate data before rendering
-
-### 8. Geek Stats Section
-**Target**: Total agents spawned, parallel vs sequential breakdown, token efficiency, API calls per agent, iteration speed
-**Complexity**: MEDIUM - Requires comprehensive metrics collection
-**Implementation Path**: Analytics queries on metrics_db, display panel with stats, chart visualizations
-
-### 9. Modern UI/UX
-**Target**: Dark mode optimized, smooth animations, responsive, no broken graphs, error handling, loading states
-**Complexity**: LOW-MEDIUM - Frontend polish work
-**Implementation Path**: CSS transitions, loading spinners, error boundaries, data validation
-
-### 10. Backend Enhancements
-**Target**: Track per-agent metrics, WebSocket messages for agents, API endpoints for multi-instance query, parse orchestrator output
-**Complexity**: HIGH - Core infrastructure work
-**Implementation Path**: New database schema, API endpoints, output parsing logic, WebSocket event system
+**Recommendation**: PROCEED with careful HTML restructuring and custom CSS preservation strategy.
 
 ## Technology Stack Decision
 
-**Backend**: Python FastAPI (existing) - ✅ Keep, add new endpoints
-**Frontend**: Vanilla JS + Tailwind CSS + Chart.js (existing) - ✅ Keep, no new dependencies
-**Database**: SQLite (existing) - ✅ Keep, add agent_instances table
-**WebSocket**: FastAPI WebSockets (existing) - ✅ Keep, enhance with agent events
-**Testing**: Playwright (add new) - ⚠️ Need for E2E browser tests
+### Target Framework: Terminal CSS v0.7.4
+- **CDN**: `https://unpkg.com/terminal.css@0.7.4/dist/terminal.min.css`
+- **Type**: Classless CSS framework (styles semantic HTML automatically)
+- **Size**: ~3KB gzipped (extremely lightweight)
+- **Philosophy**: Retro terminal aesthetic with monospace fonts
+- **Theming**: CSS variables for customization
 
-**Rationale**: Minimize new dependencies, build on existing infrastructure, maintain backwards compatibility
+### Why Terminal CSS?
+✅ Perfect retro terminal aesthetic (matches Context Foundry's hacker vibe)
+✅ Classless approach = cleaner semantic HTML
+✅ Monospace fonts already used in current dashboard
+✅ Lightweight (vs Tailwind's large footprint)
+✅ CSS variables for easy customization
+✅ No build process required (CDN)
 
-## Critical Architecture Recommendations
+## Requirements Analysis
 
-### 1. Agent Instance Tracking Schema
-```sql
-CREATE TABLE agent_instances (
-    id INTEGER PRIMARY KEY,
-    session_id TEXT,
-    agent_id TEXT UNIQUE,
-    agent_type TEXT,
-    status TEXT,
-    phase TEXT,
-    progress_percent REAL,
-    tokens_used INTEGER,
-    tokens_limit INTEGER,
-    start_time TEXT,
-    end_time TEXT,
-    parent_agent_id TEXT,
-    FOREIGN KEY (session_id) REFERENCES tasks(task_id)
-)
+### MUST PRESERVE (Critical Features)
+1. **Multi-agent monitoring panel**
+   - Per-agent gradient progress bars with shimmer animation
+   - Token usage gauges with color warnings (green/yellow/red)
+   - Real-time status indicators (● active/idle/completed)
+   - Agent cards with hover effects
+
+2. **Progress visualizations**
+   - Horizontal gradient bars (green → yellow → red)
+   - Percentage overlays
+   - Smooth width transitions (CSS transitions)
+   - Shimmer/pulse animations
+
+3. **WebSocket functionality**
+   - All JavaScript code unchanged
+   - Real-time updates trigger DOM updates
+   - Auto-reconnect logic
+   - Phase update handling
+
+4. **Layout structure**
+   - 3-column grid on desktop
+   - Single column on mobile
+   - Session selector dropdown
+   - Live logs viewer with auto-scroll
+
+5. **Custom animations**
+   - @keyframes shimmer (progress bars)
+   - @keyframes pulse-red (critical warnings)
+   - @keyframes pulse (token warnings)
+   - Hover effects on metric cards
+
+### Terminal CSS Capabilities
+
+**What Terminal CSS provides automatically:**
+- Semantic HTML styling (header, section, article, nav, etc.)
+- Form elements (select, input, button, textarea)
+- Typography (headings, paragraphs, monospace code blocks)
+- Tables, lists, blockquotes
+- Alert components (via optional classes)
+- Basic buttons (default, primary, error)
+
+**What requires custom CSS:**
+- Grid layouts (Terminal CSS has NO built-in grid)
+- Progress bars with gradients (Terminal CSS has basic progress bars only)
+- Multi-agent cards with animations
+- Token gauges
+- Phase indicator backgrounds
+- Hover effects and transitions
+- Status indicator colors
+
+## Architecture Recommendations
+
+### 1. HTML Structure Strategy
+
+**Replace Tailwind utility classes with semantic HTML:**
+
+```html
+<!-- BEFORE (Tailwind) -->
+<div class="mb-6 bg-gray-900 p-4 rounded-lg">
+  <label class="block text-sm font-bold mb-2">Active Session:</label>
+  <select id="sessionSelector" class="w-full bg-gray-800 text-white p-2 rounded">
+  </select>
+</div>
+
+<!-- AFTER (Terminal CSS + Custom) -->
+<section class="session-selector">
+  <label for="sessionSelector">Active Session:</label>
+  <select id="sessionSelector">
+    <option>Loading sessions...</option>
+  </select>
+</section>
 ```
 
-### 2. WebSocket Event System
-- `agent_spawned`: New agent started (sends agent_id, agent_type, phase)
-- `agent_progress`: Progress update (sends agent_id, progress_percent, tokens_used)
-- `agent_completed`: Agent finished (sends agent_id, success, duration)
-- `agent_failed`: Agent error (sends agent_id, error_message)
+**Use semantic elements:**
+- `<header>` for page title
+- `<section>` for major panels
+- `<article>` for agent cards
+- `<nav>` for action buttons
+- `<aside>` for statistics sidebar
 
-### 3. Output Parsing Strategy
-Parse orchestrator logs to detect:
-- Agent spawning: `Starting [Agent Type] agent...`
-- Progress updates: Token usage from Claude output
-- Completion: `Agent [Type] completed in X seconds`
+### 2. Custom CSS Strategy
 
-### 4. UI Component Structure
+**Preserve all existing custom CSS (lines 19-149):**
+- Phase gradients (.phase-scout, .phase-architect, etc.)
+- Agent progress bars with shimmer
+- Token gauges with gradients
+- Keyframe animations
+- Hover effects
+
+**Add new custom CSS for layout:**
+```css
+/* Grid layout (Terminal CSS has none) */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
 ```
-Dashboard
-├── Instance Selector (dropdown or cards)
-├── Multi-Agent Panel (per instance)
-│   ├── Agent Card (Scout)
-│   │   ├── Status badge
-│   │   ├── Horizontal gradient progress bar
-│   │   ├── Token gauge
-│   │   └── Elapsed time
-│   ├── Agent Card (Architect)
-│   ├── Agent Card (Builder 1)
-│   └── Agent Card (Builder 2)
-├── Phase Timeline (all phases)
-├── Geek Stats Panel
-└── Live Logs
+
+**Override Terminal CSS defaults where needed:**
+```css
+/* Adjust Terminal CSS color scheme */
+:root {
+  --background-color: #0a0a0a;
+  --font-color: #00ff00;
+  --primary-color: #00ff00;
+  --secondary-color: #33ff33;
+  --block-background-color: #111111;
+}
 ```
 
-### 5. Data Validation & Error Handling
-- Validate all WebSocket data before rendering
-- Check for null/undefined before updating DOM
-- Gracefully handle missing agent data
-- Loading states while fetching
-- Fallback to "No data" when appropriate
+### 3. Color Scheme Adaptation
 
-## Main Challenges & Mitigations
+**Terminal CSS Default Theme**: Light mode with blue accents
+**Our Customization**: Dark green-on-black retro terminal
 
-### Challenge 1: Parsing Orchestrator Output
-**Risk**: Output format may vary, parsing could fail
-**Mitigation**: Robust regex patterns, fallback mechanisms, log warnings but continue
+**CSS Variables to override:**
+- `--background-color: #0a0a0a` (almost black)
+- `--font-color: #00ff00` (terminal green)
+- `--primary-color: #00ff00` (green for buttons)
+- `--secondary-color: #33ff33` (lighter green)
+- `--block-background-color: #111111` (dark panels)
+- `--invert-font-color: #000000` (for buttons)
 
-### Challenge 2: Performance with Many Agents
-**Risk**: Dozens of WebSocket updates per second could lag browser
-**Mitigation**: Throttle updates (max 10/sec per agent), batch updates, use requestAnimationFrame for smooth animations
+**Keep custom colors:**
+- Status indicators (green #10b981, yellow #eab308, red #ef4444)
+- Phase gradients (purple, pink, blue, green)
+- Token gauge gradient (green → yellow → red)
 
-### Challenge 3: State Management Complexity
-**Risk**: Multiple instances × multiple agents = complex state synchronization
-**Mitigation**: Single source of truth (server-side), stateless frontend updates, clear data flow
+### 4. Layout Migration Plan
 
-### Challenge 4: Backwards Compatibility
-**Risk**: Breaking existing single-agent monitoring
-**Mitigation**: Feature detection, graceful degradation, keep existing APIs intact
+**Grid replacement:**
+```css
+/* Replace: grid grid-cols-1 lg:grid-cols-3 gap-6 */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
 
-### Challenge 5: Testing Coverage
-**Risk**: Broken graphs, missing error handling
-**Mitigation**: Comprehensive test suite:
-- Unit tests for API endpoints
-- Integration tests for WebSocket events
-- E2E tests with Playwright to catch UI bugs
-- Validation tests for data rendering
+@media (min-width: 1024px) {
+  .main-grid {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+```
 
-## Testing Approach
+**Spacing system:**
+- Terminal CSS uses `--global-space: 10px`
+- Current dashboard uses Tailwind spacing (p-4 = 1rem, p-6 = 1.5rem)
+- Solution: Add custom padding/margin classes or inline styles
 
-### Unit Tests (pytest)
-- `test_agent_instances_api` - Test CRUD operations for agents
-- `test_multi_instance_discovery` - Test instance listing
-- `test_agent_metrics_collection` - Test metrics gathering
+### 5. Component Mapping
 
-### Integration Tests
-- `test_websocket_agent_events` - Test WebSocket message flow
-- `test_agent_progress_updates` - Test real-time progress updates
+| Current (Tailwind) | Terminal CSS Equivalent |
+|-------------------|------------------------|
+| `<select class="...">` | `<select>` (auto-styled) |
+| `<button class="bg-blue-600...">` | `<button class="btn-primary">` |
+| `<div class="bg-gray-900 p-6 rounded-lg">` | `<section>` + custom .panel class |
+| `<h1 class="text-4xl font-bold">` | `<h1>` (auto-styled) |
+| `<div class="grid grid-cols-3 gap-4">` | Custom .stats-grid class |
 
-### E2E Tests (Playwright)
-- `test_multi_agent_display` - Verify all agents render correctly
-- `test_gradient_progress_bars` - Verify animations work
-- `test_no_broken_graphs` - Verify all charts render without errors
-- `test_multi_instance_cards` - Verify instance cards expand/collapse
-- `test_error_handling` - Verify graceful degradation when data missing
+## Challenges and Mitigations
 
-### Validation Tests
-- Check all DOM elements exist before updating
-- Validate data types before rendering
-- Ensure no console errors during operation
+### Challenge 1: No Built-in Grid System
+**Impact**: High - Dashboard relies heavily on grid layouts
+**Mitigation**: 
+- Create custom grid CSS classes
+- Use CSS Grid with media queries for responsive design
+- Test layouts at multiple breakpoints
 
-## Timeline Estimate
-- Scout: 15 minutes ✅
-- Architect: 30 minutes
-- Builder: 90 minutes (complex changes)
-- Test: 30 minutes (comprehensive testing)
-- Deploy: 10 minutes
-**Total: ~2.5-3 hours**
+### Challenge 2: Complex Progress Bars
+**Impact**: High - Multi-agent monitoring is a key feature
+**Mitigation**:
+- Keep ALL existing progress bar CSS
+- Ensure gradients and animations are preserved
+- Test shimmer animation still works
+- Verify percentage overlays display correctly
 
-## Success Criteria
-1. ✅ Multi-agent panel displays all running agents with individual progress bars
-2. ✅ Horizontal gradient progress bars animate smoothly
-3. ✅ Per-agent token tracking with color-coded warnings
-4. ✅ Multi-instance support with expandable cards
-5. ✅ Phase tracking dashboard with timeline visualization
-6. ✅ Geek stats section with comprehensive metrics
-7. ✅ Real-time WebSocket updates without flickering
-8. ✅ No broken graphs or console errors
-9. ✅ Comprehensive test coverage (>80%)
-10. ✅ Backwards compatible with existing sessions
+### Challenge 3: Color Scheme Consistency
+**Impact**: Medium - Terminal CSS defaults may conflict
+**Mitigation**:
+- Override Terminal CSS variables in custom CSS
+- Test color contrast for accessibility
+- Ensure status indicators remain visible
+- Preserve warning colors (green/yellow/red)
+
+### Challenge 4: Button Styling
+**Impact**: Low - Terminal CSS provides button classes
+**Mitigation**:
+- Use `class="btn-primary"` for primary actions
+- Use `class="btn-ghost"` for secondary actions
+- Add custom hover effects if needed
+
+### Challenge 5: Form Elements
+**Impact**: Low - Terminal CSS auto-styles forms
+**Mitigation**:
+- Session selector dropdown should work automatically
+- May need custom styling to match dark theme
+- Test dropdown visibility and usability
+
+## Testing Strategy
+
+### Phase 1: Visual Testing (Manual)
+1. Open dashboard in browser
+2. Verify Terminal CSS loaded (check Network tab)
+3. Check all panels render correctly
+4. Verify gradient progress bars animate
+5. Test responsive layout (resize window)
+6. Verify color scheme matches retro terminal aesthetic
+
+### Phase 2: Functional Testing
+1. **Session selector**: Change sessions, verify WebSocket reconnects
+2. **Live logs**: Check auto-scroll and emoji highlighting
+3. **Multi-agent panel**: Verify agent cards render and update
+4. **Progress bars**: Trigger update, verify smooth transitions
+5. **Token gauges**: Check color warnings (50%, 75%, 100%)
+6. **Export button**: Verify JSON export works
+7. **Refresh button**: Verify manual refresh works
+
+### Phase 3: Integration Testing
+1. Start livestream server
+2. Trigger phase update via API
+3. Verify dashboard updates in real-time
+4. Check WebSocket auto-reconnect after disconnect
+5. Test with multiple agents active simultaneously
+
+### Success Criteria
+- ✅ Zero Tailwind references in HTML
+- ✅ Terminal CSS CDN loaded successfully
+- ✅ All multi-agent monitoring features functional
+- ✅ Gradient progress bars animate smoothly
+- ✅ Token gauges show correct colors
+- ✅ WebSocket updates work
+- ✅ Retro terminal aesthetic achieved
+- ✅ Responsive on mobile and desktop
+- ✅ No JavaScript errors in console
+- ✅ All buttons and forms work
+
+## Implementation Estimate
+
+**Complexity Breakdown:**
+- HTML restructuring: 2-3 hours (1,053 lines)
+- Custom CSS adaptation: 1-2 hours
+- Testing and debugging: 1-2 hours
+- Total: 4-7 hours
+
+**Risk Level**: MEDIUM
+- Most risk in layout migration (no grid system)
+- Low risk in functionality (JavaScript unchanged)
+- Medium risk in visual consistency
+
+## Recommendations
+
+### DO:
+✅ Preserve ALL existing custom CSS for animations
+✅ Use semantic HTML throughout
+✅ Override Terminal CSS variables for dark theme
+✅ Create custom grid classes for layouts
+✅ Test incrementally (section by section)
+✅ Keep JavaScript 100% unchanged
+
+### DON'T:
+❌ Don't remove gradient animations
+❌ Don't change WebSocket logic
+❌ Don't rely solely on Terminal CSS for complex layouts
+❌ Don't skip responsive testing
+❌ Don't forget to test with real session data
+
+## Next Steps → Architect Phase
+
+The Architect should:
+1. Create detailed HTML structure with semantic elements
+2. Design custom CSS for grid layouts
+3. Plan CSS variable overrides for Terminal CSS theme
+4. Map each Tailwind component to Terminal CSS equivalent
+5. Create comprehensive test plan
+6. Document all custom CSS requirements
