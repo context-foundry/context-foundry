@@ -1,305 +1,215 @@
-# Scout Report: BAML Integration into Context Foundry
+# Scout Report: Anthropic Prompt Caching Implementation
 
 ## Executive Summary
 
-BAML (Basically a Made-up Language) is a production-ready framework that treats LLM prompts as type-safe functions with structured inputs/outputs. Integration into Context Foundry presents a strategic opportunity to improve autonomous build reliability by replacing string-based JSON parsing with compile-time type safety. The core value proposition: eliminate the 5% failure rate from LLM response parsing that currently exists in Context Foundry's phase tracking and agent communication.
+Implement Anthropic's prompt caching feature for Context Foundry's orchestrator to achieve **90% cost reduction** and **~$0.20 → $0.02 per build** savings. The infrastructure is **60% complete** - cost calculator, pricing config, and token tracking already support caching. Need to implement: prompt builder, mcp_server integration, tests, and docs.
 
-**Recommendation**: Targeted integration focusing on high-impact areas (phase tracking, agent outputs) rather than full rewrite. Implement as v1.3.0 feature release.
+**Key Discovery**: Cost calculator already has full cache support (cache_read/write tokens, pricing, savings calculation). This significantly simplifies implementation!
 
-## Key Requirements
+## Requirements Analysis
 
-**Must-Have:**
-- Structured phase tracking (replace JSON string parsing)
-- Type-safe Scout/Architect/Builder outputs
-- Backward compatibility with existing orchestrator workflow
-- Python 3.8+ compatibility (baml-py requirement)
-- Zero-config for users (BAML compilation handled internally)
+### Core Objective
+Cache the static 9,000-token orchestrator prompt to reuse across builds within 5-minute TTL window, reducing input tokens by 90% on subsequent builds.
 
-**Should-Have:**
-- Semantic streaming for real-time progress updates
-- Observability integration with Boundary Studio
-- Example projects that use BAML (show users the benefit)
-
-**Nice-to-Have:**
-- Suspension/resumption for very long builds (current builds avg 10-20 min)
-- Full orchestrator rewrite in BAML (high risk, deferred to v2.0)
+### Core Components Needed
+1. **Prompt Builder** (tools/prompts/cached_prompt_builder.py) - Split orchestrator prompt into cacheable/dynamic sections
+2. **Cache Analysis** (tools/prompts/cache_analysis.py) - Analyze prompt structure and generate segmentation plan
+3. **MCP Integration** (tools/mcp_server.py) - Modify autonomous_build_and_deploy() to use cached prompts
+4. **Cache Config** (tools/prompts/cache_config.json) - Enable/disable caching, configure TTL
+5. **Tests** (tests/test_cached_prompt_builder.py) - Unit and integration tests
+6. **Documentation** (docs/PROMPT_CACHING.md) - Complete implementation guide
 
 ## Technology Stack Decision
+- **Language**: Python 3.10+ (existing codebase)
+- **Caching**: Anthropic Prompt Caching API (Claude 3.5+)
+- **Integration**: MCP server (tools/mcp_server.py)
+- **No new dependencies needed** - anthropic package already installed
 
-**Core Integration:**
-- `baml-py==0.211.2` - Latest stable release (Oct 2025)
-- Python 3.8+ (matches Context Foundry's existing requirement)
-- Compile `.baml` files to Python client at runtime
-- Store BAML definitions in `tools/baml_schemas/`
-
-**Rationale:**
-- BAML compiles to native Python code (zero runtime overhead)
-- Type safety catches errors at compile-time, not runtime
-- Semantic streaming provides better UX than current JSON polling
-- Observability built-in (better debugging than current logs)
+### Anthropic Cache API Spec (from docs.claude.com)
+- **TTL**: 5 minutes (default) or 1 hour (extended, 2× cost)
+- **Minimum tokens**: 1024 for Sonnet, 2048 for Haiku
+- **Max breakpoints**: 4 per request
+- **Pricing** (Claude Sonnet 4):
+  - Input: $3.00/MTok
+  - Cache writes (5min): $3.75/MTok (1.25×)
+  - Cache reads: $0.30/MTok (0.1×) - **90% savings!**
+- **Cache control marker**: `{"type": "ephemeral", "ttl": "5m"}`
 
 ## Critical Architecture Recommendations
 
-### 1. Phase Tracking with BAML Types
-**Current**: JSON string → `json.loads()` → dict → manual validation
-**Proposed**: BAML function → typed PhaseInfo class → compile-time safety
+### 1. Prompt Segmentation Strategy
 
-```baml
-class PhaseInfo {
-  session_id string
-  current_phase PhaseType
-  phase_number string
-  status PhaseStatus
-  progress_detail string
-  test_iteration int
-  phases_completed PhaseType[]
-  started_at string
-  last_updated string
-}
+**CACHEABLE SECTION** (~8,500 tokens):
+- All phase instructions (Phases 0-7.5)
+- Git workflow reference
+- Enhancement mode reference
+- Phase tracking templates
+- Error handling guides
+- Critical rules
+- Test loop logic
 
-enum PhaseType {
-  CodebaseAnalysis
-  Scout
-  Architect
-  Builder
-  Test
-  Screenshot
-  Documentation
-  Deploy
-  Feedback
-  GitHub
-}
+**DYNAMIC SECTION** (~500 tokens):
+- Task description (varies per build)
+- Working directory path
+- Mode flags (new_project/fix_bug/etc)
+- Project configuration JSON
+- Test iteration limits
 
-enum PhaseStatus {
-  analyzing
-  researching
-  designing
-  building
-  testing
-  capturing
-  documenting
-  deploying
-  completed
-  failed
-}
-
-function UpdatePhase(
-  phase: PhaseType,
-  status: PhaseStatus,
-  detail: string
-) -> PhaseInfo {
-  client "anthropic/claude-3-5-sonnet-20241022"
-  prompt #"
-    Update phase tracking with validated structure.
-    Current phase: {{ phase }}
-    Status: {{ status }}
-    Detail: {{ detail }}
-  "#
+**Cache Control Placement**:
+```json
+{
+  "role": "user",
+  "content": [
+    {
+      "type": "text",
+      "text": "<STATIC ORCHESTRATOR PROMPT>",
+      "cache_control": {"type": "ephemeral"}
+    },
+    {
+      "type": "text",
+      "text": "AUTONOMOUS BUILD TASK\\n\\nCONFIGURATION:\\n{...}"
+    }
+  ]
 }
 ```
 
-### 2. Structured Scout Outputs
-**Current**: Free-form markdown → manual parsing → error-prone
-**Proposed**: BAML-enforced schema → guaranteed structure
+### 2. Integration with mcp_server.py
 
-```baml
-class ScoutReport {
-  executive_summary string
-  past_learnings_applied string[]
-  known_risks string[]
-  key_requirements string[]
-  tech_stack TechStack
-  architecture_recommendations string[] @description("Top 3-5 critical recommendations")
-  main_challenges Challenge[]
-  testing_approach string
-  timeline_estimate string
-}
-
-class TechStack {
-  languages string[]
-  frameworks string[]
-  dependencies string[]
-  justification string
-}
-
-class Challenge {
-  description string
-  severity "LOW" | "MEDIUM" | "HIGH"
-  mitigation string
-}
-
-function ScoutResearch(
-  task_description: string,
-  codebase_analysis: string
-) -> ScoutReport {
-  client "anthropic/claude-3-5-sonnet-20241022"
-  prompt #"
-    Research requirements for: {{ task_description }}
-    
-    Codebase context: {{ codebase_analysis }}
-    
-    Provide comprehensive analysis with structured output.
-  "#
-}
-```
-
-### 3. Architect Blueprint Schema
-```baml
-class ArchitectureBlueprint {
-  system_overview string
-  file_structure FileStructure[]
-  modules ModuleSpec[]
-  applied_patterns Pattern[]
-  implementation_steps string[]
-  test_plan TestPlan
-  success_criteria string[]
-}
-
-class FileStructure {
-  path string
-  purpose string
-  dependencies string[]
-}
-
-class ModuleSpec {
-  name string
-  responsibility string
-  interfaces string[]
-  dependencies string[]
-}
-
-class TestPlan {
-  unit_tests string[]
-  integration_tests string[]
-  e2e_tests string[]
-  success_criteria string[]
-}
-```
-
-### 4. Builder Task Execution
-```baml
-class BuildTaskResult {
-  task_id string
-  status "success" | "failed" | "partial"
-  files_created string[]
-  errors BuildError[]
-  warnings string[]
-  next_steps string[]
-}
-
-class BuildError {
-  file string
-  line int?
-  message string
-  severity "error" | "warning"
-}
-```
-
-### 5. Semantic Streaming for Progress
-**Current**: Poll `.context-foundry/current-phase.json` every 5 seconds
-**Proposed**: Stream partial PhaseInfo updates in real-time
-
+**Current Flow** (lines 1269-1293):
 ```python
-# Streaming phase updates
-async for partial_phase in b.stream.UpdatePhase(phase="Builder", status="building", detail="Creating game.js"):
-    if partial_phase.progress_detail:
-        print(f"Progress: {partial_phase.progress_detail}")
-        
-final_phase = await partial_phase.get_final_response()
+with open(orchestrator_prompt_path) as f:
+    system_prompt = f.read()
+
+task_prompt = f"AUTONOMOUS BUILD TASK\\n\\nCONFIGURATION:\\n{json.dumps(...)}"
+
+cmd = ["claude", "--system-prompt", system_prompt, task_prompt]
 ```
 
-## Main Challenges and Mitigations
+**New Cache-Aware Flow**:
+```python
+from tools.prompts.cached_prompt_builder import build_cached_prompt
 
-### Challenge 1: BAML Compilation Overhead
-- **Issue**: BAML files must compile before use, adds startup time
-- **Severity**: MEDIUM
-- **Mitigation**: Pre-compile BAML schemas during Context Foundry installation, cache compiled clients
+# Build prompt with cache markers
+prompt_data = build_cached_prompt(
+    task_config=task_config,
+    enable_caching=True  # from config
+)
 
-### Challenge 2: Backward Compatibility
-- **Issue**: Existing projects use JSON-based phase tracking
-- **Severity**: HIGH
-- **Mitigation**: 
-  - Phase 1: Add BAML support alongside JSON (dual mode)
-  - Phase 2: Migrate gradually over 2-3 releases
-  - Never break existing orchestrator workflows
+# Use structured prompt format
+# Claude Code supports JSON prompt format via stdin
+cmd = ["claude", "--print", "--prompt-format", "json"]
+stdin_data = json.dumps(prompt_data)
+```
 
-### Challenge 3: Learning Curve
-- **Issue**: Team and users need to understand BAML syntax
-- **Severity**: MEDIUM
-- **Mitigation**: 
-  - Comprehensive docs with examples
-  - BAML usage is internal (users don't need to know)
-  - Only expose benefits (better reliability, streaming)
+### 3. Existing Infrastructure (Already Complete!)
 
-### Challenge 4: Dependency Weight
-- **Issue**: baml-py adds ~20MB to installation
-- **Severity**: LOW
-- **Mitigation**: Make BAML optional dependency, graceful fallback to JSON mode
+✅ **Cost Calculator** (tools/metrics/cost_calculator.py):
+- Already has cache_read_tokens and cache_write_tokens support
+- get_cost_breakdown() calculates cache_savings
+- No modifications needed!
 
-### Challenge 5: Multi-Model Support
-- **Issue**: Context Foundry supports multiple LLM providers, BAML integrates with all
-- **Severity**: LOW
-- **Mitigation**: BAML supports 100+ models (OpenAI, Anthropic, Gemini, etc.) - already compatible
+✅ **Pricing Config** (tools/metrics/pricing_config.json):
+- Already has cache_write_per_mtok: 3.75
+- Already has cache_read_per_mtok: 0.30
+- All Claude models configured!
+
+✅ **Metrics DB** (tools/metrics/metrics_db.py):
+- Schema already supports cache tokens
+- TokenUsage class ready for cache data
+
+## Main Challenges & Mitigations
+
+### Challenge 1: Claude Code CLI Integration
+**Issue**: Claude Code may not support structured JSON prompt format via stdin
+**Solution**: Investigate three approaches:
+1. Use --prompt-format json if supported (ideal)
+2. Convert cache markers to equivalent --system-prompt usage
+3. Fallback to current method with cache tracking in metrics only
+
+### Challenge 2: Prompt Version Management
+**Issue**: Any change to orchestrator_prompt.txt invalidates entire cache
+**Solution**:
+- Add version hash to prompt header
+- Track prompt versions in cache_config.json
+- Warn when prompt changes invalidate cache
+
+### Challenge 3: Token Boundary Precision
+**Issue**: Cache requires minimum 1024 tokens for Sonnet
+**Solution**:
+- Use anthropic package's count_tokens() for accurate counting
+- Validate static section meets minimum before enabling caching
+- Add buffer (ensure 1100+ tokens)
+
+### Challenge 4: Known Risks from Pattern Analysis
+**Medium-Priority Risks**:
+1. **Prompt Structure Changes**: If orchestrator_prompt.txt modified, cache invalidates
+   - Mitigation: Version prompt, include version hash in cache key
+
+2. **Cache TTL Window**: 5-minute default may be too short for some workflows
+   - Mitigation: Make configurable, support 1-hour extended cache option
 
 ## Testing Approach
 
-**Unit Tests:**
-- Test BAML schema compilation
-- Test PhaseInfo validation with valid/invalid inputs
-- Test ScoutReport parsing with LLM responses
-- Test error handling for malformed BAML outputs
+### Unit Tests (tests/test_cached_prompt_builder.py)
+- Test prompt segmentation logic
+- Test cache marker insertion
+- Test token counting accuracy
+- Test config loading
+- Test fallback behavior (non-Claude models)
 
-**Integration Tests:**
-- Full Scout → Architect → Builder workflow with BAML
-- Phase tracking updates with semantic streaming
-- Backward compatibility (JSON mode still works)
-- Multi-model support (test with different LLM providers)
+### Integration Tests (tests/test_cache_integration.py)
+- Mock subprocess calls to claude CLI
+- Verify cache markers in generated commands
+- Test metrics collection with cache tokens
+- Test cost calculation with cached vs uncached
 
-**E2E Tests:**
-- Build a simple project using BAML-enabled orchestrator
-- Verify phase tracking accuracy
-- Verify structured outputs improve reliability
-- Measure failure rate reduction (target: <1% vs current 5%)
+### End-to-End Test (manual)
+```bash
+# Build 1: Full prompt (cache miss)
+foundry build test-app "Create hello world app"
+# Verify: cache_write_tokens > 8000, cost ~$0.03
 
-**Performance Tests:**
-- BAML compilation time overhead
-- Streaming vs polling performance
-- Memory usage comparison
+# Build 2: Cached prompt (cache hit) - within 5 min
+foundry build test-app-2 "Create goodbye world app"
+# Verify: cache_read_tokens > 8000, cost ~$0.003
+
+# Build 3: After 5 min (cache expired)
+sleep 310 && foundry build test-app-3 "Create test app"
+# Verify: cache_write_tokens > 8000 again
+```
+
+## Success Criteria Validation
+
+✅ Cost calculator already supports caching (done!)
+✅ Pricing config already has cache rates (done!)
+✅ Metrics DB already tracks cache tokens (verified in schema)
+✅ Token counting infrastructure exists (TokenUsage class)
+⏳ Need: Prompt builder, MCP integration, tests, docs
+⏳ Target: 90% token reduction on cached builds
+⏳ Target: $0.20 → $0.02 per build cost savings
 
 ## Timeline Estimate
 
-**Total: 2-3 days autonomous build**
+- **Prompt Builder**: 2 hours (new file, straightforward logic)
+- **MCP Integration**: 3 hours (modify existing, test CLI compatibility)
+- **Cache Analysis Tool**: 1 hour (simple utility)
+- **Tests**: 2 hours (unit + integration)
+- **Documentation**: 2 hours (comprehensive guide)
+- **Total**: ~10 hours (actual implementation ~60% smaller than task spec suggested)
 
-- Phase 1 (Scout): 30 min - Research complete
-- Phase 2 (Architect): 1 hour - Design BAML schemas and integration points
-- Phase 3 (Builder): 4-6 hours - Implement BAML integration
-- Phase 4 (Test): 2-4 hours - Comprehensive testing + self-healing iterations
-- Phase 5 (Documentation): 1-2 hours - Update docs with BAML usage
-- Phase 6 (Deploy): 30 min - Create v1.3.0 release
+## Applied Learnings from Pattern Library
 
-## Success Metrics
+No relevant patterns found in global library for prompt caching (new feature). After implementation, will contribute patterns for:
+- cache-anthropic-prompt-caching-implementation
+- cache-token-optimization-strategies
+- cache-ttl-management
 
-- **Reliability**: Reduce phase tracking parsing errors from 5% to <1%
-- **Developer Experience**: Compile-time type checking catches errors before runtime
-- **Observability**: Built-in Boundary Studio integration for debugging
-- **Performance**: Semantic streaming provides <500ms update latency (vs 5s polling)
-- **Adoption**: Example projects demonstrate BAML value to users
+## Next Phase: Architect
 
-## Integration Points Summary
-
-**High Priority (Implement First):**
-1. ✅ Phase tracking with PhaseInfo BAML class
-2. ✅ Scout report structured output
-3. ✅ Architect blueprint structured output
-4. ✅ Builder task result validation
-
-**Medium Priority (v1.4.0):**
-5. Semantic streaming for real-time progress
-6. Observability with Boundary Studio
-7. Example projects using BAML
-
-**Low Priority (v2.0.0):**
-8. Full orchestrator rewrite in BAML
-9. Suspension/resumption for long builds
-10. Advanced pattern library with BAML types
-
+Scout recommends Architect focus on:
+1. Detailed prompt builder module design
+2. MCP server integration strategy (CLI compatibility research)
+3. Cache configuration schema
+4. Test strategy refinement
+5. Fallback mechanism design (graceful degradation)
+6. Metrics tracking enhancement plan

@@ -1675,3 +1675,15 @@ When you receive a task configuration:
 Remember: You are fully autonomous. Complete the entire workflow without human intervention.
 
 START NOW.
+
+<<CACHE_BOUNDARY_MARKER>>
+
+═══════════════════════════════════════════════════════════
+END OF STATIC ORCHESTRATOR INSTRUCTIONS
+═══════════════════════════════════════════════════════════
+
+The content above this marker is STATIC and CACHEABLE (~8,500 tokens).
+It contains all phase instructions, workflows, and templates that don't change between builds.
+
+The content below this marker is DYNAMIC and varies per build.
+It will be injected at runtime with task-specific configuration.

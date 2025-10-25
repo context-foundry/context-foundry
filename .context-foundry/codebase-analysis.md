@@ -1,101 +1,164 @@
-# Codebase Analysis Report
+# Codebase Analysis Report - Prompt Caching Implementation
 
 ## Project Overview
-- Type: Python MCP Server + Autonomous Build System
-- Languages: Python 3.10+
-- Architecture: FastMCP server that spawns Claude Code instances recursively for autonomous software builds
-- Current Version: v2.1.0 (MCP-based, v2.0+ architecture)
+- **Type**: Python CLI/MCP Tool
+- **Languages**: Python 3.10+
+- **Architecture**: Multi-agent autonomous build orchestration system
+- **Current Branch**: feature/metrics-cost-tracking-system (uncommitted changes present)
 
-## Key Files
-- Entry point: `tools/mcp_server.py` (FastMCP server)
-- Main orchestrator: `tools/orchestrator_prompt.txt` (63KB prompt for autonomous builds)
-- Config: `requirements.txt`, `requirements-mcp.txt`, `.mcp.json`
-- Tests: `tests/` directory
-- Documentation: `README.md`, `docs/` directory
+## Key Files for Prompt Caching Implementation
 
-## Project Structure
-```
-context-foundry/
-├── tools/
-│   ├── mcp_server.py          # FastMCP server - spawns Claude instances
-│   ├── orchestrator_prompt.txt # Main autonomous build workflow (Scout→Test→Deploy)
-│   ├── builder_task_prompt.txt # Parallel builder agent prompts
-│   ├── test_task_prompt.txt   # Parallel test agent prompts
-│   ├── github_agent_prompt.txt # GitHub integration agent
-│   ├── banner.py              # CLI banner
-│   ├── config_manager.py      # Configuration management
-│   ├── livestream/            # Real-time monitoring (websocket, metrics)
-│   └── tui/                   # Terminal UI dashboard
-├── docs/                      # Comprehensive documentation
-├── tests/                     # Test suite
-├── examples/                  # Example projects
-└── scripts/                   # Utility scripts
-```
+### Entry Points
+- `tools/mcp_server.py` - MCP server, handles autonomous_build_and_deploy()
+- `tools/orchestrator_prompt.txt` - 1,677 lines, ~9,000 tokens (target for caching)
 
-## Dependencies
-**Core:**
-- anthropic>=0.40.0 (Claude API)
-- fastmcp (MCP server framework)
-- click, rich (CLI)
+### Cost/Metrics Infrastructure (Already Exists!)
+- `tools/metrics/cost_calculator.py` - **Already supports cache pricing!**
+  - Has cache_write_per_mtok and cache_read_per_mtok fields
+  - calculate_cost() already handles cache tokens
+  - get_cost_breakdown() already calculates cache_savings
+- `tools/metrics/pricing_config.json` - **Already has cache rates!**
+  - cache_write_per_mtok: 3.75 (Claude Sonnet)
+  - cache_read_per_mtok: 0.30 (Claude Sonnet)
+- `tools/metrics/metrics_db.py` - Database for metrics storage
+- `tools/metrics/log_parser.py` - TokenUsage class
 
-**Pattern Library:**
-- sentence-transformers (semantic search)
-- numpy, pyyaml
+### Test Infrastructure
+- `tests/test_cost_calculator.py` - Existing cost calculator tests
+- `tests/test_metrics_db.py` - Database tests
+- `tests/test_log_parser.py` - Log parsing tests
 
-**Monitoring:**
-- watchdog (filesystem events)
-- requests, beautifulsoup4 (pricing data)
+### Configuration
+- `requirements.txt` - Python dependencies
+- `.context-foundry/` - Build artifacts directory
+
+## Existing Code to Leverage
+
+### 1. Cost Calculator Already Cache-Aware!
+The cost_calculator.py already has complete cache support:
+- TokenUsage class has cache_read_tokens and cache_write_tokens
+- calculate_cost() processes cache tokens with proper pricing
+- get_cost_breakdown() calculates cache_savings
+- pricing_config.json has cache rates for all Claude models
+
+**Key Finding**: We don't need to add cache support to cost calculator - it's already there!
+
+### 2. Prompt Structure (orchestrator_prompt.txt)
+Current structure (1,677 lines):
+- Lines 0-6: Git Workflow Reference (STATIC)
+- Phase instructions (STATIC)
+- Enhancement mode reference (STATIC)
+- Phase tracking template (STATIC)
+- Final output format (STATIC)
+- Task configuration parsing (DYNAMIC - varies per build)
+
+**Cache Strategy**:
+- CACHEABLE: All phase instructions, templates, workflows (lines 0-1600+)
+- DYNAMIC: Task description, working directory, mode flags (injected at runtime)
+
+### 3. MCP Server Integration Point
+`tools/mcp_server.py` line ~99+ contains autonomous_build_and_deploy():
+- Currently constructs subprocess command with orchestrator prompt
+- Needs modification to use cached prompt builder
+- Already tracks metrics via collector
 
 ## Code to Modify
-**Task**: Integrate BAML for improved LLM reliability and structured outputs
 
-**Files to change:**
-1. `tools/orchestrator_prompt.txt` - May recommend BAML to generated projects
-2. `tools/mcp_server.py` - Could use BAML for structured phase tracking
-3. `requirements.txt` - Add BAML dependency
-4. `docs/` - Add BAML integration documentation
+### Primary Changes
+1. **tools/mcp_server.py**:
+   - Import cached_prompt_builder
+   - Modify autonomous_build_and_deploy() to use cache-aware prompts
+   - Add cache tracking to metrics collection
 
-**Approach**: 
-1. Research BAML library capabilities deeply
-2. Identify integration points:
-   - Scout/Architect/Builder agents: Use BAML for structured responses?
-   - Phase tracking: Use BAML types instead of JSON?
-   - Projects Context Foundry generates: Should they use BAML?
-3. Design BAML integration strategy
-4. Implement where it adds value (prioritize orchestrator reliability)
-5. Add tests for BAML integration
-6. Document BAML usage
+2. **tools/orchestrator_prompt.txt**:
+   - Add section markers for cache boundaries
+   - Ensure static sections come first
+   - Mark dynamic injection points
 
-## Architecture Notes
-- **Meta-MCP Innovation**: Uses MCP to recursively spawn Claude Code instances
-- **Self-healing**: Test loop (up to 3 iterations) with Architect→Builder→Test cycle
-- **Parallel execution**: Spawns multiple builder/test agents concurrently
-- **Phase tracking**: JSON files in `.context-foundry/` directory
-- **Pattern library**: Self-learning system stores patterns globally at `~/.context-foundry/patterns/`
+### New Files Needed
+1. **tools/prompts/cache_analysis.py**:
+   - Analyze orchestrator_prompt.txt structure
+   - Identify static vs dynamic sections
+   - Generate segmentation recommendations
 
-## Risks
-1. **Scope creep**: BAML is a large library - need focused integration plan
-2. **Backward compatibility**: Must not break existing orchestrator workflow
-3. **Dependency weight**: BAML adds complexity - ensure value justifies cost
-4. **Learning curve**: Team needs to understand BAML patterns
-5. **Version compatibility**: BAML is actively developed - pin versions carefully
+2. **tools/prompts/cached_prompt_builder.py**:
+   - Split prompt into cacheable/dynamic sections
+   - Add Anthropic cache control markers
+   - Build requests with proper structure
 
-## Integration Opportunities
-**High Value:**
-- Phase tracking with BAML types (replace JSON parsing)
-- Structured Scout/Architect outputs (eliminate parsing errors)
-- Type-safe configuration (replace dict-based configs)
+3. **tools/prompts/cache_config.json**:
+   - Enable/disable caching
+   - Configure cache settings
+   - Model-specific configuration
 
-**Medium Value:**
-- Projects Context Foundry generates could use BAML
-- Semantic streaming for real-time progress updates
-- Observability integration
+4. **tests/test_cached_prompt_builder.py**:
+   - Unit tests for prompt builder
+   - Test cache marker insertion
+   - Test prompt segmentation
 
-**Lower Priority:**
-- Suspension feature (builds are relatively fast already)
-- Full orchestrator rewrite (works well, high risk)
+5. **docs/PROMPT_CACHING.md**:
+   - Implementation guide
+   - Performance metrics
+   - Troubleshooting
 
-## Current Branch Status
-- On branch: `enhancement/multi-agent-monitoring-dashboard`
-- Git clean: No (current-phase.json modified, safe to ignore)
-- Recent work: Livestream monitoring dashboard, GitHub agent, prompt optimization
+## Dependencies Analysis
+Current requirements.txt includes:
+- anthropic (for Claude API - supports prompt caching)
+- fastmcp (for MCP server)
+- sqlite3 (built-in, for metrics)
+
+**No new dependencies needed!**
+
+## Architecture Insights
+
+### Cache Flow
+1. First build: Send full prompt with cache markers → Cache created (cache_write_tokens)
+2. Subsequent builds (within 5 min): Reuse cached prompt → Cache hit (cache_read_tokens)
+3. After 5 min: Cache expired → Create new cache
+
+### Integration with Existing Metrics
+The existing metrics system is already cache-ready:
+- TokenUsage captures cache tokens
+- CostCalculator processes them correctly
+- Database can store them
+- Just need to populate cache token values!
+
+## Risks & Considerations
+
+### Low Risk
+- Cost calculator already supports caching (no breaking changes)
+- Metrics DB schema may already support cache fields (need to verify)
+- Anthropic API supports caching (Claude 3.5+)
+
+### Medium Risk
+- Need to ensure prompt segmentation preserves functionality
+- Cache invalidation if prompt template changes
+- Backward compatibility with non-Anthropic models
+
+### High Risk
+- None identified - infrastructure already exists!
+
+## Task Modification Strategy
+
+**Key Insight**: The task specification overestimates the work needed!
+- Cost calculator: Already done ✅
+- Pricing config: Already done ✅
+- Cache token handling: Already done ✅
+
+**Actual Work Needed**:
+1. Create prompt builder (new file)
+2. Integrate with mcp_server.py (modify existing)
+3. Add cache analysis tool (new file)
+4. Update orchestrator prompt with markers (modify existing)
+5. Add tests (new files)
+6. Write documentation (new file)
+
+**Estimated Scope**: ~60% of originally described work (infra exists)
+
+## Next Steps for Scout Phase
+1. Verify metrics_db schema supports cache fields
+2. Review mcp_server.py autonomous_build_and_deploy() in detail
+3. Analyze orchestrator_prompt.txt for optimal cache boundaries
+4. Research Anthropic cache control API format
+5. Design prompt builder architecture
+6. Plan integration testing strategy
