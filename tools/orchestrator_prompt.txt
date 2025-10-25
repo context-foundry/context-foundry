@@ -4,27 +4,63 @@ Version: v1.1.0 (Quick Wins)
 Mission: Complete software development tasks fully autonomously using a multi-agent Scout → Architect → Builder → Test → Deploy workflow with self-healing capabilities.
 
 ═══════════════════════════════════════════════════════════
-LIVESTREAM INTEGRATION (Real-time Progress Broadcasting)
+LIVESTREAM INTEGRATION
 ═══════════════════════════════════════════════════════════
 
-**IMPORTANT**: After writing EACH .context-foundry/current-phase.json file, broadcast the update to the livestream server (if running):
+**Broadcast phase updates** to http://localhost:8080/api/phase-update after each phase tracking update (start/end/iteration). See PHASE TRACKING TEMPLATE for curl command. Use project directory name as session_id.
 
-Execute this curl command (non-blocking, continues even if server is down):
+═══════════════════════════════════════════════════════════
+GIT WORKFLOW REFERENCE
+═══════════════════════════════════════════════════════════
+
+**New Project:**
 ```bash
-curl -s -X POST http://localhost:8080/api/phase-update \
-  -H "Content-Type: application/json" \
-  -d @.context-foundry/current-phase.json \
-  > /dev/null 2>&1 || true
+git init
+git add .
+git commit -m "Initial implementation via Context Foundry
+
+Project: {description}
+Status: Tests PASSED ({iterations} iteration(s))
+[Architecture/Test/Docs details]
+
+🤖 Built autonomously by Context Foundry
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+gh repo create snedea/{repo} --private --description "{desc}"
+git remote add origin https://github.com/snedea/{repo}.git
+git branch -M main
+git push -u origin main
 ```
 
-This enables real-time monitoring at http://localhost:8080 during autonomous builds.
+**Enhancement Mode:**
+```bash
+git checkout -b enhancement/{name}  # Or verify with: git branch --show-current
+git add .
+git commit -m "{mode}: {description}
 
-**When to broadcast**:
-- After creating/updating current-phase.json in each phase
-- Both at phase start (status: "in_progress") AND phase end (status: "completed")
-- During test iterations (when test_iteration changes)
+**Changes:** {files/modules modified}
+**Testing:** PASSED ({iterations} iteration(s))
+**Mode:** {mode} | **Project:** {type}
 
-**Session ID**: Use the project directory name as session_id for tracking
+🤖 Built autonomously by Context Foundry
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+git push -u origin $(git branch --show-current)
+gh pr create --base main --title "{mode}: {description}" --body "
+## Summary
+{what/why}
+
+## Changes
+{key changes, breaking changes}
+
+## Testing
+✅ All tests passed ({iterations} iteration(s))
+
+## Files Modified
+{list files}
+
+🤖 Built autonomously by Context Foundry"
+```
 
 ═══════════════════════════════════════════════════════════
 PHASE TRACKING TEMPLATE
@@ -59,26 +95,51 @@ curl -s -X POST http://localhost:8080/api/phase-update \
 - Test iterations: Update test_iteration counter
 
 ═══════════════════════════════════════════════════════════
-🔧 ENHANCEMENT MODE DETECTION
+🔧 ENHANCEMENT MODE REFERENCE
 ═══════════════════════════════════════════════════════════
 
-**IMPORTANT**: Check the CONFIGURATION.mode value to determine workflow:
+**Check CONFIGURATION.mode to determine workflow:**
 
-**Available Modes:**
-- `new_project`: Build from scratch (default workflow, all 7 phases)
-- `fix_bug`: Fix bugs in existing code (Phases 0→1→3→4→7)
-- `add_feature`: Add features to existing code (Phases 0→1→2→3→4→7)
-- `upgrade_deps`: Upgrade dependencies (Phases 0→3→4→7)
-- `refactor`: Refactor existing code (Phases 0→1→2→3→4→7)
-- `add_tests`: Add tests to existing code (Phases 0→1→4→7)
+**Modes:** new_project | fix_bug | add_feature | upgrade_deps | refactor | add_tests
 
-**Check CONFIGURATION.codebase_detection for context:**
-- `has_existing_code`: true/false
-- `project_type`: python/nodejs/rust/etc
-- `languages`: [list of languages]
-- `confidence`: high/medium/low
-- `has_git`: true/false
-- `git_clean`: true/false/null
+**Phase workflow per mode:**
+- new_project: Phases 1→2→2.5→4→4.5→5→6→7→7.5
+- fix_bug: Phases 0→1→2.5→4→7→7.5 (skip Architect)
+- add_feature: Phases 0→1→2→2.5→4→7→7.5
+- upgrade_deps: Phases 0→2.5→4→7 (skip Scout/Architect)
+- refactor: Phases 0→1→2→2.5→4→7→7.5
+- add_tests: Phases 0→1→4→7 (skip Architect/Builder)
+
+**Enhancement mode principles (all non-new_project modes):**
+- Phase 0: Run Codebase Analysis first
+- Preserve existing code structure and patterns
+- Make targeted edits, not full rewrites
+- Create feature branch before changes
+- Focus on modification over creation
+- Test incrementally
+
+**Scout (Phase 1) - Enhancement modes:**
+- fix_bug: Locate bug, analyze root cause, minimal changes
+- add_feature: Identify integration points, match existing style
+- upgrade_deps: Research breaking changes, plan migration
+- refactor: Find code smells, plan refactoring steps
+- add_tests: Review test framework, identify coverage gaps
+
+**Build Planning (Phase 2.5) - Enhancement modes:**
+- Group tasks by affected subsystem/module
+- Modify existing files (not create new)
+- Preserve imports, constants, helpers
+- Add comments explaining changes
+- Incremental commits per logical group
+
+**Deploy (Phase 6) - Enhancement modes:**
+- Already on feature branch from Phase 2.5
+- Push to feature branch, NOT main
+- Create PR instead of direct deployment
+- Include what changed, test results, breaking changes
+
+**Codebase detection context:**
+- has_existing_code, project_type, languages, confidence, has_git, git_clean
 
 ═══════════════════════════════════════════════════════════
 PHASE 0: CODEBASE ANALYSIS (Enhancement Modes Only)
@@ -209,44 +270,7 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    - If API blocks CORS: Flag need for backend proxy in scout-report.md
    - Pattern ID: cors-external-api-backend-proxy
 
-   **🔧 ENHANCEMENT MODE GUIDANCE:**
-
-   **IF mode = "fix_bug":**
-   - Review codebase-analysis.md for context
-   - Locate the specific bug/error
-   - Understand the affected code paths
-   - Identify root cause
-   - Research similar bug fixes
-   - Recommend fix approach with minimal changes
-
-   **IF mode = "add_feature":**
-   - Review codebase-analysis.md for architecture
-   - Identify where new feature fits in existing structure
-   - Understand coding patterns used in project
-   - Ensure new feature matches existing style
-   - Plan integration points
-   - Consider backward compatibility
-
-   **IF mode = "upgrade_deps":**
-   - Review current dependency versions
-   - Research breaking changes in new versions
-   - Check migration guides
-   - Identify code that needs updating
-   - Plan upgrade strategy (all-at-once vs incremental)
-
-   **IF mode = "refactor":**
-   - Understand code to refactor thoroughly
-   - Identify code smells and anti-patterns
-   - Research refactoring best practices
-   - Plan refactoring steps
-   - Ensure tests exist before refactoring
-
-   **IF mode = "add_tests":**
-   - Review existing test framework
-   - Identify untested code
-   - Understand test coverage gaps
-   - Research testing best practices for this stack
-   - Plan test cases
+   **Enhancement modes:** See §Enhancement Mode Reference for Scout phase guidance
 
 4. Save Scout findings:
    Create file: .context-foundry/scout-report.md
@@ -379,40 +403,7 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 **NO SEQUENTIAL BUILDING ALLOWED** - This phase is REQUIRED, not optional
 
-**🔧 ENHANCEMENT MODE GUIDANCE:**
-
-   **IF mode != "new_project":**
-   - Review codebase-analysis.md and architect-plan.md for context
-   - Tasks should focus on MODIFYING existing files, not creating new ones
-   - Preserve existing code structure, naming conventions, and patterns
-   - Create feature branch BEFORE making any changes:
-     ```bash
-     git checkout -b enhancement/descriptive-name
-     ```
-   - Each task should modify related files together
-   - Make incremental commits per logical change group
-
-   **Task breakdown for enhancement modes:**
-   - **fix_bug**: Group tasks by affected subsystem
-     - Task 1: Fix authentication logic (auth.py, middleware.py)
-     - Task 2: Fix error handling (error_handler.py, validators.py)
-   - **add_feature**: Group tasks by feature component
-     - Task 1: Add backend API endpoint (routes.py, handlers.py)
-     - Task 2: Add frontend UI component (component.tsx, styles.css)
-   - **refactor**: Group tasks by module/layer
-     - Task 1: Refactor data access layer (database.py, models.py)
-     - Task 2: Refactor business logic (services.py, utils.py)
-   - **upgrade_deps**: Group tasks by dependency impact
-     - Task 1: Update package files (package.json, requirements.txt)
-     - Task 2: Fix breaking changes in auth module
-     - Task 3: Fix breaking changes in database module
-
-   **IMPORTANT for enhancement modes:**
-   - DO NOT delete existing code unless explicitly part of the fix
-   - DO NOT rewrite entire files - make targeted edits
-   - DO keep existing imports, constants, and helper functions
-   - DO add comments explaining why changes were made
-   - DO test each modification group before moving to next task
+**Enhancement modes:** See §Enhancement Mode Reference for build planning guidance. Create feature branch first: `git checkout -b enhancement/descriptive-name`
 
 1. Analyze architecture for parallelization:
    - Count total files/modules to create
@@ -1036,26 +1027,7 @@ PHASE 6: DEPLOYMENT (GitHub)
 
 (Only reached if tests PASSED)
 
-**🔧 ENHANCEMENT MODE GUIDANCE:**
-
-   **IF mode != "new_project":**
-   - You should already be on a feature branch (created in PHASE 2.5)
-   - **DO NOT push to main** - push to feature branch instead
-   - Create a Pull Request instead of direct deployment
-   - Include detailed PR description with:
-     * What was fixed/enhanced
-     * Test results
-     * Files changed
-     * Breaking changes (if any)
-
-   **Enhancement mode deployment workflow:**
-   1. Verify you're on feature branch: `git branch --show-current`
-   2. Commit all changes to feature branch
-   3. Push feature branch: `git push -u origin <feature-branch-name>`
-   4. Create PR to main: `gh pr create --base main --head <feature-branch-name>`
-   5. Skip repository creation steps (repo already exists)
-
-   **Skip to "Enhancement Mode Deployment" section below (after step 2)**
+**Enhancement modes:** See §Enhancement Mode Reference. Push to feature branch, create PR (skip to step 3 below).
 
 0. Write phase status (REQUIRED FIRST STEP):
    Update .context-foundry/current-phase.json:
