@@ -105,15 +105,11 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
 
     # CRITICAL: Ensure API keys are in os.environ BEFORE creating client
     # BAML captures environment at client creation time
-    anthropic_key = os.getenv('ANTHROPIC_API_KEY')
     openai_key = os.getenv('OPENAI_API_KEY')
-
-    if anthropic_key and 'ANTHROPIC_API_KEY' not in os.environ:
-        os.environ['ANTHROPIC_API_KEY'] = anthropic_key
-        print(f"[BAML] Set ANTHROPIC_API_KEY in os.environ before client creation", file=sys.stderr)
 
     if openai_key and 'OPENAI_API_KEY' not in os.environ:
         os.environ['OPENAI_API_KEY'] = openai_key
+        print(f"[BAML] Set OPENAI_API_KEY in os.environ before client creation", file=sys.stderr)
 
     # Return cached client (unless force reload requested)
     if BAML_CLIENT is not None and not force_recompile:
@@ -148,16 +144,11 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
             env_vars_for_baml[key] = value
 
         # Ensure API keys are explicitly present
-        if 'ANTHROPIC_API_KEY' in os.environ:
-            env_vars_for_baml['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
-            print(f"[BAML] Explicitly added ANTHROPIC_API_KEY: {os.environ['ANTHROPIC_API_KEY'][:20]}...", file=sys.stderr)
-
         if 'OPENAI_API_KEY' in os.environ:
             env_vars_for_baml['OPENAI_API_KEY'] = os.environ['OPENAI_API_KEY']
             print(f"[BAML] Explicitly added OPENAI_API_KEY", file=sys.stderr)
 
         print(f"[BAML] Creating BamlRuntime with {len(env_vars_for_baml)} env vars", file=sys.stderr)
-        print(f"[BAML] ANTHROPIC_API_KEY in env_vars_for_baml: {'ANTHROPIC_API_KEY' in env_vars_for_baml}", file=sys.stderr)
         print(f"[BAML] env_vars_for_baml keys: {list(env_vars_for_baml.keys())[:10]}...", file=sys.stderr)
 
         # Pass environment to BAML
@@ -217,23 +208,10 @@ def update_phase_with_baml(
             if client is None:
                 raise Exception("BAML client not available")
 
-            # Debug: Check environment at function call time
-            print(f"[BAML DEBUG] About to call CreatePhaseInfo...", file=sys.stderr)
-            print(f"[BAML DEBUG] ANTHROPIC_API_KEY in os.environ at call time: {'ANTHROPIC_API_KEY' in os.environ}", file=sys.stderr)
-            if 'ANTHROPIC_API_KEY' in os.environ:
-                key = os.environ['ANTHROPIC_API_KEY']
-                print(f"[BAML DEBUG] Key value: {key[:20]}...", file=sys.stderr)
-
             # Call BAML CreatePhaseInfo function
             ctx = client.create_context_manager()
 
-            print(f"[BAML DEBUG] Calling function with args: session_id={session_id}, phase={phase}, status={status}", file=sys.stderr)
-
-            # CRITICAL: Try passing env vars at call time as well
-            call_env_vars = {}
-            if 'ANTHROPIC_API_KEY' in os.environ:
-                call_env_vars['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
-                print(f"[BAML DEBUG] Passing ANTHROPIC_API_KEY at call time: {os.environ['ANTHROPIC_API_KEY'][:20]}...", file=sys.stderr)
+            print(f"[BAML DEBUG] Calling CreatePhaseInfo with session_id={session_id}, phase={phase}, status={status}", file=sys.stderr)
 
             result = client.call_function_sync(
                 function_name="CreatePhaseInfo",
@@ -248,7 +226,7 @@ def update_phase_with_baml(
                 tb=None,
                 cb=None,
                 collectors=[],
-                env_vars=call_env_vars,  # Pass env vars at call time
+                env_vars={},  # No additional env vars needed at call time
                 tags=None
             )
 

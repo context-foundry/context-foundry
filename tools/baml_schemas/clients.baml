@@ -33,32 +33,8 @@ client<llm> GPT4oMini {
   }
 }
 
-client<llm> Claude35Sonnet {
-  provider anthropic
-  options {
-    model "claude-sonnet-4-5-20250929"
-    api_key env.ANTHROPIC_API_KEY
-    max_tokens 8000
-  }
-}
-
-client<llm> Claude35Haiku {
-  provider anthropic
-  options {
-    model "claude-3-5-haiku-20241022"
-    api_key env.ANTHROPIC_API_KEY
-    max_tokens 8000
-  }
-}
-
-client<llm> Claude3Opus {
-  provider anthropic
-  options {
-    model "claude-3-opus-20240229"
-    api_key env.ANTHROPIC_API_KEY
-    max_tokens 8000
-  }
-}
+// Claude clients removed - Context Foundry uses OpenAI GPT-4o-mini for BAML
+// to avoid Anthropic API charges. All BAML functions use GPT4oMini client.
 
 // Retry policies for reliability
 retry_policy StandardRetry {

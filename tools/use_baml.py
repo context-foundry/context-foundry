@@ -11,9 +11,8 @@ Usage:
     python3 tools/use_baml.py scout-report "Build a web app" "New project, no codebase"
     python3 tools/use_baml.py architecture "{scout_json}" '["risk1", "risk2"]'
 
-Environment Variables Required (at least one):
-    ANTHROPIC_API_KEY - For Claude models
-    OPENAI_API_KEY - For GPT models
+Environment Variables Required:
+    OPENAI_API_KEY - For GPT models (Context Foundry uses GPT-4o-mini for BAML)
 """
 
 import sys
@@ -82,7 +81,6 @@ def main():
             print("✅ BAML is available and ready to use")
             print("\nAPI Keys configured:")
             import os
-            print(f"  ANTHROPIC_API_KEY: {'✅ Set' if os.getenv('ANTHROPIC_API_KEY') else '❌ Not set'}")
             print(f"  OPENAI_API_KEY: {'✅ Set' if os.getenv('OPENAI_API_KEY') else '❌ Not set'}")
             return 0
         else:
