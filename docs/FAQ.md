@@ -192,9 +192,189 @@ tar -czf context-foundry-$(date +%Y%m%d).tar.gz .context-foundry/
 
 ---
 
+### Q7: Does Context Foundry have a database?
+
+**A:** **No, Context Foundry is database-free.** It uses the **filesystem as its storage layer**.
+
+**Why no database?**
+
+1. **Simplicity** - Zero installation/setup of PostgreSQL, MongoDB, SQLite, etc.
+2. **Portability** - Projects are just directories—move them, copy them, zip them
+3. **Git-friendliness** - Version control works naturally with files
+4. **Human-readable** - Open any `.md` or `.json` file to understand state
+5. **No schema migrations** - Files evolve naturally, no database migrations needed
+6. **Zero dependencies** - Works on any system with a filesystem (macOS, Linux, Windows)
+
+**How the filesystem is used:**
+
+| Storage Need | Filesystem Solution | Example |
+|--------------|---------------------|---------|
+| **Build state & progress** | JSON files in `.context-foundry/` | `current-phase.json`, `build-tasks.json` |
+| **Agent communication** | Markdown files | Scout writes `scout-report.md`, Architect reads it |
+| **Pattern library** | JSON files in `~/.context-foundry/patterns/` | `common-issues.json`, `scout-learnings.json` |
+| **Build artifacts** | Markdown logs | `build-log.md`, `test-results-iteration-1.md` |
+| **Project metadata** | JSON | `session-summary.json`, `task-config.json` |
+| **Source code** | Regular project files | `src/`, `package.json`, etc. |
+
+**Filesystem as "Shared Memory" between agents:**
+
+Context Foundry uses a **stateless agent model** where each phase spawns a fresh agent:
+
+```
+Phase 1: Scout Agent
+  ├─ Reads: (nothing, fresh start)
+  ├─ Writes: scout-report.md
+  └─ Dies (context discarded)
+
+Phase 2: Architect Agent
+  ├─ Reads: scout-report.md (persistent file)
+  ├─ Writes: architecture.md
+  └─ Dies (context discarded)
+
+Phase 3: Builder Agent
+  ├─ Reads: architecture.md (persistent file)
+  ├─ Writes: src/*.ts, package.json, build-log.md
+  └─ Dies (context discarded)
+```
+
+**The filesystem is the persistent state**—agents die, files survive.
+
+**Pattern Library Storage (Global):**
+
+```
+~/.context-foundry/patterns/
+├── common-issues.json          # Known problems & solutions
+│   {
+│     "patterns": [
+│       {
+│         "pattern_id": "cors-es6-modules",
+│         "frequency": 3,
+│         "severity": "HIGH",
+│         "solution": {...}
+│       }
+│     ],
+│     "total_builds": 42,
+│     "last_updated": "2025-10-26"
+│   }
+│
+├── scout-learnings.json        # Research insights
+│   {
+│     "learnings": [
+│       {
+│         "learning_id": "vite-vs-webpack-2025",
+│         "key_points": [...],
+│         "confidence": "high"
+│       }
+│     ]
+│   }
+│
+└── build-metrics.json          # Build performance tracking
+    {
+      "builds": [
+        {
+          "project": "weather-app",
+          "duration_minutes": 12.3,
+          "test_iterations": 1
+        }
+      ]
+    }
+```
+
+**Per-Project Storage:**
+
+```
+your-project/.context-foundry/
+├── scout-report.md             # Phase 1 output (markdown)
+├── architecture.md             # Phase 2 output (markdown)
+├── build-tasks.json            # Phase 2.5 parallel task breakdown (JSON)
+├── current-phase.json          # Real-time build state (JSON)
+│   {
+│     "phase": "Builder",
+│     "status": "in_progress",
+│     "detail": "Implementing 3/8 components",
+│     "timestamp": "2025-10-26T10:15:30Z"
+│   }
+│
+├── builder-logs/               # Phase 2.5 builder outputs
+│   ├── task-1.log
+│   ├── task-2.log
+│   └── task-3.log
+│
+├── test-results-iteration-1.md # Phase 4 test run (markdown)
+├── test-final-report.md        # Phase 4 final results (markdown)
+│
+└── session-summary.json        # Phase 7 complete summary (JSON)
+    {
+      "status": "completed",
+      "pr_url": "https://github.com/user/project/pull/1",
+      "files_created": 12,
+      "test_summary": {
+        "unit_tests": "25/25 passed",
+        "e2e_tests": "7/7 passed"
+      }
+    }
+```
+
+**Why JSON for some files, Markdown for others?**
+
+| Format | Use Case | Reason |
+|--------|----------|---------|
+| **Markdown** | Agent communication, human review | Natural language, explanations, code examples |
+| **JSON** | Machine-parseable state, metadata | MCP server needs to parse build results programmatically |
+
+**Advantages of filesystem-based storage:**
+
+✅ **Zero setup** - No database to install or configure
+✅ **Transparent** - `cat .context-foundry/architecture.md` shows exactly what's happening
+✅ **Debuggable** - Every agent's output is a readable file
+✅ **Portable** - Tar/zip your project, it works anywhere
+✅ **Version-controllable** - Git tracks architecture evolution
+✅ **Crash-resistant** - Files written = work persisted, even if agent crashes
+✅ **Distributed** - No central database to maintain, each project is independent
+
+**Disadvantages (and why they don't matter for Context Foundry):**
+
+❌ **No SQL queries** - Don't need complex queries across builds
+❌ **No transactions** - Don't need ACID properties (single-writer model)
+❌ **No indexing** - Pattern library is small (<1MB), linear scan is fine
+❌ **No concurrent writes** - Only one build per project at a time (by design)
+
+**What about the SQLite file at `foundry/patterns/patterns.db`?**
+
+That's a **legacy artifact** from an older version. **It's not currently used.** Context Foundry uses JSON files exclusively now for simpler, more transparent storage.
+
+**Pattern merging and updates:**
+
+When a build completes, patterns are merged using simple file operations:
+
+```python
+# Read global patterns
+with open('~/.context-foundry/patterns/common-issues.json') as f:
+    global_patterns = json.load(f)
+
+# Read project patterns
+with open('.context-foundry/feedback/build-feedback.json') as f:
+    project_patterns = json.load(f)
+
+# Merge (increment frequency, update timestamps)
+merged = merge_patterns(global_patterns, project_patterns)
+
+# Write back
+with open('~/.context-foundry/patterns/common-issues.json', 'w') as f:
+    json.dump(merged, f, indent=2)
+```
+
+No database transactions, no locks, no schema—just read, merge, write.
+
+**Summary:**
+
+Context Foundry proves that **not every system needs a database**. For its use case (autonomous builds with agent communication via artifacts), the filesystem provides exactly what's needed: durable, transparent, portable, human-readable storage that survives agent termination and scales to thousands of builds.
+
+---
+
 ## 2. The "Secret Sauce" - Prompt Engineering
 
-### Q7: Where are the core prompts that make Context Foundry work?
+### Q8: Where are the core prompts that make Context Foundry work?
 
 **A:** The "magic" is in three main prompt files:
 
