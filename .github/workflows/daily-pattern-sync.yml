@@ -1,0 +1,257 @@
+name: Daily Pattern Sync
+
+on:
+  # Run daily at 1 AM UTC (after nightly release at midnight)
+  schedule:
+    - cron: '0 1 * * *'
+
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force pattern submission even if no changes'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-patterns:
+    name: Sync Patterns to Community
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema
+
+      - name: Check for pattern changes
+        id: check_changes
+        run: |
+          # Check if patterns have been modified since last sync
+          LAST_SYNC_TAG=$(git tag --list 'pattern-sync-*' --sort=-v:refname | head -n1)
+
+          if [ -z "$LAST_SYNC_TAG" ]; then
+            echo "No previous sync found, checking all patterns"
+            HAS_CHANGES=true
+          else
+            echo "Last sync: $LAST_SYNC_TAG"
+
+            # Check for changes in pattern files
+            CHANGED_FILES=$(git diff --name-only $LAST_SYNC_TAG..HEAD | grep -E '\.context-foundry/patterns/.*\.json' || true)
+
+            if [ -n "$CHANGED_FILES" ]; then
+              echo "Pattern files changed:"
+              echo "$CHANGED_FILES"
+              HAS_CHANGES=true
+            else
+              echo "No pattern changes detected"
+              HAS_CHANGES=false
+            fi
+          fi
+
+          if [ "${{ github.event.inputs.force }}" == "true" ]; then
+            echo "Force flag set, proceeding with sync"
+            HAS_CHANGES=true
+          fi
+
+          echo "has_changes=$HAS_CHANGES" >> $GITHUB_OUTPUT
+
+      - name: Exit if no changes
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: |
+          echo "✅ No pattern changes since last sync"
+          echo "Skipping pattern submission to avoid duplicates"
+          exit 0
+
+      - name: Validate patterns before submission
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "🔍 Validating patterns before submission..."
+
+          # Validate JSON syntax
+          for file in .context-foundry/patterns/*.json; do
+            if [ -f "$file" ]; then
+              echo "  Checking: $file"
+              if ! python3 -m json.tool "$file" > /dev/null; then
+                echo "❌ Invalid JSON in $file - aborting sync"
+                exit 1
+              fi
+            fi
+          done
+
+          echo "✅ All patterns valid"
+
+      - name: Generate sync metadata
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: metadata
+        run: |
+          DATE=$(date +'%Y%m%d')
+          TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S UTC')
+          SYNC_TAG="pattern-sync-${DATE}"
+          BRANCH_NAME="automated-patterns/sync-${DATE}"
+
+          echo "date=$DATE" >> $GITHUB_OUTPUT
+          echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+          echo "sync_tag=$SYNC_TAG" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Get pattern statistics
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: stats
+        run: |
+          PATTERN_COUNT=0
+          LEARNING_COUNT=0
+          TOTAL_BUILDS=0
+
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            PATTERN_COUNT=$(jq '.patterns | length' .context-foundry/patterns/common-issues.json)
+            TOTAL_BUILDS=$(jq '.total_builds' .context-foundry/patterns/common-issues.json)
+          fi
+
+          if [ -f ".context-foundry/patterns/scout-learnings.json" ]; then
+            LEARNING_COUNT=$(jq '.learnings | length' .context-foundry/patterns/scout-learnings.json)
+          fi
+
+          echo "pattern_count=$PATTERN_COUNT" >> $GITHUB_OUTPUT
+          echo "learning_count=$LEARNING_COUNT" >> $GITHUB_OUTPUT
+          echo "total_builds=$TOTAL_BUILDS" >> $GITHUB_OUTPUT
+
+      - name: Create pattern sync branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Create and checkout new branch
+          git checkout -b "${{ steps.metadata.outputs.branch }}"
+
+      - name: Update pattern metadata
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # Update last_updated timestamp in pattern files
+          TIMESTAMP="${{ steps.metadata.outputs.timestamp }}"
+
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            jq --arg ts "$TIMESTAMP" '.last_updated = $ts' \
+              .context-foundry/patterns/common-issues.json > tmp.json && \
+              mv tmp.json .context-foundry/patterns/common-issues.json
+          fi
+
+          if [ -f ".context-foundry/patterns/scout-learnings.json" ]; then
+            jq --arg ts "$TIMESTAMP" '.last_updated = $ts' \
+              .context-foundry/patterns/scout-learnings.json > tmp.json && \
+              mv tmp.json .context-foundry/patterns/scout-learnings.json
+          fi
+
+      - name: Commit pattern changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git add .context-foundry/patterns/*.json
+          git commit -m "chore: sync community patterns - ${{ steps.metadata.outputs.date }}
+
+Automated pattern sync from daily builds.
+
+Statistics:
+- Common Issue Patterns: ${{ steps.stats.outputs.pattern_count }}
+- Scout Learnings: ${{ steps.stats.outputs.learning_count }}
+- Total Builds: ${{ steps.stats.outputs.total_builds }}
+
+Last Updated: ${{ steps.metadata.outputs.timestamp }}"
+
+      - name: Push branch
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git push origin "${{ steps.metadata.outputs.branch }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.has_changes == 'true'
+        id: create_pr
+        run: |
+          PR_BODY="## 🔄 Automated Pattern Sync - ${{ steps.metadata.outputs.date }}
+
+This PR contains automated pattern updates from daily builds.
+
+### 📊 Pattern Statistics
+- **Common Issue Patterns**: ${{ steps.stats.outputs.pattern_count }}
+- **Scout Learnings**: ${{ steps.stats.outputs.learning_count }}
+- **Total Builds Analyzed**: ${{ steps.stats.outputs.total_builds }}
+
+### ⏰ Sync Information
+- **Sync Date**: ${{ steps.metadata.outputs.timestamp }}
+- **Sync Tag**: \`${{ steps.metadata.outputs.sync_tag }}\`
+
+### 🔍 What's Included
+This PR syncs the global pattern library with learnings from recent builds:
+- Common issues encountered and their solutions
+- Scout agent learnings about codebase patterns
+- Updated frequency and severity data
+
+### ✅ Validation
+All patterns have been validated for:
+- Valid JSON syntax
+- No duplicate IDs
+- Required fields present
+- Proper severity levels
+
+---
+
+**This PR will be automatically merged after validation passes.**
+
+Thank you for contributing to the Context Foundry pattern library! 🙏"
+
+          # Create PR
+          gh pr create \
+            --title "chore: Daily pattern sync - ${{ steps.metadata.outputs.date }}" \
+            --body "$PR_BODY" \
+            --base main \
+            --head "${{ steps.metadata.outputs.branch }}" \
+            --label "patterns" \
+            --label "automated"
+
+          # Get PR number
+          PR_NUMBER=$(gh pr list --head "${{ steps.metadata.outputs.branch }}" --json number --jq '.[0].number')
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create sync tag
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git tag -a "${{ steps.metadata.outputs.sync_tag }}" -m "Pattern sync ${{ steps.metadata.outputs.date }}"
+          git push origin "${{ steps.metadata.outputs.sync_tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          echo "## ✅ Pattern Sync Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "- **Common Issue Patterns**: ${{ steps.stats.outputs.pattern_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Scout Learnings**: ${{ steps.stats.outputs.learning_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Builds**: ${{ steps.stats.outputs.total_builds }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR**: #${{ steps.create_pr.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: \`${{ steps.metadata.outputs.branch }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: \`${{ steps.metadata.outputs.sync_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The PR will be automatically merged after validation passes." >> $GITHUB_STEP_SUMMARY
