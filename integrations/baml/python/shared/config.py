@@ -16,23 +16,33 @@ class Config(BaseModel):
     Configuration for BAML + Anthropic integration.
 
     Attributes:
-        anthropic_api_key: Anthropic API key (required)
+        anthropic_api_key: Anthropic API key (optional - only needed for direct API calls, not MCP delegation)
         baml_log_level: BAML logging level
         run_integration_tests: Whether to run integration tests
         log_level: Application log level
     """
 
-    anthropic_api_key: str = Field(..., min_length=1)
+    anthropic_api_key: Optional[str] = Field(default=None)
     baml_log_level: str = Field(default="INFO")
     run_integration_tests: bool = Field(default=False)
     log_level: str = Field(default="INFO")
 
     @validator("anthropic_api_key")
-    def validate_api_key(cls, v: str) -> str:
-        """Validate API key is not a template placeholder."""
+    def validate_api_key(cls, v: Optional[str]) -> Optional[str]:
+        """
+        Validate API key if provided.
+
+        For MCP-only mode (Context Foundry delegation), API key is not needed.
+        Only validates if a key is provided to catch template placeholders.
+        """
+        if v is None or v == "":
+            # MCP-only mode - no API key needed
+            return None
+
         if v == "your_api_key_here" or len(v) < 10:
             raise ValueError(
-                "Invalid API key. Please set ANTHROPIC_API_KEY environment variable."
+                "Invalid API key format. Either leave empty for MCP-only mode, "
+                "or provide a valid ANTHROPIC_API_KEY for direct API calls."
             )
         return v
 
