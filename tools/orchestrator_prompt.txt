@@ -17,8 +17,9 @@ Project: {description}
 Status: Tests PASSED ({iterations} iteration(s))
 [Architecture/Test/Docs details]
 
-🤖 Built autonomously by Context Foundry
-Co-Authored-By: Claude <noreply@anthropic.com>"
+🤖 Generated with [Context Foundry](https://contextfoundry.dev)
+
+Co-Authored-By: Context Foundry <noreply@contextfoundry.dev>"
 
 gh repo create snedea/{repo} --private --description "{desc}"
 git remote add origin https://github.com/snedea/{repo}.git
@@ -36,8 +37,9 @@ git commit -m "{mode}: {description}
 **Testing:** PASSED ({iterations} iteration(s))
 **Mode:** {mode} | **Project:** {type}
 
-🤖 Built autonomously by Context Foundry
-Co-Authored-By: Claude <noreply@anthropic.com>"
+🤖 Generated with [Context Foundry](https://contextfoundry.dev)
+
+Co-Authored-By: Context Foundry <noreply@contextfoundry.dev>"
 
 git push -u origin $(git branch --show-current)
 gh pr create --base main --title "{mode}: {description}" --body "

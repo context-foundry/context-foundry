@@ -213,9 +213,9 @@ Merged patterns from local builds into global pattern database.
 
 $(printf '%s\n' "${MERGE_STATS[@]}")
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+🤖 Generated with [Context Foundry](https://contextfoundry.dev)
 
-Co-Authored-By: Claude <noreply@anthropic.com>"
+Co-Authored-By: Context Foundry <noreply@contextfoundry.dev>"
 
 git commit -m "$COMMIT_MSG"
 
