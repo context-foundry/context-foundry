@@ -1,0 +1,256 @@
+name: Validate Patterns
+
+on:
+  pull_request:
+    paths:
+      - '.context-foundry/patterns/*.json'
+      - 'scripts/merge-patterns-intelligent.py'
+      - 'schemas/pattern_schema.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate Pattern Files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install jsonschema
+
+      - name: Validate JSON syntax
+        run: |
+          echo "🔍 Validating JSON syntax..."
+          for file in .context-foundry/patterns/*.json; do
+            if [ -f "$file" ]; then
+              echo "  Checking: $file"
+              if ! python3 -m json.tool "$file" > /dev/null; then
+                echo "❌ Invalid JSON in $file"
+                exit 1
+              fi
+            fi
+          done
+          echo "✅ All JSON files are valid"
+
+      - name: Check for duplicate pattern IDs
+        run: |
+          echo "🔍 Checking for duplicate pattern IDs..."
+
+          # Check common-issues.json
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            DUPLICATES=$(jq -r '.patterns[].pattern_id' .context-foundry/patterns/common-issues.json | sort | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate pattern IDs found in common-issues.json:"
+              echo "$DUPLICATES"
+              exit 1
+            fi
+          fi
+
+          # Check scout-learnings.json
+          if [ -f ".context-foundry/patterns/scout-learnings.json" ]; then
+            DUPLICATES=$(jq -r '.learnings[].learning_id' .context-foundry/patterns/scout-learnings.json | sort | uniq -d)
+            if [ -n "$DUPLICATES" ]; then
+              echo "❌ Duplicate learning IDs found in scout-learnings.json:"
+              echo "$DUPLICATES"
+              exit 1
+            fi
+          fi
+
+          echo "✅ No duplicate IDs found"
+
+      - name: Validate required fields
+        run: |
+          echo "🔍 Validating required fields..."
+
+          # Validate common-issues.json
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            echo "  Checking common-issues.json..."
+            python3 << 'EOF'
+          import json
+          import sys
+
+          with open('.context-foundry/patterns/common-issues.json', 'r') as f:
+              data = json.load(f)
+
+          required_top_level = ['patterns', 'version', 'last_updated', 'total_builds']
+          for field in required_top_level:
+              if field not in data:
+                  print(f"❌ Missing required field: {field}")
+                  sys.exit(1)
+
+          required_pattern_fields = ['pattern_id', 'first_seen', 'last_seen', 'frequency', 'project_types', 'issue', 'solution', 'severity']
+          for i, pattern in enumerate(data.get('patterns', [])):
+              for field in required_pattern_fields:
+                  if field not in pattern:
+                      print(f"❌ Pattern {i} missing required field: {field}")
+                      print(f"   Pattern ID: {pattern.get('pattern_id', 'unknown')}")
+                      sys.exit(1)
+
+          print("✅ common-issues.json has all required fields")
+          EOF
+          fi
+
+          # Validate scout-learnings.json
+          if [ -f ".context-foundry/patterns/scout-learnings.json" ]; then
+            echo "  Checking scout-learnings.json..."
+            python3 << 'EOF'
+          import json
+          import sys
+
+          with open('.context-foundry/patterns/scout-learnings.json', 'r') as f:
+              data = json.load(f)
+
+          required_top_level = ['learnings', 'version', 'last_updated']
+          for field in required_top_level:
+              if field not in data:
+                  print(f"❌ Missing required field: {field}")
+                  sys.exit(1)
+
+          required_learning_fields = ['learning_id', 'category', 'project_types', 'key_points']
+          for i, learning in enumerate(data.get('learnings', [])):
+              for field in required_learning_fields:
+                  if field not in learning:
+                      print(f"❌ Learning {i} missing required field: {field}")
+                      print(f"   Learning ID: {learning.get('learning_id', 'unknown')}")
+                      sys.exit(1)
+
+          print("✅ scout-learnings.json has all required fields")
+          EOF
+          fi
+
+          echo "✅ All required fields present"
+
+      - name: Validate severity levels
+        run: |
+          echo "🔍 Validating severity levels..."
+
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            python3 << 'EOF'
+          import json
+          import sys
+
+          with open('.context-foundry/patterns/common-issues.json', 'r') as f:
+              data = json.load(f)
+
+          valid_severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']
+          for pattern in data.get('patterns', []):
+              severity = pattern.get('severity')
+              if severity not in valid_severities:
+                  print(f"❌ Invalid severity '{severity}' in pattern: {pattern.get('pattern_id')}")
+                  print(f"   Valid values: {', '.join(valid_severities)}")
+                  sys.exit(1)
+
+          print("✅ All severity levels are valid")
+          EOF
+          fi
+
+      - name: Test merge integrity
+        run: |
+          echo "🔍 Testing merge integrity..."
+
+          # Create a test merge to ensure no data corruption
+          TEMP_DIR=$(mktemp -d)
+
+          for pattern_type in common-issues scout-learnings; do
+            SOURCE_FILE=".context-foundry/patterns/${pattern_type}.json"
+
+            if [ -f "$SOURCE_FILE" ]; then
+              echo "  Testing $pattern_type merge..."
+
+              # Test merging file with itself (should be idempotent)
+              python3 scripts/merge-patterns-intelligent.py \
+                --source "$SOURCE_FILE" \
+                --dest "$SOURCE_FILE" \
+                --type "$pattern_type" \
+                --output "$TEMP_DIR/${pattern_type}-test.json"
+
+              # Verify output is valid JSON
+              if ! python3 -m json.tool "$TEMP_DIR/${pattern_type}-test.json" > /dev/null; then
+                echo "❌ Merge produced invalid JSON for $pattern_type"
+                exit 1
+              fi
+            fi
+          done
+
+          rm -rf "$TEMP_DIR"
+          echo "✅ Merge integrity test passed"
+
+      - name: Generate validation summary
+        run: |
+          echo "## ✅ Pattern Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f ".context-foundry/patterns/common-issues.json" ]; then
+            PATTERN_COUNT=$(jq '.patterns | length' .context-foundry/patterns/common-issues.json)
+            TOTAL_BUILDS=$(jq '.total_builds' .context-foundry/patterns/common-issues.json)
+            echo "### Common Issues" >> $GITHUB_STEP_SUMMARY
+            echo "- 📋 Total patterns: **$PATTERN_COUNT**" >> $GITHUB_STEP_SUMMARY
+            echo "- 🏗️ Total builds: **$TOTAL_BUILDS**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f ".context-foundry/patterns/scout-learnings.json" ]; then
+            LEARNING_COUNT=$(jq '.learnings | length' .context-foundry/patterns/scout-learnings.json)
+            echo "### Scout Learnings" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔍 Total learnings: **$LEARNING_COUNT**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "### Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ JSON syntax valid" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ No duplicate IDs" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ All required fields present" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Severity levels valid" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Merge integrity test passed" >> $GITHUB_STEP_SUMMARY
+
+  auto-merge:
+    name: Auto-merge Pattern PR
+    runs-on: ubuntu-latest
+    needs: validate
+    if: |
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'patterns') &&
+      contains(github.event.pull_request.labels.*.name, 'automated')
+
+    steps:
+      - name: Auto-approve PR
+        uses: hmarr/auto-approve-action@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --auto \
+            --squash \
+            --delete-branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+
+      - name: Add comment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ Pattern validation passed! This PR will be automatically merged.\n\nThank you for contributing to the Context Foundry pattern library! 🙏\n\nYour patterns will be included in the next nightly release.'
+            })
