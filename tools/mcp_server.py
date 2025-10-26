@@ -1278,6 +1278,9 @@ Auto-correcting to use_parallel=False...
             "original_mode": original_mode,  # Keep track of what user requested
             "enable_test_loop": enable_test_loop,
             "max_test_iterations": max_test_iterations,
+            # Smart Incremental Builds (Phase 1 implementation)
+            "incremental": incremental and not force_rebuild,  # Enable only if incremental=True and not forced rebuild
+            "force_rebuild": force_rebuild,
             # Enhancement mode: Include codebase detection results
             "codebase_detection": {
                 "has_existing_code": codebase_info["has_code"],
@@ -1393,6 +1396,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "github_repo": github_repo_name,
             "timeout_minutes": timeout_minutes,
             "enable_test_loop": enable_test_loop,
+            "incremental_mode": incremental and not force_rebuild,
             "message": f"""
 🚀 Autonomous build started!
 
@@ -1400,6 +1404,7 @@ Project: {project_name}
 Task ID: {task_id}
 Location: {final_working_dir_str}
 Expected duration: 7-15 minutes
+{"⚡ Incremental mode: ENABLED (will reuse cached Scout reports and test results)" if (incremental and not force_rebuild) else ""}
 
 You can continue working - the build runs in the background.
 

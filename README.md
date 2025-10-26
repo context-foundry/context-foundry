@@ -609,6 +609,148 @@ Use mcp__list_delegations
 
 ---
 
+## ⚡ Smart Incremental Builds (NEW in v2.1.0)
+
+**Speed up repeated builds by 10-40%** with intelligent caching and phase skipping!
+
+### What Are Incremental Builds?
+
+Smart Incremental Builds cache expensive operations (like Scout research) and skip them on subsequent builds of the same or similar projects. This means:
+
+- **Faster iterations** - Skip phases that don't need to rerun
+- **Efficient development** - Cache Scout reports for similar tasks
+- **Automatic optimization** - System decides what to cache and when to reuse
+
+### Performance Impact
+
+**Real-world results** from production testing:
+
+| Scenario | Build Time (Normal) | Build Time (Incremental) | Speedup |
+|----------|---------------------|--------------------------|---------|
+| **Best Case** | 29 minutes | 18 minutes | **37.4% faster** ✅ |
+| **Average** | 29 minutes | 25 minutes | 12-15% faster |
+| **Cache Creation** | 29 minutes | 33 minutes | Slightly slower (creating cache) |
+
+**Key Insight**: First build with `incremental=True` creates the cache (slightly slower). Subsequent similar builds are significantly faster!
+
+### How to Use
+
+#### Enable Incremental Mode
+
+Simply add `incremental=True` when building:
+
+```
+Build a weather app with incremental mode enabled
+```
+
+Or explicitly:
+
+```
+Use mcp__autonomous_build_and_deploy:
+- task: "Build a weather app"
+- working_directory: "/tmp/weather-app"
+- incremental: true
+```
+
+#### What Gets Cached
+
+**Scout Cache** (✅ Working):
+- Task analysis and research findings
+- Technology stack recommendations
+- Architecture insights
+- **Reused when**: Similar task within 24 hours
+- **Speedup**: ~2-5 minutes saved per build
+
+**Test Cache** (🔧 In Development):
+- Test results when code hasn't changed
+- File change detection via SHA256 hashing
+- **Speedup**: ~3-5 minutes saved (when implemented)
+
+### Cache Behavior
+
+**Cache is per-project** (Phase 1):
+```
+your-project/
+└── .context-foundry/
+    └── cache/
+        ├── scout-{hash}.md         # Cached Scout reports
+        ├── scout-{hash}.meta.json  # Cache metadata
+        └── (more cache files...)
+```
+
+**Cache TTL**: 24 hours (automatic expiration)
+
+**Cache Key**: Generated from task description + mode
+- "Build a todo app" → Same cache key as "Build a todo application"
+- Task normalization catches minor wording differences
+
+### When to Use Incremental Mode
+
+**✅ Use incremental mode when:**
+- Iterating on the same project
+- Building similar apps repeatedly
+- Making small changes to existing code
+- Running documentation-only updates
+
+**❌ Don't use incremental mode when:**
+- Building completely different projects
+- You want a clean build from scratch
+- Testing the build system itself
+
+### Force Full Rebuild
+
+Bypass cache even with incremental mode:
+
+```
+Use mcp__autonomous_build_and_deploy:
+- task: "Build weather app"
+- working_directory: "/tmp/weather-app"
+- incremental: true
+- force_rebuild: true  # Bypass all caches
+```
+
+### Cache Management
+
+**Check cache status:**
+```python
+from tools.cache.cache_manager import CacheManager
+
+manager = CacheManager("/tmp/your-project")
+manager.print_stats()
+```
+
+**Clear cache:**
+```python
+manager.clear_all()  # Clear all caches
+manager.clear_by_type("scout")  # Clear only Scout cache
+```
+
+### Roadmap: Phase 2 (Coming Soon)
+
+Phase 1 (current) provides 10-40% speedup. **Phase 2 will deliver 70-90% speedup** on rebuilds:
+
+**Planned Features**:
+- **Global Scout Cache** - Share cache across all projects
+- **File-Level Change Detection** - Only rebuild changed modules
+- **Incremental Builder** - Preserve unchanged files
+- **Test Impact Analysis** - Only run affected tests
+- **Incremental Documentation** - Update only changed docs
+
+**Expected Impact**:
+- Small code changes: 70-90% faster
+- Documentation-only updates: 95% faster
+- Similar projects: 50-70% faster
+
+### Technical Details
+
+Want to understand how it works under the hood?
+
+- **Implementation**: [docs/INCREMENTAL_BUILDS_PHASE1.md](docs/INCREMENTAL_BUILDS_PHASE1.md)
+- **Test Results**: [tests/PHASE1_FINAL_RESULTS.md](tests/PHASE1_FINAL_RESULTS.md)
+- **Unit Tests**: [tests/test_cache_system.py](tests/test_cache_system.py)
+
+---
+
 ## MCP Tools Reference
 
 ### 🚀 `autonomous_build_and_deploy_async()` (Recommended)

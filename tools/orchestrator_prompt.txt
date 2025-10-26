@@ -236,6 +236,43 @@ Update phase: "Codebase Analysis" (0/7, "analyzing", "Understanding existing cod
 ═══════════════════════════════════════════════════════════
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 
+**⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
+
+**IF incremental mode is enabled (check CONFIGURATION.incremental):**
+
+1. **Check for cached Scout report:**
+   ```python
+   python3 -c "
+   import sys
+   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   from tools.cache.scout_cache import get_cached_scout_report
+
+   cached = get_cached_scout_report(
+       task='TASK_DESCRIPTION',
+       mode='MODE',
+       working_directory='WORKING_DIR'
+   )
+
+   if cached:
+       print('CACHE_HIT')
+       # Save cached report to expected location
+       with open('.context-foundry/scout-report.md', 'w') as f:
+           f.write(cached)
+   else:
+       print('CACHE_MISS')
+   "
+   ```
+
+2. **If CACHE_HIT:**
+   - ✅ Scout phase complete (reused cached report)
+   - Skip to Phase 2 (Architect)
+   - Log: "⚡ Incremental build: Reusing Scout report from cache"
+   - Update phase tracking: "Scout" → "completed" (cache hit)
+
+3. **If CACHE_MISS:**
+   - Continue with normal Scout phase below
+   - After completing Scout, save to cache (see step 5 below)
+
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 (See PHASE TRACKING TEMPLATE)
@@ -303,6 +340,26 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    - Timeline estimate (1 line)
 
    DO NOT write exhaustive documentation - Architect will expand details.
+
+5. **Save Scout report to cache (if incremental mode enabled):**
+   ```python
+   python3 -c "
+   import sys
+   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   from tools.cache.scout_cache import save_scout_report_to_cache
+
+   with open('.context-foundry/scout-report.md', 'r') as f:
+       report_content = f.read()
+
+   save_scout_report_to_cache(
+       task='TASK_DESCRIPTION',
+       mode='MODE',
+       working_directory='WORKING_DIR',
+       scout_report_content=report_content
+   )
+   "
+   ```
+   This enables future builds with similar tasks to skip Scout phase entirely.
 
 **PHASE TRACKING (COMPLETE) - MANDATORY LAST ACTION:**
 Update phase: "Scout" (1/7, "completed", "Research complete")
@@ -563,6 +620,50 @@ PHASE 3: BUILDER (DEPRECATED)
 ═══════════════════════════════════════════════════════════
 PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
 
+**⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
+
+**IF incremental mode is enabled (check CONFIGURATION.incremental):**
+
+1. **Check for cached test results:**
+   ```python
+   python3 -c "
+   import sys
+   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   from tools.cache.test_cache import get_cached_test_results
+
+   cached = get_cached_test_results(
+       working_directory='WORKING_DIR'
+   )
+
+   if cached:
+       print('CACHE_HIT')
+       # Save cached results to expected location
+       import json
+       with open('.context-foundry/test-final-report.md', 'w') as f:
+           f.write(f'''# Test Results (Cached)
+
+**Status**: {cached.get(\"success\", False) and \"✅ PASSED\" or \"❌ FAILED\"}
+**Tests Passed**: {cached.get(\"passed\", 0)}/{cached.get(\"total\", 0)}
+**Duration**: {cached.get(\"duration\", 0):.2f}s
+**Source**: Cached (no code changes detected)
+
+All source files unchanged since last test run.
+Reusing cached test results.
+''')
+   else:
+       print('CACHE_MISS')
+   "
+   ```
+
+2. **If CACHE_HIT and tests PASSED:**
+   - ✅ Test phase complete (reused cached results)
+   - Skip to Phase 4.5 (Screenshot) or Phase 5 (Documentation)
+   - Log: "⚡ Incremental build: No code changes, reusing test results"
+   - Update phase tracking: "Test" → "completed" (cache hit)
+
+3. **If CACHE_MISS or tests FAILED:**
+   - Continue with normal Test phase below
+   - After completing tests, save to cache (see end of phase)
 
 ⚡ **PERFORMANCE OPTIMIZATION**: Check for parallel test opportunity first
    If project has 2+ test types (unit/e2e/lint), use parallel execution
@@ -725,6 +826,76 @@ PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
    - Document success
    - Create file: .context-foundry/test-final-report.md
    - Mark status as "PASSED"
+   - **Save test results to cache (if incremental mode enabled):**
+
+     **Check if incremental mode is enabled:**
+     ```bash
+     # Read incremental setting from task config
+     INCREMENTAL=$(python3 -c "import json; config=json.load(open('.context-foundry/task-config.json')); print(config.get('incremental', False))")
+
+     if [ "$INCREMENTAL" = "True" ]; then
+         echo "⚡ Incremental mode enabled - saving test cache..."
+
+         # Save test results to cache
+         python3 <<'PYTHON_SCRIPT'
+import sys
+import re
+from pathlib import Path
+
+sys.path.insert(0, '/Users/name/homelab/context-foundry')
+from tools.cache.test_cache import save_test_results_to_cache
+
+# Parse test results from test output (saved in variables or test-final-report.md)
+# Default values if parsing fails
+test_results = {
+    'success': True,
+    'passed': 0,
+    'total': 0,
+    'duration': 0.0,
+    'test_command': 'npm test'  # or pytest, etc.
+}
+
+# Try to extract from test-final-report.md if it exists
+report_file = Path('.context-foundry/test-final-report.md')
+if report_file.exists():
+    report_content = report_file.read_text()
+
+    # Extract test count (look for patterns like "25/25 passing" or "25 passed, 0 failed")
+    patterns = [
+        r'(\d+)/(\d+)\s+(?:passing|passed)',  # Jest/Mocha: "25/25 passing"
+        r'(\d+)\s+passed.*?(\d+)\s+total',     # pytest: "25 passed, 25 total"
+        r'All\s+(\d+)\s+tests?\s+passed',       # Generic: "All 25 tests passed"
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, report_content, re.IGNORECASE)
+        if match:
+            if len(match.groups()) == 2:
+                test_results['passed'] = int(match.group(1))
+                test_results['total'] = int(match.group(2))
+            elif len(match.groups()) == 1:
+                count = int(match.group(1))
+                test_results['passed'] = count
+                test_results['total'] = count
+            break
+
+    # Extract duration if present
+    duration_match = re.search(r'Duration[:\s]+(\d+\.?\d*)\s*(?:seconds|s)', report_content, re.IGNORECASE)
+    if duration_match:
+        test_results['duration'] = float(duration_match.group(1))
+
+# Save to cache
+try:
+    save_test_results_to_cache('.', test_results)
+    print(f"✅ Test cache saved: {test_results['passed']}/{test_results['total']} tests")
+except Exception as e:
+    print(f"⚠️  Failed to save test cache: {e}")
+    # Don't fail the build if cache save fails
+PYTHON_SCRIPT
+     else
+         echo "⚠️  Incremental mode disabled - skipping test cache"
+     fi
+     ```
    - Update phase status:
      Update .context-foundry/current-phase.json:
      {
