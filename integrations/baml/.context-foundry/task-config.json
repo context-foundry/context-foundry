@@ -1,0 +1,7 @@
+{
+  "task": "Build BAML + Anthropic Agent Skills Integration",
+  "mode": "new_project",
+  "incremental": false,
+  "max_test_iterations": 3,
+  "working_directory": "/Users/name/homelab/context-foundry/integrations/baml"
+}
