@@ -7,9 +7,10 @@ Includes logging setup, retry logic, and helper functions.
 import asyncio
 import logging
 import sys
-from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
+
+from collections.abc import Callable
 
 
 T = TypeVar("T")
