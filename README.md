@@ -928,6 +928,32 @@ Use mcp__get_delegation_result for each task_id
 - Parallel time: ~12 minutes (limited by slowest task)
 - Time saved: 18 minutes (60% faster)
 
+### Example 4: BAML + Anthropic Agent Skills Integration
+
+**Built-in Integration:** Context Foundry includes a production-ready example demonstrating type-safe prompting with BAML and progressive skill disclosure with Anthropic's Agent Skills system.
+
+**Location:** `integrations/baml/`
+
+**Features:**
+- Type-safe prompts with BAML's compile-time validation
+- Progressive skill disclosure pattern (skills loaded only when needed)
+- Dual-language implementation (Python & TypeScript)
+- Document processing with PDF/DOCX Skills
+- Data analysis examples
+- Custom skill integration
+- Comprehensive tests and documentation
+
+**Quick Start:**
+```bash
+cd integrations/baml/python/
+pip install -r requirements.txt
+cp .env.template .env  # Add your ANTHROPIC_API_KEY
+baml-cli generate
+python examples/document_processing.py
+```
+
+**Learn More:** See [`integrations/baml/README.md`](integrations/baml/README.md) for complete setup guide, examples, and best practices.
+
 ---
 
 ## Self-Healing Test Loop in Action
