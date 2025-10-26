@@ -6,7 +6,7 @@ Loads environment variables and provides typed configuration access.
 
 import os
 from pathlib import Path
-from typing import Optional
+
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
 
@@ -22,13 +22,13 @@ class Config(BaseModel):
         log_level: Application log level
     """
 
-    anthropic_api_key: Optional[str] = Field(default=None)
+    anthropic_api_key: str | None = Field(default=None)
     baml_log_level: str = Field(default="INFO")
     run_integration_tests: bool = Field(default=False)
     log_level: str = Field(default="INFO")
 
     @validator("anthropic_api_key")
-    def validate_api_key(cls, v: Optional[str]) -> Optional[str]:
+    def validate_api_key(cls, v: str | None) -> str | None:
         """
         Validate API key if provided.
 
@@ -56,7 +56,7 @@ class Config(BaseModel):
         return v_upper
 
 
-def load_config(env_file: Optional[Path] = None) -> Config:
+def load_config(env_file: Path | None = None) -> Config:
     """
     Load configuration from environment variables.
 

@@ -5,7 +5,7 @@ Pattern: python-missing-setup-py
 Reason: Include both pyproject.toml AND setup.py for maximum compatibility
 """
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 setup(
     name="baml-anthropic-integration",

@@ -20,8 +20,8 @@ BENEFITS:
 
 import json
 import logging
-from typing import Dict, List, Any, Optional
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger("baml_mcp.executor")
 
@@ -41,8 +41,8 @@ class MCPExecutor:
     async def analyze_document(
         self,
         file_path: str,
-        questions: List[str]
-    ) -> Dict[str, Any]:
+        questions: list[str]
+    ) -> dict[str, Any]:
         """
         Analyze a document using spawned Claude with Agent Skills.
 
@@ -135,7 +135,7 @@ Return ONLY the JSON, no markdown formatting, no explanation.
         self,
         data_source: str,
         analysis_type: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Analyze a dataset using spawned Claude with Agent Skills.
 
@@ -215,7 +215,7 @@ Return ONLY the JSON, no markdown formatting.
         self,
         task: str,
         skill_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process a task using a custom Agent Skill via spawned Claude.
 
@@ -277,8 +277,8 @@ Return ONLY the JSON.
     async def progressive_skill_loading(
         self,
         user_task: str,
-        available_skills: List[str]
-    ) -> Dict[str, Any]:
+        available_skills: list[str]
+    ) -> dict[str, Any]:
         """
         Demonstrate progressive skill disclosure via spawned Claude.
 
