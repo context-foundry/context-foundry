@@ -178,7 +178,7 @@ Context Foundry introduces **15 groundbreaking innovations** that transform AI s
 
 ### 🏗️ Architecture Innovations
 
-1. **Meta-MCP Innovation** - Use MCP to recursively spawn Claude Code instances (the breakthrough that enabled v2.0)
+1. **Meta-MCP Innovation** - Use MCP to recursively spawn Claude Code instances (the breakthrough that enabled v2.x)
 2. **Subprocess Delegation** - Spawn fresh Claude instances via `subprocess.Popen()` with auth inheritance
 3. **Context Window Isolation** - Each agent gets a fresh 200K token window, no accumulation
 4. **File-Based Context System** - Shared memory via filesystem, `.context-foundry/` artifacts
@@ -207,10 +207,10 @@ Context Foundry introduces **15 groundbreaking innovations** that transform AI s
 
 ### What Changed from 1.x?
 
-| Feature | 1.x (Python CLI) | 2.0 (MCP Server) |
+| Feature | 1.x (Python CLI) | 2.x (MCP Server) |
 |---------|------------------|-------------------|
 | **Orchestration** | Python scripts + API calls | Native Claude `/agents` + meta-prompts |
-| **Cost Model** | Pay-per-token API | Claude Max subscription ($20/month unlimited) |
+| **Cost Model** | Pay-per-token API | Claude subscription (unlimited) |
 | **Testing** | Manual review at checkpoints | Self-healing auto-fix loops |
 | **Deployment** | Manual git operations | Automatic GitHub deployment |
 | **Tool Access** | Limited to Python functions | Full Claude Code tool suite (Read, Edit, Bash, etc.) |
@@ -384,7 +384,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 
 - **Python 3.10 or higher** (for MCP server)
 - **Claude Code CLI** installed and in PATH
-- **Claude Max subscription** ($20/month) or Anthropic API key
+- **Claude subscription or API** - Uses your existing Claude Code authentication
 - **Git** and **GitHub CLI** (for deployment features)
 
 ### Installation
@@ -1154,9 +1154,9 @@ context-foundry/
 ├── docs/
 │   ├── CLAUDE_CODE_MCP_SETUP.md   # MCP setup and troubleshooting
 │   └── (other documentation)
-├── ARCHITECTURE_DECISIONS.md       # Technical deep dive (v2.0 changes)
+├── ARCHITECTURE_DECISIONS.md       # Technical deep dive (v2.x changes)
 ├── LEGACY_README.md                # Original 1.x documentation
-├── README.md                       # This file (v2.0)
+├── README.md                       # This file (v2.x)
 └── requirements-mcp.txt            # MCP server dependencies
 ```
 
@@ -1180,7 +1180,7 @@ Context Foundry has **two layers** - understanding this is essential:
 - ✅ **Documentation Agent** - README and guide generation
 - ✅ **Deploy Agent** - GitHub deployment
 
-**These agents account for 99%+ of the token usage** and run entirely under your **$20/month Claude Max subscription** (unlimited usage).
+**These agents account for 99%+ of the token usage** and run entirely under your **Claude subscription** (unlimited usage).
 
 #### **Layer 2: BAML Type-Safety (OPTIONAL - Requires API Key)**
 
@@ -1267,12 +1267,12 @@ Per project: $3-10 (pay-per-token)
 100 projects: $300-1000
 ```
 
-**Context Foundry (Claude Max):**
+**Context Foundry (Claude subscription):**
 ```
-Subscription: $20/month (unlimited)
-100 projects: $20/month
+Subscription: Unlimited usage included
+100 projects: Covered by subscription
 
-Break-even: ~5 projects per month
+Break-even: ~5 projects per month vs API mode
 ```
 
 **Savings:** 95%+ for heavy users
@@ -1307,7 +1307,7 @@ Break-even: ~5 projects per month
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
 | **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** | Why delegation keeps main context clean | Technical users |
-| **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** | What changed in v2.0 and why | Technical users |
+| **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** | What changed in v2.x and why | Technical users |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Stateless conversation architecture | Developers |
 
 ### 🧠 Self-Learning & Patterns
@@ -1338,7 +1338,7 @@ Break-even: ~5 projects per month
 1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 15 innovations with code examples
 2. [docs/FAQ.md](docs/FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
 3. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
-4. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.0 architecture
+4. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.x architecture
 5. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
 6. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
 7. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
