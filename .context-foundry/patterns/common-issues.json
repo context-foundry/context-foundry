@@ -1,10 +1,149 @@
 {
   "$schema": "Pattern Library for Common Issues",
   "version": "1.0.0",
-  "last_updated": "2025-10-19T00:05:00Z",
+  "last_updated": "2025-10-26T06:15:00Z",
   "description": "Common issues encountered across builds with proven solutions",
 
   "patterns": [
+    {
+      "pattern_id": "x-frame-options-iframe-blocking",
+      "title": "Third-Party Sites Blocking Iframe Embedding with X-Frame-Options",
+      "first_seen": "2025-10-26",
+      "last_seen": "2025-10-26",
+      "frequency": 1,
+      "times_prevented": 0,
+      "severity": "HIGH",
+      "project_types": ["webcam-aggregator", "iframe-embedding-app", "content-aggregator", "dashboard-app", "multi-source-display"],
+      "tech_stack": ["nextjs", "react", "iframe-embedding"],
+
+      "issue": {
+        "description": "Third-party websites block iframe embedding using X-Frame-Options: DENY/SAMEORIGIN or Content-Security-Policy frame-ancestors headers",
+        "error_message": "To protect your security, [site] will not allow Firefox to display the page if another site has embedded it",
+        "symptoms": [
+          "Browser error about security preventing iframe display",
+          "Blank iframes showing no content",
+          "Console errors: 'Refused to display [url] in a frame because it set X-Frame-Options to DENY'",
+          "Works in development with direct URLs but fails when embedded",
+          "80%+ of iframe content sources non-functional"
+        ],
+        "detected_in_phase": "Post-deployment user testing",
+        "should_detect_in_phase": "Builder (during seed data validation)"
+      },
+
+      "root_cause": "External websites use X-Frame-Options and CSP headers to prevent clickjacking attacks. Browser enforces these headers and blocks iframe rendering. Affects sites like skylinewebcams.com, earthcam.com, webcamtaxi.com, and most commercial webcam services.",
+
+      "solution": {
+        "scout": {
+          "action": "Detect iframe-based content aggregation and warn about embedding restrictions",
+          "check": "If project description mentions 'aggregating', 'embedding', 'iframes', or 'multiple sources', flag X-Frame-Options risk",
+          "questions": [
+            "Will you be embedding third-party websites in iframes?",
+            "Do you control the content sources or are they external?",
+            "Have you verified these sites allow iframe embedding?"
+          ],
+          "recommendation": "Suggest proxy solution architecture from the start"
+        },
+        "architect": {
+          "action": "Include proxy API route in architecture for iframe-heavy apps",
+          "specifics": [
+            "Design /api/proxy route for server-side fetching",
+            "Plan URL validation in seed scripts",
+            "Separate architecture for image URLs vs HTML pages",
+            "Include cache strategy (recommended: 60s for real-time feeds)"
+          ],
+          "example": {
+            "architecture_section": "Proxy Pattern: Next.js API route fetches external content server-side, strips X-Frame-Options/CSP headers, rewrites relative URLs to absolute, returns embeddable content"
+          },
+          "conditions": [
+            "If >5 external iframe sources detected",
+            "If external sources are from different domains",
+            "If user confirms embedding third-party sites"
+          ]
+        },
+        "builder": {
+          "action": "Implement proxy route and smart rendering component",
+          "files_to_create": [
+            "src/app/api/proxy/route.ts - Server-side fetch proxy",
+            "Component with URL type detection (image vs HTML)",
+            "Conditional rendering: <img> for images, proxied <iframe> for HTML"
+          ],
+          "implementation_details": {
+            "proxy_route": "Fetch with User-Agent header, strip X-Frame-Options/CSP, rewrite relative URLs, cache 60s",
+            "component_logic": "Detect .jpg/.png extensions → use <img>, else use <iframe src='/api/proxy?url=...'>"
+          },
+          "seed_script_enhancement": "Add URL validation: check X-Frame-Options header before adding to database"
+        },
+        "test": {
+          "action": "Verify iframe content loads from external sources",
+          "tests": [
+            "Unit: Test URL detection logic (image vs HTML)",
+            "Integration: Test proxy route returns content without X-Frame-Options header",
+            "E2E: Playwright test that validates iframe content is visible: await expect(page.frameLocator('iframe').first()).toBeVisible()",
+            "Manual: Check 5-10 random external sources in actual browser"
+          ],
+          "validation_script": "curl -I <external-url> | grep -i 'x-frame-options' to check headers"
+        }
+      },
+
+      "prevention": {
+        "auto_apply": false,
+        "conditions": [
+          "project_type includes 'iframe' OR 'aggregator' OR 'dashboard'",
+          ">5 external URLs detected in seed data",
+          "External URLs are not from controlled domains"
+        ],
+        "actions": [
+          "Scout: Add X-Frame-Options warning to scout-report.md",
+          "Architect: Include proxy pattern in architecture",
+          "Builder: Implement proxy route automatically",
+          "Test: Add E2E iframe visibility test"
+        ],
+        "manual_check_required": true,
+        "reason": "Some projects may legitimately embed only friendly sources. Auto-apply only if clear iframe aggregation pattern detected."
+      },
+
+      "impact": "Critical - 80%+ of content sources non-functional. App appears broken to users. Core functionality fails.",
+
+      "fix_time_estimate": "45 minutes post-deployment, 10 minutes if included from start",
+
+      "affected_sites": [
+        "skylinewebcams.com",
+        "earthcam.com",
+        "webcamtaxi.com",
+        "Most commercial webcam services",
+        "Many news sites, social media embeds, third-party tools"
+      ],
+
+      "workarounds": [
+        "Server-side proxy (recommended)",
+        "Use official embed APIs where available (e.g., YouTube, Twitter)",
+        "Use screenshot services for non-embeddable content",
+        "Request iframe-friendly URLs from content providers"
+      ],
+
+      "legal_considerations": "Proxying content may violate Terms of Service of some sites. Check ToS before implementing. Some sites have explicit anti-scraping clauses.",
+
+      "performance_notes": "Proxy adds 500-1500ms latency on first load. Cache aggressively (60s) for real-time feeds, longer for static content. Monitor server bandwidth.",
+
+      "references": [
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options",
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/frame-ancestors"
+      ],
+
+      "success_rate": "95% with proxy solution (some sites have additional bot protection)",
+
+      "detection_history": [
+        {
+          "build": "worldview-live",
+          "date": "2025-10-26",
+          "detected_by": "End user",
+          "affected_sources": 42,
+          "fix_applied": "Next.js API proxy with header stripping",
+          "result": "95% success rate (40/42 cameras working)",
+          "evidence": ".context-foundry/feedback/post-deployment-pattern-2025-10-26.json"
+        }
+      ]
+    },
     {
       "pattern_id": "cors-es6-modules",
       "title": "CORS Error with ES6 Modules from file://",
@@ -105,8 +244,8 @@
   ],
 
   "statistics": {
-    "total_patterns": 1,
-    "high_severity": 1,
+    "total_patterns": 2,
+    "high_severity": 2,
     "medium_severity": 0,
     "low_severity": 0,
     "auto_apply_enabled": 1
