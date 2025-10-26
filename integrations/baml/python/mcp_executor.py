@@ -60,8 +60,8 @@ class MCPExecutor:
         """
         logger.info(f"Analyzing document via MCP: {file_path}")
 
-        # Build task for spawned Claude
-        task = f"""
+        # Build task for spawned Claude (will be used when MCP delegation is implemented)
+        _task = f"""
 Analyze the document at: {file_path}
 
 Use your Agent Skills to read the document (PDF/DOCX reader).
@@ -148,7 +148,8 @@ Return ONLY the JSON, no markdown formatting, no explanation.
         """
         logger.info(f"Analyzing dataset via MCP: {data_source}")
 
-        task = f"""
+        # Build task for spawned Claude (will be used when MCP delegation is implemented)
+        _task = f"""
 Analyze the dataset at: {data_source}
 
 Analysis type: {analysis_type}
@@ -228,7 +229,8 @@ Return ONLY the JSON, no markdown formatting.
         """
         logger.info(f"Processing with custom skill via MCP: {skill_name}")
 
-        mcp_task = f"""
+        # Build task for spawned Claude (will be used when MCP delegation is implemented)
+        _mcp_task = f"""
 Task: {task}
 
 Use your custom Agent Skill: {skill_name}
@@ -291,7 +293,8 @@ Return ONLY the JSON.
         """
         logger.info("Demonstrating progressive skill loading via MCP")
 
-        mcp_task = f"""
+        # Build task for spawned Claude (will be used when MCP delegation is implemented)
+        _mcp_task = f"""
 Task: {user_task}
 
 Available skills:
