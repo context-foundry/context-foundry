@@ -1439,23 +1439,16 @@ I'll notify you when it's complete!
 # ============================================================================
 
 
-@mcp.tool()
-def read_global_patterns(pattern_type: str = "common-issues") -> str:
+def _read_global_patterns_impl(pattern_type: str = "common-issues") -> str:
     """
-    Read global patterns from ~/.context-foundry/patterns/
+    Internal implementation for reading global patterns.
+    This function contains the core logic without the MCP tool decorator.
 
     Args:
         pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics")
 
     Returns:
         JSON string with patterns or error message
-
-    Examples:
-        # Read common issues
-        patterns = read_global_patterns("common-issues")
-
-        # Read scout learnings
-        learnings = read_global_patterns("scout-learnings")
     """
     try:
         # Global pattern directory
@@ -1538,9 +1531,30 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
 
 
 @mcp.tool()
-def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
+def read_global_patterns(pattern_type: str = "common-issues") -> str:
     """
-    Save patterns to global pattern storage.
+    Read global patterns from ~/.context-foundry/patterns/
+
+    Args:
+        pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics")
+
+    Returns:
+        JSON string with patterns or error message
+
+    Examples:
+        # Read common issues
+        patterns = read_global_patterns("common-issues")
+
+        # Read scout learnings
+        learnings = read_global_patterns("scout-learnings")
+    """
+    return _read_global_patterns_impl(pattern_type)
+
+
+def _save_global_patterns_impl(pattern_type: str, patterns_data: str) -> str:
+    """
+    Internal implementation for saving global patterns.
+    This function contains the core logic without the MCP tool decorator.
 
     Args:
         pattern_type: Type of patterns ("common-issues", "scout-learnings", "build-metrics")
@@ -1548,11 +1562,6 @@ def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
 
     Returns:
         JSON string with save result
-
-    Examples:
-        # Save common issues
-        data = json.dumps({"patterns": [...], "version": "1.0", ...})
-        result = save_global_patterns("common-issues", data)
     """
     try:
         # Parse patterns data
@@ -1616,6 +1625,26 @@ def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
 
 
 @mcp.tool()
+def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
+    """
+    Save patterns to global pattern storage.
+
+    Args:
+        pattern_type: Type of patterns ("common-issues", "scout-learnings", "build-metrics")
+        patterns_data: JSON string containing the patterns data
+
+    Returns:
+        JSON string with save result
+
+    Examples:
+        # Save common issues
+        data = json.dumps({"patterns": [...], "version": "1.0", ...})
+        result = save_global_patterns("common-issues", data)
+    """
+    return _save_global_patterns_impl(pattern_type, patterns_data)
+
+
+@mcp.tool()
 def merge_project_patterns(
     project_pattern_file: str,
     pattern_type: str = "common-issues",
@@ -1657,8 +1686,8 @@ def merge_project_patterns(
         with open(project_file_path, 'r') as f:
             project_data = json.load(f)
 
-        # Read global patterns
-        global_result = read_global_patterns(pattern_type)
+        # Read global patterns (use internal implementation to avoid MCP decorator issues)
+        global_result = _read_global_patterns_impl(pattern_type)
         global_response = json.loads(global_result)
 
         if global_response["status"] != "success":
@@ -1774,8 +1803,8 @@ def merge_project_patterns(
 
             global_data["learnings"] = global_learnings
 
-        # Save merged patterns
-        save_result = save_global_patterns(pattern_type, json.dumps(global_data))
+        # Save merged patterns (use internal implementation to avoid MCP decorator issues)
+        save_result = _save_global_patterns_impl(pattern_type, json.dumps(global_data))
         save_response = json.loads(save_result)
 
         if save_response["status"] != "success":
