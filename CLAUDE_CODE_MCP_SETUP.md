@@ -104,26 +104,38 @@ cat .mcp.json  # Should show your MCP server configuration
 
 **Note**: Project-scoped servers won't appear in `claude mcp list` (which only shows global config). They're automatically detected when you run `claude` in the project directory.
 
-### 2. Global Configuration
+### 2. Global Configuration (Recommended for Most Users)
 
-**File**: `~/.config/claude-code/mcp_settings.json`
+**File**: `~/.claude.json` (user-level configuration)
 
 **Advantages**:
-- ✅ Available in all projects
-- ✅ No need to be in specific directory
-- ✅ Appears in `claude mcp list`
+- ✅ Available in all projects globally
+- ✅ Works from any directory on your system
+- ✅ Appears in `claude mcp list` from any directory
+- ✅ No need to configure per-project
 
 **Setup command**:
 ```bash
-claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py
+claude mcp add --scope user --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
 ```
+
+**Important**:
+- Use `--scope user` to make it truly global (not `--scope local`)
+- Replace `/Users/name/homelab/context-foundry` with your actual Context Foundry path
+- Replace `python3.10` with your Python version if different
 
 **Verification**:
 ```bash
+# Test from ANY directory:
+cd /tmp
 claude mcp list  # Should show: ✓ Connected: context-foundry
 ```
 
-**Important**: Global config requires absolute paths. If you move the context-foundry directory, you must update the paths.
+**If you move Context Foundry**: You must update the paths by removing and re-adding:
+```bash
+claude mcp remove context-foundry
+claude mcp add --scope user --transport stdio context-foundry -- python3.10 /new/path/to/context-foundry/tools/mcp_server.py
+```
 
 ---
 
@@ -155,30 +167,36 @@ grep -n "delegate_to_claude_code" tools/mcp_server.py
 
 ### Step 3: Configure Claude Code MCP Settings
 
-Choose **either** project-scoped (recommended) or global configuration:
+Choose **either** global (recommended) or project-scoped configuration:
 
-#### Option A: Project-Scoped (Recommended)
+#### Option A: Global Configuration (Recommended)
+
+Makes the MCP server available from **any directory** on your system:
+
+```bash
+claude mcp add --scope user --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
+```
+
+Replace `/Users/name/homelab/context-foundry` with your actual path.
+
+Verify from **any directory**:
+```bash
+cd /tmp  # Or any other directory
+claude mcp list  # Should show: ✓ Connected: context-foundry
+```
+
+#### Option B: Project-Scoped
+
+Only available when running `claude` from within the context-foundry directory:
 
 ```bash
 cd /path/to/context-foundry
-claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+claude mcp add --scope project --transport stdio context-foundry -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
 ```
 
 Verify:
 ```bash
 cat .mcp.json  # Should show the configuration
-```
-
-#### Option B: Global Configuration
-
-```bash
-# Use absolute paths
-claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py
-```
-
-Verify:
-```bash
-claude mcp list  # Should show: ✓ Connected: context-foundry
 ```
 
 **See "Configuration Approaches" section above for detailed comparison and when to use each option.**
