@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Feedback System | Context Foundry Documentation</title>
+  <meta name="description" content="Making Context Foundry Smarter with Every Build">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/guides/feedback-system">
+  <meta property="og:title" content="Feedback System">
+  <meta property="og:description" content="Making Context Foundry Smarter with Every Build">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Feedback System">
+  <meta name="twitter:description" content="Making Context Foundry Smarter with Every Build">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/guides/feedback-system">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/guides" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Feedback System</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-self-learning-feedback-system">Context Foundry Self-Learning Feedback System</h1>
+<p><strong>Making Context Foundry Smarter with Every Build</strong></p>
+<p>Version: 1.0.0 | Last Updated: October 18, 2025</p>
+<hr>
+<h2 id="overview">Overview</h2>
+<p>Context Foundry now includes a <strong>Phase 7: Feedback Analysis</strong> that runs after every build (success or failure). This phase analyzes what happened, extracts learnings, and stores them in a pattern library that future builds can leverage.</p>
+<p><strong>Result:</strong> Context Foundry gets smarter over time, preventing issues before they occur.</p>
+<hr>
+<h2 id="the-feedback-loop">The Feedback Loop</h2>
+<pre><code class="">Build Project (Phases 1-6)
+          ↓
+Phase 7: Analyze Build → Extract Patterns → Store Learnings
+          ↓                                        ↓
+     Update Pattern Library          ←────────────┘
+          ↓
+Next Build: Apply Past Learnings (Phases 1-4 read patterns)</code></pre>
+<p><strong>Key Insight:</strong> Every build makes the next build better.</p>
+<hr>
+<h2 id="how-it-works">How It Works</h2>
+<h3 id="phase-7-feedback-analysis">Phase 7: Feedback Analysis</h3>
+<p><strong>Runs:</strong> After Phase 6 (Deploy) on success, or after Phase 4 (Test) on failure</p>
+<p><strong>What It Does:</strong></p>
+<ol>
+<li><p><strong>Collects build data:</strong></p>
+<ul>
+<li>Reads all artifacts (.context-foundry/)</li>
+<li>Reviews test iterations and failures</li>
+<li>Analyzes what worked and what didn&#39;t</li>
+<li>Identifies root causes of issues</li>
+</ul>
+</li>
+<li><p><strong>Categorizes feedback:</strong></p>
+<ul>
+<li>Scout improvements (missing research/risk flags)</li>
+<li>Architect improvements (design gaps/preventive measures)</li>
+<li>Builder improvements (implementation patterns)</li>
+<li>Test improvements (coverage gaps/integration tests)</li>
+</ul>
+</li>
+<li><p><strong>Extracts patterns:</strong></p>
+<ul>
+<li>Identifies if issue is recurring or one-time</li>
+<li>Determines applicable project types</li>
+<li>Documents proven solutions</li>
+<li>Assigns severity (HIGH/MEDIUM/LOW)</li>
+</ul>
+</li>
+<li><p><strong>Updates pattern library:</strong></p>
+<ul>
+<li>Creates new pattern entries</li>
+<li>Increments frequency for existing patterns</li>
+<li>Updates last_seen dates</li>
+<li>Enables auto-apply for proven patterns</li>
+</ul>
+</li>
+<li><p><strong>Generates recommendations:</strong></p>
+<ul>
+<li>Specific actions for each phase</li>
+<li>Priorities (what to fix first)</li>
+<li>Expected impact</li>
+<li>Implementation guidance</li>
+</ul>
+</li>
+</ol>
+<p><strong>Output Files:</strong></p>
+<ul>
+<li><code>.context-foundry/feedback/build-feedback-{timestamp}.json</code> (this build&#39;s analysis)</li>
+<li><code>.context-foundry/patterns/common-issues.json</code> (updated)</li>
+<li><code>.context-foundry/patterns/test-patterns.json</code> (updated)</li>
+<li><code>.context-foundry/patterns/architecture-patterns.json</code> (updated)</li>
+<li><code>.context-foundry/patterns/scout-learnings.json</code> (updated)</li>
+<li><code>.context-foundry/feedback/recommendations.md</code> (improvement suggestions)</li>
+</ul>
+<hr>
+<h2 id="pattern-library">Pattern Library</h2>
+<h3 id="storage-locations">Storage Locations</h3>
+<p><strong>Context Foundry has TWO pattern libraries with different purposes:</strong></p>
+<p><strong>1. Global Pattern Library</strong> (shared across ALL builds)</p>
+<p>Location: <code>/Users/name/homelab/context-foundry/.context-foundry/patterns/</code></p>
+<pre><code class="">context-foundry/                          ← Main Context Foundry repo
+└── .context-foundry/
+    └── patterns/                         ← GLOBAL PATTERNS (shared)
+        ├── common-issues.json            ← Issues across all builds
+        ├── test-patterns.json            ← Testing strategies
+        ├── architecture-patterns.json    ← Proven designs
+        └── scout-learnings.json          ← Research insights</code></pre>
+<p><strong>Purpose:</strong></p>
+<ul>
+<li>✅ Shared knowledge across ALL builds</li>
+<li>✅ Automatically READ by Scout/Architect/Test phases</li>
+<li>✅ Auto-apply when conditions match</li>
+<li>✅ Updated by Phase 7: Feedback (promotes valuable patterns)</li>
+</ul>
+<p><strong>2. Per-Project Pattern Library</strong> (build-specific)</p>
+<p>Location: <code>your-project/.context-foundry/patterns/</code></p>
+<pre><code class="">your-project/                             ← Your app directory
+└── .context-foundry/
+    ├── architecture.md
+    ├── scout-report.md
+    └── patterns/                         ← PROJECT PATTERNS (local)
+        ├── common-issues.json            ← Patterns discovered in THIS build
+        ├── test-patterns.json
+        ├── architecture-patterns.json
+        └── scout-learnings.json</code></pre>
+<p><strong>Purpose:</strong></p>
+<ul>
+<li>✅ Documents patterns discovered during THIS build</li>
+<li>✅ Analyzed by Phase 7: Feedback</li>
+<li>✅ Valuable patterns promoted to global library</li>
+<li>✅ Archive of what was learned from this project</li>
+</ul>
+<p><strong>How they work together:</strong></p>
+<pre><code class="">Build Starts
+    ↓
+Scout/Architect/Test READ global patterns
+    ↓
+    (Apply learnings from past builds)
+    ↓
+Build discovers new issues
+    ↓
+New patterns written to project/.context-foundry/patterns/
+    ↓
+Phase 7: Feedback analyzes patterns
+    ↓
+Valuable patterns promoted to global library
+    ↓
+Next build benefits from expanded global patterns</code></pre>
+<p><strong>View global patterns:</strong></p>
+<pre><code class="language-bash"># See all issues Context Foundry has learned
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+
+# See testing strategies
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.json</code></pre>
+<p><strong>View project-specific patterns:</strong></p>
+<pre><code class="language-bash"># See what VimQuest build discovered
+cat /Users/name/homelab/vimquest/.context-foundry/patterns/common-issues.json</code></pre>
+<h3 id="pattern-files">Pattern Files</h3>
+<p><strong>common-issues.json</strong></p>
+<ul>
+<li>General issues across all project types</li>
+<li>Example: CORS errors, module loading problems, dependency conflicts</li>
+</ul>
+<p><strong>test-patterns.json</strong></p>
+<ul>
+<li>Testing strategy improvements</li>
+<li>Example: Unit tests miss browser issues, integration test needs</li>
+</ul>
+<p><strong>architecture-patterns.json</strong></p>
+<ul>
+<li>Proven design patterns</li>
+<li>Example: Entity-component architecture for games</li>
+</ul>
+<p><strong>scout-learnings.json</strong></p>
+<ul>
+<li>Risk detection and research insights</li>
+<li>Example: Flag CORS risk for browser apps with ES6 modules</li>
+</ul>
+<h3 id="pattern-schema">Pattern Schema</h3>
+<pre><code class="language-json">{
+  &quot;pattern_id&quot;: &quot;unique-identifier&quot;,
+  &quot;title&quot;: &quot;Human-readable title&quot;,
+  &quot;first_seen&quot;: &quot;2025-10-18&quot;,
+  &quot;last_seen&quot;: &quot;2025-10-18&quot;,
+  &quot;frequency&quot;: 1,
+  &quot;severity&quot;: &quot;HIGH|MEDIUM|LOW&quot;,
+  &quot;project_types&quot;: [&quot;browser-app&quot;, &quot;cli-tool&quot;, ...],
+  &quot;issue&quot;: {...},
+  &quot;root_cause&quot;: &quot;Description&quot;,
+  &quot;solution&quot;: {
+    &quot;scout&quot;: &quot;What Scout should do&quot;,
+    &quot;architect&quot;: &quot;What Architect should include&quot;,
+    &quot;builder&quot;: &quot;What Builder should implement&quot;,
+    &quot;test&quot;: &quot;What Test should verify&quot;
+  },
+  &quot;prevention&quot;: {
+    &quot;auto_apply&quot;: true/false,
+    &quot;conditions&quot;: [&quot;when to apply&quot;],
+    &quot;actions&quot;: [&quot;specific steps&quot;]
+  }
+}</code></pre>
+<hr>
+<h2 id="how-patterns-are-applied">How Patterns Are Applied</h2>
+<h3 id="phase-1-scout-updated">Phase 1: Scout (Updated)</h3>
+<p><strong>Before starting research:</strong></p>
+<ol>
+<li>Reads <code>.context-foundry/patterns/scout-learnings.json</code></li>
+<li>Reads <code>.context-foundry/patterns/common-issues.json</code></li>
+<li>Identifies project type from task description</li>
+<li>Checks for patterns matching this type</li>
+<li>Flags known risks in scout-report.md</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="">Task: &quot;Build a browser game with HTML5 Canvas&quot;
+Scout reads patterns → Finds &quot;cors-es6-modules&quot; pattern
+Scout flags: ⚠️ CORS RISK: ES6 modules require dev server
+Scout includes: Recommendation for http-server in scout-report.md</code></pre>
+<h3 id="phase-2-architect-updated">Phase 2: Architect (Updated)</h3>
+<p><strong>During design:</strong></p>
+<ol>
+<li>Reads <code>.context-foundry/patterns/architecture-patterns.json</code></li>
+<li>Reads <code>.context-foundry/patterns/common-issues.json</code></li>
+<li>Checks Scout&#39;s flagged risks</li>
+<li>Applies proven architectural patterns</li>
+<li>Includes preventive measures</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="">Scout flagged: CORS risk
+Architect reads: cors-es6-modules pattern
+Architect includes: http-server in package.json automatically
+Architect documents: Server requirement in architecture.md</code></pre>
+<h3 id="phase-4-test-updated">Phase 4: Test (Updated)</h3>
+<p><strong>Before running tests:</strong></p>
+<ol>
+<li>Reads <code>.context-foundry/patterns/test-patterns.json</code></li>
+<li>Reads <code>.context-foundry/patterns/common-issues.json</code></li>
+<li>Checks for project-type-specific test needs</li>
+<li>Runs additional integration tests if indicated</li>
+</ol>
+<p><strong>Example:</strong></p>
+<pre><code class="">Project type: browser-app
+Test reads: &quot;unit-tests-miss-browser-issues&quot; pattern
+Test runs: Browser integration checks (if tools available)
+Test verifies: Dev server config exists, modules load properly</code></pre>
+<hr>
+<h2 id="real-world-example-1942-clone">Real-World Example: 1942 Clone</h2>
+<h3 id="the-problem">The Problem</h3>
+<p><strong>Build completed:</strong></p>
+<ul>
+<li>✅ 86 unit tests passing</li>
+<li>✅ Deployed to GitHub</li>
+<li>❌ Game stuck at loading screen (CORS error)</li>
+</ul>
+<p><strong>Root cause:</strong> Jest+jsdom doesn&#39;t test actual browser environment.</p>
+<h3 id="feedback-analysis">Feedback Analysis</h3>
+<p>Phase 7 analyzed the build:</p>
+<pre><code class="language-json">{
+  &quot;issue&quot;: &quot;CORS error not caught by unit tests&quot;,
+  &quot;should_detect_in_phase&quot;: &quot;Test&quot;,
+  &quot;detected_in_phase&quot;: &quot;Manual user testing&quot;,
+  &quot;solution&quot;: &quot;Include http-server, add browser integration tests&quot;,
+  &quot;severity&quot;: &quot;HIGH&quot;,
+  &quot;project_types&quot;: [&quot;browser-app&quot;, &quot;es6-modules&quot;]
+}</code></pre>
+<h3 id="pattern-created">Pattern Created</h3>
+<p>Added to <code>common-issues.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;pattern_id&quot;: &quot;cors-es6-modules&quot;,
+  &quot;solution&quot;: {
+    &quot;scout&quot;: &quot;Flag CORS risk for browser apps&quot;,
+    &quot;architect&quot;: &quot;Include http-server in package.json&quot;,
+    &quot;test&quot;: &quot;Verify dev server config exists&quot;
+  },
+  &quot;auto_apply&quot;: true
+}</code></pre>
+<h3 id="next-build-improvement">Next Build Improvement</h3>
+<p><strong>When building next browser game with ES6 modules:</strong></p>
+<ol>
+<li><strong>Scout:</strong> Automatically flags CORS risk</li>
+<li><strong>Architect:</strong> Automatically includes http-server</li>
+<li><strong>Test:</strong> Automatically verifies server config</li>
+<li><strong>Result:</strong> Issue prevented, no manual intervention needed</li>
+</ol>
+<p><strong>Time saved:</strong> ~8 minutes debugging + better UX</p>
+<hr>
+<h2 id="pattern-lifecycle">Pattern Lifecycle</h2>
+<h3 id="1-discovery-frequency-1">1. Discovery (Frequency: 1)</h3>
+<pre><code class="">Issue occurs → Feedback Analysis → New pattern created
+Status: frequency=1, auto_apply=false</code></pre>
+<h3 id="2-validation-frequency-2-3">2. Validation (Frequency: 2-3)</h3>
+<pre><code class="">Issue recurs → Pattern matched → Frequency incremented
+Status: frequency=3, consider auto_apply=true</code></pre>
+<h3 id="3-proven-frequency-5">3. Proven (Frequency: 5+)</h3>
+<pre><code class="">Pattern consistently applies → High success rate
+Status: frequency=5+, auto_apply=true, prevention rate tracked</code></pre>
+<h3 id="4-maintenance">4. Maintenance</h3>
+<pre><code class="">Stale patterns (not seen in 6+ months, frequency &lt; 3):
+→ Reviewed for removal
+→ Pruned to keep library focused</code></pre>
+<hr>
+<h2 id="metrics-analytics">Metrics &amp; Analytics</h2>
+<h3 id="build-quality-metrics">Build Quality Metrics</h3>
+<p>Track over time:</p>
+<ul>
+<li><strong>Test iterations trend:</strong> Should decrease as patterns prevent issues</li>
+<li><strong>Build success rate:</strong> Should increase to 95%+</li>
+<li><strong>Common issue prevention:</strong> Track how often patterns prevent problems</li>
+<li><strong>Average build duration:</strong> Should stabilize/decrease</li>
+</ul>
+<h3 id="pattern-library-metrics">Pattern Library Metrics</h3>
+<ul>
+<li><strong>Total patterns:</strong> Growth indicates learning accumulation</li>
+<li><strong>Auto-apply ratio:</strong> Higher = more automation</li>
+<li><strong>Pattern frequency:</strong> Identifies most common issues</li>
+<li><strong>Coverage:</strong> Project types represented</li>
+</ul>
+<h3 id="example-metrics-dashboard">Example Metrics Dashboard</h3>
+<pre><code class="">Builds Completed: 25
+Average Test Iterations: 1.2 (down from 2.5 initially)
+Common Issues Prevented: 18 (72%)
+Patterns in Library: 12
+Auto-Apply Patterns: 8 (67%)
+High-Severity Patterns: 4</code></pre>
+<hr>
+<h2 id="integration-with-autonomous-builds">Integration with Autonomous Builds</h2>
+<h3 id="mcp-tool-integration">MCP Tool Integration</h3>
+<p>The <code>mcp__autonomous_build_and_deploy</code> tool automatically:</p>
+<ol>
+<li>Runs Phases 1-6 (as before)</li>
+<li>Runs Phase 7 (Feedback Analysis)</li>
+<li>Updates pattern library</li>
+<li>Returns feedback data in JSON</li>
+</ol>
+<p><strong>No changes needed to existing builds!</strong></p>
+<h3 id="async-builds">Async Builds</h3>
+<p>Works with <code>mcp__autonomous_build_and_deploy_async</code> too:</p>
+<pre><code class="">Build runs in background → Completes → Feedback generated
+User checks status → Sees patterns added
+Next build → Benefits from learnings</code></pre>
+<hr>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="for-users">For Users</h3>
+<p>✅ <strong>Do:</strong></p>
+<ul>
+<li>Review <code>.context-foundry/feedback/recommendations.md</code> after builds</li>
+<li>Check pattern library growth over time</li>
+<li>Note when patterns prevent issues</li>
+<li>Provide feedback on pattern accuracy</li>
+</ul>
+<p>❌ <strong>Don&#39;t:</strong></p>
+<ul>
+<li>Disable feedback analysis (it&#39;s lightweight, ~1-2 min)</li>
+<li>Ignore high-priority recommendations</li>
+<li>Delete pattern library files</li>
+<li>Modify pattern files without understanding schema</li>
+</ul>
+<h3 id="for-developers">For Developers</h3>
+<p>✅ <strong>Do:</strong></p>
+<ul>
+<li>Keep pattern library in version control (.context-foundry/patterns/)</li>
+<li>Share patterns across projects/teams</li>
+<li>Review and prune low-frequency patterns periodically</li>
+<li>Document custom patterns clearly</li>
+<li>Test auto-apply logic before enabling</li>
+</ul>
+<hr>
+<h2 id="configuration">Configuration</h2>
+<h3 id="enabledisable-feedback">Enable/Disable Feedback</h3>
+<p><strong>Enabled by default.</strong> To disable:</p>
+<p>Edit <code>tools/orchestrator_prompt.txt</code>:</p>
+<ul>
+<li>Comment out Phase 7 section</li>
+<li>Or set environment variable: <code>SKIP_FEEDBACK_ANALYSIS=true</code></li>
+</ul>
+<h3 id="customize-pattern-application">Customize Pattern Application</h3>
+<p>Edit pattern JSON files:</p>
+<ul>
+<li>Set <code>auto_apply: false</code> to disable automatic application</li>
+<li>Adjust <code>conditions</code> to refine when patterns apply</li>
+<li>Update <code>severity</code> based on real-world impact</li>
+</ul>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="patterns-not-being-applied">Patterns Not Being Applied</h3>
+<p><strong>Check:</strong></p>
+<ol>
+<li>Pattern file exists: <code>.context-foundry/patterns/*.json</code></li>
+<li>Pattern <code>auto_apply: true</code></li>
+<li>Pattern conditions match project type</li>
+<li>Phase is reading pattern files (check orchestrator_prompt.txt)</li>
+</ol>
+<p><strong>Debug:</strong></p>
+<ul>
+<li>Review scout-report.md for flagged risks</li>
+<li>Check architecture.md for applied patterns</li>
+<li>Look for pattern mentions in build artifacts</li>
+</ul>
+<h3 id="feedback-analysis-fails">Feedback Analysis Fails</h3>
+<p><strong>Common causes:</strong></p>
+<ul>
+<li>Malformed JSON in pattern files</li>
+<li>Missing .context-foundry/test-results-*.md</li>
+<li>Feedback agent crashed</li>
+</ul>
+<p><strong>Solution:</strong></p>
+<ul>
+<li>Validate JSON: <code>cat .context-foundry/patterns/common-issues.json | jq</code></li>
+<li>Check .context-foundry/errors.md for details</li>
+<li>Review orchestrator execution logs</li>
+</ul>
+<hr>
+<h2 id="future-enhancements">Future Enhancements</h2>
+<h3 id="planned-features">Planned Features</h3>
+<ol>
+<li><p><strong>ML-Based Pattern Detection</strong></p>
+<ul>
+<li>Automatically identify new patterns without manual analysis</li>
+<li>Predict likely issues before they occur</li>
+</ul>
+</li>
+<li><p><strong>Cross-Project Learning</strong></p>
+<ul>
+<li>Share patterns across multiple repositories</li>
+<li>Team-wide pattern libraries</li>
+</ul>
+</li>
+<li><p><strong>Pattern Confidence Scores</strong></p>
+<ul>
+<li>Track success rate when applied</li>
+<li>Adjust auto-apply based on confidence</li>
+</ul>
+</li>
+<li><p><strong>Visualization Dashboard</strong></p>
+<ul>
+<li>View pattern library growth</li>
+<li>See metrics trends over time</li>
+<li>Identify most impactful patterns</li>
+</ul>
+</li>
+<li><p><strong>Pattern Testing</strong></p>
+<ul>
+<li>Automated validation of patterns</li>
+<li>A/B testing: with vs without pattern</li>
+<li>Measure effectiveness quantitatively</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="contributing-patterns">Contributing Patterns</h2>
+<p>Want to contribute patterns to the community?</p>
+<ol>
+<li>Build projects with Context Foundry</li>
+<li>Review generated feedback files</li>
+<li>Identify high-value, reusable patterns</li>
+<li>Submit PR with:<ul>
+<li>Pattern JSON</li>
+<li>Real-world example</li>
+<li>Success metrics</li>
+<li>Documentation</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: Does feedback analysis slow down builds?</strong><br>A: Minimal impact. ~1-2 minutes per build, fully automated.</p>
+<p><strong>Q: Can I use patterns from one machine on another?</strong><br>A: Yes! Copy <code>.context-foundry/patterns/</code> directory. Patterns are portable.</p>
+<p><strong>Q: What if a pattern is wrong?</strong><br>A: Edit the pattern JSON file or set <code>auto_apply: false</code> to disable.</p>
+<p><strong>Q: How many patterns before it&#39;s &quot;smart enough&quot;?</strong><br>A: Quality over quantity. 10-20 well-defined patterns cover 80% of issues.</p>
+<p><strong>Q: Can I share patterns with my team?</strong><br>A: Yes! Commit <code>.context-foundry/patterns/</code> to your repo or share the directory.</p>
+<p><strong>Q: Does this work with all project types?</strong><br>A: Yes. Patterns are tagged by project type, so they only apply when relevant.</p>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>Context Foundry&#39;s feedback system creates a self-improving development workflow:</strong></p>
+<ol>
+<li>✅ Learns from every build automatically</li>
+<li>✅ Prevents issues before they occur</li>
+<li>✅ Reduces test iterations over time</li>
+<li>✅ Improves build quality continuously</li>
+<li>✅ No manual intervention required</li>
+</ol>
+<p><strong>The more you use Context Foundry, the smarter it gets.</strong></p>
+<hr>
+<p><strong>Version:</strong> 1.0.0<br><strong>Last Updated:</strong> October 18, 2025<br><strong>Status:</strong> Production Ready<br><strong>Learn More:</strong> <a href="README.md">README.md</a> | <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/guides/changelog" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Changelog</span>
+            </a>
+
+            <a href="/docs/guides/roadmap" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Roadmap</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#overview" class="toc-link" data-heading-id="overview">
+                  Overview
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#the-feedback-loop" class="toc-link" data-heading-id="the-feedback-loop">
+                  The Feedback Loop
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-it-works" class="toc-link" data-heading-id="how-it-works">
+                  How It Works
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#phase-7-feedback-analysis" class="toc-link" data-heading-id="phase-7-feedback-analysis">
+                          Phase 7: Feedback Analysis
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#pattern-library" class="toc-link" data-heading-id="pattern-library">
+                  Pattern Library
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#storage-locations" class="toc-link" data-heading-id="storage-locations">
+                          Storage Locations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-files" class="toc-link" data-heading-id="pattern-files">
+                          Pattern Files
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-schema" class="toc-link" data-heading-id="pattern-schema">
+                          Pattern Schema
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-patterns-are-applied" class="toc-link" data-heading-id="how-patterns-are-applied">
+                  How Patterns Are Applied
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#phase-1-scout-updated" class="toc-link" data-heading-id="phase-1-scout-updated">
+                          Phase 1: Scout (Updated)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#phase-2-architect-updated" class="toc-link" data-heading-id="phase-2-architect-updated">
+                          Phase 2: Architect (Updated)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#phase-4-test-updated" class="toc-link" data-heading-id="phase-4-test-updated">
+                          Phase 4: Test (Updated)
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#real-world-example-1942-clone" class="toc-link" data-heading-id="real-world-example-1942-clone">
+                  Real-World Example: 1942 Clone
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#the-problem" class="toc-link" data-heading-id="the-problem">
+                          The Problem
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#feedback-analysis" class="toc-link" data-heading-id="feedback-analysis">
+                          Feedback Analysis
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-created" class="toc-link" data-heading-id="pattern-created">
+                          Pattern Created
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#next-build-improvement" class="toc-link" data-heading-id="next-build-improvement">
+                          Next Build Improvement
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#pattern-lifecycle" class="toc-link" data-heading-id="pattern-lifecycle">
+                  Pattern Lifecycle
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-discovery-frequency-1" class="toc-link" data-heading-id="1-discovery-frequency-1">
+                          1. Discovery (Frequency: 1)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-validation-frequency-2-3" class="toc-link" data-heading-id="2-validation-frequency-2-3">
+                          2. Validation (Frequency: 2-3)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#3-proven-frequency-5" class="toc-link" data-heading-id="3-proven-frequency-5">
+                          3. Proven (Frequency: 5+)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#4-maintenance" class="toc-link" data-heading-id="4-maintenance">
+                          4. Maintenance
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#metrics-analytics" class="toc-link" data-heading-id="metrics-analytics">
+                  Metrics &amp; Analytics
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#build-quality-metrics" class="toc-link" data-heading-id="build-quality-metrics">
+                          Build Quality Metrics
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-library-metrics" class="toc-link" data-heading-id="pattern-library-metrics">
+                          Pattern Library Metrics
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#example-metrics-dashboard" class="toc-link" data-heading-id="example-metrics-dashboard">
+                          Example Metrics Dashboard
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#integration-with-autonomous-builds" class="toc-link" data-heading-id="integration-with-autonomous-builds">
+                  Integration with Autonomous Builds
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-tool-integration" class="toc-link" data-heading-id="mcp-tool-integration">
+                          MCP Tool Integration
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#async-builds" class="toc-link" data-heading-id="async-builds">
+                          Async Builds
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#best-practices" class="toc-link" data-heading-id="best-practices">
+                  Best Practices
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#for-users" class="toc-link" data-heading-id="for-users">
+                          For Users
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#for-developers" class="toc-link" data-heading-id="for-developers">
+                          For Developers
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#configuration" class="toc-link" data-heading-id="configuration">
+                  Configuration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#enabledisable-feedback" class="toc-link" data-heading-id="enabledisable-feedback">
+                          Enable/Disable Feedback
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#customize-pattern-application" class="toc-link" data-heading-id="customize-pattern-application">
+                          Customize Pattern Application
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting" class="toc-link" data-heading-id="troubleshooting">
+                  Troubleshooting
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#patterns-not-being-applied" class="toc-link" data-heading-id="patterns-not-being-applied">
+                          Patterns Not Being Applied
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#feedback-analysis-fails" class="toc-link" data-heading-id="feedback-analysis-fails">
+                          Feedback Analysis Fails
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#future-enhancements" class="toc-link" data-heading-id="future-enhancements">
+                  Future Enhancements
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#planned-features" class="toc-link" data-heading-id="planned-features">
+                          Planned Features
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#contributing-patterns" class="toc-link" data-heading-id="contributing-patterns">
+                  Contributing Patterns
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#faq" class="toc-link" data-heading-id="faq">
+                  FAQ
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

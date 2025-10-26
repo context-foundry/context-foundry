@@ -103,6 +103,113 @@ Add this badge to README.md to show CI status:
 ![CI](https://github.com/snedea/context-foundry/workflows/CI%20Pipeline/badge.svg)
 ```
 
+## Pattern Validation Workflow
+
+### Overview
+
+The Pattern Validation workflow automatically validates and merges community-contributed patterns via pull requests.
+
+### Triggers
+
+This workflow runs on:
+- Pull requests that modify `.context-foundry/patterns/*.json`
+- Pull requests that modify pattern-related scripts or schemas
+- Manual trigger via `workflow_dispatch`
+
+### Validation Jobs
+
+#### 1. Validate (Pattern Integrity)
+
+Runs comprehensive validation checks on pattern files:
+
+| Check | Description | Status |
+|-------|-------------|--------|
+| **JSON Syntax** | Validates all JSON files are properly formatted | Must pass |
+| **Duplicate IDs** | Checks for duplicate `pattern_id` or `learning_id` | Must pass |
+| **Required Fields** | Ensures all required fields are present | Must pass |
+| **Severity Levels** | Validates severity is CRITICAL/HIGH/MEDIUM/LOW | Must pass |
+| **Merge Integrity** | Tests that merge operations don't corrupt data | Must pass |
+
+#### 2. Auto-merge (Automatic PR Merge)
+
+Automatically merges pattern PRs if:
+- ✅ All validation checks pass
+- ✅ PR has `patterns` label
+- ✅ PR has `automated` label
+- ✅ PR was created by pattern sharing script
+
+**Actions taken:**
+1. Auto-approves the PR
+2. Enables auto-merge with squash strategy
+3. Deletes branch after merge
+4. Adds comment confirming validation passed
+
+### Sharing Patterns
+
+Users can contribute learned patterns using the pattern sharing script:
+
+```bash
+# Share your locally-learned patterns
+cd ~/homelab/context-foundry
+./scripts/share-my-patterns.sh
+```
+
+See [PATTERN_SHARING.md](./PATTERN_SHARING.md) for complete documentation.
+
+### Pattern Flow
+
+```
+┌──────────────────────┐
+│  Local Machine       │
+│  ~/.context-foundry/ │
+│   patterns/          │
+└──────────────────────┘
+          ↓
+   share-my-patterns.sh
+          ↓
+┌──────────────────────┐
+│  GitHub PR           │
+│  (Pattern Sharing)   │
+└──────────────────────┘
+          ↓
+┌──────────────────────┐
+│  Validate Workflow   │
+│  ✅ JSON valid       │
+│  ✅ No duplicates    │
+│  ✅ Fields present   │
+│  ✅ Merge works      │
+└──────────────────────┘
+          ↓
+┌──────────────────────┐
+│  Auto-merge          │
+│  → main branch       │
+└──────────────────────┘
+          ↓
+┌──────────────────────┐
+│  Nightly Release     │
+│  (includes patterns) │
+└──────────────────────┘
+```
+
+### Testing Pattern Validation Locally
+
+Before sharing patterns, test validation locally:
+
+```bash
+# Test JSON syntax
+python3 -m json.tool .context-foundry/patterns/common-issues.json
+
+# Check for duplicate IDs
+jq -r '.patterns[].pattern_id' .context-foundry/patterns/common-issues.json | sort | uniq -d
+
+# Test merge integrity
+python3 scripts/merge-patterns-intelligent.py \
+  --source ~/.context-foundry/patterns/common-issues.json \
+  --dest .context-foundry/patterns/common-issues.json \
+  --type common-issues \
+  --output /tmp/test-merge.json
+```
+
 ## Pattern Backup System
 
 ### Automatic Backups

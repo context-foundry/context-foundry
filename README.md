@@ -194,7 +194,7 @@ Context Foundry introduces **15 groundbreaking innovations** that transform AI s
 
 ### 🧠 Intelligence Innovations
 
-11. **Global Pattern Learning** - Cross-project knowledge accumulation in `~/.context-foundry/patterns/`
+11. **Global Pattern Learning** - Cross-project knowledge accumulation in `~/.context-foundry/patterns/` with automatic community sharing
 12. **Output Truncation Strategy** - 45-45-10 split keeps critical context visible
 
 ### 🎨 User Experience Innovations

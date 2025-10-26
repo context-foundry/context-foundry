@@ -1,0 +1,1615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Server Architecture | Context Foundry Documentation</title>
+  <meta name="description" content="Technical Deep Dive - Complete System Architecture">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/technical/mcp-server-architecture">
+  <meta property="og:title" content="MCP Server Architecture">
+  <meta property="og:description" content="Technical Deep Dive - Complete System Architecture">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MCP Server Architecture">
+  <meta name="twitter:description" content="Technical Deep Dive - Complete System Architecture">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/technical/mcp-server-architecture">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/technical" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">MCP Server Architecture</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-mcp-server-architecture">Context Foundry MCP Server Architecture</h1>
+<p><strong>Technical Deep Dive - Complete System Architecture</strong></p>
+<blockquote><p><strong>Audience:</strong> Developers, contributors, and technical users who want to understand how Context Foundry&#39;s MCP server works internally.</p>
+</blockquote>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#technology-stack">Technology Stack</a></li>
+<li><a href="#mcp-protocol-integration">MCP Protocol Integration</a></li>
+<li><a href="#subprocess-delegation-model">Subprocess Delegation Model</a></li>
+<li><a href="#tool-implementations">Tool Implementations</a></li>
+<li><a href="#context-isolation-mechanism">Context Isolation Mechanism</a></li>
+<li><a href="#pattern-library-integration">Pattern Library Integration</a></li>
+<li><a href="#error-handling--recovery">Error Handling &amp; Recovery</a></li>
+<li><a href="#performance--scalability">Performance &amp; Scalability</a></li>
+<li><a href="#security-considerations">Security Considerations</a></li>
+<li><a href="#testing--validation">Testing &amp; Validation</a></li>
+<li><a href="#troubleshooting--debugging">Troubleshooting &amp; Debugging</a></li>
+</ol>
+<hr>
+<h2 id="overview">Overview</h2>
+<p>Context Foundry 2.0 is built as an <strong>MCP (Model Context Protocol) server</strong> that integrates with Claude Code CLI to enable fully autonomous software development workflows.</p>
+<h3 id="key-innovation">Key Innovation</h3>
+<p><strong>Traditional AI Coding:</strong></p>
+<pre><code class="">User → Claude Code (single session) → Build happens in same context
+Result: Context window fills up, can&#039;t multitask</code></pre>
+<p><strong>Context Foundry Approach:</strong></p>
+<pre><code class="">User → Claude Code (stays clean) → MCP Server → Spawns Fresh Claude Instance → Build happens isolated
+Result: Main context stays &lt; 1%, can run multiple builds, continue working</code></pre>
+<h3 id="core-principles">Core Principles</h3>
+<ol>
+<li><strong>Delegation over Monopolization</strong> - Spawn separate processes instead of hogging main session</li>
+<li><strong>File-based over Conversation-based</strong> - Persist artifacts, not chat history</li>
+<li><strong>Ephemeral Agents over Persistent State</strong> - Clean slate each build</li>
+<li><strong>Self-healing over Manual Debugging</strong> - Auto-fix test failures</li>
+<li><strong>Autonomous over Interactive</strong> - Walk away, return to finished project</li>
+</ol>
+<hr>
+<h2 id="technology-stack">Technology Stack</h2>
+<h3 id="core-components">Core Components</h3>
+<pre><code class="">┌─────────────────────────────────────────────────────────────┐
+│                    TECHNOLOGY STACK                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ MCP Protocol Layer                                          │
+│ ├─ FastMCP 2.0+          (MCP server framework)            │
+│ ├─ nest-asyncio 1.5+     (Async event loop compatibility)  │
+│ └─ Python 3.10+          (Type hints, pattern matching)    │
+│                                                              │
+│ Process Management                                          │
+│ ├─ subprocess.Popen      (Spawn Claude Code instances)     │
+│ ├─ asyncio               (Async task tracking)              │
+│ └─ uuid                  (Task ID generation)               │
+│                                                              │
+│ File System Operations                                      │
+│ ├─ pathlib.Path          (Cross-platform paths)            │
+│ ├─ json                  (Pattern library storage)          │
+│ └─ os                    (Environment variables)            │
+│                                                              │
+│ Claude Code Integration                                     │
+│ ├─ claude CLI            (Delegated build instances)       │
+│ ├─ --permission-mode     (Bypass interactive prompts)      │
+│ └─ --prompt              (Inject orchestrator prompt)       │
+│                                                              │
+│ GitHub Integration                                          │
+│ ├─ gh CLI                (Repository creation, pushing)     │
+│ └─ git                   (Version control operations)       │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<h3 id="dependencies">Dependencies</h3>
+<p><strong><code>requirements-mcp.txt</code>:</strong></p>
+<pre><code class="language-txt">fastmcp&gt;=2.0.0         # MCP protocol server
+nest-asyncio&gt;=1.5.0    # Async event loop nesting</code></pre>
+<p><strong>External Tools:</strong></p>
+<pre><code class="language-bash">claude                 # Claude Code CLI (in PATH)
+gh                     # GitHub CLI (for deployment)
+git                    # Version control
+python3.10+            # Python runtime</code></pre>
+<hr>
+<h2 id="mcp-protocol-integration">MCP Protocol Integration</h2>
+<h3 id="what-is-mcp">What is MCP?</h3>
+<p><strong>Model Context Protocol (MCP)</strong> is a standard protocol for connecting AI models to tools and data sources. It defines:</p>
+<ul>
+<li><strong>Tools</strong>: Functions the AI can call</li>
+<li><strong>Resources</strong>: Data the AI can access</li>
+<li><strong>Prompts</strong>: Reusable prompt templates</li>
+<li><strong>Communication</strong>: JSON-RPC 2.0 over stdio</li>
+</ul>
+<p><strong>Context Foundry uses MCP for:</strong></p>
+<ol>
+<li>Exposing build tools to Claude Code</li>
+<li>Managing async task delegation</li>
+<li>Tracking build status</li>
+<li>Returning results to main session</li>
+</ol>
+<h3 id="mcp-server-initialization">MCP Server Initialization</h3>
+<p><strong>File:</strong> <code>tools/mcp_server.py</code> (lines 1-50)</p>
+<pre><code class="language-python">from fastmcp import FastMCP
+import nest_asyncio
+import asyncio
+
+# Enable nested async loops (required for MCP)
+nest_asyncio.apply()
+
+# Initialize MCP server
+mcp = FastMCP(&quot;Context Foundry&quot;)
+
+# Global task tracking
+TASKS = {}  # {task_id: {process, status, start_time, ...}}
+
+# Server metadata
+@mcp.tool()
+async def context_foundry_status() -&gt; str:
+    &quot;&quot;&quot;Get server status and capabilities.&quot;&quot;&quot;
+    return json.dumps({
+        &quot;name&quot;: &quot;Context Foundry&quot;,
+        &quot;version&quot;: &quot;2.0.1&quot;,
+        &quot;status&quot;: &quot;operational&quot;,
+        &quot;capabilities&quot;: {
+            &quot;autonomous_builds&quot;: True,
+            &quot;async_delegation&quot;: True,
+            &quot;self_healing_tests&quot;: True,
+            &quot;pattern_learning&quot;: True,
+            &quot;github_deployment&quot;: True
+        },
+        &quot;active_tasks&quot;: len([t for t in TASKS.values() if t[&#039;status&#039;] == &#039;running&#039;])
+    })
+
+# Start server (stdio transport)
+if __name__ == &quot;__main__&quot;:
+    mcp.run()  # Listens on stdin/stdout for MCP messages</code></pre>
+<h3 id="mcp-message-flow">MCP Message Flow</h3>
+<p><strong>User Request → MCP Tool Call → Response:</strong></p>
+<pre><code class="">┌───────────────────────────────────────────────────────────┐
+│ 1. USER REQUEST                                            │
+│    &quot;Build a weather app&quot;                                   │
+└───────────────┬───────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────────────┐
+│ 2. CLAUDE CODE INTENT DETECTION                            │
+│    Recognizes build intent                                 │
+│    Selects MCP tool: autonomous_build_and_deploy_async     │
+└───────────────┬───────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────────────┐
+│ 3. MCP TOOL CALL (JSON-RPC over stdio)                     │
+│                                                            │
+│    {                                                       │
+│      &quot;jsonrpc&quot;: &quot;2.0&quot;,                                    │
+│      &quot;method&quot;: &quot;tools/call&quot;,                              │
+│      &quot;params&quot;: {                                          │
+│        &quot;name&quot;: &quot;autonomous_build_and_deploy_async&quot;,       │
+│        &quot;arguments&quot;: {                                     │
+│          &quot;task&quot;: &quot;Build a weather app&quot;,                   │
+│          &quot;working_directory&quot;: &quot;/tmp/weather-app&quot;,         │
+│          &quot;github_repo_name&quot;: &quot;weather-app&quot;,               │
+│          &quot;enable_test_loop&quot;: true                         │
+│        }                                                  │
+│      },                                                   │
+│      &quot;id&quot;: 1                                              │
+│    }                                                      │
+└───────────────┬───────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────────────┐
+│ 4. MCP SERVER PROCESSES REQUEST                            │
+│    - Validates parameters                                  │
+│    - Generates task ID                                     │
+│    - Spawns subprocess                                     │
+│    - Tracks in TASKS dict                                  │
+└───────────────┬───────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────────────┐
+│ 5. MCP RESPONSE (JSON-RPC)                                 │
+│                                                            │
+│    {                                                       │
+│      &quot;jsonrpc&quot;: &quot;2.0&quot;,                                    │
+│      &quot;result&quot;: {                                          │
+│        &quot;task_id&quot;: &quot;abc-123-def-456&quot;,                      │
+│        &quot;status&quot;: &quot;started&quot;,                               │
+│        &quot;message&quot;: &quot;Build running in background&quot;,          │
+│        &quot;working_directory&quot;: &quot;/tmp/weather-app&quot;,           │
+│        &quot;expected_duration&quot;: &quot;7-15 minutes&quot;                │
+│      },                                                   │
+│      &quot;id&quot;: 1                                              │
+│    }                                                      │
+└───────────────┬───────────────────────────────────────────┘
+                │
+                ↓
+┌───────────────────────────────────────────────────────────┐
+│ 6. CLAUDE CODE SHOWS RESPONSE TO USER                      │
+│    &quot;Build started! Task ID: abc-123-def-456&quot;              │
+│    &quot;Expected duration: 7-15 minutes&quot;                      │
+│    &quot;You can continue working...&quot;                          │
+└───────────────────────────────────────────────────────────┘</code></pre>
+<hr>
+<h2 id="subprocess-delegation-model">Subprocess Delegation Model</h2>
+<h3 id="why-subprocess-delegation">Why Subprocess Delegation?</h3>
+<p><strong>Problem:</strong> Building in main Claude Code session consumes context window</p>
+<p><strong>Solution:</strong> Spawn fresh Claude Code instance for each build</p>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>✅ Main session stays clean (&lt; 1% context usage)</li>
+<li>✅ Can run multiple builds in parallel</li>
+<li>✅ Each build gets fresh 200K context</li>
+<li>✅ No context pollution between builds</li>
+<li>✅ User can continue working</li>
+</ul>
+<h3 id="implementation-details">Implementation Details</h3>
+<p><strong><code>autonomous_build_and_deploy_async()</code> Tool:</strong></p>
+<pre><code class="language-python">@mcp.tool()
+async def autonomous_build_and_deploy_async(
+    task: str,
+    working_directory: str,
+    github_repo_name: str | None = None,
+    enable_test_loop: bool = True,
+    max_test_iterations: int = 3,
+    timeout_minutes: float = 90.0
+) -&gt; str:
+    &quot;&quot;&quot;
+    Spawn fresh Claude Code instance to build project autonomously.
+    Returns immediately with task ID (non-blocking).
+    &quot;&quot;&quot;
+
+    # 1. Generate unique task ID
+    task_id = str(uuid.uuid4())
+
+    # 2. Load orchestrator prompt template
+    orchestrator_path = Path(__file__).parent / &quot;orchestrator_prompt.txt&quot;
+    orchestrator_template = orchestrator_path.read_text()
+
+    # 3. Inject task-specific parameters
+    full_prompt = f&quot;&quot;&quot;
+{orchestrator_template}
+
+TASK PARAMETERS:
+───────────────────────────────────────────────────────────
+TASK: {task}
+WORKING_DIRECTORY: {working_directory}
+GITHUB_REPO: {github_repo_name or &quot;auto-generate&quot;}
+ENABLE_TEST_LOOP: {enable_test_loop}
+MAX_TEST_ITERATIONS: {max_test_iterations}
+───────────────────────────────────────────────────────────
+
+BEGIN EXECUTION NOW.
+&quot;&quot;&quot;
+
+    # 4. Create working directory if needed
+    working_dir = Path(working_directory)
+    working_dir.mkdir(parents=True, exist_ok=True)
+
+    # 5. Spawn delegated Claude Code instance
+    process = subprocess.Popen(
+        [
+            &#039;claude&#039;,                                   # Binary in PATH
+            &#039;--prompt&#039;, full_prompt,                    # User message to start
+            &#039;--permission-mode&#039;, &#039;bypassPermissions&#039;    # No interactive prompts
+        ],
+        cwd=str(working_dir),                          # Run in project directory
+        stdout=subprocess.PIPE,                         # Capture output
+        stderr=subprocess.PIPE,                         # Capture errors
+        text=True,                                      # Decode as UTF-8
+        bufsize=1                                       # Line-buffered
+    )
+
+    # 6. Track task
+    TASKS[task_id] = {
+        &#039;process&#039;: process,
+        &#039;task&#039;: task,
+        &#039;working_directory&#039;: str(working_dir),
+        &#039;github_repo_name&#039;: github_repo_name,
+        &#039;status&#039;: &#039;running&#039;,
+        &#039;start_time&#039;: time.time(),
+        &#039;timeout&#039;: timeout_minutes * 60,
+        &#039;enable_test_loop&#039;: enable_test_loop,
+        &#039;max_test_iterations&#039;: max_test_iterations
+    }
+
+    # 7. Return immediately (non-blocking!)
+    return json.dumps({
+        &#039;task_id&#039;: task_id,
+        &#039;status&#039;: &#039;started&#039;,
+        &#039;message&#039;: f&#039;Autonomous build started for: {task}&#039;,
+        &#039;working_directory&#039;: str(working_dir),
+        &#039;expected_duration&#039;: &#039;7-15 minutes&#039;,
+        &#039;check_status&#039;: f&#039;Use get_delegation_result(&quot;{task_id}&quot;) to check progress&#039;
+    })</code></pre>
+<h3 id="process-lifecycle">Process Lifecycle</h3>
+<pre><code class="">┌─────────────────────────────────────────────────────────────┐
+│ SUBPROCESS LIFECYCLE                                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│ 1. SPAWN                                                     │
+│    subprocess.Popen([&#039;claude&#039;, &#039;--prompt&#039;, ...])             │
+│    ├─ New process created                                   │
+│    ├─ Own PID assigned                                      │
+│    ├─ Own context window (200K tokens)                      │
+│    └─ Receives orchestrator prompt as USER message          │
+│                                                              │
+│ 2. EXECUTE (7-15 minutes)                                    │
+│    Delegated instance runs autonomously:                    │
+│    ├─ Phase 1: Scout                                        │
+│    ├─ Phase 2: Architect                                    │
+│    ├─ Phase 3: Builder                                      │
+│    ├─ Phase 4: Test (self-healing if needed)                │
+│    ├─ Phase 5: Documentation                                │
+│    ├─ Phase 6: Deploy                                       │
+│    └─ Phase 7: Feedback                                     │
+│                                                              │
+│ 3. COMPLETE                                                  │
+│    ├─ Writes .context-foundry/session-summary.json          │
+│    ├─ Process exits (return code 0)                         │
+│    └─ All context discarded                                 │
+│                                                              │
+│ 4. CLEANUP                                                   │
+│    ├─ process.poll() returns exit code                      │
+│    ├─ stdout/stderr read                                    │
+│    ├─ TASKS[task_id][&#039;status&#039;] = &#039;completed&#039;                │
+│    └─ Results available for retrieval                       │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<h3 id="monitoring-status-checking">Monitoring &amp; Status Checking</h3>
+<p><strong><code>get_delegation_result()</code> Tool:</strong></p>
+<pre><code class="language-python">@mcp.tool()
+async def get_delegation_result(task_id: str) -&gt; str:
+    &quot;&quot;&quot;
+    Check status and retrieve results of async build.
+
+    Returns:
+    - If running: {&quot;status&quot;: &quot;running&quot;, &quot;elapsed&quot;: X}
+    - If complete: {&quot;status&quot;: &quot;completed&quot;, ...full summary...}
+    - If timeout: {&quot;status&quot;: &quot;timeout&quot;, ...}
+    - If failed: {&quot;status&quot;: &quot;failed&quot;, &quot;error&quot;: &quot;...&quot;}
+    &quot;&quot;&quot;
+
+    # 1. Validate task exists
+    if task_id not in TASKS:
+        return json.dumps({
+            &#039;error&#039;: &#039;Task not found&#039;,
+            &#039;task_id&#039;: task_id,
+            &#039;available_tasks&#039;: list(TASKS.keys())
+        })
+
+    task = TASKS[task_id]
+    process = task[&#039;process&#039;]
+
+    # 2. Check if still running
+    exit_code = process.poll()  # Returns None if running, exit code if done
+
+    if exit_code is None:
+        # Still running
+        elapsed = time.time() - task[&#039;start_time&#039;]
+
+        # Check timeout
+        if elapsed &gt; task[&#039;timeout&#039;]:
+            process.kill()
+            task[&#039;status&#039;] = &#039;timeout&#039;
+            return json.dumps({
+                &#039;status&#039;: &#039;timeout&#039;,
+                &#039;task_id&#039;: task_id,
+                &#039;elapsed_seconds&#039;: elapsed,
+                &#039;timeout_seconds&#039;: task[&#039;timeout&#039;],
+                &#039;message&#039;: &#039;Build exceeded timeout limit&#039;
+            })
+
+        return json.dumps({
+            &#039;status&#039;: &#039;running&#039;,
+            &#039;task_id&#039;: task_id,
+            &#039;task&#039;: task[&#039;task&#039;],
+            &#039;elapsed_seconds&#039;: elapsed,
+            &#039;timeout_seconds&#039;: task[&#039;timeout&#039;],
+            &#039;percentage_complete&#039;: min((elapsed / 900) * 100, 95)  # Estimate
+        })
+
+    # 3. Process finished - read results
+    working_dir = Path(task[&#039;working_directory&#039;])
+    summary_path = working_dir / &#039;.context-foundry&#039; / &#039;session-summary.json&#039;
+
+    if summary_path.exists():
+        # Success - read build summary
+        summary = json.loads(summary_path.read_text())
+        task[&#039;status&#039;] = &#039;completed&#039;
+
+        return json.dumps({
+            &#039;status&#039;: &#039;completed&#039;,
+            &#039;task_id&#039;: task_id,
+            &#039;duration_seconds&#039;: time.time() - task[&#039;start_time&#039;],
+            &#039;exit_code&#039;: exit_code,
+            **summary  # Merge all summary data
+        })
+    else:
+        # Failed - process exited without creating summary
+        stdout, stderr = process.communicate()
+        task[&#039;status&#039;] = &#039;failed&#039;
+
+        return json.dumps({
+            &#039;status&#039;: &#039;failed&#039;,
+            &#039;task_id&#039;: task_id,
+            &#039;exit_code&#039;: exit_code,
+            &#039;stdout&#039;: stdout[-5000:],  # Last 5KB
+            &#039;stderr&#039;: stderr[-5000:],
+            &#039;message&#039;: &#039;Build failed - check stdout/stderr for errors&#039;
+        })</code></pre>
+<hr>
+<h2 id="tool-implementations">Tool Implementations</h2>
+<h3 id="full-tool-catalog">Full Tool Catalog</h3>
+<p>Context Foundry MCP server exposes 9 tools:</p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Tool</th>
+<th>Type</th>
+<th>Purpose</th>
+<th>Blocking</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><code>context_foundry_status</code></td>
+<td>Info</td>
+<td>Get server status</td>
+<td>Instant</td>
+</tr>
+<tr>
+<td><code>context_foundry_build</code></td>
+<td>Build</td>
+<td>Legacy build tool</td>
+<td>Blocking</td>
+</tr>
+<tr>
+<td><code>context_foundry_enhance</code></td>
+<td>Enhancement</td>
+<td>Enhance existing project (coming soon)</td>
+<td>Blocking</td>
+</tr>
+<tr>
+<td><code>delegate_to_claude_code</code></td>
+<td>Delegation</td>
+<td>Delegate simple task</td>
+<td>Blocking</td>
+</tr>
+<tr>
+<td><code>delegate_to_claude_code_async</code></td>
+<td>Delegation</td>
+<td>Delegate task (async)</td>
+<td>Non-blocking</td>
+</tr>
+<tr>
+<td><code>autonomous_build_and_deploy</code></td>
+<td>Build</td>
+<td>Full build workflow</td>
+<td>Blocking</td>
+</tr>
+<tr>
+<td><code>autonomous_build_and_deploy_async</code></td>
+<td>Build</td>
+<td>Full build workflow (async)</td>
+<td>Non-blocking</td>
+</tr>
+<tr>
+<td><code>get_delegation_result</code></td>
+<td>Status</td>
+<td>Check task status</td>
+<td>Instant</td>
+</tr>
+<tr>
+<td><code>list_delegations</code></td>
+<td>Status</td>
+<td>List all tasks</td>
+<td>Instant</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="tool-parameter-specifications">Tool Parameter Specifications</h3>
+<p><strong><code>autonomous_build_and_deploy_async()</code>:</strong></p>
+<pre><code class="language-python">Parameters:
+  task: str                              # Required: What to build
+  working_directory: str                 # Required: Where to build it
+  github_repo_name: str | None = None   # Optional: GitHub repo name
+  existing_repo: str | None = None      # Optional: Enhance existing repo
+  mode: str = &quot;new_project&quot;             # Optional: &quot;new_project&quot; | &quot;fix_bugs&quot; | &quot;add_docs&quot;
+  enable_test_loop: bool = True         # Optional: Enable self-healing
+  max_test_iterations: int = 3          # Optional: Max auto-fix attempts
+  timeout_minutes: float = 90.0         # Optional: Build timeout
+
+Returns:
+  JSON string with:
+    - task_id: Unique task identifier
+    - status: &quot;started&quot;
+    - message: Human-readable description
+    - working_directory: Absolute path
+    - expected_duration: Estimate</code></pre>
+<p><strong><code>get_delegation_result(task_id)</code>:</strong></p>
+<pre><code class="language-python">Parameters:
+  task_id: str                          # Required: Task ID from async build
+
+Returns:
+  JSON string with (varies by status):
+
+  If running:
+    - status: &quot;running&quot;
+    - elapsed_seconds: Time elapsed
+    - percentage_complete: Estimate
+
+  If completed:
+    - status: &quot;completed&quot;
+    - duration_seconds: Total time
+    - phases_completed: [&quot;scout&quot;, &quot;architect&quot;, ...]
+    - files_created: [...list of files...]
+    - github_url: &quot;https://github.com/...&quot;
+    - tests_passed: true/false
+    - test_iterations: Number of test attempts
+
+  If timeout:
+    - status: &quot;timeout&quot;
+    - elapsed_seconds: Time before timeout
+
+  If failed:
+    - status: &quot;failed&quot;
+    - error: Error message
+    - stdout/stderr: Last 5KB of output</code></pre>
+<hr>
+<h2 id="context-isolation-mechanism">Context Isolation Mechanism</h2>
+<h3 id="the-core-problem">The Core Problem</h3>
+<p><strong>Traditional approach:</strong></p>
+<pre><code class="">User conversation → Build code → More conversation → Context window fills → Hit limit</code></pre>
+<p><strong>Context Foundry approach:</strong></p>
+<pre><code class="">User conversation → Spawn subprocess → Build in isolation → Return summary → Context stays clean</code></pre>
+<h3 id="how-isolation-works">How Isolation Works</h3>
+<pre><code class="">┌──────────────────────────────────────────────────────────────┐
+│ CONTEXT ISOLATION ARCHITECTURE                                │
+├──────────────────────────────────────────────────────────────┤
+│                                                               │
+│ MAIN CLAUDE CODE WINDOW                                      │
+│ ┌──────────────────────────────────────────────────────┐    │
+│ │ Context Window: 200,000 tokens                        │    │
+│ │ ├─ System Prompt: 5,000 tokens                        │    │
+│ │ ├─ User: &quot;Build weather app&quot; (100 tokens)            │    │
+│ │ ├─ Tool Call: autonomous_build_and_deploy (200 tokens)│    │
+│ │ ├─ Tool Response: Task ID (100 tokens)               │    │
+│ │ └─ Total Used: ~1,400 tokens (0.7%)                  │    │
+│ │                                                        │    │
+│ │ ✅ Remains clean and available                        │    │
+│ └──────────────────────────────────────────────────────┘    │
+│                                                               │
+│                        ↓ Spawns subprocess                    │
+│                                                               │
+│ DELEGATED CLAUDE CODE INSTANCE (Separate Process)            │
+│ ┌──────────────────────────────────────────────────────┐    │
+│ │ Context Window: 200,000 tokens (SEPARATE!)            │    │
+│ │ ├─ System Prompt: 5,000 tokens                        │    │
+│ │ ├─ Orchestrator Prompt (USER msg): 5,000 tokens      │    │
+│ │ ├─ Phase 1 Scout: 10,000 tokens                      │    │
+│ │ ├─ Phase 2 Architect: 15,000 tokens                  │    │
+│ │ ├─ Phase 3 Builder: 30,000 tokens                    │    │
+│ │ ├─ Phase 4 Test: 8,000 tokens                        │    │
+│ │ ├─ Phase 5 Docs: 3,000 tokens                        │    │
+│ │ ├─ Phase 6 Deploy: 2,000 tokens                      │    │
+│ │ └─ Total Used: ~78,000 tokens (39%)                  │    │
+│ │                                                        │    │
+│ │ ❌ Discarded when process exits                       │    │
+│ └──────────────────────────────────────────────────────┘    │
+│                                                               │
+│ IMPACT ON MAIN WINDOW: 0% (completely isolated!)             │
+└──────────────────────────────────────────────────────────────┘</code></pre>
+<h3 id="key-insights">Key Insights</h3>
+<ol>
+<li><p><strong>Separate Operating System Processes</strong></p>
+<ul>
+<li>Main Claude Code: PID 12345</li>
+<li>Delegated Instance: PID 67890</li>
+<li>No shared memory</li>
+</ul>
+</li>
+<li><p><strong>Separate Context Windows</strong></p>
+<ul>
+<li>Each process has own 200K token budget</li>
+<li>No cross-contamination</li>
+<li>Build can use 80% of context without affecting main window</li>
+</ul>
+</li>
+<li><p><strong>Communication via Files Only</strong></p>
+<ul>
+<li>No message passing between processes</li>
+<li>Results written to <code>.context-foundry/session-summary.json</code></li>
+<li>MCP server reads file after process exits</li>
+</ul>
+</li>
+<li><p><strong>Clean Slate Each Build</strong></p>
+<ul>
+<li>Every build starts fresh</li>
+<li>No accumulated context from previous builds</li>
+<li>Predictable, repeatable behavior</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2 id="pattern-library-integration">Pattern Library Integration</h2>
+<h3 id="where-patterns-live">Where Patterns Live</h3>
+<p><strong>Global Patterns</strong> (shared across all builds):</p>
+<pre><code class="">/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json           # Known issues and solutions
+├── test-patterns.json           # Testing strategies
+├── architecture-patterns.json   # Proven architectures
+└── scout-learnings.json         # Research insights</code></pre>
+<p><strong>Project Patterns</strong> (project-specific):</p>
+<pre><code class="">/Users/name/homelab/your-project/.context-foundry/patterns/
+└── [Same structure, project-specific discoveries]</code></pre>
+<h3 id="how-patterns-are-used">How Patterns Are Used</h3>
+<p><strong>Phase 1: Scout</strong> reads global patterns:</p>
+<pre><code class="language-python"># Scout agent checks for known issues
+patterns_path = Path.home() / &quot;.context-foundry&quot; / &quot;patterns&quot; / &quot;common-issues.json&quot;
+if patterns_path.exists():
+    patterns = json.loads(patterns_path.read_text())
+
+    # Check if current project type has known issues
+    for pattern in patterns[&#039;patterns&#039;]:
+        if project_type in pattern[&#039;project_types&#039;]:
+            # Warn about potential issues in scout-report.md
+            warnings.append({
+                &#039;pattern_id&#039;: pattern[&#039;pattern_id&#039;],
+                &#039;severity&#039;: pattern[&#039;severity&#039;],
+                &#039;issue&#039;: pattern[&#039;issue&#039;],
+                &#039;prevention&#039;: pattern[&#039;solution&#039;]
+            })</code></pre>
+<p><strong>Phase 7: Feedback</strong> updates patterns:</p>
+<pre><code class="language-python"># Feedback agent extracts new learnings
+if build_had_issues and issue_was_resolved:
+    new_pattern = {
+        &#039;pattern_id&#039;: generate_id(issue_description),
+        &#039;first_seen&#039;: today,
+        &#039;frequency&#039;: 1,
+        &#039;project_types&#039;: [current_project_type],
+        &#039;issue&#039;: issue_description,
+        &#039;solution&#039;: resolution_steps,
+        &#039;severity&#039;: calculate_severity(impact),
+        &#039;auto_apply&#039;: is_automatable
+    }
+
+    # Add to global pattern library
+    global_patterns[&#039;patterns&#039;].append(new_pattern)
+    save_patterns(global_patterns)</code></pre>
+<h3 id="mcp-server-pattern-access">MCP Server Pattern Access</h3>
+<p>MCP server provides pattern management tools:</p>
+<pre><code class="language-python">@mcp.tool()
+async def read_global_patterns(pattern_type: str = &quot;common-issues&quot;) -&gt; str:
+    &quot;&quot;&quot;Read patterns from global library.&quot;&quot;&quot;
+    patterns_path = CONTEXT_FOUNDRY_ROOT / &quot;.context-foundry&quot; / &quot;patterns&quot; / f&quot;{pattern_type}.json&quot;
+    if patterns_path.exists():
+        return patterns_path.read_text()
+    return json.dumps({&quot;patterns&quot;: [], &quot;version&quot;: &quot;1.0&quot;})
+
+@mcp.tool()
+async def save_global_patterns(pattern_type: str, patterns_data: str) -&gt; str:
+    &quot;&quot;&quot;Save patterns to global library.&quot;&quot;&quot;
+    patterns_path = CONTEXT_FOUNDRY_ROOT / &quot;.context-foundry&quot; / &quot;patterns&quot; / f&quot;{pattern_type}.json&quot;
+    patterns_path.parent.mkdir(parents=True, exist_ok=True)
+    patterns_path.write_text(patterns_data)
+    return json.dumps({&quot;status&quot;: &quot;saved&quot;, &quot;path&quot;: str(patterns_path)})</code></pre>
+<hr>
+<h2 id="error-handling-recovery">Error Handling &amp; Recovery</h2>
+<h3 id="timeout-handling">Timeout Handling</h3>
+<pre><code class="language-python"># In get_delegation_result()
+if elapsed &gt; task[&#039;timeout&#039;]:
+    # Kill runaway process
+    process.kill()
+    process.wait(timeout=5)  # Give it 5 seconds to die gracefully
+
+    # Mark as timeout
+    task[&#039;status&#039;] = &#039;timeout&#039;
+
+    # Partial results may exist
+    partial_results = {}
+    if (Path(task[&#039;working_directory&#039;]) / &#039;.context-foundry&#039;).exists():
+        # Check what phases completed
+        if (Path(task[&#039;working_directory&#039;]) / &#039;.context-foundry&#039; / &#039;scout-report.md&#039;).exists():
+            partial_results[&#039;scout_completed&#039;] = True
+        if (Path(task[&#039;working_directory&#039;]) / &#039;.context-foundry&#039; / &#039;architecture.md&#039;).exists():
+            partial_results[&#039;architect_completed&#039;] = True
+        # etc.
+
+    return json.dumps({
+        &#039;status&#039;: &#039;timeout&#039;,
+        &#039;elapsed_seconds&#039;: elapsed,
+        &#039;partial_results&#039;: partial_results,
+        &#039;recovery&#039;: &#039;Review partial artifacts in .context-foundry/ and retry with higher timeout&#039;
+    })</code></pre>
+<h3 id="process-crash-handling">Process Crash Handling</h3>
+<pre><code class="language-python"># If process exits with non-zero code
+if exit_code != 0:
+    stdout, stderr = process.communicate()
+
+    # Parse common errors
+    if &#039;ModuleNotFoundError&#039; in stderr:
+        error_type = &#039;dependency_missing&#039;
+        suggestion = &#039;Install missing Python packages: pip install -r requirements-mcp.txt&#039;
+    elif &#039;claude: command not found&#039; in stderr:
+        error_type = &#039;claude_not_installed&#039;
+        suggestion = &#039;Install Claude Code CLI and add to PATH&#039;
+    elif &#039;Permission denied&#039; in stderr:
+        error_type = &#039;permission_error&#039;
+        suggestion = &#039;Check file/directory permissions&#039;
+    else:
+        error_type = &#039;unknown&#039;
+        suggestion = &#039;Check stderr for details&#039;
+
+    return json.dumps({
+        &#039;status&#039;: &#039;failed&#039;,
+        &#039;exit_code&#039;: exit_code,
+        &#039;error_type&#039;: error_type,
+        &#039;suggestion&#039;: suggestion,
+        &#039;stdout&#039;: stdout[-2000:],
+        &#039;stderr&#039;: stderr[-2000:]
+    })</code></pre>
+<h3 id="self-healing-test-loop">Self-Healing Test Loop</h3>
+<p><strong>Built into delegated instance, not MCP server!</strong></p>
+<p>The orchestrator prompt includes self-healing logic:</p>
+<pre><code class="">PHASE 4: TEST (with Self-Healing)
+───────────────────────────────────
+1. Run tests: npm test (or pytest, etc.)
+2. Parse results
+3. IF tests pass:
+     → Write test-final-report.md
+     → Continue to Phase 5
+4. IF tests fail AND iterations &lt; max_test_iterations:
+     → Analyze root cause
+     → Write test-results-iteration-N.md
+     → Create fixes-iteration-N.md
+     → Apply fixes (re-run Builder phase for specific files)
+     → Increment iteration counter
+     → GOTO step 1 (retry tests)
+5. IF tests fail AND iterations &gt;= max_test_iterations:
+     → Write test-final-report.md with failure details
+     → Continue to Phase 5 (document known issues)</code></pre>
+<hr>
+<h2 id="performance-scalability">Performance &amp; Scalability</h2>
+<h3 id="concurrent-build-limits">Concurrent Build Limits</h3>
+<p><strong>No artificial limits!</strong> Constrained only by system resources:</p>
+<pre><code class="language-python"># In MCP server - no limit on TASKS
+TASKS = {}  # Can grow indefinitely
+
+# Practical limits:
+# - CPU: Each Claude Code instance uses 1-2 cores
+# - Memory: Each instance uses ~500MB-1GB RAM
+# - Network: API calls (if using Anthropic API mode)
+
+# Example capacity on typical dev machine:
+# - 8-core CPU: ~4-6 parallel builds comfortable
+# - 16GB RAM: ~10-15 builds before swapping
+# - Gigabit internet: Network not a bottleneck</code></pre>
+<h3 id="resource-optimization">Resource Optimization</h3>
+<p><strong>1. Process Cleanup:</strong></p>
+<pre><code class="language-python"># Automatic cleanup of finished tasks (optional)
+async def cleanup_completed_tasks():
+    &quot;&quot;&quot;Remove completed tasks older than 1 hour.&quot;&quot;&quot;
+    cutoff = time.time() - 3600
+    to_remove = [
+        task_id for task_id, task in TASKS.items()
+        if task[&#039;status&#039;] in [&#039;completed&#039;, &#039;failed&#039;, &#039;timeout&#039;]
+        and task[&#039;start_time&#039;] &lt; cutoff
+    ]
+    for task_id in to_remove:
+        del TASKS[task_id]</code></pre>
+<p><strong>2. Output Buffering:</strong></p>
+<pre><code class="language-python"># Prevent memory bloat from large stdout/stderr
+process = subprocess.Popen(
+    [...],
+    bufsize=1,  # Line-buffered (not unbuffered = 0)
+    # This prevents buffering entire output in memory
+)</code></pre>
+<p><strong>3. File-based Artifacts:</strong></p>
+<pre><code class="language-python"># Don&#039;t store build artifacts in memory
+# Write to files immediately:
+# - .context-foundry/scout-report.md
+# - .context-foundry/architecture.md
+# - .context-foundry/build-log.md
+# MCP server reads summary file only when requested</code></pre>
+<h3 id="benchmark-performance">Benchmark Performance</h3>
+<p><strong>Measured on MacBook Pro (M1, 16GB RAM):</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>Single build time</td>
+<td>7-15 minutes</td>
+</tr>
+<tr>
+<td>Parallel builds (4x)</td>
+<td>12-18 minutes</td>
+</tr>
+<tr>
+<td>Memory per build</td>
+<td>~800MB</td>
+</tr>
+<tr>
+<td>CPU per build</td>
+<td>1.5 cores avg</td>
+</tr>
+<tr>
+<td>Main context usage</td>
+<td>&lt; 1% (0.7% measured)</td>
+</tr>
+<tr>
+<td>Delegated context usage</td>
+<td>30-50%</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Speedup from Parallel Execution:</strong></p>
+<pre><code class="">Sequential: 4 builds × 10 min = 40 minutes
+Parallel:   4 builds in ~15 minutes = 2.7x speedup</code></pre>
+<hr>
+<h2 id="security-considerations">Security Considerations</h2>
+<h3 id="process-isolation">Process Isolation</h3>
+<p><strong>Each delegated instance:</strong></p>
+<ul>
+<li>✅ Runs with same user permissions as MCP server</li>
+<li>✅ Cannot escalate privileges</li>
+<li>✅ Isolated from other delegated instances</li>
+<li>✅ Cannot access main Claude window&#39;s context</li>
+<li>❌ Not sandboxed (has full filesystem access)</li>
+</ul>
+<p><strong>Implications:</strong></p>
+<pre><code class="">Delegated instances can:
+  ✅ Create/modify files in working_directory
+  ✅ Run bash commands (tests, git, npm, etc.)
+  ✅ Access internet (API calls, package downloads)
+  ✅ Create GitHub repositories
+
+Delegated instances CANNOT:
+  ❌ Access files outside working_directory (unless explicitly given permission)
+  ❌ Modify Context Foundry source code (different directory)
+  ❌ Affect other running builds
+  ❌ Read your Claude Code conversation history</code></pre>
+<h3 id="api-key-handling">API Key Handling</h3>
+<p><strong>Environment Variables:</strong></p>
+<pre><code class="language-python"># MCP server doesn&#039;t need API keys for Claude Max subscription mode
+# But if using API mode:
+
+@mcp.tool()
+async def autonomous_build_and_deploy_async(...):
+    # Don&#039;t log API keys!
+    env = os.environ.copy()
+    if &#039;ANTHROPIC_API_KEY&#039; in env:
+        env[&#039;ANTHROPIC_API_KEY_MASKED&#039;] = env[&#039;ANTHROPIC_API_KEY&#039;][:8] + &#039;...&#039;
+
+    # Pass environment to subprocess
+    process = subprocess.Popen(
+        [...],
+        env=env  # Inherits MCP server&#039;s environment (including API keys)
+    )</code></pre>
+<p><strong>Recommended Practice:</strong></p>
+<pre><code class="language-bash"># Store API keys in ~/.zshrc or ~/.bashrc
+export ANTHROPIC_API_KEY=&quot;sk-ant-...&quot;
+export GITHUB_TOKEN=&quot;ghp_...&quot;
+
+# NOT in .mcp.json (gets committed to git!)
+# NOT in orchestrator_prompt.txt (readable by user)</code></pre>
+<h3 id="code-injection-prevention">Code Injection Prevention</h3>
+<p><strong>User input is sanitized:</strong></p>
+<pre><code class="language-python"># Task description is escaped before shell execution
+task_description = user_input.replace(&#039;&quot;&#039;, &#039;\\&quot;&#039;).replace(&#039;$&#039;, &#039;\\$&#039;)
+
+# Passed via --prompt flag (shell-safe)
+process = subprocess.Popen([
+    &#039;claude&#039;,
+    &#039;--prompt&#039;, task_description  # List argument (not shell string!)
+])
+
+# NOT this (vulnerable to injection):
+# os.system(f&#039;claude --prompt &quot;{task_description}&quot;&#039;)  # ❌ UNSAFE!</code></pre>
+<hr>
+<h2 id="testing-validation">Testing &amp; Validation</h2>
+<h3 id="mcp-server-tests">MCP Server Tests</h3>
+<p><strong>Test harness location:</strong> <code>tests/test_mcp_server.py</code></p>
+<pre><code class="language-python">import pytest
+from tools.mcp_server import autonomous_build_and_deploy_async, get_delegation_result
+
+@pytest.mark.asyncio
+async def test_build_spawns_subprocess():
+    &quot;&quot;&quot;Test that build tool spawns subprocess correctly.&quot;&quot;&quot;
+    result = await autonomous_build_and_deploy_async(
+        task=&quot;Create hello.py that prints &#039;Hello World&#039;&quot;,
+        working_directory=&quot;/tmp/test-build&quot;
+    )
+
+    result_dict = json.loads(result)
+    assert result_dict[&#039;status&#039;] == &#039;started&#039;
+    assert &#039;task_id&#039; in result_dict
+    assert result_dict[&#039;working_directory&#039;] == &#039;/tmp/test-build&#039;
+
+@pytest.mark.asyncio
+async def test_get_status_while_running():
+    &quot;&quot;&quot;Test status check while build is running.&quot;&quot;&quot;
+    # Start build
+    result = await autonomous_build_and_deploy_async(
+        task=&quot;Create hello.py&quot;,
+        working_directory=&quot;/tmp/test-build&quot;
+    )
+    task_id = json.loads(result)[&#039;task_id&#039;]
+
+    # Check status immediately
+    status = await get_delegation_result(task_id)
+    status_dict = json.loads(status)
+    assert status_dict[&#039;status&#039;] == &#039;running&#039;
+    assert &#039;elapsed_seconds&#039; in status_dict</code></pre>
+<h3 id="integration-tests">Integration Tests</h3>
+<p><strong>Manual test procedure:</strong></p>
+<pre><code class="language-bash"># 1. Start MCP server in one terminal
+cd /Users/name/homelab/context-foundry
+python3 tools/mcp_server.py
+
+# 2. Start Claude Code in another terminal
+claude
+
+# 3. In Claude Code session, test each tool:
+&gt; Use mcp__context_foundry_status
+
+&gt; Use mcp__autonomous_build_and_deploy_async with:
+&gt;   task: &quot;Create a Python script that prints the Fibonacci sequence&quot;
+&gt;   working_directory: &quot;/tmp/fib-test&quot;
+
+&gt; [Wait 30 seconds]
+
+&gt; Use mcp__get_delegation_result with the task_id from above
+
+&gt; Use mcp__list_delegations
+
+# 4. Verify results
+&gt; Check /tmp/fib-test/.context-foundry/session-summary.json</code></pre>
+<hr>
+<h2 id="troubleshooting-debugging">Troubleshooting &amp; Debugging</h2>
+<h3 id="enable-verbose-logging">Enable Verbose Logging</h3>
+<p><strong>Add to <code>tools/mcp_server.py</code>:</strong></p>
+<pre><code class="language-python">import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format=&#039;%(asctime)s - %(name)s - %(levelname)s - %(message)s&#039;,
+    filename=&#039;/tmp/context-foundry-mcp.log&#039;
+)
+logger = logging.getLogger(&#039;context-foundry&#039;)
+
+@mcp.tool()
+async def autonomous_build_and_deploy_async(...):
+    logger.debug(f&quot;Received build request: task={task}, working_dir={working_directory}&quot;)
+
+    # ... spawn process ...
+
+    logger.debug(f&quot;Spawned process PID={process.pid}, task_id={task_id}&quot;)
+
+    return json.dumps({...})</code></pre>
+<p><strong>View logs:</strong></p>
+<pre><code class="language-bash">tail -f /tmp/context-foundry-mcp.log</code></pre>
+<h3 id="inspect-process-state">Inspect Process State</h3>
+<p><strong>Check running delegated instances:</strong></p>
+<pre><code class="language-bash"># See all Claude Code processes
+ps aux | grep claude
+
+# Output:
+# user  12345  ... claude (main session)
+# user  67890  ... claude --prompt &quot;Read orchestrator...&quot; (delegated)
+# user  67891  ... claude --prompt &quot;Read orchestrator...&quot; (another delegated)
+
+# Kill a specific delegated instance
+kill 67890</code></pre>
+<h3 id="debug-subprocess-output">Debug Subprocess Output</h3>
+<p><strong>Read stdout/stderr while process runs:</strong></p>
+<pre><code class="language-python"># Modify subprocess.Popen to save output to file
+log_file = Path(working_directory) / &#039;.context-foundry&#039; / &#039;build-output.log&#039;
+
+process = subprocess.Popen(
+    [...],
+    stdout=open(log_file, &#039;w&#039;),
+    stderr=subprocess.STDOUT  # Merge stderr into stdout
+)
+
+# Now you can tail the log:
+# tail -f /path/to/working_directory/.context-foundry/build-output.log</code></pre>
+<h3 id="common-issues">Common Issues</h3>
+<p><strong>1. &quot;MCP Server not responding&quot;</strong></p>
+<pre><code class="">Symptoms: Claude Code says MCP tools unavailable
+Cause: MCP server not running or misconfigured
+
+Fix:
+1. Check MCP server is running: ps aux | grep mcp_server.py
+2. Check .mcp.json path is correct
+3. Restart Claude Code: exit and run claude again</code></pre>
+<p><strong>2. &quot;Process spawns but nothing happens&quot;</strong></p>
+<pre><code class="">Symptoms: get_delegation_result shows &quot;running&quot; forever
+Cause: Delegated instance waiting for input (shouldn&#039;t happen with --permission-mode bypassPermissions)
+
+Fix:
+1. Check process logs: cat /tmp/context-foundry-mcp.log
+2. Verify --permission-mode bypassPermissions is set
+3. Check process isn&#039;t hung: ps aux | grep &lt;PID&gt;</code></pre>
+<p><strong>3. &quot;Build succeeds but no GitHub deployment&quot;</strong></p>
+<pre><code class="">Symptoms: Code builds, tests pass, but no GitHub repo created
+Cause: GitHub CLI not authenticated
+
+Fix:
+1. Check: gh auth status
+2. Authenticate: gh auth login
+3. Retry build</code></pre>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>Context Foundry MCP Server Architecture:</strong></p>
+<p>✅ <strong>FastMCP 2.0</strong> framework for MCP protocol<br>✅ <strong>Subprocess delegation</strong> for context isolation<br>✅ <strong>9 MCP tools</strong> for build automation and task management<br>✅ <strong>File-based artifacts</strong> (no memory bloat)<br>✅ <strong>Pattern library integration</strong> (self-learning)<br>✅ <strong>Self-healing test loops</strong> (autonomous debugging)<br>✅ <strong>Parallel execution</strong> (unlimited concurrent builds)<br>✅ <strong>Professional error handling</strong> (timeouts, crashes, recovery)</p>
+<p><strong>Key Files:</strong></p>
+<ul>
+<li><code>tools/mcp_server.py</code> - MCP server implementation (1400 lines)</li>
+<li><code>tools/orchestrator_prompt.txt</code> - Build workflow meta-prompt (1000+ lines)</li>
+<li><code>.mcp.json</code> - Project-shareable MCP configuration</li>
+<li><code>requirements-mcp.txt</code> - Python dependencies</li>
+</ul>
+<p><strong>For More Information:</strong></p>
+<ul>
+<li><a href="CONTEXT_PRESERVATION.md">CONTEXT_PRESERVATION.md</a> - Context flow deep dive</li>
+<li><a href="DELEGATION_MODEL.md">DELEGATION_MODEL.md</a> - How delegation keeps context clean</li>
+<li><a href="../CLAUDE_CODE_MCP_SETUP.md">CLAUDE_CODE_MCP_SETUP.md</a> - Setup and troubleshooting</li>
+<li><a href="../FAQ.md">FAQ.md</a> - Frequently asked questions</li>
+</ul>
+<hr>
+<p><strong>Version:</strong> 2.0.1 | <strong>Last Updated:</strong> October 2025</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/technical/delegation-model" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Delegation Model</span>
+            </a>
+
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#overview" class="toc-link" data-heading-id="overview">
+                  Overview
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#key-innovation" class="toc-link" data-heading-id="key-innovation">
+                          Key Innovation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#core-principles" class="toc-link" data-heading-id="core-principles">
+                          Core Principles
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#technology-stack" class="toc-link" data-heading-id="technology-stack">
+                  Technology Stack
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#core-components" class="toc-link" data-heading-id="core-components">
+                          Core Components
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#dependencies" class="toc-link" data-heading-id="dependencies">
+                          Dependencies
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#mcp-protocol-integration" class="toc-link" data-heading-id="mcp-protocol-integration">
+                  MCP Protocol Integration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-is-mcp" class="toc-link" data-heading-id="what-is-mcp">
+                          What is MCP?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-server-initialization" class="toc-link" data-heading-id="mcp-server-initialization">
+                          MCP Server Initialization
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-message-flow" class="toc-link" data-heading-id="mcp-message-flow">
+                          MCP Message Flow
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#subprocess-delegation-model" class="toc-link" data-heading-id="subprocess-delegation-model">
+                  Subprocess Delegation Model
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#why-subprocess-delegation" class="toc-link" data-heading-id="why-subprocess-delegation">
+                          Why Subprocess Delegation?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#implementation-details" class="toc-link" data-heading-id="implementation-details">
+                          Implementation Details
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#process-lifecycle" class="toc-link" data-heading-id="process-lifecycle">
+                          Process Lifecycle
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#monitoring-status-checking" class="toc-link" data-heading-id="monitoring-status-checking">
+                          Monitoring &amp; Status Checking
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#tool-implementations" class="toc-link" data-heading-id="tool-implementations">
+                  Tool Implementations
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#full-tool-catalog" class="toc-link" data-heading-id="full-tool-catalog">
+                          Full Tool Catalog
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#tool-parameter-specifications" class="toc-link" data-heading-id="tool-parameter-specifications">
+                          Tool Parameter Specifications
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#context-isolation-mechanism" class="toc-link" data-heading-id="context-isolation-mechanism">
+                  Context Isolation Mechanism
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#the-core-problem" class="toc-link" data-heading-id="the-core-problem">
+                          The Core Problem
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-isolation-works" class="toc-link" data-heading-id="how-isolation-works">
+                          How Isolation Works
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#key-insights" class="toc-link" data-heading-id="key-insights">
+                          Key Insights
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#pattern-library-integration" class="toc-link" data-heading-id="pattern-library-integration">
+                  Pattern Library Integration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-patterns-live" class="toc-link" data-heading-id="where-patterns-live">
+                          Where Patterns Live
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-patterns-are-used" class="toc-link" data-heading-id="how-patterns-are-used">
+                          How Patterns Are Used
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-server-pattern-access" class="toc-link" data-heading-id="mcp-server-pattern-access">
+                          MCP Server Pattern Access
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#error-handling-recovery" class="toc-link" data-heading-id="error-handling-recovery">
+                  Error Handling &amp; Recovery
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#timeout-handling" class="toc-link" data-heading-id="timeout-handling">
+                          Timeout Handling
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#process-crash-handling" class="toc-link" data-heading-id="process-crash-handling">
+                          Process Crash Handling
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#self-healing-test-loop" class="toc-link" data-heading-id="self-healing-test-loop">
+                          Self-Healing Test Loop
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#performance-scalability" class="toc-link" data-heading-id="performance-scalability">
+                  Performance &amp; Scalability
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#concurrent-build-limits" class="toc-link" data-heading-id="concurrent-build-limits">
+                          Concurrent Build Limits
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#resource-optimization" class="toc-link" data-heading-id="resource-optimization">
+                          Resource Optimization
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#benchmark-performance" class="toc-link" data-heading-id="benchmark-performance">
+                          Benchmark Performance
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#security-considerations" class="toc-link" data-heading-id="security-considerations">
+                  Security Considerations
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#process-isolation" class="toc-link" data-heading-id="process-isolation">
+                          Process Isolation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#api-key-handling" class="toc-link" data-heading-id="api-key-handling">
+                          API Key Handling
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#code-injection-prevention" class="toc-link" data-heading-id="code-injection-prevention">
+                          Code Injection Prevention
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#testing-validation" class="toc-link" data-heading-id="testing-validation">
+                  Testing &amp; Validation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-server-tests" class="toc-link" data-heading-id="mcp-server-tests">
+                          MCP Server Tests
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#integration-tests" class="toc-link" data-heading-id="integration-tests">
+                          Integration Tests
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting-debugging" class="toc-link" data-heading-id="troubleshooting-debugging">
+                  Troubleshooting &amp; Debugging
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#enable-verbose-logging" class="toc-link" data-heading-id="enable-verbose-logging">
+                          Enable Verbose Logging
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#inspect-process-state" class="toc-link" data-heading-id="inspect-process-state">
+                          Inspect Process State
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#debug-subprocess-output" class="toc-link" data-heading-id="debug-subprocess-output">
+                          Debug Subprocess Output
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#common-issues" class="toc-link" data-heading-id="common-issues">
+                          Common Issues
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

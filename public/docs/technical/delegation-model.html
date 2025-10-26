@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delegation Model | Context Foundry Documentation</title>
+  <meta name="description" content="Technical Deep Dive: How Context Foundry Keeps Your Main Context Clean">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/technical/delegation-model">
+  <meta property="og:title" content="Delegation Model">
+  <meta property="og:description" content="Technical Deep Dive: How Context Foundry Keeps Your Main Context Clean">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Delegation Model">
+  <meta name="twitter:description" content="Technical Deep Dive: How Context Foundry Keeps Your Main Context Clean">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/technical/delegation-model">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/technical" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Delegation Model</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-delegation-model">Context Foundry Delegation Model</h1>
+<p><strong>Technical Deep Dive: How Context Foundry Keeps Your Main Context Clean</strong></p>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#the-problem-context-window-bloat">The Problem: Context Window Bloat</a></li>
+<li><a href="#the-solution-delegation-architecture">The Solution: Delegation Architecture</a></li>
+<li><a href="#how-delegation-works">How Delegation Works</a></li>
+<li><a href="#context-separation-benefits">Context Separation Benefits</a></li>
+<li><a href="#mcp-server-implementation">MCP Server Implementation</a></li>
+<li><a href="#prompt-architecture">Prompt Architecture</a></li>
+<li><a href="#agent-lifecycle">Agent Lifecycle</a></li>
+<li><a href="#comparison-with-other-approaches">Comparison with Other Approaches</a></li>
+<li><a href="#faq">FAQ</a></li>
+</ol>
+<hr>
+<h2 id="overview">Overview</h2>
+<p><strong>Key Innovation:</strong> Context Foundry builds entire applications while using &lt; 1% of your main Claude Code window&#39;s context.</p>
+<p><strong>How:</strong> By delegating the work to <strong>separate Claude Code instances</strong> that run independently and communicate via files.</p>
+<p><strong>Result:</strong></p>
+<ul>
+<li>✅ Main window stays clean</li>
+<li>✅ Multiple builds can run in parallel</li>
+<li>✅ Each build gets fresh 200K context budget</li>
+<li>✅ No context pollution between projects</li>
+</ul>
+<hr>
+<h2 id="the-problem-context-window-bloat">The Problem: Context Window Bloat</h2>
+<h3 id="traditional-ai-coding-single-context">Traditional AI Coding (Single Context)</h3>
+<pre><code class="">┌────────────────────────────────────────────────────┐
+│ Claude Code Session (Single Conversation)          │
+│                                                     │
+│ User: &quot;Build a todo app&quot;                           │
+│ Claude: [2,000 tokens of implementation]           │
+│                                                     │
+│ User: &quot;Add authentication&quot;                         │
+│ Claude: [3,000 tokens more]                        │
+│                                                     │
+│ User: &quot;Add dark mode&quot;                              │
+│ Claude: [2,500 tokens more]                        │
+│                                                     │
+│ [After 20 interactions]                            │
+│ Total: 80,000 tokens (40% of 200K context)         │
+│                                                     │
+│ Problems:                                          │
+│ ❌ Context fills up quickly                        │
+│ ❌ Early messages get truncated                    │
+│ ❌ Performance degrades at high utilization        │
+│ ❌ Can&#039;t run multiple builds simultaneously        │
+│ ❌ Can&#039;t do other work while building              │
+└────────────────────────────────────────────────────┘</code></pre>
+<h3 id="context-foundry-approach-delegation">Context Foundry Approach (Delegation)</h3>
+<pre><code class="">┌────────────────────────────────────────────────────┐
+│ Your Claude Code Window (Main Context)             │
+│                                                     │
+│ You: &quot;Build a todo app&quot;                            │
+│ Claude: [Delegates to MCP server]                  │
+│ Claude: &quot;Build started! Task ID: abc-123&quot;          │
+│                                                     │
+│ Context Used: ~1,000 tokens (0.5%)                 │
+│ ✅ Stay clean and available                        │
+│                                                     │
+│ You: [Can continue other work]                     │
+│                                                     │
+│ [10 minutes later]                                 │
+│ Claude: &quot;Build complete! ✅&quot;                        │
+│                                                     │
+│ Context Used: ~1,500 tokens (0.75%)                │
+│ ✅ Still clean after full build!                   │
+└────────────────────────────────────────────────────┘
+          │
+          │ Spawns
+          ↓
+┌────────────────────────────────────────────────────┐
+│ Delegated Claude Instance (Separate Context)       │
+│                                                     │
+│ [Receives orchestrator prompt]                     │
+│ [Runs all 7 phases autonomously]                   │
+│ [Uses 80,000 tokens of ITS OWN context]            │
+│                                                     │
+│ Context Used: ~80,000 tokens (40%)                 │
+│ ✅ Isolated - doesn&#039;t affect main window           │
+│                                                     │
+│ Returns: Build summary                             │
+└────────────────────────────────────────────────────┘</code></pre>
+<hr>
+<h2 id="the-solution-delegation-architecture">The Solution: Delegation Architecture</h2>
+<h3 id="high-level-architecture">High-Level Architecture</h3>
+<pre><code class="">┌─────────────────────────────────────────────────────────────┐
+│                    MAIN CLAUDE CODE WINDOW                   │
+│                                                              │
+│  User Request: &quot;Build a weather app&quot;                        │
+│         ↓                                                    │
+│  Claude Code detects build intent                           │
+│         ↓                                                    │
+│  Calls MCP Tool: autonomous_build_and_deploy()              │
+│         ↓                                                    │
+│  Returns: Task ID (build continues in background)           │
+│         ↓                                                    │
+│  User: [Continues working on other things]                  │
+│                                                              │
+│  Context Usage: &lt; 1% (stays clean!)                         │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ MCP Protocol
+                       │
+                       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      MCP SERVER (Python)                     │
+│                  tools/mcp_server.py                         │
+│                                                              │
+│  Receives: autonomous_build_and_deploy(task, directory)     │
+│         ↓                                                    │
+│  Spawns: subprocess.Popen(                                  │
+│            [&#039;claude&#039;, &#039;--prompt&#039;, task_prompt]              │
+│          )                                                   │
+│         ↓                                                    │
+│  Returns: Task ID to main window                            │
+│         ↓                                                    │
+│  Monitors: Delegated process (async)                        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ Subprocess
+                       │
+                       ↓
+┌─────────────────────────────────────────────────────────────┐
+│              DELEGATED CLAUDE CODE INSTANCE                  │
+│                   (Fresh Context)                            │
+│                                                              │
+│  Receives orchestrator prompt as USER message:              │
+│  &quot;Read tools/orchestrator_prompt.txt and execute...&quot;        │
+│         ↓                                                    │
+│  Phase 1: Scout (creates agent, researches)                 │
+│         ↓ (writes scout-report.md)                          │
+│  Phase 2: Architect (creates agent, designs)                │
+│         ↓ (writes architecture.md)                          │
+│  Phase 3: Builder (creates agent, implements)               │
+│         ↓ (writes code files)                               │
+│  Phase 4: Test (runs tests, self-heals if needed)           │
+│         ↓ (writes test results)                             │
+│  Phase 5: Docs (generates documentation)                    │
+│         ↓ (writes README, guides)                           │
+│  Phase 6: Deploy (creates GitHub repo, pushes)              │
+│         ↓ (git operations)                                  │
+│  Phase 7: Feedback (extracts learnings)                     │
+│         ↓ (updates pattern library)                         │
+│  Returns: Build summary                                     │
+│                                                              │
+│  Context Usage: 40-60% (isolated, doesn&#039;t affect main!)     │
+└─────────────────────────────────────────────────────────────┘
+                       │
+                       │ Returns Summary
+                       │
+                       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                      MCP SERVER                              │
+│  Receives: Build complete summary                           │
+│  Returns: Summary to main Claude window                     │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │
+                       ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    MAIN CLAUDE CODE WINDOW                   │
+│                                                              │
+│  Shows: &quot;Build complete! ✅&quot;                                 │
+│         GitHub: github.com/snedea/weather-app               │
+│         Tests: 25/25 passing                                │
+│         Duration: 8.3 minutes                               │
+│                                                              │
+│  User: [Can check results, continue working, etc.]          │
+│                                                              │
+│  Context Usage: Still &lt; 1% (stayed clean entire time!)      │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<hr>
+<h2 id="how-delegation-works">How Delegation Works</h2>
+<h3 id="step-by-step-flow">Step-by-Step Flow</h3>
+<p><strong>1. User Makes Request</strong></p>
+<pre><code class="">You: &quot;Build a weather app with current weather and 5-day forecast&quot;</code></pre>
+<p><strong>2. Claude Code Intent Detection</strong></p>
+<pre><code class="language-python"># Claude Code&#039;s internal reasoning:
+if contains_build_intent(user_message):
+    tool_to_call = &quot;mcp__autonomous_build_and_deploy&quot;
+    params = extract_build_params(user_message)</code></pre>
+<p><strong>3. MCP Tool Call</strong></p>
+<pre><code class="language-python"># Claude Code makes MCP tool call
+{
+  &quot;tool&quot;: &quot;mcp__autonomous_build_and_deploy&quot;,
+  &quot;parameters&quot;: {
+    &quot;task&quot;: &quot;Build a weather app with current weather and 5-day forecast&quot;,
+    &quot;working_directory&quot;: &quot;/Users/name/homelab/weather-app&quot;,
+    &quot;github_repo_name&quot;: &quot;weather-app&quot;,
+    &quot;enable_test_loop&quot;: true
+  }
+}</code></pre>
+<p><strong>4. MCP Server Receives Call</strong></p>
+<pre><code class="language-python"># tools/mcp_server.py
+@mcp.tool()
+async def autonomous_build_and_deploy_async(
+    task: str,
+    working_directory: str,
+    github_repo_name: str = None,
+    enable_test_loop: bool = True
+) -&gt; str:
+    # Create task ID
+    task_id = str(uuid.uuid4())
+
+    # Build orchestrator prompt
+    orchestrator_prompt = build_prompt(task, working_directory)
+
+    # Spawn delegated Claude Code instance
+    process = subprocess.Popen([
+        &#039;claude&#039;,
+        &#039;--prompt&#039;, orchestrator_prompt,
+        &#039;--permission-mode&#039;, &#039;bypassPermissions&#039;
+    ], cwd=working_directory)
+
+    # Track in background
+    TASKS[task_id] = {
+        &#039;process&#039;: process,
+        &#039;status&#039;: &#039;running&#039;,
+        &#039;start_time&#039;: time.time()
+    }
+
+    # Return immediately (non-blocking)
+    return json.dumps({
+        &#039;task_id&#039;: task_id,
+        &#039;status&#039;: &#039;started&#039;,
+        &#039;message&#039;: &#039;Build running in background&#039;
+    })</code></pre>
+<p><strong>5. Delegated Instance Starts</strong></p>
+<pre><code class="">New Claude Code process spawned
+    ↓
+Receives prompt: &quot;Read tools/orchestrator_prompt.txt and execute it&quot;
+    ↓
+Orchestrator prompt is a USER message (not system prompt!)
+    ↓
+Claude Code reads orchestrator_prompt.txt
+    ↓
+Begins Phase 1: Scout</code></pre>
+<p><strong>6. Phases Execute</strong></p>
+<pre><code class="">Phase 1: Scout
+    ├─ Creates /agents scout
+    ├─ Researches requirements
+    ├─ Writes .context-foundry/scout-report.md
+    └─ Agent context discarded
+    ↓
+Phase 2: Architect
+    ├─ Reads scout-report.md
+    ├─ Creates /agents architect
+    ├─ Designs architecture
+    ├─ Writes .context-foundry/architecture.md
+    └─ Agent context discarded
+    ↓
+Phase 3: Builder
+    ├─ Reads architecture.md
+    ├─ Creates /agents builder
+    ├─ Implements code
+    ├─ Writes source files
+    └─ Agent context discarded
+    ↓
+Phase 4: Test
+    ├─ Runs tests
+    ├─ If failures: Self-healing loop
+    ├─ Writes test results
+    └─ Continues when passing
+    ↓
+Phase 5: Docs
+    ├─ Generates README
+    ├─ Creates guides
+    └─ Documentation complete
+    ↓
+Phase 6: Deploy
+    ├─ Git commit
+    ├─ GitHub repo creation
+    ├─ Push to GitHub
+    └─ Deployment complete
+    ↓
+Phase 7: Feedback
+    ├─ Analyzes build
+    ├─ Extracts patterns
+    ├─ Updates pattern library
+    └─ Build complete!</code></pre>
+<p><strong>7. Delegated Instance Returns</strong></p>
+<pre><code class="language-python"># Delegated instance completes
+# Writes final summary to .context-foundry/session-summary.json
+# Process exits</code></pre>
+<p><strong>8. MCP Server Detects Completion</strong></p>
+<pre><code class="language-python"># MCP server monitors process
+if process.poll() is not None:
+    # Process finished
+    summary = read_session_summary(working_directory)
+    TASKS[task_id][&#039;status&#039;] = &#039;completed&#039;
+    TASKS[task_id][&#039;result&#039;] = summary</code></pre>
+<p><strong>9. User Checks Status</strong></p>
+<pre><code class="">You: &quot;What&#039;s the status of my build?&quot;
+
+Claude Code: [Calls get_delegation_result(task_id)]
+
+MCP Server: Returns summary
+
+Claude Code: &quot;Build complete! ✅
+    GitHub: github.com/snedea/weather-app
+    Tests: 25/25 passing
+    Duration: 8.3 minutes&quot;</code></pre>
+<hr>
+<h2 id="context-separation-benefits">Context Separation Benefits</h2>
+<h3 id="main-window-context-usage">Main Window Context Usage</h3>
+<pre><code class="">┌──────────────────────────────────────────────────┐
+│ MAIN CLAUDE CODE WINDOW                          │
+│ Context Window: 200,000 tokens                   │
+├──────────────────────────────────────────────────┤
+│                                                   │
+│ User Request:                     ~100 tokens    │
+│ &quot;Build a weather app...&quot;                         │
+│                                                   │
+│ Claude&#039;s Acknowledgment:           ~50 tokens    │
+│ &quot;I&#039;ll start the build...&quot;                        │
+│                                                   │
+│ MCP Tool Call:                    ~200 tokens    │
+│ { tool: &quot;autonomous_build...&quot;, params: {...} }   │
+│                                                   │
+│ MCP Tool Response:                ~100 tokens    │
+│ { task_id: &quot;abc-123&quot;, status: &quot;started&quot; }        │
+│                                                   │
+│ User Question:                     ~50 tokens    │
+│ &quot;What&#039;s the status?&quot;                             │
+│                                                   │
+│ Status Check Call:                ~100 tokens    │
+│ { tool: &quot;get_delegation_result&quot;, task_id: &quot;...&quot; }│
+│                                                   │
+│ Status Response:                  ~500 tokens    │
+│ { status: &quot;completed&quot;, github_url: &quot;...&quot;, ... }  │
+│                                                   │
+│ Claude&#039;s Summary:                 ~300 tokens    │
+│ &quot;Build complete! ✅ ...&quot;                         │
+│                                                   │
+├──────────────────────────────────────────────────┤
+│ TOTAL CONTEXT USED:            ~1,400 tokens     │
+│ Percentage:                        0.7%          │
+│                                                   │
+│ REMAINING CONTEXT:           198,600 tokens      │
+│ Available for:          ✅ Other work            │
+│                         ✅ Multiple builds       │
+│                         ✅ Regular coding        │
+└──────────────────────────────────────────────────┘</code></pre>
+<h3 id="delegated-instance-context-usage">Delegated Instance Context Usage</h3>
+<pre><code class="">┌──────────────────────────────────────────────────┐
+│ DELEGATED CLAUDE CODE INSTANCE                   │
+│ Context Window: 200,000 tokens (SEPARATE!)       │
+├──────────────────────────────────────────────────┤
+│                                                   │
+│ Orchestrator Prompt:             ~5,000 tokens   │
+│ (tools/orchestrator_prompt.txt)                  │
+│                                                   │
+│ Phase 1: Scout                  ~10,000 tokens   │
+│ ├─ Research                                      │
+│ ├─ Pattern analysis                              │
+│ └─ Scout report generation                       │
+│                                                   │
+│ Phase 2: Architect              ~15,000 tokens   │
+│ ├─ Read scout report                             │
+│ ├─ Design architecture                           │
+│ └─ Create implementation plan                    │
+│                                                   │
+│ Phase 3: Builder                ~30,000 tokens   │
+│ ├─ Read architecture                             │
+│ ├─ Implement files                               │
+│ └─ Create tests                                  │
+│                                                   │
+│ Phase 4: Test                    ~8,000 tokens   │
+│ ├─ Run tests                                     │
+│ ├─ Self-healing (if needed)                      │
+│ └─ Validation                                    │
+│                                                   │
+│ Phase 5: Docs                    ~3,000 tokens   │
+│ ├─ Generate README                               │
+│ └─ Create guides                                 │
+│                                                   │
+│ Phase 6: Deploy                  ~2,000 tokens   │
+│ ├─ Git operations                                │
+│ └─ GitHub deployment                             │
+│                                                   │
+│ Phase 7: Feedback                ~5,000 tokens   │
+│ ├─ Extract patterns                              │
+│ └─ Update library                                │
+│                                                   │
+├──────────────────────────────────────────────────┤
+│ TOTAL CONTEXT USED:           ~78,000 tokens     │
+│ Percentage:                       39%            │
+│                                                   │
+│ IMPACT ON MAIN WINDOW:               0%          │
+│ Reason:               Separate process!          │
+└──────────────────────────────────────────────────┘</code></pre>
+<h3 id="parallel-builds">Parallel Builds</h3>
+<p><strong>Because contexts are separate, you can run MULTIPLE builds simultaneously:</strong></p>
+<pre><code class="">┌──────────────────────────────────────────────────┐
+│ MAIN CLAUDE WINDOW                                │
+│ Context: 0.7% (clean!)                            │
+└───┬──────────────────────────────────────────────┘
+    │
+    ├──&gt; Delegated Instance #1: Backend API
+    │    Context: 40% (isolated)
+    │
+    ├──&gt; Delegated Instance #2: Frontend React App
+    │    Context: 35% (isolated)
+    │
+    └──&gt; Delegated Instance #3: Database Schema
+         Context: 20% (isolated)
+
+All three run SIMULTANEOUSLY without affecting each other!</code></pre>
+<hr>
+<h2 id="mcp-server-implementation">MCP Server Implementation</h2>
+<h3 id="core-mcp-tool-autonomous-build-and-deploy-async">Core MCP Tool: autonomous_build_and_deploy_async</h3>
+<p><strong>File:</strong> <code>tools/mcp_server.py</code></p>
+<pre><code class="language-python">from fastmcp import FastMCP
+import subprocess
+import uuid
+import time
+import json
+
+mcp = FastMCP(&quot;Context Foundry&quot;)
+
+# Track async tasks
+TASKS = {}
+
+@mcp.tool()
+async def autonomous_build_and_deploy_async(
+    task: str,
+    working_directory: str,
+    github_repo_name: str | None = None,
+    enable_test_loop: bool = True,
+    max_test_iterations: int = 3,
+    timeout_minutes: float = 90.0
+) -&gt; str:
+    &quot;&quot;&quot;
+    Spawn fresh Claude Code instance to build project autonomously.
+    Returns immediately with task ID (non-blocking).
+    &quot;&quot;&quot;
+
+    # Generate task ID
+    task_id = str(uuid.uuid4())
+
+    # Build orchestrator prompt
+    orchestrator_path = Path(__file__).parent / &quot;orchestrator_prompt.txt&quot;
+    orchestrator_prompt = orchestrator_path.read_text()
+
+    # Inject task details
+    full_prompt = f&quot;&quot;&quot;
+{orchestrator_prompt}
+
+TASK: {task}
+WORKING_DIRECTORY: {working_directory}
+GITHUB_REPO: {github_repo_name or &quot;auto-generate&quot;}
+ENABLE_TEST_LOOP: {enable_test_loop}
+MAX_TEST_ITERATIONS: {max_test_iterations}
+    &quot;&quot;&quot;
+
+    # Spawn delegated Claude Code instance
+    process = subprocess.Popen(
+        [
+            &#039;claude&#039;,
+            &#039;--prompt&#039;, full_prompt,
+            &#039;--permission-mode&#039;, &#039;bypassPermissions&#039;  # No interactive prompts
+        ],
+        cwd=working_directory,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE
+    )
+
+    # Track task
+    TASKS[task_id] = {
+        &#039;process&#039;: process,
+        &#039;task&#039;: task,
+        &#039;working_directory&#039;: working_directory,
+        &#039;status&#039;: &#039;running&#039;,
+        &#039;start_time&#039;: time.time(),
+        &#039;timeout&#039;: timeout_minutes * 60
+    }
+
+    # Return immediately (async!)
+    return json.dumps({
+        &#039;task_id&#039;: task_id,
+        &#039;status&#039;: &#039;started&#039;,
+        &#039;message&#039;: f&#039;Autonomous build started for: {task}&#039;,
+        &#039;working_directory&#039;: working_directory,
+        &#039;expected_duration&#039;: &#039;7-15 minutes&#039;
+    })
+
+
+@mcp.tool()
+async def get_delegation_result(task_id: str) -&gt; str:
+    &quot;&quot;&quot;
+    Check status and get results of async task.
+    &quot;&quot;&quot;
+
+    if task_id not in TASKS:
+        return json.dumps({&#039;error&#039;: &#039;Task not found&#039;})
+
+    task = TASKS[task_id]
+    process = task[&#039;process&#039;]
+
+    # Check if still running
+    if process.poll() is None:
+        elapsed = time.time() - task[&#039;start_time&#039;]
+        return json.dumps({
+            &#039;status&#039;: &#039;running&#039;,
+            &#039;elapsed_seconds&#039;: elapsed,
+            &#039;task&#039;: task[&#039;task&#039;]
+        })
+
+    # Process finished
+    # Read session summary from .context-foundry/
+    summary_path = Path(task[&#039;working_directory&#039;]) / &#039;.context-foundry&#039; / &#039;session-summary.json&#039;
+
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text())
+        return json.dumps({
+            &#039;status&#039;: &#039;completed&#039;,
+            &#039;duration_seconds&#039;: time.time() - task[&#039;start_time&#039;],
+            **summary
+        })
+    else:
+        # Build failed
+        stdout, stderr = process.communicate()
+        return json.dumps({
+            &#039;status&#039;: &#039;failed&#039;,
+            &#039;stdout&#039;: stdout.decode(&#039;utf-8&#039;, errors=&#039;ignore&#039;)[-5000:],  # Last 5KB
+            &#039;stderr&#039;: stderr.decode(&#039;utf-8&#039;, errors=&#039;ignore&#039;)[-5000:]
+        })</code></pre>
+<hr>
+<h2 id="prompt-architecture">Prompt Architecture</h2>
+<h3 id="orchestrator-prompt-is-not-a-system-prompt">Orchestrator Prompt is NOT a System Prompt!</h3>
+<p><strong>Critical Understanding:</strong></p>
+<pre><code class="">❌ WRONG: Context Foundry modifies Claude&#039;s system prompt
+✅ CORRECT: Context Foundry sends orchestrator prompt as USER message</code></pre>
+<p><strong>What Actually Happens:</strong></p>
+<pre><code class="">Delegated Claude Instance Starts
+    ↓
+SYSTEM PROMPT: [Standard Claude Code system prompt - UNCHANGED]
+    ↓
+USER MESSAGE: &quot;Read tools/orchestrator_prompt.txt and execute it to build...&quot;
+    ↓
+Claude reads the file (normal file operation)
+    ↓
+Claude executes the instructions (normal task)</code></pre>
+<p><strong>orchestrator_prompt.txt is just a detailed task description!</strong></p>
+<h3 id="orchestrator-prompt-structure">Orchestrator Prompt Structure</h3>
+<p><strong>File:</strong> <code>tools/orchestrator_prompt.txt</code> (1000+ lines)</p>
+<pre><code class="">═══════════════════════════════════════════════════════════
+CONTEXT FOUNDRY 2.0.1 - AUTONOMOUS BUILD ORCHESTRATOR
+═══════════════════════════════════════════════════════════
+
+You are orchestrating an autonomous software build.
+
+PHASE 1: SCOUT (Research &amp; Context Gathering)
+───────────────────────────────────────────────────────────
+1. Create Scout agent using /agents
+2. Research requirements
+3. Analyze technology choices
+4. Read pattern library: .context-foundry/patterns/
+5. Flag known risks
+6. Write .context-foundry/scout-report.md
+
+PHASE 2: ARCHITECT (Design &amp; Planning)
+───────────────────────────────────────────────────────────
+1. Read scout-report.md
+2. Create Architect agent using /agents
+3. Design system architecture
+4. Create file structure
+5. Plan implementation
+6. Write .context-foundry/architecture.md
+
+PHASE 3: BUILDER (Implementation)
+───────────────────────────────────────────────────────────
+1. Read architecture.md
+2. Create Builder agent using /agents
+3. Implement all files
+4. Create tests
+5. Write .context-foundry/build-log.md
+
+PHASE 4: TEST (Quality Assurance + Self-Healing)
+───────────────────────────────────────────────────────────
+1. Run tests
+2. If failures:
+   a. Analyze root cause
+   b. Create fixes-iteration-N.md
+   c. Re-architect if needed
+   d. Re-build fixes
+   e. Re-test (max 3 iterations)
+3. Write test-final-report.md
+
+PHASE 5: DOCUMENTATION
+───────────────────────────────────────────────────────────
+1. Generate README.md
+2. Create usage guides
+3. Document architecture
+
+PHASE 6: DEPLOYMENT
+───────────────────────────────────────────────────────────
+1. Git init and commit
+2. Create GitHub repository
+3. Push to GitHub
+4. Deployment complete
+
+PHASE 7: FEEDBACK (Self-Learning)
+───────────────────────────────────────────────────────────
+1. Analyze what worked and what didn&#039;t
+2. Extract patterns
+3. Update pattern library
+4. Write feedback report
+
+═══════════════════════════════════════════════════════════</code></pre>
+<p><strong>This is a USER task, not a system prompt modification!</strong></p>
+<hr>
+<h2 id="agent-lifecycle">Agent Lifecycle</h2>
+<h3 id="ephemeral-agents">Ephemeral Agents</h3>
+<p><strong>Agents exist only during the delegated instance&#39;s execution:</strong></p>
+<pre><code class="">Delegated Instance Spawns
+    ↓
+Phase 1: /agents scout
+    ├─ Agent created in conversation context
+    ├─ Performs research
+    ├─ Writes scout-report.md
+    └─ [Agent&#039;s conversation context DISCARDED when phase ends]
+    ↓
+Phase 2: /agents architect
+    ├─ NEW agent created (no memory of Scout)
+    ├─ Reads scout-report.md (file persists!)
+    ├─ Performs design
+    ├─ Writes architecture.md
+    └─ [Agent&#039;s conversation context DISCARDED when phase ends]
+    ↓
+... (same pattern for Builder, Test, etc.)
+    ↓
+Delegated Instance Terminates
+    ↓
+ALL agent contexts GONE forever</code></pre>
+<p><strong>What Persists:</strong></p>
+<pre><code class="">✅ Files in .context-foundry/
+✅ Your actual project code
+✅ Git commits
+✅ GitHub repository
+✅ Pattern library updates (global)
+
+❌ Agent conversation histories
+❌ Delegated instance context
+❌ Temporary state</code></pre>
+<p><strong>Why This Is Good:</strong></p>
+<ol>
+<li><strong>Clean slate each build</strong> - No accumulated assumptions</li>
+<li><strong>Predictable behavior</strong> - Same inputs = same outputs</li>
+<li><strong>No state pollution</strong> - Can&#39;t carry forward errors</li>
+<li><strong>Scalable</strong> - Agents don&#39;t accumulate context over time</li>
+</ol>
+<hr>
+<h2 id="comparison-with-other-approaches">Comparison with Other Approaches</h2>
+<h3 id="vs-single-long-conversation">vs. Single Long Conversation</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Aspect</th>
+<th>Single Conversation</th>
+<th>Context Foundry Delegation</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Context usage</strong></td>
+<td>80%+ after one build</td>
+<td>&lt; 1% in main window</td>
+</tr>
+<tr>
+<td><strong>Multiple builds</strong></td>
+<td>Can&#39;t run in parallel</td>
+<td>Run simultaneously</td>
+</tr>
+<tr>
+<td><strong>Continue working</strong></td>
+<td>Blocked while building</td>
+<td>Non-blocking</td>
+</tr>
+<tr>
+<td><strong>Context limit</strong></td>
+<td>Hit after 1-2 builds</td>
+<td>Never (separate contexts)</td>
+</tr>
+<tr>
+<td><strong>Build isolation</strong></td>
+<td>All in one context</td>
+<td>Each build separate</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="vs-api-based-orchestration">vs. API-Based Orchestration</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Aspect</th>
+<th>API Orchestration</th>
+<th>Claude Code Delegation</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Cost</strong></td>
+<td>Pay per token</td>
+<td>Fixed ($20/month unlimited)</td>
+</tr>
+<tr>
+<td><strong>Tool access</strong></td>
+<td>Limited to API tools</td>
+<td>Full Claude Code toolset</td>
+</tr>
+<tr>
+<td><strong>File operations</strong></td>
+<td>Via API calls</td>
+<td>Native file system</td>
+</tr>
+<tr>
+<td><strong>Bash commands</strong></td>
+<td>Via API</td>
+<td>Direct terminal access</td>
+</tr>
+<tr>
+<td><strong>State persistence</strong></td>
+<td>Must track via code</td>
+<td>File-based artifacts</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="vs-cursorcopilot">vs. Cursor/Copilot</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Aspect</th>
+<th>Cursor/Copilot</th>
+<th>Context Foundry</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Workflow</strong></td>
+<td>Interactive guidance</td>
+<td>Fully autonomous</td>
+</tr>
+<tr>
+<td><strong>Human input</strong></td>
+<td>Required for each step</td>
+<td>Optional (checkpoints)</td>
+</tr>
+<tr>
+<td><strong>Test failures</strong></td>
+<td>Manual debugging</td>
+<td>Self-healing auto-fix</td>
+</tr>
+<tr>
+<td><strong>Deployment</strong></td>
+<td>Manual git operations</td>
+<td>Automatic GitHub push</td>
+</tr>
+<tr>
+<td><strong>Pattern learning</strong></td>
+<td>No learning mechanism</td>
+<td>Self-learning from builds</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<hr>
+<h2 id="faq">FAQ</h2>
+<h3 id="q-does-context-foundry-modify-claude-codes-system-prompt">Q: Does Context Foundry modify Claude Code&#39;s system prompt?</h3>
+<p><strong>A:</strong> NO! The orchestrator prompt is sent as a <strong>USER message</strong>, not a system prompt. Claude Code&#39;s system prompt remains unchanged.</p>
+<h3 id="q-will-using-context-foundry-affect-my-regular-claude-code-usage">Q: Will using Context Foundry affect my regular Claude Code usage?</h3>
+<p><strong>A:</strong> NO! Builds run in <strong>separate Claude Code instances</strong>. Your main window is completely unaffected.</p>
+<h3 id="q-can-i-use-claude-code-for-other-tasks-while-a-build-is-running">Q: Can I use Claude Code for other tasks while a build is running?</h3>
+<p><strong>A:</strong> YES! Builds run in the background. Your main Claude window stays available for other work.</p>
+<h3 id="q-how-many-builds-can-run-in-parallel">Q: How many builds can run in parallel?</h3>
+<p><strong>A:</strong> As many as your system resources allow. Each build is an independent process with its own context.</p>
+<h3 id="q-what-if-i-close-my-main-claude-code-window-during-a-build">Q: What if I close my main Claude Code window during a build?</h3>
+<p><strong>A:</strong> The delegated build continues running! It&#39;s a separate process. You can check status later with <code>list_delegations()</code>.</p>
+<h3 id="q-can-i-see-the-agent-conversations">Q: Can I see the agent conversations?</h3>
+<p><strong>A:</strong> Not currently. You see their OUTPUT (scout-report.md, architecture.md, etc.) but not the internal conversation. This could be added in verbose mode.</p>
+<h3 id="q-what-happens-if-a-build-takes-longer-than-expected">Q: What happens if a build takes longer than expected?</h3>
+<p><strong>A:</strong> The MCP server has configurable timeouts (default 90 min). You can increase via <code>timeout_minutes</code> parameter.</p>
+<h3 id="q-can-i-pause-a-running-build">Q: Can I pause a running build?</h3>
+<p><strong>A:</strong> Not currently. Builds run autonomously start-to-finish. You can kill the process if needed.</p>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>Context Foundry&#39;s delegation model:</strong></p>
+<p>✅ Keeps your main context clean (&lt; 1% usage)<br>✅ Enables parallel builds (separate processes)<br>✅ Non-blocking (continue working while building)<br>✅ Scalable (each build gets fresh 200K context)<br>✅ Isolated (builds don&#39;t interfere with each other)</p>
+<p><strong>Key Innovation:</strong> Using subprocess delegation instead of single conversation enables autonomous, parallel, walk-away development that doesn&#39;t pollute your main working context.</p>
+<p><strong>The Result:</strong> You can build multiple applications simultaneously while your main Claude Code window stays clean and available for other work.</p>
+<hr>
+<p><strong>For More Information:</strong></p>
+<ul>
+<li><a href="../FAQ.md">FAQ.md</a> - Comprehensive Q&amp;A</li>
+<li><a href="../USER_GUIDE.md">USER_GUIDE.md</a> - Step-by-step usage</li>
+<li><a href="../FEEDBACK_SYSTEM.md">FEEDBACK_SYSTEM.md</a> - Self-learning patterns</li>
+<li><a href="ARCHITECTURE.md">docs/ARCHITECTURE.md</a> - Stateless conversation design</li>
+</ul>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/technical/context-preservation" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Context Preservation</span>
+            </a>
+
+            <a href="/docs/technical/mcp-server-architecture" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">MCP Server Architecture</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#overview" class="toc-link" data-heading-id="overview">
+                  Overview
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#the-problem-context-window-bloat" class="toc-link" data-heading-id="the-problem-context-window-bloat">
+                  The Problem: Context Window Bloat
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#traditional-ai-coding-single-context" class="toc-link" data-heading-id="traditional-ai-coding-single-context">
+                          Traditional AI Coding (Single Context)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#context-foundry-approach-delegation" class="toc-link" data-heading-id="context-foundry-approach-delegation">
+                          Context Foundry Approach (Delegation)
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#the-solution-delegation-architecture" class="toc-link" data-heading-id="the-solution-delegation-architecture">
+                  The Solution: Delegation Architecture
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#high-level-architecture" class="toc-link" data-heading-id="high-level-architecture">
+                          High-Level Architecture
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-delegation-works" class="toc-link" data-heading-id="how-delegation-works">
+                  How Delegation Works
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#step-by-step-flow" class="toc-link" data-heading-id="step-by-step-flow">
+                          Step-by-Step Flow
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#context-separation-benefits" class="toc-link" data-heading-id="context-separation-benefits">
+                  Context Separation Benefits
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#main-window-context-usage" class="toc-link" data-heading-id="main-window-context-usage">
+                          Main Window Context Usage
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegated-instance-context-usage" class="toc-link" data-heading-id="delegated-instance-context-usage">
+                          Delegated Instance Context Usage
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#parallel-builds" class="toc-link" data-heading-id="parallel-builds">
+                          Parallel Builds
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#mcp-server-implementation" class="toc-link" data-heading-id="mcp-server-implementation">
+                  MCP Server Implementation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#core-mcp-tool-autonomous-build-and-deploy-async" class="toc-link" data-heading-id="core-mcp-tool-autonomous-build-and-deploy-async">
+                          Core MCP Tool: autonomous_build_and_deploy_async
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#prompt-architecture" class="toc-link" data-heading-id="prompt-architecture">
+                  Prompt Architecture
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#orchestrator-prompt-is-not-a-system-prompt" class="toc-link" data-heading-id="orchestrator-prompt-is-not-a-system-prompt">
+                          Orchestrator Prompt is NOT a System Prompt!
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#orchestrator-prompt-structure" class="toc-link" data-heading-id="orchestrator-prompt-structure">
+                          Orchestrator Prompt Structure
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#agent-lifecycle" class="toc-link" data-heading-id="agent-lifecycle">
+                  Agent Lifecycle
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#ephemeral-agents" class="toc-link" data-heading-id="ephemeral-agents">
+                          Ephemeral Agents
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#comparison-with-other-approaches" class="toc-link" data-heading-id="comparison-with-other-approaches">
+                  Comparison with Other Approaches
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#vs-single-long-conversation" class="toc-link" data-heading-id="vs-single-long-conversation">
+                          vs. Single Long Conversation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#vs-api-based-orchestration" class="toc-link" data-heading-id="vs-api-based-orchestration">
+                          vs. API-Based Orchestration
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#vs-cursorcopilot" class="toc-link" data-heading-id="vs-cursorcopilot">
+                          vs. Cursor/Copilot
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#faq" class="toc-link" data-heading-id="faq">
+                  FAQ
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-does-context-foundry-modify-claude-codes-system-prompt" class="toc-link" data-heading-id="q-does-context-foundry-modify-claude-codes-system-prompt">
+                          Q: Does Context Foundry modify Claude Code&#x27;s system prompt?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-will-using-context-foundry-affect-my-regular-claude-code-usage" class="toc-link" data-heading-id="q-will-using-context-foundry-affect-my-regular-claude-code-usage">
+                          Q: Will using Context Foundry affect my regular Claude Code usage?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-can-i-use-claude-code-for-other-tasks-while-a-build-is-running" class="toc-link" data-heading-id="q-can-i-use-claude-code-for-other-tasks-while-a-build-is-running">
+                          Q: Can I use Claude Code for other tasks while a build is running?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-how-many-builds-can-run-in-parallel" class="toc-link" data-heading-id="q-how-many-builds-can-run-in-parallel">
+                          Q: How many builds can run in parallel?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-what-if-i-close-my-main-claude-code-window-during-a-build" class="toc-link" data-heading-id="q-what-if-i-close-my-main-claude-code-window-during-a-build">
+                          Q: What if I close my main Claude Code window during a build?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-can-i-see-the-agent-conversations" class="toc-link" data-heading-id="q-can-i-see-the-agent-conversations">
+                          Q: Can I see the agent conversations?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-what-happens-if-a-build-takes-longer-than-expected" class="toc-link" data-heading-id="q-what-happens-if-a-build-takes-longer-than-expected">
+                          Q: What happens if a build takes longer than expected?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-can-i-pause-a-running-build" class="toc-link" data-heading-id="q-can-i-pause-a-running-build">
+                          Q: Can I pause a running build?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

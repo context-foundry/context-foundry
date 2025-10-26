@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ | Context Foundry Documentation</title>
+  <meta name="description" content="Frequently Asked Questions - Making Context Foundry Transparent">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/getting-started/faq">
+  <meta property="og:title" content="FAQ">
+  <meta property="og:description" content="Frequently Asked Questions - Making Context Foundry Transparent">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="FAQ">
+  <meta name="twitter:description" content="Frequently Asked Questions - Making Context Foundry Transparent">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/getting-started/faq">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/getting-started" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">FAQ</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-faq">Context Foundry FAQ</h1>
+<p><strong>Frequently Asked Questions - Making Context Foundry Transparent</strong></p>
+<blockquote><p><strong>Philosophy:</strong> &quot;No Magic, Just Transparency&quot;<br>This FAQ explains how Context Foundry works internally, where everything is stored, and demystifies the agent delegation model.</p>
+</blockquote>
+<blockquote><p><strong>Looking for technical details?</strong> If you&#39;re a software developer, architect, or AI engineer looking for deep technical information about parallelization, token management, MCP server architecture, or prompt engineering, see the <strong><a href="docs/FAQ.md">Technical FAQ</a></strong> with 52 in-depth questions and code examples.</p>
+</blockquote>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<p><strong>Build Artifacts &amp; Plans</strong></p>
+<ul>
+<li><a href="#where-can-i-find-the-architects-plan-for-my-project">Where can I find the architect&#39;s plan for my project?</a></li>
+<li><a href="#what-other-build-artifacts-are-created">What other build artifacts are created?</a></li>
+<li><a href="#where-is-the-pattern-library-stored">Where is the pattern library stored?</a></li>
+</ul>
+<p><strong>System Prompts &amp; Delegation</strong></p>
+<ul>
+<li><a href="#did-context-foundry-change-claude-codes-system-prompt">Did Context Foundry change Claude Code&#39;s system prompt?</a></li>
+<li><a href="#if-i-use-claude-code-for-other-tasks-do-i-need-to-change-the-system-prompt-back">If I use Claude Code for other tasks, do I need to change the system prompt back?</a></li>
+<li><a href="#how-does-the-mcp-server-trigger-builds">How does the MCP server trigger builds?</a></li>
+<li><a href="#where-are-all-the-prompts-located">Where are all the prompts located?</a></li>
+</ul>
+<p><strong>Context &amp; Agents</strong></p>
+<ul>
+<li><a href="#why-is-my-context-usage-so-low-during-builds">Why is my context usage so low during builds?</a></li>
+<li><a href="#what-happens-to-the-agents-after-the-build-completes">What happens to the agents after the build completes?</a></li>
+<li><a href="#can-i-see-the-agent-conversations">Can I see the agent conversations?</a></li>
+</ul>
+<p><strong>Usage &amp; Control</strong></p>
+<ul>
+<li><a href="#can-i-review-the-architects-plan-before-building-starts">Can I review the architect&#39;s plan before building starts?</a></li>
+<li><a href="#how-do-i-know-what-patterns-are-being-applied-to-my-build">How do I know what patterns are being applied to my build?</a></li>
+<li><a href="#can-i-disable-autonomous-mode-and-have-more-control">Can I disable autonomous mode and have more control?</a></li>
+</ul>
+<hr>
+<h2 id="build-artifacts-plans">Build Artifacts &amp; Plans</h2>
+<h3 id="where-can-i-find-the-architects-plan-for-my-project">Where can I find the architect&#39;s plan for my project?</h3>
+<p><strong>Location:</strong> Inside your project directory at <code>.context-foundry/architecture.md</code></p>
+<p><strong>Example for VimQuest:</strong></p>
+<pre><code class="language-bash">/Users/name/homelab/vimquest/.context-foundry/architecture.md</code></pre>
+<p><strong>Example for Satoshi&#39;s Chore Tracker:</strong></p>
+<pre><code class="language-bash">/Users/name/homelab/satoshi-chore-tracker/.context-foundry/architecture.md</code></pre>
+<p><strong>What&#39;s in it:</strong></p>
+<ul>
+<li>Complete system architecture</li>
+<li>File structure plan</li>
+<li>Module specifications</li>
+<li>Data models</li>
+<li>Component hierarchy</li>
+<li>State management design</li>
+<li>Testing plan</li>
+<li>Implementation roadmap</li>
+</ul>
+<p><strong>File size:</strong> Typically 30-90KB of detailed technical specifications!</p>
+<p><strong>How to view:</strong></p>
+<pre><code class="language-bash"># In terminal
+cat /path/to/your-project/.context-foundry/architecture.md
+
+# Or open in editor
+code /path/to/your-project/.context-foundry/architecture.md
+
+# Or use Claude Code
+claude
+# Then: &quot;Read /path/to/your-project/.context-foundry/architecture.md&quot;</code></pre>
+<hr>
+<h3 id="what-other-build-artifacts-are-created">What other build artifacts are created?</h3>
+<p><strong>Every project gets a <code>.context-foundry/</code> directory with:</strong></p>
+<pre><code class="">your-project/
+└── .context-foundry/
+    ├── scout-report.md           # Research findings (40-60KB)
+    ├── architecture.md            # Architect&#039;s plan (30-90KB)
+    ├── build-log.md              # Implementation progress
+    ├── test-results-iteration-1.md  # First test run results
+    ├── test-results-iteration-2.md  # (if self-healing triggered)
+    ├── test-final-report.md      # Final test summary
+    ├── fixes-iteration-1.md      # (if bugs found)
+    ├── session-summary.json      # Complete build metadata
+    ├── feedback/
+    │   └── build-feedback-{timestamp}.json
+    └── patterns/
+        ├── common-issues.json
+        ├── test-patterns.json
+        ├── architecture-patterns.json
+        └── scout-learnings.json</code></pre>
+<p><strong>Key Files Explained:</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>File</th>
+<th>Purpose</th>
+<th>When to Read</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><code>scout-report.md</code></td>
+<td>Research findings, technology recommendations</td>
+<td>Understand why certain tech choices were made</td>
+</tr>
+<tr>
+<td><code>architecture.md</code></td>
+<td>Complete technical design</td>
+<td>Learn the system architecture</td>
+</tr>
+<tr>
+<td><code>build-log.md</code></td>
+<td>Implementation chronology</td>
+<td>Track what was built and when</td>
+</tr>
+<tr>
+<td><code>test-final-report.md</code></td>
+<td>Test results and coverage</td>
+<td>See test pass rate and quality metrics</td>
+</tr>
+<tr>
+<td><code>session-summary.json</code></td>
+<td>Metadata: files created, duration, GitHub URL</td>
+<td>Quick build overview</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<hr>
+<h3 id="where-is-the-pattern-library-stored">Where is the pattern library stored?</h3>
+<p><strong>Two Locations - Different Purposes:</strong></p>
+<p><strong>1. Global Pattern Library</strong> (shared across ALL builds)</p>
+<pre><code class="">/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json           # Known issues &amp; solutions
+├── test-patterns.json           # Testing strategies
+├── architecture-patterns.json   # Proven architectures
+└── scout-learnings.json         # Research patterns</code></pre>
+<p><strong>2. Per-Project Patterns</strong> (this build&#39;s specific patterns)</p>
+<pre><code class="">/Users/name/homelab/your-project/.context-foundry/patterns/
+└── [Same structure, but project-specific]</code></pre>
+<p><strong>How it works:</strong></p>
+<ol>
+<li><strong>Global patterns</strong> are READ by Scout/Architect/Test phases</li>
+<li><strong>New patterns</strong> discovered during build go to project directory</li>
+<li><strong>Phase 7: Feedback</strong> analyzes and promotes valuable patterns to global library</li>
+<li><strong>Next build</strong> benefits from accumulated learnings</li>
+</ol>
+<p><strong>View global patterns:</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json</code></pre>
+<hr>
+<h2 id="system-prompts-delegation">System Prompts &amp; Delegation</h2>
+<h3 id="did-context-foundry-change-claude-codes-system-prompt">Did Context Foundry change Claude Code&#39;s system prompt?</h3>
+<p><strong>NO!</strong> Context Foundry does NOT modify Claude Code&#39;s system prompt at all.</p>
+<p><strong>How it actually works:</strong></p>
+<pre><code class="">┌─────────────────────────────────────────────────────────┐
+│ Your Claude Code Session (Normal System Prompt)         │
+│                                                          │
+│ You: &quot;Build a weather app&quot;                              │
+│                                                          │
+│ Claude Code: [Recognizes build request]                 │
+│              [Calls MCP tool: autonomous_build_and_deploy]│
+│                                                          │
+│              ↓ Spawns Fresh Claude Instance              │
+│                                                          │
+│ ┌────────────────────────────────────────────────────┐  │
+│ │ New Claude Code Instance (Normal System Prompt)    │  │
+│ │                                                     │  │
+│ │ Task (USER message): &quot;Read orchestrator_prompt.txt │  │
+│ │ and execute it to build a weather app&quot;             │  │
+│ │                                                     │  │
+│ │ [This instance does ALL the work]                  │  │
+│ │ [Creates Scout, Architect, Builder, Test agents]   │  │
+│ │ [Builds entire project]                            │  │
+│ │                                                     │  │
+│ │ Returns: &quot;Build complete! ✅&quot;                       │  │
+│ └────────────────────────────────────────────────────┘  │
+│                                                          │
+│ Claude Code: &quot;Your weather app is ready! ✅&quot;            │
+│              &quot;Deployed to: github.com/you/weather-app&quot;  │
+└─────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li>✅ Claude Code&#39;s system prompt: <strong>UNCHANGED</strong></li>
+<li>✅ Orchestrator prompt: Sent as <strong>USER message</strong> to delegated instance</li>
+<li>✅ Your main Claude window: <strong>Clean and separate</strong></li>
+<li>✅ Build work: Happens in <strong>separate Claude instance</strong></li>
+</ul>
+<hr>
+<h3 id="if-i-use-claude-code-for-other-tasks-do-i-need-to-change-the-system-prompt-back">If I use Claude Code for other tasks, do I need to change the system prompt back?</h3>
+<p><strong>NO!</strong> You never need to worry about this.</p>
+<p><strong>Why:</strong></p>
+<ul>
+<li>Context Foundry runs in <strong>delegated Claude instances</strong>, not your main session</li>
+<li>Your regular Claude Code usage is <strong>completely unaffected</strong></li>
+<li>The MCP server is only activated when you explicitly request a build</li>
+<li>Regular code editing, file operations, git commands all work normally</li>
+</ul>
+<p><strong>You can freely:</strong></p>
+<pre><code class="language-bash">claude
+
+# Regular usage - Context Foundry NOT involved
+You: &quot;Refactor this function to use async/await&quot;
+You: &quot;Fix the bug in line 42&quot;
+You: &quot;Explain this code to me&quot;
+
+# Context Foundry usage - Triggers MCP delegation
+You: &quot;Build a todo app&quot;  ← Only THIS triggers Context Foundry</code></pre>
+<p><strong>Think of it like:</strong></p>
+<ul>
+<li>Regular Claude Code = Your IDE</li>
+<li>Context Foundry = Calling a contractor who works offsite</li>
+</ul>
+<hr>
+<h3 id="how-does-the-mcp-server-trigger-builds">How does the MCP server trigger builds?</h3>
+<p><strong>The Delegation Flow:</strong></p>
+<pre><code class="">1. User Request
+   ↓
+   &quot;Build a weather app&quot;
+
+2. Claude Code (Main Window)
+   ↓
+   Recognizes: &quot;This is a build request&quot;
+   ↓
+   Calls MCP tool: autonomous_build_and_deploy(
+     task=&quot;Build a weather app&quot;,
+     working_directory=&quot;/Users/name/homelab/weather-app&quot;
+   )
+
+3. MCP Server (mcp_server.py)
+   ↓
+   Receives tool call
+   ↓
+   Spawns: subprocess.Popen([&#039;claude&#039;, &#039;--prompt&#039;, task])
+   ↓
+   New Claude Code instance starts (FRESH context)
+
+4. Delegated Claude Instance
+   ↓
+   Receives orchestrator prompt as USER message
+   ↓
+   Executes all 7 phases (Scout → Architect → Builder → Test → Docs → Deploy → Feedback)
+   ↓
+   Returns: Build summary
+
+5. MCP Server
+   ↓
+   Receives build summary
+   ↓
+   Returns to main Claude window
+
+6. Main Claude Window
+   ↓
+   Shows: &quot;Build complete! ✅&quot;</code></pre>
+<p><strong>Why this is brilliant:</strong></p>
+<ul>
+<li>Main context stays clean (&lt; 10% usage)</li>
+<li>Delegated instance can use 100% of ITS context</li>
+<li>Multiple builds can run in parallel</li>
+<li>Each build is isolated</li>
+<li>Main window just monitors progress</li>
+</ul>
+<hr>
+<h3 id="where-are-all-the-prompts-located">Where are all the prompts located?</h3>
+<p><strong>Prompt Locations:</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Prompt</th>
+<th>Location</th>
+<th>Purpose</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Orchestrator Prompt</strong></td>
+<td><code>/Users/name/homelab/context-foundry/tools/orchestrator_prompt.txt</code></td>
+<td>Main build orchestration (7 phases)</td>
+</tr>
+<tr>
+<td><strong>MCP Server</strong></td>
+<td><code>/Users/name/homelab/context-foundry/mcp_server.py</code></td>
+<td>Delegation logic</td>
+</tr>
+<tr>
+<td><strong>Agent Prompts</strong></td>
+<td>Embedded in <code>orchestrator_prompt.txt</code></td>
+<td>Scout, Architect, Builder, Test, etc.</td>
+</tr>
+<tr>
+<td><strong>Claude Code System Prompt</strong></td>
+<td>NOT MODIFIED</td>
+<td>Standard Claude Code prompt</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>View the orchestrator prompt:</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/context-foundry/tools/orchestrator_prompt.txt</code></pre>
+<p><strong>It&#39;s 1000+ lines and defines:</strong></p>
+<ul>
+<li>Phase 1: Scout (Research)</li>
+<li>Phase 2: Architect (Design)</li>
+<li>Phase 3: Builder (Implementation)</li>
+<li>Phase 4: Test (Quality Assurance + Self-Healing)</li>
+<li>Phase 5: Documentation</li>
+<li>Phase 6: Deployment</li>
+<li>Phase 7: Feedback Analysis</li>
+</ul>
+<hr>
+<h2 id="context-agents">Context &amp; Agents</h2>
+<h3 id="why-is-my-context-usage-so-low-during-builds">Why is my context usage so low during builds?</h3>
+<p><strong>You noticed something important!</strong></p>
+<p>Your observation is correct: <strong>The main Claude window shows very low context usage during builds</strong>.</p>
+<p><strong>Why:</strong></p>
+<pre><code class="">Main Claude Window Context:
+├─ Your request: &quot;Build a weather app&quot; (~10 tokens)
+├─ Claude&#039;s acknowledgment (~50 tokens)
+├─ MCP tool call (~100 tokens)
+└─ Final summary: &quot;Build complete!&quot; (~500 tokens)
+───────────────────────────────────────
+Total: ~660 tokens (~0.3% of 200K context window)</code></pre>
+<p><strong>Meanwhile, in the delegated instance:</strong></p>
+<pre><code class="">Delegated Claude Instance Context:
+├─ Orchestrator prompt (~5,000 tokens)
+├─ Scout phase conversation (~10,000 tokens)
+├─ Architect phase conversation (~15,000 tokens)
+├─ Builder phase conversation (~30,000 tokens)
+├─ Test phase conversation (~8,000 tokens)
+├─ Docs phase conversation (~3,000 tokens)
+├─ Deploy phase conversation (~2,000 tokens)
+├─ Feedback phase conversation (~5,000 tokens)
+───────────────────────────────────────
+Total: ~78,000 tokens (~39% of context window)</code></pre>
+<p><strong>The magic:</strong> All the heavy lifting happens in a SEPARATE Claude instance that you never see!</p>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>✅ Your main session stays clean</li>
+<li>✅ You can continue working on other tasks</li>
+<li>✅ Multiple builds can run in parallel</li>
+<li>✅ Each build gets a fresh 200K context budget</li>
+<li>✅ No context pollution between projects</li>
+</ul>
+<p><strong>This is why Context Foundry can build multiple apps simultaneously without hitting context limits!</strong></p>
+<hr>
+<h3 id="what-happens-to-the-agents-after-the-build-completes">What happens to the agents after the build completes?</h3>
+<p><strong>Agents are ephemeral</strong> - they exist only during the build and disappear when complete.</p>
+<p><strong>Lifecycle:</strong></p>
+<pre><code class="">Build Starts
+    ↓
+Delegated Claude instance spawned
+    ↓
+Orchestrator reads orchestrator_prompt.txt
+    ↓
+Phase 1: Scout agent created
+    ├─ Researches project
+    ├─ Writes scout-report.md
+    └─ [Agent context discarded]
+    ↓
+Phase 2: Architect agent created
+    ├─ Reads scout-report.md (persisted)
+    ├─ Designs architecture
+    ├─ Writes architecture.md
+    └─ [Agent context discarded]
+    ↓
+Phase 3: Builder agent created
+    ├─ Reads architecture.md (persisted)
+    ├─ Implements code
+    ├─ Writes files
+    └─ [Agent context discarded]
+    ↓
+... (Test, Docs, Deploy, Feedback)
+    ↓
+Build Completes
+    ↓
+Delegated Claude instance terminates
+    ↓
+ALL agent contexts GONE</code></pre>
+<p><strong>What persists:</strong></p>
+<ul>
+<li>✅ Files created (your actual project code)</li>
+<li>✅ <code>.context-foundry/</code> artifacts (plans, reports, logs)</li>
+<li>✅ Pattern library updates</li>
+<li>✅ Git commits</li>
+<li>✅ GitHub repository</li>
+</ul>
+<p><strong>What disappears:</strong></p>
+<ul>
+<li>❌ Agent conversation histories</li>
+<li>❌ Delegated Claude instance</li>
+<li>❌ Temporary build state</li>
+<li>❌ Agent &quot;memory&quot; (only artifacts remain)</li>
+</ul>
+<p><strong>Why this is good:</strong></p>
+<ul>
+<li>Clean slate for each build</li>
+<li>No state pollution</li>
+<li>Predictable behavior</li>
+<li>Agents can&#39;t accumulate incorrect assumptions</li>
+</ul>
+<p><strong>Next build:</strong> Fresh agents are created, read the pattern library, and benefit from past learnings without carrying forward any conversation baggage.</p>
+<hr>
+<h3 id="can-i-see-the-agent-conversations">Can I see the agent conversations?</h3>
+<p><strong>Short answer:</strong> Not currently, but you can see their OUTPUT.</p>
+<p><strong>What you CAN see:</strong></p>
+<p>Each agent documents their work:</p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Agent</th>
+<th>Output File</th>
+<th>What It Shows</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>Scout</td>
+<td><code>.context-foundry/scout-report.md</code></td>
+<td>Research findings, technology recommendations</td>
+</tr>
+<tr>
+<td>Architect</td>
+<td><code>.context-foundry/architecture.md</code></td>
+<td>Complete system design</td>
+</tr>
+<tr>
+<td>Builder</td>
+<td><code>.context-foundry/build-log.md</code></td>
+<td>Implementation progress</td>
+</tr>
+<tr>
+<td>Test</td>
+<td><code>.context-foundry/test-results-iteration-X.md</code></td>
+<td>Test runs, failures, fixes</td>
+</tr>
+<tr>
+<td>Feedback</td>
+<td><code>.context-foundry/feedback/build-feedback-{timestamp}.json</code></td>
+<td>Learnings extracted</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Example - Reading Scout&#39;s findings:</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/vimquest/.context-foundry/scout-report.md</code></pre>
+<p>You&#39;ll see:</p>
+<ul>
+<li>What Scout researched</li>
+<li>Technologies recommended</li>
+<li>Risks identified</li>
+<li>Prior art analyzed</li>
+<li>Patterns applied</li>
+</ul>
+<p><strong>What you CAN&#39;T see:</strong></p>
+<ul>
+<li>The actual back-and-forth between Scout and file tools</li>
+<li>Internal reasoning steps</li>
+<li>Trial-and-error during research</li>
+</ul>
+<p><strong>Why:</strong> The delegated Claude instance only returns the final artifacts, not the full conversation log.</p>
+<p><strong>Future enhancement:</strong> Could add <code>--verbose</code> mode to capture full conversation logs if desired for debugging.</p>
+<hr>
+<h2 id="usage-control">Usage &amp; Control</h2>
+<h3 id="can-i-review-the-architects-plan-before-building-starts">Can I review the architect&#39;s plan before building starts?</h3>
+<p><strong>Yes! You have options:</strong></p>
+<p><strong>Option 1: Autonomous Mode (Default - No Review)</strong></p>
+<pre><code class="">You: &quot;Build a weather app&quot;
+
+→ Scout runs → Architect runs → Builder runs → ... → Done!
+  (You don&#039;t see plan until after completion)</code></pre>
+<p><strong>Option 2: Non-Autonomous Mode (Manual Review)</strong></p>
+<pre><code class="language-python"># Use MCP tool with autonomous=False
+autonomous_build_and_deploy(
+    task=&quot;Build a weather app&quot;,
+    working_directory=&quot;/Users/name/homelab/weather&quot;,
+    autonomous=False  # ← Enables checkpoints
+)</code></pre>
+<p><strong>With checkpoints enabled:</strong></p>
+<ol>
+<li>Scout completes → Shows scout-report.md → Waits for approval</li>
+<li>You review: <code>cat .context-foundry/scout-report.md</code></li>
+<li>You approve: &quot;Continue&quot;</li>
+<li>Architect completes → Shows architecture.md → Waits for approval</li>
+<li>You review: <code>cat .context-foundry/architecture.md</code></li>
+<li>You approve: &quot;Continue&quot;</li>
+<li>Builder starts...</li>
+</ol>
+<p><strong>Option 3: Review After Completion (Most Common)</strong></p>
+<pre><code class="">Build completes autonomously
+    ↓
+Review: cat .context-foundry/architecture.md
+    ↓
+Understand what was built and why
+    ↓
+Make adjustments if needed</code></pre>
+<p><strong>Best practice:</strong></p>
+<ul>
+<li>First build: Use autonomous mode (trust the system)</li>
+<li>After build: Review architecture.md to learn</li>
+<li>If adjustments needed: Edit code or request changes</li>
+</ul>
+<hr>
+<h3 id="how-do-i-know-what-patterns-are-being-applied-to-my-build">How do I know what patterns are being applied to my build?</h3>
+<p><strong>Patterns document themselves in the build artifacts!</strong></p>
+<p><strong>Check 1: Scout Report</strong></p>
+<pre><code class="language-bash">cat your-project/.context-foundry/scout-report.md</code></pre>
+<p>Look for section:</p>
+<pre><code class="language-markdown">## Patterns Applied
+
+Based on pattern library analysis:
+
+1. ✅ vite-educational-spa (PRIORITY: HIGH)
+   - Reason: Browser-based app with ES6 modules
+   - Prevention: CORS errors from file:// protocol
+   - Action: Use Vite with built-in dev server
+
+2. ✅ hash-routing-offline-first
+   - Reason: Educational app, offline capability important
+   - Action: Implement hash-based routing</code></pre>
+<p><strong>Check 2: Architecture Document</strong></p>
+<pre><code class="language-bash">cat your-project/.context-foundry/architecture.md</code></pre>
+<p>Look for section:</p>
+<pre><code class="language-markdown">## Technology Choices
+
+### Build Tool: Vite
+**Rationale:** Pattern library indicates Vite prevents CORS issues
+(pattern: vite-educational-spa, frequency: 3, success_rate: 100%)</code></pre>
+<p><strong>Check 3: Session Summary</strong></p>
+<pre><code class="language-bash">cat your-project/.context-foundry/session-summary.json</code></pre>
+<pre><code class="language-json">{
+  &quot;patterns_applied&quot;: [
+    &quot;vite-educational-spa&quot;,
+    &quot;hash-routing-offline-first&quot;,
+    &quot;localstorage-educational-persistence&quot;
+  ]
+}</code></pre>
+<p><strong>Check 4: Global Pattern Library</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json</code></pre>
+<p>See all available patterns and their auto-apply conditions.</p>
+<hr>
+<h3 id="can-i-disable-autonomous-mode-and-have-more-control">Can I disable autonomous mode and have more control?</h3>
+<p><strong>Yes! Multiple control levels:</strong></p>
+<p><strong>Level 1: Full Autonomous (Walk Away)</strong></p>
+<pre><code class="">autonomous_build_and_deploy(
+    task=&quot;Build a weather app&quot;,
+    autonomous=True  # Default
+)</code></pre>
+<ul>
+<li>No checkpoints</li>
+<li>Runs start to finish</li>
+<li>Use when: You trust the system</li>
+</ul>
+<p><strong>Level 2: Checkpoint Mode (Review Key Decisions)</strong></p>
+<pre><code class="">autonomous_build_and_deploy(
+    task=&quot;Build a weather app&quot;,
+    autonomous=False  # ← Enables checkpoints
+)</code></pre>
+<ul>
+<li>Pauses after Scout (review research)</li>
+<li>Pauses after Architect (review plan)</li>
+<li>Pauses after Test (review results)</li>
+<li>Use when: You want oversight</li>
+</ul>
+<p><strong>Level 3: Manual Orchestrator (Full Control)</strong></p>
+<pre><code class="language-bash">cd /Users/name/homelab/your-project
+claude
+
+You: &quot;Read /Users/name/homelab/context-foundry/tools/orchestrator_prompt.txt
+      and execute Phase 1 (Scout) only&quot;
+
+[Review scout-report.md]
+
+You: &quot;Now execute Phase 2 (Architect)&quot;
+
+[Review architecture.md, make edits]
+
+You: &quot;Now execute Phase 3 (Builder) with these modifications: ...&quot;</code></pre>
+<p><strong>Level 4: Traditional Claude Code (No Context Foundry)</strong></p>
+<pre><code class="language-bash">claude
+
+You: &quot;Help me build a weather app step by step&quot;
+
+[Traditional interactive development]</code></pre>
+<p><strong>Recommendation:</strong></p>
+<ul>
+<li><strong>First time:</strong> Use autonomous mode to see what it can do</li>
+<li><strong>After seeing results:</strong> Decide if you want more control</li>
+<li><strong>Complex projects:</strong> Use checkpoint mode</li>
+<li><strong>Learning/teaching:</strong> Use manual orchestrator to see each phase</li>
+</ul>
+<hr>
+<h2 id="advanced-questions">Advanced Questions</h2>
+<h3 id="whats-the-difference-between-the-mcp-server-and-manual-orchestrator">What&#39;s the difference between the MCP server and manual orchestrator?</h3>
+<p><strong>MCP Server (Recommended):</strong></p>
+<ul>
+<li>Integrates with Claude Code&#39;s MCP protocol</li>
+<li>One-command builds from any directory</li>
+<li>Supports parallel builds</li>
+<li>Automatic delegation</li>
+<li>Clean API</li>
+</ul>
+<p><strong>Usage:</strong></p>
+<pre><code class="">You: &quot;Build a weather app&quot;
+[System handles everything]</code></pre>
+<p><strong>Manual Orchestrator:</strong></p>
+<ul>
+<li>Direct use of orchestrator prompt</li>
+<li>More explicit control</li>
+<li>Educational (see how it works)</li>
+<li>Debugging builds</li>
+</ul>
+<p><strong>Usage:</strong></p>
+<pre><code class="">You: &quot;Read orchestrator_prompt.txt and execute it for a weather app&quot;
+[You manually guide Claude through phases]</code></pre>
+<p><strong>When to use each:</strong></p>
+<ul>
+<li><strong>MCP:</strong> Production use, ease of use, parallel builds</li>
+<li><strong>Manual:</strong> Learning, debugging, custom workflows</li>
+</ul>
+<hr>
+<h3 id="where-can-i-learn-more">Where can I learn more?</h3>
+<p><strong>Documentation:</strong></p>
+<ul>
+<li><strong>Quick Start:</strong> <a href="QUICKSTART.md">QUICKSTART.md</a></li>
+<li><strong>User Guide:</strong> <a href="USER_GUIDE.md">USER_GUIDE.md</a></li>
+<li><strong>Architecture Deep Dive:</strong> <a href="docs/ARCHITECTURE.md">docs/ARCHITECTURE.md</a></li>
+<li><strong>Delegation Model:</strong> <a href="docs/DELEGATION_MODEL.md">docs/DELEGATION_MODEL.md</a></li>
+<li><strong>Feedback System:</strong> <a href="FEEDBACK_SYSTEM.md">FEEDBACK_SYSTEM.md</a></li>
+</ul>
+<p><strong>Real Examples:</strong></p>
+<ul>
+<li>VimQuest: <code>/Users/name/homelab/vimquest/.context-foundry/</code></li>
+<li>Satoshi&#39;s Chore Tracker: <code>/Users/name/homelab/satoshi-chore-tracker/.context-foundry/</code></li>
+<li>1942 Clone: <code>/tmp/1942-clone/.context-foundry/</code></li>
+</ul>
+<p><strong>Pattern Library:</strong></p>
+<ul>
+<li>Global patterns: <code>/Users/name/homelab/context-foundry/.context-foundry/patterns/</code></li>
+<li>See what Context Foundry has learned!</li>
+</ul>
+<hr>
+<h2 id="still-have-questions">Still Have Questions?</h2>
+<p><strong>Open an issue:</strong> <a href="https://github.com/snedea/context-foundry/issues" target="_blank" rel="noopener noreferrer">https://github.com/snedea/context-foundry/issues <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></p>
+<p><strong>Philosophy:</strong> If the documentation doesn&#39;t answer it, the documentation is incomplete. We&#39;ll add your question to this FAQ!</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+
+            <a href="/docs/getting-started/readme" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Overview</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#build-artifacts-plans" class="toc-link" data-heading-id="build-artifacts-plans">
+                  Build Artifacts &amp; Plans
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-can-i-find-the-architects-plan-for-my-project" class="toc-link" data-heading-id="where-can-i-find-the-architects-plan-for-my-project">
+                          Where can I find the architect&#x27;s plan for my project?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-other-build-artifacts-are-created" class="toc-link" data-heading-id="what-other-build-artifacts-are-created">
+                          What other build artifacts are created?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-is-the-pattern-library-stored" class="toc-link" data-heading-id="where-is-the-pattern-library-stored">
+                          Where is the pattern library stored?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#system-prompts-delegation" class="toc-link" data-heading-id="system-prompts-delegation">
+                  System Prompts &amp; Delegation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#did-context-foundry-change-claude-codes-system-prompt" class="toc-link" data-heading-id="did-context-foundry-change-claude-codes-system-prompt">
+                          Did Context Foundry change Claude Code&#x27;s system prompt?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#if-i-use-claude-code-for-other-tasks-do-i-need-to-change-the-system-prompt-back" class="toc-link" data-heading-id="if-i-use-claude-code-for-other-tasks-do-i-need-to-change-the-system-prompt-back">
+                          If I use Claude Code for other tasks, do I need to change the system prompt back?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-does-the-mcp-server-trigger-builds" class="toc-link" data-heading-id="how-does-the-mcp-server-trigger-builds">
+                          How does the MCP server trigger builds?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-are-all-the-prompts-located" class="toc-link" data-heading-id="where-are-all-the-prompts-located">
+                          Where are all the prompts located?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#context-agents" class="toc-link" data-heading-id="context-agents">
+                  Context &amp; Agents
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#why-is-my-context-usage-so-low-during-builds" class="toc-link" data-heading-id="why-is-my-context-usage-so-low-during-builds">
+                          Why is my context usage so low during builds?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-happens-to-the-agents-after-the-build-completes" class="toc-link" data-heading-id="what-happens-to-the-agents-after-the-build-completes">
+                          What happens to the agents after the build completes?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#can-i-see-the-agent-conversations" class="toc-link" data-heading-id="can-i-see-the-agent-conversations">
+                          Can I see the agent conversations?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#usage-control" class="toc-link" data-heading-id="usage-control">
+                  Usage &amp; Control
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#can-i-review-the-architects-plan-before-building-starts" class="toc-link" data-heading-id="can-i-review-the-architects-plan-before-building-starts">
+                          Can I review the architect&#x27;s plan before building starts?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-do-i-know-what-patterns-are-being-applied-to-my-build" class="toc-link" data-heading-id="how-do-i-know-what-patterns-are-being-applied-to-my-build">
+                          How do I know what patterns are being applied to my build?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#can-i-disable-autonomous-mode-and-have-more-control" class="toc-link" data-heading-id="can-i-disable-autonomous-mode-and-have-more-control">
+                          Can I disable autonomous mode and have more control?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#advanced-questions" class="toc-link" data-heading-id="advanced-questions">
+                  Advanced Questions
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#whats-the-difference-between-the-mcp-server-and-manual-orchestrator" class="toc-link" data-heading-id="whats-the-difference-between-the-mcp-server-and-manual-orchestrator">
+                          What&#x27;s the difference between the MCP server and manual orchestrator?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-can-i-learn-more" class="toc-link" data-heading-id="where-can-i-learn-more">
+                          Where can I learn more?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#still-have-questions" class="toc-link" data-heading-id="still-have-questions">
+                  Still Have Questions?
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

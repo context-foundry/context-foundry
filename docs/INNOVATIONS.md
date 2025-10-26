@@ -3051,10 +3051,128 @@ Month 6: 100 builds, 45 patterns discovered
 - Auto-apply threshold prevents premature application
 - Cross-project learning benefits all future builds
 
+### Automatic Community Sharing (v2.1+)
+
+**The next evolution: Sharing knowledge globally across ALL Context Foundry users.**
+
+**The problem with local-only patterns:**
+```
+User A (Computer 1):
+- Builds 50 projects
+- Discovers 30 valuable patterns
+- Patterns stored in ~/.context-foundry/patterns/
+- Only User A benefits
+
+User B (Computer 2):
+- Builds 50 projects
+- Discovers same 30 patterns independently
+- Wastes time rediscovering same solutions
+- Patterns stored locally, never shared
+
+❌ Knowledge is siloed per computer/user
+```
+
+**The v2.1 solution: Automatic pattern contribution:**
+```
+User A builds a project:
+1. Build completes successfully
+2. Phase 7 (Feedback) extracts patterns
+3. Patterns merged to ~/.context-foundry/patterns/
+4. 🆕 share_patterns_to_community() called automatically
+   - Creates GitHub PR with patterns
+   - PR validated automatically
+   - Auto-merges if valid
+   - Patterns included in next nightly release
+
+Next day:
+- User B downloads nightly release
+- Gets User A's patterns automatically
+- Avoids issues User A already solved
+- Contributes their own patterns back
+```
+
+**One-time setup (30 seconds):**
+```bash
+# Install GitHub CLI
+brew install gh   # macOS
+sudo apt install gh   # Linux
+
+# Authenticate once
+gh auth login
+```
+
+**After setup:**
+```
+Every build automatically:
+✅ Extracts patterns (Phase 7: Feedback)
+✅ Shares to community (share_patterns_to_community())
+✅ Creates PR (validated + auto-merged)
+✅ Patterns in next nightly release
+✅ Everyone benefits!
+```
+
+**Smart features:**
+- **Deduplication**: Tracks `.last-pattern-share` timestamp, won't spam PRs
+- **Graceful degradation**: Skips if `gh` not authenticated (build still succeeds)
+- **Non-blocking**: Sharing failure doesn't break the build
+- **Privacy-first**: Only shares generic patterns (no code, no secrets)
+- **Automatic validation**: GitHub Actions validates before merge
+
+**The flow:**
+```mermaid
+graph TD
+    A[Build Completes] --> B[Phase 7: Feedback]
+    B --> C[Merge patterns locally]
+    C --> D{gh authenticated?}
+    D -->|Yes| E[share_patterns_to_community]
+    D -->|No| F[Skip with message]
+    E --> G[Create branch: patterns/user/timestamp]
+    G --> H[Create PR automatically]
+    H --> I[GitHub Actions validates]
+    I --> J{Valid?}
+    J -->|Yes| K[Auto-merge to main]
+    J -->|No| L[PR stays open for review]
+    K --> M[Nightly release at midnight UTC]
+    M --> N[Everyone gets the patterns!]
+
+    style E fill:#4ecdc4
+    style K fill:#95e1d3
+    style N fill:#95e1d3
+```
+
+**Real example:**
+```json
+// session-summary.json after build
+{
+  "feedback": {
+    "patterns_merged_to_global": true,
+    "patterns_shared_to_community": true,
+    "pattern_share_status": "success",
+    "pattern_share_pr_url": "https://github.com/context-foundry/context-foundry/pull/789",
+    "pattern_share_timestamp": "2025-10-27T14:32:00Z"
+  }
+}
+```
+
+**The impact:**
+- **Network effect**: More users = more patterns = smarter builds for everyone
+- **Collective intelligence**: Community learns from every build
+- **Zero manual work**: Runs automatically after every build
+- **Continuous improvement**: Pattern library grows with each contribution
+- **Cross-machine sync**: Works seamlessly across multiple computers
+
+**Why this is innovative:**
+- Most AI tools don't share learnings between users
+- Context Foundry creates a collective knowledge base
+- Automatic contribution (not manual)
+- Validated before merge (quality control)
+- Everyone's builds get smarter together
+
 **The paradigm shift:**
 ```
-Traditional: Each build starts with zero knowledge
-Context Foundry: Each build starts with cumulative knowledge from all previous builds
+Traditional: Each user starts with zero knowledge
+Context Foundry v2.0: Each user accumulates their own knowledge
+Context Foundry v2.1: All users share one global knowledge base
 ```
 
 ---
