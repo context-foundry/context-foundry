@@ -28,6 +28,7 @@ class Config(BaseModel):
     log_level: str = Field(default="INFO")
 
     @validator("anthropic_api_key")
+    @classmethod
     def validate_api_key(cls, v: str | None) -> str | None:
         """
         Validate API key if provided.
@@ -47,6 +48,7 @@ class Config(BaseModel):
         return v
 
     @validator("baml_log_level", "log_level")
+    @classmethod
     def validate_log_level(cls, v: str) -> str:
         """Validate log level is valid."""
         valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]

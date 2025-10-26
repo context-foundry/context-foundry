@@ -1,8 +1,10 @@
 """Tests for document processing functionality."""
 
 import pytest
-from pathlib import Path
-from examples.document_processing import analyze_document
+
+# Note: examples.document_processing was consolidated into mcp_delegation.py
+# These tests need to be updated or removed
+# from examples.document_processing import analyze_document
 
 
 @pytest.mark.asyncio

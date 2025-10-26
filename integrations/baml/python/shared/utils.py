@@ -7,8 +7,9 @@ Includes logging setup, retry logic, and helper functions.
 import asyncio
 import logging
 import sys
-from typing import TypeVar, Callable, Any, Optional
+from collections.abc import Callable
 from functools import wraps
+from typing import Any, TypeVar
 
 
 T = TypeVar("T")
@@ -73,7 +74,7 @@ async def retry_with_backoff(
     """
     logger = logging.getLogger("baml_anthropic")
     delay = initial_delay
-    last_exception: Optional[Exception] = None
+    last_exception: Exception | None = None
 
     for attempt in range(max_retries):
         try:
