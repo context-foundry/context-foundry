@@ -70,32 +70,58 @@ graph LR
 
 ---
 
-## 🎮 See It In Action: Evolution Quest
+## 🎮 See It In Action
 
-**Real build example** - Watch Context Foundry autonomously build a complete game from a simple request:
+**Example conversation** - Context Foundry builds a complete game autonomously:
 
-### Starting the Build
+```
+You: Build a platformer game with player movement, enemies,
+     collectibles, and multiple levels in JavaScript
 
-![Evolution Quest - Build Starting](docs/screenshots/EvolutionQuestBeingBuilt.png)
-*User makes a request, then walks away. Context Foundry's autonomous workflow begins.*
+Context Foundry: 🚀 Autonomous build started!
 
-### Guided Progress Updates
+Project: platformer-game
+Task ID: abc-123-def-456
+Location: /tmp/platformer-game
+Expected duration: 7-15 minutes
 
-![Build Status Update 1](docs/screenshots/BuildStatusUpdate1.png)
-*Scout phase completes research. Architect phase designs the game architecture. Builder phase begins implementation.*
+You can continue working - the build runs in the background.
+```
 
-![Build Status Update 2](docs/screenshots/BuildStatusUpdate2.png)
-*Tests running and passing. Self-healing test loop ensures quality. Screenshot capture phase documents the UI.*
+**10 minutes later...**
 
-### Build Complete
+```
+You: What's the status?
 
-![Build Complete](docs/screenshots/BuildStatusComplete.png)
-*All phases complete automatically. Tests passing. Documentation generated. Ready for deployment.*
+Context Foundry: ✅ Build completed!
 
-### The Result
+Phase 1: Scout ✓
+  - Analyzed platformer game requirements
+  - Recommended HTML5 Canvas + vanilla JS
+  - Identified physics, collision, level design needs
 
-![Evolution Quest - Ready to Play](docs/screenshots/App_Ready_to_Play.png)
-*Complete, working game deployed to GitHub with tests, documentation, and screenshots. Total time: 12 minutes. User interaction: Just the initial request.*
+Phase 2: Architect ✓
+  - Designed game engine architecture
+  - Planned Player, Enemy, Collectible classes
+  - Created level data structure
+
+Phase 3: Builder ✓
+  - Implemented game loop and rendering
+  - Added physics and collision detection
+  - Created 3 levels with increasing difficulty
+
+Phase 4: Test ✓ (2 iterations)
+  - Iteration 1: Fixed collision edge cases
+  - Iteration 2: All tests passing (15/15)
+
+Phase 5: Deploy ✓
+  - Deployed to GitHub: github.com/you/platformer-game
+  - README with screenshots generated
+  - GitHub Pages enabled
+
+Total time: 12 minutes
+Files created: 12 (game.js, player.js, level.js, tests/, docs/)
+```
 
 **Key Takeaway:** User described what they wanted, walked away, came back to a finished, tested, documented, and deployed application.
 
