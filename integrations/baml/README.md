@@ -1,6 +1,6 @@
-# BAML + Anthropic Agent Skills Integration
+# BAML + Agent Skills Integration (Dual-Provider)
 
-Production-ready integration example demonstrating **type-safe prompting** with BAML and **progressive skill disclosure** with Anthropic's Agent Skills system.
+Production-ready integration demonstrating **type-safe prompting** with BAML, **Agent Skills** with Anthropic, and **cost-effective** OpenAI support.
 
 ![Hero Image](docs/hero.png)
 
@@ -8,24 +8,54 @@ Production-ready integration example demonstrating **type-safe prompting** with 
 
 This integration showcases how to combine:
 - **[BAML](https://github.com/BoundaryML/baml)**: Type-safe prompting framework with compile-time validation
-- **[Anthropic Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)**: Progressive disclosure pattern for complex AI capabilities
-- **Dual Language Support**: Production-ready Python and TypeScript implementations
+- **[Anthropic Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)**: Progressive disclosure for complex AI capabilities (Claude-only)
+- **[OpenAI](https://platform.openai.com/)**: Cost-effective alternative for simple tasks (GPT-4o-mini at 20x lower cost)
+- **Dual Provider Support**: Use both providers in the same codebase with intelligent selection
 
 ## Features
 
 ✅ **Type-Safe Prompts**: BAML provides compile-time type checking for LLM inputs/outputs
-✅ **Progressive Skill Disclosure**: Skills loaded only when needed
+✅ **Dual-Provider Support**: Use Claude OR OpenAI (or both!) with same BAML code
+✅ **Cost Optimization**: OpenAI for simple tasks (95% cheaper), Claude for complex ones
+✅ **Progressive Skill Disclosure**: Agent Skills loaded only when needed (Claude)
 ✅ **Production Ready**: Error handling, retry logic, logging, streaming support
-✅ **Dual Implementation**: Python and TypeScript with feature parity
-✅ **Comprehensive Examples**: Document processing, data analysis, custom skills
-✅ **Full Test Coverage**: Unit, integration, and E2E tests
+✅ **Dual Language**: Python and TypeScript implementations
+✅ **Comprehensive Examples**: Document processing, cost-effective summarization, batch processing
+
+## 💰 Cost Comparison
+
+| Provider | Model | Input Cost | Output Cost | Best For |
+|----------|-------|------------|-------------|----------|
+| **OpenAI** | GPT-4o-mini | $0.15/1M tokens | $0.60/1M tokens | Simple tasks, high-volume |
+| **OpenAI** | GPT-4o | $2.50/1M tokens | $10.00/1M tokens | Balanced quality/cost |
+| **Anthropic** | Claude 3.5 Sonnet | $3.00/1M tokens | $15.00/1M tokens | Complex reasoning, Agent Skills |
+
+**Example Savings:**
+- Summarize 1000 customer reviews: **$1.50 (OpenAI) vs $30 (Claude) = 95% savings**
+- Process PDF document: **Use Claude** (Agent Skills required)
+
+## 🎯 When to Use Each Provider
+
+### Use Claude (Anthropic Agent Skills)
+- ✅ PDF/DOCX document processing
+- ✅ Complex reasoning and analysis
+- ✅ Tasks requiring Agent Skills
+- ✅ Progressive skill disclosure needed
+
+### Use OpenAI (Cost-Effective)
+- ✅ Text summarization
+- ✅ Simple classification
+- ✅ High-volume batch processing
+- ✅ Data extraction from plain text
+- ✅ Cost-sensitive workloads
 
 ## Quick Start
 
 ### Prerequisites
 
 - Python 3.10+ OR Node.js 18+
-- Anthropic API key ([get one here](https://console.anthropic.com/))
+- **Anthropic API key** ([get one here](https://console.anthropic.com/)) - Required for Agent Skills
+- **OpenAI API key** ([get one here](https://platform.openai.com/api-keys)) - Optional for cost savings
 - BAML CLI: `npm install -g @boundaryml/baml`
 
 ### Python Setup (5 minutes)
@@ -36,15 +66,20 @@ cd python/
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure API key
+# Configure API keys
 cp .env.template .env
-# Edit .env and add your ANTHROPIC_API_KEY
+# Edit .env and add:
+#   ANTHROPIC_API_KEY=your_key  (required)
+#   OPENAI_API_KEY=your_key     (optional - for cost savings)
 
 # Generate BAML client
 cd .. && baml-cli generate && cd python/
 
-# Run example
+# Run Claude example (Agent Skills)
 python examples/document_processing.py
+
+# Run dual-provider example (cost comparison)
+python examples/dual_provider.py
 ```
 
 ### TypeScript Setup (5 minutes)

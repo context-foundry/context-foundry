@@ -180,3 +180,149 @@ function LoadSkillsProgressively(
     Return your decisions in the specified structured format.
   "#
 }
+
+/**
+ * ============================================================================
+ * DUAL-PROVIDER FUNCTIONS (Cost-Effective with OpenAI)
+ * ============================================================================
+ */
+
+/**
+ * Generate Summary (Cost-Effective with OpenAI)
+ *
+ * Uses GPT-4o-mini for simple text summarization at 20x lower cost than Claude.
+ *
+ * Cost: ~$0.0015 per 10K tokens (vs $0.30 with Claude)
+ *
+ * @param text Text to summarize
+ * @param max_sentences Maximum sentences in summary
+ * @returns TextSummary with condensed version
+ */
+function GenerateSummary(
+  text: string,
+  max_sentences: int
+) -> TextSummary {
+  client OpenAIClient
+  prompt #"
+    You are a summarization assistant.
+
+    TEXT TO SUMMARIZE:
+    {{ text }}
+
+    INSTRUCTIONS:
+    1. Read the text carefully
+    2. Extract the most important information
+    3. Create a concise summary with no more than {{ max_sentences }} sentences
+    4. Preserve key facts and main points
+    5. Use clear, simple language
+
+    Return the summary in the specified format.
+  "#
+}
+
+/**
+ * Extract Structured Data (Cost-Effective with OpenAI)
+ *
+ * Uses GPT-4o-mini for simple data extraction from text.
+ * Perfect for high-volume batch processing.
+ *
+ * @param text Text containing data to extract
+ * @param schema Description of the data structure to extract
+ * @returns StructuredData with extracted information
+ */
+function ExtractStructuredData(
+  text: string,
+  schema: string
+) -> StructuredData {
+  client OpenAIClient
+  prompt #"
+    You are a data extraction assistant.
+
+    TEXT:
+    {{ text }}
+
+    SCHEMA TO EXTRACT:
+    {{ schema }}
+
+    INSTRUCTIONS:
+    1. Parse the text carefully
+    2. Extract data matching the specified schema
+    3. Validate extracted data for completeness
+    4. Handle missing fields gracefully
+
+    Return the extracted data in the specified structured format.
+  "#
+}
+
+/**
+ * Classify Text (Cost-Effective with OpenAI)
+ *
+ * Uses GPT-4o-mini for text classification tasks.
+ * Ideal for high-volume content moderation, tagging, or categorization.
+ *
+ * @param text Text to classify
+ * @param categories List of possible categories
+ * @returns TextClassification with predicted category and confidence
+ */
+function ClassifyText(
+  text: string,
+  categories: string[]
+) -> TextClassification {
+  client OpenAIClient
+  prompt #"
+    You are a text classification assistant.
+
+    TEXT TO CLASSIFY:
+    {{ text }}
+
+    POSSIBLE CATEGORIES:
+    {% for category in categories %}
+    - {{ category }}
+    {% endfor %}
+
+    INSTRUCTIONS:
+    1. Analyze the text content
+    2. Determine which category best fits
+    3. Provide a confidence score (0.0 to 1.0)
+    4. Explain your reasoning briefly
+
+    Return the classification in the specified format.
+  "#
+}
+
+/**
+ * Hybrid Function: Choose Provider Based on Task Complexity
+ *
+ * This demonstrates intelligent provider selection:
+ * - Uses OpenAI for simple tasks (cost-effective)
+ * - Falls back to Claude for complex tasks (higher quality)
+ *
+ * @param task Description of the task
+ * @param complexity Estimated complexity ("simple", "moderate", "complex")
+ * @returns TaskResult with appropriate provider used
+ */
+function SmartProcessTask(
+  task: string,
+  complexity: string
+) -> TaskResult {
+  // Start with cost-effective OpenAI
+  client OpenAIClient
+  prompt #"
+    You are an intelligent task processor.
+
+    TASK: {{ task }}
+    COMPLEXITY: {{ complexity }}
+
+    INSTRUCTIONS:
+    1. Process the task according to the requirements
+    2. If complexity is "simple", use efficient processing
+    3. For "complex" tasks, apply advanced reasoning
+    4. Track which approach was used
+
+    COST OPTIMIZATION:
+    This function uses GPT-4o-mini for cost savings.
+    For complex tasks requiring Agent Skills, use AnalyzeDocument or AnalyzeDataset instead.
+
+    Return the result in the specified format.
+  "#
+}
