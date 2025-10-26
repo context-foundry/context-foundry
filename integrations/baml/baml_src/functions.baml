@@ -1,7 +1,16 @@
 /**
- * BAML Function Definitions
+ * BAML Function Definitions (Schema Documentation Only)
  *
- * These functions demonstrate type-safe prompting with Anthropic Agent Skills.
+ * These function signatures define the interface and return types for
+ * operations performed via MCP delegation. They serve as:
+ *
+ * 1. Type definitions for validation
+ * 2. Documentation of expected inputs/outputs
+ * 3. Schema contracts between caller and spawned Claude instances
+ *
+ * IMPLEMENTATION: All functions are implemented via Context Foundry's
+ * MCP delegation pattern (see python/examples/mcp_delegation.py).
+ * No direct API calls are made.
  */
 
 /**

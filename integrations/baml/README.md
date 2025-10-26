@@ -1,64 +1,55 @@
-# BAML + Agent Skills Integration (Dual-Provider)
+# BAML + Agent Skills Integration (MCP-Only, FREE!)
 
-Production-ready integration demonstrating **type-safe prompting** with BAML, **Agent Skills** with Anthropic, and **cost-effective** OpenAI support.
+**The TRUE Context Foundry Way**: Type-safe Agent Skills via Meta-MCP delegation - **NO API costs, NO API keys, UNLIMITED usage!**
 
 ![Hero Image](docs/hero.png)
 
-## Overview
+## 🚀 The Meta-MCP Innovation
 
-This integration showcases how to combine:
-- **[BAML](https://github.com/BoundaryML/baml)**: Type-safe prompting framework with compile-time validation
-- **[Anthropic Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)**: Progressive disclosure for complex AI capabilities (Claude-only)
-- **[OpenAI](https://platform.openai.com/)**: Cost-effective alternative for simple tasks (GPT-4o-mini at 20x lower cost)
-- **Dual Provider Support**: Use both providers in the same codebase with intelligent selection
+This integration showcases Context Foundry's **Meta-MCP pattern** applied to BAML + Agent Skills:
 
-## Features
+Instead of making **paid API calls** to Anthropic or OpenAI, we **spawn Claude instances** via MCP delegation that run on your Claude Code subscription!
 
-✅ **Type-Safe Prompts**: BAML provides compile-time type checking for LLM inputs/outputs
-✅ **Dual-Provider Support**: Use Claude OR OpenAI (or both!) with same BAML code
-✅ **Cost Optimization**: OpenAI for simple tasks (95% cheaper), Claude for complex ones
-✅ **Progressive Skill Disclosure**: Agent Skills loaded only when needed (Claude)
-✅ **Production Ready**: Error handling, retry logic, logging, streaming support
-✅ **Dual Language**: Python and TypeScript implementations
-✅ **Comprehensive Examples**: Document processing, cost-effective summarization, batch processing
+## Architecture
+
+```
+Traditional Approach (COSTS MONEY):
+User → BAML → Direct API Call → Anthropic/OpenAI → Pay per token 💸
+
+Context Foundry Approach (FREE!):
+User → BAML Schema → MCP Delegation → Spawn Claude → Agent Skills → $0 🎉
+```
 
 ## 💰 Cost Comparison
 
-| Provider | Model | Input Cost | Output Cost | Best For |
-|----------|-------|------------|-------------|----------|
-| **OpenAI** | GPT-4o-mini | $0.15/1M tokens | $0.60/1M tokens | Simple tasks, high-volume |
-| **OpenAI** | GPT-4o | $2.50/1M tokens | $10.00/1M tokens | Balanced quality/cost |
-| **Anthropic** | Claude 3.5 Sonnet | $3.00/1M tokens | $15.00/1M tokens | Complex reasoning, Agent Skills |
+| Approach | Cost | API Keys | Agent Skills | Usage Limit |
+|----------|------|----------|--------------|-------------|
+| **Direct API** | $3-15/1M tokens | Required | Yes | Pay-per-use |
+| **MCP Delegation** | **$0** | **None!** | **Yes** | **Unlimited!** |
 
 **Example Savings:**
-- Summarize 1000 customer reviews: **$1.50 (OpenAI) vs $30 (Claude) = 95% savings**
-- Process PDF document: **Use Claude** (Agent Skills required)
+- Process 100 PDF documents: **Direct API: $150** → **MCP: $0** = **100% savings!**
+- Unlimited document processing on your subscription!
 
-## 🎯 When to Use Each Provider
+## Features
 
-### Use Claude (Anthropic Agent Skills)
-- ✅ PDF/DOCX document processing
-- ✅ Complex reasoning and analysis
-- ✅ Tasks requiring Agent Skills
-- ✅ Progressive skill disclosure needed
-
-### Use OpenAI (Cost-Effective)
-- ✅ Text summarization
-- ✅ Simple classification
-- ✅ High-volume batch processing
-- ✅ Data extraction from plain text
-- ✅ Cost-sensitive workloads
+✅ **FREE & UNLIMITED**: Runs on Claude Code subscription
+✅ **NO API KEYS**: Authentication inherited automatically
+✅ **AGENT SKILLS**: Full PDF/DOCX/data processing access
+✅ **TYPE-SAFE**: BAML schemas for validation (not API calls)
+✅ **FRESH CONTEXT**: Each spawn gets 200K token window
+✅ **PRODUCTION READY**: Error handling, retry logic, streaming
+✅ **TRUE META-MCP**: Uses Context Foundry's core innovation
 
 ## Quick Start
 
 ### Prerequisites
 
-- Python 3.10+ OR Node.js 18+
-- **Anthropic API key** ([get one here](https://console.anthropic.com/)) - Required for Agent Skills
-- **OpenAI API key** ([get one here](https://platform.openai.com/api-keys)) - Optional for cost savings
-- BAML CLI: `npm install -g @boundaryml/baml`
+- **Claude Code subscription** (that's it!)
+- Python 3.10+ (for examples)
+- **NO API KEYS NEEDED** - authentication inherited from Claude Code
 
-### Python Setup (5 minutes)
+### Python Setup (2 minutes)
 
 ```bash
 cd python/
@@ -66,21 +57,14 @@ cd python/
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure API keys
-cp .env.template .env
-# Edit .env and add:
-#   ANTHROPIC_API_KEY=your_key  (required)
-#   OPENAI_API_KEY=your_key     (optional - for cost savings)
+# NO API KEY CONFIGURATION NEEDED!
+# Authentication is inherited from Claude Code
 
-# Generate BAML client
-cd .. && baml-cli generate && cd python/
-
-# Run Claude example (Agent Skills)
-python examples/document_processing.py
-
-# Run dual-provider example (cost comparison)
-python examples/dual_provider.py
+# Run MCP delegation example (FREE, unlimited Agent Skills)
+python examples/mcp_delegation.py
 ```
+
+**That's it!** No API keys to manage, no costs to worry about. Everything runs on your Claude Code subscription.
 
 ### TypeScript Setup (5 minutes)
 

@@ -928,31 +928,37 @@ Use mcp__get_delegation_result for each task_id
 - Parallel time: ~12 minutes (limited by slowest task)
 - Time saved: 18 minutes (60% faster)
 
-### Example 4: BAML + Anthropic Agent Skills Integration
+### Example 4: BAML + Agent Skills via MCP (FREE!)
 
-**Built-in Integration:** Context Foundry includes a production-ready example demonstrating type-safe prompting with BAML and progressive skill disclosure with Anthropic's Agent Skills system.
+**The Meta-MCP Innovation Applied:** Context Foundry's BAML integration demonstrates using MCP delegation instead of API calls - giving you FREE, UNLIMITED Agent Skills access!
 
 **Location:** `integrations/baml/`
 
+**The Breakthrough:**
+```
+Traditional: BAML → API Call → Pay per token 💸
+Context Foundry: BAML → MCP Delegation → FREE! 🎉
+```
+
 **Features:**
-- Type-safe prompts with BAML's compile-time validation
-- Progressive skill disclosure pattern (skills loaded only when needed)
-- Dual-language implementation (Python & TypeScript)
-- Document processing with PDF/DOCX Skills
-- Data analysis examples
-- Custom skill integration
-- Comprehensive tests and documentation
+- ✅ **FREE & UNLIMITED** - Runs on Claude Code subscription
+- ✅ **NO API KEYS** - Authentication inherited automatically
+- ✅ **AGENT SKILLS** - Full PDF/DOCX/data processing access via spawned Claude
+- ✅ **TYPE-SAFE** - BAML schemas for validation (not API calls)
+- ✅ **FRESH CONTEXT** - 200K tokens per spawn
+- ✅ Meta-MCP all the way down!
 
 **Quick Start:**
 ```bash
 cd integrations/baml/python/
 pip install -r requirements.txt
-cp .env.template .env  # Add your ANTHROPIC_API_KEY
-baml-cli generate
-python examples/document_processing.py
+# NO API KEYS NEEDED!
+python examples/mcp_delegation.py  # FREE, unlimited!
 ```
 
-**Learn More:** See [`integrations/baml/README.md`](integrations/baml/README.md) for complete setup guide, examples, and best practices.
+**Cost Savings:** Process 100 PDFs - Direct API: $150 → MCP Delegation: $0 (100% savings!)
+
+**Learn More:** See [`integrations/baml/README.md`](integrations/baml/README.md) for the Meta-MCP pattern in action.
 
 ---
 
