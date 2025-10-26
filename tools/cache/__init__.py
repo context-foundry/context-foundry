@@ -1,13 +1,17 @@
 """
 Context Foundry Cache System
 
-Provides intelligent caching for Scout reports, Architect plans, and test results
-to enable 30-50% faster builds on repeated/similar tasks.
+Phase 1: Local caching for 10-40% speedup
+Phase 2: Global caching + incremental builds for 70-90% speedup
 
 Features:
-- Scout cache: Reuse research for similar tasks
-- Architect cache: Skip re-planning for small changes
-- Test cache: Skip tests when no code changed
+- Scout cache (Phase 1): Reuse research for similar tasks (local)
+- Global Scout cache (Phase 2): Cross-project Scout sharing
+- Test cache (Phase 1): Skip tests when no code changed
+- Change detection (Phase 2): File-level change tracking
+- Incremental Builder (Phase 2): Smart file preservation
+- Test impact analysis (Phase 2): Selective test execution
+- Incremental docs (Phase 2): Selective documentation updates
 - TTL-based expiration
 - Automatic cleanup
 """
@@ -104,7 +108,44 @@ def get_cache_stats(working_directory: str) -> Dict[str, Any]:
         "expired_files": expired_files
     }
 
+# Re-export Phase 2 incremental modules
+from ..incremental import (
+    # Global Scout Cache
+    get_global_cache_dir,
+    generate_global_scout_key,
+    get_cached_scout_report_global,
+    save_scout_report_to_global_cache,
+    find_similar_cached_reports,
+    clear_global_scout_cache,
+    get_global_scout_cache_stats,
+    # Change Detector
+    ChangeReport,
+    capture_build_snapshot,
+    detect_changes,
+    get_last_build_snapshot_path,
+    # Incremental Builder
+    BuildPlan,
+    DependencyGraph,
+    build_dependency_graph,
+    find_affected_files,
+    create_incremental_build_plan,
+    preserve_unchanged_files,
+    # Test Impact Analyzer
+    TestPlan,
+    TestCoverageMap,
+    build_test_coverage_map,
+    find_affected_tests,
+    create_test_plan,
+    # Incremental Docs
+    DocsPlan,
+    DocsManifest,
+    build_docs_manifest,
+    find_affected_docs,
+    create_docs_plan,
+)
+
 __all__ = [
+    # Phase 1 - Local cache utilities
     'get_cache_dir',
     'hash_string',
     'is_cache_valid',
@@ -112,5 +153,37 @@ __all__ = [
     'load_cache_metadata',
     'get_cache_stats',
     'DEFAULT_CACHE_TTL_HOURS',
-    'DEFAULT_MAX_CACHE_SIZE_MB'
+    'DEFAULT_MAX_CACHE_SIZE_MB',
+    # Phase 2 - Global Scout Cache
+    'get_global_cache_dir',
+    'generate_global_scout_key',
+    'get_cached_scout_report_global',
+    'save_scout_report_to_global_cache',
+    'find_similar_cached_reports',
+    'clear_global_scout_cache',
+    'get_global_scout_cache_stats',
+    # Phase 2 - Change Detection
+    'ChangeReport',
+    'capture_build_snapshot',
+    'detect_changes',
+    'get_last_build_snapshot_path',
+    # Phase 2 - Incremental Builder
+    'BuildPlan',
+    'DependencyGraph',
+    'build_dependency_graph',
+    'find_affected_files',
+    'create_incremental_build_plan',
+    'preserve_unchanged_files',
+    # Phase 2 - Test Impact Analysis
+    'TestPlan',
+    'TestCoverageMap',
+    'build_test_coverage_map',
+    'find_affected_tests',
+    'create_test_plan',
+    # Phase 2 - Incremental Docs
+    'DocsPlan',
+    'DocsManifest',
+    'build_docs_manifest',
+    'find_affected_docs',
+    'create_docs_plan',
 ]

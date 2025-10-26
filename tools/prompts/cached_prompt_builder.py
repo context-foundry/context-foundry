@@ -187,37 +187,20 @@ def _estimate_tokens(text: str) -> int:
 
 def count_prompt_tokens(text: str, model: str = "claude-sonnet-4") -> int:
     """
-    Count tokens in prompt using anthropic package (if available).
+    Count tokens in prompt using estimation (NO API CALLS).
+
+    Previously used Anthropic API for accurate counting, but removed to avoid
+    unexpected API charges. Uses simple estimation instead (~4 chars/token).
 
     Args:
         text: Text to count tokens for
-        model: Model name for tokenization
+        model: Model name (unused, kept for backward compatibility)
 
     Returns:
-        Accurate token count, or estimation if anthropic package unavailable
+        Estimated token count
     """
-    try:
-        from anthropic import Anthropic
-        client = Anthropic()
-
-        # Use count_tokens method
-        result = client.count_tokens(text)
-
-        # Handle different response formats
-        if isinstance(result, dict):
-            return result.get('token_count', result.get('tokens', 0))
-        elif isinstance(result, int):
-            return result
-        else:
-            # Fallback to estimation
-            return _estimate_tokens(text)
-
-    except ImportError:
-        # Anthropic package not available - use estimation
-        return _estimate_tokens(text)
-    except Exception:
-        # API call failed or other error - use estimation
-        return _estimate_tokens(text)
+    # Always use estimation - no API calls to avoid charges
+    return _estimate_tokens(text)
 
 
 def get_prompt_hash(prompt: str) -> str:
