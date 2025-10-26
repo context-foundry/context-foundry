@@ -295,6 +295,7 @@ def context_foundry_status() -> str:
 - save_global_patterns: Save patterns to global pattern storage
 - merge_project_patterns: Merge project patterns into global storage
 - migrate_all_project_patterns: Migrate all project patterns to global storage
+- share_patterns_to_community: Automatically share patterns to community (creates PR)
 
 ℹ️  **Status:**
 - context_foundry_status: This status message
@@ -1913,6 +1914,192 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
         }, indent=2)
 
 
+@mcp.tool()
+def share_patterns_to_community(
+    auto_confirm: bool = True,
+    skip_if_no_changes: bool = True
+) -> str:
+    """
+    Automatically share locally-learned patterns with the Context Foundry community.
+
+    This creates a PR with your patterns which will be automatically validated and merged.
+    Runs after successful builds to contribute learnings back to the community.
+
+    Args:
+        auto_confirm: If True, automatically confirms sharing without prompting (default: True)
+        skip_if_no_changes: If True, skips sharing if no new patterns since last share (default: True)
+
+    Returns:
+        JSON string with share result
+
+    Examples:
+        # Share patterns automatically (typical use after build)
+        result = share_patterns_to_community()
+
+        # Force share even if no changes
+        result = share_patterns_to_community(skip_if_no_changes=False)
+    """
+    try:
+        import subprocess
+        from datetime import datetime
+
+        # Get repository root
+        repo_root = Path(__file__).parent.parent
+        share_script = repo_root / "scripts" / "share-my-patterns.sh"
+
+        if not share_script.exists():
+            return json.dumps({
+                "status": "error",
+                "error": f"Pattern sharing script not found: {share_script}",
+                "shared": False
+            }, indent=2)
+
+        # Check if gh CLI is available and authenticated
+        try:
+            result = subprocess.run(
+                ["gh", "auth", "status"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode != 0:
+                return json.dumps({
+                    "status": "skipped",
+                    "reason": "GitHub CLI not authenticated",
+                    "message": "Run 'gh auth login' to enable automatic pattern sharing",
+                    "shared": False,
+                    "setup_instructions": "https://cli.github.com/manual/gh_auth_login"
+                }, indent=2)
+        except FileNotFoundError:
+            return json.dumps({
+                "status": "skipped",
+                "reason": "GitHub CLI not installed",
+                "message": "Install gh CLI to enable automatic pattern sharing",
+                "shared": False,
+                "setup_instructions": "https://cli.github.com/"
+            }, indent=2)
+        except subprocess.TimeoutExpired:
+            return json.dumps({
+                "status": "error",
+                "error": "gh auth status check timed out",
+                "shared": False
+            }, indent=2)
+
+        # Check if local patterns exist
+        local_patterns_dir = Path.home() / ".context-foundry" / "patterns"
+        if not local_patterns_dir.exists():
+            return json.dumps({
+                "status": "skipped",
+                "reason": "No local patterns found",
+                "message": "No patterns to share yet",
+                "shared": False
+            }, indent=2)
+
+        # Count pattern files
+        pattern_files = list(local_patterns_dir.glob("*.json"))
+        if not pattern_files:
+            return json.dumps({
+                "status": "skipped",
+                "reason": "No pattern files found",
+                "message": "No patterns to share yet",
+                "shared": False
+            }, indent=2)
+
+        # Check if there are changes since last share (if skip_if_no_changes=True)
+        if skip_if_no_changes:
+            # Check if .last-pattern-share file exists
+            last_share_file = local_patterns_dir / ".last-pattern-share"
+            if last_share_file.exists():
+                last_share_time = datetime.fromtimestamp(last_share_file.stat().st_mtime)
+
+                # Check if any pattern files were modified after last share
+                any_newer = False
+                for pf in pattern_files:
+                    if datetime.fromtimestamp(pf.stat().st_mtime) > last_share_time:
+                        any_newer = True
+                        break
+
+                if not any_newer:
+                    return json.dumps({
+                        "status": "skipped",
+                        "reason": "No new patterns since last share",
+                        "message": f"Last shared: {last_share_time.isoformat()}",
+                        "shared": False
+                    }, indent=2)
+
+        # Run the share script with auto-confirmation
+        print(f"\n🔄 Automatically sharing patterns to community...", file=sys.stderr)
+
+        # Prepare environment with auto-confirm
+        env = os.environ.copy()
+        if auto_confirm:
+            # The script will need to be modified to support auto-confirm env var
+            # For now, we'll use 'yes' to pipe confirmation
+            process = subprocess.Popen(
+                ["bash", str(share_script)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(repo_root),
+                env=env
+            )
+            stdout, stderr = process.communicate(input="y\n", timeout=120)
+        else:
+            process = subprocess.run(
+                ["bash", str(share_script)],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_root),
+                timeout=120
+            )
+            stdout = process.stdout
+            stderr = process.stderr
+
+        # Update last share timestamp
+        last_share_file = local_patterns_dir / ".last-pattern-share"
+        last_share_file.touch()
+
+        if process.returncode == 0:
+            # Extract PR URL from output if present
+            pr_url = None
+            for line in stdout.split('\n'):
+                if 'https://github.com' in line and '/pull/' in line:
+                    pr_url = line.strip()
+                    break
+
+            return json.dumps({
+                "status": "success",
+                "message": "Patterns shared successfully",
+                "shared": True,
+                "pr_url": pr_url,
+                "timestamp": datetime.now().isoformat(),
+                "output_summary": stdout[-500:] if len(stdout) > 500 else stdout
+            }, indent=2)
+        else:
+            return json.dumps({
+                "status": "error",
+                "error": f"Share script failed with code {process.returncode}",
+                "shared": False,
+                "stderr": stderr[-500:] if len(stderr) > 500 else stderr
+            }, indent=2)
+
+    except subprocess.TimeoutExpired:
+        return json.dumps({
+            "status": "error",
+            "error": "Pattern sharing timed out after 120 seconds",
+            "shared": False
+        }, indent=2)
+    except Exception as e:
+        import traceback
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+            "shared": False,
+            "traceback": traceback.format_exc()
+        }, indent=2)
+
+
 @mcp.resource("logs://latest")
 def get_latest_logs() -> str:
     """Get the most recent build logs."""
@@ -1952,6 +2139,7 @@ if __name__ == "__main__":
     print("   - save_global_patterns: Save patterns to global pattern storage", file=sys.stderr)
     print("   - merge_project_patterns: Merge project patterns into global storage", file=sys.stderr)
     print("   - migrate_all_project_patterns: Migrate all project patterns to global storage", file=sys.stderr)
+    print("   - share_patterns_to_community: Automatically share patterns to community (creates PR)", file=sys.stderr)
     print("💡 Configure in Claude Desktop or Claude Code CLI to use this server!", file=sys.stderr)
 
     mcp.run()

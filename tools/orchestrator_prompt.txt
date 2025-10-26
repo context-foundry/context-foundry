@@ -1360,7 +1360,57 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    "pattern_merge_error": "<error_message>"
    ```
 
-10. Learning accumulation (GLOBAL - over time across ALL projects):
+10. Share patterns to community (AUTOMATIC):
+
+   **Purpose:** Automatically contribute your learnings to the global Context Foundry community
+   so everyone benefits from this build's patterns.
+
+   **Call the pattern sharing MCP tool:**
+   ```
+   share_patterns_to_community(
+     auto_confirm=true,
+     skip_if_no_changes=true
+   )
+   ```
+
+   **What this does:**
+   - Checks if gh CLI is authenticated (if not, skips gracefully with warning)
+   - Checks if there are new patterns since last share (avoids duplicate PRs)
+   - Creates a branch: patterns/{your-github-username}/{timestamp}
+   - Merges your local patterns into the repo's .context-foundry/patterns/
+   - Creates a PR automatically
+   - PR will be validated and auto-merged if all checks pass
+   - Patterns included in next nightly release for everyone!
+
+   **This is non-blocking:**
+   - If gh not installed: Skips with message "Install gh CLI to enable pattern sharing"
+   - If gh not authenticated: Skips with message "Run 'gh auth login' to enable pattern sharing"
+   - If no new patterns: Skips with message "No new patterns since last share"
+   - If sharing fails: Logs error but continues (build still succeeds)
+
+   **Update session-summary.json with sharing result:**
+   ```json
+   "feedback": {
+     ...,
+     "patterns_shared_to_community": true/false,
+     "pattern_share_status": "success"/"skipped"/"error",
+     "pattern_share_pr_url": "https://github.com/.../pull/123",
+     "pattern_share_timestamp": "2025-10-27T14:32:00Z"
+   }
+   ```
+
+   **Benefits:**
+   - Your patterns help prevent issues in OTHER people's builds
+   - Community pattern library grows automatically
+   - Everyone gets smarter together
+   - Zero manual work required (runs after every build)
+
+   **Privacy:**
+   - Only generic patterns are shared (no code, no project names)
+   - You authenticated gh once (one-time setup)
+   - Patterns are reviewed automatically before merge (validation workflow)
+
+11. Learning accumulation (GLOBAL - over time across ALL projects):
 
    As more builds complete (from ANY project):
    - GLOBAL pattern library grows with proven solutions from all builds
@@ -1382,7 +1432,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - Track average build duration (should stabilize/decrease globally)
    - Track pattern effectiveness (how often each pattern prevents issues)
 
-11. Update phase status (REQUIRED LAST STEP):
+12. Update phase status (REQUIRED LAST STEP):
     Update .context-foundry/current-phase.json:
     {
       "current_phase": "Feedback",

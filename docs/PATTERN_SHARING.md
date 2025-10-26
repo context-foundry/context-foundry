@@ -1,18 +1,18 @@
 # Pattern Sharing System
 
-**Share your learnings, help the community build better projects**
+**Automatic knowledge sharing - your builds make everyone smarter**
 
-Context Foundry learns from every build. When patterns are shared across the community, everyone benefits from accumulated knowledge about common issues, proven solutions, and best practices.
+Context Foundry learns from every build and **automatically shares** patterns with the community. When you run builds, your learnings help prevent issues for everyone else - completely automatically, no manual steps required.
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [How It Works](#how-it-works)
-- [When to Share](#when-to-share)
-- [Sharing Your Patterns](#sharing-your-patterns)
-- [What Happens Next](#what-happens-next)
+- [How It Works (Automatic)](#how-it-works-automatic)
+- [One-Time Setup](#one-time-setup)
+- [What Gets Shared Automatically](#what-gets-shared-automatically)
+- [Manual Sharing (Optional)](#manual-sharing-optional)
 - [Pattern Types](#pattern-types)
 - [Privacy & Security](#privacy--security)
 - [Troubleshooting](#troubleshooting)
@@ -22,32 +22,47 @@ Context Foundry learns from every build. When patterns are shared across the com
 
 ## Quick Start
 
-After running some Context Foundry builds:
+### Automatic Sharing (Recommended)
+
+**One-time setup:**
 
 ```bash
-# Share your learned patterns with the community
+# Install GitHub CLI (if not already installed)
+brew install gh   # macOS
+# or
+sudo apt install gh   # Linux
+
+# Authenticate with GitHub (one-time)
+gh auth login
+```
+
+**That's it!** Now every build automatically shares patterns. Zero manual work.
+
+### Manual Sharing (If you prefer)
+
+```bash
+# Share patterns manually anytime
 cd ~/homelab/context-foundry
 ./scripts/share-my-patterns.sh
 ```
 
-That's it! Your patterns will be validated and automatically merged if all checks pass.
-
 ---
 
-## How It Works
+## How It Works (Automatic)
 
 ### The Pattern Learning Cycle
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  1. Build on Your Computer                                  │
+│  1. Build Runs on Your Computer                            │
 │     └─> Context Foundry learns patterns locally             │
 │         Saved to: ~/.context-foundry/patterns/              │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
-│  2. Share Patterns (Manual)                                 │
-│     └─> Run: ./scripts/share-my-patterns.sh                │
+│  2. Phase 7: Feedback (AUTOMATIC)                          │
+│     └─> Patterns merged to local database                   │
+│     └─> share_patterns_to_community() called automatically │
 │         Creates PR to Context Foundry repo                   │
 └─────────────────────────────────────────────────────────────┘
                           ↓
@@ -65,6 +80,8 @@ That's it! Your patterns will be validated and automatically merged if all check
 │         Everyone gets the latest learnings!                 │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Key Point:** After Step 1 (running `gh auth login` once), everything else happens **automatically** with every build. No manual intervention needed!
 
 ### Flow Diagram
 
@@ -89,7 +106,98 @@ That's it! Your patterns will be validated and automatically merged if all check
 
 ---
 
-## When to Share
+## One-Time Setup
+
+To enable automatic pattern sharing, you only need to do this once:
+
+### Install GitHub CLI
+
+```bash
+# macOS
+brew install gh
+
+# Linux (Debian/Ubuntu)
+sudo apt install gh
+
+# Or download from: https://cli.github.com/
+```
+
+### Authenticate
+
+```bash
+gh auth login
+```
+
+Follow the prompts to authenticate with GitHub. This gives Context Foundry permission to create PRs on your behalf.
+
+**That's it!** Every build will now automatically share patterns.
+
+### Verify Setup
+
+```bash
+# Check if gh is authenticated
+gh auth status
+
+# Should show: "Logged in to github.com as YOUR_USERNAME"
+```
+
+### What If I Don't Set This Up?
+
+No problem! Builds will work normally, but pattern sharing will be skipped with a friendly message:
+
+```
+⚠️  Pattern sharing skipped: GitHub CLI not authenticated
+   Run 'gh auth login' to enable automatic pattern sharing
+```
+
+Your local patterns still work and improve YOUR builds - they just won't be shared with the community.
+
+---
+
+## What Gets Shared Automatically
+
+After **every successful build**, Context Foundry automatically:
+
+1. ✅ Checks if there are new patterns since last share
+2. ✅ Creates a PR with your patterns
+3. ✅ GitHub validates the patterns
+4. ✅ Auto-merges if validation passes
+5. ✅ Patterns included in next nightly release
+
+**Smart deduplication:**
+- Won't create duplicate PRs (tracks last share timestamp)
+- Only shares if patterns were modified since last share
+- Gracefully skips if gh not authenticated
+
+**What happens in session-summary.json:**
+```json
+"feedback": {
+  "patterns_shared_to_community": true,
+  "pattern_share_status": "success",
+  "pattern_share_pr_url": "https://github.com/context-foundry/context-foundry/pull/456",
+  "pattern_share_timestamp": "2025-10-27T14:32:00Z"
+}
+```
+
+---
+
+## Manual Sharing (Optional)
+
+If you prefer to share manually instead of automatically:
+
+```bash
+cd ~/homelab/context-foundry
+./scripts/share-my-patterns.sh
+```
+
+This gives you full control over when to share. Useful if you want to:
+- Review patterns before sharing
+- Batch multiple builds before sharing
+- Share only specific patterns (by editing local files first)
+
+---
+
+## When to Share (Manual Mode)
 
 ### Good Times to Share
 
