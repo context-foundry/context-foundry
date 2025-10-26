@@ -25,6 +25,14 @@ client<llm> GPT35Turbo {
   }
 }
 
+client<llm> GPT4oMini {
+  provider openai
+  options {
+    model "gpt-4o-mini"
+    api_key env.OPENAI_API_KEY
+  }
+}
+
 client<llm> Claude35Sonnet {
   provider anthropic
   options {

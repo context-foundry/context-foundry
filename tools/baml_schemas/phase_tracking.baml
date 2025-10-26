@@ -47,7 +47,7 @@ function CreatePhaseInfo(
   detail: string,
   iteration: int
 ) -> PhaseInfo {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     Create phase tracking information for Context Foundry build:
 
@@ -64,7 +64,7 @@ function CreatePhaseInfo(
 }
 
 function ValidatePhaseInfo(json_string: string) -> PhaseInfo {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     Validate and parse this phase tracking JSON from Context Foundry:
 

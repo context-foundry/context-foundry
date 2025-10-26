@@ -43,7 +43,7 @@ function GenerateArchitecture(
   scout_report_json: string,
   flagged_risks: string[]
 ) -> ArchitectureBlueprint {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     You are the Architect agent for Context Foundry, designing the system architecture.
 
@@ -75,7 +75,7 @@ function GenerateArchitecture(
 }
 
 function ParseArchitectureMarkdown(markdown_content: string) -> ArchitectureBlueprint {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     Parse this architecture markdown into a structured ArchitectureBlueprint object:
 

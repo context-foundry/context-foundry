@@ -40,7 +40,7 @@ function ExecuteBuildTask(
   files_to_create: string[],
   architecture: string
 ) -> BuildTaskResult {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     You are a Builder agent for Context Foundry, executing a build task.
 
@@ -74,7 +74,7 @@ function ExecuteBuildTask(
 }
 
 function ValidateBuildResult(result_json: string) -> BuildTaskResult {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     Validate this build task result JSON:
 

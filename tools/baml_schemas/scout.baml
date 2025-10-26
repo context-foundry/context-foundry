@@ -38,7 +38,7 @@ function GenerateScoutReport(
   codebase_analysis: string,
   past_patterns: string
 ) -> ScoutReport {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     You are the Scout agent for Context Foundry, researching requirements for this task:
 
@@ -70,7 +70,7 @@ function GenerateScoutReport(
 }
 
 function ParseScoutMarkdown(markdown_content: string) -> ScoutReport {
-  client Claude35Sonnet
+  client GPT4oMini
   prompt #"
     Parse this Scout report markdown into a structured ScoutReport object:
 
