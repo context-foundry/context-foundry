@@ -21,13 +21,13 @@ This is the TRUE Context Foundry way - Meta-MCP all the way down!
 
 import asyncio
 import logging
+import sys
 from pathlib import Path
 
 # Import MCP executor (replaces BAML API client)
-import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from mcp_executor import executor
 
+from mcp_executor import executor
 from shared.config import load_config
 from shared.utils import setup_logging
 
@@ -58,7 +58,7 @@ async def document_processing_example():
         ]
     )
 
-    logger.info(f"\n📄 Document Analysis Results:")
+    logger.info("\n📄 Document Analysis Results:")
     logger.info(f"Summary: {result['summary']}")
     logger.info(f"Key Findings: {result['key_findings']}")
     logger.info(f"Confidence: {result['confidence_score']}")
@@ -86,12 +86,12 @@ async def data_analysis_example():
         analysis_type="trends"
     )
 
-    logger.info(f"\n📊 Data Analysis Results:")
+    logger.info("\n📊 Data Analysis Results:")
     logger.info(f"Trends: {result['trends']}")
     logger.info(f"Anomalies: {result['anomalies']}")
     logger.info(f"Recommendations: {result['recommendations']}")
-    logger.info(f"\n💰 Cost: $0.00 (subscription)")
-    logger.info(f"🎯 Method: MCP delegation")
+    logger.info("\n💰 Cost: $0.00 (subscription)")
+    logger.info("🎯 Method: MCP delegation")
 
     return result
 
@@ -114,7 +114,7 @@ async def custom_skill_example():
         skill_name="custom_extractor"
     )
 
-    logger.info(f"\n🔧 Custom Skill Results:")
+    logger.info("\n🔧 Custom Skill Results:")
     logger.info(f"Skill Used: {result['skill_used']}")
     logger.info(f"Output: {result['output']}")
     logger.info(f"Success: {result['success']}")
@@ -147,13 +147,13 @@ async def progressive_disclosure_example():
         ]
     )
 
-    logger.info(f"\n🎯 Progressive Disclosure Results:")
+    logger.info("\n🎯 Progressive Disclosure Results:")
     logger.info(f"Loaded Skills: {result['loaded_skills']}")
     logger.info(f"Skipped Skills: {result['skipped_skills']}")
-    logger.info(f"\nRationale:")
+    logger.info("\nRationale:")
     for skill, reason in result['loading_rationale'].items():
         logger.info(f"  - {skill}: {reason}")
-    logger.info(f"\nMetrics:")
+    logger.info("\nMetrics:")
     logger.info(f"  - Load time: {result['metrics']['load_time_ms']}ms")
     logger.info(f"  - Cognitive load reduced: {result['metrics']['cognitive_load_reduced']:.0%}")
 
@@ -182,11 +182,11 @@ async def cost_comparison():
     logger.info(f"\nScenario: Process {num_docs} PDF documents")
     logger.info(f"Average tokens per doc: {avg_tokens:,}")
     logger.info(f"Total tokens: {total_tokens:,}")
-    logger.info(f"\n📊 Cost Comparison:")
+    logger.info("\n📊 Cost Comparison:")
     logger.info(f"  Direct API calls: ${api_cost:.2f}")
     logger.info(f"  MCP delegation:   ${mcp_cost:.2f}")
     logger.info(f"\n💰 Savings: ${api_cost:.2f} (100%!)")
-    logger.info(f"\n🎉 MCP delegation is FREE and UNLIMITED!")
+    logger.info("\n🎉 MCP delegation is FREE and UNLIMITED!")
 
 
 async def main():

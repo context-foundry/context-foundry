@@ -1,12 +1,8 @@
-"""Example implementations for BAML + Anthropic Agent Skills integration."""
+"""
+Example implementations for BAML + Anthropic Agent Skills integration.
 
-from .document_processing import analyze_document
-from .data_analysis import analyze_dataset
-from .custom_skill import process_with_custom_skill, progressive_skill_loading
+All examples consolidated in mcp_delegation.py after MCP-only refactor.
+Run: python3 examples/mcp_delegation.py
+"""
 
-__all__ = [
-    "analyze_document",
-    "analyze_dataset",
-    "process_with_custom_skill",
-    "progressive_skill_loading",
-]
+__all__ = []
