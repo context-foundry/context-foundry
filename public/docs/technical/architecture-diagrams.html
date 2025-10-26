@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Diagrams | Context Foundry Documentation</title>
+  <meta name="description" content="Visual Documentation - Architecture Flowcharts and Sequence Diagrams">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/technical/architecture-diagrams">
+  <meta property="og:title" content="Architecture Diagrams">
+  <meta property="og:description" content="Visual Documentation - Architecture Flowcharts and Sequence Diagrams">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Architecture Diagrams">
+  <meta name="twitter:description" content="Visual Documentation - Architecture Flowcharts and Sequence Diagrams">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/technical/architecture-diagrams">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/technical" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Architecture Diagrams</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-architecture-diagrams">Context Foundry Architecture Diagrams</h1>
+<p><strong>Visual Documentation - Architecture Flowcharts and Sequence Diagrams</strong></p>
+<blockquote><p><strong>Note:</strong> These diagrams use Mermaid syntax, which GitHub renders automatically. If viewing locally, use a Mermaid-compatible markdown viewer or the <a href="https://mermaid.live/" target="_blank" rel="noopener noreferrer">Mermaid Live Editor <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>.</p>
+</blockquote>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-high-level-architecture">High-Level Architecture</a></li>
+<li><a href="#2-sequence-diagram-complete-build-flow">Sequence Diagram: Complete Build Flow</a></li>
+<li><a href="#3-agent-lifecycle-state-diagram">Agent Lifecycle State Diagram</a></li>
+<li><a href="#4-context-isolation-architecture">Context Isolation Architecture</a></li>
+<li><a href="#5-data-flow-through-files">Data Flow Through Files</a></li>
+<li><a href="#6-mcp-protocol-message-flow">MCP Protocol Message Flow</a></li>
+<li><a href="#7-multi-agent-parallel-execution-architecture-new">Multi-Agent Parallel Execution Architecture</a></li>
+</ol>
+<hr>
+<h2 id="1-high-level-architecture">1. High-Level Architecture</h2>
+<p><strong>Complete system overview showing all components and their relationships</strong></p>
+<pre class="mermaid">flowchart TD
+    Start([User Request]) --&gt; MainWindow[Main Claude Code Window&lt;br/&gt;Context: &lt;1%]
+
+    MainWindow --&gt; IntentDetection{Build Intent&lt;br/&gt;Detected?}
+
+    IntentDetection --&gt;|No| RegularTask[Regular Claude Code Task]
+    IntentDetection --&gt;|Yes| MCPCall[Call MCP Tool:&lt;br/&gt;autonomous_build_and_deploy_async]
+
+    MCPCall --&gt; MCPServer[MCP Server&lt;br/&gt;tools/mcp_server.py]
+
+    MCPServer --&gt; GenerateTaskID[Generate Task ID&lt;br/&gt;UUID]
+    GenerateTaskID --&gt; BuildPrompt[Build Orchestrator Prompt&lt;br/&gt;tools/orchestrator_prompt.txt]
+    BuildPrompt --&gt; SpawnProcess[Spawn Subprocess:&lt;br/&gt;claude --prompt ...]
+
+    SpawnProcess --&gt; TaskTracking[Track in TASKS dict&lt;br/&gt;Status: running]
+    TaskTracking --&gt; ReturnTaskID[Return Task ID to&lt;br/&gt;Main Window]
+
+    ReturnTaskID --&gt; MainWindow
+    MainWindow --&gt; UserContinues[User Continues Working&lt;br/&gt;Context Still &lt;1%]
+
+    SpawnProcess --&gt; DelegatedInstance[Delegated Claude Code Instance&lt;br/&gt;Separate Process&lt;br/&gt;Fresh 200K Context]
+
+    DelegatedInstance --&gt; Phase1[Phase 1: Scout Agent&lt;br/&gt;Research &amp; Analysis]
+    Phase1 --&gt; ScoutReport[Write:&lt;br/&gt;.context-foundry/scout-report.md]
+    ScoutReport --&gt; Phase1End[Agent Dies&lt;br/&gt;Context Freed]
+
+    Phase1End --&gt; Phase2[Phase 2: Architect Agent&lt;br/&gt;Read scout-report.md&lt;br/&gt;Design Architecture]
+    Phase2 --&gt; ArchReport[Write:&lt;br/&gt;.context-foundry/architecture.md]
+    ArchReport --&gt; Phase2End[Agent Dies&lt;br/&gt;Context Freed]
+
+    Phase2End --&gt; Phase3[Phase 3: Builder Agent&lt;br/&gt;Read architecture.md&lt;br/&gt;Implement Code]
+    Phase3 --&gt; CodeFiles[Write:&lt;br/&gt;Source code files&lt;br/&gt;Tests&lt;br/&gt;build-log.md]
+    CodeFiles --&gt; Phase3End[Agent Dies&lt;br/&gt;Context Freed]
+
+    Phase3End --&gt; Phase4{Phase 4: Test Agent&lt;br/&gt;Run Tests}
+
+    Phase4 --&gt;|Tests Pass| Phase5[Phase 5: Documentation&lt;br/&gt;Generate README, guides]
+
+    Phase4 --&gt;|Tests Fail| TestAnalysis[Analyze Failures&lt;br/&gt;Write test-results-iteration-N.md]
+    TestAnalysis --&gt; TestFixes[Write fixes-iteration-N.md&lt;br/&gt;Re-architect if needed]
+    TestFixes --&gt; RebuildFixes[Re-implement Fixes]
+    RebuildFixes --&gt; TestIteration{Iterations &lt;&lt;br/&gt;Max?}
+    TestIteration --&gt;|Yes| Phase5
+    TestIteration --&gt;|No| Phase4
+
+    Phase5 --&gt; Docs[Write:&lt;br/&gt;README.md&lt;br/&gt;User guides]
+    Docs --&gt; Phase6[Phase 6: Deploy&lt;br/&gt;Git operations]
+
+    Phase6 --&gt; GitCommit[git init&lt;br/&gt;git add .&lt;br/&gt;git commit]
+    GitCommit --&gt; GitHubRepo[gh repo create&lt;br/&gt;git push origin main]
+    GitHubRepo --&gt; Phase7[Phase 7: Feedback&lt;br/&gt;Extract Patterns]
+
+    Phase7 --&gt; PatternUpdate[Update:&lt;br/&gt;~/.context-foundry/patterns/]
+    PatternUpdate --&gt; SessionSummary[Write:&lt;br/&gt;.context-foundry/session-summary.json]
+
+    SessionSummary --&gt; ProcessComplete[Delegated Process Exits&lt;br/&gt;Context Discarded]
+
+    ProcessComplete --&gt; MCPServer
+    MCPServer --&gt; ReadSummary[Read session-summary.json]
+    ReadSummary --&gt; UpdateTaskStatus[Update TASKS&lt;br/&gt;Status: completed]
+
+    UserContinues --&gt; CheckStatus{User Checks&lt;br/&gt;Status?}
+    CheckStatus --&gt;|Yes| GetResult[Call get_delegation_result]
+    GetResult --&gt; MCPServer
+    UpdateTaskStatus --&gt; ReturnSummary[Return Build Summary]
+    ReturnSummary --&gt; MainWindow
+    MainWindow --&gt; ShowComplete[Show User:&lt;br/&gt;Build Complete!&lt;br/&gt;GitHub URL&lt;br/&gt;Tests Passed]
+
+    ShowComplete --&gt; End([End])
+
+    style MainWindow fill:#e1f5e1
+    style DelegatedInstance fill:#fff4e1
+    style MCPServer fill:#e1e5ff
+    style Phase1 fill:#ffe1e1
+    style Phase2 fill:#ffe1e1
+    style Phase3 fill:#ffe1e1
+    style Phase4 fill:#ffe1e1
+    style Phase5 fill:#ffe1e1
+    style Phase6 fill:#ffe1e1
+    style Phase7 fill:#ffe1e1</pre>
+<p><strong>Key Observations:</strong></p>
+<ul>
+<li><strong>Main Window</strong> (green) stays clean throughout entire build</li>
+<li><strong>MCP Server</strong> (blue) orchestrates subprocess spawning and tracking</li>
+<li><strong>Delegated Instance</strong> (yellow) does all the heavy lifting in isolated context</li>
+<li><strong>7 Phases</strong> (red) each with ephemeral agents that die after completing their work</li>
+<li><strong>Self-healing loop</strong> in Phase 4 automatically fixes test failures</li>
+</ul>
+<hr>
+<h2 id="2-sequence-diagram-complete-build-flow-parallel-multi-agent">2. Sequence Diagram: Complete Build Flow (Parallel Multi-Agent)</h2>
+<p><strong>Step-by-step message flow from user request to completion with parallel execution</strong></p>
+<blockquote><p><strong>Updated</strong>: Now shows parallel multi-agent execution (5 scouts, 4 builders) for 62% faster builds!</p>
+</blockquote>
+<pre class="mermaid">sequenceDiagram
+    participant User
+    participant MainClaude as Main Claude Window&lt;br/&gt;(Context &lt;1%)
+    participant MCP as MCP Server&lt;br/&gt;(Python)
+    participant Delegated as Delegated Instance&lt;br/&gt;(Fresh 200K Context)
+    participant FileSystem as File System&lt;br/&gt;(.context-foundry/)
+    participant GitHub
+
+    User-&gt;&gt;MainClaude: &quot;Build a weather app&quot;
+    activate MainClaude
+
+    MainClaude-&gt;&gt;MainClaude: Detect build intent
+
+    MainClaude-&gt;&gt;MCP: MCP Tool Call:&lt;br/&gt;autonomous_build_and_deploy_async&lt;br/&gt;{task: &quot;Build weather app&quot;, ...}
+    activate MCP
+
+    MCP-&gt;&gt;MCP: Generate task_id = &quot;abc-123&quot;
+    MCP-&gt;&gt;MCP: Load orchestrator_prompt.txt
+    MCP-&gt;&gt;MCP: Inject task parameters
+
+    MCP-&gt;&gt;Delegated: spawn subprocess&lt;br/&gt;claude --prompt &quot;...&quot;
+    activate Delegated
+
+    MCP-&gt;&gt;MCP: Track in TASKS[abc-123]&lt;br/&gt;Status: running
+
+    MCP--&gt;&gt;MainClaude: {task_id: &quot;abc-123&quot;,&lt;br/&gt;status: &quot;started&quot;}
+    deactivate MCP
+
+    MainClaude--&gt;&gt;User: &quot;Build started!&lt;br/&gt;Task ID: abc-123&lt;br/&gt;You can continue working...&quot;
+    deactivate MainClaude
+
+    Note over Delegated: WORKFLOW PLANNING
+    Delegated-&gt;&gt;Delegated: Lead Orchestrator plans workflow
+    Delegated-&gt;&gt;Delegated: Create scout tasks (5)
+    Delegated-&gt;&gt;Delegated: Create builder tasks (4)
+
+    Note over Delegated: PHASE 1: PARALLEL RESEARCH (5 Scouts)
+    Delegated-&gt;&gt;Delegated: ParallelScoutCoordinator launches
+    par Scout 1
+        Delegated-&gt;&gt;Delegated: Research APIs
+        Delegated-&gt;&gt;FileSystem: Write scout-1-report.md
+    and Scout 2
+        Delegated-&gt;&gt;Delegated: Research tech stack
+        Delegated-&gt;&gt;FileSystem: Write scout-2-report.md
+    and Scout 3
+        Delegated-&gt;&gt;Delegated: Research security
+        Delegated-&gt;&gt;FileSystem: Write scout-3-report.md
+    and Scout 4
+        Delegated-&gt;&gt;Delegated: Research testing
+        Delegated-&gt;&gt;FileSystem: Write scout-4-report.md
+    and Scout 5
+        Delegated-&gt;&gt;Delegated: Research deployment
+        Delegated-&gt;&gt;FileSystem: Write scout-5-report.md
+    end
+    Delegated-&gt;&gt;Delegated: Compress 5 reports to summary
+
+    Note over Delegated: PHASE 2: ARCHITECTURE
+    Delegated-&gt;&gt;FileSystem: Read compressed scout summary
+    Delegated-&gt;&gt;Delegated: ArchitectCoordinator launches
+    Delegated-&gt;&gt;Delegated: Create architecture (12K tokens)
+    Delegated-&gt;&gt;FileSystem: Write architecture.md (60KB)
+
+    Note over Delegated: PHASE 3: PARALLEL IMPLEMENTATION (4 Builders)
+    Delegated-&gt;&gt;FileSystem: Read architecture.md
+    Delegated-&gt;&gt;Delegated: ParallelBuilderCoordinator launches
+    par Builder 1
+        Delegated-&gt;&gt;Delegated: Build core module
+        Delegated-&gt;&gt;FileSystem: Write core files
+    and Builder 2
+        Delegated-&gt;&gt;Delegated: Build API layer
+        Delegated-&gt;&gt;FileSystem: Write API files
+    and Builder 3
+        Delegated-&gt;&gt;Delegated: Build data models
+        Delegated-&gt;&gt;FileSystem: Write model files
+    and Builder 4
+        Delegated-&gt;&gt;Delegated: Build tests + utils
+        Delegated-&gt;&gt;FileSystem: Write test files
+    end
+    Delegated-&gt;&gt;FileSystem: All source code (12 files) written
+
+    Note over Delegated: PHASE 4: VALIDATION
+    Delegated-&gt;&gt;Delegated: Detect project type
+    alt Node.js Project
+        Delegated-&gt;&gt;Delegated: Run npm test
+    else Python Project
+        Delegated-&gt;&gt;Delegated: Run pytest -v
+    end
+    Delegated-&gt;&gt;Delegated: LLM Judge: evaluate code quality
+    Delegated-&gt;&gt;Delegated: Combine: tests + judge
+
+    alt Tests Pass AND Judge Pass
+        Delegated-&gt;&gt;FileSystem: Write test-final-report.md&lt;br/&gt;(all validations passed)
+    else Tests Fail OR Judge Fail
+        Delegated-&gt;&gt;FileSystem: Write test-results-iteration-1.md
+        Delegated-&gt;&gt;Delegated: Self-healing: re-architect + rebuild
+        Delegated-&gt;&gt;Delegated: Re-run validation (max 3 attempts)
+        Delegated-&gt;&gt;FileSystem: Write test-final-report.md&lt;br/&gt;(iteration N, tests pass)
+    end
+
+    Note over Delegated: PHASE 5: DOCUMENTATION
+    Delegated-&gt;&gt;FileSystem: Read source code
+    Delegated-&gt;&gt;Delegated: Generate README, guides
+    Delegated-&gt;&gt;FileSystem: Write README.md, docs/
+
+    Note over Delegated: PHASE 6: DEPLOYMENT
+    Delegated-&gt;&gt;Delegated: git init, add, commit
+    Delegated-&gt;&gt;GitHub: gh repo create weather-app
+    Delegated-&gt;&gt;GitHub: git push origin main
+    GitHub--&gt;&gt;Delegated: Repository created
+
+    Note over Delegated: PHASE 7: FEEDBACK
+    Delegated-&gt;&gt;FileSystem: Analyze build for patterns
+    Delegated-&gt;&gt;FileSystem: Update ~/.context-foundry/patterns/
+    Delegated-&gt;&gt;FileSystem: Write session-summary.json
+
+    Delegated-&gt;&gt;Delegated: Exit process (context freed)
+    deactivate Delegated
+
+    Note over User: [6 minutes later - 62% faster!]
+    User-&gt;&gt;MainClaude: &quot;What&#039;s the status of task abc-123?&quot;
+    activate MainClaude
+
+    MainClaude-&gt;&gt;MCP: get_delegation_result(abc-123)
+    activate MCP
+
+    MCP-&gt;&gt;MCP: Check TASKS[abc-123].process.poll()
+    MCP-&gt;&gt;MCP: Process finished (exit code 0)
+    MCP-&gt;&gt;FileSystem: Read session-summary.json
+    FileSystem--&gt;&gt;MCP: {status: &quot;completed&quot;,&lt;br/&gt;github_url: &quot;...&quot;,&lt;br/&gt;tests_passed: true,&lt;br/&gt;parallel_speedup: &quot;62%&quot;}
+
+    MCP--&gt;&gt;MainClaude: {status: &quot;completed&quot;, ...}
+    deactivate MCP
+
+    MainClaude--&gt;&gt;User: &quot;Build complete! ✅&lt;br/&gt;GitHub: github.com/you/weather-app&lt;br/&gt;Tests: 25/25 passing&lt;br/&gt;Duration: 6.1 minutes (62% faster)&lt;br/&gt;Scouts: 5 parallel, Builders: 4 parallel&quot;
+    deactivate MainClaude</pre>
+<p><strong>Key Points:</strong></p>
+<ol>
+<li>Main Claude window makes ONE tool call and returns immediately</li>
+<li>User can continue working (context stays clean)</li>
+<li><strong>Lead Orchestrator</strong> plans workflow and creates parallel tasks</li>
+<li><strong>5 scouts run in parallel</strong> using ThreadPoolExecutor (5x faster research)</li>
+<li><strong>Finding compression</strong> reduces 5 reports to 1 summary for architect</li>
+<li><strong>Single architect</strong> creates coherent design (not parallelized)</li>
+<li><strong>4 builders run in parallel</strong> using ThreadPoolExecutor (4x faster implementation)</li>
+<li><strong>Automated validation</strong>: test detection + execution + LLM judge</li>
+<li><strong>Self-healing loop</strong>: automatically fixes failures (max 3 attempts)</li>
+<li><strong>62% faster builds</strong> compared to sequential execution (~6 min vs ~16 min)</li>
+<li>Final summary written to session-summary.json with speedup metrics</li>
+<li>User checks status later, gets complete results</li>
+</ol>
+<hr>
+<h2 id="3-agent-lifecycle-state-diagram">3. Agent Lifecycle State Diagram</h2>
+<p><strong>How agents transition through states during a build</strong></p>
+<pre class="mermaid">stateDiagram-v2
+    [*] --&gt; Orch_Start: Instance Spawned
+
+    Orch_Start --&gt; Scout_New: /agents scout
+
+    Scout_New --&gt; Scout_Work: Begin Research
+    Scout_Work --&gt; Scout_Write: Research Done
+    Scout_Write --&gt; Scout_Done: Write report.md
+
+    Scout_Done --&gt; Arch_New: /agents architect
+
+    Arch_New --&gt; Arch_Read: Read scout report
+    Arch_Read --&gt; Arch_Design: Knowledge Loaded
+    Arch_Design --&gt; Arch_Write: Design Done
+    Arch_Write --&gt; Arch_Done: Write arch.md
+
+    Arch_Done --&gt; Build_New: /agents builder
+
+    Build_New --&gt; Build_Read: Read arch.md
+    Build_Read --&gt; Build_Code: Plans Loaded
+    Build_Code --&gt; Build_Write: Code Done
+    Build_Write --&gt; Build_Done: Write files
+
+    Build_Done --&gt; Test_Run: Run Tests
+
+    Test_Run --&gt; Test_Pass: All Pass
+    Test_Run --&gt; Test_Fail: Failures
+
+    Test_Fail --&gt; Test_Analyze: Find Cause
+    Test_Analyze --&gt; Test_Fix: Write fixes.md
+    Test_Fix --&gt; Test_Rebuild: Re-implement
+    Test_Rebuild --&gt; Test_Run: Re-run Tests
+
+    Test_Pass --&gt; Docs_Gen: Generate Docs
+
+    Docs_Gen --&gt; Docs_Write: README + guides
+    Docs_Write --&gt; Deploy_Start: Write to disk
+
+    Deploy_Start --&gt; Git_Ops: git init/commit
+    Git_Ops --&gt; GH_Create: gh repo create
+    GH_Create --&gt; Git_Push: git push
+    Git_Push --&gt; FB_Analyze: Deploy Done
+
+    FB_Analyze --&gt; Ptn_Extract: Analyze Build
+    Ptn_Extract --&gt; Ptn_Update: Extract Lessons
+    Ptn_Update --&gt; Sum_Write: Update Library
+    Sum_Write --&gt; Proc_Exit: Write summary.json
+
+    Proc_Exit --&gt; [*]: Process Exits
+
+    note right of Scout_Done
+        Scout Agent: context DISCARDED
+        scout-report.md PERSISTS
+    end note
+
+    note right of Arch_Done
+        Architect Agent: context DISCARDED
+        architecture.md PERSISTS
+    end note
+
+    note right of Build_Done
+        Builder Agent: context DISCARDED
+        Source code + build-log.md PERSIST
+    end note
+
+    note right of Proc_Exit
+        ALL agent contexts GONE
+        All files PERSIST on disk
+        Pattern library UPDATED
+    end note</pre>
+<p><strong>State Name Legend:</strong></p>
+<ul>
+<li><strong>Orch_Start</strong>: Orchestrator Active (delegated instance running)</li>
+<li><strong>Scout_New/Work/Write/Done</strong>: Scout Agent Created → Researching → Writing Report → Dead</li>
+<li><strong>Arch_New/Read/Design/Write/Done</strong>: Architect Agent Created → Reading → Designing → Writing → Dead</li>
+<li><strong>Build_New/Read/Code/Write/Done</strong>: Builder Agent Created → Reading → Implementing → Writing → Dead</li>
+<li><strong>Test_Run/Pass/Fail/Analyze/Fix/Rebuild</strong>: Test Phase (with self-healing loop)</li>
+<li><strong>Docs_Gen/Write</strong>: Documentation Generation → Writing</li>
+<li><strong>Deploy_Start/Git_Ops/GH_Create/Git_Push</strong>: Deployment Phase</li>
+<li><strong>FB_Analyze</strong>: Feedback Analysis</li>
+<li><strong>Ptn_Extract/Update</strong>: Pattern Extraction and Update</li>
+<li><strong>Sum_Write</strong>: Summary Writing</li>
+<li><strong>Proc_Exit</strong>: Process Exit</li>
+</ul>
+<pre><code class="">
+**Agent Lifecycle Principles:**
+1. **Ephemeral Agents**: Each agent lives only during its phase
+2. **Clean Handoff**: Agents read previous phase&#039;s artifacts from disk
+3. **No Shared Context**: Agents never communicate directly
+4. **Persistent Artifacts**: All essential knowledge written to files
+5. **Self-Healing**: Test phase can loop back to fix failures
+6. **Pattern Learning**: Feedback phase updates global patterns
+
+---
+
+## 4. Context Isolation Architecture
+
+**How main window stays clean while delegated instance does heavy work**
+
+```mermaid
+flowchart TB
+    subgraph MainProcess[Main Claude Code Process - PID 12345]
+        MainContext[Context Window: 200,000 tokens]
+        MainUsed[Used: ~1,400 tokens&lt;br/&gt;0.7%]
+        MainAvailable[Available: 198,600 tokens&lt;br/&gt;99.3%]
+
+        MainContext --&gt; MainUsed
+        MainContext --&gt; MainAvailable
+
+        UserMsg[User: Build weather app&lt;br/&gt;100 tokens]
+        ToolCall[MCP Tool Call&lt;br/&gt;200 tokens]
+        ToolResp[MCP Response&lt;br/&gt;100 tokens]
+        StatusCheck[Status Check&lt;br/&gt;100 tokens]
+        StatusResp[Status Response&lt;br/&gt;500 tokens]
+        Summary[Claude Summary&lt;br/&gt;300 tokens]
+
+        UserMsg --&gt; MainUsed
+        ToolCall --&gt; MainUsed
+        ToolResp --&gt; MainUsed
+        StatusCheck --&gt; MainUsed
+        StatusResp --&gt; MainUsed
+        Summary --&gt; MainUsed
+    end
+
+    MainProcess -.-&gt;|Spawns subprocess| DelegatedProcess
+
+    subgraph DelegatedProcess[Delegated Claude Process - PID 67890]
+        DelegatedContext[Context Window: 200,000 tokens&lt;br/&gt;SEPARATE!]
+        DelegatedUsed[Used: ~78,000 tokens&lt;br/&gt;39%]
+        DelegatedAvailable[Available: 122,000 tokens&lt;br/&gt;61%]
+
+        DelegatedContext --&gt; DelegatedUsed
+        DelegatedContext --&gt; DelegatedAvailable
+
+        OrchestratorPrompt[Orchestrator Prompt&lt;br/&gt;5,000 tokens]
+        Phase1Scout[Phase 1: Scout&lt;br/&gt;10,000 tokens]
+        Phase2Arch[Phase 2: Architect&lt;br/&gt;15,000 tokens]
+        Phase3Build[Phase 3: Builder&lt;br/&gt;30,000 tokens]
+        Phase4Test[Phase 4: Test&lt;br/&gt;8,000 tokens]
+        Phase5Docs[Phase 5: Docs&lt;br/&gt;3,000 tokens]
+        Phase6Deploy[Phase 6: Deploy&lt;br/&gt;2,000 tokens]
+        Phase7Feedback[Phase 7: Feedback&lt;br/&gt;5,000 tokens]
+
+        OrchestratorPrompt --&gt; DelegatedUsed
+        Phase1Scout --&gt; DelegatedUsed
+        Phase2Arch --&gt; DelegatedUsed
+        Phase3Build --&gt; DelegatedUsed
+        Phase4Test --&gt; DelegatedUsed
+        Phase5Docs --&gt; DelegatedUsed
+        Phase6Deploy --&gt; DelegatedUsed
+        Phase7Feedback --&gt; DelegatedUsed
+    end
+
+    DelegatedProcess -.-&gt;|Writes files| FileSystem[(File System&lt;br/&gt;.context-foundry/)]
+
+    FileSystem -.-&gt;|MCP reads summary| MainProcess
+
+    style MainProcess fill:#e1f5e1,stroke:#4a4,stroke-width:3px
+    style DelegatedProcess fill:#fff4e1,stroke:#fa4,stroke-width:3px
+    style FileSystem fill:#e1e5ff,stroke:#44a,stroke-width:3px
+
+    style MainUsed fill:#4a4,color:#fff
+    style DelegatedUsed fill:#fa4,color:#000
+    style MainAvailable fill:#afa,color:#000
+    style DelegatedAvailable fill:#ffa,color:#000</code></pre>
+<p><strong>Key Insights:</strong></p>
+<ul>
+<li><strong>Separate OS Processes</strong>: Main (PID 12345) and Delegated (PID 67890)</li>
+<li><strong>Separate Context Windows</strong>: Each has own 200K token budget</li>
+<li><strong>Zero Cross-Contamination</strong>: Delegated instance&#39;s 78K tokens don&#39;t affect main window</li>
+<li><strong>File-Based Communication</strong>: Only way processes share data</li>
+<li><strong>Main Window Efficiency</strong>: Only tracks task ID and summary, stays at 0.7%</li>
+<li><strong>Delegated Instance</strong>: Can use 40-60% of context without impacting main window</li>
+</ul>
+<p><strong>Result</strong>: You can run MULTIPLE delegated builds in parallel, each in its own process, while your main Claude Code window stays clean and available for other work!</p>
+<hr>
+<h2 id="5-data-flow-through-files">5. Data Flow Through Files</h2>
+<p><strong>How information flows via persistent artifacts</strong></p>
+<pre class="mermaid">flowchart LR
+    subgraph Input[Input to Scout]
+        Task[Task Description&lt;br/&gt;Build a weather app]
+        Patterns[Pattern Library&lt;br/&gt;~/.context-foundry/patterns/]
+    end
+
+    Input --&gt; Scout[Scout Agent]
+
+    Scout --&gt; ScoutOut[scout-report.md&lt;br/&gt;40KB&lt;br/&gt;- API recommendations&lt;br/&gt;- Tech stack&lt;br/&gt;- Risk warnings&lt;br/&gt;- Architecture guidance]
+
+    ScoutOut --&gt; Architect[Architect Agent]
+
+    Architect --&gt; ArchOut[architecture.md&lt;br/&gt;60KB&lt;br/&gt;- System design&lt;br/&gt;- File structure&lt;br/&gt;- Component specs&lt;br/&gt;- Data models&lt;br/&gt;- Implementation plan]
+
+    ArchOut --&gt; Builder[Builder Agent]
+
+    Builder --&gt; BuildOut[Source Code Files&lt;br/&gt;12 files&lt;br/&gt;+ build-log.md&lt;br/&gt;- Implementation log&lt;br/&gt;- Decisions made]
+
+    BuildOut --&gt; Test[Test Agent]
+
+    Test --&gt; TestLoop{Tests&lt;br/&gt;Pass?}
+
+    TestLoop --&gt;|No| TestFix[test-results-iteration-N.md&lt;br/&gt;fixes-iteration-N.md]
+    TestFix --&gt; Builder
+
+    TestLoop --&gt;|Yes| TestOut[test-final-report.md&lt;br/&gt;- Test results&lt;br/&gt;- Coverage metrics&lt;br/&gt;- Iterations taken]
+
+    TestOut --&gt; Docs[Documentation Agent]
+
+    Docs --&gt; DocsOut[README.md&lt;br/&gt;User Guides&lt;br/&gt;API Docs]
+
+    DocsOut --&gt; Deploy[Deployment Agent]
+
+    Deploy --&gt; DeployOut[GitHub Repository&lt;br/&gt;- All source code&lt;br/&gt;- All documentation&lt;br/&gt;- Git history]
+
+    DeployOut --&gt; Feedback[Feedback Agent]
+
+    Feedback --&gt; FeedbackOut[Pattern Library Updates&lt;br/&gt;session-summary.json&lt;br/&gt;- Build metadata&lt;br/&gt;- Lessons learned]
+
+    FeedbackOut --&gt; Patterns
+
+    style ScoutOut fill:#ffe1e1
+    style ArchOut fill:#e1ffe1
+    style BuildOut fill:#e1e1ff
+    style TestOut fill:#ffe1ff
+    style DocsOut fill:#ffffe1
+    style DeployOut fill:#e1ffff
+    style FeedbackOut fill:#ffe1e1</pre>
+<p><strong>Data Flow Principles:</strong></p>
+<ol>
+<li><strong>Unidirectional Flow</strong>: Information flows forward through phases</li>
+<li><strong>File-Based Handoff</strong>: Each agent reads previous files, writes new files</li>
+<li><strong>Cumulative Knowledge</strong>: Later artifacts contain all essential knowledge from earlier phases</li>
+<li><strong>Self-Healing Loop</strong>: Test phase can loop back to Builder with fix specifications</li>
+<li><strong>Pattern Learning</strong>: Feedback updates global library for future builds</li>
+</ol>
+<p><strong>What Persists vs. What&#39;s Discarded:</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Phase</th>
+<th>Agent Context</th>
+<th>Files Written</th>
+<th>Knowledge Preserved?</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>Scout</td>
+<td>Discarded</td>
+<td>scout-report.md</td>
+<td>✅ Yes (in file)</td>
+</tr>
+<tr>
+<td>Architect</td>
+<td>Discarded</td>
+<td>architecture.md</td>
+<td>✅ Yes (in file)</td>
+</tr>
+<tr>
+<td>Builder</td>
+<td>Discarded</td>
+<td>Source code, build-log.md</td>
+<td>✅ Yes (in files)</td>
+</tr>
+<tr>
+<td>Test</td>
+<td>Discarded</td>
+<td>test-final-report.md</td>
+<td>✅ Yes (in file)</td>
+</tr>
+<tr>
+<td>Docs</td>
+<td>Discarded</td>
+<td>README.md, guides</td>
+<td>✅ Yes (in files)</td>
+</tr>
+<tr>
+<td>Deploy</td>
+<td>Discarded</td>
+<td>GitHub repository</td>
+<td>✅ Yes (on GitHub)</td>
+</tr>
+<tr>
+<td>Feedback</td>
+<td>Discarded</td>
+<td>Pattern updates, session-summary.json</td>
+<td>✅ Yes (in files)</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Conclusion</strong>: Even though ALL agent contexts are discarded, ALL essential knowledge is preserved in files!</p>
+<hr>
+<h2 id="6-mcp-protocol-message-flow">6. MCP Protocol Message Flow</h2>
+<p><strong>JSON-RPC messages between Claude Code and MCP Server</strong></p>
+<pre class="mermaid">sequenceDiagram
+    participant CC as Claude Code CLI
+    participant MCP as MCP Server&lt;br/&gt;(stdio transport)
+    participant Sub as Subprocess&lt;br/&gt;(Delegated Instance)
+
+    Note over CC,MCP: Connection established via stdio
+
+    CC-&gt;&gt;MCP: JSON-RPC Request&lt;br/&gt;{&lt;br/&gt;  &quot;jsonrpc&quot;: &quot;2.0&quot;,&lt;br/&gt;  &quot;method&quot;: &quot;tools/call&quot;,&lt;br/&gt;  &quot;params&quot;: {&lt;br/&gt;    &quot;name&quot;: &quot;autonomous_build_and_deploy_async&quot;,&lt;br/&gt;    &quot;arguments&quot;: {&lt;br/&gt;      &quot;task&quot;: &quot;Build weather app&quot;,&lt;br/&gt;      &quot;working_directory&quot;: &quot;/tmp/weather-app&quot;,&lt;br/&gt;      &quot;github_repo_name&quot;: &quot;weather-app&quot;,&lt;br/&gt;      &quot;enable_test_loop&quot;: true&lt;br/&gt;    }&lt;br/&gt;  },&lt;br/&gt;  &quot;id&quot;: 1&lt;br/&gt;}
+
+    activate MCP
+    MCP-&gt;&gt;MCP: Generate task_id = &quot;abc-123&quot;
+    MCP-&gt;&gt;MCP: Build orchestrator prompt
+
+    MCP-&gt;&gt;Sub: subprocess.Popen([&lt;br/&gt;  &#039;claude&#039;,&lt;br/&gt;  &#039;--prompt&#039;, &#039;...&#039;,&lt;br/&gt;  &#039;--permission-mode&#039;, &#039;bypassPermissions&#039;&lt;br/&gt;])
+    activate Sub
+
+    MCP-&gt;&gt;MCP: TASKS[&quot;abc-123&quot;] = {&lt;br/&gt;  process: &lt;subprocess&gt;,&lt;br/&gt;  status: &quot;running&quot;,&lt;br/&gt;  start_time: 1234567890&lt;br/&gt;}
+
+    MCP--&gt;&gt;CC: JSON-RPC Response&lt;br/&gt;{&lt;br/&gt;  &quot;jsonrpc&quot;: &quot;2.0&quot;,&lt;br/&gt;  &quot;result&quot;: {&lt;br/&gt;    &quot;task_id&quot;: &quot;abc-123&quot;,&lt;br/&gt;    &quot;status&quot;: &quot;started&quot;,&lt;br/&gt;    &quot;message&quot;: &quot;Build running in background&quot;,&lt;br/&gt;    &quot;expected_duration&quot;: &quot;7-15 minutes&quot;&lt;br/&gt;  },&lt;br/&gt;  &quot;id&quot;: 1&lt;br/&gt;}
+    deactivate MCP
+
+    Note over Sub: Delegated instance runs 7 phases...&lt;br/&gt;(Scout, Architect, Builder, Test, Docs, Deploy, Feedback)
+
+    Sub-&gt;&gt;Sub: Write session-summary.json
+    Sub-&gt;&gt;Sub: Exit (return code 0)
+    deactivate Sub
+
+    Note over CC: [User checks status later]
+
+    CC-&gt;&gt;MCP: JSON-RPC Request&lt;br/&gt;{&lt;br/&gt;  &quot;jsonrpc&quot;: &quot;2.0&quot;,&lt;br/&gt;  &quot;method&quot;: &quot;tools/call&quot;,&lt;br/&gt;  &quot;params&quot;: {&lt;br/&gt;    &quot;name&quot;: &quot;get_delegation_result&quot;,&lt;br/&gt;    &quot;arguments&quot;: {&lt;br/&gt;      &quot;task_id&quot;: &quot;abc-123&quot;&lt;br/&gt;    }&lt;br/&gt;  },&lt;br/&gt;  &quot;id&quot;: 2&lt;br/&gt;}
+
+    activate MCP
+    MCP-&gt;&gt;MCP: process.poll() → 0 (finished)
+    MCP-&gt;&gt;MCP: Read .context-foundry/session-summary.json
+
+    MCP--&gt;&gt;CC: JSON-RPC Response&lt;br/&gt;{&lt;br/&gt;  &quot;jsonrpc&quot;: &quot;2.0&quot;,&lt;br/&gt;  &quot;result&quot;: {&lt;br/&gt;    &quot;status&quot;: &quot;completed&quot;,&lt;br/&gt;    &quot;task_id&quot;: &quot;abc-123&quot;,&lt;br/&gt;    &quot;duration_seconds&quot;: 498,&lt;br/&gt;    &quot;phases_completed&quot;: [&quot;scout&quot;, &quot;architect&quot;, &quot;builder&quot;,&lt;br/&gt;                         &quot;test&quot;, &quot;docs&quot;, &quot;deploy&quot;, &quot;feedback&quot;],&lt;br/&gt;    &quot;github_url&quot;: &quot;https://github.com/user/weather-app&quot;,&lt;br/&gt;    &quot;tests_passed&quot;: true,&lt;br/&gt;    &quot;test_iterations&quot;: 1,&lt;br/&gt;    &quot;files_created&quot;: 12&lt;br/&gt;  },&lt;br/&gt;  &quot;id&quot;: 2&lt;br/&gt;}
+    deactivate MCP</pre>
+<p><strong>MCP Protocol Details:</strong></p>
+<ul>
+<li><strong>Transport</strong>: stdio (standard input/output)</li>
+<li><strong>Format</strong>: JSON-RPC 2.0</li>
+<li><strong>Tools</strong>: Exposed via <code>tools/call</code> method</li>
+<li><strong>Async</strong>: Returns immediately with task_id, build continues in background</li>
+<li><strong>Status Polling</strong>: User can check status anytime with <code>get_delegation_result</code></li>
+</ul>
+<p><strong>Message Types:</strong></p>
+<ol>
+<li><strong>Tool Call</strong>: Request to execute MCP tool (autonomous_build_and_deploy_async)</li>
+<li><strong>Tool Response</strong>: Immediate response with task_id</li>
+<li><strong>Status Request</strong>: Check build progress (get_delegation_result)</li>
+<li><strong>Status Response</strong>: Build summary (running, completed, failed, timeout)</li>
+</ol>
+<hr>
+<h2 id="7-multi-agent-parallel-execution-architecture-new">7. Multi-Agent Parallel Execution Architecture (NEW)</h2>
+<p><strong>Complete parallel multi-agent system - 67-90% faster than sequential execution</strong></p>
+<blockquote><p><strong>🚀 Performance Breakthrough</strong>: The system now uses parallel scouts and builders for dramatically faster builds!</p>
+<p><strong>Implemented</strong>: October 2025 (Commit: 0649a93)</p>
+</blockquote>
+<h3 id="architecture-before-vs-after">Architecture: Before vs. After</h3>
+<p><strong>BEFORE (Sequential Single-Agent):</strong></p>
+<pre><code class="">User Request
+  ↓
+Scout Agent (1 agent, waits to complete)
+  ↓ scout-report.md
+Architect Agent (1 agent, waits to complete)
+  ↓ architecture.md
+Builder Agent (1 agent, waits to complete)
+  ↓ source files
+Manual Tests (TODO)</code></pre>
+<p><strong>AFTER (Parallel Multi-Agent):</strong></p>
+<pre><code class="">User Request
+  ↓
+Lead Orchestrator (plans workflow)
+  ↓
+┌─────────────── PARALLEL SCOUTS ───────────────┐
+│ Scout 1 | Scout 2 | Scout 3 | Scout 4 | Scout 5│
+└────────────────────┬──────────────────────────┘
+  ↓ Compressed findings
+Architect (single, coherent design)
+  ↓ architecture.md
+┌──────────── PARALLEL BUILDERS ────────────┐
+│ Builder 1 | Builder 2 | Builder 3 | Builder 4│
+└─────────────────┬─────────────────────────┘
+  ↓ All source files
+Automated Test Detection &amp; Execution
+  ↓
+LLM Judge + Self-Healing Loop
+  ↓
+✅ Complete!</code></pre>
+<h3 id="complete-parallel-execution-flow">Complete Parallel Execution Flow</h3>
+<pre class="mermaid">flowchart TD
+    Start([User Request]) --&gt; LeadOrch[Lead Orchestrator&lt;br/&gt;Plans Workflow]
+
+    LeadOrch --&gt; Phase1[PHASE 1: PARALLEL RESEARCH]
+
+    Phase1 --&gt; ScoutCoord[Scout Coordinator&lt;br/&gt;Launches 5 Parallel Subagents]
+
+    subgraph ParallelScouts[Parallel Scout Execution - ThreadPoolExecutor max_workers=5]
+        Scout1[Scout 1:&lt;br/&gt;API Research]
+        Scout2[Scout 2:&lt;br/&gt;Tech Stack Analysis]
+        Scout3[Scout 3:&lt;br/&gt;Security Patterns]
+        Scout4[Scout 4:&lt;br/&gt;Testing Strategies]
+        Scout5[Scout 5:&lt;br/&gt;Deployment Options]
+    end
+
+    ScoutCoord --&gt; Scout1 &amp; Scout2 &amp; Scout3 &amp; Scout4 &amp; Scout5
+
+    Scout1 &amp; Scout2 &amp; Scout3 &amp; Scout4 &amp; Scout5 --&gt; ScoutResults[5 Scout Reports&lt;br/&gt;collected concurrently]
+
+    ScoutResults --&gt; Compression[Lead Orchestrator:&lt;br/&gt;Compress Findings&lt;br/&gt;Reduce 5 reports to summary]
+
+    Compression --&gt; Phase2[PHASE 2: ARCHITECTURE]
+
+    Phase2 --&gt; ArchCoord[Architect Coordinator&lt;br/&gt;Single Architect for Coherence]
+
+    ArchCoord --&gt; Architect[Architect Subagent:&lt;br/&gt;Creates comprehensive architecture&lt;br/&gt;- File structure&lt;br/&gt;- Module breakdown&lt;br/&gt;- API design&lt;br/&gt;- Testing strategy&lt;br/&gt;- Implementation order]
+
+    Architect --&gt; ArchDoc[architecture.md&lt;br/&gt;Complete system design]
+
+    ArchDoc --&gt; Phase3[PHASE 3: PARALLEL IMPLEMENTATION]
+
+    Phase3 --&gt; BuildCoord[Builder Coordinator&lt;br/&gt;Launches 4 Parallel Subagents]
+
+    subgraph ParallelBuilders[Parallel Builder Execution - ThreadPoolExecutor max_workers=4]
+        Builder1[Builder 1:&lt;br/&gt;Core Module]
+        Builder2[Builder 2:&lt;br/&gt;API Layer]
+        Builder3[Builder 3:&lt;br/&gt;Data Models]
+        Builder4[Builder 4:&lt;br/&gt;Tests + Utils]
+    end
+
+    BuildCoord --&gt; Builder1 &amp; Builder2 &amp; Builder3 &amp; Builder4
+
+    Builder1 &amp; Builder2 &amp; Builder3 &amp; Builder4 --&gt; BuildResults[All files written&lt;br/&gt;directly to filesystem&lt;br/&gt;No game of telephone]
+
+    BuildResults --&gt; Phase4[PHASE 4: VALIDATION]
+
+    Phase4 --&gt; TestDetection{Detect Project Type}
+
+    TestDetection --&gt;|package.json| NodeTests[npm test&lt;br/&gt;Run Node.js tests&lt;br/&gt;120s timeout]
+    TestDetection --&gt;|pytest files| PythonTests[pytest -v&lt;br/&gt;Run Python tests&lt;br/&gt;120s timeout]
+    TestDetection --&gt;|None found| NoTests[No test framework&lt;br/&gt;detected]
+
+    NodeTests &amp; PythonTests --&gt; TestResults[Test Results:&lt;br/&gt;Pass/Fail + Output]
+    NoTests --&gt; TestResults
+
+    TestResults --&gt; LLMJudge[LLM Judge:&lt;br/&gt;Code quality evaluation]
+
+    TestResults --&gt; CombinedValidation{Both Pass?&lt;br/&gt;Tests + LLM Judge}
+    LLMJudge --&gt; CombinedValidation
+
+    CombinedValidation --&gt;|No| SelfHealing[Self-Healing Loop:&lt;br/&gt;Analyze failures&lt;br/&gt;Re-architect if needed&lt;br/&gt;Max 3 attempts]
+
+    SelfHealing --&gt; BuildCoord
+
+    CombinedValidation --&gt;|Yes| Complete[✅ BUILD COMPLETE&lt;br/&gt;All validations passed]
+
+    Complete --&gt; Metrics[Export Metrics:&lt;br/&gt;- Token usage per phase&lt;br/&gt;- Duration per phase&lt;br/&gt;- Parallel speedup ratio&lt;br/&gt;- Test iterations&lt;br/&gt;- Files created]
+
+    Metrics --&gt; End([End])
+
+    style ParallelScouts fill:#ffe1e1,stroke:#f66,stroke-width:3px
+    style ParallelBuilders fill:#e1e1ff,stroke:#66f,stroke-width:3px
+    style LeadOrch fill:#e1f5e1,stroke:#4a4
+    style ScoutCoord fill:#ffe1e1
+    style ArchCoord fill:#e1ffe1
+    style BuildCoord fill:#e1e1ff
+    style Compression fill:#ffffe1
+    style Architect fill:#e1ffe1
+    style SelfHealing fill:#ffe1ff
+    style CombinedValidation fill:#e1ffff
+    style Complete fill:#d4f4dd,stroke:#4a4,stroke-width:3px
+
+    classDef parallel fill:#fff4e1,stroke:#fa4,stroke-width:4px
+    class ParallelScouts,ParallelBuilders parallel</pre>
+<h3 id="performance-comparison">Performance Comparison</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Phase</th>
+<th>Before (Sequential)</th>
+<th>After (Parallel)</th>
+<th>Speedup</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Scout</strong></td>
+<td>1 agent × 5 min = <strong>5 min</strong></td>
+<td>5 agents in parallel = <strong>1 min</strong></td>
+<td><strong>5x faster</strong> ⚡</td>
+</tr>
+<tr>
+<td><strong>Architect</strong></td>
+<td>1 agent × 3 min = <strong>3 min</strong></td>
+<td>1 agent × 3 min = <strong>3 min</strong></td>
+<td>Same (coherence needed)</td>
+</tr>
+<tr>
+<td><strong>Builder</strong></td>
+<td>1 agent × 8 min = <strong>8 min</strong></td>
+<td>4 agents in parallel = <strong>2 min</strong></td>
+<td><strong>4x faster</strong> ⚡</td>
+</tr>
+<tr>
+<td><strong>Test</strong></td>
+<td>Manual/TODO</td>
+<td>Automated detection + execution</td>
+<td><strong>Fully automated</strong> ✅</td>
+</tr>
+<tr>
+<td><strong>TOTAL</strong></td>
+<td><strong>~16 min</strong></td>
+<td><strong>~6 min</strong></td>
+<td><strong>~62% faster</strong> 🚀</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Real-world results</strong>: Builds completing in 33-10% of original time (67-90% faster depending on parallelization opportunities)</p>
+<h3 id="new-components-architecture">New Components Architecture</h3>
+<pre class="mermaid">flowchart TD
+    subgraph NEW[New Components Added - October 2025]
+        direction TB
+
+        AC[ArchitectCoordinator&lt;br/&gt;ace/architects/coordinator.py&lt;br/&gt;&lt;br/&gt;- Manages architect execution&lt;br/&gt;- Single architect strategy&lt;br/&gt;- Phase result tracking]
+
+        AS[ArchitectSubagent&lt;br/&gt;ace/architects/architect_subagent.py&lt;br/&gt;&lt;br/&gt;- Creates comprehensive architecture&lt;br/&gt;- 12K token budget&lt;br/&gt;- Extended thinking mode&lt;br/&gt;- Provider-agnostic]
+
+        RT[_run_tests Method&lt;br/&gt;multi_agent_orchestrator.py&lt;br/&gt;&lt;br/&gt;- Auto-detects project type&lt;br/&gt;- Runs npm test / pytest&lt;br/&gt;- Structured result output&lt;br/&gt;- 120s timeout]
+
+        VAL[Enhanced Validation&lt;br/&gt;multi_agent_orchestrator.py&lt;br/&gt;&lt;br/&gt;- Combines test results&lt;br/&gt;- Integrates LLM judge&lt;br/&gt;- Both must pass&lt;br/&gt;- Self-healing on failure]
+
+        AC --&gt; AS
+        RT --&gt; VAL
+    end
+
+    subgraph EXISTING[Existing Components - Already Working]
+        direction TB
+
+        PSC[ParallelScoutCoordinator&lt;br/&gt;ThreadPoolExecutor&lt;br/&gt;5 scouts max]
+        PBC[ParallelBuilderCoordinator&lt;br/&gt;ThreadPoolExecutor&lt;br/&gt;4 builders max]
+        LO[LeadOrchestrator&lt;br/&gt;Workflow planning&lt;br/&gt;Finding compression]
+        SH[SelfHealingLoop&lt;br/&gt;Automatic fixes&lt;br/&gt;Max 3 iterations]
+        LJ[LLMJudge&lt;br/&gt;Code quality&lt;br/&gt;evaluation]
+    end
+
+    LO --&gt; PSC
+    PSC --&gt; AC
+    AC --&gt; PBC
+    PBC --&gt; RT
+    RT --&gt; LJ
+    LJ --&gt; VAL
+    VAL --&gt; SH
+    SH -.-&gt;|If needed| PBC
+
+    style NEW fill:#ffe1e1,stroke:#f44,stroke-width:3px
+    style EXISTING fill:#e1f5e1,stroke:#4a4,stroke-width:2px</pre>
+<h3 id="data-flow-sequential-vs-parallel">Data Flow: Sequential vs. Parallel</h3>
+<p><strong>SEQUENTIAL (Before):</strong></p>
+<pre><code class="">User Request
+  → Scout Agent (waits for completion)
+    → scout-report.md (40KB)
+  → Architect Agent (waits for completion)
+    → architecture.md (60KB)
+  → Builder Agent (waits for completion)
+    → source files (12 files)
+  → Manual tests (TODO)</code></pre>
+<p><strong>Total Time:</strong> 16 minutes (all serial)</p>
+<p><strong>PARALLEL (After):</strong></p>
+<pre><code class="">User Request
+  → Lead Orchestrator (plans tasks)
+
+  ├─ PARALLEL SCOUTS ──────────────────┐
+  │  ├→ Scout 1: API Research          │
+  │  ├→ Scout 2: Tech Stack            │
+  │  ├→ Scout 3: Security              │ ALL CONCURRENT
+  │  ├→ Scout 4: Testing               │ (5 threads)
+  │  └→ Scout 5: Deployment            │
+  └────────────────────────────────────┘
+    → Compressed findings (1 summary)
+
+  → Architect (single, coherent design)
+    → architecture.md (60KB)
+
+  ├─ PARALLEL BUILDERS ────────────────┐
+  │  ├→ Builder 1: Core Module         │
+  │  ├→ Builder 2: API Layer           │ ALL CONCURRENT
+  │  ├→ Builder 3: Data Models         │ (4 threads)
+  │  └→ Builder 4: Tests + Utils       │
+  └────────────────────────────────────┘
+    → All source files (12 files)
+
+  → Auto-detect project type
+    ├→ npm test (if Node.js)
+    └→ pytest (if Python)
+
+  → LLM Judge evaluation
+
+  → Both tests + judge must pass
+
+  → Self-healing if needed (max 3 attempts)</code></pre>
+<p><strong>Total Time:</strong> 6 minutes (parallelized phases)</p>
+<h3 id="key-improvements">Key Improvements</h3>
+<p>✅ <strong>Parallel Scout Research</strong> - 5 scouts research different aspects concurrently<br>✅ <strong>Finding Compression</strong> - Lead orchestrator reduces 5 reports to 1 summary<br>✅ <strong>Single Architect</strong> - Maintains design coherence (not parallelized)<br>✅ <strong>Parallel Builders</strong> - 4 builders implement modules concurrently<br>✅ <strong>Automated Testing</strong> - Auto-detects and runs npm/pytest tests<br>✅ <strong>Dual Validation</strong> - Both automated tests AND LLM judge must pass<br>✅ <strong>Self-Healing Loop</strong> - Automatically fixes failures up to 3 attempts<br>✅ <strong>Observability</strong> - Complete metrics on tokens, duration, speedup</p>
+<h3 id="why-single-architect">Why Single Architect?</h3>
+<p><strong>Design Decision</strong>: Unlike scouts and builders, the architect runs as a SINGLE agent (not parallel) because:</p>
+<ol>
+<li><strong>Architectural Coherence</strong>: One vision for the system prevents conflicting designs</li>
+<li><strong>Dependency Coordination</strong>: Central architect can optimize for module dependencies</li>
+<li><strong>Consistency</strong>: Unified tech stack, patterns, and conventions</li>
+<li><strong>Compression Already Done</strong>: Scout findings already compressed into concise summary</li>
+</ol>
+<p><strong>Result</strong>: Architect phase takes same time as before, but produces higher quality designs without conflicts.</p>
+<h3 id="threadpoolexecutor-configuration">ThreadPoolExecutor Configuration</h3>
+<pre><code class="language-python"># Scout Coordinator
+max_workers = min(len(tasks), 5)  # Up to 5 scouts in parallel
+
+# Builder Coordinator
+max_workers = min(len(tasks), 4)  # Up to 4 builders in parallel</code></pre>
+<p><strong>Why these limits?</strong></p>
+<ul>
+<li>Prevents overwhelming API rate limits</li>
+<li>Avoids file system conflicts</li>
+<li>Balances speed vs. stability</li>
+<li>Empirically optimized values</li>
+</ul>
+<h3 id="expected-speedups-by-project-size">Expected Speedups by Project Size</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Project Size</th>
+<th>Sequential Time</th>
+<th>Parallel Time</th>
+<th>Speedup</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Small</strong> (1-2 modules)</td>
+<td>8 min</td>
+<td>5 min</td>
+<td>38% faster</td>
+</tr>
+<tr>
+<td><strong>Medium</strong> (3-5 modules)</td>
+<td>16 min</td>
+<td>6 min</td>
+<td>62% faster</td>
+</tr>
+<tr>
+<td><strong>Large</strong> (6-10 modules)</td>
+<td>30 min</td>
+<td>10 min</td>
+<td>67% faster</td>
+</tr>
+<tr>
+<td><strong>Extra Large</strong> (10+ modules)</td>
+<td>60 min</td>
+<td>15 min</td>
+<td>75% faster</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Note</strong>: Larger projects benefit more from parallelization due to more work to distribute across scouts/builders.</p>
+<hr>
+<h2 id="viewing-these-diagrams">Viewing These Diagrams</h2>
+<h3 id="on-github">On GitHub</h3>
+<p>Simply view this file on GitHub - diagrams render automatically!</p>
+<h3 id="locally">Locally</h3>
+<p>Use one of these tools:</p>
+<ul>
+<li><strong>VS Code</strong>: Install &quot;Markdown Preview Mermaid Support&quot; extension</li>
+<li><strong>Mermaid Live Editor</strong>: Copy diagram code to <a href="https://mermaid.live/" target="_blank" rel="noopener noreferrer">mermaid.live <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+<li><strong>IntelliJ/PyCharm</strong>: Mermaid plugin available</li>
+<li><strong>Obsidian</strong>: Built-in Mermaid support</li>
+</ul>
+<h3 id="export-to-pngsvg">Export to PNG/SVG</h3>
+<ol>
+<li>Copy diagram code</li>
+<li>Go to <a href="https://mermaid.live/" target="_blank" rel="noopener noreferrer">mermaid.live <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+<li>Paste code</li>
+<li>Click &quot;Actions&quot; → &quot;Export PNG&quot; or &quot;Export SVG&quot;</li>
+</ol>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>These diagrams show:</strong></p>
+<p>✅ <strong>Complete System Architecture</strong> - From user request to GitHub deployment<br>✅ <strong>Message Flow</strong> - Every step from MCP call to subprocess completion<br>✅ <strong>Agent Lifecycle</strong> - How ephemeral agents transition and die<br>✅ <strong>Context Isolation</strong> - How main window stays clean (0.7% usage)<br>✅ <strong>Data Flow</strong> - How information persists via files, not agent contexts<br>✅ <strong>MCP Protocol</strong> - JSON-RPC messages between components<br>✅ <strong>Multi-Agent Parallel Execution</strong> - How 5 scouts and 4 builders run concurrently for 67-90% faster builds</p>
+<p><strong>Key Takeaway</strong>: Context Foundry&#39;s architecture is built on:</p>
+<ul>
+<li><strong>Subprocess delegation</strong> (separate processes, separate contexts)</li>
+<li><strong>Ephemeral agents</strong> (die after each phase, context freed)</li>
+<li><strong>Persistent files</strong> (knowledge written to disk, survives agent death)</li>
+<li><strong>MCP protocol</strong> (standard communication between Claude Code and server)</li>
+<li><strong>Parallel execution</strong> (ThreadPoolExecutor for concurrent scouts and builders)</li>
+<li><strong>Automated validation</strong> (test detection + execution + LLM judge + self-healing)</li>
+</ul>
+<p><strong>Result</strong>: Your main Claude Code window stays clean (&lt;1%) while entire applications are built autonomously in the background at blazing speed!</p>
+<hr>
+<h2 id="related-documentation">Related Documentation</h2>
+<ul>
+<li><a href="MCP_SERVER_ARCHITECTURE.md">MCP_SERVER_ARCHITECTURE.md</a> - Technical implementation details</li>
+<li><a href="CONTEXT_PRESERVATION.md">CONTEXT_PRESERVATION.md</a> - How context flows between agents</li>
+<li><a href="DELEGATION_MODEL.md">DELEGATION_MODEL.md</a> - Why delegation keeps context clean</li>
+<li><a href="../README.md">README.md</a> - Quick start and overview</li>
+</ul>
+<hr>
+<p><strong>Version:</strong> 2.1.0 | <strong>Last Updated:</strong> October 2025 | <strong>Latest:</strong> Multi-Agent Parallel Execution (Commit: 0649a93)</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/technical/innovations" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">15 Innovations</span>
+            </a>
+
+            <a href="/docs/technical/context-preservation" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Context Preservation</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#1-high-level-architecture" class="toc-link" data-heading-id="1-high-level-architecture">
+                  1. High-Level Architecture
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#2-sequence-diagram-complete-build-flow-parallel-multi-agent" class="toc-link" data-heading-id="2-sequence-diagram-complete-build-flow-parallel-multi-agent">
+                  2. Sequence Diagram: Complete Build Flow (Parallel Multi-Agent)
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#3-agent-lifecycle-state-diagram" class="toc-link" data-heading-id="3-agent-lifecycle-state-diagram">
+                  3. Agent Lifecycle State Diagram
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#5-data-flow-through-files" class="toc-link" data-heading-id="5-data-flow-through-files">
+                  5. Data Flow Through Files
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#6-mcp-protocol-message-flow" class="toc-link" data-heading-id="6-mcp-protocol-message-flow">
+                  6. MCP Protocol Message Flow
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#7-multi-agent-parallel-execution-architecture-new" class="toc-link" data-heading-id="7-multi-agent-parallel-execution-architecture-new">
+                  7. Multi-Agent Parallel Execution Architecture (NEW)
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#architecture-before-vs-after" class="toc-link" data-heading-id="architecture-before-vs-after">
+                          Architecture: Before vs. After
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#complete-parallel-execution-flow" class="toc-link" data-heading-id="complete-parallel-execution-flow">
+                          Complete Parallel Execution Flow
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#performance-comparison" class="toc-link" data-heading-id="performance-comparison">
+                          Performance Comparison
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#new-components-architecture" class="toc-link" data-heading-id="new-components-architecture">
+                          New Components Architecture
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#data-flow-sequential-vs-parallel" class="toc-link" data-heading-id="data-flow-sequential-vs-parallel">
+                          Data Flow: Sequential vs. Parallel
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#key-improvements" class="toc-link" data-heading-id="key-improvements">
+                          Key Improvements
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#why-single-architect" class="toc-link" data-heading-id="why-single-architect">
+                          Why Single Architect?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#threadpoolexecutor-configuration" class="toc-link" data-heading-id="threadpoolexecutor-configuration">
+                          ThreadPoolExecutor Configuration
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#expected-speedups-by-project-size" class="toc-link" data-heading-id="expected-speedups-by-project-size">
+                          Expected Speedups by Project Size
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#viewing-these-diagrams" class="toc-link" data-heading-id="viewing-these-diagrams">
+                  Viewing These Diagrams
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#on-github" class="toc-link" data-heading-id="on-github">
+                          On GitHub
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#locally" class="toc-link" data-heading-id="locally">
+                          Locally
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#export-to-pngsvg" class="toc-link" data-heading-id="export-to-pngsvg">
+                          Export to PNG/SVG
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#related-documentation" class="toc-link" data-heading-id="related-documentation">
+                  Related Documentation
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

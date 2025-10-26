@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Start | Context Foundry Documentation</title>
+  <meta name="description" content="Get from zero to deployed app in 5 minutes">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/getting-started/quickstart">
+  <meta property="og:title" content="Quick Start">
+  <meta property="og:description" content="Get from zero to deployed app in 5 minutes">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Quick Start">
+  <meta name="twitter:description" content="Get from zero to deployed app in 5 minutes">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/getting-started/quickstart">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/getting-started" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Quick Start</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-5-minute-quickstart">Context Foundry - 5-Minute Quickstart</h1>
+<p><strong>Get from zero to deployed app in 5 minutes</strong></p>
+<hr>
+<h2 id="what-youll-do">What You&#39;ll Do</h2>
+<ol>
+<li>One-time setup (2 minutes)</li>
+<li>Build your first app (3 minutes of your time, 7-15 min build runs in background)</li>
+<li>See it deployed on GitHub</li>
+</ol>
+<p><strong>Total active time:</strong> 5 minutes<br><strong>Build time:</strong> 7-15 minutes (runs in background while you work - no waiting!)</p>
+<hr>
+<h2 id="step-1-one-time-setup-2-minutes">Step 1: One-Time Setup (2 minutes)</h2>
+<h3 id="install-dependencies">Install Dependencies</h3>
+<pre><code class="language-bash"># Clone Context Foundry
+cd ~/homelab  # or your preferred location
+git clone https://github.com/context-foundry/context-foundry.git
+
+# IMPORTANT: Change into the context-foundry directory
+cd context-foundry
+
+# Verify you&#039;re in the right place (should show: .../context-foundry)
+pwd
+
+# Create virtual environment (recommended, required on Debian/Ubuntu)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install MCP server (requires Python 3.10+)
+# Minimal installation: ~50MB, completes in 15-20 seconds
+pip install -r requirements-mcp.txt</code></pre>
+<h3 id="connect-to-claude-code">Connect to Claude Code</h3>
+<pre><code class="language-bash"># Add MCP server to Claude Code (use venv Python, add to project scope)
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+
+# This creates .mcp.json in the project directory (shareable with your team)
+
+# Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
+
+# Note: Project-scoped servers don&#039;t appear in `claude mcp list` (that shows global config)
+# They&#039;re automatically detected when you run `claude` in this directory</code></pre>
+<h3 id="authenticate-with-github">Authenticate with GitHub</h3>
+<pre><code class="language-bash">gh auth login
+# Follow prompts to authenticate</code></pre>
+<p><strong>Done!</strong> You only do this once.</p>
+<hr>
+<h2 id="step-2-build-your-first-app-3-minutes">Step 2: Build Your First App (3 minutes)</h2>
+<h3 id="start-claude-code">Start Claude Code</h3>
+<pre><code class="language-bash">claude</code></pre>
+<h3 id="just-ask-naturally">Just Ask Naturally</h3>
+<p>Inside your Claude Code session, say:</p>
+<pre><code class="">Build a simple todo app with the following features:
+- Add new todos
+- Mark todos as complete
+- Delete todos
+- Save todos to localStorage
+- Clean, modern UI</code></pre>
+<p><strong>That&#39;s it!</strong> No commands to memorize, no copy/paste needed.</p>
+<h3 id="what-happens-next-runs-in-background">What Happens Next (Runs in Background!)</h3>
+<p>Claude Code will automatically start the build <strong>in the background</strong>:</p>
+<pre><code class="">🚀 Autonomous build started!
+
+Project: todo-app
+Task ID: abc-123-def-456
+Location: /tmp/todo-app
+Expected duration: 7-15 minutes
+
+You can continue working - the build runs in the background.</code></pre>
+<p><strong>You can now:</strong></p>
+<ul>
+<li>✅ Continue working on other things</li>
+<li>✅ Start another build in parallel</li>
+<li>✅ Close Claude and come back later</li>
+<li>✅ Check status anytime</li>
+</ul>
+<p><strong>The system autonomously:</strong></p>
+<ol>
+<li><strong>Scout</strong> (1-2 min): Research best practices</li>
+<li><strong>Architect</strong> (1-2 min): Design the app</li>
+<li><strong>Builder</strong> (2-5 min): Write all code + tests</li>
+<li><strong>Test</strong> (1-2 min): Validate everything (auto-fixes failures!)</li>
+<li><strong>Document</strong> (1 min): Create README and docs</li>
+<li><strong>Deploy</strong> (30 sec): Push to GitHub</li>
+</ol>
+<p><strong>Total time:</strong> 7-15 minutes (runs in background while you work)</p>
+<h3 id="visual-example-real-build-in-progress">Visual Example: Real Build in Progress</h3>
+<p><strong>Here&#39;s what a real autonomous build looks like:</strong></p>
+<p><img src="docs/screenshots/EvolutionQuestBeingBuilt.png" alt="Build Process - Starting" loading="lazy" /><br><em>Context Foundry begins the autonomous build process after your request</em></p>
+<p><img src="docs/screenshots/BuildStatusUpdate1.png" alt="Build Process - In Progress" loading="lazy" /><br><em>Guided workflow progresses through Scout → Architect → Builder phases automatically</em></p>
+<p><img src="docs/screenshots/BuildStatusUpdate2.png" alt="Build Process - Testing" loading="lazy" /><br><em>Self-healing test loop validates and fixes issues without your intervention</em></p>
+<p><img src="docs/screenshots/BuildStatusComplete.png" alt="Build Process - Complete" loading="lazy" /><br><em>All phases complete with tests passing and documentation generated</em></p>
+<p><img src="docs/screenshots/App_Ready_to_Play.png" alt="Final Application" loading="lazy" /><br><em>Deployed, working application ready to use - from simple request to finished product</em></p>
+<p><strong>The entire process runs autonomously</strong> - you can work on other things while it builds!</p>
+<p><strong>Check status:</strong></p>
+<pre><code class="">What&#039;s the status of my build?</code></pre>
+<hr>
+<h2 id="step-3-check-your-results">Step 3: Check Your Results</h2>
+<h3 id="youll-get">You&#39;ll Get</h3>
+<pre><code class="">✅ Complete!
+
+GitHub Repository: https://github.com/yourusername/todo-app
+Local Files: /tmp/todo-app
+Tests: 25/25 passing
+Duration: 8.3 minutes
+
+Try it:
+cd /tmp/todo-app
+npm install
+npm start
+open http://localhost:8080</code></pre>
+<h3 id="what-was-created">What Was Created</h3>
+<ul>
+<li>✅ Full source code (HTML, CSS, JavaScript)</li>
+<li>✅ Comprehensive tests (Jest)</li>
+<li>✅ Complete documentation (README, usage guides)</li>
+<li>✅ Deployed to GitHub</li>
+<li>✅ All tests passing</li>
+</ul>
+<hr>
+<h2 id="more-examples">More Examples</h2>
+<h3 id="weather-app">Weather App</h3>
+<pre><code class="">Build a weather app that shows current weather and 5-day forecast
+using the OpenWeatherMap API. Include city search and temperature
+unit toggle.</code></pre>
+<h3 id="rest-api">REST API</h3>
+<pre><code class="">Create a REST API with Express.js that has user authentication (JWT),
+CRUD operations for blog posts, and PostgreSQL database. Include
+comprehensive tests.</code></pre>
+<h3 id="game">Game</h3>
+<pre><code class="">Build a Snake game in JavaScript with HTML5 Canvas. Include score
+tracking, difficulty levels, and game over screen.</code></pre>
+<h3 id="full-stack-app">Full-Stack App</h3>
+<pre><code class="">Build a full-stack task management app with:
+- Backend: Node.js + Express + PostgreSQL
+- Frontend: React with login/register pages
+- Features: Create tasks, assign to users, mark complete
+- Authentication: JWT tokens</code></pre>
+<hr>
+<h2 id="tips-for-best-results">Tips for Best Results</h2>
+<h3 id="do-this">✅ Do This</h3>
+<p><strong>Be specific about features:</strong></p>
+<pre><code class="">Build a calculator app with:
+- Basic operations (+, -, *, /)
+- Scientific functions (sin, cos, sqrt)
+- Memory storage (M+, M-, MR)
+- Keyboard support
+- Clean UI with button animations</code></pre>
+<p><strong>Include technical requirements:</strong></p>
+<pre><code class="">Create a weather API with:
+- Express.js framework
+- Redis caching (5 min TTL)
+- Rate limiting (100 req/hour)
+- PostgreSQL for user preferences
+- Comprehensive error handling
+- Jest tests</code></pre>
+<p><strong>Mention deployment needs:</strong></p>
+<pre><code class="">Build a portfolio website that:
+- Works on mobile and desktop
+- Has dark mode toggle
+- Can be deployed to Vercel
+- Includes SEO meta tags</code></pre>
+<h3 id="dont-do-this">❌ Don&#39;t Do This</h3>
+<p><strong>Too vague:</strong></p>
+<pre><code class="">Build an app  # What kind of app?</code></pre>
+<p><strong>Just questions (won&#39;t trigger build):</strong></p>
+<pre><code class="">How do I build a weather app?  # This explains, doesn&#039;t build
+What&#039;s the best way to create an API?  # This discusses, doesn&#039;t build</code></pre>
+<p><strong>Contradictory requirements:</strong></p>
+<pre><code class="">Build a simple app with 50 features  # Pick one: simple OR feature-rich</code></pre>
+<hr>
+<h2 id="common-scenarios">Common Scenarios</h2>
+<h3 id="scenario-1-quick-prototype">Scenario 1: Quick Prototype</h3>
+<pre><code class="">Build a minimal viable product for a recipe sharing app.
+Just basic recipe CRUD and search functionality.
+Use vanilla JavaScript and localStorage.</code></pre>
+<p><strong>Result:</strong> Working prototype in ~7 minutes</p>
+<h3 id="scenario-2-production-ready-api">Scenario 2: Production-Ready API</h3>
+<pre><code class="">Create a production-ready REST API for an e-commerce platform with:
+- User authentication and authorization
+- Product catalog with categories
+- Shopping cart functionality
+- Order processing
+- Payment integration preparation
+- PostgreSQL database
+- Comprehensive tests (unit + integration)
+- API documentation
+- Rate limiting and security headers</code></pre>
+<p><strong>Result:</strong> Production-ready API in ~15 minutes</p>
+<h3 id="scenario-3-learning-project">Scenario 3: Learning Project</h3>
+<pre><code class="">Build a Pomodoro timer app to help me learn JavaScript.
+Include start/stop/reset controls, customizable work/break durations,
+and notification sounds. Add detailed code comments explaining
+how everything works.</code></pre>
+<p><strong>Result:</strong> Educational project with comments in ~8 minutes</p>
+<hr>
+<h2 id="what-if-something-goes-wrong">What If Something Goes Wrong?</h2>
+<h3 id="build-failed">Build Failed</h3>
+<p>Check <code>.context-foundry/test-results-iteration-*.md</code> for details:</p>
+<pre><code class="language-bash">cd /your/project
+cat .context-foundry/test-results-iteration-*.md</code></pre>
+<p>The system auto-fixes 95% of failures. If it doesn&#39;t:</p>
+<ol>
+<li>Review the error reports</li>
+<li>Re-run with more iterations: (in Claude Code) &quot;Increase max_test_iterations to 5 and rebuild&quot;</li>
+</ol>
+<h3 id="mcp-tools-not-available">MCP Tools Not Available</h3>
+<pre><code class="language-bash"># Verify MCP connection
+claude mcp list
+
+# Should show: ✓ Connected: context-foundry
+# If not, re-run setup from Step 1</code></pre>
+<h3 id="timeout">Timeout</h3>
+<p>For very complex projects, increase timeout:</p>
+<pre><code class="">Build [complex project description]
+
+Use a timeout of 30 minutes for this build.</code></pre>
+<hr>
+<h2 id="next-steps">Next Steps</h2>
+<h3 id="you-just-built-your-first-app">You Just Built Your First App!</h3>
+<p>Now try:</p>
+<ol>
+<li><strong>Build something useful</strong> - Solve a real problem you have</li>
+<li><strong>Experiment</strong> - Try different tech stacks</li>
+<li><strong>Learn</strong> - Review the generated code to learn patterns</li>
+<li><strong>Share</strong> - Your apps are on GitHub, share them!</li>
+</ol>
+<h3 id="want-to-learn-more">Want to Learn More?</h3>
+<ul>
+<li><strong>README.md</strong> - Full feature overview</li>
+<li><strong>USER_GUIDE.md</strong> - Detailed usage guide</li>
+<li><strong>ARCHITECTURE_DECISIONS.md</strong> - How it works under the hood, what&#39;s new in 2.0</li>
+</ul>
+<h3 id="advanced-features">Advanced Features</h3>
+<p>Once comfortable with basics:</p>
+<ul>
+<li><strong>Parallel builds</strong> - Build multiple components simultaneously</li>
+<li><strong>Custom workflows</strong> - Edit <code>orchestrator_prompt.txt</code></li>
+<li><strong>Existing projects</strong> - Enhance or fix existing code</li>
+<li><strong>Complex systems</strong> - Multi-service architectures</li>
+</ul>
+<hr>
+<h2 id="troubleshooting-quick-reference">Troubleshooting Quick Reference</h2>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>requirements-mcp.txt not found</td>
+<td><code>cd context-foundry</code> - you need to be in the cloned directory</td>
+</tr>
+<tr>
+<td>MCP not connected</td>
+<td><code>claude mcp list</code> then re-run setup</td>
+</tr>
+<tr>
+<td>Python version error</td>
+<td>Install Python 3.10+: <code>brew install python@3.10</code></td>
+</tr>
+<tr>
+<td>Build timeout</td>
+<td>Add: &quot;Use 30 minute timeout&quot; to request</td>
+</tr>
+<tr>
+<td>Tests failing</td>
+<td>Check <code>.context-foundry/test-results-*.md</code></td>
+</tr>
+<tr>
+<td>GitHub auth error</td>
+<td>Run: <code>gh auth login</code></td>
+</tr>
+<tr>
+<td>Wrong directory</td>
+<td>Specify: &quot;Build in /Users/name/projects/myapp&quot;</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<hr>
+<h2 id="faq">FAQ</h2>
+<p><strong>Q: Do I need to know the MCP tool names?</strong><br>A: No! Just describe what you want in natural language.</p>
+<p><strong>Q: Can I use this for real projects?</strong><br>A: Yes! The code is production-ready with tests and documentation.</p>
+<p><strong>Q: How much does it cost?</strong><br>A: Requires Claude Max subscription ($20/month unlimited) or pay-per-use API.</p>
+<p><strong>Q: Can I customize the workflow?</strong><br>A: Yes! Edit <code>tools/orchestrator_prompt.txt</code> to change phases.</p>
+<p><strong>Q: What if I don&#39;t want GitHub deployment?</strong><br>A: Say: &quot;Build locally only, skip GitHub deployment&quot;</p>
+<p><strong>Q: Can it work on existing code?</strong><br>A: Yes! Say: &quot;Enhance my project at /path/to/project by adding [features]&quot;</p>
+<p><strong>Q: Is the generated code good quality?</strong><br>A: Yes - 90%+ test coverage, follows best practices, includes documentation.</p>
+<p><strong>Q: Can I stop a build in progress?</strong><br>A: Builds are autonomous but time out after the specified duration (default 90 min).</p>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>The magic of Context Foundry:</strong></p>
+<ol>
+<li><strong>You:</strong> &quot;Build [describe your app]&quot;</li>
+<li><strong>System:</strong> [Builds autonomously for 7-15 minutes]</li>
+<li><strong>You:</strong> Get deployed app with tests and docs</li>
+</ol>
+<p><strong>No commands to memorize. No copy/paste. No supervision needed.</strong></p>
+<hr>
+<p><strong>Ready to build?</strong> → Start Claude Code: <code>claude</code></p>
+<p><strong>Questions?</strong> → See <a href="USER_GUIDE.md">USER_GUIDE.md</a> for comprehensive help</p>
+<p><strong>Technical details?</strong> → See <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></p>
+<hr>
+<p><em>Context Foundry - Build complete software autonomously</em></p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/getting-started/readme" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Overview</span>
+            </a>
+
+            <a href="/docs/getting-started/user-guide" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">User Guide</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#what-youll-do" class="toc-link" data-heading-id="what-youll-do">
+                  What You&#x27;ll Do
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#step-1-one-time-setup-2-minutes" class="toc-link" data-heading-id="step-1-one-time-setup-2-minutes">
+                  Step 1: One-Time Setup (2 minutes)
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#install-dependencies" class="toc-link" data-heading-id="install-dependencies">
+                          Install Dependencies
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#connect-to-claude-code" class="toc-link" data-heading-id="connect-to-claude-code">
+                          Connect to Claude Code
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#authenticate-with-github" class="toc-link" data-heading-id="authenticate-with-github">
+                          Authenticate with GitHub
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#step-2-build-your-first-app-3-minutes" class="toc-link" data-heading-id="step-2-build-your-first-app-3-minutes">
+                  Step 2: Build Your First App (3 minutes)
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#start-claude-code" class="toc-link" data-heading-id="start-claude-code">
+                          Start Claude Code
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#just-ask-naturally" class="toc-link" data-heading-id="just-ask-naturally">
+                          Just Ask Naturally
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-happens-next-runs-in-background" class="toc-link" data-heading-id="what-happens-next-runs-in-background">
+                          What Happens Next (Runs in Background!)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#visual-example-real-build-in-progress" class="toc-link" data-heading-id="visual-example-real-build-in-progress">
+                          Visual Example: Real Build in Progress
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#step-3-check-your-results" class="toc-link" data-heading-id="step-3-check-your-results">
+                  Step 3: Check Your Results
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#youll-get" class="toc-link" data-heading-id="youll-get">
+                          You&#x27;ll Get
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-was-created" class="toc-link" data-heading-id="what-was-created">
+                          What Was Created
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#more-examples" class="toc-link" data-heading-id="more-examples">
+                  More Examples
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#weather-app" class="toc-link" data-heading-id="weather-app">
+                          Weather App
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#rest-api" class="toc-link" data-heading-id="rest-api">
+                          REST API
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#game" class="toc-link" data-heading-id="game">
+                          Game
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#full-stack-app" class="toc-link" data-heading-id="full-stack-app">
+                          Full-Stack App
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#tips-for-best-results" class="toc-link" data-heading-id="tips-for-best-results">
+                  Tips for Best Results
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#do-this" class="toc-link" data-heading-id="do-this">
+                          ✅ Do This
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#dont-do-this" class="toc-link" data-heading-id="dont-do-this">
+                          ❌ Don&#x27;t Do This
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#common-scenarios" class="toc-link" data-heading-id="common-scenarios">
+                  Common Scenarios
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#scenario-1-quick-prototype" class="toc-link" data-heading-id="scenario-1-quick-prototype">
+                          Scenario 1: Quick Prototype
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#scenario-2-production-ready-api" class="toc-link" data-heading-id="scenario-2-production-ready-api">
+                          Scenario 2: Production-Ready API
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#scenario-3-learning-project" class="toc-link" data-heading-id="scenario-3-learning-project">
+                          Scenario 3: Learning Project
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#what-if-something-goes-wrong" class="toc-link" data-heading-id="what-if-something-goes-wrong">
+                  What If Something Goes Wrong?
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#build-failed" class="toc-link" data-heading-id="build-failed">
+                          Build Failed
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-tools-not-available" class="toc-link" data-heading-id="mcp-tools-not-available">
+                          MCP Tools Not Available
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#timeout" class="toc-link" data-heading-id="timeout">
+                          Timeout
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#next-steps" class="toc-link" data-heading-id="next-steps">
+                  Next Steps
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#you-just-built-your-first-app" class="toc-link" data-heading-id="you-just-built-your-first-app">
+                          You Just Built Your First App!
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#want-to-learn-more" class="toc-link" data-heading-id="want-to-learn-more">
+                          Want to Learn More?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#advanced-features" class="toc-link" data-heading-id="advanced-features">
+                          Advanced Features
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting-quick-reference" class="toc-link" data-heading-id="troubleshooting-quick-reference">
+                  Troubleshooting Quick Reference
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#faq" class="toc-link" data-heading-id="faq">
+                  FAQ
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

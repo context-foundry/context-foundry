@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Preservation | Context Foundry Documentation</title>
+  <meta name="description" content="How Ephemeral Agents + Persistent Files &#x3D; Zero Information Loss">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/technical/context-preservation">
+  <meta property="og:title" content="Context Preservation">
+  <meta property="og:description" content="How Ephemeral Agents + Persistent Files &#x3D; Zero Information Loss">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Context Preservation">
+  <meta name="twitter:description" content="How Ephemeral Agents + Persistent Files &#x3D; Zero Information Loss">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/technical/context-preservation">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/technical" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Context Preservation</h1>
+
+        <div class="doc-body">
+          <h1 id="context-preservation-in-context-foundry">Context Preservation in Context Foundry</h1>
+<p><strong>How Ephemeral Agents + Persistent Files = Zero Information Loss</strong></p>
+<blockquote><p><strong>Core Question:</strong> If agents disappear after each phase, how does information persist across the 7-phase build workflow?</p>
+<p><strong>Answer:</strong> File-based artifacts! Each agent writes comprehensive documentation that the next agent reads.</p>
+</blockquote>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#the-paradox">The Paradox</a></li>
+<li><a href="#how-context-flows">How Context Flows</a></li>
+<li><a href="#step-by-step-trace">Step-by-Step Trace</a></li>
+<li><a href="#token-budget-allocation">Token Budget Allocation</a></li>
+<li><a href="#why-agents-are-ephemeral">Why Agents Are Ephemeral</a></li>
+<li><a href="#why-files-persist">Why Files Persist</a></li>
+<li><a href="#information-loss-analysis">Information Loss Analysis</a></li>
+<li><a href="#comparison-with-persistent-agents">Comparison with Persistent Agents</a></li>
+<li><a href="#visual-diagrams">Visual Diagrams</a></li>
+<li><a href="#faq">FAQ</a></li>
+</ol>
+<hr>
+<h2 id="the-paradox">The Paradox</h2>
+<p><strong>Observation:</strong></p>
+<ul>
+<li>Scout agent creates research report, then disappears</li>
+<li>Architect agent has never &quot;talked&quot; to Scout</li>
+<li>Yet Architect has ALL Scout&#39;s knowledge</li>
+</ul>
+<p><strong>How is this possible?</strong></p>
+<pre><code class="">Scout Agent                    Architect Agent
+    |                               |
+    | Creates                       | Reads
+    | scout-report.md               | scout-report.md
+    |                               |
+    ↓                               ↓
+   DIES                      Has Scout&#039;s knowledge!
+(context discarded)          (via file reading)</code></pre>
+<hr>
+<h2 id="how-context-flows">How Context Flows</h2>
+<h3 id="information-transfer-mechanism">Information Transfer Mechanism</h3>
+<p><strong>Traditional LLM Conversation:</strong></p>
+<pre><code class="">User: &quot;What&#039;s the weather?&quot;
+LLM:  &quot;It&#039;s sunny&quot;
+User: &quot;How about tomorrow?&quot;
+LLM:  [Remembers previous message, knows we&#039;re talking about weather]</code></pre>
+<p><strong>Context Foundry Agent Handoff:</strong></p>
+<pre><code class="">Scout Agent:
+  Research → Write scout-report.md → Die
+
+Architect Agent:
+  Read scout-report.md → Design → Write architecture.md → Die
+
+Builder Agent:
+  Read architecture.md → Implement → Write code files → Die</code></pre>
+<p><strong>Key Insight:</strong> File system is the shared memory between agents!</p>
+<hr>
+<h2 id="step-by-step-trace">Step-by-Step Trace</h2>
+<h3 id="complete-information-flow">Complete Information Flow</h3>
+<p>Let&#39;s trace a real build: <strong>&quot;Build a weather app&quot;</strong></p>
+<h4 id="phase-1-scout-research">Phase 1: Scout (Research)</h4>
+<p><strong>Input:</strong></p>
+<ul>
+<li>Task: &quot;Build a weather app&quot;</li>
+<li>Working directory: <code>/tmp/weather-app</code></li>
+<li>Pattern library: <code>~/.context-foundry/patterns/common-issues.json</code></li>
+</ul>
+<p><strong>Processing:</strong></p>
+<pre><code class="">Scout Agent Context Window (fresh 200K tokens):
+┌────────────────────────────────────────────────────────┐
+│ System Prompt: [Standard Claude Code system]           │
+│ User Message: &quot;You are Scout. Research weather APIs...&quot; │
+│                                                          │
+│ Agent&#039;s Actions:                                        │
+│ 1. Web search: &quot;weather API comparison&quot;                │
+│ 2. Read patterns: common-issues.json                   │
+│ 3. Check: CORS issues for browser apps?                │
+│ 4. Research: OpenWeatherMap vs WeatherAPI             │
+│ 5. Decision: Recommend OpenWeatherMap (free tier)      │
+│                                                          │
+│ Token Usage: ~10,000 tokens                            │
+└────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Output:</strong></p>
+<ul>
+<li>File created: <code>.context-foundry/scout-report.md</code> (40KB)</li>
+</ul>
+<p><strong>scout-report.md contents:</strong></p>
+<pre><code class="language-markdown"># Scout Report: Weather App
+
+## Project Summary
+Build a weather application with current weather display and forecasts.
+
+## Technology Recommendations
+
+### Weather API
+**Chosen: OpenWeatherMap API**
+- Free tier: 1000 calls/day
+- Supports current weather + 5-day forecast
+- Good documentation
+- RESTful JSON API
+
+**Rejected Alternatives:**
+- WeatherAPI.com: Smaller free tier (1M calls/month but requires credit card)
+- NOAA API: US-only, complex response format
+
+### Frontend Stack
+**Chosen: React + Vite**
+- Fast development server
+- ES6 modules support
+- Built-in dev server (prevents CORS issues - see pattern CORS-ES6-001)
+
+**Warning from Pattern Library:**
+Pattern ID: cors-es6-modules
+Severity: HIGH
+Issue: ES6 modules fail when loaded from file:// protocol
+Solution: Use Vite dev server (configured in package.json)
+
+### State Management
+**Chosen: useState (React hooks)**
+- Simple app, no global state needed
+- Avoid Redux complexity for this scope
+
+## Architecture Recommendations
+- Component structure: App &gt; WeatherDisplay &gt; ForecastCard
+- API service layer: weather-api.js
+- Error handling: try-catch with user-friendly messages
+- Loading states: skeleton screens during fetch
+
+## Risks Identified
+1. API key exposure (solution: use Vite env vars)
+2. Rate limiting (solution: cache results for 10 min)
+3. CORS errors (solution: dev server - already chosen)
+
+## Next Steps for Architect
+- Design component hierarchy following recommendations above
+- Plan API service integration
+- Specify error handling strategy
+- Create file structure plan</code></pre>
+<p><strong>Agent Death:</strong></p>
+<pre><code class="">Scout Agent exits
+    ↓
+Context window: DISCARDED
+    ↓
+All conversation history: GONE FOREVER
+    ↓
+But scout-report.md: PERSISTS ON DISK</code></pre>
+<hr>
+<h4 id="phase-2-architect-design">Phase 2: Architect (Design)</h4>
+<p><strong>Input:</strong></p>
+<ul>
+<li>File: <code>.context-foundry/scout-report.md</code> (just created)</li>
+<li>Task: &quot;Design architecture for weather app&quot;</li>
+<li>Working directory: <code>/tmp/weather-app</code></li>
+</ul>
+<p><strong>Processing:</strong></p>
+<pre><code class="">Architect Agent Context Window (fresh 200K tokens):
+┌────────────────────────────────────────────────────────┐
+│ System Prompt: [Standard Claude Code system]           │
+│ User Message: &quot;You are Architect. Read scout-report.md │
+│                and design the architecture...&quot;          │
+│                                                          │
+│ Agent&#039;s Actions:                                        │
+│ 1. Read .context-foundry/scout-report.md (40KB)        │
+│    → Entire Scout knowledge now in Architect&#039;s context │
+│ 2. Design component tree                                │
+│ 3. Plan API integration                                 │
+│ 4. Specify file structure                               │
+│ 5. Create implementation plan                           │
+│                                                          │
+│ Token Usage: ~15,000 tokens                            │
+│   ├─ scout-report.md: ~5,000 tokens                    │
+│   └─ architecture design: ~10,000 tokens               │
+└────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Output:</strong></p>
+<ul>
+<li>File created: <code>.context-foundry/architecture.md</code> (60KB)</li>
+</ul>
+<p><strong>architecture.md contents (excerpt):</strong></p>
+<pre><code class="language-markdown"># Architecture: Weather App
+
+## Overview
+React SPA with OpenWeatherMap API integration, built with Vite.
+
+## File Structure
+weather-app/
+├── src/
+│   ├── App.jsx                   # Root component
+│   ├── components/
+│   │   ├── WeatherDisplay.jsx    # Main weather UI
+│   │   ├── ForecastCard.jsx      # Individual forecast card
+│   │   └── LoadingSpinner.jsx    # Loading state
+│   ├── services/
+│   │   └── weatherApi.js         # OpenWeatherMap API calls
+│   ├── utils/
+│   │   └── formatters.js         # Date/temp formatting
+│   └── index.css                 # Tailwind imports
+├── .env.example                  # API key template
+├── package.json                  # Dependencies
+└── vite.config.js                # Vite configuration
+
+## Component Specifications
+
+### App.jsx
+**Responsibilities:**
+- Manage global state (city, weatherData, forecast)
+- Handle API calls via weatherApi service
+- Coordinate loading/error states
+- Render WeatherDisplay and ForecastCard children
+
+**State:**
+{
+  city: string,
+  weatherData: object | null,
+  forecast: array | null,
+  loading: boolean,
+  error: string | null
+}
+
+**Key Functions:**
+- fetchWeather(city): Call API, update state
+- handleCityChange(newCity): Update city, trigger fetch
+
+### WeatherDisplay.jsx
+**Props:** { weatherData: object }
+**Displays:**
+- Current temperature (convert Kelvin → Celsius)
+- Weather description (capitalize)
+- Humidity, wind speed
+- Weather icon (use OpenWeatherMap icon URLs)
+
+... [60KB of detailed specifications]</code></pre>
+<p><strong>Agent Death:</strong></p>
+<pre><code class="">Architect Agent exits
+    ↓
+Context window: DISCARDED (including scout-report.md that was in context)
+    ↓
+But architecture.md: PERSISTS ON DISK
+    ↓
+Contains ALL relevant knowledge from Scout + Architect&#039;s design decisions</code></pre>
+<hr>
+<h4 id="phase-3-builder-implementation">Phase 3: Builder (Implementation)</h4>
+<p><strong>Input:</strong></p>
+<ul>
+<li>File: <code>.context-foundry/architecture.md</code> (just created)</li>
+<li>Task: &quot;Implement weather app according to architecture&quot;</li>
+<li>Working directory: <code>/tmp/weather-app</code></li>
+</ul>
+<p><strong>Processing:</strong></p>
+<pre><code class="">Builder Agent Context Window (fresh 200K tokens):
+┌────────────────────────────────────────────────────────┐
+│ System Prompt: [Standard Claude Code system]           │
+│ User Message: &quot;You are Builder. Read architecture.md   │
+│                and implement all files...&quot;              │
+│                                                          │
+│ Agent&#039;s Actions:                                        │
+│ 1. Read .context-foundry/architecture.md (60KB)        │
+│    → Now has Scout + Architect knowledge combined      │
+│ 2. Create package.json (Vite, React, Tailwind)         │
+│ 3. Implement src/App.jsx (API calls, state mgmt)       │
+│ 4. Implement src/components/WeatherDisplay.jsx         │
+│ 5. Implement src/services/weatherApi.js                │
+│ 6. Create tests (Jest + React Testing Library)         │
+│ 7. Write build-log.md documenting what was created     │
+│                                                          │
+│ Token Usage: ~30,000 tokens                            │
+│   ├─ architecture.md: ~8,000 tokens                    │
+│   └─ code generation: ~22,000 tokens                   │
+└────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Output:</strong></p>
+<ul>
+<li>Files created: 12 source files (<code>src/</code>, <code>tests/</code>, config files)</li>
+<li>File created: <code>.context-foundry/build-log.md</code></li>
+</ul>
+<p><strong>build-log.md contents:</strong></p>
+<pre><code class="language-markdown"># Build Log: Weather App
+
+## Files Created
+
+### 1. package.json
+Dependencies installed:
+- react@^18.2.0
+- vite@^5.0.0
+- tailwindcss@^3.4.0
+- axios@^1.6.0 (API calls)
+
+Dev dependencies:
+- @vitejs/plugin-react
+- vitest (testing)
+- @testing-library/react
+
+**Rationale:** Following Architect&#039;s spec, using Vite for dev server (prevents CORS issue per Scout&#039;s warning)
+
+### 2. src/App.jsx (120 lines)
+State management:
+- city (default: &quot;London&quot;)
+- weatherData (null | WeatherResponse)
+- loading (boolean)
+- error (string | null)
+
+API integration:
+- fetchWeather() calls weatherApi.getCurrentWeather()
+- 10-minute caching to avoid rate limits (per Scout recommendation)
+
+### 3. src/services/weatherApi.js (80 lines)
+OpenWeatherMap integration:
+- API_KEY from import.meta.env.VITE_API_KEY
+- getCurrentWeather(city): Returns current weather
+- getForecast(city): Returns 5-day forecast
+- Error handling: Network errors, 404 (city not found), 401 (invalid API key)
+
+**Implementation Note:** Used axios for HTTP (better error handling than fetch)
+
+... [Detailed log of all 12 files]</code></pre>
+<p><strong>Agent Death:</strong></p>
+<pre><code class="">Builder Agent exits
+    ↓
+Context window: DISCARDED
+    ↓
+But 12 source files + build-log.md: PERSIST ON DISK</code></pre>
+<hr>
+<h4 id="phase-4-test-quality-assurance">Phase 4: Test (Quality Assurance)</h4>
+<p><strong>Input:</strong></p>
+<ul>
+<li>Files: All source code (just created)</li>
+<li>File: <code>.context-foundry/architecture.md</code> (testing plan section)</li>
+<li>Task: &quot;Run tests, fix failures&quot;</li>
+</ul>
+<p><strong>Processing:</strong></p>
+<pre><code class="">Test Agent Context Window (fresh 200K tokens):
+┌────────────────────────────────────────────────────────┐
+│ System Prompt: [Standard Claude Code system]           │
+│ User Message: &quot;You are Tester. Run tests...&quot;           │
+│                                                          │
+│ Agent&#039;s Actions:                                        │
+│ 1. Run: npm test                                        │
+│ 2. Parse test output                                    │
+│ 3. IF failures:                                         │
+│    a. Read failing test file                            │
+│    b. Read source file being tested                     │
+│    c. Analyze root cause                                │
+│    d. Write fixes-iteration-1.md                        │
+│    e. Update source files                               │
+│    f. Re-run tests                                      │
+│ 4. Write test-final-report.md                          │
+│                                                          │
+│ Token Usage: ~8,000 tokens (with self-healing)         │
+└────────────────────────────────────────────────────────┘</code></pre>
+<p><strong>Output:</strong></p>
+<ul>
+<li>File created: <code>.context-foundry/test-final-report.md</code></li>
+<li>Possibly: <code>.context-foundry/test-results-iteration-1.md</code>, <code>fixes-iteration-1.md</code></li>
+</ul>
+<hr>
+<h4 id="phases-5-7-documentation-deployment-feedback">Phases 5-7: Documentation, Deployment, Feedback</h4>
+<p><strong>Phase 5:</strong> Reads source code → Creates README.md, usage guides<br><strong>Phase 6:</strong> Runs git commands → Creates GitHub repo, pushes code<br><strong>Phase 7:</strong> Analyzes build → Extracts patterns → Updates pattern library</p>
+<p>Each phase follows the same pattern:</p>
+<ol>
+<li>Read previous artifacts</li>
+<li>Perform work</li>
+<li>Write new artifacts</li>
+<li>Agent dies (context discarded)</li>
+</ol>
+<hr>
+<h2 id="token-budget-allocation">Token Budget Allocation</h2>
+<h3 id="main-claude-code-window">Main Claude Code Window</h3>
+<pre><code class="">User Request (100 tokens):
+&quot;Build a weather app with current conditions and 5-day forecast&quot;
+
+MCP Tool Call (200 tokens):
+{
+  &quot;tool&quot;: &quot;autonomous_build_and_deploy_async&quot;,
+  &quot;params&quot;: {...}
+}
+
+MCP Response (100 tokens):
+{
+  &quot;task_id&quot;: &quot;abc-123&quot;,
+  &quot;status&quot;: &quot;started&quot;
+}
+
+Status Check (100 tokens):
+&quot;What&#039;s the status of task abc-123?&quot;
+
+Status Response (500 tokens):
+{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;github_url&quot;: &quot;...&quot;,
+  &quot;tests_passed&quot;: true,
+  ...
+}
+
+Claude&#039;s Summary (300 tokens):
+&quot;Your weather app is ready! Deployed to GitHub...&quot;
+
+───────────────────────────────────────────────────
+TOTAL MAIN WINDOW: ~1,300 tokens (0.65% of 200K)
+───────────────────────────────────────────────────</code></pre>
+<h3 id="delegated-claude-instance">Delegated Claude Instance</h3>
+<pre><code class="">Orchestrator Prompt (5,000 tokens):
+Full instructions for 7-phase workflow
+
+Phase 1: Scout (10,000 tokens):
+├─ Web research: 3,000 tokens
+├─ Pattern library reading: 2,000 tokens
+├─ Analysis and recommendations: 3,000 tokens
+└─ Writing scout-report.md: 2,000 tokens
+
+Phase 2: Architect (15,000 tokens):
+├─ Reading scout-report.md: 5,000 tokens
+├─ Architecture design: 7,000 tokens
+└─ Writing architecture.md: 3,000 tokens
+
+Phase 3: Builder (30,000 tokens):
+├─ Reading architecture.md: 8,000 tokens
+├─ Code generation (12 files): 20,000 tokens
+└─ Writing build-log.md: 2,000 tokens
+
+Phase 4: Test (8,000 tokens):
+├─ Running tests: 1,000 tokens
+├─ Reading test files: 2,000 tokens
+├─ Self-healing (if needed): 4,000 tokens
+└─ Writing test-final-report.md: 1,000 tokens
+
+Phase 5: Docs (3,000 tokens):
+├─ Reading source code: 1,000 tokens
+└─ Writing README.md: 2,000 tokens
+
+Phase 6: Deploy (2,000 tokens):
+├─ Git operations: 1,000 tokens
+└─ GitHub CLI calls: 1,000 tokens
+
+Phase 7: Feedback (5,000 tokens):
+├─ Analyzing build: 2,000 tokens
+├─ Pattern extraction: 2,000 tokens
+└─ Updating pattern library: 1,000 tokens
+
+───────────────────────────────────────────────────
+TOTAL DELEGATED: ~78,000 tokens (39% of 200K)
+───────────────────────────────────────────────────
+
+IMPACT ON MAIN WINDOW: 0 tokens (separate process!)</code></pre>
+<hr>
+<h2 id="why-agents-are-ephemeral">Why Agents Are Ephemeral</h2>
+<p><strong>Advantages of Ephemeral Agents:</strong></p>
+<h3 id="1-clean-slate-each-phase">1. <strong>Clean Slate Each Phase</strong></h3>
+<pre><code class="">Traditional Persistent Agent:
+Scout → Architect (in same conversation)
+    ├─ Architect has ALL Scout&#039;s raw research
+    ├─ Architect has ALL Scout&#039;s tangential thoughts
+    ├─ Architect has ALL Scout&#039;s discarded ideas
+    └─ Context window filling up with irrelevant history
+
+Context Foundry:
+Scout writes report → Scout dies → Architect reads report
+    ├─ Architect gets ONLY the essential findings
+    ├─ Architect&#039;s context is clean and focused
+    └─ No cognitive load from Scout&#039;s internal deliberation</code></pre>
+<h3 id="2-focused-attention">2. <strong>Focused Attention</strong></h3>
+<pre><code class="">Architect Agent sees:
+✅ scout-report.md (curated knowledge)
+
+Architect Agent does NOT see:
+❌ Scout&#039;s web search queries
+❌ Scout&#039;s pattern library exploration
+❌ Scout&#039;s internal reasoning
+❌ Scout&#039;s discarded alternatives
+
+Result: Cleaner, more focused design decisions</code></pre>
+<h3 id="3-predictable-behavior">3. <strong>Predictable Behavior</strong></h3>
+<pre><code class="">Persistent Agent State:
+Build 1: Scout discovers issue X
+Build 2: Scout might remember issue X (unpredictable!)
+    └─ May bias future builds based on past experiences
+
+Ephemeral Agent State:
+Build 1: Scout discovers issue X → Pattern library
+Build 2: Scout reads pattern library (predictable!)
+    └─ Consistent behavior driven by patterns, not memory</code></pre>
+<h3 id="4-no-state-pollution">4. <strong>No State Pollution</strong></h3>
+<pre><code class="">If Architect agent persisted:
+Build 1: Designs React app
+Build 2: Designs Python API
+    └─ Might leak React assumptions into Python design
+
+With ephemeral agents:
+Build 1: Architect designs React → Dies
+Build 2: Fresh Architect designs Python
+    └─ No cross-contamination!</code></pre>
+<hr>
+<h2 id="why-files-persist">Why Files Persist</h2>
+<p><strong>Files as the Single Source of Truth:</strong></p>
+<h3 id="1-durability">1. <strong>Durability</strong></h3>
+<pre><code class="">Agent Context (RAM):
+    ├─ Process dies → Context lost
+    └─ Volatile, temporary
+
+File System (Disk):
+    ├─ Process dies → Files remain
+    └─ Durable, permanent</code></pre>
+<h3 id="2-reviewability">2. <strong>Reviewability</strong></h3>
+<pre><code class="">You can review:
+✅ .context-foundry/scout-report.md        (Scout&#039;s findings)
+✅ .context-foundry/architecture.md        (Architect&#039;s plan)
+✅ .context-foundry/build-log.md           (Builder&#039;s implementation log)
+
+You CANNOT review:
+❌ Scout agent&#039;s conversation history       (discarded)
+❌ Architect agent&#039;s internal reasoning     (discarded)</code></pre>
+<h3 id="3-debuggability">3. <strong>Debuggability</strong></h3>
+<pre><code class="">Build fails at Phase 4 (Test):
+✅ Can read architecture.md to see what was planned
+✅ Can read build-log.md to see what was built
+✅ Can compare plan vs implementation to find discrepancy
+
+If using persistent agents:
+❌ Can&#039;t easily review what Scout decided
+❌ Can&#039;t easily review Architect&#039;s original plan
+❌ Would need to scroll through long conversation</code></pre>
+<h3 id="4-composability">4. <strong>Composability</strong></h3>
+<pre><code class="">File-based workflow:
+    ├─ Scout writes scout-report.md
+    ├─ Architect reads scout-report.md + writes architecture.md
+    ├─ Builder reads architecture.md + writes code
+    ├─ Test reads code + writes test-final-report.md
+    └─ Each phase is a pure function: Input Files → Output Files
+
+Agent-based workflow (without files):
+    ├─ Scout remembers findings
+    ├─ Architect remembers Scout + own decisions
+    ├─ Builder remembers Scout + Architect + implementation
+    └─ Accumulating context, tight coupling, hard to modify</code></pre>
+<hr>
+<h2 id="information-loss-analysis">Information Loss Analysis</h2>
+<p><strong>Question:</strong> Does anything get lost when agents die?</p>
+<p><strong>Analysis:</strong></p>
+<h3 id="what-is-lost-by-design">What IS Lost (By Design)</h3>
+<pre><code class="">✅ Good to lose:
+├─ Scout&#039;s web search queries (&quot;weather api&quot; → 10 results)
+├─ Scout&#039;s exploration of dead-ends (considered WeatherStack API, rejected it)
+├─ Architect&#039;s internal deliberation (&quot;should I use Redux? No, too heavy for this.&quot;)
+├─ Builder&#039;s intermediate attempts (tried import X, syntax error, used import Y instead)
+└─ All conversation turns between agent and Claude Code
+
+Why good to lose:
+→ Reduces noise
+→ Focuses on decisions, not process
+→ Keeps subsequent phases efficient
+→ Prevents context window bloat</code></pre>
+<h3 id="what-is-not-lost-preserved-in-files">What Is NOT Lost (Preserved in Files)</h3>
+<pre><code class="">✅ Preserved:
+├─ Scout&#039;s recommendations (in scout-report.md)
+├─ Scout&#039;s risk warnings (in scout-report.md)
+├─ Architect&#039;s complete plan (in architecture.md)
+├─ Architect&#039;s file specifications (in architecture.md)
+├─ Builder&#039;s implementation log (in build-log.md)
+├─ Test results and fixes (in test-final-report.md)
+└─ Pattern library updates (in patterns/*.json)
+
+Why preserved:
+→ Essential knowledge
+→ Needed by subsequent phases
+→ Needed for debugging
+→ Needed for pattern learning</code></pre>
+<h3 id="test-can-you-reconstruct-the-build">Test: Can You Reconstruct the Build?</h3>
+<pre><code class="">Given ONLY the artifacts:
+✅ scout-report.md → Understand why tech choices were made
+✅ architecture.md → Understand system design
+✅ build-log.md → Understand implementation details
+✅ test-final-report.md → Understand quality validation
+✅ session-summary.json → Understand build outcome
+
+Could you understand the project without agent conversations?
+→ YES! Files contain all essential knowledge.
+
+Could you continue development without agent conversations?
+→ YES! Future builds read artifacts + pattern library.</code></pre>
+<p><strong>Conclusion:</strong> Zero essential information loss!</p>
+<hr>
+<h2 id="comparison-with-persistent-agents">Comparison with Persistent Agents</h2>
+<h3 id="persistent-agent-architecture-hypothetical">Persistent Agent Architecture (Hypothetical)</h3>
+<pre><code class="">┌──────────────────────────────────────────────────────────┐
+│ Single Persistent Agent (200K token context)              │
+├──────────────────────────────────────────────────────────┤
+│                                                            │
+│ Phase 1: Scout Research (10,000 tokens)                   │
+│    Context: [System + Scout work] = 15,000 tokens         │
+│                                                            │
+│ Phase 2: Architect Design (15,000 tokens)                 │
+│    Context: [System + Scout + Architect] = 30,000 tokens  │
+│                                                            │
+│ Phase 3: Builder Implement (30,000 tokens)                │
+│    Context: [System + Scout + Arch + Builder] = 60K       │
+│                                                            │
+│ Phase 4: Test Validate (8,000 tokens)                     │
+│    Context: [All above + Test] = 68,000 tokens            │
+│                                                            │
+│ Phase 5: Documentation (3,000 tokens)                     │
+│    Context: [All above + Docs] = 71,000 tokens            │
+│                                                            │
+│ Phase 6: Deploy (2,000 tokens)                            │
+│    Context: [All above + Deploy] = 73,000 tokens          │
+│                                                            │
+│ Phase 7: Feedback (5,000 tokens)                          │
+│    Context: [All above + Feedback] = 78,000 tokens        │
+│                                                            │
+│ Problems:                                                  │
+│ ❌ Single build uses 39% of context (can only do 2-3)     │
+│ ❌ Each build adds to context (eventually hits limit)     │
+│ ❌ Earlier phases get truncated as context fills          │
+│ ❌ Agent accumulates bias from previous builds            │
+│ ❌ Can&#039;t parallelize (one agent, one context)             │
+└──────────────────────────────────────────────────────────┘</code></pre>
+<h3 id="context-foundry-architecture-actual">Context Foundry Architecture (Actual)</h3>
+<pre><code class="">┌──────────────────────────────────────────────────────────┐
+│ Ephemeral Agents + Files (200K tokens per agent)          │
+├──────────────────────────────────────────────────────────┤
+│                                                            │
+│ Phase 1: Scout Agent (fresh 200K context)                 │
+│    Context: [System + Scout] = 15,000 tokens              │
+│    Output: scout-report.md → Disk                         │
+│    Agent: DIES (context freed)                            │
+│                                                            │
+│ Phase 2: Architect Agent (fresh 200K context)             │
+│    Input: scout-report.md from disk                       │
+│    Context: [System + scout-report.md + Arch] = 18,000    │
+│    Output: architecture.md → Disk                         │
+│    Agent: DIES (context freed)                            │
+│                                                            │
+│ Phase 3: Builder Agent (fresh 200K context)               │
+│    Input: architecture.md from disk                       │
+│    Context: [System + architecture.md + Build] = 38,000   │
+│    Output: source code → Disk                             │
+│    Agent: DIES (context freed)                            │
+│                                                            │
+│ ... Phases 4-7 follow same pattern ...                    │
+│                                                            │
+│ Benefits:                                                  │
+│ ✅ Each agent gets fresh 200K context                     │
+│ ✅ No context accumulation across builds                  │
+│ ✅ No truncation of earlier phases                        │
+│ ✅ Can run infinite builds without filling context        │
+│ ✅ Can parallelize (spawn multiple delegated instances)   │
+│ ✅ Each build is deterministic (no accumulated bias)      │
+└──────────────────────────────────────────────────────────┘</code></pre>
+<hr>
+<h2 id="visual-diagrams">Visual Diagrams</h2>
+<h3 id="context-flow-diagram">Context Flow Diagram</h3>
+<pre><code class="">USER REQUEST
+     │
+     │ &quot;Build weather app&quot;
+     │
+     ↓
+┌────────────────────────────────────────────────────┐
+│ MAIN CLAUDE WINDOW (stays clean)                   │
+│ Context Used: &lt; 1%                                 │
+└─────────────────┬──────────────────────────────────┘
+                  │
+                  │ Spawns subprocess
+                  │
+                  ↓
+┌─────────────────────────────────────────────────────┐
+│ DELEGATED INSTANCE (isolated context)               │
+│                                                      │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ PHASE 1: SCOUT AGENT                          │   │
+│ │ Context: [System + Task] = 15K tokens        │   │
+│ │                                               │   │
+│ │ Actions:                                      │   │
+│ │  - Web research                               │   │
+│ │  - Pattern library check                      │   │
+│ │  - Technology recommendations                 │   │
+│ │                                               │   │
+│ │ Output: scout-report.md ──┐                  │   │
+│ └───────────────────────────┼──────────────────┘   │
+│                              │                       │
+│                              ↓ File persists         │
+│                            DISK                      │
+│ [Agent dies, context freed]  │                      │
+│                              ↓ Next agent reads     │
+│                                                      │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ PHASE 2: ARCHITECT AGENT                      │   │
+│ │ Context: [System + scout-report.md] = 18K    │   │
+│ │                                               │   │
+│ │ Actions:                                      │   │
+│ │  - Read scout-report.md (5K tokens)          │   │
+│ │  - Design architecture                        │   │
+│ │  - Plan file structure                        │   │
+│ │                                               │   │
+│ │ Output: architecture.md ──┐                  │   │
+│ └───────────────────────────┼──────────────────┘   │
+│                              │                       │
+│                              ↓ File persists         │
+│                            DISK                      │
+│ [Agent dies, context freed]  │                      │
+│                              ↓ Next agent reads     │
+│                                                      │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ PHASE 3: BUILDER AGENT                        │   │
+│ │ Context: [System + architecture.md] = 38K    │   │
+│ │                                               │   │
+│ │ Actions:                                      │   │
+│ │  - Read architecture.md (8K tokens)          │   │
+│ │  - Implement all source files                │   │
+│ │  - Create tests                               │   │
+│ │                                               │   │
+│ │ Output: 12 source files ──┐                  │   │
+│ │         build-log.md ──────┤                 │   │
+│ └────────────────────────────┼─────────────────┘   │
+│                              │                       │
+│                              ↓ Files persist         │
+│                            DISK                      │
+│ [Agent dies, context freed]  │                      │
+│                              ↓ Test phase runs       │
+│                                                      │
+│ ... Phases 4-7 continue ...                         │
+│                                                      │
+│ Final Output:                                       │
+│  - Complete project on disk                         │
+│  - GitHub repository                                │
+│  - Pattern library updated                          │
+│  - session-summary.json                             │
+└─────────────────────────────────────────────────────┘
+                       │
+                       │ Returns summary
+                       ↓
+┌─────────────────────────────────────────────────────┐
+│ MAIN CLAUDE WINDOW                                   │
+│ Shows: &quot;Build complete! GitHub: github.com/...&quot;     │
+│ Context Used: Still &lt; 1%                            │
+└─────────────────────────────────────────────────────┘</code></pre>
+<hr>
+<h2 id="faq">FAQ</h2>
+<h3 id="q-if-scouts-context-is-discarded-how-does-architect-know-what-scout-researched">Q: If Scout&#39;s context is discarded, how does Architect know what Scout researched?</h3>
+<p><strong>A:</strong> Architect reads <code>scout-report.md</code> which contains Scout&#39;s findings.</p>
+<p><strong>Analogy:</strong> Scout writes a research paper, then quits the job. Architect reads the research paper and has all the knowledge needed.</p>
+<hr>
+<h3 id="q-doesnt-architect-miss-nuance-by-only-reading-the-report-not-seeing-scouts-reasoning">Q: Doesn&#39;t Architect miss nuance by only reading the report, not seeing Scout&#39;s reasoning?</h3>
+<p><strong>A:</strong> The report IS the refined reasoning. Scout&#39;s job is to distill research into actionable recommendations. Raw exploration (dead ends, tangents) is noise, not signal.</p>
+<p><strong>Analogy:</strong> You read a scientific paper&#39;s conclusion and methodology. You don&#39;t need to see the researcher&#39;s 1000 failed experiments.</p>
+<hr>
+<h3 id="q-what-if-scout-made-a-mistake-thats-not-obvious-from-the-report">Q: What if Scout made a mistake that&#39;s not obvious from the report?</h3>
+<p><strong>A:</strong> Two-layer validation:</p>
+<ol>
+<li><p><strong>Architect reviews Scout&#39;s recommendations</strong></p>
+<ul>
+<li>Can disagree with Scout</li>
+<li>Can add missing considerations</li>
+<li>Can flag risks Scout missed</li>
+</ul>
+</li>
+<li><p><strong>Test phase validates Builder&#39;s implementation</strong></p>
+<ul>
+<li>Self-healing catches bugs</li>
+<li>Can trace back to Architect → Scout if needed</li>
+</ul>
+</li>
+</ol>
+<p><strong>Pattern library prevents repeated mistakes</strong> - if Scout misses something and it causes issues, Feedback phase adds it to patterns for future builds.</p>
+<hr>
+<h3 id="q-is-there-a-performance-cost-to-reading-files-vs-having-conversation-context">Q: Is there a performance cost to reading files vs. having conversation context?</h3>
+<p><strong>A:</strong> No meaningful cost:</p>
+<pre><code class="">Reading scout-report.md (40KB):
+- Time: &lt; 100ms
+- Tokens: ~5,000 (well within budget)
+
+Persistent conversation (hypothetical):
+- Time: 0ms (already in context)
+- Tokens: ~10,000 (raw research + report)
+
+Trade-off:
+✅ File reading: Cleaner context, better for parallel builds
+❌ Persistent conversation: Marginally faster (by 100ms), but context bloats</code></pre>
+<p><strong>Verdict:</strong> 100ms is negligible compared to 7-15 minute build time. Clean context is worth it.</p>
+<hr>
+<h3 id="q-could-agents-share-context-via-message-passing-instead-of-files">Q: Could agents share context via message passing instead of files?</h3>
+<p><strong>A:</strong> Technically yes, but defeats the purpose:</p>
+<pre><code class="">Message Passing:
+Scout Agent → [sends JSON] → Architect Agent
+    ├─ Both must be alive simultaneously (no parallelization)
+    ├─ Tight coupling (can&#039;t inspect messages easily)
+    └─ Not persistent (message lost if crash)
+
+File-Based:
+Scout Agent → [writes file] → Dies → Architect Agent → [reads file]
+    ├─ Agents can run sequentially or in parallel
+    ├─ Loose coupling (can inspect/edit files)
+    └─ Persistent (survives crashes, user can review)</code></pre>
+<p><strong>File-based is superior for this use case.</strong></p>
+<hr>
+<h3 id="q-whats-the-largest-file-an-agent-writes">Q: What&#39;s the largest file an agent writes?</h3>
+<p><strong>A:</strong> Measured in production builds:</p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>File</th>
+<th>Typical Size</th>
+<th>Max Tokens</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>scout-report.md</td>
+<td>30-60KB</td>
+<td>~8,000</td>
+</tr>
+<tr>
+<td>architecture.md</td>
+<td>40-90KB</td>
+<td>~12,000</td>
+</tr>
+<tr>
+<td>build-log.md</td>
+<td>10-30KB</td>
+<td>~4,000</td>
+</tr>
+<tr>
+<td>test-final-report.md</td>
+<td>5-15KB</td>
+<td>~2,000</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>All well within</strong> Claude&#39;s 200K token context window.</p>
+<hr>
+<h3 id="q-can-i-review-the-artifacts-while-build-is-running">Q: Can I review the artifacts while build is running?</h3>
+<p><strong>A:</strong> YES! Files are written in real-time:</p>
+<pre><code class="language-bash"># Start build
+# Build a weather app in /tmp/weather-app
+
+# In another terminal, tail the scout report as it&#039;s being written:
+tail -f /tmp/weather-app/.context-foundry/scout-report.md
+
+# Or check which phase is currently running:
+ls -lt /tmp/weather-app/.context-foundry/</code></pre>
+<p><strong>Real-time transparency</strong> into the build process.</p>
+<hr>
+<h2 id="summary">Summary</h2>
+<p><strong>How Context Foundry Preserves Context:</strong></p>
+<p>✅ <strong>Agents are ephemeral</strong> (context discarded after each phase)<br>✅ <strong>Files are persistent</strong> (knowledge written to disk)<br>✅ <strong>Agents read previous artifacts</strong> (file-based information transfer)<br>✅ <strong>No information loss</strong> (all essential knowledge preserved)<br>✅ <strong>Clean context each phase</strong> (no accumulated noise)<br>✅ <strong>Reviewable artifacts</strong> (you can inspect files anytime)<br>✅ <strong>Debuggable builds</strong> (trace decisions through artifacts)</p>
+<p><strong>The Result:</strong><br>Perfect information continuity with zero context bloat. Agents disappear, knowledge persists.</p>
+<hr>
+<p><strong>For More Information:</strong></p>
+<ul>
+<li><a href="MCP_SERVER_ARCHITECTURE.md">MCP_SERVER_ARCHITECTURE.md</a> - Technical implementation</li>
+<li><a href="DELEGATION_MODEL.md">DELEGATION_MODEL.md</a> - Why delegation keeps main context clean</li>
+<li><a href="../FAQ.md">FAQ.md</a> - Frequently asked questions</li>
+<li><a href="../README.md">README.md</a> - Quick start guide</li>
+</ul>
+<hr>
+<p><strong>Version:</strong> 2.0.1 | <strong>Last Updated:</strong> October 2025</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/technical/architecture-diagrams" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Architecture Diagrams</span>
+            </a>
+
+            <a href="/docs/technical/delegation-model" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Delegation Model</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#the-paradox" class="toc-link" data-heading-id="the-paradox">
+                  The Paradox
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-context-flows" class="toc-link" data-heading-id="how-context-flows">
+                  How Context Flows
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#information-transfer-mechanism" class="toc-link" data-heading-id="information-transfer-mechanism">
+                          Information Transfer Mechanism
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#step-by-step-trace" class="toc-link" data-heading-id="step-by-step-trace">
+                  Step-by-Step Trace
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#complete-information-flow" class="toc-link" data-heading-id="complete-information-flow">
+                          Complete Information Flow
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-1-scout-research" class="toc-link" data-heading-id="phase-1-scout-research">
+                                  Phase 1: Scout (Research)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-2-architect-design" class="toc-link" data-heading-id="phase-2-architect-design">
+                                  Phase 2: Architect (Design)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-3-builder-implementation" class="toc-link" data-heading-id="phase-3-builder-implementation">
+                                  Phase 3: Builder (Implementation)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-4-test-quality-assurance" class="toc-link" data-heading-id="phase-4-test-quality-assurance">
+                                  Phase 4: Test (Quality Assurance)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phases-5-7-documentation-deployment-feedback" class="toc-link" data-heading-id="phases-5-7-documentation-deployment-feedback">
+                                  Phases 5-7: Documentation, Deployment, Feedback
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#token-budget-allocation" class="toc-link" data-heading-id="token-budget-allocation">
+                  Token Budget Allocation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#main-claude-code-window" class="toc-link" data-heading-id="main-claude-code-window">
+                          Main Claude Code Window
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegated-claude-instance" class="toc-link" data-heading-id="delegated-claude-instance">
+                          Delegated Claude Instance
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#why-agents-are-ephemeral" class="toc-link" data-heading-id="why-agents-are-ephemeral">
+                  Why Agents Are Ephemeral
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-clean-slate-each-phase" class="toc-link" data-heading-id="1-clean-slate-each-phase">
+                          1. Clean Slate Each Phase
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-focused-attention" class="toc-link" data-heading-id="2-focused-attention">
+                          2. Focused Attention
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#3-predictable-behavior" class="toc-link" data-heading-id="3-predictable-behavior">
+                          3. Predictable Behavior
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#4-no-state-pollution" class="toc-link" data-heading-id="4-no-state-pollution">
+                          4. No State Pollution
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#why-files-persist" class="toc-link" data-heading-id="why-files-persist">
+                  Why Files Persist
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-durability" class="toc-link" data-heading-id="1-durability">
+                          1. Durability
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-reviewability" class="toc-link" data-heading-id="2-reviewability">
+                          2. Reviewability
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#3-debuggability" class="toc-link" data-heading-id="3-debuggability">
+                          3. Debuggability
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#4-composability" class="toc-link" data-heading-id="4-composability">
+                          4. Composability
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#information-loss-analysis" class="toc-link" data-heading-id="information-loss-analysis">
+                  Information Loss Analysis
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-is-lost-by-design" class="toc-link" data-heading-id="what-is-lost-by-design">
+                          What IS Lost (By Design)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-is-not-lost-preserved-in-files" class="toc-link" data-heading-id="what-is-not-lost-preserved-in-files">
+                          What Is NOT Lost (Preserved in Files)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#test-can-you-reconstruct-the-build" class="toc-link" data-heading-id="test-can-you-reconstruct-the-build">
+                          Test: Can You Reconstruct the Build?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#comparison-with-persistent-agents" class="toc-link" data-heading-id="comparison-with-persistent-agents">
+                  Comparison with Persistent Agents
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#persistent-agent-architecture-hypothetical" class="toc-link" data-heading-id="persistent-agent-architecture-hypothetical">
+                          Persistent Agent Architecture (Hypothetical)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#context-foundry-architecture-actual" class="toc-link" data-heading-id="context-foundry-architecture-actual">
+                          Context Foundry Architecture (Actual)
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#visual-diagrams" class="toc-link" data-heading-id="visual-diagrams">
+                  Visual Diagrams
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#context-flow-diagram" class="toc-link" data-heading-id="context-flow-diagram">
+                          Context Flow Diagram
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#faq" class="toc-link" data-heading-id="faq">
+                  FAQ
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-if-scouts-context-is-discarded-how-does-architect-know-what-scout-researched" class="toc-link" data-heading-id="q-if-scouts-context-is-discarded-how-does-architect-know-what-scout-researched">
+                          Q: If Scout&#x27;s context is discarded, how does Architect know what Scout researched?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-doesnt-architect-miss-nuance-by-only-reading-the-report-not-seeing-scouts-reasoning" class="toc-link" data-heading-id="q-doesnt-architect-miss-nuance-by-only-reading-the-report-not-seeing-scouts-reasoning">
+                          Q: Doesn&#x27;t Architect miss nuance by only reading the report, not seeing Scout&#x27;s reasoning?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-what-if-scout-made-a-mistake-thats-not-obvious-from-the-report" class="toc-link" data-heading-id="q-what-if-scout-made-a-mistake-thats-not-obvious-from-the-report">
+                          Q: What if Scout made a mistake that&#x27;s not obvious from the report?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-is-there-a-performance-cost-to-reading-files-vs-having-conversation-context" class="toc-link" data-heading-id="q-is-there-a-performance-cost-to-reading-files-vs-having-conversation-context">
+                          Q: Is there a performance cost to reading files vs. having conversation context?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-could-agents-share-context-via-message-passing-instead-of-files" class="toc-link" data-heading-id="q-could-agents-share-context-via-message-passing-instead-of-files">
+                          Q: Could agents share context via message passing instead of files?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-whats-the-largest-file-an-agent-writes" class="toc-link" data-heading-id="q-whats-the-largest-file-an-agent-writes">
+                          Q: What&#x27;s the largest file an agent writes?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#q-can-i-review-the-artifacts-while-build-is-running" class="toc-link" data-heading-id="q-can-i-review-the-artifacts-while-build-is-running">
+                          Q: Can I review the artifacts while build is running?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

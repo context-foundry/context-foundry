@@ -1,0 +1,2024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overview | Context Foundry Documentation</title>
+  <meta name="description" content="&gt; The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP &gt; Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build...">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/getting-started/readme">
+  <meta property="og:title" content="Overview">
+  <meta property="og:description" content="&gt; The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP &gt; Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build...">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Overview">
+  <meta name="twitter:description" content="&gt; The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP &gt; Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build...">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/getting-started/readme">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/getting-started" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Overview</h1>
+
+        <div class="doc-body">
+          <div align="center">
+  <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
+</div>
+
+<h1 id="context-foundry">🏭 Context Foundry</h1>
+<blockquote><p><strong>The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP</strong><br>Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.</p>
+</blockquote>
+<p><strong>Version 2.1.0 - October 2025</strong></p>
+<blockquote><p><strong>📌 Version Note:</strong> This is Context Foundry <strong>v2.x</strong> (MCP server for Claude Code). For the legacy <strong>v1.0</strong> Python CLI with multi-provider support, see the <a href="https://github.com/context-foundry/context-foundry/tree/v1.x-legacy" target="_blank" rel="noopener noreferrer"><code>v1.x-legacy</code> branch <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a> or download <a href="https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final" target="_blank" rel="noopener noreferrer"><code>v1.0-final</code> release <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>.</p>
+</blockquote>
+<hr>
+<h2 id="what-is-context-foundry">What is Context Foundry?</h2>
+<p>Context Foundry is an <strong>MCP (Model Context Protocol) server</strong> that empowers Claude Code CLI to build complete software projects autonomously with <strong>self-healing test loops</strong> and <strong>automatic GitHub deployment</strong>.</p>
+<p>Unlike traditional AI coding tools that require constant supervision, Context Foundry lets you describe what you want and <strong>walk away</strong> while it:</p>
+<ul>
+<li>Researches requirements (Scout phase)</li>
+<li>Designs architecture (Architect phase)</li>
+<li>Implements code with tests (Builder phase)</li>
+<li>Auto-fixes test failures (Test phase with self-healing)</li>
+<li><strong>Captures screenshots automatically</strong> (Screenshot phase - NEW!)</li>
+<li>Documents everything with visual guides (Documentation phase)</li>
+<li>Deploys to GitHub (Deployment phase)</li>
+</ul>
+<p><strong>Real Example:</strong></p>
+<pre><code class="">User: &quot;Build a Mario platformer game in JavaScript&quot;
+[User walks away for 7 minutes]
+Result: ✅ Complete game deployed to GitHub, all tests passing</code></pre>
+<hr>
+<h2 id="the-breakthrough-meta-mcp-innovation">🚀 The Breakthrough: Meta-MCP Innovation</h2>
+<p><strong>What makes Context Foundry unique?</strong> Most MCP servers call external tools. Context Foundry does something radical: <strong>it uses MCP to recursively spawn Claude Code itself</strong>.</p>
+<pre class="mermaid">graph LR
+    A[Your Claude Session] --&gt;|&quot;Build a weather app&quot;| B[MCP Server]
+    B --&gt;|Spawns| C[Fresh Claude Instance #1]
+    C --&gt;|Spawns| D[Fresh Claude Instance #2]
+    C --&gt;|Spawns| E[Fresh Claude Instance #3]
+    D --&gt;|100% Complete| C
+    E --&gt;|100% Complete| C
+    C --&gt;|✅ Deployed to GitHub| A
+
+    style A fill:#e1f5ff
+    style B fill:#fff3cd
+    style C fill:#d4edda
+    style D fill:#d4edda
+    style E fill:#d4edda</pre>
+<p><strong>The paradigm shift:</strong></p>
+<ul>
+<li><strong>Traditional MCP</strong>: Claude → MCP → External System (database, API, etc.)</li>
+<li><strong>Context Foundry</strong>: Claude → MCP → <strong>Claude</strong> (recursive spawning)</li>
+</ul>
+<p><strong>Why this matters:</strong></p>
+<ul>
+<li>🧠 <strong>Fresh 200K context windows</strong> - Each spawned Claude starts clean, no token accumulation</li>
+<li>🔄 <strong>Parallel execution</strong> - Multiple Claude instances work simultaneously</li>
+<li>🎯 <strong>Autonomous decision-making</strong> - Agents decide when to spawn new agents</li>
+<li>🏗️ <strong>Self-orchestration</strong> - AI orchestrates AI through meta-prompts</li>
+</ul>
+<p><strong>Learn more:</strong> Read the complete technical breakdown in <strong><a href="docs/INNOVATIONS.md">docs/INNOVATIONS.md</a></strong> - all 15 innovations explained with code examples.</p>
+<hr>
+<h2 id="see-it-in-action-evolution-quest">🎮 See It In Action: Evolution Quest</h2>
+<p><strong>Real build example</strong> - Watch Context Foundry autonomously build a complete game from a simple request:</p>
+<h3 id="starting-the-build">Starting the Build</h3>
+<p><img src="docs/screenshots/EvolutionQuestBeingBuilt.png" alt="Evolution Quest - Build Starting" loading="lazy" /><br><em>User makes a request, then walks away. Context Foundry&#39;s autonomous workflow begins.</em></p>
+<h3 id="guided-progress-updates">Guided Progress Updates</h3>
+<p><img src="docs/screenshots/BuildStatusUpdate1.png" alt="Build Status Update 1" loading="lazy" /><br><em>Scout phase completes research. Architect phase designs the game architecture. Builder phase begins implementation.</em></p>
+<p><img src="docs/screenshots/BuildStatusUpdate2.png" alt="Build Status Update 2" loading="lazy" /><br><em>Tests running and passing. Self-healing test loop ensures quality. Screenshot capture phase documents the UI.</em></p>
+<h3 id="build-complete">Build Complete</h3>
+<p><img src="docs/screenshots/BuildStatusComplete.png" alt="Build Complete" loading="lazy" /><br><em>All phases complete automatically. Tests passing. Documentation generated. Ready for deployment.</em></p>
+<h3 id="the-result">The Result</h3>
+<p><img src="docs/screenshots/App_Ready_to_Play.png" alt="Evolution Quest - Ready to Play" loading="lazy" /><br><em>Complete, working game deployed to GitHub with tests, documentation, and screenshots. Total time: 12 minutes. User interaction: Just the initial request.</em></p>
+<p><strong>Key Takeaway:</strong> User described what they wanted, walked away, came back to a finished, tested, documented, and deployed application.</p>
+<hr>
+<h2 id="just-ask-naturally-no-commands-to-memorize">💬 Just Ask Naturally (No Commands to Memorize!)</h2>
+<p><strong>The easiest way to use Context Foundry:</strong> Just describe what you want in plain English.</p>
+<h3 id="say-this">✅ Say This</h3>
+<pre><code class="">Build a weather app with current weather and 5-day forecast
+using the OpenWeatherMap API</code></pre>
+<pre><code class="">Create a todo app with add, complete, and delete functionality</code></pre>
+<pre><code class="">Make a REST API with user authentication and PostgreSQL</code></pre>
+<p><strong>That&#39;s it!</strong> Claude Code automatically uses Context Foundry&#39;s autonomous build system. No need to remember tool names or syntax.</p>
+<h3 id="quick-start">📚 Quick Start</h3>
+<p><strong>1. One-time setup</strong> (2 minutes) - See <a href="QUICKSTART.md">QUICKSTART.md</a></p>
+<p><strong>2. Start Claude Code:</strong></p>
+<pre><code class="language-bash">claude</code></pre>
+<p><strong>3. Just ask:</strong></p>
+<pre><code class="">Build a calculator app with basic and scientific functions</code></pre>
+<p><strong>4. Walk away</strong> - System builds autonomously (7-15 min)</p>
+<p><strong>5. Get results</strong> - Deployed to GitHub with tests and docs</p>
+<h3 id="say-this-not-that">🎯 Say This, Not That</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>✅ Say This (Easy)</th>
+<th>❌ Not This (Hard)</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>&quot;Build a blog with React&quot;</td>
+<td>&quot;Use mcp__autonomous_build_and_deploy with task: &#39;Build a blog&#39;, working_directory: &#39;/tmp/blog&#39;, ...&quot;</td>
+</tr>
+<tr>
+<td>&quot;Create a Snake game&quot;</td>
+<td>&quot;I need to call the autonomous build tool with parameters...&quot;</td>
+</tr>
+<tr>
+<td>&quot;Make a weather API&quot;</td>
+<td>&quot;How do I use the MCP server to build an API?&quot;</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Claude Code handles the MCP calls automatically when you ask to build something!</strong></p>
+<h3 id="tips-for-best-results">💡 Tips for Best Results</h3>
+<p><strong>Be specific:</strong></p>
+<pre><code class="">Build a weather app with:
+- Current weather display
+- 5-day forecast
+- City search
+- Temperature unit toggle
+- Responsive design</code></pre>
+<p><strong>Include tech requirements:</strong></p>
+<pre><code class="">Create a REST API using Express.js, PostgreSQL, and JWT authentication
+with comprehensive tests and error handling</code></pre>
+<p><strong>Want to learn more?</strong> → <a href="QUICKSTART.md">QUICKSTART.md</a> for 5-minute tutorial</p>
+<hr>
+<h2 id="key-innovations">🎨 Key Innovations</h2>
+<p>Context Foundry introduces <strong>15 groundbreaking innovations</strong> that transform AI software development. Here&#39;s a quick overview organized by category:</p>
+<h3 id="architecture-innovations">🏗️ Architecture Innovations</h3>
+<ol>
+<li><strong>Meta-MCP Innovation</strong> - Use MCP to recursively spawn Claude Code instances (the breakthrough that enabled v2.0)</li>
+<li><strong>Subprocess Delegation</strong> - Spawn fresh Claude instances via <code>subprocess.Popen()</code> with auth inheritance</li>
+<li><strong>Context Window Isolation</strong> - Each agent gets a fresh 200K token window, no accumulation</li>
+<li><strong>File-Based Context System</strong> - Shared memory via filesystem, <code>.context-foundry/</code> artifacts</li>
+<li><strong>Markdown-First Design</strong> - <code>.md</code> files over JSON for human+AI readability</li>
+</ol>
+<h3 id="automation-innovations">🤖 Automation Innovations</h3>
+<ol start="6">
+<li><strong>Self-Healing Test Loop</strong> - Auto-fix test failures through redesign→rebuild→retest cycles</li>
+<li><strong>Parallel Execution Architecture</strong> - Phase 2.5 and 4.5 spawn concurrent agents (30-45% faster)</li>
+<li><strong>Meta-Prompt Orchestration</strong> - AI orchestrates AI via <code>orchestrator_prompt.txt</code> (no Python)</li>
+<li><strong>8-Phase Workflow</strong> - Scout→Architect→Builder→Test→Screenshot→Docs→Deploy→Feedback</li>
+<li><strong>Async Task Management</strong> - Non-blocking subprocess execution, work while builds run</li>
+</ol>
+<h3 id="intelligence-innovations">🧠 Intelligence Innovations</h3>
+<ol start="11">
+<li><strong>Global Pattern Learning</strong> - Cross-project knowledge accumulation in <code>~/.context-foundry/patterns/</code> with automatic community sharing</li>
+<li><strong>Output Truncation Strategy</strong> - 45-45-10 split keeps critical context visible</li>
+</ol>
+<h3 id="user-experience-innovations">🎨 User Experience Innovations</h3>
+<ol start="13">
+<li><strong>Screenshot Capture Phase</strong> - Playwright-based visual documentation (Phase 4.5)</li>
+<li><strong>TUI Real-time Monitoring</strong> - Textual framework terminal dashboard</li>
+<li><strong>Livestream Integration</strong> - WebSocket-based remote monitoring</li>
+</ol>
+<p><strong>Want the complete technical breakdown?</strong> See <strong><a href="docs/INNOVATIONS.md">docs/INNOVATIONS.md</a></strong> for in-depth explanations with code examples, real-world impact analysis, and paradigm shifts for each innovation.</p>
+<h3 id="what-changed-from-1x">What Changed from 1.x?</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Feature</th>
+<th>1.x (Python CLI)</th>
+<th>2.0 (MCP Server)</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Orchestration</strong></td>
+<td>Python scripts + API calls</td>
+<td>Native Claude <code>/agents</code> + meta-prompts</td>
+</tr>
+<tr>
+<td><strong>Cost Model</strong></td>
+<td>Pay-per-token API</td>
+<td>Claude Max subscription ($20/month unlimited)</td>
+</tr>
+<tr>
+<td><strong>Testing</strong></td>
+<td>Manual review at checkpoints</td>
+<td>Self-healing auto-fix loops</td>
+</tr>
+<tr>
+<td><strong>Deployment</strong></td>
+<td>Manual git operations</td>
+<td>Automatic GitHub deployment</td>
+</tr>
+<tr>
+<td><strong>Tool Access</strong></td>
+<td>Limited to Python functions</td>
+<td>Full Claude Code tool suite (Read, Edit, Bash, etc.)</td>
+</tr>
+<tr>
+<td><strong>Context</strong></td>
+<td>API conversation history</td>
+<td>File-based artifacts (.context-foundry/)</td>
+</tr>
+<tr>
+<td><strong>Providers</strong></td>
+<td>7 AI providers supported</td>
+<td>Claude only (optimized for quality)</td>
+</tr>
+<tr>
+<td><strong>Complexity</strong></td>
+<td>~3000 lines of Python</td>
+<td>~1400 lines (MCP + meta-prompt)</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Want the technical details?</strong> See <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a> for comprehensive explanations of what changed and why.</p>
+<p><strong>Using Context Foundry 1.x?</strong> The Python CLI is preserved in <code>LEGACY_README.md</code> and still functional.</p>
+<hr>
+<h2 id="how-it-works-8-phase-architecture">🔄 How It Works: 8-Phase Architecture</h2>
+<p>Context Foundry orchestrates autonomous builds through <strong>8 distinct phases</strong>, with parallel execution at key stages for maximum performance:</p>
+<pre class="mermaid">graph TD
+    START[User Request] --&gt; P1[Phase 1: Scout]
+    P1 --&gt; P2[Phase 2: Architect]
+    P2 --&gt; P25[Phase 2.5: Parallel Builders]
+
+    P25 --&gt; B1[Builder Agent #1]
+    P25 --&gt; B2[Builder Agent #2]
+    P25 --&gt; B3[Builder Agent #N...]
+
+    B1 --&gt; P3[Phase 3: Integration]
+    B2 --&gt; P3
+    B3 --&gt; P3
+
+    P3 --&gt; P4[Phase 4: Test]
+    P4 --&gt;|Tests Pass| P45[Phase 4.5: Screenshot Capture]
+    P4 --&gt;|Tests Fail| HEAL{Self-Healing Loop}
+
+    HEAL --&gt;|Iteration &lt; 3| P2
+    HEAL --&gt;|Max Iterations| FAIL[Report Failure]
+
+    P45 --&gt; P5[Phase 5: Documentation]
+    P5 --&gt; P6[Phase 6: Deploy to GitHub]
+    P6 --&gt; P7[Phase 7: Feedback Analysis]
+    P7 --&gt; DONE[✅ Complete]
+
+    style P1 fill:#e3f2fd
+    style P2 fill:#fff3e0
+    style P25 fill:#fce4ec
+    style P3 fill:#f3e5f5
+    style P4 fill:#e8f5e9
+    style P45 fill:#fff9c4
+    style P5 fill:#e0f2f1
+    style P6 fill:#fce4ec
+    style P7 fill:#e1bee7
+    style HEAL fill:#ffebee
+    style DONE fill:#c8e6c9</pre>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li><strong>Phase 2.5</strong>: Spawns 2-8 concurrent Builder agents based on project complexity</li>
+<li><strong>Phase 4</strong>: Self-healing loop with up to 3 auto-fix iterations</li>
+<li><strong>Phase 4.5</strong>: Parallel screenshot capture using Playwright</li>
+<li><strong>Phase 7</strong>: Extracts patterns and updates global knowledge base</li>
+</ul>
+<p><strong>Total Duration:</strong> 7-15 minutes for most projects (autonomous, zero human intervention)</p>
+<hr>
+<h2 id="understanding-context-foundry">📚 Understanding Context Foundry</h2>
+<h3 id="how-it-really-works-no-magic-just-transparency">How It Really Works (No Magic, Just Transparency)</h3>
+<p><strong>Key Insight:</strong> Context Foundry does NOT modify Claude Code. It uses <strong>delegation</strong> to spawn separate Claude instances that do the work.</p>
+<pre><code class="">Your Claude Window (stays clean)
+    ↓
+    &quot;Build a weather app&quot;
+    ↓
+MCP Server spawns → Fresh Claude Instance
+                    (runs all 7 phases)
+                    (builds entire project)
+                    ↓
+                    Returns summary
+    ↓
+Your Claude Window shows: &quot;Build complete! ✅&quot;</code></pre>
+<p><strong>Why your context usage stays low:</strong> The heavy work happens in a separate Claude instance!</p>
+<h3 id="where-are-my-build-artifacts">Where Are My Build Artifacts?</h3>
+<p><strong>Every project gets a <code>.context-foundry/</code> directory:</strong></p>
+<pre><code class="">your-project/
+└── .context-foundry/
+    ├── architecture.md      ← Architect&#039;s complete plan (30-90KB!)
+    ├── scout-report.md      ← Research findings
+    ├── build-log.md         ← Implementation log
+    ├── test-final-report.md ← Test results
+    └── session-summary.json ← Build metadata</code></pre>
+<p><strong>Example - View VimQuest&#39;s architecture plan:</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/vimquest/.context-foundry/architecture.md</code></pre>
+<h3 id="pattern-library-location">Pattern Library Location</h3>
+<p><strong>Global patterns</strong> (shared across ALL builds):</p>
+<pre><code class="">/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json
+├── test-patterns.json
+├── architecture-patterns.json
+└── scout-learnings.json</code></pre>
+<p><strong>How it works:</strong></p>
+<ul>
+<li>Each build reads global patterns</li>
+<li>Applies past learnings automatically</li>
+<li>Discovers new patterns</li>
+<li>Updates library for future builds</li>
+</ul>
+<p><strong>See what Context Foundry has learned:</strong></p>
+<pre><code class="language-bash">cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json</code></pre>
+<h3 id="common-questions">Common Questions</h3>
+<p>❓ <strong>Did Context Foundry change Claude Code&#39;s system prompt?</strong><br>✅ <strong>No!</strong> It spawns separate Claude instances via delegation. Your regular Claude Code usage is unaffected.</p>
+<p>❓ <strong>Where can I find the architect&#39;s plan?</strong><br>✅ <code>&lt;your-project&gt;/.context-foundry/architecture.md</code></p>
+<p>❓ <strong>Why is my context usage so low?</strong><br>✅ The build runs in a <strong>separate Claude instance</strong>. Your main window just monitors progress.</p>
+<p>❓ <strong>What happens to the agents after the build?</strong><br>✅ They&#39;re ephemeral - disappear after the build. Only artifacts and patterns persist.</p>
+<p>❓ <strong>Can I review the plan before building?</strong><br>✅ Yes! Use <code>autonomous=False</code> to enable checkpoints, or review <code>architecture.md</code> after completion.</p>
+<h3 id="full-faq">📖 Full FAQ</h3>
+<p><strong>Want comprehensive answers?</strong> See <strong><a href="FAQ.md">FAQ.md</a></strong> for:</p>
+<ul>
+<li>Complete delegation model explanation</li>
+<li>Where all prompts are located</li>
+<li>How agents work and disappear</li>
+<li>Build artifact locations</li>
+<li>Pattern library details</li>
+<li>Control options (autonomous vs manual)</li>
+<li>And much more!</li>
+</ul>
+<p><strong>Additional Documentation:</strong></p>
+<ul>
+<li><strong><a href="FAQ.md">FAQ.md</a></strong> - Comprehensive Q&amp;A (transparency focus)</li>
+<li><strong><a href="USER_GUIDE.md">USER_GUIDE.md</a></strong> - Step-by-step usage guide</li>
+<li><strong><a href="docs/DELEGATION_MODEL.md">docs/DELEGATION_MODEL.md</a></strong> - Technical deep dive on delegation</li>
+<li><strong><a href="FEEDBACK_SYSTEM.md">FEEDBACK_SYSTEM.md</a></strong> - How self-learning works</li>
+<li><strong><a href="docs/BAML_INTEGRATION.md">docs/BAML_INTEGRATION.md</a></strong> - Type-safe LLM outputs with BAML (v1.3.0+)</li>
+</ul>
+<hr>
+<h2 id="quick-start-1">Quick Start</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li><strong>Python 3.10 or higher</strong> (for MCP server)</li>
+<li><strong>Claude Code CLI</strong> installed and in PATH</li>
+<li><strong>Claude Max subscription</strong> ($20/month) or Anthropic API key</li>
+<li><strong>Git</strong> and <strong>GitHub CLI</strong> (for deployment features)</li>
+</ul>
+<h3 id="installation">Installation</h3>
+<h4 id="stable-release-recommended">Stable Release (Recommended)</h4>
+<pre><code class="language-bash"># 1. Clone Context Foundry
+git clone https://github.com/context-foundry/context-foundry.git
+
+# IMPORTANT: Change into the context-foundry directory
+cd context-foundry
+
+# 2. Create virtual environment (recommended, required on Debian-based systems)
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# 3. Install MCP server dependencies (Python 3.10+ required)
+# This is a minimal installation - only ~50MB, installs in 15-20 seconds
+pip install -r requirements-mcp.txt
+
+# 3a. [Optional] Install BAML for type-safe LLM outputs
+pip install -r requirements-baml.txt
+
+# 4. Configure Claude Code to connect to MCP server
+# Use absolute paths with $(pwd) and add to project scope (-s project)
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+
+# This uses $(pwd) to automatically get absolute paths
+# The -s project flag creates .mcp.json in the project directory (shareable with team)
+
+# 5. Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
+
+# Note: Project-scoped servers don&#039;t appear in `claude mcp list` (that shows global config)
+# They&#039;re automatically detected when you run `claude` in this directory
+
+# 6. Authenticate with GitHub (for deployment)
+gh auth login</code></pre>
+<p><strong>Detailed setup guide:</strong> See <a href="CLAUDE_CODE_MCP_SETUP.md">CLAUDE_CODE_MCP_SETUP.md</a> for troubleshooting and advanced configuration.</p>
+<h4 id="nightly-builds-bleeding-edge">Nightly Builds (Bleeding Edge)</h4>
+<p>For the latest features and fixes before they&#39;re in a stable release:</p>
+<pre><code class="language-bash"># 1. Clone and checkout the latest nightly
+git clone https://github.com/context-foundry/context-foundry.git
+cd context-foundry
+
+# 2. List available nightly releases
+git tag --list &#039;v*-nightly.*&#039; --sort=-v:refname | head -5
+
+# 3. Checkout specific nightly (example)
+git checkout v2.1.0-nightly.20251025
+
+# 4. Continue with standard setup (venv, pip install, etc.)</code></pre>
+<p><strong>About Nightly Releases:</strong></p>
+<ul>
+<li>🌙 <strong>Built daily</strong> at midnight UTC if there are new commits</li>
+<li>🏷️ <strong>Format:</strong> <code>v{VERSION}-nightly.{YYYYMMDD}</code> (e.g., <code>v2.1.0-nightly.20251025</code>)</li>
+<li>⚡ <strong>Latest features</strong> that haven&#39;t been released in stable yet</li>
+<li>🔬 <strong>Pre-release quality</strong> - May contain bugs, use stable releases for production</li>
+<li>📋 <strong>Auto-generated release notes</strong> - Grouped by commit type (feat, fix, docs, etc.)</li>
+<li>🔄 <strong>Retained for 30 days</strong> then automatically cleaned up</li>
+</ul>
+<p><strong>View nightly releases:</strong> <a href="https://github.com/context-foundry/context-foundry/releases?q=prerelease%3Atrue" target="_blank" rel="noopener noreferrer">GitHub Releases (Pre-releases) <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></p>
+<h3 id="basic-usage">Basic Usage</h3>
+<p>Start Claude Code CLI:</p>
+<pre><code class="language-bash">claude</code></pre>
+<p>Inside your Claude Code session:</p>
+<h4 id="build-a-new-project-autonomous">Build a New Project (Autonomous)</h4>
+<pre><code class="">Use mcp__autonomous_build_and_deploy with:
+- task: &quot;Build a weather API with Express.js that fetches data from OpenWeatherMap&quot;
+- working_directory: &quot;/tmp/weather-api&quot;
+- github_repo_name: &quot;weather-api&quot;
+- enable_test_loop: true</code></pre>
+<p><strong>What happens:</strong></p>
+<ol>
+<li>Build starts immediately in the background</li>
+<li>You get a task_id to check progress</li>
+<li><strong>You can continue working</strong> while it builds!</li>
+<li>System completes autonomously:<ul>
+<li>Scout researches requirements (1-2 min)</li>
+<li>Architect designs system (1-2 min)</li>
+<li>Builder implements code + tests (2-5 min)</li>
+<li>Tester validates (tests fail? auto-fixes up to 3x)</li>
+<li><strong>Screenshot Capturer takes visual documentation (30-60 sec)</strong></li>
+<li>Documentation created with screenshots (1 min)</li>
+<li>Deployed to GitHub (30 sec)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Total:</strong> ~7-15 minutes, zero human input required.</p>
+<p><strong>Check status anytime:</strong></p>
+<pre><code class="">What&#039;s the status of my build?</code></pre>
+<p>Claude will automatically check and report progress.</p>
+<h4 id="delegate-a-simple-task">Delegate a Simple Task</h4>
+<pre><code class="">Use mcp__delegate_to_claude_code with:
+- task: &quot;Create a Python script that fetches weather data and prints it nicely&quot;
+- working_directory: &quot;/tmp/weather-script&quot;</code></pre>
+<p>Returns when complete with full output.</p>
+<h4 id="parallel-task-execution">Parallel Task Execution</h4>
+<pre><code class="">Use mcp__delegate_to_claude_code_async to start these tasks in parallel:
+
+Task 1: &quot;Create Flask REST API for user authentication&quot;
+  working_directory: &quot;/tmp/project/backend&quot;
+
+Task 2: &quot;Create React frontend with login UI&quot;
+  working_directory: &quot;/tmp/project/frontend&quot;
+
+Task 3: &quot;Create PostgreSQL schema and migrations&quot;
+  working_directory: &quot;/tmp/project/database&quot;
+
+Then use mcp__list_delegations to monitor progress
+And mcp__get_delegation_result to collect results when ready</code></pre>
+<p><strong>Time saved:</strong> 3 sequential tasks (30 min) → parallel tasks (10 min) = 3x faster</p>
+<hr>
+<h2 id="background-builds-non-blocking-execution">Background Builds (Non-Blocking Execution)</h2>
+<p><strong>The best part:</strong> Builds run in the background by default! You can continue working in your Claude Code session while projects build autonomously.</p>
+<h3 id="how-it-works">How It Works</h3>
+<p>When you trigger a build (by saying &quot;Build a weather app&quot; or using the MCP tool directly), the system:</p>
+<ol>
+<li><strong>Starts immediately</strong> - Spawns a background Claude Code process</li>
+<li><strong>Returns task_id</strong> - Gives you a tracking ID</li>
+<li><strong>Runs autonomously</strong> - Completes all phases without blocking you</li>
+<li><strong>Notifies when done</strong> - You can check status anytime</li>
+</ol>
+<h3 id="example-workflow">Example Workflow</h3>
+<pre><code class="">You: Build a todo app with React and localStorage
+
+Claude: 🚀 Autonomous build started!
+
+Project: todo-app
+Task ID: abc-123-def-456
+Location: /tmp/todo-app
+Expected duration: 7-15 minutes
+
+You can continue working - the build runs in the background.
+
+You: [Continue working on other things]
+
+[10 minutes later]
+
+You: What&#039;s the status of task abc-123-def-456?
+
+Claude: ✅ Build completed!
+
+GitHub: https://github.com/snedea/todo-app
+Tests: 25/25 passing
+Duration: 8.3 minutes</code></pre>
+<h3 id="checking-build-status">Checking Build Status</h3>
+<p><strong>Ask naturally:</strong></p>
+<pre><code class="">What&#039;s the status of my build?
+How&#039;s the todo app build going?
+Is task abc-123-def-456 done?</code></pre>
+<p><strong>Or use the MCP tool directly:</strong></p>
+<pre><code class="">Use mcp__get_delegation_result with task_id &quot;abc-123-def-456&quot;</code></pre>
+<h3 id="listing-all-active-builds">Listing All Active Builds</h3>
+<pre><code class="">What builds are running?
+Show me all active tasks</code></pre>
+<p>Or:</p>
+<pre><code class="">Use mcp__list_delegations</code></pre>
+<h3 id="benefits-of-background-builds">Benefits of Background Builds</h3>
+<ul>
+<li>✅ <strong>No blocking</strong> - Keep working while builds run</li>
+<li>✅ <strong>Parallel work</strong> - Build multiple projects simultaneously</li>
+<li>✅ <strong>Better UX</strong> - Natural workflow, no waiting</li>
+<li>✅ <strong>Check anytime</strong> - Monitor progress when convenient</li>
+</ul>
+<p><strong>Note:</strong> If you want synchronous execution (wait for completion), you can explicitly request the non-async version, but async is recommended for the best experience.</p>
+<hr>
+<h2 id="mcp-tools-reference">MCP Tools Reference</h2>
+<h3 id="autonomous-build-and-deploy-async-recommended">🚀 <code>autonomous_build_and_deploy_async()</code> (Recommended)</h3>
+<p>Fully autonomous Scout → Architect → Builder → Test → Deploy workflow that runs in the <strong>background</strong> (non-blocking).</p>
+<p><strong>Why async is better:</strong></p>
+<ul>
+<li>✅ Continue working while build runs</li>
+<li>✅ Build multiple projects simultaneously</li>
+<li>✅ No session blocking (7-15 min builds don&#39;t freeze Claude)</li>
+<li>✅ Check status anytime</li>
+</ul>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>task</code> (required): What to build (e.g., &quot;Build a todo app&quot;)</li>
+<li><code>working_directory</code> (required): Where to build it</li>
+<li><code>github_repo_name</code> (optional): Deploy to this GitHub repo</li>
+<li><code>existing_repo</code> (optional): Enhance existing repo instead</li>
+<li><code>mode</code> (default: &quot;new_project&quot;): &quot;new_project&quot; | &quot;fix&quot; | &quot;enhance&quot;</li>
+<li><code>enable_test_loop</code> (default: true): Enable self-healing when tests fail</li>
+<li><code>max_test_iterations</code> (default: 3): Max auto-fix attempts</li>
+<li><code>timeout_minutes</code> (default: 90.0): Total timeout</li>
+</ul>
+<p><strong>Returns:</strong> JSON with task_id and status message (build continues in background)</p>
+<p><strong>Note:</strong> When you naturally say &quot;Build a weather app&quot;, Claude Code automatically uses this async version.</p>
+<h3 id="autonomous-build-and-deploy-synchronous">🚀 <code>autonomous_build_and_deploy()</code> (Synchronous)</h3>
+<p>Same as async version above, but <strong>blocks</strong> your Claude Code session until complete.</p>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>You specifically want to wait for the build</li>
+<li>You&#39;re debugging and need immediate output</li>
+<li>You prefer synchronous workflows</li>
+</ul>
+<p><strong>Returns:</strong> JSON with complete results after build finishes (7-15 min wait)</p>
+<p><strong>Example:</strong></p>
+<pre><code class="language-python">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;phases_completed&quot;: [&quot;scout&quot;, &quot;architect&quot;, &quot;builder&quot;, &quot;test&quot;, &quot;docs&quot;, &quot;deploy&quot;],
+  &quot;github_url&quot;: &quot;https://github.com/snedea/weather-api&quot;,
+  &quot;files_created&quot;: [&quot;server.js&quot;, &quot;tests/api.test.js&quot;, &quot;README.md&quot;, ...],
+  &quot;tests_passed&quot;: true,
+  &quot;test_iterations&quot;: 2,
+  &quot;duration_minutes&quot;: 7.42
+}</code></pre>
+<h3 id="delegate-to-claude-code">⚡ <code>delegate_to_claude_code()</code></h3>
+<p>Synchronous delegation - starts task and waits for completion.</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li><code>task</code> (required): Task description</li>
+<li><code>working_directory</code> (optional): Where to run (default: current)</li>
+<li><code>timeout_minutes</code> (default: 10.0): Max execution time</li>
+<li><code>additional_flags</code> (optional): CLI flags to pass</li>
+</ul>
+<p><strong>Returns:</strong> JSON with status, stdout, stderr, duration</p>
+<h3 id="delegate-to-claude-code-async">🔄 <code>delegate_to_claude_code_async()</code></h3>
+<p>Asynchronous delegation - starts task in background, returns immediately.</p>
+<p><strong>Parameters:</strong> Same as <code>delegate_to_claude_code()</code></p>
+<p><strong>Returns:</strong> JSON with <code>task_id</code> for tracking</p>
+<h3 id="get-delegation-resulttask-id">📊 <code>get_delegation_result(task_id)</code></h3>
+<p>Check status and retrieve results of async task.</p>
+<p><strong>Returns:</strong></p>
+<ul>
+<li>If running: <code>{&quot;status&quot;: &quot;running&quot;, &quot;elapsed_seconds&quot;: X}</code></li>
+<li>If complete: <code>{&quot;status&quot;: &quot;completed&quot;, &quot;stdout&quot;: &quot;...&quot;, &quot;stderr&quot;: &quot;...&quot;, &quot;duration_seconds&quot;: X}</code></li>
+<li>If timeout: <code>{&quot;status&quot;: &quot;timeout&quot;}</code></li>
+</ul>
+<h3 id="list-delegations">📋 <code>list_delegations()</code></h3>
+<p>List all active and completed async tasks.</p>
+<p><strong>Returns:</strong> JSON array of tasks with status and elapsed time</p>
+<hr>
+<h2 id="real-world-examples">Real-World Examples</h2>
+<h3 id="example-1-build-expressjs-weather-api">Example 1: Build Express.js Weather API</h3>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- task: &quot;Build Express.js weather API that fetches from OpenWeatherMap, includes caching with Redis, rate limiting, error handling, and comprehensive tests&quot;
+- working_directory: &quot;/tmp/weather-api&quot;
+- github_repo_name: &quot;weather-api&quot;
+- enable_test_loop: true</code></pre>
+<p><strong>Result:</strong></p>
+<ul>
+<li>Duration: 8.3 minutes</li>
+<li>Files: 12 (server.js, routes/, controllers/, tests/, README.md, etc.)</li>
+<li>Tests: 15/15 passed (iteration 1 failed, auto-fixed)</li>
+<li>Deployed: <a href="https://github.com/snedea/weather-api" target="_blank" rel="noopener noreferrer">https://github.com/snedea/weather-api <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+</ul>
+<h3 id="example-2-build-mario-platformer-game">Example 2: Build Mario Platformer Game</h3>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- task: &quot;Build a Mario-style platformer game in vanilla JavaScript with HTML5 Canvas. Include player movement (left, right, jump), collision detection, multiple levels, enemies, and score tracking&quot;
+- working_directory: &quot;/tmp/mario-game&quot;
+- github_repo_name: &quot;mario-game&quot;
+- enable_test_loop: true</code></pre>
+<p><strong>Result:</strong></p>
+<ul>
+<li>Duration: 7.42 minutes</li>
+<li>Files: 8 (index.html, game.js, player.js, level.js, physics.js, tests/, docs/)</li>
+<li>Tests: 12/12 passed (iteration 2 after collision fix)</li>
+<li>Deployed: <a href="https://github.com/snedea/mario-game" target="_blank" rel="noopener noreferrer">https://github.com/snedea/mario-game <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+</ul>
+<h3 id="example-3-parallel-full-stack-build">Example 3: Parallel Full-Stack Build</h3>
+<pre><code class=""># Start backend
+Use mcp__delegate_to_claude_code_async:
+- task: &quot;Create Python Flask REST API with JWT authentication, PostgreSQL database, user registration/login endpoints, and tests&quot;
+- working_directory: &quot;/tmp/fullstack/backend&quot;
+
+# Start frontend (in parallel)
+Use mcp__delegate_to_claude_code_async:
+- task: &quot;Create React SPA with login form, registration form, protected routes, JWT token management, and tests&quot;
+- working_directory: &quot;/tmp/fullstack/frontend&quot;
+
+# Start database (in parallel)
+Use mcp__delegate_to_claude_code_async:
+- task: &quot;Create PostgreSQL schema with users table, migrations, seed data, and setup scripts&quot;
+- working_directory: &quot;/tmp/fullstack/database&quot;
+
+# Monitor progress
+Use mcp__list_delegations
+
+# Collect results
+Use mcp__get_delegation_result for each task_id</code></pre>
+<p><strong>Result:</strong></p>
+<ul>
+<li>Sequential time: ~30 minutes (10 min each)</li>
+<li>Parallel time: ~12 minutes (limited by slowest task)</li>
+<li>Time saved: 18 minutes (60% faster)</li>
+</ul>
+<hr>
+<h2 id="self-healing-test-loop-in-action">Self-Healing Test Loop in Action</h2>
+<p><strong>Scenario:</strong> Building Express.js authentication API</p>
+<pre><code class="">PHASE 4 - TEST (Iteration 1):
+
+Running: npm test
+
+❌ FAIL: POST /auth/login should return JWT token
+   Expected: 200
+   Received: 500
+   Error: UnhandledPromiseRejectionWarning: JWT secret not defined
+
+[SYSTEM ANALYZES FAILURE]
+
+Tester Agent:
+- Root cause: generateToken() throws when JWT_SECRET undefined
+- Missing: Error handling in auth controller
+- Fix needed: Add try-catch, validate environment on startup
+
+[SYSTEM REDESIGNS]
+
+Architect Agent:
+- Updates architecture.md with error handling requirements
+- Creates fixes-iteration-1.md with specific code changes
+
+[SYSTEM RE-IMPLEMENTS]
+
+Builder Agent:
+- Adds try-catch to auth controller
+- Adds JWT_SECRET validation at startup
+- Updates .env.example with required variables
+
+[SYSTEM RE-TESTS]
+
+PHASE 4 - TEST (Iteration 2):
+
+Running: npm test
+
+✅ PASS: All tests (3/3)
+   ✓ POST /auth/login should return JWT token
+   ✓ POST /auth/login should reject invalid credentials
+   ✓ GET /auth/verify should validate token
+
+[SYSTEM CONTINUES TO DEPLOYMENT]</code></pre>
+<p><strong>Total auto-fix time:</strong> ~2 minutes</p>
+<p><strong>Human intervention:</strong> Zero</p>
+<hr>
+<h2 id="configuration">Configuration</h2>
+<h3 id="custom-python-version">Custom Python Version</h3>
+<p>If you need a specific Python version for the MCP server:</p>
+<p>Edit <code>~/.config/claude-code/mcp_settings.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;/usr/local/bin/python3.11&quot;,
+      &quot;args&quot;: [&quot;/path/to/context-foundry/tools/mcp_server.py&quot;]
+    }
+  }
+}</code></pre>
+<h3 id="environment-variables">Environment Variables</h3>
+<p>Pass environment variables to MCP server:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;python3.10&quot;,
+      &quot;args&quot;: [&quot;/path/to/context-foundry/tools/mcp_server.py&quot;],
+      &quot;env&quot;: {
+        &quot;ANTHROPIC_API_KEY&quot;: &quot;your-key&quot;,
+        &quot;OPENWEATHERMAP_API_KEY&quot;: &quot;your-key&quot;
+      }
+    }
+  }
+}</code></pre>
+<h3 id="disable-mcp-server">Disable MCP Server</h3>
+<p>Temporarily disable without deleting configuration:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;disabled&quot;: true
+    }
+  }
+}</code></pre>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="mcp-server-wont-start">MCP Server Won&#39;t Start</h3>
+<p><strong>Error:</strong> <code>ImportError: No module named &#39;fastmcp&#39;</code></p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Make sure you&#039;re in the virtual environment
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Then install dependencies (minimal installation, ~50MB)
+pip install -r requirements-mcp.txt
+# Or specifically:
+pip install fastmcp&gt;=2.0.0 nest-asyncio&gt;=1.5.0
+# Note: Previous versions required ~3-4GB of ML libraries - no longer needed!</code></pre>
+<p><strong>Error:</strong> <code>externally-managed-environment</code> (Debian/Ubuntu systems)</p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Create a virtual environment first (best practice)
+python3 -m venv venv
+source venv/bin/activate
+
+# Then install dependencies
+pip install -r requirements-mcp.txt</code></pre>
+<p><strong>Error:</strong> Python version too old</p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Check version (must be 3.10+)
+python3 --version
+
+# Use specific version if available
+python3.10 -m venv venv
+source venv/bin/activate
+pip install -r requirements-mcp.txt</code></pre>
+<h3 id="claude-code-doesnt-see-mcp-tools">Claude Code Doesn&#39;t See MCP Tools</h3>
+<p><strong>Symptoms:</strong> <code>mcp__autonomous_build_and_deploy</code> not available</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p>Verify MCP settings exist:</p>
+<pre><code class="language-bash">cat ~/.config/claude-code/mcp_settings.json</code></pre>
+</li>
+<li><p>Check path is correct:</p>
+<pre><code class="language-bash">ls /path/to/context-foundry/tools/mcp_server.py</code></pre>
+</li>
+<li><p>Restart Claude Code:</p>
+<pre><code class="language-bash"># Exit current session and restart
+claude</code></pre>
+</li>
+<li><p>Verify connection:</p>
+<pre><code class="language-bash">claude mcp list
+# Should show: ✓ Connected: context-foundry</code></pre>
+</li>
+</ol>
+<h3 id="delegations-timeout">Delegations Timeout</h3>
+<p><strong>Symptoms:</strong> Tasks consistently hit timeout</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p>Increase timeout:</p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- timeout_minutes: 120.0</code></pre>
+</li>
+<li><p>Break into smaller tasks:</p>
+<ul>
+<li>Instead of &quot;Build entire application&quot;</li>
+<li>Use: Multiple delegations for modules</li>
+</ul>
+</li>
+<li><p>Check if task requires manual input (shouldn&#39;t happen with <code>--permission-mode bypassPermissions</code>)</p>
+</li>
+</ol>
+<h3 id="tests-keep-failing">Tests Keep Failing</h3>
+<p><strong>Symptoms:</strong> Test loop reaches max iterations without passing</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p>Check test failure reports:</p>
+<pre><code class="language-bash">cat .context-foundry/test-results-iteration-*.md</code></pre>
+</li>
+<li><p>Review fix attempts:</p>
+<pre><code class="language-bash">cat .context-foundry/fixes-iteration-*.md</code></pre>
+</li>
+<li><p>Increase max iterations if issue seems fixable:</p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- max_test_iterations: 5</code></pre>
+</li>
+<li><p>Disable test loop to see raw test output:</p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- enable_test_loop: false</code></pre>
+</li>
+</ol>
+<p><strong>More help:</strong> See <a href="CLAUDE_CODE_MCP_SETUP.md">CLAUDE_CODE_MCP_SETUP.md</a> for comprehensive troubleshooting.</p>
+<hr>
+<h2 id="project-structure">Project Structure</h2>
+<pre><code class="">context-foundry/
+├── tools/
+│   ├── mcp_server.py              # MCP server (all delegation tools)
+│   └── orchestrator_prompt.txt    # Meta-prompt for autonomous workflow
+├── .context-foundry/              # Generated during builds (in working_directory)
+│   ├── scout-report.md            # Scout phase findings
+│   ├── architecture.md            # Architect phase design
+│   ├── build-log.md               # Builder phase log
+│   ├── test-iteration-count.txt   # Current test iteration (1, 2, 3)
+│   ├── test-results-iteration-*.md # Test failure analysis per iteration
+│   ├── fixes-iteration-*.md       # Fix strategies per iteration
+│   ├── test-final-report.md       # Final test results
+│   └── session-summary.json       # Complete session metadata
+├── examples/                      # Test delegation examples
+│   └── test_claude_code_delegation.md
+├── docs/
+│   ├── CLAUDE_CODE_MCP_SETUP.md   # MCP setup and troubleshooting
+│   └── (other documentation)
+├── ARCHITECTURE_DECISIONS.md       # Technical deep dive (v2.0 changes)
+├── LEGACY_README.md                # Original 1.x documentation
+├── README.md                       # This file (v2.0)
+└── requirements-mcp.txt            # MCP server dependencies</code></pre>
+<hr>
+<h2 id="cost-model-baml-integration">💰 Cost Model &amp; BAML Integration</h2>
+<h3 id="critical-what-runs-on-your-subscription-vs-api-keys"><strong>CRITICAL: What Runs on Your Subscription vs API Keys</strong></h3>
+<p>Context Foundry has <strong>two layers</strong> - understanding this is essential:</p>
+<h4 id="layer-1-core-build-system-free-uses-your-claude-code-subscription"><strong>Layer 1: Core Build System (FREE - Uses Your Claude Code Subscription)</strong></h4>
+<p><strong>ALL the main work runs on your Claude Code subscription:</strong></p>
+<ul>
+<li>✅ <strong>Scout Agent</strong> - Codebase research, requirement analysis</li>
+<li>✅ <strong>Architect Agent</strong> - System design, architecture planning</li>
+<li>✅ <strong>Builder Agents</strong> (2-8 parallel) - ALL code implementation</li>
+<li>✅ <strong>Test Agent</strong> - Running tests, analyzing failures</li>
+<li>✅ <strong>Self-Healing Loop</strong> - Auto-fixing test failures (redesign → rebuild → retest)</li>
+<li>✅ <strong>Screenshot Agent</strong> - Visual documentation capture</li>
+<li>✅ <strong>Documentation Agent</strong> - README and guide generation</li>
+<li>✅ <strong>Deploy Agent</strong> - GitHub deployment</li>
+</ul>
+<p><strong>These agents account for 99%+ of the token usage</strong> and run entirely under your <strong>$20/month Claude Max subscription</strong> (unlimited usage).</p>
+<h4 id="layer-2-baml-type-safety-optional-requires-api-key"><strong>Layer 2: BAML Type-Safety (OPTIONAL - Requires API Key)</strong></h4>
+<p><strong>BAML is an optional add-on for type-safe validation:</strong></p>
+<ul>
+<li>⚙️ Phase tracking validation (~10-15 calls/build)</li>
+<li>⚙️ Scout report structure validation (1 call/build)</li>
+<li>⚙️ Architecture blueprint validation (1 call/build)</li>
+<li>⚙️ Build result validation (5-10 calls/build)</li>
+</ul>
+<p><strong>BAML token usage: ~17,000 tokens per build</strong></p>
+<p><strong>BAML cost: ~$0.20 per build</strong> (20 cents)</p>
+<p><strong>What you get:</strong></p>
+<ul>
+<li>Guaranteed valid JSON structures</li>
+<li>Compile-time schema validation</li>
+<li>Type-safe outputs</li>
+<li>Multi-provider support (Claude/GPT/Gemini)</li>
+</ul>
+<p><strong>What you lose if disabled:</strong></p>
+<ul>
+<li>Simple JSON validation instead (works fine!)</li>
+<li>No type checking (but JSON parsing still works)</li>
+</ul>
+<h3 id="cost-comparison-table">Cost Comparison Table</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Component</th>
+<th>Runs On</th>
+<th>Cost</th>
+<th>Token Usage</th>
+<th>What It Does</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Scout Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~15,000 tokens</td>
+<td>Research &amp; requirements</td>
+</tr>
+<tr>
+<td><strong>Architect Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~25,000 tokens</td>
+<td>System design</td>
+</tr>
+<tr>
+<td><strong>Builder Agents (2-8×)</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~100,000 tokens</td>
+<td><strong>All code implementation</strong></td>
+</tr>
+<tr>
+<td><strong>Test Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~20,000 tokens</td>
+<td>Test execution &amp; analysis</td>
+</tr>
+<tr>
+<td><strong>Self-Healing (1-3×)</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~30,000 tokens/iteration</td>
+<td>Auto-fix test failures</td>
+</tr>
+<tr>
+<td><strong>Screenshot Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~5,000 tokens</td>
+<td>Visual docs</td>
+</tr>
+<tr>
+<td><strong>Docs Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~10,000 tokens</td>
+<td>README generation</td>
+</tr>
+<tr>
+<td><strong>Deploy Agent</strong></td>
+<td>Claude Code subscription</td>
+<td>$0 (included)</td>
+<td>~5,000 tokens</td>
+<td>GitHub deployment</td>
+</tr>
+<tr>
+<td><strong>BAML Validation</strong></td>
+<td>API key (optional)</td>
+<td><strong>~$0.20/build</strong></td>
+<td>~17,000 tokens</td>
+<td>Type-safe validation</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Total per build:</strong></p>
+<ul>
+<li><strong>With BAML:</strong> $0.20 (subscription covers 99%, BAML adds $0.20)</li>
+<li><strong>Without BAML:</strong> $0 (100% covered by subscription)</li>
+</ul>
+<h3 id="baml-keep-or-disable">BAML: Keep or Disable?</h3>
+<p><strong>Disable BAML (Recommended for most users):</strong></p>
+<pre><code class="language-bash"># Simply don&#039;t set API keys in .env
+# BAML automatically falls back to JSON mode
+# Zero additional cost</code></pre>
+<p><strong>Enable BAML (If you want type safety):</strong></p>
+<pre><code class="language-bash"># Set API key in .env
+export ANTHROPIC_API_KEY=&quot;sk-ant-...&quot;
+
+# Cost: ~$0.20 per build
+# ~$2/month for 10 builds
+# ~$10/month for 50 builds</code></pre>
+<p><strong>Our recommendation:</strong> Try Context Foundry without BAML first. If you need stronger type guarantees, enable it later.</p>
+<hr>
+<h2 id="performance-cost">Performance &amp; Cost</h2>
+<h3 id="performance-metrics">Performance Metrics</h3>
+<p>Based on real-world usage:</p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Avg build time</strong></td>
+<td>7-15 minutes (simple to moderate projects)</td>
+</tr>
+<tr>
+<td><strong>Test auto-fix success</strong></td>
+<td>95% (within 3 iterations)</td>
+</tr>
+<tr>
+<td><strong>Parallel speedup</strong></td>
+<td>3-10x (vs sequential)</td>
+</tr>
+<tr>
+<td><strong>Token efficiency</strong></td>
+<td>No limits (file-based context)</td>
+</tr>
+<tr>
+<td><strong>Code quality</strong></td>
+<td>90%+ test coverage</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="cost-comparison">Cost Comparison</h3>
+<p><strong>Context Foundry 1.x (API mode):</strong></p>
+<pre><code class="">Per project: $3-10 (pay-per-token)
+100 projects: $300-1000</code></pre>
+<p><strong>Context Foundry (Claude Max):</strong></p>
+<pre><code class="">Subscription: $20/month (unlimited)
+100 projects: $20/month
+
+Break-even: ~5 projects per month</code></pre>
+<p><strong>Savings:</strong> 95%+ for heavy users</p>
+<hr>
+<h2 id="documentation">Documentation</h2>
+<h3 id="getting-started">📘 Getting Started</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Document</th>
+<th>Description</th>
+<th>Audience</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong><a href="README.md">README.md</a></strong> (this file)</td>
+<td>Quick start and overview</td>
+<td>Everyone</td>
+</tr>
+<tr>
+<td><strong><a href="QUICKSTART.md">QUICKSTART.md</a></strong></td>
+<td>5-minute setup guide</td>
+<td>New users</td>
+</tr>
+<tr>
+<td><strong><a href="USER_GUIDE.md">USER_GUIDE.md</a></strong></td>
+<td>Step-by-step usage guide with examples</td>
+<td>New users</td>
+</tr>
+<tr>
+<td><strong><a href="FAQ.md">FAQ.md</a></strong></td>
+<td>Comprehensive Q&amp;A - transparency focused</td>
+<td>Everyone</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="setup-configuration">🔧 Setup &amp; Configuration</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Document</th>
+<th>Description</th>
+<th>Audience</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong><a href="CLAUDE_CODE_MCP_SETUP.md">CLAUDE_CODE_MCP_SETUP.md</a></strong></td>
+<td>Complete MCP setup and troubleshooting</td>
+<td>All users</td>
+</tr>
+<tr>
+<td><strong><a href=".mcp.json">.mcp.json</a></strong></td>
+<td>Project-shareable MCP configuration</td>
+<td>Team leads</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="architecture-technical-deep-dives">🏗️ Architecture &amp; Technical Deep Dives</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Document</th>
+<th>Description</th>
+<th>Audience</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>⭐ <a href="docs/INNOVATIONS.md">docs/INNOVATIONS.md</a></strong></td>
+<td><strong>All 15 innovations explained with code examples</strong></td>
+<td><strong>Everyone - START HERE!</strong></td>
+</tr>
+<tr>
+<td><strong><a href="docs/FAQ.md">docs/FAQ.md</a></strong></td>
+<td>Technical FAQ (52 questions): parallelization, token management, MCP architecture, prompt engineering</td>
+<td>Developers, architects, AI engineers</td>
+</tr>
+<tr>
+<td><strong><a href="docs/ARCHITECTURE_DIAGRAMS.md">docs/ARCHITECTURE_DIAGRAMS.md</a></strong></td>
+<td>🎨 Visual flowcharts and sequence diagrams (Mermaid)</td>
+<td>Visual learners, everyone!</td>
+</tr>
+<tr>
+<td><strong><a href="docs/MCP_SERVER_ARCHITECTURE.md">docs/MCP_SERVER_ARCHITECTURE.md</a></strong></td>
+<td>Complete MCP server technical architecture</td>
+<td>Developers, contributors</td>
+</tr>
+<tr>
+<td><strong><a href="docs/CONTEXT_PRESERVATION.md">docs/CONTEXT_PRESERVATION.md</a></strong></td>
+<td>How context flows between agents (ephemeral agents + persistent files)</td>
+<td>Developers, curious users</td>
+</tr>
+<tr>
+<td><strong><a href="docs/DELEGATION_MODEL.md">docs/DELEGATION_MODEL.md</a></strong></td>
+<td>Why delegation keeps main context clean</td>
+<td>Technical users</td>
+</tr>
+<tr>
+<td><strong><a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></strong></td>
+<td>What changed in v2.0 and why</td>
+<td>Technical users</td>
+</tr>
+<tr>
+<td><strong><a href="docs/ARCHITECTURE.md">docs/ARCHITECTURE.md</a></strong></td>
+<td>Stateless conversation architecture</td>
+<td>Developers</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="self-learning-patterns">🧠 Self-Learning &amp; Patterns</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Document</th>
+<th>Description</th>
+<th>Audience</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong><a href="FEEDBACK_SYSTEM.md">FEEDBACK_SYSTEM.md</a></strong></td>
+<td>Self-learning pattern library documentation</td>
+<td>All users</td>
+</tr>
+<tr>
+<td><strong>~/.context-foundry/patterns/common-issues.json</strong></td>
+<td>Global pattern library (on your machine)</td>
+<td>Curious users</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="reference-legacy">📚 Reference &amp; Legacy</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Document</th>
+<th>Description</th>
+<th>Audience</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong><a href="CHANGELOG.md">CHANGELOG.md</a></strong></td>
+<td>Version history and release notes</td>
+<td>Everyone</td>
+</tr>
+<tr>
+<td><strong><a href="ROADMAP.md">ROADMAP.md</a></strong></td>
+<td>Future plans</td>
+<td>Contributors</td>
+</tr>
+<tr>
+<td><strong><a href="LEGACY_README.md">LEGACY_README.md</a></strong></td>
+<td>Original Context Foundry 1.x documentation</td>
+<td>v1.x users</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="recommended-reading-order">💡 Recommended Reading Order</h3>
+<p><strong>New Users:</strong></p>
+<ol>
+<li><a href="README.md">README.md</a> - Understand what Context Foundry does</li>
+<li><a href="QUICKSTART.md">QUICKSTART.md</a> - Get set up in 5 minutes</li>
+<li><a href="USER_GUIDE.md">USER_GUIDE.md</a> - Learn how to use it</li>
+<li><a href="docs/INNOVATIONS.md">docs/INNOVATIONS.md</a> - Deep dive into all 15 innovations</li>
+<li><a href="FAQ.md">FAQ.md</a> - Common questions answered</li>
+</ol>
+<p><strong>Developers/Contributors:</strong></p>
+<ol>
+<li><a href="docs/INNOVATIONS.md">docs/INNOVATIONS.md</a> - 🎨 START HERE! All 15 innovations with code examples</li>
+<li><a href="docs/FAQ.md">docs/FAQ.md</a> - Technical FAQ (52 questions on architecture, parallelization, etc.)</li>
+<li><a href="docs/ARCHITECTURE_DIAGRAMS.md">docs/ARCHITECTURE_DIAGRAMS.md</a> - Visual flowcharts and sequence diagrams</li>
+<li><a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a> - Why v2.0 architecture</li>
+<li><a href="docs/MCP_SERVER_ARCHITECTURE.md">docs/MCP_SERVER_ARCHITECTURE.md</a> - How MCP server works</li>
+<li><a href="docs/CONTEXT_PRESERVATION.md">docs/CONTEXT_PRESERVATION.md</a> - How context flows</li>
+<li><a href="docs/DELEGATION_MODEL.md">docs/DELEGATION_MODEL.md</a> - Delegation architecture</li>
+</ol>
+<p><strong>Troubleshooting:</strong></p>
+<ol>
+<li><a href="CLAUDE_CODE_MCP_SETUP.md">CLAUDE_CODE_MCP_SETUP.md</a> - Setup issues</li>
+<li><a href="FAQ.md">FAQ.md</a> - Common questions</li>
+<li><a href="docs/FAQ.md">docs/FAQ.md</a> - Technical troubleshooting (parallel execution, test loops, etc.)</li>
+<li><a href="docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging">docs/MCP_SERVER_ARCHITECTURE.md</a> - Advanced debugging</li>
+</ol>
+<hr>
+<h2 id="philosophy">Philosophy</h2>
+<p><strong>Context Foundry Philosophy:</strong></p>
+<ul>
+<li><strong>Autonomous over supervised</strong>: Walk away while it builds</li>
+<li><strong>Self-healing over manual debugging</strong>: Auto-fix test failures</li>
+<li><strong>File-based over conversation-based</strong>: No token limits</li>
+<li><strong>Quality over speed</strong>: Tests must pass before deployment</li>
+<li><strong>Simplicity over features</strong>: Do one thing excellently</li>
+</ul>
+<p><strong>Design Principles:</strong></p>
+<ul>
+<li>✅ AI orchestrates itself (meta-prompts, not Python)</li>
+<li>✅ Native tools over custom wrappers (Claude Code Read/Edit/Bash)</li>
+<li>✅ File artifacts over conversation memory (.context-foundry/ directory)</li>
+<li>✅ Self-healing over checkpoints (auto-fix instead of human review)</li>
+<li>✅ GitHub deployment over local-only (share your work)</li>
+</ul>
+<hr>
+<h2 id="roadmap">Roadmap</h2>
+<h3 id="v220-next-release">v2.2.0 (Next Release)</h3>
+<ul>
+<li><input disabled="" type="checkbox"> Enhanced test failure analysis</li>
+<li><input disabled="" type="checkbox"> Configurable test frameworks (Jest, pytest, etc.)</li>
+<li><input disabled="" type="checkbox"> Better error recovery in deployment phase</li>
+<li><input disabled="" type="checkbox"> Pattern library (save successful builds as reusable patterns)</li>
+<li><input disabled="" type="checkbox"> Multi-project orchestration (build related projects together)</li>
+<li><input disabled="" type="checkbox"> Cost tracking for API mode users</li>
+<li><input disabled="" type="checkbox"> Enhanced logging and debugging tools</li>
+</ul>
+<h3 id="v30-vision">v3.0 (Vision)</h3>
+<ul>
+<li><input disabled="" type="checkbox"> Visual progress dashboard</li>
+<li><input disabled="" type="checkbox"> Support for additional version control systems</li>
+<li><input disabled="" type="checkbox"> Integration with CI/CD pipelines</li>
+<li><input disabled="" type="checkbox"> Team collaboration features</li>
+</ul>
+<hr>
+<h2 id="contributing">Contributing</h2>
+<p>We welcome contributions! To contribute:</p>
+<ol>
+<li><strong>Read the technical docs</strong>: <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></li>
+<li><strong>Understand the workflow</strong>: Scout → Architect → Builder → Test → Deploy</li>
+<li><strong>Follow the principles</strong>: Autonomous, self-healing, file-based</li>
+<li><strong>Submit PRs</strong>: With clear descriptions and tests</li>
+</ol>
+<hr>
+<h2 id="license">License</h2>
+<p>MIT License - See LICENSE file for details</p>
+<hr>
+<h2 id="credits">Credits</h2>
+<p>Context Foundry builds upon:</p>
+<ul>
+<li><strong>Anthropic&#39;s Claude Code</strong> - Native agent capabilities and MCP protocol</li>
+<li><strong>Context Foundry 1.x</strong> - Original Scout/Architect/Builder workflow</li>
+<li><strong><a href="https://youtu.be/IS_y40zY-hc" target="_blank" rel="noopener noreferrer">Dexter Horthy&#39;s <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a> &quot;anti-vibe coding&quot;</strong> - Systematic approach over chaotic iteration</li>
+<li><strong><a href="https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk" target="_blank" rel="noopener noreferrer">Anthropic Agent SDK patterns <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></strong> - Agent orchestration techniques</li>
+</ul>
+<hr>
+<h2 id="support">Support</h2>
+<ul>
+<li><strong>Issues</strong>: <a href="https://github.com/snedea/context-foundry/issues" target="_blank" rel="noopener noreferrer">GitHub Issues <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+<li><strong>Discussions</strong>: <a href="https://github.com/snedea/context-foundry/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+<li><strong>Documentation</strong>: Start with this README, then <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></li>
+</ul>
+<hr>
+<p><strong>Context Foundry</strong> - <em>Build complete software autonomously with self-healing AI workflows</em></p>
+<p><strong>Version:</strong> 2.1.0 | <strong>Release Date:</strong> October 2025 | <strong>License:</strong> MIT</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/getting-started/faq" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">FAQ</span>
+            </a>
+
+            <a href="/docs/getting-started/quickstart" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Quick Start</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#what-is-context-foundry" class="toc-link" data-heading-id="what-is-context-foundry">
+                  What is Context Foundry?
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#the-breakthrough-meta-mcp-innovation" class="toc-link" data-heading-id="the-breakthrough-meta-mcp-innovation">
+                  🚀 The Breakthrough: Meta-MCP Innovation
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#see-it-in-action-evolution-quest" class="toc-link" data-heading-id="see-it-in-action-evolution-quest">
+                  🎮 See It In Action: Evolution Quest
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#starting-the-build" class="toc-link" data-heading-id="starting-the-build">
+                          Starting the Build
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#guided-progress-updates" class="toc-link" data-heading-id="guided-progress-updates">
+                          Guided Progress Updates
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#build-complete" class="toc-link" data-heading-id="build-complete">
+                          Build Complete
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#the-result" class="toc-link" data-heading-id="the-result">
+                          The Result
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#just-ask-naturally-no-commands-to-memorize" class="toc-link" data-heading-id="just-ask-naturally-no-commands-to-memorize">
+                  💬 Just Ask Naturally (No Commands to Memorize!)
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#say-this" class="toc-link" data-heading-id="say-this">
+                          ✅ Say This
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#quick-start" class="toc-link" data-heading-id="quick-start">
+                          📚 Quick Start
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#say-this-not-that" class="toc-link" data-heading-id="say-this-not-that">
+                          🎯 Say This, Not That
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#tips-for-best-results" class="toc-link" data-heading-id="tips-for-best-results">
+                          💡 Tips for Best Results
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#key-innovations" class="toc-link" data-heading-id="key-innovations">
+                  🎨 Key Innovations
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#architecture-innovations" class="toc-link" data-heading-id="architecture-innovations">
+                          🏗️ Architecture Innovations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#automation-innovations" class="toc-link" data-heading-id="automation-innovations">
+                          🤖 Automation Innovations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#intelligence-innovations" class="toc-link" data-heading-id="intelligence-innovations">
+                          🧠 Intelligence Innovations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#user-experience-innovations" class="toc-link" data-heading-id="user-experience-innovations">
+                          🎨 User Experience Innovations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-changed-from-1x" class="toc-link" data-heading-id="what-changed-from-1x">
+                          What Changed from 1.x?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-it-works-8-phase-architecture" class="toc-link" data-heading-id="how-it-works-8-phase-architecture">
+                  🔄 How It Works: 8-Phase Architecture
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#understanding-context-foundry" class="toc-link" data-heading-id="understanding-context-foundry">
+                  📚 Understanding Context Foundry
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-it-really-works-no-magic-just-transparency" class="toc-link" data-heading-id="how-it-really-works-no-magic-just-transparency">
+                          How It Really Works (No Magic, Just Transparency)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#where-are-my-build-artifacts" class="toc-link" data-heading-id="where-are-my-build-artifacts">
+                          Where Are My Build Artifacts?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-library-location" class="toc-link" data-heading-id="pattern-library-location">
+                          Pattern Library Location
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#common-questions" class="toc-link" data-heading-id="common-questions">
+                          Common Questions
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#full-faq" class="toc-link" data-heading-id="full-faq">
+                          📖 Full FAQ
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#quick-start-1" class="toc-link" data-heading-id="quick-start-1">
+                  Quick Start
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#prerequisites" class="toc-link" data-heading-id="prerequisites">
+                          Prerequisites
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#installation" class="toc-link" data-heading-id="installation">
+                          Installation
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#stable-release-recommended" class="toc-link" data-heading-id="stable-release-recommended">
+                                  Stable Release (Recommended)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#nightly-builds-bleeding-edge" class="toc-link" data-heading-id="nightly-builds-bleeding-edge">
+                                  Nightly Builds (Bleeding Edge)
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#basic-usage" class="toc-link" data-heading-id="basic-usage">
+                          Basic Usage
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#build-a-new-project-autonomous" class="toc-link" data-heading-id="build-a-new-project-autonomous">
+                                  Build a New Project (Autonomous)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#delegate-a-simple-task" class="toc-link" data-heading-id="delegate-a-simple-task">
+                                  Delegate a Simple Task
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#parallel-task-execution" class="toc-link" data-heading-id="parallel-task-execution">
+                                  Parallel Task Execution
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#background-builds-non-blocking-execution" class="toc-link" data-heading-id="background-builds-non-blocking-execution">
+                  Background Builds (Non-Blocking Execution)
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-it-works" class="toc-link" data-heading-id="how-it-works">
+                          How It Works
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#example-workflow" class="toc-link" data-heading-id="example-workflow">
+                          Example Workflow
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#checking-build-status" class="toc-link" data-heading-id="checking-build-status">
+                          Checking Build Status
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#listing-all-active-builds" class="toc-link" data-heading-id="listing-all-active-builds">
+                          Listing All Active Builds
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#benefits-of-background-builds" class="toc-link" data-heading-id="benefits-of-background-builds">
+                          Benefits of Background Builds
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#mcp-tools-reference" class="toc-link" data-heading-id="mcp-tools-reference">
+                  MCP Tools Reference
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#autonomous-build-and-deploy-async-recommended" class="toc-link" data-heading-id="autonomous-build-and-deploy-async-recommended">
+                          🚀 autonomous_build_and_deploy_async() (Recommended)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#autonomous-build-and-deploy-synchronous" class="toc-link" data-heading-id="autonomous-build-and-deploy-synchronous">
+                          🚀 autonomous_build_and_deploy() (Synchronous)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegate-to-claude-code" class="toc-link" data-heading-id="delegate-to-claude-code">
+                          ⚡ delegate_to_claude_code()
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegate-to-claude-code-async" class="toc-link" data-heading-id="delegate-to-claude-code-async">
+                          🔄 delegate_to_claude_code_async()
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#get-delegation-resulttask-id" class="toc-link" data-heading-id="get-delegation-resulttask-id">
+                          📊 get_delegation_result(task_id)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#list-delegations" class="toc-link" data-heading-id="list-delegations">
+                          📋 list_delegations()
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#real-world-examples" class="toc-link" data-heading-id="real-world-examples">
+                  Real-World Examples
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#example-1-build-expressjs-weather-api" class="toc-link" data-heading-id="example-1-build-expressjs-weather-api">
+                          Example 1: Build Express.js Weather API
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#example-2-build-mario-platformer-game" class="toc-link" data-heading-id="example-2-build-mario-platformer-game">
+                          Example 2: Build Mario Platformer Game
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#example-3-parallel-full-stack-build" class="toc-link" data-heading-id="example-3-parallel-full-stack-build">
+                          Example 3: Parallel Full-Stack Build
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#self-healing-test-loop-in-action" class="toc-link" data-heading-id="self-healing-test-loop-in-action">
+                  Self-Healing Test Loop in Action
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#configuration" class="toc-link" data-heading-id="configuration">
+                  Configuration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#custom-python-version" class="toc-link" data-heading-id="custom-python-version">
+                          Custom Python Version
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#environment-variables" class="toc-link" data-heading-id="environment-variables">
+                          Environment Variables
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#disable-mcp-server" class="toc-link" data-heading-id="disable-mcp-server">
+                          Disable MCP Server
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting" class="toc-link" data-heading-id="troubleshooting">
+                  Troubleshooting
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#mcp-server-wont-start" class="toc-link" data-heading-id="mcp-server-wont-start">
+                          MCP Server Won&#x27;t Start
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#claude-code-doesnt-see-mcp-tools" class="toc-link" data-heading-id="claude-code-doesnt-see-mcp-tools">
+                          Claude Code Doesn&#x27;t See MCP Tools
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegations-timeout" class="toc-link" data-heading-id="delegations-timeout">
+                          Delegations Timeout
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#tests-keep-failing" class="toc-link" data-heading-id="tests-keep-failing">
+                          Tests Keep Failing
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#project-structure" class="toc-link" data-heading-id="project-structure">
+                  Project Structure
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#cost-model-baml-integration" class="toc-link" data-heading-id="cost-model-baml-integration">
+                  💰 Cost Model &amp; BAML Integration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#critical-what-runs-on-your-subscription-vs-api-keys" class="toc-link" data-heading-id="critical-what-runs-on-your-subscription-vs-api-keys">
+                          CRITICAL: What Runs on Your Subscription vs API Keys
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#layer-1-core-build-system-free-uses-your-claude-code-subscription" class="toc-link" data-heading-id="layer-1-core-build-system-free-uses-your-claude-code-subscription">
+                                  Layer 1: Core Build System (FREE - Uses Your Claude Code Subscription)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#layer-2-baml-type-safety-optional-requires-api-key" class="toc-link" data-heading-id="layer-2-baml-type-safety-optional-requires-api-key">
+                                  Layer 2: BAML Type-Safety (OPTIONAL - Requires API Key)
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#cost-comparison-table" class="toc-link" data-heading-id="cost-comparison-table">
+                          Cost Comparison Table
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#baml-keep-or-disable" class="toc-link" data-heading-id="baml-keep-or-disable">
+                          BAML: Keep or Disable?
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#performance-cost" class="toc-link" data-heading-id="performance-cost">
+                  Performance &amp; Cost
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#performance-metrics" class="toc-link" data-heading-id="performance-metrics">
+                          Performance Metrics
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#cost-comparison" class="toc-link" data-heading-id="cost-comparison">
+                          Cost Comparison
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#documentation" class="toc-link" data-heading-id="documentation">
+                  Documentation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#getting-started" class="toc-link" data-heading-id="getting-started">
+                          📘 Getting Started
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#setup-configuration" class="toc-link" data-heading-id="setup-configuration">
+                          🔧 Setup &amp; Configuration
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#architecture-technical-deep-dives" class="toc-link" data-heading-id="architecture-technical-deep-dives">
+                          🏗️ Architecture &amp; Technical Deep Dives
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#self-learning-patterns" class="toc-link" data-heading-id="self-learning-patterns">
+                          🧠 Self-Learning &amp; Patterns
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#reference-legacy" class="toc-link" data-heading-id="reference-legacy">
+                          📚 Reference &amp; Legacy
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#recommended-reading-order" class="toc-link" data-heading-id="recommended-reading-order">
+                          💡 Recommended Reading Order
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#philosophy" class="toc-link" data-heading-id="philosophy">
+                  Philosophy
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#roadmap" class="toc-link" data-heading-id="roadmap">
+                  Roadmap
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#v220-next-release" class="toc-link" data-heading-id="v220-next-release">
+                          v2.2.0 (Next Release)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#v30-vision" class="toc-link" data-heading-id="v30-vision">
+                          v3.0 (Vision)
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#contributing" class="toc-link" data-heading-id="contributing">
+                  Contributing
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#license" class="toc-link" data-heading-id="license">
+                  License
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#credits" class="toc-link" data-heading-id="credits">
+                  Credits
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#support" class="toc-link" data-heading-id="support">
+                  Support
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

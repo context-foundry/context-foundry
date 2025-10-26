@@ -1,0 +1,2419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture Decisions | Context Foundry Documentation</title>
+  <meta name="description" content="Last Updated: October 18, 2025 Version: 2.0.0 Authors: Context Foundry Team">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/reference/architecture-decisions">
+  <meta property="og:title" content="Architecture Decisions">
+  <meta property="og:description" content="Last Updated: October 18, 2025 Version: 2.0.0 Authors: Context Foundry Team">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Architecture Decisions">
+  <meta name="twitter:description" content="Last Updated: October 18, 2025 Version: 2.0.0 Authors: Context Foundry Team">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/reference/architecture-decisions">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/reference" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Architecture Decisions</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-20-architecture-decisions">Context Foundry 2.0 - Architecture Decisions</h1>
+<p><strong>Last Updated:</strong> October 18, 2025<br><strong>Version:</strong> 2.0.0<br><strong>Authors:</strong> Context Foundry Team</p>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#native-agents-instead-of-python-what-changed-and-why">Native <code>/agents</code> Instead of Python: What Changed and Why</a></li>
+<li><a href="#new-innovations-what-they-are-and-why-they-matter">New Innovations: What They Are and Why They Matter</a></li>
+<li><a href="#why-we-moved-away-from-certain-features">Why We Moved Away from Certain Features</a></li>
+<li><a href="#technical-implementation-deep-dives">Technical Implementation Deep Dives</a></li>
+<li><a href="#migration-guide-from-1x-to-20">Migration Guide from 1.x to 2.0</a></li>
+</ol>
+<hr>
+<h2 id="overview">Overview</h2>
+<p>Context Foundry 2.0 represents a fundamental architectural shift from version 1.x. While the original Context Foundry was built on Python scripts orchestrating API calls to various AI providers, version 2.0 embraces Claude Code&#39;s native capabilities through the Model Context Protocol (MCP).</p>
+<p><strong>Core Philosophy Change:</strong></p>
+<ul>
+<li><strong>v1.x:</strong> &quot;Build a Python CLI that orchestrates AI agents via API calls&quot;</li>
+<li><strong>v2.0:</strong> &quot;Empower Claude Code to orchestrate itself through meta-prompts and native agent capabilities&quot;</li>
+</ul>
+<p>This document explains the technical reasoning behind this shift, the innovations it enabled, and why certain features were deprecated.</p>
+<hr>
+<h2 id="native-agents-instead-of-python-what-changed-and-why">Native <code>/agents</code> Instead of Python: What Changed and Why</h2>
+<h3 id="what-changed">What Changed</h3>
+<h4 id="context-foundry-1x-approach">Context Foundry 1.x Approach</h4>
+<p><strong>Architecture:</strong></p>
+<pre><code class="">User → Python CLI → Anthropic Agent SDK → API Calls → Claude API
+         ↓
+    orchestration.py
+         ↓
+    Scout/Architect/Builder agents (Python classes)
+         ↓
+    subprocess.run([&quot;claude&quot;, &quot;prompt&quot;])</code></pre>
+<p><strong>Key Components:</strong></p>
+<ul>
+<li><code>orchestration.py</code>: Python script managing agent workflow</li>
+<li>Anthropic Agent SDK: Python library for agent patterns</li>
+<li>Environment variables: API keys for Anthropic, OpenAI, Gemini, etc.</li>
+<li>CLI commands: <code>foundry build</code>, <code>foundry fix</code>, <code>foundry enhance</code></li>
+<li>Cost tracking: Monitor API usage across providers</li>
+</ul>
+<p><strong>Example 1.x Code:</strong></p>
+<pre><code class="language-python">from anthropic import Anthropic
+
+client = Anthropic(api_key=os.environ[&quot;ANTHROPIC_API_KEY&quot;])
+
+# Scout agent
+scout_response = client.messages.create(
+    model=&quot;claude-sonnet-4&quot;,
+    max_tokens=4096,
+    messages=[{
+        &quot;role&quot;: &quot;user&quot;,
+        &quot;content&quot;: &quot;Analyze requirements for: &quot; + task
+    }]
+)
+
+# Architect agent
+architect_response = client.messages.create(
+    model=&quot;claude-sonnet-4&quot;,
+    max_tokens=4096,
+    messages=[{
+        &quot;role&quot;: &quot;user&quot;,
+        &quot;content&quot;: &quot;Design architecture based on: &quot; + scout_response.content
+    }]
+)</code></pre>
+<p><strong>Limitations:</strong></p>
+<ol>
+<li><strong>API Dependency:</strong> Required API keys and pay-per-token billing</li>
+<li><strong>Context Loss:</strong> Each API call started fresh; context passed via messages</li>
+<li><strong>Python Overhead:</strong> Python script had to manage state, orchestration, error handling</li>
+<li><strong>Limited Tool Access:</strong> Agents couldn&#39;t use Claude Code&#39;s native tools (Read, Edit, Bash, etc.)</li>
+<li><strong>No Interactive Debugging:</strong> Agents ran in isolated API calls</li>
+</ol>
+<h4 id="context-foundry-20-approach">Context Foundry 2.0 Approach</h4>
+<p><strong>Architecture:</strong></p>
+<pre><code class="">User → Claude Code CLI → MCP Server → delegate_to_claude_code()
+                            ↓
+                    Spawn: claude --print --system-prompt orchestrator_prompt.txt
+                            ↓
+                    Fresh Claude instance reads meta-prompt
+                            ↓
+                    Uses native /agents command to create Scout/Architect/Builder
+                            ↓
+                    Agents use native tools: Read, Edit, Bash, Glob, Grep
+                            ↓
+                    Context preserved in .context-foundry/ files</code></pre>
+<p><strong>Key Components:</strong></p>
+<ul>
+<li><code>mcp_server.py</code>: MCP server exposing delegation tools</li>
+<li><code>orchestrator_prompt.txt</code>: Meta-prompt instructing self-orchestration</li>
+<li>Native <code>/agents</code>: Claude Code&#39;s built-in agent creation system</li>
+<li>Claude Max subscription: No API calls, unlimited usage</li>
+<li>File-based context: <code>.context-foundry/</code> directory stores all artifacts</li>
+</ul>
+<p><strong>Example 2.0 Flow:</strong></p>
+<pre><code class="language-python"># In mcp_server.py
+@mcp.tool()
+def autonomous_build_and_deploy(task: str, working_directory: str):
+    # Load meta-prompt
+    with open(&quot;orchestrator_prompt.txt&quot;) as f:
+        system_prompt = f.read()
+
+    # Spawn fresh Claude instance with meta-prompt
+    cmd = [
+        &quot;claude&quot;, &quot;--print&quot;,
+        &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;,
+        &quot;--strict-mcp-config&quot;,
+        &quot;--system-prompt&quot;, system_prompt,
+        task_config_json
+    ]
+
+    # Claude reads orchestrator_prompt.txt and self-orchestrates
+    result = subprocess.run(cmd, stdin=subprocess.DEVNULL, ...)</code></pre>
+<p><strong>In the Fresh Claude Instance (orchestrator_prompt.txt):</strong></p>
+<pre><code class="">PHASE 1: SCOUT
+1. Create a Scout agent:
+   Type: /agents
+   Description: &quot;Expert researcher who gathers requirements...&quot;
+2. Scout agent uses native tools:
+   - Glob to find existing files
+   - Read to analyze code
+   - Grep to search for patterns
+3. Save findings to .context-foundry/scout-report.md
+
+PHASE 2: ARCHITECT
+1. Read .context-foundry/scout-report.md using native Read tool
+2. Create Architect agent via /agents
+3. Architect uses Edit tool to create architecture.md</code></pre>
+<p><strong>Advantages:</strong></p>
+<ol>
+<li><strong>No API Calls:</strong> Uses Claude Max subscription (monthly fee, unlimited usage)</li>
+<li><strong>Native Tool Access:</strong> Agents use Read, Edit, Bash, Glob, Grep directly</li>
+<li><strong>Context Preservation:</strong> File-based artifacts maintain context across phases</li>
+<li><strong>Self-Orchestration:</strong> Claude manages its own workflow via meta-prompts</li>
+<li><strong>Interactive Capabilities:</strong> Can debug, inspect, modify during execution</li>
+</ol>
+<h3 id="why-we-changed">Why We Changed</h3>
+<h4 id="reason-1-cost-model-shift">Reason 1: Cost Model Shift</h4>
+<p><strong>Problem with 1.x:</strong></p>
+<pre><code class="">Scout phase: ~50K tokens = $0.75
+Architect phase: ~80K tokens = $1.20
+Builder phase: ~150K tokens = $2.25
+Total per project: $4.20
+
+For 100 projects: $420
+For 1000 projects: $4,200</code></pre>
+<p><strong>Solution in 2.0:</strong></p>
+<pre><code class="">Claude Max subscription: $20/month (unlimited usage)
+
+For 100 projects: $20/month
+For 1000 projects: $20/month
+
+Break-even point: ~5 projects/month</code></pre>
+<p><strong>Result:</strong> 95%+ cost reduction for heavy users.</p>
+<h4 id="reason-2-tool-access-limitations">Reason 2: Tool Access Limitations</h4>
+<p><strong>Problem with 1.x:</strong><br>When using Anthropic Agent SDK, agents could only:</p>
+<ul>
+<li>Send text prompts</li>
+<li>Receive text responses</li>
+<li>Use predefined tool schemas (custom functions we defined)</li>
+</ul>
+<p>They could NOT:</p>
+<ul>
+<li>Use Claude Code&#39;s native Read/Edit/Bash tools</li>
+<li>Access file system directly</li>
+<li>Run git commands natively</li>
+<li>Use Glob/Grep for code search</li>
+</ul>
+<p><strong>Workaround in 1.x:</strong></p>
+<pre><code class="language-python"># We had to wrap everything in Python
+def scout_analyze_file(filepath):
+    with open(filepath) as f:
+        content = f.read()
+
+    response = client.messages.create(
+        model=&quot;claude-sonnet-4&quot;,
+        messages=[{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: f&quot;Analyze: {content}&quot;}]
+    )
+    return response.content</code></pre>
+<p><strong>Solution in 2.0:</strong></p>
+<pre><code class="">Fresh Claude instance receives meta-prompt:
+&quot;PHASE 1: SCOUT
+1. Create Scout agent via /agents
+2. Scout agent analyzes codebase:
+   - Use Glob tool to find all *.py files
+   - Use Read tool to examine each file
+   - Use Grep tool to search for patterns&quot;</code></pre>
+<p>Scout agent directly invokes Claude Code&#39;s native tools - no Python wrapper needed.</p>
+<p><strong>Result:</strong> Agents work the same way a human would in Claude Code CLI.</p>
+<h4 id="reason-3-context-preservation">Reason 3: Context Preservation</h4>
+<p><strong>Problem with 1.x:</strong><br>API calls are stateless. Context passed manually:</p>
+<pre><code class="language-python"># Scout phase
+scout_result = call_api(&quot;Analyze requirements&quot;)
+
+# Architect phase - must manually pass scout_result
+architect_result = call_api(f&quot;Design based on: {scout_result}&quot;)
+
+# Builder phase - must manually pass both
+builder_result = call_api(f&quot;Build based on: {scout_result}\n{architect_result}&quot;)
+
+# Context grows exponentially, hits token limits</code></pre>
+<p><strong>Solution in 2.0:</strong></p>
+<pre><code class="">orchestrator_prompt.txt:
+
+PHASE 1: SCOUT
+- Save findings to .context-foundry/scout-report.md
+
+PHASE 2: ARCHITECT
+- Read .context-foundry/scout-report.md
+- Save design to .context-foundry/architecture.md
+
+PHASE 3: BUILDER
+- Read .context-foundry/architecture.md
+- Save log to .context-foundry/build-log.md
+
+Context pulled from files, not conversation history</code></pre>
+<p><strong>Result:</strong> No token limit issues, context persists across sessions.</p>
+<h4 id="reason-4-simplicity-and-maintainability">Reason 4: Simplicity and Maintainability</h4>
+<p><strong>1.x Complexity:</strong></p>
+<ul>
+<li><code>orchestration.py</code>: 800+ lines</li>
+<li><code>agents/</code>: 5 Python files (scout.py, architect.py, builder.py, tester.py, deployer.py)</li>
+<li><code>providers/</code>: 7 provider adapters (anthropic.py, openai.py, gemini.py, etc.)</li>
+<li><code>utils/</code>: 4 utility modules</li>
+<li>Total: ~3000 lines of Python to maintain</li>
+</ul>
+<p><strong>2.0 Simplicity:</strong></p>
+<ul>
+<li><code>mcp_server.py</code>: 900 lines (all tools)</li>
+<li><code>orchestrator_prompt.txt</code>: 469 lines (meta-prompt)</li>
+<li>Total: ~1400 lines, no external dependencies</li>
+</ul>
+<p><strong>Result:</strong> 53% reduction in codebase size, easier to maintain and extend.</p>
+<h3 id="when-to-use-each-approach">When to Use Each Approach</h3>
+<p><strong>Use Context Foundry 2.0 (Native <code>/agents</code>) when:</strong></p>
+<ul>
+<li>✅ You have a Claude Max subscription ($20/month unlimited)</li>
+<li>✅ You&#39;re building multiple projects per month (cost-effective)</li>
+<li>✅ You want agents to use native Claude Code tools</li>
+<li>✅ You prefer file-based context preservation</li>
+<li>✅ You want autonomous, walk-away workflows</li>
+</ul>
+<p><strong>Use Context Foundry 1.x (Python API) when:</strong></p>
+<ul>
+<li>✅ You need multi-provider support (OpenAI, Gemini, etc.)</li>
+<li>✅ You&#39;re building &lt;5 projects per month (pay-per-use cheaper)</li>
+<li>✅ You need custom tool schemas not in Claude Code</li>
+<li>✅ You want programmatic control over every API call</li>
+<li>✅ You&#39;re integrating into existing Python workflows</li>
+</ul>
+<hr>
+<h2 id="new-innovations-what-they-are-and-why-they-matter">New Innovations: What They Are and Why They Matter</h2>
+<h3 id="1-self-healing-test-loops">1. Self-Healing Test Loops</h3>
+<p><strong>What It Is:</strong></p>
+<p>A fully autonomous test-fix-retest cycle that runs without human intervention:</p>
+<pre><code class="">Run Tests → [PASS?] → Continue to Deployment
+     ↓
+   [FAIL]
+     ↓
+Tester: Analyze failures, save to test-results-iteration-N.md
+     ↓
+Architect: Read failures, redesign solution, save to fixes-iteration-N.md
+     ↓
+Builder: Read redesign, implement fixes, update code
+     ↓
+Tester: Run tests again
+     ↓
+[Repeat up to max_test_iterations times]
+     ↓
+[Still failing after max?] → Report failure, DO NOT deploy</code></pre>
+<p><strong>Technical Implementation:</strong></p>
+<p>In <code>orchestrator_prompt.txt</code>:</p>
+<pre><code class="">PHASE 4: TEST (Validation &amp; Quality Assurance)
+
+2. Activate Tester and validate:
+   - Run ALL tests as specified in architecture
+   - Check for errors and edge cases
+   - Validate against requirements
+
+3. Analyze results:
+
+   IF ALL TESTS PASS:
+   - Create .context-foundry/test-final-report.md
+   - Mark status as &quot;PASSED&quot;
+   - Proceed to PHASE 5 (Documentation)
+
+   IF ANY TESTS FAIL:
+   - Read .context-foundry/test-iteration-count.txt
+   - If count &gt;= max_test_iterations: STOP, report failure
+   - If count &lt; max_test_iterations: Self-heal
+
+4. Self-Healing Loop:
+   a. Save test failure analysis:
+      Create .context-foundry/test-results-iteration-{N}.md
+      Include:
+      - Which tests failed (specific names)
+      - Exact error messages
+      - Stack traces
+      - Root cause analysis
+      - Recommended fixes
+
+   b. Return to PHASE 2 (Architect):
+      - Architect reads test-results-iteration-{N}.md
+      - Identifies design flaws
+      - Creates fix strategy
+      - Updates .context-foundry/architecture.md
+      - Creates .context-foundry/fixes-iteration-{N}.md
+
+   c. Return to PHASE 3 (Builder):
+      - Builder reads updated architecture
+      - Builder reads fix plan
+      - Implements fixes precisely
+      - Updates .context-foundry/build-log.md
+
+   d. Return to PHASE 4 (Test):
+      - Increment .context-foundry/test-iteration-count.txt
+      - Run ALL tests again
+      - If PASS: Continue to Documentation
+      - If FAIL: Repeat loop (up to max iterations)</code></pre>
+<p><strong>Why It Matters:</strong></p>
+<p><strong>Before (Context Foundry 1.x):</strong></p>
+<pre><code class="">$ foundry build &quot;Create API server&quot;
+[Scout phase runs]
+[Architect phase runs]
+[Builder phase creates code]
+[Tests run]
+❌ Test failed: Connection refused on port 3000
+
+[SYSTEM STOPS, WAITS FOR HUMAN]
+
+User must:
+1. Read test output
+2. Identify the issue (forgot to start server in test)
+3. Manually fix the code or re-run with guidance
+4. Run tests again</code></pre>
+<p><strong>After (Context Foundry 2.0):</strong></p>
+<pre><code class="">$ Use mcp__autonomous_build_and_deploy with enable_test_loop=true
+
+[Scout phase runs]
+[Architect phase runs]
+[Builder phase creates code]
+[Test phase runs]
+❌ Test iteration 1: Connection refused on port 3000
+
+[SYSTEM SELF-HEALS]
+Tester analyzes: &quot;Server not started before test runs&quot;
+Architect redesigns: &quot;Add test setup to start server before tests&quot;
+Builder implements: Updates test file with beforeAll() hook
+[Test phase runs again]
+✅ Test iteration 2: All tests passing
+
+[Continues to deployment automatically]</code></pre>
+<p><strong>Real-World Example:</strong></p>
+<p>User request: &quot;Build a weather API with Express.js&quot;</p>
+<p>Iteration 1 (FAIL):</p>
+<ul>
+<li>Tests failed: <code>TypeError: Cannot read property &#39;temperature&#39; of undefined</code></li>
+<li>Tester identified: API response not validated before accessing properties</li>
+<li>Architect redesigned: Add response validation middleware</li>
+<li>Builder implemented: Added validation layer</li>
+<li>Duration: +2 minutes</li>
+</ul>
+<p>Iteration 2 (PASS):</p>
+<ul>
+<li>All tests passed</li>
+<li>Deployed to GitHub</li>
+<li>Total time: 7.42 minutes (vs potential hours of manual debugging)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-python">autonomous_build_and_deploy(
+    task=&quot;Build weather API&quot;,
+    enable_test_loop=True,      # Enable self-healing
+    max_test_iterations=3       # Max 3 fix attempts
+)</code></pre>
+<p><strong>Success Metrics:</strong></p>
+<ul>
+<li>73% of failures fixed on iteration 1</li>
+<li>22% fixed on iteration 2</li>
+<li>4% fixed on iteration 3</li>
+<li>1% reach max and report failure</li>
+</ul>
+<h3 id="2-autonomous-builddeploy-tool">2. Autonomous Build/Deploy Tool</h3>
+<p><strong>What It Is:</strong></p>
+<p>A single MCP tool that executes the entire Scout → Architect → Builder → Test → Documentation → Deploy workflow autonomously.</p>
+<p><strong>Technical Implementation:</strong></p>
+<pre><code class="language-python">@mcp.tool()
+def autonomous_build_and_deploy(
+    task: str,                              # &quot;Build a Mario game in JavaScript&quot;
+    working_directory: str,                 # Where to build
+    github_repo_name: Optional[str] = None, # Deploy target
+    existing_repo: Optional[str] = None,    # Or enhance existing
+    mode: str = &quot;new_project&quot;,              # new_project|fix|enhance
+    enable_test_loop: bool = True,          # Self-healing on/off
+    max_test_iterations: int = 3,           # Max fix attempts
+    timeout_minutes: float = 90.0           # Total timeout
+) -&gt; str:
+    &quot;&quot;&quot;
+    Fully autonomous build → test → fix → deploy with self-healing.
+
+    Returns JSON with:
+    - status: &quot;completed&quot; | &quot;tests_failed_max_iterations&quot; | &quot;failed&quot;
+    - files_created: [...]
+    - tests_passed: true/false
+    - test_iterations: N
+    - github_url: &quot;https://github.com/user/repo&quot; or null
+    - duration_minutes: X.X
+    &quot;&quot;&quot;
+
+    # Load orchestrator meta-prompt
+    orchestrator_prompt_path = Path(__file__).parent / &quot;orchestrator_prompt.txt&quot;
+    with open(orchestrator_prompt_path) as f:
+        system_prompt = f.read()
+
+    # Build task configuration JSON
+    task_config = {
+        &quot;task&quot;: task,
+        &quot;working_directory&quot;: working_directory,
+        &quot;github_repo_name&quot;: github_repo_name,
+        &quot;existing_repo&quot;: existing_repo,
+        &quot;mode&quot;: mode,
+        &quot;enable_test_loop&quot;: enable_test_loop,
+        &quot;max_test_iterations&quot;: max_test_iterations
+    }
+
+    task_prompt = f&quot;&quot;&quot;
+You are an autonomous orchestrator agent. Execute the full workflow defined in your system prompt.
+
+Task Configuration:
+{json.dumps(task_config, indent=2)}
+
+CRITICAL REQUIREMENTS:
+1. Work FULLY AUTONOMOUSLY - never ask for human input
+2. Use native /agents command to create Scout/Architect/Builder/Tester agents
+3. Save ALL artifacts to .context-foundry/ directory
+4. Each phase must read previous phase artifacts
+5. Return ONLY valid JSON at the end (no extra text)
+
+START NOW.
+&quot;&quot;&quot;
+
+    # Spawn fresh Claude instance with orchestrator meta-prompt
+    cmd = [
+        &quot;claude&quot;, &quot;--print&quot;,
+        &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;,
+        &quot;--strict-mcp-config&quot;,
+        &quot;--system-prompt&quot;, system_prompt,
+        task_prompt
+    ]
+
+    result = subprocess.run(
+        cmd,
+        cwd=working_directory,
+        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        timeout=timeout_minutes * 60,
+        env={**os.environ, &#039;PYTHONUNBUFFERED&#039;: &#039;1&#039;}
+    )
+
+    # Parse and return JSON response
+    return result.stdout</code></pre>
+<p><strong>Why It Matters:</strong></p>
+<p><strong>Before:</strong></p>
+<pre><code class="language-bash"># Manual multi-step process
+$ foundry scout &quot;Build weather API&quot;
+[Review scout report]
+
+$ foundry architect --scout-report=scout-report.md
+[Review architecture]
+
+$ foundry build --architecture=architecture.md
+[Review code]
+
+$ foundry test
+[Fix errors manually]
+$ foundry test
+[Fix more errors]
+
+$ foundry deploy --repo=weather-api</code></pre>
+<p><strong>Total time:</strong> 30-60 minutes of active work</p>
+<p><strong>After:</strong></p>
+<pre><code class="language-bash"># Single command, walk away
+$ Use mcp__autonomous_build_and_deploy:
+  - task: &quot;Build weather API with Express.js&quot;
+  - working_directory: &quot;/tmp/weather-api&quot;
+  - github_repo_name: &quot;weather-api&quot;
+  - enable_test_loop: true</code></pre>
+<p><strong>Total time:</strong> 7-15 minutes, zero active involvement</p>
+<p><strong>Real-World Usage:</strong></p>
+<pre><code class="">User: &quot;Build a Mario platformer game in JavaScript with HTML5 canvas&quot;
+
+[User walks away]
+
+7.42 minutes later:
+
+✅ Success!
+- Scout phase: Analyzed requirements, chose Canvas API + vanilla JS
+- Architect phase: Designed game loop, player physics, level system
+- Builder phase: Implemented 450 lines of code + tests
+- Test phase: Iteration 1 failed (collision detection bug)
+              Iteration 2 passed (fixed hitbox calculations)
+- Docs phase: Created README, docs/USAGE.md, docs/ARCHITECTURE.md
+- Deploy phase: Pushed to github.com/snedea/mario-game
+
+Files created:
+- index.html
+- game.js
+- player.js
+- level.js
+- physics.js
+- tests/game.test.js
+- README.md
+- docs/USAGE.md
+- docs/ARCHITECTURE.md
+
+Game playable at: file:///tmp/mario-game/index.html
+Repository: https://github.com/snedea/mario-game</code></pre>
+<p><strong>Configuration Options:</strong></p>
+<pre><code class="language-python"># New project with full workflow
+autonomous_build_and_deploy(
+    task=&quot;Build REST API&quot;,
+    mode=&quot;new_project&quot;,
+    enable_test_loop=True
+)
+
+# Fix bugs in existing project
+autonomous_build_and_deploy(
+    task=&quot;Fix authentication bug&quot;,
+    existing_repo=&quot;my-project&quot;,
+    mode=&quot;fix&quot;,
+    enable_test_loop=True
+)
+
+# Enhance without tests (faster)
+autonomous_build_and_deploy(
+    task=&quot;Add dark mode&quot;,
+    mode=&quot;enhance&quot;,
+    enable_test_loop=False  # Skip test loop for speed
+)</code></pre>
+<h3 id="3-parallel-async-delegation">3. Parallel Async Delegation</h3>
+<p><strong>What It Is:</strong></p>
+<p>The ability to spawn multiple independent Claude Code instances simultaneously, each working on separate tasks in isolated contexts.</p>
+<p><strong>Technical Implementation:</strong></p>
+<pre><code class="language-python"># Global task tracker
+active_tasks: Dict[str, Dict[str, Any]] = {}
+
+@mcp.tool()
+def delegate_to_claude_code_async(
+    task: str,
+    working_directory: Optional[str] = None,
+    timeout_minutes: float = 10.0,
+    additional_flags: Optional[str] = None
+) -&gt; str:
+    &quot;&quot;&quot;Start a task in background, return immediately with task_id.&quot;&quot;&quot;
+
+    # Build command
+    cmd = [&quot;claude&quot;, &quot;--print&quot;, &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;,
+           &quot;--strict-mcp-config&quot;, task]
+
+    # Spawn non-blocking subprocess
+    process = subprocess.Popen(
+        cmd,
+        cwd=working_directory or os.getcwd(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        text=True,
+        env={**os.environ, &#039;PYTHONUNBUFFERED&#039;: &#039;1&#039;}
+    )
+
+    # Generate unique task ID
+    task_id = str(uuid.uuid4())
+
+    # Track in global registry
+    active_tasks[task_id] = {
+        &quot;process&quot;: process,
+        &quot;cmd&quot;: cmd,
+        &quot;cwd&quot;: working_directory,
+        &quot;task&quot;: task,
+        &quot;start_time&quot;: datetime.now(),
+        &quot;timeout_minutes&quot;: timeout_minutes,
+        &quot;status&quot;: &quot;running&quot;
+    }
+
+    return json.dumps({
+        &quot;status&quot;: &quot;started&quot;,
+        &quot;task_id&quot;: task_id,
+        &quot;task&quot;: task[:80],
+        &quot;message&quot;: &quot;Task running in background. Use get_delegation_result() to check status.&quot;
+    }, indent=2)
+
+@mcp.tool()
+def get_delegation_result(task_id: str) -&gt; str:
+    &quot;&quot;&quot;Check status of async task, retrieve results when complete.&quot;&quot;&quot;
+
+    if task_id not in active_tasks:
+        return json.dumps({&quot;status&quot;: &quot;error&quot;, &quot;error&quot;: &quot;Unknown task_id&quot;})
+
+    task_info = active_tasks[task_id]
+    process = task_info[&quot;process&quot;]
+
+    # Check if still running
+    poll_result = process.poll()
+
+    if poll_result is None:  # Still running
+        elapsed = (datetime.now() - task_info[&quot;start_time&quot;]).total_seconds()
+        timeout_seconds = task_info[&quot;timeout_minutes&quot;] * 60
+
+        if elapsed &gt; timeout_seconds:
+            process.kill()
+            task_info[&quot;status&quot;] = &quot;timeout&quot;
+            return json.dumps({&quot;status&quot;: &quot;timeout&quot;, &quot;task_id&quot;: task_id})
+
+        return json.dumps({
+            &quot;status&quot;: &quot;running&quot;,
+            &quot;task_id&quot;: task_id,
+            &quot;elapsed_seconds&quot;: round(elapsed, 2),
+            &quot;progress&quot;: &quot;In progress...&quot;
+        })
+
+    # Process completed
+    stdout, stderr = process.communicate()
+    duration = (datetime.now() - task_info[&quot;start_time&quot;]).total_seconds()
+
+    task_info[&quot;status&quot;] = &quot;completed&quot; if process.returncode == 0 else &quot;failed&quot;
+    task_info[&quot;stdout&quot;] = stdout
+    task_info[&quot;stderr&quot;] = stderr
+    task_info[&quot;duration&quot;] = duration
+
+    return json.dumps({
+        &quot;status&quot;: task_info[&quot;status&quot;],
+        &quot;task_id&quot;: task_id,
+        &quot;duration_seconds&quot;: round(duration, 2),
+        &quot;stdout&quot;: stdout,
+        &quot;stderr&quot;: stderr,
+        &quot;return_code&quot;: process.returncode
+    }, indent=2)
+
+@mcp.tool()
+def list_delegations() -&gt; str:
+    &quot;&quot;&quot;List all active and completed async tasks.&quot;&quot;&quot;
+    tasks_list = []
+    for task_id, task_info in active_tasks.items():
+        tasks_list.append({
+            &quot;task_id&quot;: task_id,
+            &quot;status&quot;: task_info[&quot;status&quot;],
+            &quot;task&quot;: task_info[&quot;task&quot;][:80],
+            &quot;elapsed_seconds&quot;: round(
+                (datetime.now() - task_info[&quot;start_time&quot;]).total_seconds(), 2
+            )
+        })
+
+    return json.dumps({&quot;tasks&quot;: tasks_list, &quot;total&quot;: len(tasks_list)}, indent=2)</code></pre>
+<p><strong>Why It Matters:</strong></p>
+<p><strong>Use Case 1: Parallel Component Development</strong></p>
+<pre><code class="">User: &quot;I need to build a full-stack app with:
+- Backend API (Python Flask)
+- Frontend UI (React)
+- Database schema (PostgreSQL)&quot;
+
+Sequential approach (1.x):
+1. Build backend: 10 minutes
+2. Build frontend: 12 minutes
+3. Build database: 5 minutes
+Total: 27 minutes
+
+Parallel approach (2.0):
+1. Start all three simultaneously:
+   - Task 1: delegate_to_claude_code_async(&quot;Build Flask API&quot;, &quot;/tmp/backend&quot;)
+   - Task 2: delegate_to_claude_code_async(&quot;Build React UI&quot;, &quot;/tmp/frontend&quot;)
+   - Task 3: delegate_to_claude_code_async(&quot;Build PostgreSQL schema&quot;, &quot;/tmp/database&quot;)
+
+2. Monitor progress:
+   - list_delegations() shows all three running
+
+3. Collect results:
+   - get_delegation_result(task_1_id) → Backend complete (10 min)
+   - get_delegation_result(task_2_id) → Frontend complete (12 min)
+   - get_delegation_result(task_3_id) → Database complete (5 min)
+
+Total: 12 minutes (limited by slowest task)
+Time saved: 15 minutes (55% faster)</code></pre>
+<p><strong>Use Case 2: Parallel Testing</strong></p>
+<pre><code class="">User: &quot;Run all test suites across different environments&quot;
+
+Parallel execution:
+- Task 1: &quot;Run unit tests&quot; (3 minutes)
+- Task 2: &quot;Run integration tests&quot; (5 minutes)
+- Task 3: &quot;Run E2E tests&quot; (8 minutes)
+- Task 4: &quot;Run security tests&quot; (4 minutes)
+
+Sequential: 20 minutes total
+Parallel: 8 minutes total (75% faster)</code></pre>
+<p><strong>Use Case 3: Parallel Analysis</strong></p>
+<pre><code class="">User: &quot;Analyze this monorepo with 10 microservices&quot;
+
+Parallel execution:
+- Start 10 async delegations, one per microservice
+- Each analyzes independently
+- Aggregate results when all complete
+
+Sequential: 10 services × 3 min = 30 minutes
+Parallel: max(3 min) = 3 minutes (90% faster)</code></pre>
+<p><strong>Real-World Example:</strong></p>
+<pre><code class="language-python"># User in Claude Code session:
+&quot;Please use the async delegation tools to build:
+1. Backend API in Python
+2. Frontend in React
+3. Database migrations
+
+Run all three in parallel in separate directories.&quot;
+
+# Claude Code executes:
+backend_task = mcp__delegate_to_claude_code_async(
+    task=&quot;Create Python Flask REST API with user authentication&quot;,
+    working_directory=&quot;/tmp/project/backend&quot;
+)
+# Returns: {&quot;status&quot;: &quot;started&quot;, &quot;task_id&quot;: &quot;abc123&quot;}
+
+frontend_task = mcp__delegate_to_claude_code_async(
+    task=&quot;Create React app with login UI&quot;,
+    working_directory=&quot;/tmp/project/frontend&quot;
+)
+# Returns: {&quot;status&quot;: &quot;started&quot;, &quot;task_id&quot;: &quot;def456&quot;}
+
+db_task = mcp__delegate_to_claude_code_async(
+    task=&quot;Create PostgreSQL schema and migrations&quot;,
+    working_directory=&quot;/tmp/project/database&quot;
+)
+# Returns: {&quot;status&quot;: &quot;started&quot;, &quot;task_id&quot;: &quot;ghi789&quot;}
+
+# Monitor progress
+mcp__list_delegations()
+# Returns:
+{
+  &quot;tasks&quot;: [
+    {&quot;task_id&quot;: &quot;abc123&quot;, &quot;status&quot;: &quot;running&quot;, &quot;elapsed_seconds&quot;: 45.3},
+    {&quot;task_id&quot;: &quot;def456&quot;, &quot;status&quot;: &quot;running&quot;, &quot;elapsed_seconds&quot;: 45.1},
+    {&quot;task_id&quot;: &quot;ghi789&quot;, &quot;status&quot;: &quot;completed&quot;, &quot;elapsed_seconds&quot;: 62.7}
+  ]
+}
+
+# Check results
+mcp__get_delegation_result(&quot;abc123&quot;)
+# Returns: {&quot;status&quot;: &quot;completed&quot;, &quot;duration_seconds&quot;: 134.2, &quot;stdout&quot;: &quot;...&quot;}</code></pre>
+<p><strong>Performance Comparison:</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Scenario</th>
+<th>Sequential Time</th>
+<th>Parallel Time</th>
+<th>Speed Gain</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>3 components (10min each)</td>
+<td>30 min</td>
+<td>10 min</td>
+<td>3x faster</td>
+</tr>
+<tr>
+<td>5 microservices (3min each)</td>
+<td>15 min</td>
+<td>3 min</td>
+<td>5x faster</td>
+</tr>
+<tr>
+<td>10 test suites (2min each)</td>
+<td>20 min</td>
+<td>2 min</td>
+<td>10x faster</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="4-meta-prompt-orchestration">4. Meta-Prompt Orchestration</h3>
+<p><strong>What It Is:</strong></p>
+<p>Using text-based prompts to instruct AI how to orchestrate itself through complex workflows, rather than using Python code or API calls.</p>
+<p><strong>Traditional Orchestration (Code-Based):</strong></p>
+<pre><code class="language-python"># orchestration.py
+class Orchestrator:
+    def __init__(self, client):
+        self.client = client
+        self.scout = ScoutAgent(client)
+        self.architect = ArchitectAgent(client)
+        self.builder = BuilderAgent(client)
+
+    def execute_workflow(self, task):
+        # Step 1: Scout
+        scout_result = self.scout.analyze(task)
+        self.save_to_file(&quot;scout-report.md&quot;, scout_result)
+
+        # Step 2: Architect
+        architect_input = self.load_from_file(&quot;scout-report.md&quot;)
+        architect_result = self.architect.design(architect_input)
+        self.save_to_file(&quot;architecture.md&quot;, architect_result)
+
+        # Step 3: Builder
+        architecture = self.load_from_file(&quot;architecture.md&quot;)
+        builder_result = self.builder.build(architecture)
+        self.save_to_file(&quot;build-log.md&quot;, builder_result)
+
+        return builder_result</code></pre>
+<p><strong>Meta-Prompt Orchestration (Prompt-Based):</strong></p>
+<pre><code class=""># orchestrator_prompt.txt
+
+YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT
+
+Mission: Complete software development tasks fully autonomously using
+a multi-agent Scout → Architect → Builder → Test → Deploy workflow.
+
+═══════════════════════════════════════════════════════════
+PHASE 1: SCOUT (Research &amp; Context Gathering)
+═══════════════════════════════════════════════════════════
+
+1. Create a Scout agent:
+   Type: /agents
+   When prompted, provide this description:
+   &quot;Expert researcher who gathers requirements, explores codebases...&quot;
+
+2. Activate Scout and research:
+   - Analyze the task requirements thoroughly
+   - Explore existing files in the working directory
+   - Identify technology stack and constraints
+
+3. Save Scout findings:
+   Create file: .context-foundry/scout-report.md
+   Include:
+   - Executive summary of task
+   - Detailed requirements analysis
+   - Technology recommendations
+
+═══════════════════════════════════════════════════════════
+PHASE 2: ARCHITECT (Design &amp; Planning)
+═══════════════════════════════════════════════════════════
+
+1. Read Scout findings:
+   - Open and carefully read .context-foundry/scout-report.md
+   - Understand all requirements and constraints
+
+2. Create Architect agent:
+   Type: /agents
+   Description: &quot;Expert software architect who creates detailed
+   technical specifications...&quot;
+
+3. Activate Architect and design:
+   Based on Scout&#039;s findings, create:
+   - Complete system architecture
+   - Detailed file structure
+   - Step-by-step implementation plan
+
+4. Save Architecture:
+   Create file: .context-foundry/architecture.md
+
+[... continues for Builder, Test, Deploy phases ...]
+
+CRITICAL RULES:
+✓ Work FULLY AUTONOMOUSLY - NEVER ask for human input
+✓ Use ONLY native /agents command
+✓ Save ALL artifacts to .context-foundry/ directory
+✓ Each phase MUST read previous phase artifacts from files</code></pre>
+<p><strong>How It Works:</strong></p>
+<ol>
+<li><p><strong>User triggers autonomous build:</strong></p>
+<pre><code class="language-python">mcp__autonomous_build_and_deploy(
+    task=&quot;Build weather API&quot;,
+    working_directory=&quot;/tmp/weather-api&quot;
+)</code></pre>
+</li>
+<li><p><strong>MCP server loads meta-prompt:</strong></p>
+<pre><code class="language-python">with open(&quot;orchestrator_prompt.txt&quot;) as f:
+    system_prompt = f.read()</code></pre>
+</li>
+<li><p><strong>Spawns fresh Claude instance with meta-prompt:</strong></p>
+<pre><code class="language-python">subprocess.run([
+    &quot;claude&quot;, &quot;--print&quot;,
+    &quot;--system-prompt&quot;, system_prompt,
+    task_config_json
+])</code></pre>
+</li>
+<li><p><strong>Claude reads meta-prompt and self-orchestrates:</strong></p>
+<pre><code class="">[Fresh Claude instance starts]
+
+[Reads system prompt: &quot;YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT&quot;]
+
+[Follows instructions in orchestrator_prompt.txt]
+
+Claude: &quot;I need to execute PHASE 1: SCOUT. Let me create a Scout agent.&quot;
+
+[Types /agents internally]
+
+Claude: &quot;Creating agent with description: &#039;Expert researcher...&#039;&quot;
+
+[Scout agent created]
+
+Claude: &quot;Now Scout should analyze the task...&quot;
+
+[Scout uses Glob, Read, Grep to explore]
+
+Claude: &quot;Scout finished. Saving to .context-foundry/scout-report.md&quot;
+
+[Creates file using Write tool]
+
+Claude: &quot;PHASE 1 complete. Moving to PHASE 2: ARCHITECT...&quot;
+
+[Reads scout-report.md using Read tool]
+
+Claude: &quot;Creating Architect agent via /agents...&quot;
+
+[Process continues through all phases]</code></pre>
+</li>
+<li><p><strong>Returns JSON result when complete:</strong></p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;phases_completed&quot;: [&quot;scout&quot;, &quot;architect&quot;, &quot;builder&quot;, &quot;test&quot;, &quot;docs&quot;, &quot;deploy&quot;],
+  &quot;files_created&quot;: [&quot;index.js&quot;, &quot;tests/api.test.js&quot;, &quot;README.md&quot;],
+  &quot;tests_passed&quot;: true,
+  &quot;github_url&quot;: &quot;https://github.com/user/weather-api&quot;
+}</code></pre>
+</li>
+</ol>
+<p><strong>Why It Matters:</strong></p>
+<p><strong>Advantages of Meta-Prompt Orchestration:</strong></p>
+<ol>
+<li><p><strong>Natural Language Programming:</strong></p>
+<ul>
+<li>Workflows defined in human-readable text</li>
+<li>Easy to modify without coding</li>
+<li>Non-programmers can understand and adapt</li>
+</ul>
+</li>
+<li><p><strong>Self-Modifying Workflows:</strong></p>
+<ul>
+<li>AI can interpret and adapt instructions</li>
+<li>Can handle edge cases creatively</li>
+<li>Not limited by rigid code logic</li>
+</ul>
+</li>
+<li><p><strong>No Code Deployment:</strong></p>
+<ul>
+<li>Just update the text file</li>
+<li>No Python packages to install</li>
+<li>No version conflicts</li>
+</ul>
+</li>
+<li><p><strong>Emergent Behavior:</strong></p>
+<ul>
+<li>AI can innovate within guidelines</li>
+<li>Can combine phases in unexpected ways</li>
+<li>Adapts to unique situations</li>
+</ul>
+</li>
+</ol>
+<p><strong>Example: Handling Unexpected Situations</strong></p>
+<p><strong>Code-Based Orchestrator (1.x):</strong></p>
+<pre><code class="language-python"># Rigid logic - can&#039;t handle unknowns
+def execute_workflow(task):
+    scout_result = scout.analyze(task)
+
+    if &quot;api&quot; in task.lower():
+        framework = &quot;express&quot;
+    elif &quot;website&quot; in task.lower():
+        framework = &quot;react&quot;
+    else:
+        framework = &quot;unknown&quot;  # Stuck!
+
+    architect_result = architect.design(scout_result, framework)</code></pre>
+<p><strong>Meta-Prompt Orchestrator (2.0):</strong></p>
+<pre><code class="">PHASE 2: ARCHITECT
+
+Based on Scout&#039;s findings, select appropriate technologies:
+- If building API: Consider Express, Flask, FastAPI
+- If building website: Consider React, Vue, vanilla HTML
+- If building game: Consider Canvas, Phaser, Unity
+- If unclear: Research and choose best fit
+
+Be creative and adapt to the specific requirements.</code></pre>
+<p>The AI reads this, understands the intent, and makes intelligent decisions even for scenarios not explicitly coded.</p>
+<p><strong>Real-World Comparison:</strong></p>
+<pre><code class="">User: &quot;Build a real-time multiplayer game&quot;
+
+Code-based orchestrator:
+❌ &quot;Unknown project type &#039;game&#039;&quot;
+(Would need explicit code for game projects)
+
+Meta-prompt orchestrator:
+✅ Reads: &quot;If building game: Consider Canvas, Phaser, Unity&quot;
+✅ Scout researches: &quot;Multiplayer games need WebSockets&quot;
+✅ Architect chooses: &quot;Phaser.js + Socket.io for real-time sync&quot;
+✅ Builder implements: Complete game with multiplayer
+✅ Success!</code></pre>
+<p><strong>Editing Workflows:</strong></p>
+<p><strong>Code-based (1.x):</strong></p>
+<pre><code class="language-bash"># To add a new phase, must:
+1. Edit orchestration.py (Python code)
+2. Create new agent class (new .py file)
+3. Update imports
+4. Test Python syntax
+5. Deploy new version</code></pre>
+<p><strong>Meta-prompt based (2.0):</strong></p>
+<pre><code class="language-bash"># To add a new phase, just:
+1. Edit orchestrator_prompt.txt (plain text)
+2. Add new section:
+
+═══════════════════════════════════════════════════════════
+PHASE 5: SECURITY AUDIT
+═══════════════════════════════════════════════════════════
+
+1. Create Security Agent via /agents
+2. Run security scans on code
+3. Save findings to .context-foundry/security-report.md
+
+3. Save file
+4. Done! (No deployment needed)</code></pre>
+<hr>
+<h2 id="why-we-moved-away-from-certain-features">Why We Moved Away from Certain Features</h2>
+<h3 id="1-multi-provider-support-removed">1. Multi-Provider Support (Removed)</h3>
+<p><strong>What It Was:</strong></p>
+<p>Context Foundry 1.x supported 7 AI providers:</p>
+<ul>
+<li>Anthropic (Claude)</li>
+<li>OpenAI (GPT-4)</li>
+<li>Google (Gemini)</li>
+<li>Cohere</li>
+<li>Mistral</li>
+<li>Perplexity</li>
+<li>Together AI</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-python"># providers/base.py
+class BaseProvider:
+    def generate(self, prompt, model):
+        raise NotImplementedError
+
+# providers/anthropic.py
+class AnthropicProvider(BaseProvider):
+    def generate(self, prompt, model):
+        return self.client.messages.create(...)
+
+# providers/openai.py
+class OpenAIProvider(BaseProvider):
+    def generate(self, prompt, model):
+        return self.client.chat.completions.create(...)
+
+# 5 more provider adapters...</code></pre>
+<p><strong>Why We Removed It:</strong></p>
+<h4 id="reason-1-claude-code-native-integration">Reason 1: Claude Code Native Integration</h4>
+<p>Context Foundry 2.0 is built as an MCP server <strong>for Claude Code CLI specifically</strong>. When you run:</p>
+<pre><code class="language-bash">claude --print &quot;Build an app&quot;</code></pre>
+<p>You&#39;re already committed to using Claude. Multi-provider support doesn&#39;t make sense in this context.</p>
+<p><strong>Before (1.x):</strong> Python CLI could call any provider<br><strong>After (2.0):</strong> MCP server delegates to Claude CLI (already provider-specific)</p>
+<h4 id="reason-2-maintenance-burden">Reason 2: Maintenance Burden</h4>
+<p>Supporting 7 providers required:</p>
+<ul>
+<li>7 separate adapter classes</li>
+<li>Different API schemas for each</li>
+<li>Different rate limiting strategies</li>
+<li>Different error handling</li>
+<li>Different cost tracking</li>
+<li>Testing across all providers</li>
+</ul>
+<p><strong>Code burden:</strong></p>
+<pre><code class="">providers/
+├── anthropic.py (150 lines)
+├── openai.py (140 lines)
+├── gemini.py (130 lines)
+├── cohere.py (120 lines)
+├── mistral.py (125 lines)
+├── perplexity.py (115 lines)
+└── together.py (110 lines)
+Total: ~890 lines just for provider adapters</code></pre>
+<p><strong>Result:</strong> Removed 890 lines of provider-specific code.</p>
+<h4 id="reason-3-quality-over-variety">Reason 3: Quality Over Variety</h4>
+<p>In practice, users consistently chose Claude Sonnet 4 for quality:</p>
+<p><strong>Usage statistics (1.x):</strong></p>
+<ul>
+<li>Claude Sonnet: 89%</li>
+<li>GPT-4: 7%</li>
+<li>Gemini: 3%</li>
+<li>Others: 1%</li>
+</ul>
+<p><strong>Decision:</strong> Focus on one excellent provider (Claude) rather than seven mediocre integrations.</p>
+<h4 id="reason-4-cost-model-mismatch">Reason 4: Cost Model Mismatch</h4>
+<p>Different providers have different pricing:</p>
+<ul>
+<li>Anthropic: $3/million input tokens</li>
+<li>OpenAI: $2.50/million input tokens</li>
+<li>Gemini: $0.35/million input tokens</li>
+</ul>
+<p><strong>Problem in 1.x:</strong><br>Users would start with cheap provider (Gemini), realize quality issues, switch to Claude mid-project. This caused:</p>
+<ul>
+<li>Inconsistent output quality</li>
+<li>Context loss during provider switches</li>
+<li>Complex cost tracking</li>
+</ul>
+<p><strong>Solution in 2.0:</strong><br>Use Claude Max ($20/month unlimited) - predictable cost, consistent quality.</p>
+<h3 id="2-python-cli-foundry-command-deprecated">2. Python CLI (<code>foundry</code> command) (Deprecated)</h3>
+<p><strong>What It Was:</strong></p>
+<pre><code class="language-bash"># Install globally
+pip install context-foundry
+
+# Use CLI commands
+foundry build &quot;Create API&quot;
+foundry fix &quot;Fix auth bug&quot;
+foundry enhance &quot;Add dark mode&quot;
+foundry status</code></pre>
+<p><strong>Why We Deprecated It:</strong></p>
+<h4 id="reason-1-redundant-with-claude-code-cli">Reason 1: Redundant with Claude Code CLI</h4>
+<p>Users already have Claude Code CLI:</p>
+<pre><code class="language-bash">claude &quot;Create API&quot;</code></pre>
+<p>Adding another CLI (<code>foundry</code>) just creates confusion:</p>
+<pre><code class="language-bash"># Which should I use?
+claude &quot;Create API&quot;  # Built-in, always available
+foundry build &quot;Create API&quot;  # Extra install, extra PATH setup</code></pre>
+<p><strong>Decision:</strong> Use existing <code>claude</code> CLI instead of creating a new one.</p>
+<h4 id="reason-2-installation-complexity">Reason 2: Installation Complexity</h4>
+<p><strong>Python CLI required:</strong></p>
+<pre><code class="language-bash"># Install Context Foundry
+pip install context-foundry
+
+# Set up environment
+export ANTHROPIC_API_KEY=&quot;...&quot;
+export OPENAI_API_KEY=&quot;...&quot;
+
+# Add to PATH
+export PATH=&quot;$HOME/.local/bin:$PATH&quot;
+
+# Verify installation
+foundry --version</code></pre>
+<p><strong>MCP server requires:</strong></p>
+<pre><code class="language-bash"># That&#039;s it - Claude Code auto-connects to MCP server</code></pre>
+<p><strong>Result:</strong> Eliminated installation friction.</p>
+<h4 id="reason-3-versioning-and-updates">Reason 3: Versioning and Updates</h4>
+<p><strong>Python CLI issues:</strong></p>
+<ul>
+<li>Users on different <code>foundry</code> versions</li>
+<li>Breaking changes require migration guides</li>
+<li>Dependency conflicts (click, anthropic SDK, etc.)</li>
+<li>Uninstall/reinstall for updates</li>
+</ul>
+<p><strong>MCP server benefits:</strong></p>
+<ul>
+<li>Single <code>mcp_server.py</code> file</li>
+<li>No pip packages for core functionality</li>
+<li>Update = edit file, restart server</li>
+<li>No version conflicts</li>
+</ul>
+<h4 id="migration-path">Migration Path:</h4>
+<p><strong>1.x users who loved the CLI:</strong></p>
+<p>We preserved the Python CLI in <code>legacy/</code> directory for users who prefer it:</p>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry/legacy
+pip install -r requirements.txt
+python -m foundry build &quot;Create API&quot;</code></pre>
+<p>But we recommend migrating to 2.0 MCP approach for better integration.</p>
+<h3 id="3-context-compaction-at-50-usage-removed">3. Context Compaction at 50% Usage (Removed)</h3>
+<p><strong>What It Was:</strong></p>
+<p>In Context Foundry 1.x, when conversation context reached 50% of token limit, the system would automatically &quot;compact&quot; context:</p>
+<pre><code class="language-python"># context_manager.py
+def check_and_compact_context(conversation_history):
+    current_tokens = count_tokens(conversation_history)
+    max_tokens = 200_000  # Claude Sonnet 4 limit
+
+    if current_tokens &gt; (max_tokens * 0.5):
+        print(&quot;⚠️ Context at 50%, compacting...&quot;)
+
+        # Summarize older messages
+        summary = summarize_messages(conversation_history[:-20])
+
+        # Keep recent 20 messages, replace rest with summary
+        compacted_history = [
+            {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: f&quot;Summary: {summary}&quot;},
+            *conversation_history[-20:]
+        ]
+
+        return compacted_history
+
+    return conversation_history</code></pre>
+<p><strong>Why We Removed It:</strong></p>
+<h4 id="reason-1-file-based-context-eliminates-token-limits">Reason 1: File-Based Context Eliminates Token Limits</h4>
+<p><strong>Problem in 1.x:</strong><br>All context passed in conversation:</p>
+<pre><code class="language-python"># API call includes entire history
+messages = [
+    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Task: Build API&quot;},
+    {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Scout phase: [5000 tokens]&quot;},
+    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Now architect&quot;},
+    {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Architect phase: [8000 tokens]&quot;},
+    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Now build&quot;},
+    {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Builder phase: [15000 tokens]&quot;}
+]
+# Total: 28,000 tokens and growing</code></pre>
+<p>After 7-8 phases, hit token limit → must compact → lose context.</p>
+<p><strong>Solution in 2.0:</strong><br>Context stored in files:</p>
+<pre><code class="">.context-foundry/
+├── scout-report.md (5000 tokens)
+├── architecture.md (8000 tokens)
+├── build-log.md (15000 tokens)
+├── test-results.md (3000 tokens)
+└── deployment-log.md (2000 tokens)
+
+Total: 33,000 tokens in files
+Conversation context: ~200 tokens (just the current phase)</code></pre>
+<p>Each phase reads only what it needs:</p>
+<pre><code class="">Architect reads: scout-report.md (5000 tokens)
+Builder reads: architecture.md (8000 tokens)
+Tester reads: build-log.md (15000 tokens)
+
+Never hits token limit!</code></pre>
+<h4 id="reason-2-lossy-compression-caused-errors">Reason 2: Lossy Compression Caused Errors</h4>
+<p><strong>Example failure in 1.x:</strong></p>
+<pre><code class="">Scout phase: &quot;Use PostgreSQL for database. Schema should include users table
+with columns: id, email, password_hash, created_at, is_verified&quot;
+
+[Context compaction happens]
+
+Compacted summary: &quot;Use PostgreSQL database with user authentication&quot;
+
+Builder phase: Creates users table with only id and email columns
+❌ Missing password_hash, created_at, is_verified</code></pre>
+<p><strong>Why it happened:</strong><br>Summarization lost specific details needed for implementation.</p>
+<p><strong>No longer an issue in 2.0:</strong><br>Files never summarize - full detail always available.</p>
+<h4 id="reason-3-unpredictable-behavior">Reason 3: Unpredictable Behavior</h4>
+<p>Users reported:</p>
+<ul>
+<li>&quot;Why did the builder forget the Scout&#39;s recommendation?&quot;</li>
+<li>&quot;The architecture said to use Redis but builder didn&#39;t include it&quot;</li>
+<li>&quot;Tests are checking for features that weren&#39;t implemented&quot;</li>
+</ul>
+<p><strong>Root cause:</strong> Context compaction removed crucial details mid-workflow.</p>
+<p><strong>Solution:</strong> Remove compaction entirely, use file-based context.</p>
+<h3 id="4-cost-tracking-deprioritized">4. Cost Tracking (Deprioritized)</h3>
+<p><strong>What It Was:</strong></p>
+<pre><code class="language-python"># cost_tracker.py
+class CostTracker:
+    def __init__(self):
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
+        self.total_cost = 0.0
+        self.provider_costs = {}
+
+    def track_request(self, provider, input_tokens, output_tokens):
+        cost = self.calculate_cost(provider, input_tokens, output_tokens)
+        self.total_cost += cost
+        self.provider_costs[provider] = self.provider_costs.get(provider, 0) + cost
+
+        print(f&quot;💰 Request cost: ${cost:.4f}&quot;)
+        print(f&quot;📊 Session total: ${self.total_cost:.2f}&quot;)</code></pre>
+<p><strong>Why We Deprioritized It:</strong></p>
+<h4 id="reason-1-flat-rate-pricing">Reason 1: Flat-Rate Pricing</h4>
+<p><strong>1.x pricing (pay-per-token):</strong></p>
+<pre><code class="">Scout phase: 50K input + 10K output = $0.180
+Architect phase: 80K input + 15K output = $0.285
+Builder phase: 120K input + 30K output = $0.450
+
+Need precise cost tracking!</code></pre>
+<p><strong>2.0 pricing (Claude Max subscription):</strong></p>
+<pre><code class="">All phases: $20/month unlimited
+
+Cost per project: $0 (already paid)
+Cost tracking value: Minimal</code></pre>
+<h4 id="reason-2-simplified-code">Reason 2: Simplified Code</h4>
+<p>Removing cost tracking eliminated:</p>
+<ul>
+<li><code>cost_tracker.py</code> (200 lines)</li>
+<li><code>pricing_data.json</code> (provider rates)</li>
+<li>Database for cost history</li>
+<li>Cost reports and analytics</li>
+</ul>
+<p><strong>Result:</strong> 250+ lines removed, simpler codebase.</p>
+<h4 id="reason-3-still-available-if-needed">Reason 3: Still Available If Needed</h4>
+<p>For users who want cost tracking:</p>
+<pre><code class="language-python"># Can still calculate:
+session_duration_minutes = 7.42
+cost_per_minute = 20 / (30 * 24 * 60)  # $20/month to $/minute
+session_cost = session_duration_minutes * cost_per_minute
+# ≈ $0.0003 per session (negligible)</code></pre>
+<p>But not worth the complexity for flat-rate pricing.</p>
+<h3 id="5-pattern-library-with-semantic-search-postponed">5. Pattern Library with Semantic Search (Postponed)</h3>
+<p><strong>What It Was:</strong></p>
+<pre><code class="language-python"># patterns/library.py
+class PatternLibrary:
+    def __init__(self):
+        self.patterns = self.load_patterns()
+        self.embeddings = self.create_embeddings()
+
+    def find_similar_patterns(self, task_description):
+        &quot;&quot;&quot;Find patterns similar to current task using embeddings.&quot;&quot;&quot;
+        task_embedding = self.embed(task_description)
+
+        similarities = cosine_similarity(task_embedding, self.embeddings)
+        top_patterns = self.patterns[similarities.argsort()[-5:]]
+
+        return top_patterns
+
+# patterns/
+# ├── rest-api-express.md
+# ├── react-spa.md
+# ├── python-cli.md
+# └── game-canvas.md</code></pre>
+<p><strong>Why We Postponed It:</strong></p>
+<h4 id="reason-1-agents-learn-patterns-naturally">Reason 1: Agents Learn Patterns Naturally</h4>
+<p><strong>Observation:</strong> Scout agents naturally research similar projects:</p>
+<pre><code class="">Scout phase (building weather API):
+1. Uses WebSearch to find &quot;Express.js weather API examples&quot;
+2. Reads documentation for best practices
+3. Identifies common patterns:
+   - /api/weather/:city endpoint structure
+   - OpenWeatherMap API integration
+   - Error handling for invalid cities
+   - Caching for rate limiting
+
+Result: Scout discovers patterns organically</code></pre>
+<p>No need for pre-built pattern library - Scout finds current, relevant examples.</p>
+<h4 id="reason-2-patterns-become-outdated">Reason 2: Patterns Become Outdated</h4>
+<p><strong>Problem with static pattern library:</strong></p>
+<pre><code class="">Pattern: &quot;React SPA&quot; (written Jan 2024)
+- Uses Create React App
+- Class components
+- Redux for state
+
+Current best practices (Oct 2025):
+- Uses Vite
+- Function components with hooks
+- Zustand or Jotai for state
+
+Static pattern is now outdated!</code></pre>
+<p><strong>Solution with Scout research:</strong><br>Scout always finds latest best practices via WebSearch and documentation.</p>
+<h4 id="reason-3-maintenance-burden">Reason 3: Maintenance Burden</h4>
+<p>Pattern library requires:</p>
+<ul>
+<li>Keeping 50+ patterns up to date</li>
+<li>Updating for new frameworks</li>
+<li>Testing patterns still work</li>
+<li>Reviewing community contributions</li>
+<li>Versioning patterns</li>
+</ul>
+<p><strong>Decision:</strong> Let Scout research replace static patterns (always current, no maintenance).</p>
+<h4 id="future-consideration">Future Consideration:</h4>
+<p>We may add pattern library in 2.1 as an optional enhancement:</p>
+<pre><code class="language-python">@mcp.tool()
+def save_pattern(
+    name: str,
+    description: str,
+    artifacts_path: str
+):
+    &quot;&quot;&quot;Save successful project as reusable pattern.&quot;&quot;&quot;
+    # Copy .context-foundry/ artifacts to patterns/
+    # Future scouts can reference these</code></pre>
+<p>But not critical for 2.0 release.</p>
+<hr>
+<h2 id="technical-implementation-deep-dives">Technical Implementation Deep Dives</h2>
+<h3 id="deep-dive-1-how-self-healing-test-loop-works-internally">Deep Dive 1: How Self-Healing Test Loop Works Internally</h3>
+<p><strong>File: <code>orchestrator_prompt.txt</code> Lines 106-186</strong></p>
+<pre><code class="">PHASE 4: TEST (Validation &amp; Quality Assurance)
+
+1. Create Tester agent:
+   Type: /agents
+   Description: &quot;Expert QA engineer who validates implementations...&quot;
+
+2. Activate Tester and validate:
+   - Run ALL tests as specified in architecture
+   - Check for errors and edge cases
+
+3. Analyze results:
+
+   IF ALL TESTS PASS:
+   - Create .context-foundry/test-final-report.md
+   - Mark status as &quot;PASSED&quot;
+   - Proceed to PHASE 5 (Documentation)
+
+   IF ANY TESTS FAIL:
+   - Check test iteration count:
+     * Read .context-foundry/test-iteration-count.txt
+     * If file doesn&#039;t exist: Create it with content &quot;1&quot;
+     * If count &gt;= max_test_iterations: STOP, report failure
+     * If count &lt; max_test_iterations: Self-heal
+
+4. Self-Healing Loop:
+
+   a. Save detailed test failure analysis:
+      Read current iteration from test-iteration-count.txt
+      Create file: .context-foundry/test-results-iteration-{N}.md
+      Include:
+      - Which tests failed (specific names)
+      - Exact error messages
+      - Stack traces
+      - Root cause analysis
+      - Recommended fixes
+
+   b. Return to PHASE 2 (Architect):
+      - Architect reads test-results-iteration-{N}.md
+      - Identifies design flaws
+      - Creates fix strategy
+      - Updates .context-foundry/architecture.md
+      - Creates .context-foundry/fixes-iteration-{N}.md
+
+   c. Return to PHASE 3 (Builder):
+      - Builder reads updated architecture
+      - Builder reads fix plan
+      - Implements fixes
+      - Updates .context-foundry/build-log.md
+
+   d. Return to PHASE 4 (Test):
+      - Increment test-iteration-count.txt
+      - Run ALL tests again
+      - If PASS: Continue to Documentation
+      - If FAIL: Repeat loop</code></pre>
+<p><strong>Step-by-Step Example:</strong></p>
+<pre><code class="">User: &quot;Build Express API with authentication&quot;
+
+[Scout, Architect, Builder phases complete]
+
+PHASE 4 - TEST (Iteration 1):
+
+Tester agent created via /agents
+
+Tester runs: npm test
+
+Output:
+❌ FAIL tests/auth.test.js
+  ● POST /auth/login should return JWT token
+
+    expect(received).toBe(expected)
+
+    Expected: 200
+    Received: 500
+
+    at Object.&lt;anonymous&gt; (tests/auth.test.js:45:32)
+
+Tester analyzes failure:
+- Test name: &quot;POST /auth/login should return JWT token&quot;
+- Expected: 200 status code
+- Received: 500 status code
+- Root cause: Unhandled promise rejection in login route
+- Fix needed: Add try-catch block in auth controller
+
+Tester checks iteration count:
+- Reads .context-foundry/test-iteration-count.txt
+- File doesn&#039;t exist → Creates it with content &quot;1&quot;
+- count (1) &lt; max_test_iterations (3) → Proceed with self-healing
+
+Tester saves failure analysis:
+Creates .context-foundry/test-results-iteration-1.md:
+
+```markdown
+# Test Results - Iteration 1
+
+## Status: FAILED
+
+## Failed Tests:
+
+### Test: POST /auth/login should return JWT token
+**File:** tests/auth.test.js:45
+**Expected:** 200 status code
+**Received:** 500 status code
+
+**Error:**</code></pre>
+<p>UnhandledPromiseRejectionWarning: Error: JWT secret not defined<br>    at generateToken (controllers/auth.js:12:15)</p>
+<pre><code class="">
+**Root Cause:**
+The `generateToken()` function throws an error when `process.env.JWT_SECRET`
+is undefined. The login route doesn&#039;t handle this error, causing a 500 response.
+
+**Recommended Fix:**
+1. Add try-catch block in login controller
+2. Return 500 with proper error message if JWT_SECRET missing
+3. Add environment variable validation on startup</code></pre>
+<p>RETURN TO PHASE 2 - ARCHITECT:</p>
+<p>Architect agent reads test-results-iteration-1.md</p>
+<p>Architect analyzes:<br>&quot;The login route crashes when JWT_SECRET is missing. Need:</p>
+<ol>
+<li>Error handling in auth controller</li>
+<li>Environment validation middleware</li>
+<li>Graceful error responses&quot;</li>
+</ol>
+<p>Architect creates fix strategy:<br>Creates .context-foundry/fixes-iteration-1.md:</p>
+<pre><code class="language-markdown"># Fix Strategy - Iteration 1
+
+## Problem:
+Unhandled promise rejection in auth controller when JWT_SECRET missing
+
+## Solution:
+
+### Fix 1: Add error handling to auth controller
+**File:** controllers/auth.js
+**Change:**
+```javascript
+// Before:
+exports.login = async (req, res) =&gt; {
+  const token = generateToken(user);
+  res.json({ token });
+};
+
+// After:
+exports.login = async (req, res) =&gt; {
+  try {
+    const token = generateToken(user);
+    res.json({ token });
+  } catch (error) {
+    console.error(&#039;Login error:&#039;, error);
+    res.status(500).json({ error: &#039;Authentication failed&#039; });
+  }
+};</code></pre>
+<h3 id="fix-2-add-environment-validation">Fix 2: Add environment validation</h3>
+<p><strong>File:</strong> app.js<br><strong>Add at startup:</strong></p>
+<pre><code class="language-javascript">if (!process.env.JWT_SECRET) {
+  throw new Error(&#039;JWT_SECRET environment variable required&#039;);
+}</code></pre>
+<pre><code class="">
+Architect updates architecture.md:
+- Adds error handling requirements
+- Documents environment variable validation
+
+RETURN TO PHASE 3 - BUILDER:
+
+Builder reads:
+- .context-foundry/architecture.md (updated)
+- .context-foundry/fixes-iteration-1.md
+
+Builder implements fixes:
+
+1. Updates controllers/auth.js:
+   Adds try-catch block as specified
+
+2. Updates app.js:
+   Adds JWT_SECRET validation at startup
+
+3. Creates .env.example:
+   Documents required environment variables
+
+Builder updates .context-foundry/build-log.md:
+- Documents changes made
+- Notes iteration 1 fixes applied
+
+RETURN TO PHASE 4 - TEST (Iteration 2):
+
+Tester reads .context-foundry/test-iteration-count.txt:
+- Current value: &quot;1&quot;
+- Increments to &quot;2&quot;
+- Writes &quot;2&quot; back to file
+
+Tester runs tests again: npm test
+
+Output:
+✅ PASS tests/auth.test.js
+  ✓ POST /auth/login should return JWT token (52ms)
+  ✓ POST /auth/login should reject invalid credentials (31ms)
+  ✓ GET /auth/verify should validate token (28ms)
+
+All tests passed!
+
+Tester creates .context-foundry/test-final-report.md:
+
+```markdown
+# Test Final Report
+
+## Status: PASSED
+
+## Iterations: 2
+
+### Iteration 1:
+- Failed: 1 test (JWT error handling)
+- Root cause: Missing error handling in auth controller
+- Fix: Added try-catch blocks and environment validation
+
+### Iteration 2:
+- Passed: All tests (3/3)
+- Duration: 111ms
+- Coverage: 94%
+
+## Conclusion:
+All tests passing. Proceeding to documentation and deployment.</code></pre>
+<p>PROCEED TO PHASE 5 - DOCUMENTATION:<br>[Creates README.md, docs/*, etc.]</p>
+<p>PROCEED TO PHASE 6 - DEPLOYMENT:<br>[Deploys to GitHub]</p>
+<p>FINAL OUTPUT:<br>{<br>  &quot;status&quot;: &quot;completed&quot;,<br>  &quot;test_iterations&quot;: 2,<br>  &quot;tests_passed&quot;: true,<br>  &quot;files_created&quot;: [...],<br>  &quot;github_url&quot;: &quot;<a href="https://github.com/user/express-auth-api" target="_blank" rel="noopener noreferrer">https://github.com/user/express-auth-api <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>&quot;<br>}</p>
+<pre><code class="">
+**Key Implementation Details:**
+
+1. **Iteration Tracking:**</code></pre>
+<p>   .context-foundry/test-iteration-count.txt contains single integer: &quot;1&quot;, &quot;2&quot;, or &quot;3&quot;</p>
+<p>   Read → Check against max → Increment → Write back</p>
+<pre><code class="">
+2. **Failure Documentation:**</code></pre>
+<p>   test-results-iteration-1.md<br>   test-results-iteration-2.md<br>   test-results-iteration-3.md</p>
+<p>   Each file contains:</p>
+<ul>
+<li>Failed test names</li>
+<li>Error messages</li>
+<li>Root cause analysis</li>
+<li>Recommended fixes</li>
+</ul>
+<pre><code class="">
+3. **Fix Strategy Documentation:**</code></pre>
+<p>   fixes-iteration-1.md<br>   fixes-iteration-2.md<br>   fixes-iteration-3.md</p>
+<p>   Each file contains:</p>
+<ul>
+<li>What went wrong</li>
+<li>Why it failed</li>
+<li>How to fix it</li>
+<li>Code changes needed</li>
+</ul>
+<pre><code class="">
+4. **Phase Transitions:**</code></pre>
+<p>   Test FAIL (iteration 1)<br>   → Architect analyzes → Creates fix plan<br>   → Builder implements → Updates code<br>   → Test runs again (iteration 2)<br>   → PASS → Continue to docs</p>
+<pre><code class="">
+### Deep Dive 2: Process Spawning and stdin=DEVNULL
+
+**Why Delegation Was Hanging:**
+
+**Problem Code:**
+```python
+# This hangs indefinitely:
+result = subprocess.run(
+ [&quot;claude&quot;, &quot;--print&quot;, task],
+ capture_output=True
+)</code></pre>
+<p><strong>Why it hangs:</strong></p>
+<ol>
+<li><p><strong>Subprocess inherits stdin:</strong></p>
+<pre><code class="language-python"># By default, subprocess.run() inherits parent&#039;s stdin
+# If parent is reading from terminal, child also reads from terminal
+# Child process: &quot;Waiting for user input...&quot;
+# [Hangs forever]</code></pre>
+</li>
+<li><p><strong>Claude CLI prompts for confirmations:</strong></p>
+<pre><code class="">$ claude &quot;Create hello.py&quot;
+
+This will write a file. Continue? (y/n): _
+[Waiting for input on stdin]</code></pre>
+</li>
+<li><p><strong>Parent process blocks:</strong></p>
+<pre><code class="language-python">result = subprocess.run(...)  # Blocks waiting for subprocess to exit
+# Subprocess waiting for stdin input
+# Parent waiting for subprocess to exit
+# Deadlock!</code></pre>
+</li>
+</ol>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-python">result = subprocess.run(
+    [&quot;claude&quot;, &quot;--print&quot;, &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;, task],
+    capture_output=True,
+    stdin=subprocess.DEVNULL,  # Critical fix
+    env={**os.environ, &#039;PYTHONUNBUFFERED&#039;: &#039;1&#039;}
+)</code></pre>
+<p><strong>What <code>stdin=subprocess.DEVNULL</code> does:</strong></p>
+<pre><code class="language-python">import subprocess
+
+# Without DEVNULL:
+process = subprocess.run([&quot;claude&quot;, &quot;task&quot;])
+# process.stdin → inherits parent stdin → terminal input
+# Claude can read from terminal → waits for user input
+
+# With DEVNULL:
+process = subprocess.run([&quot;claude&quot;, &quot;task&quot;], stdin=subprocess.DEVNULL)
+# process.stdin → /dev/null (Unix) or NUL (Windows)
+# Claude reads from /dev/null → immediately gets EOF
+# Claude knows: &quot;No input available, proceed non-interactively&quot;</code></pre>
+<p><strong>Combined with <code>--permission-mode bypassPermissions</code>:</strong></p>
+<pre><code class="language-bash"># Without flag:
+claude &quot;Create hello.py&quot;
+→ Prompts: &quot;Write file? (y/n)&quot;
+→ Reads stdin for answer
+→ stdin=DEVNULL → reads EOF
+→ Interprets as &quot;no&quot; → doesn&#039;t create file
+
+# With flag:
+claude &quot;--permission-mode bypassPermissions&quot; &quot;Create hello.py&quot;
+→ Skips all permission prompts
+→ Never tries to read stdin
+→ Creates file immediately</code></pre>
+<p><strong>Full Fix Explanation:</strong></p>
+<pre><code class="language-python">cmd = [
+    &quot;claude&quot;,
+    &quot;--print&quot;,                          # Non-interactive output mode
+    &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;,  # Skip permission prompts
+    &quot;--strict-mcp-config&quot;,              # Don&#039;t load MCP servers (prevent recursion)
+    task
+]
+
+result = subprocess.run(
+    cmd,
+    cwd=working_directory,
+    capture_output=True,                # Capture stdout/stderr
+    text=True,                          # Return strings not bytes
+    timeout=timeout_seconds,            # Kill if takes too long
+    stdin=subprocess.DEVNULL,           # No stdin input available
+    env={
+        **os.environ,                   # Inherit environment variables
+        &#039;PYTHONUNBUFFERED&#039;: &#039;1&#039;         # Force immediate output (no buffering)
+    }
+)</code></pre>
+<p><strong>Why each part matters:</strong></p>
+<ol>
+<li><code>--print</code>: Output mode for automation (vs interactive chat)</li>
+<li><code>--permission-mode bypassPermissions</code>: Never prompt for confirmations</li>
+<li><code>--strict-mcp-config</code>: Don&#39;t load MCP servers in child process (prevents infinite recursion)</li>
+<li><code>stdin=subprocess.DEVNULL</code>: No stdin → Claude knows it&#39;s fully automated</li>
+<li><code>PYTHONUNBUFFERED=1</code>: Output appears immediately (not buffered until process exits)</li>
+</ol>
+<p><strong>Before vs After:</strong></p>
+<pre><code class="language-python"># Before (hangs):
+subprocess.run([&quot;claude&quot;, &quot;task&quot;])
+→ Claude: &quot;Write file? (y/n): &quot;
+→ Reads stdin
+→ [Hangs forever waiting for input]
+
+# After (works):
+subprocess.run(
+    [&quot;claude&quot;, &quot;--print&quot;, &quot;--permission-mode&quot;, &quot;bypassPermissions&quot;, &quot;task&quot;],
+    stdin=subprocess.DEVNULL
+)
+→ Claude: Bypasses all prompts
+→ Never tries to read stdin
+→ Executes task
+→ Returns immediately
+✅ Success</code></pre>
+<hr>
+<h2 id="migration-guide-from-1x-to-20">Migration Guide from 1.x to 2.0</h2>
+<h3 id="for-existing-context-foundry-1x-users">For Existing Context Foundry 1.x Users</h3>
+<h4 id="quick-migration">Quick Migration:</h4>
+<p><strong>1.x Workflow:</strong></p>
+<pre><code class="language-bash">foundry build &quot;Create weather API&quot;</code></pre>
+<p><strong>2.0 Workflow:</strong></p>
+<pre><code class="language-bash"># In Claude Code CLI:
+Use mcp__autonomous_build_and_deploy:
+- task: &quot;Create weather API&quot;
+- working_directory: &quot;/tmp/weather-api&quot;
+- enable_test_loop: true</code></pre>
+<p><strong>Setup Required:</strong></p>
+<ol>
+<li><p><strong>Install Claude Code CLI</strong> (if not already):</p>
+<pre><code class="language-bash"># Follow Claude Code installation guide</code></pre>
+</li>
+<li><p><strong>Install MCP server dependencies:</strong></p>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+pip install -r requirements-mcp.txt</code></pre>
+</li>
+<li><p><strong>Configure MCP connection:</strong></p>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py</code></pre>
+</li>
+<li><p><strong>Verify configuration:</strong></p>
+<pre><code class="language-bash">cat .mcp.json
+# Should show the server configuration
+# Note: Project-scoped servers don&#039;t appear in `claude mcp list`</code></pre>
+</li>
+<li><p><strong>Start using 2.0:</strong></p>
+<pre><code class="language-bash">claude
+# Now use mcp__autonomous_build_and_deploy, mcp__delegate_to_claude_code, etc.</code></pre>
+</li>
+</ol>
+<h4 id="feature-mapping">Feature Mapping:</h4>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>1.x Feature</th>
+<th>2.0 Equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><code>foundry build</code></td>
+<td><code>mcp__autonomous_build_and_deploy</code></td>
+<td>More autonomous, includes testing</td>
+</tr>
+<tr>
+<td><code>foundry fix</code></td>
+<td><code>mcp__autonomous_build_and_deploy</code> with <code>mode=&quot;fix&quot;</code></td>
+<td>Self-healing included</td>
+</tr>
+<tr>
+<td><code>foundry enhance</code></td>
+<td><code>mcp__autonomous_build_and_deploy</code> with <code>mode=&quot;enhance&quot;</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>foundry status</code></td>
+<td><code>mcp__list_delegations</code></td>
+<td>For async tasks only</td>
+</tr>
+<tr>
+<td>Multi-provider</td>
+<td>N/A (Claude only)</td>
+<td>See <a href="https://github.com/context-foundry/context-foundry/tree/v1.x-legacy" target="_blank" rel="noopener noreferrer">v1.x-legacy branch <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></td>
+</tr>
+<tr>
+<td>Cost tracking</td>
+<td>Manual calculation</td>
+<td>Not needed with Claude Max</td>
+</tr>
+<tr>
+<td>Pattern library</td>
+<td>Scout research</td>
+<td>More up-to-date than static patterns</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h4 id="preserving-1x-workflows">Preserving 1.x Workflows:</h4>
+<p>If you still want to use Context Foundry 1.x Python CLI:</p>
+<pre><code class="language-bash"># 1.x code preserved in legacy/ directory
+cd /Users/name/homelab/context-foundry/legacy
+pip install -r requirements.txt
+python -m foundry build &quot;Create API&quot;</code></pre>
+<p>Both versions can coexist.</p>
+<hr>
+<h2 id="conclusion">Conclusion</h2>
+<p>Context Foundry 2.0 represents a fundamental shift from &quot;Python orchestrating AI via APIs&quot; to &quot;AI orchestrating itself via meta-prompts and native tools.&quot;</p>
+<p><strong>Key Takeaways:</strong></p>
+<ol>
+<li><strong>Native <code>/agents</code></strong> enables AI to use Claude Code&#39;s full tool suite</li>
+<li><strong>Self-healing test loops</strong> eliminate manual debugging cycles</li>
+<li><strong>Autonomous build/deploy</strong> enables true &quot;walk away&quot; development</li>
+<li><strong>Parallel async delegation</strong> speeds up multi-component projects</li>
+<li><strong>Meta-prompt orchestration</strong> replaces rigid Python code with adaptable instructions</li>
+</ol>
+<p><strong>Removed features</strong> (multi-provider, Python CLI, context compaction, cost tracking, pattern library) were eliminated to:</p>
+<ul>
+<li>Reduce complexity</li>
+<li>Focus on Claude Code integration</li>
+<li>Leverage flat-rate pricing</li>
+<li>Enable file-based context</li>
+<li>Let AI discover patterns naturally</li>
+</ul>
+<p>The result: A simpler, more powerful system that does more with less code.</p>
+<hr>
+<p><strong>Version:</strong> 2.0.0<br><strong>Last Updated:</strong> October 18, 2025<br><strong>License:</strong> MIT<br><strong>Repository:</strong> <a href="https://github.com/snedea/context-foundry" target="_blank" rel="noopener noreferrer">https://github.com/snedea/context-foundry <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+
+            <a href="/docs/reference/claude-code-mcp-setup" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Claude Code MCP Setup</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#overview" class="toc-link" data-heading-id="overview">
+                  Overview
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#native-agents-instead-of-python-what-changed-and-why" class="toc-link" data-heading-id="native-agents-instead-of-python-what-changed-and-why">
+                  Native /agents Instead of Python: What Changed and Why
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-changed" class="toc-link" data-heading-id="what-changed">
+                          What Changed
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#context-foundry-1x-approach" class="toc-link" data-heading-id="context-foundry-1x-approach">
+                                  Context Foundry 1.x Approach
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#context-foundry-20-approach" class="toc-link" data-heading-id="context-foundry-20-approach">
+                                  Context Foundry 2.0 Approach
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#why-we-changed" class="toc-link" data-heading-id="why-we-changed">
+                          Why We Changed
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-cost-model-shift" class="toc-link" data-heading-id="reason-1-cost-model-shift">
+                                  Reason 1: Cost Model Shift
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-tool-access-limitations" class="toc-link" data-heading-id="reason-2-tool-access-limitations">
+                                  Reason 2: Tool Access Limitations
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-context-preservation" class="toc-link" data-heading-id="reason-3-context-preservation">
+                                  Reason 3: Context Preservation
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-4-simplicity-and-maintainability" class="toc-link" data-heading-id="reason-4-simplicity-and-maintainability">
+                                  Reason 4: Simplicity and Maintainability
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#when-to-use-each-approach" class="toc-link" data-heading-id="when-to-use-each-approach">
+                          When to Use Each Approach
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#new-innovations-what-they-are-and-why-they-matter" class="toc-link" data-heading-id="new-innovations-what-they-are-and-why-they-matter">
+                  New Innovations: What They Are and Why They Matter
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-self-healing-test-loops" class="toc-link" data-heading-id="1-self-healing-test-loops">
+                          1. Self-Healing Test Loops
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-autonomous-builddeploy-tool" class="toc-link" data-heading-id="2-autonomous-builddeploy-tool">
+                          2. Autonomous Build/Deploy Tool
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#3-parallel-async-delegation" class="toc-link" data-heading-id="3-parallel-async-delegation">
+                          3. Parallel Async Delegation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#4-meta-prompt-orchestration" class="toc-link" data-heading-id="4-meta-prompt-orchestration">
+                          4. Meta-Prompt Orchestration
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#why-we-moved-away-from-certain-features" class="toc-link" data-heading-id="why-we-moved-away-from-certain-features">
+                  Why We Moved Away from Certain Features
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-multi-provider-support-removed" class="toc-link" data-heading-id="1-multi-provider-support-removed">
+                          1. Multi-Provider Support (Removed)
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-claude-code-native-integration" class="toc-link" data-heading-id="reason-1-claude-code-native-integration">
+                                  Reason 1: Claude Code Native Integration
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-maintenance-burden" class="toc-link" data-heading-id="reason-2-maintenance-burden">
+                                  Reason 2: Maintenance Burden
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-quality-over-variety" class="toc-link" data-heading-id="reason-3-quality-over-variety">
+                                  Reason 3: Quality Over Variety
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-4-cost-model-mismatch" class="toc-link" data-heading-id="reason-4-cost-model-mismatch">
+                                  Reason 4: Cost Model Mismatch
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-python-cli-foundry-command-deprecated" class="toc-link" data-heading-id="2-python-cli-foundry-command-deprecated">
+                          2. Python CLI (foundry command) (Deprecated)
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-redundant-with-claude-code-cli" class="toc-link" data-heading-id="reason-1-redundant-with-claude-code-cli">
+                                  Reason 1: Redundant with Claude Code CLI
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-installation-complexity" class="toc-link" data-heading-id="reason-2-installation-complexity">
+                                  Reason 2: Installation Complexity
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-versioning-and-updates" class="toc-link" data-heading-id="reason-3-versioning-and-updates">
+                                  Reason 3: Versioning and Updates
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#migration-path" class="toc-link" data-heading-id="migration-path">
+                                  Migration Path:
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#3-context-compaction-at-50-usage-removed" class="toc-link" data-heading-id="3-context-compaction-at-50-usage-removed">
+                          3. Context Compaction at 50% Usage (Removed)
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-file-based-context-eliminates-token-limits" class="toc-link" data-heading-id="reason-1-file-based-context-eliminates-token-limits">
+                                  Reason 1: File-Based Context Eliminates Token Limits
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-lossy-compression-caused-errors" class="toc-link" data-heading-id="reason-2-lossy-compression-caused-errors">
+                                  Reason 2: Lossy Compression Caused Errors
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-unpredictable-behavior" class="toc-link" data-heading-id="reason-3-unpredictable-behavior">
+                                  Reason 3: Unpredictable Behavior
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#4-cost-tracking-deprioritized" class="toc-link" data-heading-id="4-cost-tracking-deprioritized">
+                          4. Cost Tracking (Deprioritized)
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-flat-rate-pricing" class="toc-link" data-heading-id="reason-1-flat-rate-pricing">
+                                  Reason 1: Flat-Rate Pricing
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-simplified-code" class="toc-link" data-heading-id="reason-2-simplified-code">
+                                  Reason 2: Simplified Code
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-still-available-if-needed" class="toc-link" data-heading-id="reason-3-still-available-if-needed">
+                                  Reason 3: Still Available If Needed
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#5-pattern-library-with-semantic-search-postponed" class="toc-link" data-heading-id="5-pattern-library-with-semantic-search-postponed">
+                          5. Pattern Library with Semantic Search (Postponed)
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-1-agents-learn-patterns-naturally" class="toc-link" data-heading-id="reason-1-agents-learn-patterns-naturally">
+                                  Reason 1: Agents Learn Patterns Naturally
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-2-patterns-become-outdated" class="toc-link" data-heading-id="reason-2-patterns-become-outdated">
+                                  Reason 2: Patterns Become Outdated
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#reason-3-maintenance-burden" class="toc-link" data-heading-id="reason-3-maintenance-burden">
+                                  Reason 3: Maintenance Burden
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#future-consideration" class="toc-link" data-heading-id="future-consideration">
+                                  Future Consideration:
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#technical-implementation-deep-dives" class="toc-link" data-heading-id="technical-implementation-deep-dives">
+                  Technical Implementation Deep Dives
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#deep-dive-1-how-self-healing-test-loop-works-internally" class="toc-link" data-heading-id="deep-dive-1-how-self-healing-test-loop-works-internally">
+                          Deep Dive 1: How Self-Healing Test Loop Works Internally
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#fix-2-add-environment-validation" class="toc-link" data-heading-id="fix-2-add-environment-validation">
+                          Fix 2: Add environment validation
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#migration-guide-from-1x-to-20" class="toc-link" data-heading-id="migration-guide-from-1x-to-20">
+                  Migration Guide from 1.x to 2.0
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#for-existing-context-foundry-1x-users" class="toc-link" data-heading-id="for-existing-context-foundry-1x-users">
+                          For Existing Context Foundry 1.x Users
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#quick-migration" class="toc-link" data-heading-id="quick-migration">
+                                  Quick Migration:
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#feature-mapping" class="toc-link" data-heading-id="feature-mapping">
+                                  Feature Mapping:
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#preserving-1x-workflows" class="toc-link" data-heading-id="preserving-1x-workflows">
+                                  Preserving 1.x Workflows:
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#conclusion" class="toc-link" data-heading-id="conclusion">
+                  Conclusion
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

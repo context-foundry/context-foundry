@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code MCP Setup | Context Foundry Documentation</title>
+  <meta name="description" content="This guide explains how to set up and use the Context Foundry MCP server to delegate tasks from your main Claude Code CLI session to fresh Claude Code...">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/reference/claude-code-mcp-setup">
+  <meta property="og:title" content="Claude Code MCP Setup">
+  <meta property="og:description" content="This guide explains how to set up and use the Context Foundry MCP server to delegate tasks from your main Claude Code CLI session to fresh Claude Code...">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Claude Code MCP Setup">
+  <meta name="twitter:description" content="This guide explains how to set up and use the Context Foundry MCP server to delegate tasks from your main Claude Code CLI session to fresh Claude Code...">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/reference/claude-code-mcp-setup">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/reference" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Claude Code MCP Setup</h1>
+
+        <div class="doc-body">
+          <h1 id="claude-code-mcp-server-setup-guide">Claude Code MCP Server Setup Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>This guide explains how to set up and use the Context Foundry MCP server to delegate tasks from your main Claude Code CLI session to fresh Claude Code instances. This allows you to:</p>
+<ul>
+<li><strong>Delegate work to clean contexts</strong>: Spawn new Claude Code processes with fresh context windows</li>
+<li><strong>Parallel processing</strong>: Run multiple tasks in separate instances</li>
+<li><strong>Context isolation</strong>: Keep your main session focused while delegating sub-tasks</li>
+<li><strong>Automated workflows</strong>: Chain multiple delegations for complex pipelines</li>
+</ul>
+<h2 id="architecture">Architecture</h2>
+<pre><code class="">┌─────────────────────────────────────────────────────────────┐
+│                    Terminal 1: MCP Server                    │
+│                                                              │
+│  $ python3 tools/mcp_server.py                              │
+│  🚀 Starting Context Foundry MCP Server...                   │
+│  📋 Available tools:                                         │
+│     - context_foundry_build                                 │
+│     - delegate_to_claude_code  ← NEW!                       │
+│                                                              │
+│  [Running, waiting for connections via stdio...]            │
+└─────────────────────────────────────────────────────────────┘
+                              ↕
+                    MCP Protocol (stdio)
+                              ↕
+┌─────────────────────────────────────────────────────────────┐
+│                 Terminal 2: Claude Code CLI                  │
+│                                                              │
+│  $ claude                                                   │
+│  &gt; Use mcp__delegate_to_claude_code to spawn tasks         │
+│                                                              │
+│  ┌──────────────────────────────────────────────┐          │
+│  │ Delegation Request                           │          │
+│  │ task: &quot;Create hello.py&quot;                     │          │
+│  │ working_directory: &quot;/tmp/test&quot;              │          │
+│  └──────────────────────────────────────────────┘          │
+│                      ↓                                       │
+│  ┌──────────────────────────────────────────────┐          │
+│  │ Spawns subprocess:                           │          │
+│  │ $ claude &quot;Create hello.py&quot;                  │          │
+│  │   (fresh instance, clean context)            │          │
+│  └──────────────────────────────────────────────┘          │
+│                      ↓                                       │
+│  ┌──────────────────────────────────────────────┐          │
+│  │ Returns results:                             │          │
+│  │ ✅ Success | Duration | Output               │          │
+│  └──────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────┘</code></pre>
+<h2 id="prerequisites">Prerequisites</h2>
+<h3 id="required">Required</h3>
+<ol>
+<li><p><strong>Python 3.10 or higher</strong></p>
+<pre><code class="language-bash">python3 --version  # Should be 3.10+</code></pre>
+</li>
+<li><p><strong>Context Foundry dependencies</strong></p>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+pip install -r requirements-mcp.txt</code></pre>
+</li>
+<li><p><strong>Claude Code CLI</strong> (installed and in PATH)</p>
+<pre><code class="language-bash">which claude  # Should return a path
+claude --version  # Should show version</code></pre>
+</li>
+</ol>
+<h3 id="optional">Optional</h3>
+<ul>
+<li><strong>API Keys</strong>: If using models that require API keys (Anthropic, OpenAI, etc.)</li>
+<li><strong>Git</strong>: For version control of generated code</li>
+</ul>
+<h2 id="configuration-approaches">Configuration Approaches</h2>
+<p>Claude Code MCP servers can be configured in two ways:</p>
+<h3 id="1-project-scoped-configuration-recommended">1. Project-Scoped Configuration (Recommended)</h3>
+<p><strong>File</strong>: <code>.mcp.json</code> (in your project directory)</p>
+<p><strong>Advantages</strong>:</p>
+<ul>
+<li>✅ Shareable with team via version control</li>
+<li>✅ Different settings per project</li>
+<li>✅ Portable across machines</li>
+<li>✅ Automatically detected when you run <code>claude</code> in the project directory</li>
+</ul>
+<p><strong>Setup command</strong>:</p>
+<pre><code class="language-bash">cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py</code></pre>
+<p><strong>Verification</strong>:</p>
+<pre><code class="language-bash">cat .mcp.json  # Should show your MCP server configuration</code></pre>
+<p><strong>Note</strong>: Project-scoped servers won&#39;t appear in <code>claude mcp list</code> (which only shows global config). They&#39;re automatically detected when you run <code>claude</code> in the project directory.</p>
+<h3 id="2-global-configuration">2. Global Configuration</h3>
+<p><strong>File</strong>: <code>~/.config/claude-code/mcp_settings.json</code></p>
+<p><strong>Advantages</strong>:</p>
+<ul>
+<li>✅ Available in all projects</li>
+<li>✅ No need to be in specific directory</li>
+<li>✅ Appears in <code>claude mcp list</code></li>
+</ul>
+<p><strong>Setup command</strong>:</p>
+<pre><code class="language-bash">claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py</code></pre>
+<p><strong>Verification</strong>:</p>
+<pre><code class="language-bash">claude mcp list  # Should show: ✓ Connected: context-foundry</code></pre>
+<p><strong>Important</strong>: Global config requires absolute paths. If you move the context-foundry directory, you must update the paths.</p>
+<hr>
+<h2 id="installation">Installation</h2>
+<h3 id="step-1-install-dependencies">Step 1: Install Dependencies</h3>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+
+# Install MCP dependencies
+pip install -r requirements-mcp.txt
+
+# Verify installation
+python3 -c &quot;from fastmcp import FastMCP; print(&#039;FastMCP installed successfully&#039;)&quot;</code></pre>
+<h3 id="step-2-verify-mcp-server-code">Step 2: Verify MCP Server Code</h3>
+<p>The MCP server has been modified to include the <code>delegate_to_claude_code</code> tool:</p>
+<pre><code class="language-bash"># Check the server file exists
+ls -la tools/mcp_server.py
+
+# Verify the delegation tool is present
+grep -n &quot;delegate_to_claude_code&quot; tools/mcp_server.py</code></pre>
+<h3 id="step-3-configure-claude-code-mcp-settings">Step 3: Configure Claude Code MCP Settings</h3>
+<p>Choose <strong>either</strong> project-scoped (recommended) or global configuration:</p>
+<h4 id="option-a-project-scoped-recommended">Option A: Project-Scoped (Recommended)</h4>
+<pre><code class="language-bash">cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py</code></pre>
+<p>Verify:</p>
+<pre><code class="language-bash">cat .mcp.json  # Should show the configuration</code></pre>
+<h4 id="option-b-global-configuration">Option B: Global Configuration</h4>
+<pre><code class="language-bash"># Use absolute paths
+claude mcp add --transport stdio context-foundry -- /absolute/path/to/venv/bin/python /absolute/path/to/tools/mcp_server.py</code></pre>
+<p>Verify:</p>
+<pre><code class="language-bash">claude mcp list  # Should show: ✓ Connected: context-foundry</code></pre>
+<p><strong>See &quot;Configuration Approaches&quot; section above for detailed comparison and when to use each option.</strong></p>
+<h3 id="step-4-verify-claude-code-cli">Step 4: Verify Claude Code CLI</h3>
+<pre><code class="language-bash"># Check if claude is in PATH
+which claude
+
+# If not found, you may need to:
+# 1. Install Claude Code CLI
+# 2. Add it to PATH: export PATH=&quot;/path/to/claude:$PATH&quot;
+# 3. Add to your shell profile (~/.zshrc or ~/.bashrc)</code></pre>
+<h2 id="usage">Usage</h2>
+<h3 id="terminal-1-start-the-mcp-server">Terminal 1: Start the MCP Server</h3>
+<p>Open a terminal and run:</p>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+python3 tools/mcp_server.py</code></pre>
+<p>You should see:</p>
+<pre><code class="">🚀 Starting Context Foundry MCP Server...
+📋 Available tools:
+   - context_foundry_build: Build projects using Context Foundry
+   - context_foundry_enhance: Enhance existing projects (coming soon)
+   - context_foundry_status: Get server status
+   - delegate_to_claude_code: Delegate tasks to fresh Claude Code instances
+💡 Configure in Claude Desktop or Claude Code CLI to use this server!</code></pre>
+<p><strong>Keep this terminal running!</strong> The MCP server must remain active for Claude Code to connect to it.</p>
+<h3 id="terminal-2-connect-claude-code-cli">Terminal 2: Connect Claude Code CLI</h3>
+<p>Open a <strong>new terminal</strong> and start Claude Code:</p>
+<pre><code class="language-bash">claude</code></pre>
+<p>Claude Code will automatically detect the MCP server configuration and connect to it.</p>
+<h3 id="using-the-delegation-tool">Using the Delegation Tool</h3>
+<p>Inside your Claude Code session, you can now use the <code>mcp__delegate_to_claude_code</code> tool:</p>
+<h4 id="example-1-simple-task">Example 1: Simple Task</h4>
+<pre><code class="">Please use the mcp__delegate_to_claude_code tool to create a hello.py file
+that prints &quot;Hello World&quot;</code></pre>
+<p>The tool will:</p>
+<ol>
+<li>Spawn a fresh <code>claude</code> process</li>
+<li>Pass the task to it</li>
+<li>Wait for completion</li>
+<li>Return the results</li>
+</ol>
+<h4 id="example-2-specify-working-directory">Example 2: Specify Working Directory</h4>
+<pre><code class="">Use mcp__delegate_to_claude_code with:
+- task: &quot;Analyze this project and create a README.md&quot;
+- working_directory: &quot;/Users/name/homelab/my-project&quot;</code></pre>
+<h4 id="example-3-with-timeout-and-flags">Example 3: With Timeout and Flags</h4>
+<pre><code class="">Use mcp__delegate_to_claude_code with:
+- task: &quot;Run all tests and create a coverage report&quot;
+- working_directory: &quot;/Users/name/homelab/my-project&quot;
+- timeout_minutes: 15.0
+- additional_flags: &quot;--model claude-sonnet-4&quot;</code></pre>
+<h2 id="tool-parameters">Tool Parameters</h2>
+<h3 id="delegate-to-claude-code"><code>delegate_to_claude_code()</code></h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Required</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><code>task</code></td>
+<td>string</td>
+<td>Yes</td>
+<td>-</td>
+<td>The task/prompt to give to the new Claude Code instance</td>
+</tr>
+<tr>
+<td><code>working_directory</code></td>
+<td>string</td>
+<td>No</td>
+<td>Current directory</td>
+<td>Directory where claude should run</td>
+</tr>
+<tr>
+<td><code>timeout_minutes</code></td>
+<td>float</td>
+<td>No</td>
+<td>10.0</td>
+<td>Maximum execution time in minutes</td>
+</tr>
+<tr>
+<td><code>additional_flags</code></td>
+<td>string</td>
+<td>No</td>
+<td>None</td>
+<td>Additional CLI flags (e.g., &quot;--model claude-sonnet-4&quot;)</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h2 id="example-workflows">Example Workflows</h2>
+<h3 id="workflow-1-parallel-code-generation">Workflow 1: Parallel Code Generation</h3>
+<p>Delegate multiple independent tasks to separate instances:</p>
+<pre><code class="">1. Use mcp__delegate_to_claude_code:
+   - task: &quot;Create backend API in Python Flask&quot;
+   - working_directory: &quot;/tmp/project/backend&quot;
+
+2. Use mcp__delegate_to_claude_code:
+   - task: &quot;Create frontend UI in React&quot;
+   - working_directory: &quot;/tmp/project/frontend&quot;
+
+3. Use mcp__delegate_to_claude_code:
+   - task: &quot;Create database schema and migrations&quot;
+   - working_directory: &quot;/tmp/project/database&quot;</code></pre>
+<p>Each delegation runs in a fresh Claude Code instance with clean context.</p>
+<h3 id="workflow-2-analysis-and-documentation">Workflow 2: Analysis and Documentation</h3>
+<pre><code class="">1. Use mcp__delegate_to_claude_code:
+   - task: &quot;Analyze the codebase architecture and create ARCHITECTURE.md&quot;
+   - working_directory: &quot;/Users/name/homelab/my-project&quot;
+   - timeout_minutes: 20.0
+
+2. Use mcp__delegate_to_claude_code:
+   - task: &quot;Generate API documentation from code&quot;
+   - working_directory: &quot;/Users/name/homelab/my-project&quot;
+   - timeout_minutes: 15.0</code></pre>
+<h3 id="workflow-3-testing-and-quality-assurance">Workflow 3: Testing and Quality Assurance</h3>
+<pre><code class="">1. Use mcp__delegate_to_claude_code:
+   - task: &quot;Create comprehensive unit tests for all modules&quot;
+   - working_directory: &quot;/Users/name/homelab/my-project&quot;
+
+2. Use mcp__delegate_to_claude_code:
+   - task: &quot;Run tests and create coverage report&quot;
+   - working_directory: &quot;/Users/name/homelab/my-project&quot;
+   - timeout_minutes: 10.0
+
+3. Use mcp__delegate_to_claude_code:
+   - task: &quot;Analyze test results and suggest improvements&quot;
+   - working_directory: &quot;/Users/name/homelab/my-project&quot;</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-mcp-server-wont-start">Issue: MCP Server won&#39;t start</h3>
+<p><strong>Error:</strong> <code>ImportError: No module named &#39;fastmcp&#39;</code></p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash">pip install -r requirements-mcp.txt
+# Or specifically:
+pip install fastmcp&gt;=2.0.0 nest-asyncio&gt;=1.5.0</code></pre>
+<p><strong>Error:</strong> <code>SyntaxError</code> or Python version errors</p>
+<p><strong>Solution:</strong></p>
+<pre><code class="language-bash"># Check Python version (must be 3.10+)
+python3 --version
+
+# If too old, upgrade Python or use a newer version:
+python3.10 tools/mcp_server.py  # if you have 3.10 installed</code></pre>
+<h3 id="issue-claude-code-doesnt-see-the-mcp-tools">Issue: Claude Code doesn&#39;t see the MCP tools</h3>
+<p><strong>Symptoms:</strong> <code>mcp__delegate_to_claude_code</code> tool not available</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Verify MCP settings file exists:</strong></p>
+<pre><code class="language-bash">cat ~/.config/claude-code/mcp_settings.json</code></pre>
+</li>
+<li><p><strong>Check the path in mcp_settings.json is correct:</strong></p>
+<pre><code class="language-bash"># The path should point to your actual location
+python3 /Users/name/homelab/context-foundry/tools/mcp_server.py</code></pre>
+</li>
+<li><p><strong>Restart Claude Code:</strong></p>
+<ul>
+<li>Exit the current Claude Code session</li>
+<li>Restart: <code>claude</code></li>
+</ul>
+</li>
+<li><p><strong>Check MCP server is running in Terminal 1</strong></p>
+</li>
+</ol>
+<h3 id="issue-claude-command-not-found">Issue: &quot;claude command not found&quot;</h3>
+<p><strong>Error when delegating:</strong> <code>❌ Error: claude command not found</code></p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Find where claude is installed:</strong></p>
+<pre><code class="language-bash"># Try these locations:
+ls -la ~/bin/claude
+ls -la /usr/local/bin/claude
+ls -la ~/.local/bin/claude</code></pre>
+</li>
+<li><p><strong>Add to PATH temporarily:</strong></p>
+<pre><code class="language-bash">export PATH=&quot;/path/to/claude/directory:$PATH&quot;</code></pre>
+</li>
+<li><p><strong>Add to PATH permanently:</strong></p>
+<pre><code class="language-bash"># For Zsh (macOS default):
+echo &#039;export PATH=&quot;/path/to/claude/directory:$PATH&quot;&#039; &gt;&gt; ~/.zshrc
+source ~/.zshrc
+
+# For Bash:
+echo &#039;export PATH=&quot;/path/to/claude/directory:$PATH&quot;&#039; &gt;&gt; ~/.bashrc
+source ~/.bashrc</code></pre>
+</li>
+<li><p><strong>Verify:</strong></p>
+<pre><code class="language-bash">which claude
+claude --version</code></pre>
+</li>
+</ol>
+<h3 id="issue-delegations-timeout">Issue: Delegations timeout</h3>
+<p><strong>Symptoms:</strong> Tasks consistently hit timeout limit</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Increase timeout:</strong></p>
+<pre><code class="">Use mcp__delegate_to_claude_code with:
+- timeout_minutes: 20.0  # or higher</code></pre>
+</li>
+<li><p><strong>Break tasks into smaller pieces:</strong></p>
+<ul>
+<li>Instead of &quot;Build entire application&quot;</li>
+<li>Use: &quot;Create user authentication module&quot; (separate delegations)</li>
+</ul>
+</li>
+<li><p><strong>Check if task is stuck:</strong></p>
+<ul>
+<li>Some tasks may be waiting for user input</li>
+<li>Ensure tasks are fully automated</li>
+</ul>
+</li>
+</ol>
+<h3 id="issue-working-directory-errors">Issue: Working directory errors</h3>
+<p><strong>Error:</strong> <code>❌ Error: Working directory does not exist</code></p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Create the directory first:</strong></p>
+<pre><code class="language-bash">mkdir -p /path/to/working/directory</code></pre>
+</li>
+<li><p><strong>Use absolute paths:</strong></p>
+<pre><code class=""># Good:
+working_directory: &quot;/Users/name/homelab/project&quot;
+
+# May cause issues:
+working_directory: &quot;~/project&quot;  # Expand ~ first
+working_directory: &quot;../project&quot;  # Use absolute path instead</code></pre>
+</li>
+<li><p><strong>Verify the path exists:</strong></p>
+<pre><code class="language-bash">ls -la /path/to/working/directory</code></pre>
+</li>
+</ol>
+<h3 id="issue-output-not-captured-correctly">Issue: Output not captured correctly</h3>
+<p><strong>Symptoms:</strong> Empty stdout/stderr or missing output</p>
+<p><strong>Solutions:</strong></p>
+<ol>
+<li><p><strong>Check both stdout and stderr:</strong> Output may be in either section</p>
+</li>
+<li><p><strong>Some commands may not produce output:</strong> This is normal for some tasks</p>
+</li>
+<li><p><strong>Increase verbosity if possible:</strong></p>
+<pre><code class="">additional_flags: &quot;--verbose&quot;  # if supported by claude</code></pre>
+</li>
+</ol>
+<h2 id="testing-your-setup">Testing Your Setup</h2>
+<p>Follow the test scenarios in <code>examples/test_claude_code_delegation.md</code> to verify everything works:</p>
+<pre><code class="language-bash"># View test examples
+cat /Users/name/homelab/context-foundry/examples/test_claude_code_delegation.md</code></pre>
+<p>Quick test:</p>
+<pre><code class="">In your Claude Code session (Terminal 2), say:
+
+&quot;Please use mcp__delegate_to_claude_code to create a file called test.txt
+containing the text &#039;MCP delegation works!&#039;&quot;</code></pre>
+<p>Expected result:</p>
+<ul>
+<li>✅ Success status</li>
+<li><code>test.txt</code> file created</li>
+<li>Duration shown</li>
+<li>Output captured</li>
+</ul>
+<h2 id="advanced-configuration">Advanced Configuration</h2>
+<h3 id="custom-python-version">Custom Python Version</h3>
+<p>If you need to use a specific Python version for the MCP server:</p>
+<p>Edit <code>~/.config/claude-code/mcp_settings.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;/usr/local/bin/python3.11&quot;,  ← Specify full path
+      &quot;args&quot;: [
+        &quot;/Users/name/homelab/context-foundry/tools/mcp_server.py&quot;
+      ]
+    }
+  }
+}</code></pre>
+<h3 id="environment-variables">Environment Variables</h3>
+<p>Pass environment variables to the MCP server:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;python3&quot;,
+      &quot;args&quot;: [
+        &quot;/Users/name/homelab/context-foundry/tools/mcp_server.py&quot;
+      ],
+      &quot;env&quot;: {
+        &quot;ANTHROPIC_API_KEY&quot;: &quot;your-api-key&quot;,
+        &quot;CUSTOM_VAR&quot;: &quot;value&quot;
+      }
+    }
+  }
+}</code></pre>
+<h3 id="disable-the-mcp-server">Disable the MCP Server</h3>
+<p>To temporarily disable without deleting the configuration:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;python3&quot;,
+      &quot;args&quot;: [
+        &quot;/Users/name/homelab/context-foundry/tools/mcp_server.py&quot;
+      ],
+      &quot;disabled&quot;: true  ← Set to true
+    }
+  }
+}</code></pre>
+<h2 id="performance-tips">Performance Tips</h2>
+<ol>
+<li><p><strong>Timeout tuning:</strong></p>
+<ul>
+<li>Simple tasks: 2-5 minutes</li>
+<li>Code generation: 5-10 minutes</li>
+<li>Analysis: 10-20 minutes</li>
+<li>Complex projects: 20-30 minutes</li>
+</ul>
+</li>
+<li><p><strong>Working directory organization:</strong></p>
+<pre><code class="">/tmp/delegations/
+├── task-1/
+├── task-2/
+└── task-3/</code></pre>
+<p>Use separate directories for parallel delegations to avoid conflicts.</p>
+</li>
+<li><p><strong>Monitor resource usage:</strong></p>
+<pre><code class="language-bash"># In a third terminal, monitor processes:
+watch -n 1 &#039;ps aux | grep claude&#039;</code></pre>
+</li>
+</ol>
+<h2 id="security-considerations">Security Considerations</h2>
+<ol>
+<li><strong>API Keys:</strong> Be careful not to pass sensitive API keys in <code>additional_flags</code></li>
+<li><strong>Working Directory:</strong> Delegated instances have full access to the working directory</li>
+<li><strong>Timeout:</strong> Set reasonable timeouts to prevent runaway processes</li>
+<li><strong>Code Review:</strong> Always review code generated by delegated instances</li>
+</ol>
+<h2 id="next-steps">Next Steps</h2>
+<p>After successful setup:</p>
+<ol>
+<li>✅ <strong>Verify</strong>: Run test scenarios from <code>examples/test_claude_code_delegation.md</code></li>
+<li>🔧 <strong>Experiment</strong>: Try delegating different types of tasks</li>
+<li>📊 <strong>Optimize</strong>: Tune timeouts based on your use cases</li>
+<li>🚀 <strong>Automate</strong>: Create workflows that chain multiple delegations</li>
+<li>📚 <strong>Document</strong>: Record your own delegation patterns</li>
+</ol>
+<h2 id="additional-resources">Additional Resources</h2>
+<ul>
+<li><strong>MCP Server Code:</strong> <code>/Users/name/homelab/context-foundry/tools/mcp_server.py</code></li>
+<li><strong>Test Examples:</strong> <code>/Users/name/homelab/context-foundry/examples/test_claude_code_delegation.md</code></li>
+<li><strong>MCP Settings:</strong> <code>~/.config/claude-code/mcp_settings.json</code></li>
+<li><strong>MCP Protocol Docs:</strong> <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener noreferrer">https://modelcontextprotocol.io/ <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+</ul>
+<h2 id="getting-help">Getting Help</h2>
+<p>If you encounter issues:</p>
+<ol>
+<li>Check this troubleshooting guide</li>
+<li>Review the test examples</li>
+<li>Check MCP server logs (Terminal 1)</li>
+<li>Verify all prerequisites are met</li>
+<li>Try the test scenarios step-by-step</li>
+</ol>
+<h2 id="summary">Summary</h2>
+<h3 id="terminal-1-start-mcp-server">Terminal 1 - Start MCP Server:</h3>
+<pre><code class="language-bash">cd /Users/name/homelab/context-foundry
+python3 tools/mcp_server.py
+# Keep running!</code></pre>
+<h3 id="terminal-2-use-claude-code">Terminal 2 - Use Claude Code:</h3>
+<pre><code class="language-bash">claude
+# Then use: mcp__delegate_to_claude_code tool</code></pre>
+<h3 id="quick-test">Quick Test:</h3>
+<pre><code class="">&quot;Use mcp__delegate_to_claude_code to create hello.py that prints &#039;Hello World&#039;&quot;</code></pre>
+<p>That&#39;s it! You now have a working MCP server that can delegate tasks to fresh Claude Code instances. 🚀</p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/reference/architecture-decisions" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Architecture Decisions</span>
+            </a>
+
+            <a href="/docs/reference/technical-faq" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Technical FAQ</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#overview" class="toc-link" data-heading-id="overview">
+                  Overview
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#architecture" class="toc-link" data-heading-id="architecture">
+                  Architecture
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#prerequisites" class="toc-link" data-heading-id="prerequisites">
+                  Prerequisites
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#required" class="toc-link" data-heading-id="required">
+                          Required
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#optional" class="toc-link" data-heading-id="optional">
+                          Optional
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#configuration-approaches" class="toc-link" data-heading-id="configuration-approaches">
+                  Configuration Approaches
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#1-project-scoped-configuration-recommended" class="toc-link" data-heading-id="1-project-scoped-configuration-recommended">
+                          1. Project-Scoped Configuration (Recommended)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#2-global-configuration" class="toc-link" data-heading-id="2-global-configuration">
+                          2. Global Configuration
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#installation" class="toc-link" data-heading-id="installation">
+                  Installation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#step-1-install-dependencies" class="toc-link" data-heading-id="step-1-install-dependencies">
+                          Step 1: Install Dependencies
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#step-2-verify-mcp-server-code" class="toc-link" data-heading-id="step-2-verify-mcp-server-code">
+                          Step 2: Verify MCP Server Code
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#step-3-configure-claude-code-mcp-settings" class="toc-link" data-heading-id="step-3-configure-claude-code-mcp-settings">
+                          Step 3: Configure Claude Code MCP Settings
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#option-a-project-scoped-recommended" class="toc-link" data-heading-id="option-a-project-scoped-recommended">
+                                  Option A: Project-Scoped (Recommended)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#option-b-global-configuration" class="toc-link" data-heading-id="option-b-global-configuration">
+                                  Option B: Global Configuration
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#step-4-verify-claude-code-cli" class="toc-link" data-heading-id="step-4-verify-claude-code-cli">
+                          Step 4: Verify Claude Code CLI
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#usage" class="toc-link" data-heading-id="usage">
+                  Usage
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#terminal-1-start-the-mcp-server" class="toc-link" data-heading-id="terminal-1-start-the-mcp-server">
+                          Terminal 1: Start the MCP Server
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#terminal-2-connect-claude-code-cli" class="toc-link" data-heading-id="terminal-2-connect-claude-code-cli">
+                          Terminal 2: Connect Claude Code CLI
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#using-the-delegation-tool" class="toc-link" data-heading-id="using-the-delegation-tool">
+                          Using the Delegation Tool
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#example-1-simple-task" class="toc-link" data-heading-id="example-1-simple-task">
+                                  Example 1: Simple Task
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#example-2-specify-working-directory" class="toc-link" data-heading-id="example-2-specify-working-directory">
+                                  Example 2: Specify Working Directory
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#example-3-with-timeout-and-flags" class="toc-link" data-heading-id="example-3-with-timeout-and-flags">
+                                  Example 3: With Timeout and Flags
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#tool-parameters" class="toc-link" data-heading-id="tool-parameters">
+                  Tool Parameters
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#delegate-to-claude-code" class="toc-link" data-heading-id="delegate-to-claude-code">
+                          delegate_to_claude_code()
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#example-workflows" class="toc-link" data-heading-id="example-workflows">
+                  Example Workflows
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#workflow-1-parallel-code-generation" class="toc-link" data-heading-id="workflow-1-parallel-code-generation">
+                          Workflow 1: Parallel Code Generation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#workflow-2-analysis-and-documentation" class="toc-link" data-heading-id="workflow-2-analysis-and-documentation">
+                          Workflow 2: Analysis and Documentation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#workflow-3-testing-and-quality-assurance" class="toc-link" data-heading-id="workflow-3-testing-and-quality-assurance">
+                          Workflow 3: Testing and Quality Assurance
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting" class="toc-link" data-heading-id="troubleshooting">
+                  Troubleshooting
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-mcp-server-wont-start" class="toc-link" data-heading-id="issue-mcp-server-wont-start">
+                          Issue: MCP Server won&#x27;t start
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-claude-code-doesnt-see-the-mcp-tools" class="toc-link" data-heading-id="issue-claude-code-doesnt-see-the-mcp-tools">
+                          Issue: Claude Code doesn&#x27;t see the MCP tools
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-claude-command-not-found" class="toc-link" data-heading-id="issue-claude-command-not-found">
+                          Issue: &quot;claude command not found&quot;
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-delegations-timeout" class="toc-link" data-heading-id="issue-delegations-timeout">
+                          Issue: Delegations timeout
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-working-directory-errors" class="toc-link" data-heading-id="issue-working-directory-errors">
+                          Issue: Working directory errors
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#issue-output-not-captured-correctly" class="toc-link" data-heading-id="issue-output-not-captured-correctly">
+                          Issue: Output not captured correctly
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#testing-your-setup" class="toc-link" data-heading-id="testing-your-setup">
+                  Testing Your Setup
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#advanced-configuration" class="toc-link" data-heading-id="advanced-configuration">
+                  Advanced Configuration
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#custom-python-version" class="toc-link" data-heading-id="custom-python-version">
+                          Custom Python Version
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#environment-variables" class="toc-link" data-heading-id="environment-variables">
+                          Environment Variables
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#disable-the-mcp-server" class="toc-link" data-heading-id="disable-the-mcp-server">
+                          Disable the MCP Server
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#performance-tips" class="toc-link" data-heading-id="performance-tips">
+                  Performance Tips
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#security-considerations" class="toc-link" data-heading-id="security-considerations">
+                  Security Considerations
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#next-steps" class="toc-link" data-heading-id="next-steps">
+                  Next Steps
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#additional-resources" class="toc-link" data-heading-id="additional-resources">
+                  Additional Resources
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#getting-help" class="toc-link" data-heading-id="getting-help">
+                  Getting Help
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary" class="toc-link" data-heading-id="summary">
+                  Summary
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#terminal-1-start-mcp-server" class="toc-link" data-heading-id="terminal-1-start-mcp-server">
+                          Terminal 1 - Start MCP Server:
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#terminal-2-use-claude-code" class="toc-link" data-heading-id="terminal-2-use-claude-code">
+                          Terminal 2 - Use Claude Code:
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#quick-test" class="toc-link" data-heading-id="quick-test">
+                          Quick Test:
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

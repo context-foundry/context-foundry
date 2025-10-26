@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roadmap | Context Foundry Documentation</title>
+  <meta name="description" content="Context Foundry supports two execution modes:">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/guides/roadmap">
+  <meta property="og:title" content="Roadmap">
+  <meta property="og:description" content="Context Foundry supports two execution modes:">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Roadmap">
+  <meta name="twitter:description" content="Context Foundry supports two execution modes:">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/guides/roadmap">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/guides" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">Roadmap</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-roadmap">Context Foundry Roadmap</h1>
+<h2 id="current-status-v12">Current Status: v1.2</h2>
+<p>Context Foundry supports two execution modes:</p>
+<p><strong>✅ MCP Mode (Terminal-Based MCP Server):</strong></p>
+<ul>
+<li>✅ Fully implemented and functional</li>
+<li>✅ Uses Anthropic API key (same as CLI mode)</li>
+<li>✅ Terminal-based MCP server via <code>foundry serve</code></li>
+<li>⚠️ Future: Claude Desktop integration (would use subscription instead of API charges - blocked by sampling support)</li>
+</ul>
+<p><strong>💳 API Mode (Paid):</strong></p>
+<ul>
+<li>✅ Standalone CLI for automation and CI/CD</li>
+<li>✅ Direct Anthropic API access</li>
+<li>✅ Traditional command-line operation</li>
+</ul>
+<p><strong>Core Features (Both Modes):</strong></p>
+<ul>
+<li>✅ Scout → Architect → Builder workflow</li>
+<li>✅ Automated context management</li>
+<li>✅ Pattern library learning</li>
+<li>✅ Local git commits</li>
+<li>✅ Human review checkpoints</li>
+</ul>
+<h2 id="planned-features">Planned Features</h2>
+<h3 id="medium-priority-better-codebase-understanding">🎯 Medium Priority: Better Codebase Understanding</h3>
+<p><strong>Status:</strong> Research Phase</p>
+<p><strong>What:</strong> Enhanced Scout agent that deeply understands existing code.</p>
+<p><strong>Features:</strong></p>
+<ul>
+<li>AST parsing for accurate code structure</li>
+<li>Dependency graph analysis</li>
+<li>Test coverage detection</li>
+<li>Architecture pattern recognition</li>
+<li>Integration with LSP for better code intelligence</li>
+</ul>
+<p><strong>Estimated Completion:</strong> Q2 2025</p>
+<h3 id="medium-priority-temperature-control">🎛️ Medium Priority: Temperature Control</h3>
+<p><strong>Status:</strong> Planned</p>
+<p><strong>What:</strong> Add configurable temperature settings for more deterministic/creative outputs.</p>
+<p><strong>Proposed Defaults:</strong></p>
+<ul>
+<li>Scout phase: 0.7 (allow creativity in architecture design)</li>
+<li>Architect phase: 0.5 (balanced - structured but flexible)</li>
+<li>Builder phase: 0.3 (deterministic code generation)</li>
+</ul>
+<p><strong>Configuration:</strong></p>
+<pre><code class="language-bash"># In .env file
+SCOUT_TEMPERATURE=0.7
+ARCHITECT_TEMPERATURE=0.5
+BUILDER_TEMPERATURE=0.3</code></pre>
+<p><strong>Benefits:</strong></p>
+<ul>
+<li>More consistent code generation</li>
+<li>Reduced hallucinations in Builder phase</li>
+<li>Allow creativity where it matters (Scout/Architect)</li>
+<li>User override for specific use cases</li>
+</ul>
+<p><strong>Estimated Completion:</strong> Q2 2025</p>
+<h3 id="low-priority-interactive-mode-improvements">🔧 Low Priority: Interactive Mode Improvements</h3>
+<p><strong>Status:</strong> Ideas Phase</p>
+<p><strong>What:</strong> Better UX for review checkpoints.</p>
+<p><strong>Ideas:</strong></p>
+<ul>
+<li>TUI (Text User Interface) for reviewing plans</li>
+<li>Side-by-side diff view for proposed changes</li>
+<li>Interactive task reordering</li>
+<li>Inline comments on specs/plans</li>
+<li>Better visualization of context usage</li>
+</ul>
+<p><strong>Estimated Completion:</strong> Q3 2025</p>
+<h3 id="low-priority-multi-repo-support">🌐 Low Priority: Multi-Repo Support</h3>
+<p><strong>Status:</strong> Ideas Phase</p>
+<p><strong>What:</strong> Handle changes across multiple repositories.</p>
+<p><strong>Use Case:</strong></p>
+<pre><code class="language-bash">foundry enhance-multi &quot;Add authentication&quot; \
+  --frontend ~/projects/web-app \
+  --backend ~/projects/api-server</code></pre>
+<p><strong>Estimated Completion:</strong> Q4 2025</p>
+<h2 id="completed-features">Completed Features</h2>
+<h3 id="v10-initial-release">v1.0 - Initial Release</h3>
+<ul>
+<li>✅ Three-phase workflow (Scout → Architect → Builder)</li>
+<li>✅ Automated Context Engineering (ACE)</li>
+<li>✅ Pattern library with semantic search</li>
+<li>✅ Smart context compaction</li>
+<li>✅ Interactive and autonomous modes</li>
+<li>✅ Livestream dashboard</li>
+<li>✅ Session analysis and metrics</li>
+</ul>
+<h3 id="v11-authentication-improvements">v1.1 - Authentication Improvements</h3>
+<ul>
+<li>✅ Attempted Claude CLI integration (later found to still use API)</li>
+<li>✅ Auto-detection of auth method</li>
+<li>✅ Environment variable configuration</li>
+<li>✅ Documentation updates</li>
+<li>⚠️ <strong>Note:</strong> Claude CLI mode removed in v1.2 - was misleading as it still charged API fees</li>
+</ul>
+<h3 id="v12-mcp-server-mode-october-2025">v1.2 - MCP Server Mode (October 2025)</h3>
+<p><strong>Major Feature: Dual-Mode Architecture</strong></p>
+<p>Context Foundry now supports two execution modes, giving users flexibility based on their needs:</p>
+<p><strong>✅ MCP Mode (Terminal-Based - Claude Desktop Integration Pending)</strong></p>
+<ul>
+<li>✅ MCP (Model Context Protocol) server implementation using FastMCP (complete and functional)</li>
+<li>✅ Terminal-based MCP server works with API keys</li>
+<li>⚠️ Future: Claude Desktop integration blocked by lack of sampling support (would use subscription instead of API charges)</li>
+<li>✅ Three MCP tools implemented: <code>context_foundry_build</code>, <code>context_foundry_enhance</code>, <code>context_foundry_status</code></li>
+<li>✅ <code>foundry serve</code> command to start MCP server</li>
+<li>⚠️ Tools return helpful error messages explaining current limitation</li>
+<li>✅ Automatic configuration help with <code>--config-help</code></li>
+</ul>
+<p><strong>💳 API Mode (Continues to Work)</strong></p>
+<ul>
+<li>✅ Standalone CLI operation via <code>foundry build</code></li>
+<li>✅ Direct Anthropic API integration</li>
+<li>✅ Works with Python 3.9+</li>
+<li>✅ Good for CI/CD and automation</li>
+</ul>
+<p><strong>📦 Two-Tier Dependency Architecture</strong></p>
+<ul>
+<li>✅ Base installation works with Python 3.9+ (<code>requirements.txt</code>)</li>
+<li>✅ Optional MCP mode requires Python 3.10+ (<code>requirements-mcp.txt</code>)</li>
+<li>✅ Graceful degradation - users only install what they need</li>
+<li>✅ Clear error messages guiding users to correct setup</li>
+</ul>
+<p><strong>🏗️ Technical Implementation</strong></p>
+<ul>
+<li>✅ Created <code>ClaudeCodeClient</code> for MCP mode (mirrors <code>ClaudeClient</code> interface)</li>
+<li>✅ Factory function <code>get_claude_client()</code> selects appropriate client</li>
+<li>✅ MCP server with three tools for building, enhancing, and status checking</li>
+<li>✅ Fixed package structure - added <code>__init__.py</code> to all package directories</li>
+<li>✅ Removed misleading <code>claude_cli_integration.py</code></li>
+</ul>
+<p><strong>📚 Comprehensive Documentation</strong></p>
+<ul>
+<li>✅ New <code>INSTALL.md</code> with installation guide, troubleshooting, and lessons learned</li>
+<li>✅ New <code>docs/MCP_SETUP.md</code> with step-by-step MCP configuration</li>
+<li>✅ Configuration template in <code>config/claude_desktop_config.example.json</code></li>
+<li>✅ Documented 8 key lessons learned from implementation</li>
+<li>✅ Common issues section with 6 specific problems and solutions</li>
+<li>✅ Verification checklists for both modes</li>
+</ul>
+<p><strong>🎓 Lessons Learned</strong></p>
+<ol>
+<li>Python version management is critical - two-tier architecture solves compatibility</li>
+<li>Package structure matters - <code>find_packages()</code> requires <code>__init__.py</code> files</li>
+<li>PATH management is non-trivial - document exactly where scripts install</li>
+<li>Editable installs can be tricky - explicit Python version helps</li>
+<li>Dependencies should be gradual - optional features = optional dependencies</li>
+<li>Error messages should be helpful - guide users with exact commands</li>
+<li>Documentation should match reality - write after debugging, not before</li>
+<li>Two modes require two strategies - shared core with different clients</li>
+</ol>
+<p><strong>Key Insight:</strong> Users discovered that the original &quot;Claude CLI&quot; mode still charged API fees, leading to this comprehensive dual-mode implementation that provides true free usage via MCP while maintaining API mode for automation.</p>
+<p><strong>Completed:</strong> October 4, 2025</p>
+<h3 id="v210-enhancement-mode-october-2025">v2.1.0 - Enhancement Mode (October 2025)</h3>
+<p><strong>Major Feature: Fix, Enhance, and Upgrade Existing Codebases</strong></p>
+<p>Context Foundry can now intelligently modify existing projects instead of only building from scratch:</p>
+<p><strong>✅ Multi-Mode Support</strong></p>
+<ul>
+<li>✅ <code>new_project</code> - Build from scratch (original functionality)</li>
+<li>✅ <code>fix_bug</code> - Fix bugs in existing code</li>
+<li>✅ <code>add_feature</code> - Add features to existing code</li>
+<li>✅ <code>upgrade_deps</code> - Upgrade dependencies</li>
+<li>✅ <code>refactor</code> - Refactor existing code</li>
+<li>✅ <code>add_tests</code> - Add tests to existing code</li>
+</ul>
+<p><strong>✅ Intelligent Detection System</strong></p>
+<ul>
+<li>✅ Automatic codebase detection (15+ project types supported)<ul>
+<li>Python (<code>requirements.txt</code>, <code>setup.py</code>, <code>pyproject.toml</code>)</li>
+<li>Node.js (<code>package.json</code>, <code>tsconfig.json</code>)</li>
+<li>Rust (<code>Cargo.toml</code>), Go (<code>go.mod</code>), Java (<code>pom.xml</code>)</li>
+<li>Ruby (<code>Gemfile</code>), PHP (<code>composer.json</code>), .NET (<code>*.csproj</code>)</li>
+<li>And more...</li>
+</ul>
+</li>
+<li>✅ Intent detection from natural language keywords<ul>
+<li>&quot;fix&quot; → <code>fix_bug</code>, &quot;add&quot; → <code>add_feature</code>, &quot;upgrade&quot; → <code>upgrade_deps</code></li>
+</ul>
+</li>
+<li>✅ Auto-mode adjustment with conflict warnings</li>
+<li>✅ Git repository status checking</li>
+<li>✅ Confidence scoring (high/medium/low)</li>
+</ul>
+<p><strong>✅ Phase 0: Codebase Analysis</strong> (NEW!)</p>
+<ul>
+<li>✅ Runs ONLY for enhancement modes (skipped for new projects)</li>
+<li>✅ Analyzes project structure, architecture, and existing tests</li>
+<li>✅ Reviews git history and current branch state</li>
+<li>✅ Creates <code>codebase-analysis.md</code> report for context</li>
+<li>✅ Provides full understanding before making changes</li>
+</ul>
+<p><strong>✅ Enhancement-Aware Orchestrator</strong></p>
+<ul>
+<li>✅ Scout phase: Mode-specific analysis strategies<ul>
+<li>Target ed bug finding for <code>fix_bug</code></li>
+<li>Integration point analysis for <code>add_feature</code></li>
+<li>Dependency impact assessment for <code>upgrade_deps</code></li>
+</ul>
+</li>
+<li>✅ PHASE 2.5 (Parallel Builders): Targeted modifications<ul>
+<li>Modifies existing files instead of creating new projects</li>
+<li>Preserves existing code structure and patterns</li>
+<li>Creates feature branches before making changes</li>
+<li>Groups changes by logical components</li>
+</ul>
+</li>
+<li>✅ Test phase: Validates existing functionality preserved</li>
+<li>✅ Deploy phase: Feature branch + Pull Request workflow<ul>
+<li>Pushes to feature branch (NOT main)</li>
+<li>Creates PR with detailed description</li>
+<li>Links to GitHub issues (<code>Closes #N</code>)</li>
+<li>Requires human review before merge</li>
+</ul>
+</li>
+</ul>
+<p><strong>✅ Testing &amp; Validation</strong></p>
+<ul>
+<li>✅ Standalone test script (<code>test_detection.py</code>)</li>
+<li>✅ Live test: YouTube Transcript Summarizer enhancement<ul>
+<li>Added auto-save markdown feature</li>
+<li>21 new tests (all passing)</li>
+<li>Created PR #2 on feature branch</li>
+<li>Zero impact on existing functionality</li>
+<li>Completed in ~12 minutes, 1 test iteration</li>
+</ul>
+</li>
+</ul>
+<p><strong>📊 Impact</strong></p>
+<ul>
+<li>🎯 <strong>Codebase Coverage</strong>: Detects Python, JavaScript/TypeScript, Rust, Go, Java, Ruby, PHP, .NET, C/C++, and more</li>
+<li>🚀 <strong>Success Rate</strong>: 100% on first live test (YouTube Transcript Summarizer)</li>
+<li>📝 <strong>Code Quality</strong>: Professional PR workflow with detailed descriptions</li>
+<li>⚡ <strong>Efficiency</strong>: Feature branches + PRs enable safe, reviewable changes</li>
+</ul>
+<p><strong>🔧 Technical Implementation</strong></p>
+<ul>
+<li><code>tools/mcp_server.py</code> (lines 768-1165): Detection and integration<ul>
+<li><code>_detect_existing_codebase()</code> - 15+ project types</li>
+<li><code>_detect_task_intent()</code> - keyword-based mode detection</li>
+<li><code>autonomous_build_and_deploy()</code> - integrated detection and warnings</li>
+</ul>
+</li>
+<li><code>tools/orchestrator_prompt.txt</code>: Enhancement-aware phases<ul>
+<li>Mode detection section (lines 49-70)</li>
+<li>Phase 0: Codebase Analysis (lines 71-175)</li>
+<li>Scout enhancement guidance (lines 257-295)</li>
+<li>PHASE 2.5 targeted modifications (lines 481-514)</li>
+<li>Deploy PR workflow (lines 1237-1407)</li>
+</ul>
+</li>
+<li><code>test_detection.py</code>: Standalone validation script</li>
+</ul>
+<p><strong>📚 Use Cases</strong></p>
+<pre><code class="language-python"># Fix a bug in existing codebase
+autonomous_build_and_deploy(
+    task=&quot;Fix the authentication bug in the login page&quot;,
+    working_directory=&quot;/path/to/project&quot;,
+    mode=&quot;fix_bug&quot;  # Auto-detected from &quot;fix&quot; keyword
+)
+
+# Add a feature
+autonomous_build_and_deploy(
+    task=&quot;Add dark mode toggle to settings page&quot;,
+    working_directory=&quot;/path/to/project&quot;,
+    mode=&quot;add_feature&quot;  # Auto-detected from &quot;add&quot; keyword
+)
+
+# Upgrade dependencies
+autonomous_build_and_deploy(
+    task=&quot;Upgrade all npm packages to latest versions&quot;,
+    working_directory=&quot;/path/to/project&quot;,
+    mode=&quot;upgrade_deps&quot;  # Auto-detected from &quot;upgrade&quot; keyword
+)</code></pre>
+<p><strong>Key Insight:</strong> Enhancement mode transforms Context Foundry from a greenfield development tool into a comprehensive code evolution platform. It can now fix bugs, add features, upgrade dependencies, refactor code, and add tests to ANY existing project - whether built by Context Foundry or not.</p>
+<p><strong>Completed:</strong> October 24, 2025</p>
+<h3 id="v220-github-agent-october-2025">v2.2.0 - GitHub Agent (October 2025)</h3>
+<p><strong>Major Feature: Comprehensive GitHub Integration &amp; Automation</strong></p>
+<p>Context Foundry now sets up complete GitHub project infrastructure automatically:</p>
+<p><strong>✅ Phase 7.5: GitHub Integration Agent</strong></p>
+<ul>
+<li>✅ Dedicated GitHub agent with specialized prompt</li>
+<li>✅ Intelligent project type detection</li>
+<li>✅ Autonomous GitHub configuration</li>
+<li>✅ Full CI/CD workflow generation</li>
+<li>✅ Professional project setup from day 1</li>
+</ul>
+<p><strong>✅ Issue Tracking &amp; Project Management</strong></p>
+<ul>
+<li>✅ Automatic issue creation from Scout reports</li>
+<li>✅ Issue-commit-PR linking</li>
+<li>✅ Issue closure on completion</li>
+<li>✅ Standard labels for project organization</li>
+<li>✅ Issue/PR templates for collaboration</li>
+</ul>
+<p><strong>✅ CI/CD Automation (GitHub Actions)</strong></p>
+<ul>
+<li>✅ Test workflow generation (automatic)</li>
+<li>✅ Deployment workflow for web apps (GitHub Pages)</li>
+<li>✅ Docker build &amp; publish workflow (GHCR)</li>
+<li>✅ Context-aware workflow creation based on project type</li>
+<li>✅ Branch protection rules for new projects</li>
+</ul>
+<p><strong>✅ Release Management</strong></p>
+<ul>
+<li>✅ Automatic version detection from package files</li>
+<li>✅ Git tag creation and push</li>
+<li>✅ GitHub release with generated changelog</li>
+<li>✅ Test results and build metadata in release notes</li>
+<li>✅ Links to documentation and artifacts</li>
+</ul>
+<p><strong>✅ Deployment Integration</strong></p>
+<ul>
+<li>✅ GitHub Pages auto-setup for web applications</li>
+<li>✅ Live demo link added to README</li>
+<li>✅ Automatic deployment on push to main</li>
+<li>✅ Multi-platform Docker builds (if applicable)</li>
+</ul>
+<p><strong>✅ Enhancement Mode Integration</strong></p>
+<ul>
+<li>✅ Draft PR creation for tracking progress</li>
+<li>✅ PR updates as build progresses</li>
+<li>✅ Automatic PR readiness marking</li>
+<li>✅ Issue-PR linking with &quot;Closes #N&quot;</li>
+</ul>
+<p><strong>🏗️ Technical Implementation</strong></p>
+<ul>
+<li><code>tools/github_agent_prompt.txt</code> - Comprehensive agent instructions (800+ lines)<ul>
+<li>Phase 1: Project type detection (web app, CLI, API, library, container)</li>
+<li>Phase 2: Issue creation and tracking</li>
+<li>Phase 3: Labels and templates</li>
+<li>Phase 4: CI/CD workflows (test, deploy, docker)</li>
+<li>Phase 5: Release creation with changelog</li>
+<li>Phase 6: GitHub Pages setup</li>
+<li>Phase 7: Branch protection</li>
+<li>Phase 8: Issue updates and closure</li>
+</ul>
+</li>
+<li><code>tools/orchestrator_prompt.txt</code> - Phase 7.5 integration (lines 1736-1849)</li>
+<li><code>docs/SESSION_SUMMARY_SCHEMA.md</code> - Extended schema with GitHub metadata</li>
+<li><code>docs/GITHUB_AGENT_PROPOSAL.md</code> - Complete feature specification</li>
+</ul>
+<p><strong>📊 Session Summary Schema v2.0</strong><br>New <code>github</code> metadata object includes:</p>
+<pre><code class="language-json">{
+  &quot;github&quot;: {
+    &quot;issue_number&quot;: 1,
+    &quot;issue_url&quot;: &quot;https://github.com/owner/repo/issues/1&quot;,
+    &quot;release_version&quot;: &quot;1.0.0&quot;,
+    &quot;release_url&quot;: &quot;https://github.com/owner/repo/releases/tag/v1.0.0&quot;,
+    &quot;pages_url&quot;: &quot;https://owner.github.io/repo&quot;,
+    &quot;workflows_created&quot;: true,
+    &quot;actions_url&quot;: &quot;https://github.com/owner/repo/actions&quot;,
+    &quot;branch_protection_enabled&quot;: true
+  }
+}</code></pre>
+<p><strong>🎯 What Users Get Automatically</strong></p>
+<p><strong>For New Projects:</strong></p>
+<ol>
+<li>🎫 Tracking issue created with Scout report</li>
+<li>⚙️ GitHub Actions CI/CD workflows</li>
+<li>🏷️ Standard labels (context-foundry, autonomous-build, etc.)</li>
+<li>📋 Issue/PR templates for collaboration</li>
+<li>📦 GitHub release with changelog</li>
+<li>🌐 GitHub Pages deployment (web apps)</li>
+<li>🔒 Branch protection on main</li>
+<li>📚 Professional README with badges and links</li>
+</ol>
+<p><strong>For Enhancements:</strong></p>
+<ol>
+<li>🎫 Tracking issue for the fix/feature</li>
+<li>🔀 Draft PR with progress tracking</li>
+<li>🔗 Issue-PR-commit linking</li>
+<li>✅ Automatic PR readiness marking</li>
+<li>📝 Test results in PR description</li>
+</ol>
+<p><strong>📈 Benefits</strong></p>
+<ul>
+<li><strong>Professional Setup</strong>: Projects look mature from day 1</li>
+<li><strong>Full Automation</strong>: CI/CD runs automatically on every push</li>
+<li><strong>Better Tracking</strong>: Complete audit trail (Issue → PR → Release)</li>
+<li><strong>Easy Deployment</strong>: GitHub Pages live immediately</li>
+<li><strong>Collaboration Ready</strong>: Templates and guidelines in place</li>
+<li><strong>Showcase Quality</strong>: Autonomous builds are deployment-ready</li>
+</ul>
+<p><strong>🎓 Design Decisions</strong></p>
+<ol>
+<li><strong>Dedicated Agent</strong>: Sophisticated decision-making based on project type</li>
+<li><strong>Intelligent Detection</strong>: Reads Scout/Architect context to customize setup</li>
+<li><strong>Graceful Degradation</strong>: Optional features don&#39;t block build completion</li>
+<li><strong>Context-Aware</strong>: Different workflows for web apps vs APIs vs libraries</li>
+<li><strong>Enhancement-Friendly</strong>: Respects existing project settings</li>
+<li><strong>Error Resilient</strong>: Continues on non-critical failures</li>
+</ol>
+<p><strong>📝 Example: Web App Build</strong></p>
+<p>Before GitHub Agent:</p>
+<pre><code class="">✅ Code written → ✅ Tests pass → ✅ Pushed to GitHub → Done</code></pre>
+<p>After GitHub Agent:</p>
+<pre><code class="">✅ Code written → ✅ Tests pass → ✅ Pushed to GitHub
+  ↓
+✅ Issue #1 created
+✅ CI workflow configured (test + deploy)
+✅ GitHub Pages enabled
+✅ Release v1.0.0 created with changelog
+✅ Issue #1 closed with summary
+✅ Live demo: https://user.github.io/app
+✅ Professional project ready for collaboration</code></pre>
+<p><strong>Key Insight:</strong> The GitHub Agent elevates Context Foundry builds from &quot;code pushed to GitHub&quot; to &quot;fully automated, deployment-ready, professionally managed projects.&quot; Every build now includes comprehensive CI/CD, release management, and collaboration infrastructure - no manual setup required.</p>
+<p><strong>Completed:</strong> October 24, 2025</p>
+<h2 id="contributing">Contributing</h2>
+<p>Want to help implement these features? Check out our <a href="CONTRIBUTING.md">CONTRIBUTING.md</a> guide!</p>
+<h2 id="feedback">Feedback</h2>
+<p>Have ideas for features not on this roadmap? Open an issue on GitHub:<br><a href="https://github.com/snedea/context-foundry/issues" target="_blank" rel="noopener noreferrer">https://github.com/snedea/context-foundry/issues <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></p>
+<hr>
+<p><em>Last Updated: 2025-10-24</em></p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/guides/feedback-system" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Feedback System</span>
+            </a>
+
+            <a href="/docs/guides/security" class="doc-nav-link doc-nav-next" rel="next">
+              <span class="doc-nav-label">Next</span>
+              <span class="doc-nav-title">Security</span>
+            </a>
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#current-status-v12" class="toc-link" data-heading-id="current-status-v12">
+                  Current Status: v1.2
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#planned-features" class="toc-link" data-heading-id="planned-features">
+                  Planned Features
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#medium-priority-better-codebase-understanding" class="toc-link" data-heading-id="medium-priority-better-codebase-understanding">
+                          🎯 Medium Priority: Better Codebase Understanding
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#medium-priority-temperature-control" class="toc-link" data-heading-id="medium-priority-temperature-control">
+                          🎛️ Medium Priority: Temperature Control
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#low-priority-interactive-mode-improvements" class="toc-link" data-heading-id="low-priority-interactive-mode-improvements">
+                          🔧 Low Priority: Interactive Mode Improvements
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#low-priority-multi-repo-support" class="toc-link" data-heading-id="low-priority-multi-repo-support">
+                          🌐 Low Priority: Multi-Repo Support
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#completed-features" class="toc-link" data-heading-id="completed-features">
+                  Completed Features
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#v10-initial-release" class="toc-link" data-heading-id="v10-initial-release">
+                          v1.0 - Initial Release
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#v11-authentication-improvements" class="toc-link" data-heading-id="v11-authentication-improvements">
+                          v1.1 - Authentication Improvements
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#v12-mcp-server-mode-october-2025" class="toc-link" data-heading-id="v12-mcp-server-mode-october-2025">
+                          v1.2 - MCP Server Mode (October 2025)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#v210-enhancement-mode-october-2025" class="toc-link" data-heading-id="v210-enhancement-mode-october-2025">
+                          v2.1.0 - Enhancement Mode (October 2025)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#v220-github-agent-october-2025" class="toc-link" data-heading-id="v220-github-agent-october-2025">
+                          v2.2.0 - GitHub Agent (October 2025)
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#contributing" class="toc-link" data-heading-id="contributing">
+                  Contributing
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#feedback" class="toc-link" data-heading-id="feedback">
+                  Feedback
+                </a>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>

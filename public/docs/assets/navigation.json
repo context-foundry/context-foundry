@@ -1,0 +1,278 @@
+{
+  "categories": [
+    {
+      "id": "getting-started",
+      "name": "Getting Started",
+      "description": "Quick start guides and tutorials",
+      "order": 1,
+      "docs": [
+        {
+          "title": "FAQ",
+          "slug": "faq",
+          "url": "/docs/getting-started/faq"
+        },
+        {
+          "title": "Overview",
+          "slug": "readme",
+          "url": "/docs/getting-started/readme"
+        },
+        {
+          "title": "Quick Start",
+          "slug": "quickstart",
+          "url": "/docs/getting-started/quickstart"
+        },
+        {
+          "title": "User Guide",
+          "slug": "user-guide",
+          "url": "/docs/getting-started/user-guide"
+        }
+      ]
+    },
+    {
+      "id": "guides",
+      "name": "Guides",
+      "description": "How-to guides and best practices",
+      "order": 2,
+      "docs": [
+        {
+          "title": "Changelog",
+          "slug": "changelog",
+          "url": "/docs/guides/changelog"
+        },
+        {
+          "title": "Feedback System",
+          "slug": "feedback-system",
+          "url": "/docs/guides/feedback-system"
+        },
+        {
+          "title": "Roadmap",
+          "slug": "roadmap",
+          "url": "/docs/guides/roadmap"
+        },
+        {
+          "title": "Security",
+          "slug": "security",
+          "url": "/docs/guides/security"
+        }
+      ]
+    },
+    {
+      "id": "technical",
+      "name": "Technical",
+      "description": "Architecture and deep dives",
+      "order": 3,
+      "docs": [
+        {
+          "title": "15 Innovations",
+          "slug": "innovations",
+          "url": "/docs/technical/innovations"
+        },
+        {
+          "title": "Architecture Diagrams",
+          "slug": "architecture-diagrams",
+          "url": "/docs/technical/architecture-diagrams"
+        },
+        {
+          "title": "Context Preservation",
+          "slug": "context-preservation",
+          "url": "/docs/technical/context-preservation"
+        },
+        {
+          "title": "Delegation Model",
+          "slug": "delegation-model",
+          "url": "/docs/technical/delegation-model"
+        },
+        {
+          "title": "MCP Server Architecture",
+          "slug": "mcp-server-architecture",
+          "url": "/docs/technical/mcp-server-architecture"
+        }
+      ]
+    },
+    {
+      "id": "reference",
+      "name": "Reference",
+      "description": "API documentation and technical reference",
+      "order": 4,
+      "docs": [
+        {
+          "title": "Architecture Decisions",
+          "slug": "architecture-decisions",
+          "url": "/docs/reference/architecture-decisions"
+        },
+        {
+          "title": "Claude Code MCP Setup",
+          "slug": "claude-code-mcp-setup",
+          "url": "/docs/reference/claude-code-mcp-setup"
+        },
+        {
+          "title": "Technical FAQ",
+          "slug": "technical-faq",
+          "url": "/docs/reference/technical-faq"
+        }
+      ]
+    }
+  ],
+  "docLinks": {
+    "getting-started/faq": {
+      "prev": null,
+      "next": {
+        "title": "Overview",
+        "slug": "readme",
+        "url": "/docs/getting-started/readme"
+      }
+    },
+    "getting-started/readme": {
+      "prev": {
+        "title": "FAQ",
+        "slug": "faq",
+        "url": "/docs/getting-started/faq"
+      },
+      "next": {
+        "title": "Quick Start",
+        "slug": "quickstart",
+        "url": "/docs/getting-started/quickstart"
+      }
+    },
+    "getting-started/quickstart": {
+      "prev": {
+        "title": "Overview",
+        "slug": "readme",
+        "url": "/docs/getting-started/readme"
+      },
+      "next": {
+        "title": "User Guide",
+        "slug": "user-guide",
+        "url": "/docs/getting-started/user-guide"
+      }
+    },
+    "getting-started/user-guide": {
+      "prev": {
+        "title": "Quick Start",
+        "slug": "quickstart",
+        "url": "/docs/getting-started/quickstart"
+      },
+      "next": null
+    },
+    "guides/changelog": {
+      "prev": null,
+      "next": {
+        "title": "Feedback System",
+        "slug": "feedback-system",
+        "url": "/docs/guides/feedback-system"
+      }
+    },
+    "guides/feedback-system": {
+      "prev": {
+        "title": "Changelog",
+        "slug": "changelog",
+        "url": "/docs/guides/changelog"
+      },
+      "next": {
+        "title": "Roadmap",
+        "slug": "roadmap",
+        "url": "/docs/guides/roadmap"
+      }
+    },
+    "guides/roadmap": {
+      "prev": {
+        "title": "Feedback System",
+        "slug": "feedback-system",
+        "url": "/docs/guides/feedback-system"
+      },
+      "next": {
+        "title": "Security",
+        "slug": "security",
+        "url": "/docs/guides/security"
+      }
+    },
+    "guides/security": {
+      "prev": {
+        "title": "Roadmap",
+        "slug": "roadmap",
+        "url": "/docs/guides/roadmap"
+      },
+      "next": null
+    },
+    "technical/innovations": {
+      "prev": null,
+      "next": {
+        "title": "Architecture Diagrams",
+        "slug": "architecture-diagrams",
+        "url": "/docs/technical/architecture-diagrams"
+      }
+    },
+    "technical/architecture-diagrams": {
+      "prev": {
+        "title": "15 Innovations",
+        "slug": "innovations",
+        "url": "/docs/technical/innovations"
+      },
+      "next": {
+        "title": "Context Preservation",
+        "slug": "context-preservation",
+        "url": "/docs/technical/context-preservation"
+      }
+    },
+    "technical/context-preservation": {
+      "prev": {
+        "title": "Architecture Diagrams",
+        "slug": "architecture-diagrams",
+        "url": "/docs/technical/architecture-diagrams"
+      },
+      "next": {
+        "title": "Delegation Model",
+        "slug": "delegation-model",
+        "url": "/docs/technical/delegation-model"
+      }
+    },
+    "technical/delegation-model": {
+      "prev": {
+        "title": "Context Preservation",
+        "slug": "context-preservation",
+        "url": "/docs/technical/context-preservation"
+      },
+      "next": {
+        "title": "MCP Server Architecture",
+        "slug": "mcp-server-architecture",
+        "url": "/docs/technical/mcp-server-architecture"
+      }
+    },
+    "technical/mcp-server-architecture": {
+      "prev": {
+        "title": "Delegation Model",
+        "slug": "delegation-model",
+        "url": "/docs/technical/delegation-model"
+      },
+      "next": null
+    },
+    "reference/architecture-decisions": {
+      "prev": null,
+      "next": {
+        "title": "Claude Code MCP Setup",
+        "slug": "claude-code-mcp-setup",
+        "url": "/docs/reference/claude-code-mcp-setup"
+      }
+    },
+    "reference/claude-code-mcp-setup": {
+      "prev": {
+        "title": "Architecture Decisions",
+        "slug": "architecture-decisions",
+        "url": "/docs/reference/architecture-decisions"
+      },
+      "next": {
+        "title": "Technical FAQ",
+        "slug": "technical-faq",
+        "url": "/docs/reference/technical-faq"
+      }
+    },
+    "reference/technical-faq": {
+      "prev": {
+        "title": "Claude Code MCP Setup",
+        "slug": "claude-code-mcp-setup",
+        "url": "/docs/reference/claude-code-mcp-setup"
+      },
+      "next": null
+    }
+  }
+}

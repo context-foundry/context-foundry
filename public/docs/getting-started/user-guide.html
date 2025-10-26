@@ -1,0 +1,2852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Guide | Context Foundry Documentation</title>
+  <meta name="description" content="Your step-by-step guide to autonomous AI development">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://contextfoundry.dev/docs/getting-started/user-guide">
+  <meta property="og:title" content="User Guide">
+  <meta property="og:description" content="Your step-by-step guide to autonomous AI development">
+  <meta property="og:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="User Guide">
+  <meta name="twitter:description" content="Your step-by-step guide to autonomous AI development">
+  <meta name="twitter:image" content="https://contextfoundry.dev/images/banner-1280x320-dark.png">
+
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://contextfoundry.dev/docs/getting-started/user-guide">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/reset.css">
+  <link rel="stylesheet" href="/css/variables.css">
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/docs/assets/docs.css">
+
+  <!-- Prism.js theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.min.css">
+
+  <!-- Dark mode support -->
+  <meta name="color-scheme" content="light dark">
+</head>
+<body class="docs-page">
+
+  <header class="docs-header" role="banner">
+    <div class="docs-header-container">
+  
+      <!-- Logo and Site Title -->
+      <div class="docs-header-logo">
+        <a href="/docs/" class="docs-logo-link" aria-label="Context Foundry Documentation Home">
+          <svg class="docs-logo-icon" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="currentColor"/>
+            <path d="M8 16L14 10L20 16L14 22L8 16Z" fill="white"/>
+            <path d="M14 10L20 16L24 12L18 6L14 10Z" fill="white" opacity="0.7"/>
+          </svg>
+          <span class="docs-logo-text">Context Foundry</span>
+        </a>
+      </div>
+  
+      <!-- Main Navigation -->
+      <nav class="docs-header-nav" role="navigation" aria-label="Main navigation">
+        <ul class="docs-nav-list">
+          <li class="docs-nav-item">
+            <a href="/" class="docs-nav-link">Home</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/getting-started/" class="docs-nav-link">Getting Started</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/guides/" class="docs-nav-link">Guides</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/technical/" class="docs-nav-link">Technical</a>
+          </li>
+          <li class="docs-nav-item">
+            <a href="/docs/reference/" class="docs-nav-link">Reference</a>
+          </li>
+        </ul>
+      </nav>
+  
+      <!-- Search and Actions -->
+      <div class="docs-header-actions">
+  
+        <!-- Search Input -->
+        <div class="docs-search-container">
+          <label for="search-input" class="visually-hidden">Search documentation</label>
+          <input
+            type="search"
+            id="search-input"
+            class="docs-search-input"
+            placeholder="Search docs..."
+            aria-label="Search documentation"
+            autocomplete="off"
+          />
+          <kbd class="docs-search-hint" aria-hidden="true">⌘K</kbd>
+  
+          <!-- Search Results Dropdown -->
+          <div id="search-results" class="docs-search-results" role="listbox" aria-label="Search results"></div>
+        </div>
+  
+        <!-- Dark Mode Toggle -->
+        <button
+          type="button"
+          class="docs-theme-toggle"
+          id="theme-toggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <svg class="docs-theme-icon docs-theme-icon-light" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M10 2V4M10 16V18M18 10H16M4 10H2M15.66 4.34L14.24 5.76M5.76 14.24L4.34 15.66M15.66 15.66L14.24 14.24M5.76 5.76L4.34 4.34" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="docs-theme-icon docs-theme-icon-dark" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M17 10.5C16 14.5 12.5 17 9 17C5.5 17 2 14.5 2 10C2 5.5 5.5 3 9 3C9.5 3 10 3 10.5 3.5C8.5 4.5 7 6.5 7 9C7 12 9.5 14.5 12.5 14.5C14 14.5 15.5 14 16.5 13C16.8 13.8 17 14.4 17 15V10.5Z" fill="currentColor"/>
+          </svg>
+        </button>
+  
+        <!-- Mobile Menu Toggle -->
+        <button
+          type="button"
+          class="mobile-menu-toggle"
+          id="mobile-menu-toggle"
+          aria-expanded="false"
+          aria-controls="docs-sidebar"
+          aria-label="Toggle navigation menu"
+        >
+          <svg class="mobile-menu-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M3 6H21M3 12H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+  
+      </div>
+  
+    </div>
+  </header>
+
+  <div class="docs-layout">
+
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar" id="docs-sidebar" role="navigation" aria-label="Documentation navigation">
+      <nav class="sidebar-nav" aria-label="Documentation sidebar">
+      
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+          <div class="sidebar-category" data-category="">
+      
+            <!-- Category Header -->
+            <button
+              type="button"
+              class="sidebar-category-toggle"
+              aria-expanded="true"
+              aria-controls="sidebar-category-"
+            >
+              <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <h2 class="sidebar-category-title"></h2>
+            </button>
+      
+            <!-- Category Links -->
+            <ul class="sidebar-category-list" id="sidebar-category-">
+            </ul>
+      
+          </div>
+      
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="docs-content" role="main">
+
+      <!-- Breadcrumbs -->
+      <nav class="breadcrumbs" aria-label="Breadcrumb">
+        <ol class="breadcrumbs-list" itemscope itemtype="https://schema.org/BreadcrumbList">
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="0" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <a href="/docs/getting-started" class="breadcrumbs-link" itemprop="item">
+                  <span itemprop="name"></span>
+                </a>
+              <meta itemprop="position" content="1" />
+            </li>
+            <li class="breadcrumbs-item" itemprop="itemListElement" itemscope itemtype="https://schema.org/ListItem">
+                <span class="breadcrumbs-current" itemprop="name" aria-current="page"></span>
+              <meta itemprop="position" content="2" />
+            </li>
+        </ol>
+      </nav>
+
+      <!-- Document Content -->
+      <article class="doc-article">
+        <h1 class="doc-title">User Guide</h1>
+
+        <div class="doc-body">
+          <h1 id="context-foundry-20-user-guide">Context Foundry 2.0 - User Guide</h1>
+<p><strong>Your step-by-step guide to autonomous AI development</strong></p>
+<hr>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#getting-started">Getting Started</a></li>
+<li><a href="#basic-usage">Basic Usage</a></li>
+<li><a href="#autonomous-builds">Autonomous Builds</a></li>
+<li><a href="#task-delegation">Task Delegation</a></li>
+<li><a href="#parallel-execution">Parallel Execution</a></li>
+<li><a href="#understanding-the-workflow">Understanding the Workflow</a></li>
+<li><a href="#real-time-monitoring-dashboard"><strong>Real-Time Monitoring Dashboard (NEW)</strong></a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+<li><a href="#best-practices">Best Practices</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+</ol>
+<hr>
+<h2 id="getting-started">Getting Started</h2>
+<h3 id="prerequisites-check">Prerequisites Check</h3>
+<p>Before starting, verify you have:</p>
+<pre><code class="language-bash"># 1. Python 3.10 or higher
+python3 --version
+# Should show: Python 3.10.x or higher
+
+# 2. Claude Code CLI
+which claude
+# Should show: /opt/homebrew/bin/claude (or similar)
+
+claude --version
+# Should show version info
+
+# 3. Git and GitHub CLI
+git --version
+gh --version
+
+# 4. GitHub authentication
+gh auth status
+# Should show: Logged in as [your-username]</code></pre>
+<p>If any of these fail, see <a href="#prerequisites-setup">Prerequisites Setup</a> below.</p>
+<h3 id="installation">Installation</h3>
+<h4 id="step-1-clone-context-foundry">Step 1: Clone Context Foundry</h4>
+<pre><code class="language-bash"># Navigate to where you want Context Foundry
+cd ~/homelab  # or your preferred directory
+
+# Clone the repository
+git clone https://github.com/snedea/context-foundry.git
+cd context-foundry</code></pre>
+<h4 id="step-2-install-mcp-server-dependencies">Step 2: Install MCP Server Dependencies</h4>
+<pre><code class="language-bash"># Install required Python packages
+pip install -r requirements-mcp.txt
+
+# Verify installation
+python3.10 -c &quot;from fastmcp import FastMCP; print(&#039;✅ FastMCP installed&#039;)&quot;</code></pre>
+<p>If you get errors, see <a href="#troubleshooting-installation">Troubleshooting Installation</a>.</p>
+<h4 id="step-3-configure-mcp-connection">Step 3: Configure MCP Connection</h4>
+<pre><code class="language-bash"># Add MCP server to Claude Code configuration
+# Use $(pwd) for automatic absolute paths, add to project scope
+cd /path/to/context-foundry
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py
+
+# The -s project flag creates .mcp.json in the project directory (shareable with team)</code></pre>
+<h4 id="step-4-verify-connection">Step 4: Verify Connection</h4>
+<pre><code class="language-bash"># Verify the config was created
+cat .mcp.json
+# Should show the server configuration with your paths
+
+# Note: Project-scoped servers don&#039;t appear in `claude mcp list` (that shows global config)
+# They&#039;re automatically detected when you run `claude` in this directory</code></pre>
+<p>If you see &quot;✗ Disconnected&quot; or errors, see <a href="#troubleshooting-mcp-connection">Troubleshooting MCP Connection</a>.</p>
+<h4 id="step-5-test-the-setup">Step 5: Test the Setup</h4>
+<pre><code class="language-bash"># Start Claude Code
+claude
+
+# You should see MCP tools available
+# Try typing: &quot;What MCP tools are available?&quot;
+# Claude should list: mcp__autonomous_build_and_deploy, mcp__delegate_to_claude_code, etc.</code></pre>
+<p>✅ <strong>Success!</strong> You&#39;re ready to use Context Foundry 2.0.</p>
+<hr>
+<h2 id="how-claude-code-recognizes-build-requests">How Claude Code Recognizes Build Requests</h2>
+<p><strong>The easiest way to use Context Foundry:</strong> Just ask naturally in plain English!</p>
+<h3 id="intent-detection">🎯 Intent Detection</h3>
+<p>Claude Code automatically uses Context Foundry&#39;s autonomous build system when you:</p>
+<p>✅ <strong>Use action words:</strong> &quot;build&quot;, &quot;create&quot;, &quot;make&quot;, &quot;develop&quot;, &quot;implement&quot;<br>✅ <strong>Describe an application or project:</strong> &quot;weather app&quot;, &quot;REST API&quot;, &quot;todo list&quot;<br>✅ <strong>Include features or requirements:</strong> List what you want it to do</p>
+<h3 id="examples-that-trigger-autonomous-build">✅ Examples That Trigger Autonomous Build</h3>
+<p>These natural requests will automatically use <code>mcp__autonomous_build_and_deploy</code>:</p>
+<pre><code class="">Build a weather app</code></pre>
+<pre><code class="">Create a REST API with user authentication</code></pre>
+<pre><code class="">Make a game like Snake</code></pre>
+<pre><code class="">Develop a todo list app with React</code></pre>
+<pre><code class="">Build a calculator with basic and scientific functions</code></pre>
+<pre><code class="">Create a blog platform with Markdown support</code></pre>
+<h3 id="examples-that-wont-trigger-just-explains">❌ Examples That Won&#39;t Trigger (Just Explains)</h3>
+<p>These are questions that ask for information, not requests to build:</p>
+<pre><code class="">How do I build a weather app?
+→ This explains the process, doesn&#039;t build</code></pre>
+<pre><code class="">What&#039;s the best way to create an API?
+→ This discusses approaches, doesn&#039;t build</code></pre>
+<pre><code class="">Can you help me understand how to make a game?
+→ This teaches concepts, doesn&#039;t build</code></pre>
+<pre><code class="">Explain the steps to develop a todo app
+→ This provides guidance, doesn&#039;t build</code></pre>
+<h3 id="the-difference">💡 The Difference</h3>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Intent</th>
+<th>Example</th>
+<th>What Happens</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td><strong>Build Request</strong></td>
+<td>&quot;Build a weather app&quot;</td>
+<td>✅ Automatic autonomous build</td>
+</tr>
+<tr>
+<td><strong>Question</strong></td>
+<td>&quot;How do I build a weather app?&quot;</td>
+<td>ℹ️ Explains the process</td>
+</tr>
+<tr>
+<td><strong>Discussion</strong></td>
+<td>&quot;What&#39;s the best way to build apps?&quot;</td>
+<td>ℹ️ Discusses approaches</td>
+</tr>
+<tr>
+<td><strong>Learning</strong></td>
+<td>&quot;Teach me to build a weather app&quot;</td>
+<td>ℹ️ Educational response</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<h3 id="no-need-to-mention-mcp-tools">🚀 No Need to Mention MCP Tools!</h3>
+<p>You don&#39;t need to say:</p>
+<ul>
+<li>❌ &quot;Use mcp__autonomous_build_and_deploy...&quot;</li>
+<li>❌ &quot;Call the autonomous build tool...&quot;</li>
+<li>❌ &quot;Execute the MCP command for...&quot;</li>
+</ul>
+<p>Just say what you want:</p>
+<ul>
+<li>✅ &quot;Build a weather app&quot;</li>
+<li>✅ &quot;Create a todo list&quot;</li>
+<li>✅ &quot;Make a calculator&quot;</li>
+</ul>
+<p><strong>Claude Code handles the MCP calls automatically!</strong></p>
+<h3 id="being-specific-gets-better-results">📝 Being Specific Gets Better Results</h3>
+<p><strong>Vague (works, but basic):</strong></p>
+<pre><code class="">Build an app</code></pre>
+<p><strong>Specific (much better results):</strong></p>
+<pre><code class="">Build a weather app with:
+- Current weather display
+- 5-day forecast
+- City search with autocomplete
+- Temperature unit toggle (C/F)
+- Responsive design for mobile
+- Clean, modern UI</code></pre>
+<p><strong>Very specific (best results):</strong></p>
+<pre><code class="">Build a weather application using the OpenWeatherMap API with:
+- Current weather and 5-day forecast
+- Air Quality Index (AQI) display
+- City search with autocomplete
+- Geolocation to detect user&#039;s location
+- Temperature unit toggle
+- Responsive design
+- Express.js backend with caching
+- Comprehensive tests with Jest
+- Error handling for API failures</code></pre>
+<h3 id="learning-the-pattern">🎓 Learning the Pattern</h3>
+<p><strong>Pattern:</strong> <code>[Action] [What] [Optional: with features/tech]</code></p>
+<p>Examples:</p>
+<ul>
+<li><strong>Build</strong> a <strong>todo app</strong> with <strong>React and localStorage</strong></li>
+<li><strong>Create</strong> a <strong>REST API</strong> with <strong>Express and PostgreSQL</strong></li>
+<li><strong>Make</strong> a <strong>Snake game</strong> with <strong>HTML5 Canvas</strong></li>
+<li><strong>Develop</strong> a <strong>blog platform</strong> with <strong>Markdown support and authentication</strong></li>
+</ul>
+<h3 id="what-if-youre-unsure">💬 What If You&#39;re Unsure?</h3>
+<p>Just ask naturally! Worst case:</p>
+<ul>
+<li>If it&#39;s a build request → Autonomous build starts</li>
+<li>If it&#39;s a question → You get an explanation (then you can say &quot;Actually, build it!&quot;)</li>
+</ul>
+<p><strong>Example conversation:</strong></p>
+<pre><code class="">You: &quot;How do I build a weather app?&quot;
+Claude: &quot;Here&#039;s how to build a weather app...&quot;
+You: &quot;Actually, build it for me&quot;
+Claude: [Starts autonomous build]</code></pre>
+<h3 id="advanced-customize-the-build">🔧 Advanced: Customize the Build</h3>
+<p>You can still specify advanced options if needed:</p>
+<pre><code class="">Build a weather app, but use a 30-minute timeout and build it in /Users/me/projects/weather</code></pre>
+<pre><code class="">Create a REST API and skip the test loop for faster prototyping</code></pre>
+<pre><code class="">Make a todo app and deploy to my existing repo at github.com/me/todos</code></pre>
+<p>Claude Code will extract these requirements and use the right parameters.</p>
+<hr>
+<h2 id="basic-usage">Basic Usage</h2>
+<h3 id="your-first-build">Your First Build</h3>
+<p>Let&#39;s build a simple &quot;Hello World&quot; project to verify everything works.</p>
+<pre><code class="language-bash"># Start Claude Code
+claude</code></pre>
+<p>Inside your Claude Code session, say:</p>
+<pre><code class="">Please use mcp__autonomous_build_and_deploy to build a simple &quot;Hello World&quot; web page:
+
+- task: &quot;Create a simple Hello World HTML page with CSS styling and a button that shows an alert&quot;
+- working_directory: &quot;/tmp/hello-world&quot;
+- github_repo_name: &quot;hello-world-test&quot;
+- enable_test_loop: false</code></pre>
+<p><strong>What happens:</strong></p>
+<ol>
+<li>Scout phase: AI researches how to build a simple HTML page</li>
+<li>Architect phase: AI designs the structure (HTML, CSS, button)</li>
+<li>Builder phase: AI creates the files</li>
+<li>Test phase: Skipped (enable_test_loop: false)</li>
+<li>Documentation phase: AI creates README</li>
+<li>Deploy phase: AI pushes to GitHub</li>
+</ol>
+<p><strong>Expected output:</strong></p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;phases_completed&quot;: [&quot;scout&quot;, &quot;architect&quot;, &quot;builder&quot;, &quot;docs&quot;, &quot;deploy&quot;],
+  &quot;github_url&quot;: &quot;https://github.com/yourusername/hello-world-test&quot;,
+  &quot;files_created&quot;: [&quot;index.html&quot;, &quot;style.css&quot;, &quot;README.md&quot;],
+  &quot;tests_passed&quot;: null,
+  &quot;duration_minutes&quot;: 2.3
+}</code></pre>
+<p><strong>Verify the result:</strong></p>
+<pre><code class="language-bash"># Check files were created
+ls -la /tmp/hello-world
+
+# Open in browser
+open /tmp/hello-world/index.html
+
+# Check GitHub
+gh repo view yourusername/hello-world-test --web</code></pre>
+<p>✅ If you see your project deployed to GitHub, everything works!</p>
+<hr>
+<h2 id="autonomous-builds">Autonomous Builds</h2>
+<h3 id="building-a-todo-cli-app">Building a Todo CLI App</h3>
+<p>Let&#39;s build a more realistic project with tests enabled.</p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+
+- task: &quot;Build a command-line todo app in Python with the following features:
+  - Add new todos
+  - List all todos
+  - Mark todos as complete
+  - Delete todos
+  - Store todos in JSON file
+  - Use Rich library for colorful output
+  - Include comprehensive tests with pytest&quot;
+
+- working_directory: &quot;/tmp/todo-cli&quot;
+- github_repo_name: &quot;todo-cli-app&quot;
+- enable_test_loop: true
+- max_test_iterations: 3</code></pre>
+<p><strong>What&#39;s different:</strong></p>
+<ul>
+<li><code>enable_test_loop: true</code> - AI will auto-fix if tests fail</li>
+<li><code>max_test_iterations: 3</code> - Up to 3 auto-fix attempts</li>
+</ul>
+<p><strong>Duration:</strong> ~5-10 minutes</p>
+<p><strong>What to expect:</strong></p>
+<pre><code class="">Phase 1 - Scout (1-2 min):
+- Researches Python CLI best practices
+- Identifies Rich library for formatting
+- Plans JSON storage approach
+
+Phase 2 - Architect (1-2 min):
+- Designs command structure (add, list, complete, delete)
+- Plans file structure
+- Defines test strategy
+
+Phase 3 - Builder (2-4 min):
+- Creates todo.py (main logic)
+- Creates cli.py (command interface)
+- Creates tests/test_todo.py
+- Creates requirements.txt
+
+Phase 4 - Test (1-2 min):
+[If tests fail - auto-healing kicks in]
+Iteration 1: Run tests → Fail
+  Tester: Analyzes failures
+  Architect: Redesigns fix
+  Builder: Implements fix
+Iteration 2: Run tests → Pass
+
+Phase 4.5 - Screenshot Capture (30-60 sec):
+- Installs Playwright automatically
+- Starts application dev server
+- Captures hero screenshot for README
+- Captures step-by-step workflow screenshots
+- Saves to docs/screenshots/
+- Creates manifest.json listing all screenshots
+
+Phase 5 - Documentation (1 min):
+- Creates comprehensive README with hero screenshot
+- Documents usage with visual step-by-step guides
+- Includes screenshots in docs/USAGE.md
+
+Phase 6 - Deploy (30 sec):
+- Pushes to GitHub</code></pre>
+<p><strong>Final structure:</strong></p>
+<pre><code class="">/tmp/todo-cli/
+├── todo.py
+├── cli.py
+├── tests/
+│   └── test_todo.py
+├── requirements.txt
+├── README.md
+└── .context-foundry/
+    ├── scout-report.md
+    ├── architecture.md
+    ├── build-log.md
+    ├── test-iteration-count.txt
+    ├── test-results-iteration-*.md
+    └── test-final-report.md</code></pre>
+<p><strong>Try it out:</strong></p>
+<pre><code class="language-bash">cd /tmp/todo-cli
+pip install -r requirements.txt
+python cli.py add &quot;Buy groceries&quot;
+python cli.py list
+python cli.py complete 1</code></pre>
+<hr>
+<h2 id="task-delegation">Task Delegation</h2>
+<h3 id="simple-synchronous-delegation">Simple Synchronous Delegation</h3>
+<p>For quick, standalone tasks that don&#39;t need the full workflow:</p>
+<pre><code class="">Use mcp__delegate_to_claude_code:
+
+- task: &quot;Create a Python script that fetches the current weather for San Francisco using the OpenWeatherMap API and prints it nicely formatted&quot;
+- working_directory: &quot;/tmp/weather-script&quot;
+- timeout_minutes: 5</code></pre>
+<p><strong>When to use:</strong></p>
+<ul>
+<li>Quick scripts or single files</li>
+<li>No need for full Scout → Architect → Builder workflow</li>
+<li>Want synchronous execution (wait for result)</li>
+</ul>
+<p><strong>Returns immediately when complete with:</strong></p>
+<ul>
+<li>stdout (script output)</li>
+<li>stderr (error messages)</li>
+<li>duration</li>
+<li>exit code</li>
+</ul>
+<h3 id="checking-working-directory">Checking Working Directory</h3>
+<p>Before delegating, optionally create and verify the directory:</p>
+<pre><code class="language-bash">mkdir -p /tmp/my-project
+ls -la /tmp/my-project</code></pre>
+<p>Then delegate:</p>
+<pre><code class="">Use mcp__delegate_to_claude_code:
+- task: &quot;Create a simple Flask API with a /hello endpoint&quot;
+- working_directory: &quot;/tmp/my-project&quot;</code></pre>
+<hr>
+<h2 id="parallel-execution">Parallel Execution</h2>
+<h3 id="building-a-full-stack-app-in-parallel">Building a Full-Stack App in Parallel</h3>
+<p>Instead of building components sequentially (slow), build them in parallel (fast).</p>
+<h4 id="step-1-start-all-tasks-in-parallel">Step 1: Start All Tasks in Parallel</h4>
+<pre><code class="">I need to build a full-stack app with backend, frontend, and database.
+Please start these three tasks in parallel using mcp__delegate_to_claude_code_async:
+
+Task 1 - Backend:
+- task: &quot;Create a Python Flask REST API with user authentication (JWT), PostgreSQL database connection, endpoints for register/login/profile, and comprehensive tests&quot;
+- working_directory: &quot;/tmp/fullstack-app/backend&quot;
+- timeout_minutes: 15
+
+Task 2 - Frontend:
+- task: &quot;Create a React SPA with login page, registration page, user profile page, JWT token management, protected routes, and tests with React Testing Library&quot;
+- working_directory: &quot;/tmp/fullstack-app/frontend&quot;
+- timeout_minutes: 15
+
+Task 3 - Database:
+- task: &quot;Create PostgreSQL schema with users table, authentication tokens table, migration scripts, seed data, and setup documentation&quot;
+- working_directory: &quot;/tmp/fullstack-app/database&quot;
+- timeout_minutes: 10</code></pre>
+<p>Claude will spawn all three tasks and return task IDs:</p>
+<pre><code class="language-json">{
+  &quot;task_1_id&quot;: &quot;abc123-backend&quot;,
+  &quot;task_2_id&quot;: &quot;def456-frontend&quot;,
+  &quot;task_3_id&quot;: &quot;ghi789-database&quot;
+}</code></pre>
+<h4 id="step-2-monitor-progress">Step 2: Monitor Progress</h4>
+<pre><code class="">Use mcp__list_delegations to check progress</code></pre>
+<p>Returns:</p>
+<pre><code class="language-json">{
+  &quot;tasks&quot;: [
+    {
+      &quot;task_id&quot;: &quot;abc123-backend&quot;,
+      &quot;status&quot;: &quot;running&quot;,
+      &quot;elapsed_seconds&quot;: 125.3
+    },
+    {
+      &quot;task_id&quot;: &quot;def456-frontend&quot;,
+      &quot;status&quot;: &quot;running&quot;,
+      &quot;elapsed_seconds&quot;: 124.8
+    },
+    {
+      &quot;task_id&quot;: &quot;ghi789-database&quot;,
+      &quot;status&quot;: &quot;completed&quot;,
+      &quot;elapsed_seconds&quot;: 87.2
+    }
+  ]
+}</code></pre>
+<h4 id="step-3-collect-results">Step 3: Collect Results</h4>
+<pre><code class="">Use mcp__get_delegation_result with task_id &quot;ghi789-database&quot;</code></pre>
+<p>Returns:</p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;duration_seconds&quot;: 87.2,
+  &quot;stdout&quot;: &quot;Database schema created successfully...&quot;,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;return_code&quot;: 0
+}</code></pre>
+<p>Repeat for other tasks when they complete.</p>
+<h4 id="performance-comparison">Performance Comparison</h4>
+<p><strong>Sequential approach:</strong></p>
+<pre><code class="">Backend: 12 min
+Frontend: 14 min
+Database: 6 min
+Total: 32 minutes</code></pre>
+<p><strong>Parallel approach:</strong></p>
+<pre><code class="">All three start simultaneously
+Longest task (Frontend): 14 min
+Total: 14 minutes (56% time savings)</code></pre>
+<hr>
+<h2 id="background-builds">Background Builds</h2>
+<p><strong>Important:</strong> By default, all autonomous builds run in the <strong>background</strong> (non-blocking), so you can continue working while projects build.</p>
+<h3 id="why-background-builds">Why Background Builds?</h3>
+<p><strong>Before (blocking builds):</strong></p>
+<pre><code class="">You: Build a weather app
+Claude: [Building... your session is frozen for 10 minutes]
+You: [Can&#039;t do anything else, must wait]</code></pre>
+<p><strong>After (background builds):</strong></p>
+<pre><code class="">You: Build a weather app
+Claude: 🚀 Build started! Task ID: abc-123
+        You can continue working.
+You: [Immediately continue with other work]
+     [Check back in 10-15 minutes]</code></pre>
+<h3 id="how-it-works">How It Works</h3>
+<p>When you request a build, the system:</p>
+<ol>
+<li><strong>Spawns a background process</strong> - Fresh Claude Code instance starts</li>
+<li><strong>Returns immediately</strong> - You get a task_id right away</li>
+<li><strong>Runs autonomously</strong> - Complete workflow happens in background</li>
+<li><strong>No blocking</strong> - Your Claude Code session stays responsive</li>
+</ol>
+<h3 id="starting-a-background-build">Starting a Background Build</h3>
+<p><strong>Natural language (easiest):</strong></p>
+<pre><code class="">Build a todo app with React</code></pre>
+<p>Claude automatically uses the async version!</p>
+<p><strong>Explicit MCP call:</strong></p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy_async:
+- task: &quot;Build a calculator app&quot;
+- working_directory: &quot;/tmp/calculator&quot;
+- github_repo_name: &quot;calculator-app&quot;</code></pre>
+<p><strong>You&#39;ll get:</strong></p>
+<pre><code class="language-json">{
+  &quot;task_id&quot;: &quot;abc-123-def-456&quot;,
+  &quot;status&quot;: &quot;started&quot;,
+  &quot;project&quot;: &quot;calculator-app&quot;,
+  &quot;message&quot;: &quot;Build started! Expected duration: 7-15 minutes. You can continue working.&quot;
+}</code></pre>
+<h3 id="checking-build-status">Checking Build Status</h3>
+<p><strong>Ask naturally:</strong></p>
+<pre><code class="">What&#039;s the status of my build?
+How&#039;s the calculator app going?
+Is task abc-123-def-456 done?</code></pre>
+<p><strong>Use MCP tool:</strong></p>
+<pre><code class="">Use mcp__get_delegation_result with task_id &quot;abc-123-def-456&quot;</code></pre>
+<p><strong>If still running:</strong></p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;running&quot;,
+  &quot;elapsed_seconds&quot;: 312.5,
+  &quot;message&quot;: &quot;Build in progress (5.2 minutes elapsed)&quot;
+}</code></pre>
+<p><strong>If complete:</strong></p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;duration_seconds&quot;: 487.3,
+  &quot;stdout&quot;: &quot;[Full build output]&quot;,
+  &quot;stderr&quot;: &quot;&quot;,
+  &quot;return_code&quot;: 0
+}</code></pre>
+<h3 id="listing-all-active-builds">Listing All Active Builds</h3>
+<p><strong>Natural language:</strong></p>
+<pre><code class="">What builds are running?
+Show me all my active tasks
+List all delegations</code></pre>
+<p><strong>MCP tool:</strong></p>
+<pre><code class="">Use mcp__list_delegations</code></pre>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  &quot;tasks&quot;: [
+    {
+      &quot;task_id&quot;: &quot;abc-123&quot;,
+      &quot;status&quot;: &quot;running&quot;,
+      &quot;elapsed_seconds&quot;: 245.7
+    },
+    {
+      &quot;task_id&quot;: &quot;def-456&quot;,
+      &quot;status&quot;: &quot;completed&quot;,
+      &quot;elapsed_seconds&quot;: 512.3
+    },
+    {
+      &quot;task_id&quot;: &quot;ghi-789&quot;,
+      &quot;status&quot;: &quot;running&quot;,
+      &quot;elapsed_seconds&quot;: 87.1
+    }
+  ]
+}</code></pre>
+<h3 id="real-world-example">Real-World Example</h3>
+<p><strong>Scenario:</strong> Build a full-stack app while working on documentation</p>
+<pre><code class="">[9:00 AM]
+You: Build a full-stack todo app with React frontend, Express backend, and PostgreSQL
+
+Claude: 🚀 Build started!
+        Task ID: fullstack-001
+        Expected: 15-20 minutes
+        You can continue working!
+
+[9:01 AM]
+You: [Switch to working on your documentation]
+     [Write blog post about the project]
+     [Answer emails]
+
+[9:15 AM]
+You: What&#039;s the status of fullstack-001?
+
+Claude: ✅ Build completed!
+        GitHub: https://github.com/you/todo-app
+        Files: 32 created
+        Tests: 45/45 passing
+        Duration: 14.2 minutes
+
+[9:16 AM]
+You: Great! Now deploy it to Vercel</code></pre>
+<p><strong>Time saved:</strong> Instead of staring at the screen for 15 minutes, you worked on other tasks!</p>
+<h3 id="multiple-simultaneous-builds">Multiple Simultaneous Builds</h3>
+<p>You can start multiple builds at once:</p>
+<pre><code class="">Build a weather app in /tmp/weather
+Build a calculator in /tmp/calc
+Build a Snake game in /tmp/snake</code></pre>
+<p>All three run in parallel! Check status with:</p>
+<pre><code class="">List all my builds</code></pre>
+<h3 id="when-to-use-synchronous-blocking-builds">When to Use Synchronous (Blocking) Builds</h3>
+<p>Most of the time, use async (default). Only use synchronous if:</p>
+<ul>
+<li>You&#39;re debugging the workflow</li>
+<li>You want to see live output as it happens</li>
+<li>You have a very short build (&lt; 2 min)</li>
+</ul>
+<p><strong>Request synchronous explicitly:</strong></p>
+<pre><code class="">Use the synchronous version of autonomous_build_and_deploy to build [...]
+I want to wait for this build to complete</code></pre>
+<h3 id="best-practices">Best Practices</h3>
+<p><strong>✅ Do:</strong></p>
+<ul>
+<li>Start your build and continue working</li>
+<li>Check back in 10-15 minutes</li>
+<li>Use natural language to check status</li>
+<li>Run multiple builds in parallel for different projects</li>
+</ul>
+<p><strong>❌ Don&#39;t:</strong></p>
+<ul>
+<li>Sit and wait for async builds (defeats the purpose!)</li>
+<li>Restart Claude Code while builds are running (you&#39;ll lose tracking)</li>
+<li>Use synchronous builds unless you have a reason</li>
+</ul>
+<h3 id="troubleshooting-background-builds">Troubleshooting Background Builds</h3>
+<p><strong>Q: I lost my task_id, how do I find it?</strong></p>
+<pre><code class="">Show me all my active builds
+List all delegations</code></pre>
+<p><strong>Q: Build seems stuck, how do I check?</strong></p>
+<pre><code class="">Use mcp__get_delegation_result with task_id &quot;[your-id]&quot;</code></pre>
+<p>If elapsed_seconds keeps increasing, it&#39;s still running.</p>
+<p><strong>Q: Can I cancel a background build?</strong></p>
+<p>Builds will timeout after <code>timeout_minutes</code> (default: 90). No manual cancellation needed.</p>
+<p><strong>Q: What happens if I restart Claude Code?</strong></p>
+<p>Background builds continue! But you lose the ability to track them in the current session. They&#39;ll complete and be available in the working_directory.</p>
+<hr>
+<h2 id="understanding-the-workflow">Understanding the Workflow</h2>
+<h3 id="the-8-phase-autonomous-workflow">The 8-Phase Autonomous Workflow</h3>
+<p>Context Foundry runs through 8 phases to build complete, tested, documented, and visually documented projects automatically.</p>
+<h3 id="visual-walkthrough-real-build-example">Visual Walkthrough: Real Build Example</h3>
+<p><strong>Here&#39;s how Context Foundry built Evolution Quest autonomously:</strong></p>
+<p><strong>Phase 1-2: Scout &amp; Architect</strong></p>
+<p><img src="docs/screenshots/EvolutionQuestBeingBuilt.png" alt="Starting Research and Design" loading="lazy" /><br><em>Context Foundry analyzes requirements and creates architecture plan - guided by meta-prompt workflow</em></p>
+<p><strong>Phase 3-4: Builder &amp; Test</strong></p>
+<p><img src="docs/screenshots/BuildStatusUpdate1.png" alt="Implementation and Testing" loading="lazy" /><br><em>Code implementation with integrated testing. Self-healing test loop validates quality.</em></p>
+<p><strong>Phase 4.5-5: Screenshot &amp; Documentation</strong></p>
+<p><img src="docs/screenshots/BuildStatusUpdate2.png" alt="Capturing Screenshots" loading="lazy" /><br><em>Automated screenshot capture and documentation generation - no manual steps required</em></p>
+<p><strong>Phase 6-7: Deployment &amp; Feedback</strong></p>
+<p><img src="docs/screenshots/BuildStatusComplete.png" alt="Build Complete" loading="lazy" /><br><em>GitHub deployment and feedback analysis for continuous self-improvement</em></p>
+<p><strong>The Result</strong></p>
+<p><img src="docs/screenshots/App_Ready_to_Play.png" alt="Working Application" loading="lazy" /><br><em>Complete, tested, documented application deployed to GitHub - ready to use</em></p>
+<p><strong>Key Point:</strong> This entire process happened <strong>autonomously</strong> after the initial request. No checkpoints, no manual intervention - true &quot;walk away&quot; development.</p>
+<hr>
+<h4 id="phase-1-scout-research-context-gathering">Phase 1: Scout (Research &amp; Context Gathering)</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI creates a Scout agent using <code>/agents</code></li>
+<li>Scout explores your requirements</li>
+<li>Scout researches best practices</li>
+<li>Scout identifies technology choices</li>
+<li>Scout saves findings to <code>.context-foundry/scout-report.md</code></li>
+</ul>
+<p><strong>Example Scout Report:</strong></p>
+<pre><code class="language-markdown"># Scout Report
+
+## Task Analysis
+Build a weather API with Express.js and OpenWeatherMap integration
+
+## Technology Stack
+- Runtime: Node.js 18+
+- Framework: Express.js
+- External API: OpenWeatherMap
+- Caching: Redis (for rate limiting)
+- Testing: Jest + Supertest
+
+## Requirements
+- GET /weather/:city endpoint
+- Error handling for invalid cities
+- Rate limiting (100 req/hour per IP)
+- Caching (5 min TTL)
+
+## Challenges
+- API key management
+- Rate limit enforcement
+- Error responses</code></pre>
+<h4 id="phase-2-architect-design-planning">Phase 2: Architect (Design &amp; Planning)</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI reads scout-report.md</li>
+<li>AI creates Architect agent using <code>/agents</code></li>
+<li>Architect designs system architecture</li>
+<li>Architect creates implementation plan</li>
+<li>Architect saves to <code>.context-foundry/architecture.md</code></li>
+</ul>
+<p><strong>Example Architecture:</strong></p>
+<pre><code class="language-markdown"># Architecture
+
+## File Structure</code></pre>
+<p>weather-api/<br>├── server.js<br>├── routes/<br>│   └── weather.js<br>├── controllers/<br>│   └── weatherController.js<br>├── middleware/<br>│   └── rateLimiter.js<br>├── tests/<br>│   └── weather.test.js<br>└── .env.example</p>
+<pre><code class="">
+## Implementation Plan
+1. Set up Express server
+2. Create weather controller with OpenWeatherMap client
+3. Implement rate limiting middleware with Redis
+4. Create routes
+5. Add error handling
+6. Write comprehensive tests
+7. Create documentation</code></pre>
+<h4 id="phase-3-builder-implementation">Phase 3: Builder (Implementation)</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI reads architecture.md</li>
+<li>AI creates Builder agent using <code>/agents</code></li>
+<li>Builder implements all files per architecture</li>
+<li>Builder writes tests</li>
+<li>Builder saves log to <code>.context-foundry/build-log.md</code></li>
+</ul>
+<p><strong>What Builder creates:</strong></p>
+<ul>
+<li>All source code files</li>
+<li>Test files</li>
+<li>Configuration files (.env.example, package.json, etc.)</li>
+<li>Build log documenting all changes</li>
+</ul>
+<h4 id="phase-4-test-validation-quality-assurance">Phase 4: Test (Validation &amp; Quality Assurance)</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI creates Tester agent using <code>/agents</code></li>
+<li>Tester runs all tests</li>
+<li><strong>If tests pass:</strong><ul>
+<li>Creates test-final-report.md</li>
+<li>Continues to Phase 5</li>
+</ul>
+</li>
+<li><strong>If tests fail (and enable_test_loop=true):</strong><ul>
+<li>Self-healing loop activates (see below)</li>
+</ul>
+</li>
+</ul>
+<p><strong>Self-Healing Loop (when tests fail):</strong></p>
+<pre><code class="">Test Iteration 1:
+1. Tester runs: npm test
+2. Tests fail: Authentication error
+3. Tester analyzes: &quot;JWT secret undefined&quot;
+4. Tester creates: test-results-iteration-1.md
+
+5. Architect reads failure report
+6. Architect redesigns: &quot;Add JWT_SECRET validation&quot;
+7. Architect creates: fixes-iteration-1.md
+
+8. Builder reads fix plan
+9. Builder implements: try-catch blocks, env validation
+10. Builder updates: build-log.md
+
+11. Increment test-iteration-count.txt (1 → 2)
+12. Tester runs: npm test again
+
+Test Iteration 2:
+1. All tests pass!
+2. Tester creates: test-final-report.md
+3. Continue to Phase 5</code></pre>
+<p><strong>Max iterations:</strong> If tests still fail after <code>max_test_iterations</code> (default: 3), system reports failure and stops.</p>
+<h4 id="phase-45-screenshot-capture-visual-documentation-new">Phase 4.5: Screenshot Capture (Visual Documentation) 📸 NEW!</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI detects project type (web app, game, CLI, API, etc.)</li>
+<li>AI installs Playwright automatically</li>
+<li>AI copies screenshot capture templates to project</li>
+<li>AI starts dev server (for web apps/games)</li>
+<li>AI captures screenshots automatically:<ul>
+<li><strong>Hero screenshot</strong>: Main application view (docs/screenshots/hero.png)</li>
+<li><strong>Feature screenshots</strong>: Key functionality views</li>
+<li><strong>Workflow screenshots</strong>: Step-by-step user journey</li>
+</ul>
+</li>
+<li>AI creates manifest.json listing all screenshots</li>
+<li>AI stops dev server gracefully</li>
+<li><strong>If screenshot capture fails</strong>: Logs warning, continues build (graceful degradation)</li>
+</ul>
+<p><strong>Project Type Detection:</strong></p>
+<ul>
+<li><strong>Web Apps</strong> (React, Vue, etc.): Full browser screenshots via Playwright</li>
+<li><strong>Games</strong> (Canvas, WebGL): Gameplay screenshots</li>
+<li><strong>CLI Tools</strong>: Terminal output screenshots</li>
+<li><strong>APIs</strong>: Documentation/Postman screenshots</li>
+<li><strong>Other</strong>: Project structure visualization or README preview</li>
+</ul>
+<p><strong>Example Screenshot Manifest:</strong></p>
+<pre><code class="language-json">{
+  &quot;generated&quot;: &quot;2025-10-19T14:30:00Z&quot;,
+  &quot;projectType&quot;: &quot;web-app&quot;,
+  &quot;screenshots&quot;: [
+    {
+      &quot;filename&quot;: &quot;hero.png&quot;,
+      &quot;type&quot;: &quot;hero&quot;,
+      &quot;description&quot;: &quot;Main application view&quot;
+    },
+    {
+      &quot;filename&quot;: &quot;feature-01-navigation.png&quot;,
+      &quot;type&quot;: &quot;feature&quot;
+    },
+    {
+      &quot;filename&quot;: &quot;step-01-initial-state.png&quot;,
+      &quot;type&quot;: &quot;step&quot;
+    }
+  ],
+  &quot;total&quot;: 6
+}</code></pre>
+<p><strong>Why this phase is important:</strong></p>
+<ul>
+<li>Visual documentation significantly improves README appeal</li>
+<li>Step-by-step screenshots make tutorials much clearer</li>
+<li>Screenshots stored in GitHub make projects more discoverable</li>
+<li>Users can see what they&#39;re building before cloning</li>
+</ul>
+<h4 id="phase-5-documentation">Phase 5: Documentation</h4>
+<p><strong>What happens:</strong></p>
+<ul>
+<li>AI creates comprehensive README.md <strong>with hero screenshot</strong></li>
+<li>AI creates docs/ directory with:<ul>
+<li>INSTALLATION.md</li>
+<li>USAGE.md</li>
+<li>ARCHITECTURE.md</li>
+<li>TESTING.md</li>
+<li>API.md (if applicable)</li>
+</ul>
+</li>
+</ul>
+<p><strong>Example README:</strong></p>
+<pre><code class="language-markdown"># Weather API
+
+Get current weather data for any city.
+
+## Features
+- RESTful API with Express.js
+- OpenWeatherMap integration
+- Redis caching (5 min TTL)
+- Rate limiting (100 req/hour)
+- Comprehensive error handling
+- 95% test coverage
+
+## Installation
+```bash
+npm install
+cp .env.example .env
+# Add your OPENWEATHERMAP_API_KEY to .env
+npm start</code></pre>
+<h2 id="usage">Usage</h2>
+<pre><code class="language-bash">curl http://localhost:3000/weather/sanfrancisco</code></pre>
+<h2 id="testing">Testing</h2>
+<pre><code class="language-bash">npm test</code></pre>
+<p>🤖 Built autonomously by Context Foundry</p>
+<pre><code class="">
+#### Phase 6: Deployment (GitHub)
+
+**What happens:**
+- AI initializes git (if new project)
+- AI adds all files: `git add .`
+- AI creates detailed commit message
+- AI creates GitHub repo: `gh repo create`
+- AI pushes to GitHub: `git push`
+
+**Commit Message Format:**
+</code></pre>
+<p>Initial implementation via Context Foundry autonomous agent</p>
+<p>Project: Weather API with Express.js<br>Status: Tests PASSED (after 2 iteration(s))</p>
+<p>Architecture:</p>
+<ul>
+<li>Scout phase: Requirements analysis and tech stack selection</li>
+<li>Architect phase: System design and implementation plan</li>
+<li>Builder phase: Code implementation with tests</li>
+<li>Test phase: Validation and quality assurance</li>
+</ul>
+<p>Test Results:</p>
+<ul>
+<li>All tests passing</li>
+<li>Test iterations: 2</li>
+<li>Quality: Production ready</li>
+</ul>
+<p>Documentation:</p>
+<ul>
+<li>Complete README</li>
+<li>Installation guide</li>
+<li>Usage guide</li>
+<li>Architecture documentation</li>
+<li>Test documentation</li>
+</ul>
+<p>🤖 Built autonomously by Context Foundry<br>Co-Authored-By: Claude <a href="mailto:noreply@anthropic.com">noreply@anthropic.com</a></p>
+<pre><code class="">
+---
+
+## Build Artifacts &amp; Documentation
+
+### Where to Find Everything
+
+**Every Context Foundry build creates a `.context-foundry/` directory in your project:**
+</code></pre>
+<p>your-project/<br>├── src/                           ← Your actual code<br>├── tests/                         ← Test files<br>├── README.md                      ← Project documentation<br>└── .context-foundry/              ← Build artifacts (plans, logs, patterns)<br>    ├── scout-report.md            ← Phase 1: Research findings<br>    ├── architecture.md            ← Phase 2: Complete technical design<br>    ├── build-log.md               ← Phase 3: Implementation log<br>    ├── test-iteration-count.txt   ← Current test iteration number<br>    ├── test-results-iteration-1.md  ← Test run #1 results<br>    ├── test-results-iteration-2.md  ← Test run #2 (if self-healing triggered)<br>    ├── fixes-iteration-1.md       ← Fix strategy for iteration 1<br>    ├── test-final-report.md       ← Final test summary<br>    ├── session-summary.json       ← Complete build metadata<br>    ├── feedback/<br>    │   └── build-feedback-{timestamp}.json  ← Learnings from this build<br>    └── patterns/<br>        ├── common-issues.json     ← Patterns discovered<br>        ├── test-patterns.json<br>        ├── architecture-patterns.json<br>        └── scout-learnings.json</p>
+<pre><code class="">
+### Key Files Explained
+
+#### `scout-report.md` (40-60KB)
+
+**What it contains:**
+- Task analysis and requirements breakdown
+- Technology stack recommendations
+- Architecture patterns to apply
+- Potential challenges identified
+- Prior art research
+- Patterns applied from pattern library
+
+**When to read:**
+- Understand why certain technologies were chosen
+- See what patterns were applied
+- Review risk assessment
+
+**Example:**
+```bash
+cat your-project/.context-foundry/scout-report.md</code></pre>
+<h4 id="architecturemd-30-90kb"><code>architecture.md</code> (30-90KB)</h4>
+<p><strong>What it contains:</strong></p>
+<ul>
+<li>Complete system architecture</li>
+<li>Detailed file structure</li>
+<li>Module specifications and responsibilities</li>
+<li>Data models and schemas</li>
+<li>API design (if applicable)</li>
+<li>Component hierarchy</li>
+<li>State management design</li>
+<li>Testing strategy</li>
+<li>Implementation roadmap</li>
+</ul>
+<p><strong>When to read:</strong></p>
+<ul>
+<li><strong>Before making changes</strong> - understand the design</li>
+<li><strong>When onboarding</strong> - learn how the system works</li>
+<li><strong>For documentation</strong> - reference for future work</li>
+</ul>
+<p><strong>Example:</strong></p>
+<pre><code class="language-bash"># View VimQuest&#039;s architecture plan
+cat /Users/name/homelab/vimquest/.context-foundry/architecture.md
+
+# View Satoshi Chore Tracker&#039;s architecture
+cat /Users/name/homelab/satoshi-chore-tracker/.context-foundry/architecture.md</code></pre>
+<p><strong>Pro tip:</strong> This file is comprehensive! It&#39;s like having a senior architect document your entire system.</p>
+<h4 id="build-logmd"><code>build-log.md</code></h4>
+<p><strong>What it contains:</strong></p>
+<ul>
+<li>Chronological implementation log</li>
+<li>Files created in order</li>
+<li>Key decisions during building</li>
+<li>Challenges encountered and solutions</li>
+</ul>
+<p><strong>When to read:</strong></p>
+<ul>
+<li>Understand the build sequence</li>
+<li>Debug issues by seeing what was built when</li>
+<li>Learn the Builder&#39;s approach</li>
+</ul>
+<h4 id="test-results-iteration-xmd"><code>test-results-iteration-X.md</code></h4>
+<p><strong>What it contains:</strong></p>
+<ul>
+<li>Complete test output for each iteration</li>
+<li>Failed tests (if any)</li>
+<li>Error messages and stack traces</li>
+<li>Root cause analysis</li>
+</ul>
+<p><strong>When to read:</strong></p>
+<ul>
+<li>Understand what tests failed and why</li>
+<li>See how self-healing diagnosed issues</li>
+<li>Debug persistent test failures</li>
+</ul>
+<h4 id="fixes-iteration-xmd"><code>fixes-iteration-X.md</code></h4>
+<p><strong>What it contains:</strong></p>
+<ul>
+<li>Architect&#39;s analysis of test failures</li>
+<li>Specific code changes planned</li>
+<li>Rationale for each fix</li>
+</ul>
+<p><strong>When to read:</strong></p>
+<ul>
+<li>Understand how self-healing fixed issues</li>
+<li>Learn problem-solving approach</li>
+<li>See the redesign → re-implement process</li>
+</ul>
+<h4 id="session-summaryjson"><code>session-summary.json</code></h4>
+<p><strong>What it contains:</strong></p>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;completed&quot;,
+  &quot;phases_completed&quot;: [&quot;scout&quot;, &quot;architect&quot;, &quot;builder&quot;, &quot;test&quot;, &quot;docs&quot;, &quot;deploy&quot;, &quot;feedback&quot;],
+  &quot;github_url&quot;: &quot;https://github.com/snedea/your-project&quot;,
+  &quot;files_created&quot;: [&quot;server.js&quot;, &quot;tests/api.test.js&quot;, ...],
+  &quot;tests_passed&quot;: true,
+  &quot;test_iterations&quot;: 2,
+  &quot;duration_minutes&quot;: 7.42,
+  &quot;patterns_applied&quot;: [&quot;vite-educational-spa&quot;, &quot;hash-routing-offline-first&quot;]
+}</code></pre>
+<p><strong>When to read:</strong></p>
+<ul>
+<li>Quick build overview</li>
+<li>Check test pass rate</li>
+<li>See total duration</li>
+<li>Get GitHub URL</li>
+</ul>
+<h3 id="pattern-library-locations">Pattern Library Locations</h3>
+<p><strong>Global Pattern Library</strong> (shared across ALL builds):</p>
+<pre><code class="">/Users/name/homelab/context-foundry/.context-foundry/patterns/
+├── common-issues.json
+├── test-patterns.json
+├── architecture-patterns.json
+└── scout-learnings.json</code></pre>
+<p><strong>Per-Project Patterns</strong> (this build&#39;s discoveries):</p>
+<pre><code class="">your-project/.context-foundry/patterns/
+└── [Same structure]</code></pre>
+<p><strong>How they work together:</strong></p>
+<ol>
+<li>Scout/Architect/Test phases READ global patterns</li>
+<li>Patterns auto-apply if conditions match</li>
+<li>New patterns discovered during build go to project directory</li>
+<li>Phase 7: Feedback promotes valuable patterns to global library</li>
+<li>Next build benefits from expanded pattern library</li>
+</ol>
+<p><strong>View global patterns:</strong></p>
+<pre><code class="language-bash"># See all known issues and solutions
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
+
+# See testing strategies learned
+cat /Users/name/homelab/context-foundry/.context-foundry/patterns/test-patterns.json</code></pre>
+<h3 id="reviewing-plans-beforeafter-build">Reviewing Plans Before/After Build</h3>
+<p><strong>Option 1: Review After Build (Recommended)</strong></p>
+<pre><code class="language-bash"># Build completes autonomously
+# Then review the plan:
+cat your-project/.context-foundry/architecture.md
+
+# If you want changes, just ask:
+claude
+You: &quot;I reviewed the architecture. Can we change the database from SQLite to PostgreSQL?&quot;</code></pre>
+<p><strong>Option 2: Checkpoint Mode (Review During Build)</strong></p>
+<pre><code class="language-python"># Use autonomous=False to pause at key phases
+autonomous_build_and_deploy(
+    task=&quot;Build a weather app&quot;,
+    autonomous=False  # ← Enables review checkpoints
+)</code></pre>
+<p><strong>What happens:</strong></p>
+<ol>
+<li>Scout completes → Pauses → Shows scout-report.md → Waits for &quot;Continue&quot;</li>
+<li>Architect completes → Pauses → Shows architecture.md → Waits for approval</li>
+<li>Test completes → Pauses → Shows results → Waits for &quot;Deploy&quot;</li>
+</ol>
+<p><strong>Example session:</strong></p>
+<pre><code class="">[Scout completes]
+Assistant: Scout phase complete! Review the findings:
+           cat .context-foundry/scout-report.md
+
+           Type &quot;Continue&quot; to proceed to Architect phase.
+
+You: cat .context-foundry/scout-report.md
+[Review findings]
+
+You: Continue
+
+[Architect completes]
+Assistant: Architect phase complete! Review the architecture plan:
+           cat .context-foundry/architecture.md
+
+           Type &quot;Continue&quot; to proceed to Builder phase, or request changes.
+
+You: cat .context-foundry/architecture.md
+[Review 90KB plan]
+
+You: Looks good! Continue</code></pre>
+<h3 id="understanding-the-delegation-model">Understanding the Delegation Model</h3>
+<p><strong>Why your context usage stays low:</strong></p>
+<pre><code class="">┌──────────────────────────────────────┐
+│ Your Claude Code Window (Main)       │
+│                                       │
+│ You: &quot;Build a weather app&quot;           │
+│                                       │
+│ Context Used: ~1,000 tokens (0.5%)   │
+│                                       │
+│ Claude: [Delegates to MCP]           │
+│         ↓                             │
+└─────────┼────────────────────────────┘
+          │
+          ↓ Spawns
+┌──────────────────────────────────────┐
+│ Fresh Claude Instance (Delegated)    │
+│                                       │
+│ Receives: orchestrator_prompt.txt    │
+│                                       │
+│ Context Used: ~80,000 tokens (40%)   │
+│                                       │
+│ ├─ Phase 1: Scout (~10K tokens)      │
+│ ├─ Phase 2: Architect (~15K tokens)  │
+│ ├─ Phase 3: Builder (~30K tokens)    │
+│ ├─ Phase 4: Test (~8K tokens)        │
+│ ├─ Phase 5: Docs (~3K tokens)        │
+│ ├─ Phase 6: Deploy (~2K tokens)      │
+│ └─ Phase 7: Feedback (~5K tokens)    │
+│                                       │
+│ Returns: &quot;Build complete! ✅&quot;         │
+│          [Summary JSON]               │
+└──────────────────────────────────────┘
+          │
+          ↓ Returns
+┌──────────────────────────────────────┐
+│ Your Claude Code Window (Main)       │
+│                                       │
+│ Claude: &quot;Build complete! ✅&quot;          │
+│         GitHub: github.com/you/app   │
+│         Tests: 25/25 passing         │
+│                                       │
+│ Context Used: ~1,500 tokens (0.75%)  │
+└──────────────────────────────────────┘</code></pre>
+<p><strong>Key insights:</strong></p>
+<ul>
+<li>✅ Main window stays clean (&lt; 1% context usage)</li>
+<li>✅ Delegated instance does all the work (can use 100% if needed)</li>
+<li>✅ Agents live in delegated instance (ephemeral)</li>
+<li>✅ Only artifacts persist (.context-foundry/ files)</li>
+<li>✅ Multiple builds can run in parallel (separate instances)</li>
+</ul>
+<h3 id="agent-lifecycle">Agent Lifecycle</h3>
+<p><strong>What happens to the agents?</strong></p>
+<pre><code class="">Build Starts
+    ↓
+Delegated Claude instance spawned
+    ↓
+Orchestrator reads orchestrator_prompt.txt
+    ↓
+Phase 1: Scout agent created via /agents
+    ├─ Researches requirements
+    ├─ Writes scout-report.md
+    └─ [Agent conversation DISCARDED]
+    ↓
+Phase 2: Architect agent created via /agents
+    ├─ Reads scout-report.md (file persists)
+    ├─ Designs system
+    ├─ Writes architecture.md
+    └─ [Agent conversation DISCARDED]
+    ↓
+Phase 3-7: Builder, Test, Docs, Deploy, Feedback agents
+    └─ [Same pattern: use artifacts, create artifacts, discard]
+    ↓
+Build Completes
+    ↓
+Delegated Claude instance terminates
+    ↓
+ALL agent conversations GONE</code></pre>
+<p><strong>What persists:</strong></p>
+<ul>
+<li>✅ All files in <code>.context-foundry/</code></li>
+<li>✅ Your actual project code</li>
+<li>✅ Git commits</li>
+<li>✅ GitHub repository</li>
+<li>✅ Pattern library updates</li>
+</ul>
+<p><strong>What disappears:</strong></p>
+<ul>
+<li>❌ Agent conversation histories</li>
+<li>❌ Delegated Claude instance</li>
+<li>❌ Temporary state</li>
+</ul>
+<p><strong>Next build:</strong> Fresh agents read the pattern library and start clean!</p>
+<h3 id="for-more-details">For More Details</h3>
+<p><strong>Comprehensive FAQ:</strong> See <a href="FAQ.md">FAQ.md</a> for:</p>
+<ul>
+<li>Complete delegation model explanation</li>
+<li>Where all prompts are located (orchestrator_prompt.txt, etc.)</li>
+<li>How Context Foundry DOESN&#39;T change Claude&#39;s system prompt</li>
+<li>Why context stays low (separate instances)</li>
+<li>What happens to agents (ephemeral)</li>
+<li>Control options (autonomous vs checkpoints)</li>
+</ul>
+<p><strong>Technical Deep Dive:</strong> See <a href="docs/DELEGATION_MODEL.md">docs/DELEGATION_MODEL.md</a> for architecture diagrams and implementation details.</p>
+<hr>
+<h2 id="real-time-monitoring-dashboard">Real-Time Monitoring Dashboard</h2>
+<p><strong>NEW: Enhanced status dashboard with comprehensive metrics tracking</strong></p>
+<p>Monitor your Context Foundry builds in real-time with a beautiful dark-themed web dashboard that polls MCP status and displays detailed metrics including token usage, agent performance, decision quality, and test analytics.</p>
+<h3 id="features">Features</h3>
+<p>✅ <strong>Real-Time Updates</strong> - 3-5 second polling interval for near real-time status<br>✅ <strong>Token Usage Tracking</strong> - Visual gauge showing usage out of 200K budget<br>✅ <strong>Agent Performance</strong> - Track Scout, Architect, Builder, and Tester metrics<br>✅ <strong>Decision Analytics</strong> - Quality ratings, difficulty, lessons learned tracking<br>✅ <strong>Test Loop Insights</strong> - Iteration counts, success rates, failure patterns<br>✅ <strong>Pattern Effectiveness</strong> - See which patterns prevented issues<br>✅ <strong>Persistent Storage</strong> - SQLite database for historical analysis<br>✅ <strong>Beautiful Dark Mode</strong> - Easy on the eyes for overnight monitoring</p>
+<h3 id="quick-start">Quick Start</h3>
+<h4 id="1-start-the-dashboard">1. Start the Dashboard</h4>
+<pre><code class="language-bash">cd ~/context-foundry
+./tools/start_livestream.sh</code></pre>
+<p>The script will:</p>
+<ul>
+<li>Check dependencies (FastAPI, uvicorn, etc.)</li>
+<li>Initialize the metrics database (~/.context-foundry/metrics.db)</li>
+<li>Start the server on <a href="http://localhost:8080" target="_blank" rel="noopener noreferrer">http://localhost:8080 <svg class="external-link-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a></li>
+<li>Open the dashboard in your browser</li>
+</ul>
+<h4 id="2-run-a-task">2. Run a Task</h4>
+<p>In another terminal, start a Context Foundry task:</p>
+<pre><code class="language-bash"># Example: Async build
+foundry build my-app &quot;Build a todo app with REST API&quot; --async
+
+# The dashboard will automatically detect and display the task</code></pre>
+<h4 id="3-monitor-in-real-time">3. Monitor in Real-Time</h4>
+<p>The dashboard will show:</p>
+<ul>
+<li><strong>Current Phase</strong>: Scout → Architect → Builder → Test → Deploy</li>
+<li><strong>Progress</strong>: Tasks completed vs remaining</li>
+<li><strong>Token Usage</strong>: Visual gauge with color-coded warning levels</li>
+<li><strong>Live Logs</strong>: Streaming output from the build</li>
+<li><strong>Detailed Metrics</strong>: Agent performance, decisions, test iterations</li>
+</ul>
+<h3 id="dashboard-panels">Dashboard Panels</h3>
+<h4 id="main-status-panel">Main Status Panel</h4>
+<ul>
+<li><strong>Session Selector</strong>: Switch between active tasks</li>
+<li><strong>Phase Indicator</strong>: Current phase with gradient color coding</li>
+<li><strong>Elapsed Time</strong>: How long the task has been running</li>
+<li><strong>Iteration Count</strong>: Number of context resets / healing loops</li>
+</ul>
+<h4 id="context-usage">Context Usage</h4>
+<ul>
+<li>Progress bar showing token usage out of 200K budget</li>
+<li>Color-coded: Green (safe), Yellow (warning &gt;50%), Red (critical &gt;75%)</li>
+<li>Real-time updates as task progresses</li>
+</ul>
+<h4 id="task-progress">Task Progress</h4>
+<ul>
+<li>List of completed tasks (✓)</li>
+<li>Currently executing task (⏳)</li>
+<li>Pending tasks (○)</li>
+<li>Progress percentage bar</li>
+</ul>
+<h4 id="token-usage-panel">Token Usage Panel 🔢</h4>
+<ul>
+<li><strong>Used / Budget</strong>: e.g., &quot;45,234 / 200,000&quot;</li>
+<li><strong>Visual Gauge</strong>: Gradient progress bar (green→yellow→red)</li>
+<li><strong>Warning Thresholds</strong>:<ul>
+<li><strong>Safe</strong>: &lt; 50% (green)</li>
+<li><strong>Warning</strong>: 50-75% (yellow)</li>
+<li><strong>Critical</strong>: &gt; 75% (red - pulses)</li>
+</ul>
+</li>
+<li>Updates every 3-5 seconds</li>
+</ul>
+<h4 id="test-loop-analytics">Test Loop Analytics 🧪</h4>
+<ul>
+<li><strong>Total Iterations</strong>: Number of test/fix cycles</li>
+<li><strong>Success Rate</strong>: Percentage of tests passing</li>
+<li><strong>Iteration History</strong>: Last 3 iterations with pass/fail counts</li>
+<li><strong>Visual Indicators</strong>: Green ✓ for passing, Red ✗ for failing</li>
+</ul>
+<h4 id="agent-performance">Agent Performance 🤖</h4>
+<ul>
+<li><strong>Per-Agent Cards</strong>: Scout, Architect, Builder, Tester</li>
+<li><strong>Metrics</strong>:<ul>
+<li>Execution time</li>
+<li>Success/failure status</li>
+<li>Issues found vs fixed</li>
+<li>Files created/modified</li>
+</ul>
+</li>
+<li><strong>Hover Effects</strong>: Cards highlight on mouseover</li>
+</ul>
+<h4 id="decision-quality">Decision Quality 🧠</h4>
+<ul>
+<li><strong>Total Decisions</strong>: Count of autonomous decisions made</li>
+<li><strong>Average Quality</strong>: Rating 1-5 (Low, Medium, High)</li>
+<li><strong>Lessons Applied</strong>: Number of times past patterns were used</li>
+<li><strong>Recent Decisions</strong>: Last 3 decisions with quality badges</li>
+<li><strong>Color Coding</strong>:<ul>
+<li>High quality: Green</li>
+<li>Medium quality: Yellow</li>
+<li>Low quality: Red</li>
+</ul>
+</li>
+<li><strong>Lessons Indicator</strong>: Purple 📚 icon when lessons were applied</li>
+</ul>
+<h3 id="configuration">Configuration</h3>
+<h4 id="environment-variables">Environment Variables</h4>
+<pre><code class="language-bash"># Server configuration
+export LIVESTREAM_PORT=8080
+export LIVESTREAM_HOST=0.0.0.0
+
+# Polling interval (seconds)
+export POLL_INTERVAL_SECONDS=4  # 3-5 recommended
+
+# Database location
+export CF_METRICS_DB=&quot;$HOME/.context-foundry/metrics.db&quot;
+
+# Enable enhanced metrics
+export ENABLE_METRICS=true</code></pre>
+<h4 id="polling-interval">Polling Interval</h4>
+<p>The default 3-5 second polling interval balances:</p>
+<ul>
+<li><strong>Freshness</strong>: Near real-time updates</li>
+<li><strong>Overhead</strong>: Minimal API traffic</li>
+<li><strong>Responsiveness</strong>: Smooth UI updates</li>
+</ul>
+<p>To adjust:</p>
+<pre><code class="language-bash"># Aggressive (1-2 seconds) - for active monitoring
+export POLL_INTERVAL_SECONDS=2
+
+# Balanced (3-5 seconds) - recommended
+export POLL_INTERVAL_SECONDS=4
+
+# Conservative (10 seconds) - for long-running tasks
+export POLL_INTERVAL_SECONDS=10</code></pre>
+<h3 id="api-endpoints">API Endpoints</h3>
+<p>The dashboard provides a REST API for programmatic access:</p>
+<pre><code class="language-bash"># List all active MCP tasks
+curl http://localhost:8080/api/mcp/tasks
+
+# Get task status
+curl http://localhost:8080/api/mcp/task/{task_id}
+
+# Get comprehensive metrics
+curl http://localhost:8080/api/metrics/{task_id}
+
+# Get historical data
+curl http://localhost:8080/api/metrics/historical
+
+# Get decision analytics
+curl http://localhost:8080/api/analytics/decisions
+
+# Get agent performance analytics
+curl http://localhost:8080/api/analytics/agents
+
+# Get token usage status
+curl http://localhost:8080/api/token/status/{task_id}
+
+# Health check
+curl http://localhost:8080/api/health</code></pre>
+<h3 id="metrics-database">Metrics Database</h3>
+<p>All metrics are persisted to SQLite for historical analysis:</p>
+<pre><code class="language-bash"># Database location
+~/.context-foundry/metrics.db
+
+# Tables:
+# - tasks: Main task tracking
+# - metrics: Time-series metrics per task
+# - decisions: Autonomous decision tracking
+# - agent_performance: Per-agent metrics
+# - test_iterations: Test loop analytics
+# - pattern_effectiveness: Pattern usage tracking</code></pre>
+<h4 id="querying-metrics">Querying Metrics</h4>
+<pre><code class="language-bash"># Access the database
+sqlite3 ~/.context-foundry/metrics.db
+
+# Example queries:
+sqlite&gt; SELECT COUNT(*) FROM tasks;
+sqlite&gt; SELECT project_name, status, duration_seconds FROM tasks ORDER BY start_time DESC LIMIT 10;
+sqlite&gt; SELECT agent_type, AVG(duration_seconds), COUNT(*) FROM agent_performance GROUP BY agent_type;
+sqlite&gt; SELECT AVG(quality_rating), COUNT(*) FROM decisions WHERE used_lessons_learned = 1;</code></pre>
+<h3 id="self-improvement-integration">Self-Improvement Integration</h3>
+<p>The dashboard tracks metrics that help Context Foundry improve itself:</p>
+<ol>
+<li><p><strong>Decision Quality Tracking</strong></p>
+<ul>
+<li>Rates every autonomous decision (1-5)</li>
+<li>Tracks difficulty level</li>
+<li>Flags regrettable decisions to learn from</li>
+<li>Measures effectiveness of lessons learned</li>
+</ul>
+</li>
+<li><p><strong>Pattern Effectiveness</strong></p>
+<ul>
+<li>Tracks which patterns were applied</li>
+<li>Measures if they prevented issues</li>
+<li>Correlates pattern usage with success rates</li>
+<li>Builds data for pattern refinement</li>
+</ul>
+</li>
+<li><p><strong>Agent Performance Analysis</strong></p>
+<ul>
+<li>Measures time spent per agent type</li>
+<li>Tracks success rates by phase</li>
+<li>Identifies bottlenecks and inefficiencies</li>
+<li>Optimizes workflow over time</li>
+</ul>
+</li>
+<li><p><strong>Test Loop Analytics</strong></p>
+<ul>
+<li>Monitors test iteration trends</li>
+<li>Identifies common failure patterns</li>
+<li>Measures fix effectiveness</li>
+<li>Reduces iterations over time through learning</li>
+</ul>
+</li>
+</ol>
+<h3 id="dark-mode-design">Dark Mode Design</h3>
+<p>The dashboard uses a carefully crafted dark theme:</p>
+<ul>
+<li><strong>Background</strong>: Deep black (#0a0a0a) for OLED-friendly viewing</li>
+<li><strong>Panels</strong>: Dark gray (#111827) with subtle borders</li>
+<li><strong>Text</strong>: High contrast (#e0e0e0) for readability</li>
+<li><strong>Accents</strong>: Vibrant gradients for phase indicators</li>
+<li><strong>Hover Effects</strong>: Smooth transitions and subtle glows</li>
+<li><strong>Color Coding</strong>:<ul>
+<li>Green: Success, safe levels</li>
+<li>Yellow: Warnings, caution</li>
+<li>Red: Critical, failures</li>
+<li>Blue: Info, in-progress</li>
+<li>Purple: Lessons learned, special features</li>
+</ul>
+</li>
+</ul>
+<p>Perfect for overnight monitoring sessions!</p>
+<h3 id="remote-access">Remote Access</h3>
+<h4 id="with-ngrok-recommended">With ngrok (Recommended)</h4>
+<pre><code class="language-bash"># Start dashboard with public URL
+USE_NGROK=true ./tools/start_livestream.sh
+
+# You&#039;ll get:
+# - Local URL: http://localhost:8080
+# - Public URL: https://xxxx.ngrok.io
+# - QR Code: Scan with phone to access remotely</code></pre>
+<h4 id="local-network">Local Network</h4>
+<pre><code class="language-bash"># Find your local IP
+ifconfig | grep &quot;inet &quot;
+
+# Access from other devices on same network
+# http://YOUR_IP:8080</code></pre>
+<h3 id="troubleshooting-dashboard">Troubleshooting Dashboard</h3>
+<h4 id="server-wont-start">Server Won&#39;t Start</h4>
+<pre><code class="language-bash"># Check if port is in use
+lsof -i :8080
+
+# Kill existing server
+lsof -ti:8080 | xargs kill -9
+
+# Check logs
+tail -f /tmp/livestream.log</code></pre>
+<h4 id="dashboard-not-updating">Dashboard Not Updating</h4>
+<ol>
+<li><strong>Check WebSocket Connection</strong>: Look for green &quot;Connected&quot; indicator</li>
+<li><strong>Verify Task is Running</strong>: Ensure Context Foundry task is active</li>
+<li><strong>Check Browser Console</strong>: Press F12, look for errors</li>
+<li><strong>Refresh Page</strong>: Force reload with Cmd+Shift+R (Mac) or Ctrl+Shift+R</li>
+<li><strong>Check Enhanced Metrics</strong>: If disabled, some panels may not populate</li>
+</ol>
+<h4 id="enhanced-metrics-not-available">Enhanced Metrics Not Available</h4>
+<p>If you see &quot;⚠️ Enhanced metrics not available&quot;:</p>
+<pre><code class="language-bash"># Install missing dependencies
+cd ~/context-foundry/tools/livestream
+pip3 install -r requirements.txt
+
+# Restart server
+./tools/start_livestream.sh</code></pre>
+<h4 id="database-errors">Database Errors</h4>
+<pre><code class="language-bash"># Reinitialize database
+python3 -c &quot;
+from tools.livestream.metrics_db import get_db
+db = get_db()
+print(&#039;Database initialized at:&#039;, db.db_path)
+&quot;
+
+# Check database integrity
+sqlite3 ~/.context-foundry/metrics.db &quot;PRAGMA integrity_check;&quot;</code></pre>
+<h3 id="performance">Performance</h3>
+<ul>
+<li><strong>Latency</strong>: &lt; 100ms from task update to dashboard</li>
+<li><strong>Resource Usage</strong>: ~50MB RAM for server</li>
+<li><strong>Concurrent Sessions</strong>: Tested with 10+ simultaneous tasks</li>
+<li><strong>WebSocket Limit</strong>: 100 concurrent connections</li>
+<li><strong>Database Size</strong>: ~1-5MB per 100 tasks</li>
+</ul>
+<h3 id="best-practices-1">Best Practices</h3>
+<ol>
+<li><strong>Start Dashboard Before Tasks</strong>: Launch dashboard first, then start builds</li>
+<li><strong>Monitor Token Usage</strong>: Watch for yellow/red warnings</li>
+<li><strong>Review Decision Quality</strong>: Identify patterns in high vs low quality decisions</li>
+<li><strong>Analyze Test Failures</strong>: Use test loop panel to spot recurring issues</li>
+<li><strong>Export Data</strong>: Periodically export session data for analysis</li>
+<li><strong>Clean Up Old Tasks</strong>: Archive completed tasks to keep dashboard responsive</li>
+</ol>
+<h3 id="future-enhancements">Future Enhancements</h3>
+<p>Planned features:</p>
+<ul>
+<li><input disabled="" type="checkbox"> Historical session comparison</li>
+<li><input disabled="" type="checkbox"> Performance trend graphs</li>
+<li><input disabled="" type="checkbox"> Desktop notifications on completion</li>
+<li><input disabled="" type="checkbox"> Mobile app</li>
+<li><input disabled="" type="checkbox"> Video recording of sessions</li>
+<li><input disabled="" type="checkbox"> Multi-user authentication</li>
+<li><input disabled="" type="checkbox"> Session sharing via URL</li>
+<li><input disabled="" type="checkbox"> Pattern library visualization</li>
+<li><input disabled="" type="checkbox"> Cost estimation improvements</li>
+<li><input disabled="" type="checkbox"> Integration with GitHub Issues</li>
+</ul>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="prerequisites-setup">Prerequisites Setup</h3>
+<h4 id="installing-python-310">Installing Python 3.10+</h4>
+<p><strong>macOS (Homebrew):</strong></p>
+<pre><code class="language-bash">brew install python@3.10</code></pre>
+<p><strong>Linux (Ubuntu/Debian):</strong></p>
+<pre><code class="language-bash">sudo apt update
+sudo apt install python3.10 python3.10-pip</code></pre>
+<p><strong>Verify:</strong></p>
+<pre><code class="language-bash">python3.10 --version</code></pre>
+<h4 id="installing-claude-code-cli">Installing Claude Code CLI</h4>
+<p>Follow Anthropic&#39;s official installation guide for your platform.</p>
+<p><strong>Verify:</strong></p>
+<pre><code class="language-bash">which claude
+claude --version</code></pre>
+<h4 id="installing-github-cli">Installing GitHub CLI</h4>
+<p><strong>macOS:</strong></p>
+<pre><code class="language-bash">brew install gh</code></pre>
+<p><strong>Linux:</strong></p>
+<pre><code class="language-bash"># Debian/Ubuntu
+sudo apt install gh
+
+# Other distributions - see: https://github.com/cli/cli</code></pre>
+<p><strong>Authenticate:</strong></p>
+<pre><code class="language-bash">gh auth login
+# Follow prompts to authenticate</code></pre>
+<h3 id="troubleshooting-installation">Troubleshooting Installation</h3>
+<h4 id="error-no-module-named-fastmcp">Error: &quot;No module named &#39;fastmcp&#39;&quot;</h4>
+<pre><code class="language-bash"># Install again with specific Python version
+python3.10 -m pip install -r requirements-mcp.txt
+
+# Verify
+python3.10 -c &quot;from fastmcp import FastMCP; print(&#039;✅ Success&#039;)&quot;</code></pre>
+<h4 id="error-python-version-too-old">Error: &quot;Python version too old&quot;</h4>
+<p>Your system Python is &lt; 3.10. Install Python 3.10+ (see above).</p>
+<h4 id="error-permission-denied">Error: &quot;Permission denied&quot;</h4>
+<p>Try with <code>--user</code> flag:</p>
+<pre><code class="language-bash">pip install --user -r requirements-mcp.txt</code></pre>
+<h3 id="troubleshooting-mcp-connection">Troubleshooting MCP Connection</h3>
+<h4 id="error-mcp-server-not-found">Error: &quot;MCP server not found&quot;</h4>
+<p>Check the path in your <code>mcp add</code> command:</p>
+<pre><code class="language-bash"># Verify the file exists
+ls /full/path/to/context-foundry/tools/mcp_server.py
+
+# Re-add with correct path
+cd /path/to/context-foundry
+claude mcp remove context-foundry -s project
+claude mcp add --transport stdio context-foundry -s project -- $(pwd)/venv/bin/python $(pwd)/tools/mcp_server.py</code></pre>
+<h4 id="error-mcp-server-disconnected">Error: &quot;MCP server disconnected&quot;</h4>
+<p>Check MCP configuration:</p>
+<pre><code class="language-bash">cat ~/.config/claude-code/mcp_settings.json</code></pre>
+<p>Should show:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;python3.10&quot;,
+      &quot;args&quot;: [&quot;/full/path/to/context-foundry/tools/mcp_server.py&quot;],
+      &quot;disabled&quot;: false
+    }
+  }
+}</code></pre>
+<p>Restart Claude Code:</p>
+<pre><code class="language-bash"># Exit current session
+# Start fresh
+claude</code></pre>
+<h4 id="mcp-tools-not-showing-up">MCP Tools Not Showing Up</h4>
+<pre><code class="language-bash"># In Claude Code session, ask:
+&quot;What MCP tools are available?&quot;
+
+# Should list:
+# - mcp__autonomous_build_and_deploy
+# - mcp__delegate_to_claude_code
+# - mcp__delegate_to_claude_code_async
+# - mcp__get_delegation_result
+# - mcp__list_delegations</code></pre>
+<p>If not showing:</p>
+<ol>
+<li>Verify MCP configuration: <code>cat .mcp.json</code> (project-scoped) or <code>claude mcp list</code> (global)</li>
+<li>Check for errors in configuration</li>
+<li>Restart Claude Code</li>
+</ol>
+<h3 id="troubleshooting-builds">Troubleshooting Builds</h3>
+<h4 id="build-hangs-or-takes-too-long">Build Hangs or Takes Too Long</h4>
+<p>Increase timeout:</p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- timeout_minutes: 120  # Increase from default 90</code></pre>
+<p>Check if build is actually running:</p>
+<pre><code class="language-bash"># In another terminal
+ps aux | grep claude
+# Should show claude processes</code></pre>
+<h4 id="tests-keep-failing-max-iterations-reached">Tests Keep Failing (Max Iterations Reached)</h4>
+<p>Check test failure reports:</p>
+<pre><code class="language-bash">cd /your/working/directory
+cat .context-foundry/test-results-iteration-*.md</code></pre>
+<p>Review fix attempts:</p>
+<pre><code class="language-bash">cat .context-foundry/fixes-iteration-*.md</code></pre>
+<p>Options:</p>
+<ol>
+<li><p><strong>Increase max iterations:</strong></p>
+<pre><code class="">- max_test_iterations: 5</code></pre>
+</li>
+<li><p><strong>Disable test loop temporarily:</strong></p>
+<pre><code class="">- enable_test_loop: false</code></pre>
+</li>
+<li><p><strong>Fix manually and re-run</strong></p>
+</li>
+</ol>
+<h4 id="github-deployment-fails">GitHub Deployment Fails</h4>
+<p>Check GitHub authentication:</p>
+<pre><code class="language-bash">gh auth status
+# Should show: Logged in
+
+# If not:
+gh auth login</code></pre>
+<p>Check GitHub CLI works:</p>
+<pre><code class="language-bash">gh repo list
+# Should show your repos</code></pre>
+<h4 id="files-created-in-wrong-directory">Files Created in Wrong Directory</h4>
+<p>Verify working_directory is absolute path:</p>
+<pre><code class="">❌ Wrong: working_directory: &quot;~/my-project&quot;
+❌ Wrong: working_directory: &quot;./my-project&quot;
+✅ Correct: working_directory: &quot;/Users/yourname/my-project&quot;
+✅ Correct: working_directory: &quot;/tmp/my-project&quot;</code></pre>
+<p>Create directory first if it doesn&#39;t exist:</p>
+<pre><code class="language-bash">mkdir -p /tmp/my-project</code></pre>
+<hr>
+<h2 id="best-practices-2">Best Practices</h2>
+<h3 id="naming-projects">Naming Projects</h3>
+<p><strong>Good project names:</strong></p>
+<ul>
+<li>Lowercase with hyphens</li>
+<li>Descriptive</li>
+<li>GitHub-friendly</li>
+</ul>
+<pre><code class="">✅ weather-api
+✅ todo-cli-app
+✅ user-auth-service
+❌ My Cool Project
+❌ test123
+❌ untitled</code></pre>
+<h3 id="working-directories">Working Directories</h3>
+<p><strong>Recommended:</strong></p>
+<pre><code class="language-bash"># For temporary/test projects
+/tmp/project-name
+
+# For real projects
+/Users/yourname/projects/project-name
+~/projects/project-name  # Will be expanded to absolute path</code></pre>
+<p><strong>Create directory first:</strong></p>
+<pre><code class="language-bash">mkdir -p /path/to/project</code></pre>
+<h3 id="timeout-settings">Timeout Settings</h3>
+<p><strong>Guidelines:</strong></p>
+<div class="table-wrapper">
+  <table>
+    <thead><tr>
+<th>Project Type</th>
+<th>Recommended Timeout</th>
+</tr>
+</thead>
+    <tbody><tr>
+<td>Single file script</td>
+<td>2-5 minutes</td>
+</tr>
+<tr>
+<td>Simple CLI app</td>
+<td>5-10 minutes</td>
+</tr>
+<tr>
+<td>REST API</td>
+<td>10-20 minutes</td>
+</tr>
+<tr>
+<td>Full-stack app</td>
+<td>30-60 minutes</td>
+</tr>
+<tr>
+<td>Complex system</td>
+<td>60-120 minutes</td>
+</tr>
+</tbody>
+  </table>
+</div>
+<p><strong>Example:</strong></p>
+<pre><code class="">- timeout_minutes: 15  # REST API</code></pre>
+<h3 id="test-loop-settings">Test Loop Settings</h3>
+<p><strong>Enable test loop when:</strong></p>
+<ul>
+<li>✅ Building production code</li>
+<li>✅ Code has complex logic</li>
+<li>✅ You want high quality output</li>
+</ul>
+<p><strong>Disable test loop when:</strong></p>
+<ul>
+<li>✅ Rapid prototyping</li>
+<li>✅ Throwaway code</li>
+<li>✅ Debugging workflow issues</li>
+</ul>
+<p><strong>Max iterations:</strong></p>
+<ul>
+<li><strong>3</strong> (default) - Good balance</li>
+<li><strong>5</strong> - For complex projects</li>
+<li><strong>1</strong> - See raw failures without auto-fix</li>
+</ul>
+<h3 id="task-descriptions">Task Descriptions</h3>
+<p><strong>Good task descriptions:</strong></p>
+<pre><code class="">✅ Specific:
+&quot;Build a REST API with Express.js that has endpoints for user CRUD operations,
+JWT authentication, PostgreSQL database, and comprehensive tests&quot;
+
+✅ Lists requirements:
+&quot;Create a CLI todo app with:
+- Add, list, complete, delete commands
+- JSON file storage
+- Colorful output with Rich library
+- Pytest tests&quot;
+
+❌ Too vague:
+&quot;Build an app&quot;
+
+❌ Too constraining:
+&quot;Use exactly this code structure: [paste 500 lines]&quot;</code></pre>
+<p><strong>Sweet spot:</strong> Specific requirements, but let AI decide implementation details.</p>
+<hr>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<h3 id="customizing-the-workflow">Customizing the Workflow</h3>
+<p>Edit <code>tools/orchestrator_prompt.txt</code> to customize the workflow:</p>
+<pre><code class="language-bash"># Edit the meta-prompt
+nano /path/to/context-foundry/tools/orchestrator_prompt.txt</code></pre>
+<p><strong>Example customizations:</strong></p>
+<ol>
+<li><p><strong>Add a security audit phase:</strong></p>
+<pre><code class="">PHASE 5: SECURITY AUDIT
+1. Create Security Agent via /agents
+2. Run security scans
+3. Check for vulnerabilities
+4. Create security-report.md</code></pre>
+</li>
+<li><p><strong>Change test framework:</strong></p>
+<pre><code class="">PHASE 3: BUILDER
+- For Python: Use pytest (not unittest)
+- For JavaScript: Use Jest (not Mocha)
+- For Go: Use standard testing package</code></pre>
+</li>
+<li><p><strong>Add deployment to cloud:</strong></p>
+<pre><code class="">PHASE 6: DEPLOYMENT
+- Deploy to Vercel for frontend
+- Deploy to Railway for backend
+- Deploy to Supabase for database</code></pre>
+</li>
+</ol>
+<h3 id="environment-variables-1">Environment Variables</h3>
+<p>Pass env vars to MCP server:</p>
+<p>Edit <code>~/.config/claude-code/mcp_settings.json</code>:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;context-foundry&quot;: {
+      &quot;command&quot;: &quot;python3.10&quot;,
+      &quot;args&quot;: [&quot;/path/to/mcp_server.py&quot;],
+      &quot;env&quot;: {
+        &quot;ANTHROPIC_API_KEY&quot;: &quot;your-key&quot;,
+        &quot;OPENWEATHERMAP_API_KEY&quot;: &quot;your-key&quot;,
+        &quot;DATABASE_URL&quot;: &quot;postgresql://...&quot;
+      }
+    }
+  }
+}</code></pre>
+<h3 id="using-with-different-github-accounts">Using with Different GitHub Accounts</h3>
+<pre><code class="language-bash"># Switch GitHub accounts
+gh auth switch
+
+# Or log out and log in with different account
+gh auth logout
+gh auth login</code></pre>
+<h3 id="inspecting-build-artifacts">Inspecting Build Artifacts</h3>
+<p>After a build, explore the <code>.context-foundry/</code> directory:</p>
+<pre><code class="language-bash">cd /your/project/.context-foundry
+
+# Scout findings
+cat scout-report.md
+
+# Architecture design
+cat architecture.md
+
+# Build log
+cat build-log.md
+
+# Test iterations (if any failures)
+cat test-iteration-count.txt
+cat test-results-iteration-*.md
+cat fixes-iteration-*.md
+
+# Final test report
+cat test-final-report.md</code></pre>
+<p>These files help you understand what the AI did and debug issues.</p>
+<h3 id="resuming-failed-builds">Resuming Failed Builds</h3>
+<p>If a build fails, you can:</p>
+<ol>
+<li><p><strong>Review the artifacts:</strong></p>
+<pre><code class="language-bash">cd /your/project/.context-foundry
+cat test-results-iteration-*.md</code></pre>
+</li>
+<li><p><strong>Fix manually and re-run:</strong></p>
+<pre><code class="language-bash"># Fix the code manually
+# Then re-run autonomous build</code></pre>
+</li>
+<li><p><strong>Increase iterations:</strong></p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- max_test_iterations: 5  # Try more times</code></pre>
+</li>
+</ol>
+<hr>
+<h2 id="next-steps">Next Steps</h2>
+<h3 id="after-your-first-successful-build">After Your First Successful Build</h3>
+<ol>
+<li><p><strong>Try more complex projects:</strong></p>
+<ul>
+<li>Full-stack applications</li>
+<li>Microservices</li>
+<li>Game development</li>
+</ul>
+</li>
+<li><p><strong>Experiment with parallel execution:</strong></p>
+<ul>
+<li>Build multiple components simultaneously</li>
+<li>Measure time savings</li>
+</ul>
+</li>
+<li><p><strong>Customize the workflow:</strong></p>
+<ul>
+<li>Edit <code>orchestrator_prompt.txt</code></li>
+<li>Add custom phases</li>
+<li>Adjust test strategies</li>
+</ul>
+</li>
+<li><p><strong>Read the technical docs:</strong></p>
+<ul>
+<li><a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a> for deep dives and 1.x vs 2.0 comparison</li>
+</ul>
+</li>
+</ol>
+<h3 id="learning-more">Learning More</h3>
+<ul>
+<li><strong>README.md</strong> - Quick reference and overview</li>
+<li><strong>ARCHITECTURE_DECISIONS.md</strong> - Technical deep dives and what&#39;s new in 2.0</li>
+<li><strong>CLAUDE_CODE_MCP_SETUP.md</strong> - MCP setup and troubleshooting</li>
+<li><strong>examples/</strong> - Test scenarios and examples</li>
+</ul>
+<h3 id="getting-help">Getting Help</h3>
+<ul>
+<li><strong>GitHub Issues:</strong> Report bugs and request features</li>
+<li><strong>GitHub Discussions:</strong> Ask questions and share projects</li>
+<li><strong>Documentation:</strong> Start here, then technical docs</li>
+</ul>
+<hr>
+<h2 id="summary-cheat-sheet">Summary Cheat Sheet</h2>
+<h3 id="quick-reference">Quick Reference</h3>
+<p><strong>Start Claude Code:</strong></p>
+<pre><code class="language-bash">claude</code></pre>
+<p><strong>Build a project (autonomous):</strong></p>
+<pre><code class="">Use mcp__autonomous_build_and_deploy:
+- task: &quot;Description of what to build&quot;
+- working_directory: &quot;/full/path/to/project&quot;
+- github_repo_name: &quot;repo-name&quot;
+- enable_test_loop: true</code></pre>
+<p><strong>Delegate a simple task:</strong></p>
+<pre><code class="">Use mcp__delegate_to_claude_code:
+- task: &quot;Create a script that does X&quot;
+- working_directory: &quot;/tmp/my-script&quot;</code></pre>
+<p><strong>Parallel tasks:</strong></p>
+<pre><code class="">Use mcp__delegate_to_claude_code_async for each task
+Use mcp__list_delegations to monitor
+Use mcp__get_delegation_result to collect results</code></pre>
+<p><strong>Check MCP configuration:</strong></p>
+<pre><code class="language-bash"># For project-scoped config
+cat .mcp.json
+
+# For global config
+claude mcp list</code></pre>
+<p><strong>View artifacts:</strong></p>
+<pre><code class="language-bash">ls -la /your/project/.context-foundry/</code></pre>
+<hr>
+<p><strong>Happy Building!</strong> 🎉</p>
+<p>Context Foundry 2.0 - Autonomous AI Development</p>
+<p>For more help: <a href="README.md">README.md</a> | <a href="ARCHITECTURE_DECISIONS.md">ARCHITECTURE_DECISIONS.md</a></p>
+
+        </div>
+
+        <!-- Next/Previous Navigation -->
+        <nav class="doc-pagination" aria-label="Page navigation">
+            <a href="/docs/getting-started/quickstart" class="doc-nav-link doc-nav-prev" rel="prev">
+              <span class="doc-nav-label">Previous</span>
+              <span class="doc-nav-title">Quick Start</span>
+            </a>
+
+        </nav>
+      </article>
+
+    </main>
+
+    <!-- Table of Contents (Desktop Only) -->
+    <aside class="docs-toc" id="docs-toc" role="navigation" aria-label="Table of contents">
+      <div class="toc-container">
+        <h2 class="toc-title">On this page</h2>
+        <nav class="toc-nav">
+          <ul class="toc-list">
+              <li class="toc-item toc-item-2">
+                <a href="#table-of-contents" class="toc-link" data-heading-id="table-of-contents">
+                  Table of Contents
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#getting-started" class="toc-link" data-heading-id="getting-started">
+                  Getting Started
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#prerequisites-check" class="toc-link" data-heading-id="prerequisites-check">
+                          Prerequisites Check
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#installation" class="toc-link" data-heading-id="installation">
+                          Installation
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-1-clone-context-foundry" class="toc-link" data-heading-id="step-1-clone-context-foundry">
+                                  Step 1: Clone Context Foundry
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-2-install-mcp-server-dependencies" class="toc-link" data-heading-id="step-2-install-mcp-server-dependencies">
+                                  Step 2: Install MCP Server Dependencies
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-3-configure-mcp-connection" class="toc-link" data-heading-id="step-3-configure-mcp-connection">
+                                  Step 3: Configure MCP Connection
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-4-verify-connection" class="toc-link" data-heading-id="step-4-verify-connection">
+                                  Step 4: Verify Connection
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-5-test-the-setup" class="toc-link" data-heading-id="step-5-test-the-setup">
+                                  Step 5: Test the Setup
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#how-claude-code-recognizes-build-requests" class="toc-link" data-heading-id="how-claude-code-recognizes-build-requests">
+                  How Claude Code Recognizes Build Requests
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#intent-detection" class="toc-link" data-heading-id="intent-detection">
+                          🎯 Intent Detection
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#examples-that-trigger-autonomous-build" class="toc-link" data-heading-id="examples-that-trigger-autonomous-build">
+                          ✅ Examples That Trigger Autonomous Build
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#examples-that-wont-trigger-just-explains" class="toc-link" data-heading-id="examples-that-wont-trigger-just-explains">
+                          ❌ Examples That Won&#x27;t Trigger (Just Explains)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#the-difference" class="toc-link" data-heading-id="the-difference">
+                          💡 The Difference
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#no-need-to-mention-mcp-tools" class="toc-link" data-heading-id="no-need-to-mention-mcp-tools">
+                          🚀 No Need to Mention MCP Tools!
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#being-specific-gets-better-results" class="toc-link" data-heading-id="being-specific-gets-better-results">
+                          📝 Being Specific Gets Better Results
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#learning-the-pattern" class="toc-link" data-heading-id="learning-the-pattern">
+                          🎓 Learning the Pattern
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#what-if-youre-unsure" class="toc-link" data-heading-id="what-if-youre-unsure">
+                          💬 What If You&#x27;re Unsure?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#advanced-customize-the-build" class="toc-link" data-heading-id="advanced-customize-the-build">
+                          🔧 Advanced: Customize the Build
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#basic-usage" class="toc-link" data-heading-id="basic-usage">
+                  Basic Usage
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#your-first-build" class="toc-link" data-heading-id="your-first-build">
+                          Your First Build
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#autonomous-builds" class="toc-link" data-heading-id="autonomous-builds">
+                  Autonomous Builds
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#building-a-todo-cli-app" class="toc-link" data-heading-id="building-a-todo-cli-app">
+                          Building a Todo CLI App
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#task-delegation" class="toc-link" data-heading-id="task-delegation">
+                  Task Delegation
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#simple-synchronous-delegation" class="toc-link" data-heading-id="simple-synchronous-delegation">
+                          Simple Synchronous Delegation
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#checking-working-directory" class="toc-link" data-heading-id="checking-working-directory">
+                          Checking Working Directory
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#parallel-execution" class="toc-link" data-heading-id="parallel-execution">
+                  Parallel Execution
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#building-a-full-stack-app-in-parallel" class="toc-link" data-heading-id="building-a-full-stack-app-in-parallel">
+                          Building a Full-Stack App in Parallel
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-1-start-all-tasks-in-parallel" class="toc-link" data-heading-id="step-1-start-all-tasks-in-parallel">
+                                  Step 1: Start All Tasks in Parallel
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-2-monitor-progress" class="toc-link" data-heading-id="step-2-monitor-progress">
+                                  Step 2: Monitor Progress
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#step-3-collect-results" class="toc-link" data-heading-id="step-3-collect-results">
+                                  Step 3: Collect Results
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#performance-comparison" class="toc-link" data-heading-id="performance-comparison">
+                                  Performance Comparison
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#background-builds" class="toc-link" data-heading-id="background-builds">
+                  Background Builds
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#why-background-builds" class="toc-link" data-heading-id="why-background-builds">
+                          Why Background Builds?
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#how-it-works" class="toc-link" data-heading-id="how-it-works">
+                          How It Works
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#starting-a-background-build" class="toc-link" data-heading-id="starting-a-background-build">
+                          Starting a Background Build
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#checking-build-status" class="toc-link" data-heading-id="checking-build-status">
+                          Checking Build Status
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#listing-all-active-builds" class="toc-link" data-heading-id="listing-all-active-builds">
+                          Listing All Active Builds
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#real-world-example" class="toc-link" data-heading-id="real-world-example">
+                          Real-World Example
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#multiple-simultaneous-builds" class="toc-link" data-heading-id="multiple-simultaneous-builds">
+                          Multiple Simultaneous Builds
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#when-to-use-synchronous-blocking-builds" class="toc-link" data-heading-id="when-to-use-synchronous-blocking-builds">
+                          When to Use Synchronous (Blocking) Builds
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#best-practices" class="toc-link" data-heading-id="best-practices">
+                          Best Practices
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#troubleshooting-background-builds" class="toc-link" data-heading-id="troubleshooting-background-builds">
+                          Troubleshooting Background Builds
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#understanding-the-workflow" class="toc-link" data-heading-id="understanding-the-workflow">
+                  Understanding the Workflow
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#the-8-phase-autonomous-workflow" class="toc-link" data-heading-id="the-8-phase-autonomous-workflow">
+                          The 8-Phase Autonomous Workflow
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#visual-walkthrough-real-build-example" class="toc-link" data-heading-id="visual-walkthrough-real-build-example">
+                          Visual Walkthrough: Real Build Example
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-1-scout-research-context-gathering" class="toc-link" data-heading-id="phase-1-scout-research-context-gathering">
+                                  Phase 1: Scout (Research &amp; Context Gathering)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-2-architect-design-planning" class="toc-link" data-heading-id="phase-2-architect-design-planning">
+                                  Phase 2: Architect (Design &amp; Planning)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-3-builder-implementation" class="toc-link" data-heading-id="phase-3-builder-implementation">
+                                  Phase 3: Builder (Implementation)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-4-test-validation-quality-assurance" class="toc-link" data-heading-id="phase-4-test-validation-quality-assurance">
+                                  Phase 4: Test (Validation &amp; Quality Assurance)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-45-screenshot-capture-visual-documentation-new" class="toc-link" data-heading-id="phase-45-screenshot-capture-visual-documentation-new">
+                                  Phase 4.5: Screenshot Capture (Visual Documentation) 📸 NEW!
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#phase-5-documentation" class="toc-link" data-heading-id="phase-5-documentation">
+                                  Phase 5: Documentation
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#usage" class="toc-link" data-heading-id="usage">
+                  Usage
+                </a>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#testing" class="toc-link" data-heading-id="testing">
+                  Testing
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-4">
+                        <a href="#architecturemd-30-90kb" class="toc-link" data-heading-id="architecturemd-30-90kb">
+                          architecture.md (30-90KB)
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-4">
+                        <a href="#build-logmd" class="toc-link" data-heading-id="build-logmd">
+                          build-log.md
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-4">
+                        <a href="#test-results-iteration-xmd" class="toc-link" data-heading-id="test-results-iteration-xmd">
+                          test-results-iteration-X.md
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-4">
+                        <a href="#fixes-iteration-xmd" class="toc-link" data-heading-id="fixes-iteration-xmd">
+                          fixes-iteration-X.md
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-4">
+                        <a href="#session-summaryjson" class="toc-link" data-heading-id="session-summaryjson">
+                          session-summary.json
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#pattern-library-locations" class="toc-link" data-heading-id="pattern-library-locations">
+                          Pattern Library Locations
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#reviewing-plans-beforeafter-build" class="toc-link" data-heading-id="reviewing-plans-beforeafter-build">
+                          Reviewing Plans Before/After Build
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#understanding-the-delegation-model" class="toc-link" data-heading-id="understanding-the-delegation-model">
+                          Understanding the Delegation Model
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#agent-lifecycle" class="toc-link" data-heading-id="agent-lifecycle">
+                          Agent Lifecycle
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#for-more-details" class="toc-link" data-heading-id="for-more-details">
+                          For More Details
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#real-time-monitoring-dashboard" class="toc-link" data-heading-id="real-time-monitoring-dashboard">
+                  Real-Time Monitoring Dashboard
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#features" class="toc-link" data-heading-id="features">
+                          Features
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#quick-start" class="toc-link" data-heading-id="quick-start">
+                          Quick Start
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#1-start-the-dashboard" class="toc-link" data-heading-id="1-start-the-dashboard">
+                                  1. Start the Dashboard
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#2-run-a-task" class="toc-link" data-heading-id="2-run-a-task">
+                                  2. Run a Task
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#3-monitor-in-real-time" class="toc-link" data-heading-id="3-monitor-in-real-time">
+                                  3. Monitor in Real-Time
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#dashboard-panels" class="toc-link" data-heading-id="dashboard-panels">
+                          Dashboard Panels
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#main-status-panel" class="toc-link" data-heading-id="main-status-panel">
+                                  Main Status Panel
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#context-usage" class="toc-link" data-heading-id="context-usage">
+                                  Context Usage
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#task-progress" class="toc-link" data-heading-id="task-progress">
+                                  Task Progress
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#token-usage-panel" class="toc-link" data-heading-id="token-usage-panel">
+                                  Token Usage Panel 🔢
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#test-loop-analytics" class="toc-link" data-heading-id="test-loop-analytics">
+                                  Test Loop Analytics 🧪
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#agent-performance" class="toc-link" data-heading-id="agent-performance">
+                                  Agent Performance 🤖
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#decision-quality" class="toc-link" data-heading-id="decision-quality">
+                                  Decision Quality 🧠
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#configuration" class="toc-link" data-heading-id="configuration">
+                          Configuration
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#environment-variables" class="toc-link" data-heading-id="environment-variables">
+                                  Environment Variables
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#polling-interval" class="toc-link" data-heading-id="polling-interval">
+                                  Polling Interval
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#api-endpoints" class="toc-link" data-heading-id="api-endpoints">
+                          API Endpoints
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#metrics-database" class="toc-link" data-heading-id="metrics-database">
+                          Metrics Database
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#querying-metrics" class="toc-link" data-heading-id="querying-metrics">
+                                  Querying Metrics
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#self-improvement-integration" class="toc-link" data-heading-id="self-improvement-integration">
+                          Self-Improvement Integration
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#dark-mode-design" class="toc-link" data-heading-id="dark-mode-design">
+                          Dark Mode Design
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#remote-access" class="toc-link" data-heading-id="remote-access">
+                          Remote Access
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#with-ngrok-recommended" class="toc-link" data-heading-id="with-ngrok-recommended">
+                                  With ngrok (Recommended)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#local-network" class="toc-link" data-heading-id="local-network">
+                                  Local Network
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#troubleshooting-dashboard" class="toc-link" data-heading-id="troubleshooting-dashboard">
+                          Troubleshooting Dashboard
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#server-wont-start" class="toc-link" data-heading-id="server-wont-start">
+                                  Server Won&#x27;t Start
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#dashboard-not-updating" class="toc-link" data-heading-id="dashboard-not-updating">
+                                  Dashboard Not Updating
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#enhanced-metrics-not-available" class="toc-link" data-heading-id="enhanced-metrics-not-available">
+                                  Enhanced Metrics Not Available
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#database-errors" class="toc-link" data-heading-id="database-errors">
+                                  Database Errors
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#performance" class="toc-link" data-heading-id="performance">
+                          Performance
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#best-practices-1" class="toc-link" data-heading-id="best-practices-1">
+                          Best Practices
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#future-enhancements" class="toc-link" data-heading-id="future-enhancements">
+                          Future Enhancements
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#troubleshooting" class="toc-link" data-heading-id="troubleshooting">
+                  Troubleshooting
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#prerequisites-setup" class="toc-link" data-heading-id="prerequisites-setup">
+                          Prerequisites Setup
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#installing-python-310" class="toc-link" data-heading-id="installing-python-310">
+                                  Installing Python 3.10+
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#installing-claude-code-cli" class="toc-link" data-heading-id="installing-claude-code-cli">
+                                  Installing Claude Code CLI
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#installing-github-cli" class="toc-link" data-heading-id="installing-github-cli">
+                                  Installing GitHub CLI
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#troubleshooting-installation" class="toc-link" data-heading-id="troubleshooting-installation">
+                          Troubleshooting Installation
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#error-no-module-named-fastmcp" class="toc-link" data-heading-id="error-no-module-named-fastmcp">
+                                  Error: &quot;No module named &#x27;fastmcp&#x27;&quot;
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#error-python-version-too-old" class="toc-link" data-heading-id="error-python-version-too-old">
+                                  Error: &quot;Python version too old&quot;
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#error-permission-denied" class="toc-link" data-heading-id="error-permission-denied">
+                                  Error: &quot;Permission denied&quot;
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#troubleshooting-mcp-connection" class="toc-link" data-heading-id="troubleshooting-mcp-connection">
+                          Troubleshooting MCP Connection
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#error-mcp-server-not-found" class="toc-link" data-heading-id="error-mcp-server-not-found">
+                                  Error: &quot;MCP server not found&quot;
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#error-mcp-server-disconnected" class="toc-link" data-heading-id="error-mcp-server-disconnected">
+                                  Error: &quot;MCP server disconnected&quot;
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#mcp-tools-not-showing-up" class="toc-link" data-heading-id="mcp-tools-not-showing-up">
+                                  MCP Tools Not Showing Up
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#troubleshooting-builds" class="toc-link" data-heading-id="troubleshooting-builds">
+                          Troubleshooting Builds
+                        </a>
+                          <ul class="toc-sublist">
+                              <li class="toc-item toc-item-4">
+                                <a href="#build-hangs-or-takes-too-long" class="toc-link" data-heading-id="build-hangs-or-takes-too-long">
+                                  Build Hangs or Takes Too Long
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#tests-keep-failing-max-iterations-reached" class="toc-link" data-heading-id="tests-keep-failing-max-iterations-reached">
+                                  Tests Keep Failing (Max Iterations Reached)
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#github-deployment-fails" class="toc-link" data-heading-id="github-deployment-fails">
+                                  GitHub Deployment Fails
+                                </a>
+                              </li>
+                              <li class="toc-item toc-item-4">
+                                <a href="#files-created-in-wrong-directory" class="toc-link" data-heading-id="files-created-in-wrong-directory">
+                                  Files Created in Wrong Directory
+                                </a>
+                              </li>
+                          </ul>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#best-practices-2" class="toc-link" data-heading-id="best-practices-2">
+                  Best Practices
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#naming-projects" class="toc-link" data-heading-id="naming-projects">
+                          Naming Projects
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#working-directories" class="toc-link" data-heading-id="working-directories">
+                          Working Directories
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#timeout-settings" class="toc-link" data-heading-id="timeout-settings">
+                          Timeout Settings
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#test-loop-settings" class="toc-link" data-heading-id="test-loop-settings">
+                          Test Loop Settings
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#task-descriptions" class="toc-link" data-heading-id="task-descriptions">
+                          Task Descriptions
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#advanced-usage" class="toc-link" data-heading-id="advanced-usage">
+                  Advanced Usage
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#customizing-the-workflow" class="toc-link" data-heading-id="customizing-the-workflow">
+                          Customizing the Workflow
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#environment-variables-1" class="toc-link" data-heading-id="environment-variables-1">
+                          Environment Variables
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#using-with-different-github-accounts" class="toc-link" data-heading-id="using-with-different-github-accounts">
+                          Using with Different GitHub Accounts
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#inspecting-build-artifacts" class="toc-link" data-heading-id="inspecting-build-artifacts">
+                          Inspecting Build Artifacts
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#resuming-failed-builds" class="toc-link" data-heading-id="resuming-failed-builds">
+                          Resuming Failed Builds
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#next-steps" class="toc-link" data-heading-id="next-steps">
+                  Next Steps
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#after-your-first-successful-build" class="toc-link" data-heading-id="after-your-first-successful-build">
+                          After Your First Successful Build
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#learning-more" class="toc-link" data-heading-id="learning-more">
+                          Learning More
+                        </a>
+                      </li>
+                      <li class="toc-item toc-item-3">
+                        <a href="#getting-help" class="toc-link" data-heading-id="getting-help">
+                          Getting Help
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+              <li class="toc-item toc-item-2">
+                <a href="#summary-cheat-sheet" class="toc-link" data-heading-id="summary-cheat-sheet">
+                  Summary Cheat Sheet
+                </a>
+                  <ul class="toc-sublist">
+                      <li class="toc-item toc-item-3">
+                        <a href="#quick-reference" class="toc-link" data-heading-id="quick-reference">
+                          Quick Reference
+                        </a>
+                      </li>
+                  </ul>
+              </li>
+          </ul>
+        </nav>
+      </div>
+    </aside>
+
+  </div>
+
+  <footer class="docs-footer" role="contentinfo">
+    <div class="docs-footer-container">
+  
+      <!-- Footer Top -->
+      <div class="docs-footer-top">
+  
+        <!-- About Section -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Context Foundry</h3>
+          <p class="docs-footer-description">
+            An intelligent documentation and code context management system that empowers AI assistants
+            with deep project understanding.
+          </p>
+        </div>
+  
+        <!-- Quick Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Documentation</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/getting-started/" class="docs-footer-link">Getting Started</a></li>
+            <li><a href="/docs/guides/" class="docs-footer-link">Guides</a></li>
+            <li><a href="/docs/technical/" class="docs-footer-link">Technical Reference</a></li>
+            <li><a href="/docs/reference/" class="docs-footer-link">API Reference</a></li>
+          </ul>
+        </div>
+  
+        <!-- Community Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Community</h3>
+          <ul class="docs-footer-links">
+            <li><a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/issues" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Issues</a></li>
+            <li><a href="https://github.com/chuckwired/context-foundry/discussions" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Discussions</a></li>
+            <li><a href="/docs/guides/contributing" class="docs-footer-link">Contributing</a></li>
+          </ul>
+        </div>
+  
+        <!-- Resources Links -->
+        <div class="docs-footer-section">
+          <h3 class="docs-footer-heading">Resources</h3>
+          <ul class="docs-footer-links">
+            <li><a href="/docs/reference/changelog" class="docs-footer-link">Changelog</a></li>
+            <li><a href="/docs/reference/roadmap" class="docs-footer-link">Roadmap</a></li>
+            <li><a href="/docs/technical/security" class="docs-footer-link">Security</a></li>
+            <li><a href="/docs/technical/architecture" class="docs-footer-link">Architecture</a></li>
+          </ul>
+        </div>
+  
+      </div>
+  
+      <!-- Footer Bottom -->
+      <div class="docs-footer-bottom">
+        <div class="docs-footer-copyright">
+          <p>&copy;  Context Foundry. Released under the MIT License.</p>
+          <p class="docs-footer-built-with">
+            Built with <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-link" target="_blank" rel="noopener noreferrer">Context Foundry</a>
+          </p>
+        </div>
+  
+        <!-- Social Links -->
+        <div class="docs-footer-social">
+          <a href="https://github.com/chuckwired/context-foundry" class="docs-footer-social-link" aria-label="GitHub" target="_blank" rel="noopener noreferrer">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M10 0C4.477 0 0 4.477 0 10c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0110 4.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C17.137 18.165 20 14.418 20 10c0-5.523-4.477-10-10-10z"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+  
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <!-- Fuse.js for search -->
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="/docs/assets/docs.js" type="module"></script>
+
+</body>
+</html>
