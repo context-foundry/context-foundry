@@ -13,14 +13,9 @@
 #   - gh CLI installed and authenticated
 #   - Git repository is clean (all changes committed)
 #   - Python 3.10+ available
-#   - jq installed for JSON processing
 #
 
 set -e  # Exit on error
-set -o pipefail  # Fail on pipe errors
-
-# Enable verbose mode for debugging (uncomment to debug)
-# set -x
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -72,18 +67,6 @@ fi
 # Check if Python 3 is available
 if ! command -v python3 &> /dev/null; then
     echo -e "${RED}❌ Error: Python 3 is not installed${NC}"
-    exit 1
-fi
-
-# Check if jq is installed
-if ! command -v jq &> /dev/null; then
-    echo -e "${RED}❌ Error: jq is not installed${NC}"
-    echo ""
-    echo "jq is required for JSON processing."
-    echo "Install it with:"
-    echo "  macOS:   brew install jq"
-    echo "  Ubuntu:  sudo apt-get install jq"
-    echo "  Fedora:  sudo dnf install jq"
     exit 1
 fi
 
@@ -177,27 +160,17 @@ MERGE_STATS=()
 if [ -f "$LOCAL_PATTERNS_DIR/common-issues.json" ]; then
     echo "  📋 Merging common-issues.json..."
 
-    if ! python3 "$MERGE_SCRIPT" \
+    python3 "$MERGE_SCRIPT" \
         --source "$LOCAL_PATTERNS_DIR/common-issues.json" \
         --dest "$REPO_PATTERNS_DIR/common-issues.json" \
         --type common-issues \
-        --output "$TEMP_DIR/common-issues.json"; then
-        echo -e "${RED}❌ Error: Failed to merge common-issues.json${NC}"
-        echo "Check that merge script exists at: $MERGE_SCRIPT"
-        exit 1
-    fi
+        --output "$TEMP_DIR/common-issues.json"
 
     # Copy merged result to repo
-    if ! cp "$TEMP_DIR/common-issues.json" "$REPO_PATTERNS_DIR/common-issues.json"; then
-        echo -e "${RED}❌ Error: Failed to copy merged patterns${NC}"
-        exit 1
-    fi
+    cp "$TEMP_DIR/common-issues.json" "$REPO_PATTERNS_DIR/common-issues.json"
 
     # Extract stats
-    if ! NEW=$(jq '.patterns | length' "$TEMP_DIR/common-issues.json" 2>/dev/null); then
-        echo -e "${RED}❌ Error: Failed to parse merged JSON${NC}"
-        exit 1
-    fi
+    NEW=$(jq '.patterns | length' "$TEMP_DIR/common-issues.json")
     MERGE_STATS+=("common-issues: $NEW patterns")
     echo ""
 fi
@@ -206,27 +179,17 @@ fi
 if [ -f "$LOCAL_PATTERNS_DIR/scout-learnings.json" ]; then
     echo "  🔍 Merging scout-learnings.json..."
 
-    if ! python3 "$MERGE_SCRIPT" \
+    python3 "$MERGE_SCRIPT" \
         --source "$LOCAL_PATTERNS_DIR/scout-learnings.json" \
         --dest "$REPO_PATTERNS_DIR/scout-learnings.json" \
         --type scout-learnings \
-        --output "$TEMP_DIR/scout-learnings.json"; then
-        echo -e "${RED}❌ Error: Failed to merge scout-learnings.json${NC}"
-        echo "Check that merge script exists at: $MERGE_SCRIPT"
-        exit 1
-    fi
+        --output "$TEMP_DIR/scout-learnings.json"
 
     # Copy merged result to repo
-    if ! cp "$TEMP_DIR/scout-learnings.json" "$REPO_PATTERNS_DIR/scout-learnings.json"; then
-        echo -e "${RED}❌ Error: Failed to copy merged patterns${NC}"
-        exit 1
-    fi
+    cp "$TEMP_DIR/scout-learnings.json" "$REPO_PATTERNS_DIR/scout-learnings.json"
 
     # Extract stats
-    if ! NEW=$(jq '.learnings | length' "$TEMP_DIR/scout-learnings.json" 2>/dev/null); then
-        echo -e "${RED}❌ Error: Failed to parse merged JSON${NC}"
-        exit 1
-    fi
+    NEW=$(jq '.learnings | length' "$TEMP_DIR/scout-learnings.json")
     MERGE_STATS+=("scout-learnings: $NEW learnings")
     echo ""
 fi
