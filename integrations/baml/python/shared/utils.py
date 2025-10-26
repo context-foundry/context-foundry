@@ -9,7 +9,9 @@ import logging
 import sys
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, TypeVar
+from typing import Any
+
+from typing import TypeVar
 
 
 T = TypeVar("T")
