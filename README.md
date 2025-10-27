@@ -1155,7 +1155,84 @@ pip install -r requirements-mcp.txt
    - enable_test_loop: false
    ```
 
-**More help:** See [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) for comprehensive troubleshooting.
+### MCP Server Failed (Status: ✘ failed)
+
+**Most common cause:** Dependencies not installed because venv wasn't activated.
+
+**Symptoms:**
+- `/mcp` shows "Status: ✘ failed"
+- MCP tools not available in Claude Code
+
+**Quick fix:**
+```bash
+cd ~/homelab/context-foundry
+
+# 1. Activate venv (CRITICAL!)
+source venv/bin/activate
+
+# 2. Verify you see (venv) prefix in prompt
+# Should look like: (venv) you@computer:~/homelab/context-foundry$
+
+# 3. Install dependencies
+pip install -r requirements-mcp.txt
+
+# 4. Verify
+python -c "from fastmcp import FastMCP; print('✅ Success!')"
+
+# 5. Restart Claude Code
+```
+
+**Prevention:** Always activate venv BEFORE running pip install. Look for `(venv)` prefix in your prompt.
+
+### Build Succeeded But Exit Code -15
+
+**Symptoms:**
+- Build process shows exit code -15 or SIGTERM
+- Build files exist and work perfectly
+- Process reports "failure"
+
+**What really happened:**
+- ✅ Your build **DID** succeed! All files were created and tested.
+- ❌ GitHub deployment failed (missing `gh` CLI or not authenticated)
+- ⚠️ Older versions incorrectly reported this as a build failure
+
+**Verify build succeeded:**
+```bash
+cd /path/to/your/project
+ls -la  # Files should exist
+npm run dev  # Try running it
+```
+
+**To deploy manually:**
+```bash
+# Install gh CLI if needed
+# macOS: brew install gh
+# Linux: sudo apt install gh
+
+gh auth login
+gh repo create project-name --public --source=. --push
+```
+
+**Prevention:** Run `gh auth login` before building, or say: "Build locally only, skip GitHub deployment"
+
+### Missing README or .gitignore
+
+**Symptoms:**
+- No README.md in project root
+- No .gitignore file
+
+**Cause:** Using older version of Context Foundry (before Build Finalization feature).
+
+**Solution:**
+```bash
+# Update to latest version
+cd ~/homelab/context-foundry
+git pull origin main
+source venv/bin/activate
+pip install -r requirements-mcp.txt --upgrade
+```
+
+**More help:** See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for comprehensive troubleshooting and [docs/LINUX_SETUP.md](docs/LINUX_SETUP.md) for Linux-specific setup.
 
 ---
 

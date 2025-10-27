@@ -32,11 +32,20 @@ pwd
 
 # Create virtual environment (recommended, required on Debian/Ubuntu)
 python3 -m venv venv
+
+# ⚠️ CRITICAL: Activate the virtual environment BEFORE pip install!
 source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# ✅ VERIFY: Your prompt should now show (venv) at the start
+# If you don't see (venv), the activation failed - check for errors above
 
 # Install MCP server (requires Python 3.10+)
 # Minimal installation: ~50MB, completes in 15-20 seconds
 pip install -r requirements-mcp.txt
+
+# ✅ VERIFY: Installation succeeded
+python -c "from fastmcp import FastMCP; print('✅ MCP dependencies installed!')"
+# Should print success message. If ImportError, venv wasn't activated properly.
 ```
 
 ### Connect to Claude Code
@@ -345,6 +354,93 @@ Build [complex project description]
 Use a timeout of 30 minutes for this build.
 ```
 
+### MCP Server Failed (Status: ✘ failed)
+
+**Most common cause:** Dependencies not installed because venv wasn't activated.
+
+**Symptoms:**
+```
+Context-foundry MCP Server
+Status: ✘ failed
+Command: /home/you/homelab/context-foundry/venv/bin/python
+```
+
+**Solution:**
+```bash
+cd ~/homelab/context-foundry
+
+# 1. Activate venv (CRITICAL STEP!)
+source venv/bin/activate
+
+# 2. Verify you see (venv) in your prompt
+# Your prompt should look like: (venv) you@computer:~/homelab/context-foundry$
+
+# 3. Install dependencies
+pip install -r requirements-mcp.txt
+
+# 4. Verify installation
+python -c "from fastmcp import FastMCP; print('✅ Success!')"
+
+# 5. Restart Claude Code
+# Exit current session and run: claude
+```
+
+**Prevention:**
+- Always activate venv BEFORE running pip install
+- Look for `(venv)` prefix in your prompt
+- Run verification command after installation
+
+### Build Succeeded But Exit Code -15
+
+**Symptom:**
+- Build process shows exit code -15 or SIGTERM
+- Build files exist and work perfectly
+- Process reports "failure" but everything seems fine
+
+**What Really Happened:**
+✅ Your build **DID** succeed! All files were created and tested.
+❌ GitHub deployment failed (missing `gh` CLI or not authenticated)
+⚠️ Process incorrectly reported this as a build failure
+
+**Verify your build succeeded:**
+```bash
+# Go to the project directory
+cd /path/to/your/project
+
+# Check if files exist
+ls -la
+# You should see: index.html, package.json, src/, etc.
+
+# Try running it
+npm install  # if applicable
+npm run dev  # or npm start
+```
+
+**To deploy to GitHub manually:**
+```bash
+# 1. Install GitHub CLI (if needed)
+# macOS:
+brew install gh
+
+# Linux:
+sudo apt install gh
+
+# 2. Authenticate
+gh auth login
+
+# 3. Initialize git (if not already done)
+git init
+git add .
+git commit -m "Initial commit"
+
+# 4. Create GitHub repo and push
+gh repo create your-project-name --public --source=. --push
+```
+
+**Prevention:**
+- Run `gh auth login` BEFORE building if you want GitHub deployment
+- Or say: "Build locally only, skip GitHub deployment"
+
 ---
 
 ## Next Steps
@@ -379,9 +475,13 @@ Once comfortable with basics:
 
 | Problem | Solution |
 |---------|----------|
+| **MCP server failed (Status: ✘ failed)** | **Activate venv first:** `source venv/bin/activate` then `pip install -r requirements-mcp.txt`. Verify with: `python -c "import fastmcp"` |
+| **ImportError: No module named 'fastmcp'** | **Dependencies not installed.** Run: `source venv/bin/activate` then `pip install -r requirements-mcp.txt` |
+| **No (venv) in prompt** | **Venv not activated.** Run: `source venv/bin/activate` - you MUST see (venv) prefix |
+| **Build succeeded but exit code -15** | **GitHub deployment failed but build is OK!** Files are in working directory. Deploy manually: `gh auth login` then `gh repo create` |
 | requirements-mcp.txt not found | `cd context-foundry` - you need to be in the cloned directory |
-| MCP not connected | `claude mcp list` then re-run setup |
-| Python version error | Install Python 3.10+: `brew install python@3.10` |
+| MCP not connected | `claude mcp list` then re-run setup. If project-scoped, start `claude` from project directory |
+| Python version error | Install Python 3.10+: `brew install python@3.10` (macOS) or `sudo apt install python3.10` (Linux) |
 | Build timeout | Add: "Use 30 minute timeout" to request |
 | Tests failing | Check `.context-foundry/test-results-*.md` |
 | GitHub auth error | Run: `gh auth login` |
