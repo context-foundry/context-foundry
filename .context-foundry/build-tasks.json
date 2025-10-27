@@ -1,48 +1,48 @@
 {
   "parallel_mode": true,
-  "total_tasks": 6,
+  "total_tasks": 3,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Create cached_prompt_builder.py module",
-      "files": ["tools/prompts/cached_prompt_builder.py"],
+      "description": "Fix docs index page - Add Fuse.js, remove search.js reference",
+      "files": ["public/docs/index.html"],
       "dependencies": [],
-      "estimated_time": "20 minutes"
+      "estimated_time": "2 minutes"
     },
     {
       "id": "task-2",
-      "description": "Create cache_config.json and CacheConfig class",
-      "files": ["tools/prompts/cache_config.json", "tools/prompts/__init__.py"],
+      "description": "Fix all documentation page script tags - Add Fuse.js to 20 doc pages",
+      "files": [
+        "public/docs/getting-started/index.html",
+        "public/docs/getting-started/faq.html",
+        "public/docs/getting-started/quickstart.html",
+        "public/docs/getting-started/readme.html",
+        "public/docs/getting-started/user-guide.html",
+        "public/docs/guides/index.html",
+        "public/docs/guides/changelog.html",
+        "public/docs/guides/feedback-system.html",
+        "public/docs/guides/roadmap.html",
+        "public/docs/guides/security.html",
+        "public/docs/technical/index.html",
+        "public/docs/technical/innovations.html",
+        "public/docs/technical/architecture-diagrams.html",
+        "public/docs/technical/context-preservation.html",
+        "public/docs/technical/delegation-model.html",
+        "public/docs/technical/mcp-server-architecture.html",
+        "public/docs/reference/index.html",
+        "public/docs/reference/architecture-decisions.html",
+        "public/docs/reference/claude-code-mcp-setup.html",
+        "public/docs/reference/technical-faq.html"
+      ],
       "dependencies": [],
       "estimated_time": "10 minutes"
     },
     {
       "id": "task-3",
-      "description": "Create cache_analysis.py tool",
-      "files": ["tools/prompts/cache_analysis.py"],
-      "dependencies": [],
-      "estimated_time": "15 minutes"
-    },
-    {
-      "id": "task-4",
-      "description": "Modify orchestrator_prompt.txt with cache boundary marker",
-      "files": ["tools/orchestrator_prompt.txt"],
+      "description": "Add navigation population JavaScript to docs.js",
+      "files": ["public/docs/assets/docs.js"],
       "dependencies": [],
       "estimated_time": "5 minutes"
-    },
-    {
-      "id": "task-5",
-      "description": "Integrate cached prompts into mcp_server.py",
-      "files": ["tools/mcp_server.py"],
-      "dependencies": ["task-1", "task-2"],
-      "estimated_time": "15 minutes"
-    },
-    {
-      "id": "task-6",
-      "description": "Create unit and integration tests",
-      "files": ["tests/test_cached_prompt_builder.py", "tests/test_cache_integration.py"],
-      "dependencies": ["task-1", "task-2"],
-      "estimated_time": "20 minutes"
     }
   ]
 }

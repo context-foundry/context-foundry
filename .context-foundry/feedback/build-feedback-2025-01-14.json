@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-01-14T00:27:00Z",
+  "project_type": "static-website",
+  "tech_stack": ["html", "css", "javascript", "fuse.js"],
+  "build_duration_minutes": 27,
+  "test_iterations": 1,
+  "success": true,
+  
+  "issues_found": [
+    {
+      "id": "missing-library-cdn",
+      "category": "Scout",
+      "issue": "Missing external library dependency not caught during initial analysis",
+      "root_cause": "Scout phase didn't check if window.Fuse was available vs loaded",
+      "detected_in_phase": "Codebase Analysis",
+      "should_detect_in_phase": "Scout",
+      "solution": "Check HTML script tags match JavaScript library references",
+      "applies_to_phases": ["Scout", "Architect"],
+      "severity": "MEDIUM",
+      "project_types": ["static-website", "spa", "web-app"],
+      "prevention": "Scout should verify external CDN libraries are loaded when code references them"
+    },
+    {
+      "id": "empty-dom-dynamic-population",
+      "category": "Architecture",
+      "issue": "Empty DOM elements requiring JavaScript population not immediately obvious",
+      "root_cause": "HTML contained empty sidebar structure, required reading navigation.json to understand it needs JS population",
+      "detected_in_phase": "Codebase Analysis",
+      "should_detect_in_phase": "Scout",
+      "solution": "Recognize pattern: empty DOM elements + JSON data file = needs population JavaScript",
+      "applies_to_phases": ["Scout", "Architect"],
+      "severity": "LOW",
+      "project_types": ["static-website", "spa", "web-app"],
+      "prevention": "Scout should flag empty DOM structures that have corresponding data files"
+    },
+    {
+      "id": "script-type-mismatch",
+      "category": "Testing",
+      "issue": "type='module' on IIFE script prevented execution",
+      "root_cause": "HTML declared ES6 module but JavaScript was IIFE pattern",
+      "detected_in_phase": "Testing",
+      "should_detect_in_phase": "Architect",
+      "solution": "Check script type attribute matches JavaScript module format",
+      "applies_to_phases": ["Architect", "Test"],
+      "severity": "HIGH",
+      "project_types": ["static-website", "spa", "web-app"],
+      "prevention": "Architect should verify script loading attributes match code structure (IIFE vs ES6 module)"
+    }
+  ],
+  
+  "successful_patterns": [
+    {
+      "category": "Testing",
+      "pattern": "Node.js HTTP test script for static site validation",
+      "worked_well": true,
+      "project_types": ["static-website"],
+      "notes": "Simple Node.js script using http module was fast and effective for validating fixes without browser automation"
+    },
+    {
+      "category": "Architecture",
+      "pattern": "Fetch navigation.json and populate DOM dynamically",
+      "worked_well": true,
+      "project_types": ["static-website", "documentation"],
+      "notes": "Clean separation: data in JSON, presentation in HTML, population in JavaScript"
+    },
+    {
+      "category": "Build",
+      "pattern": "Bulk sed for consistent HTML changes across many files",
+      "worked_well": true,
+      "project_types": ["static-website"],
+      "notes": "Using sed for find/replace across 16 files was faster than individual Edit calls"
+    }
+  ],
+  
+  "recommendations": [
+    {
+      "for_phase": "Scout",
+      "recommendation": "Verify external library references match HTML script tags",
+      "priority": "MEDIUM",
+      "rationale": "Would have caught Fuse.js missing from docs/index.html earlier"
+    },
+    {
+      "for_phase": "Architect",
+      "recommendation": "Validate script type attributes match code structure",
+      "priority": "HIGH",
+      "rationale": "type='module' on IIFE caused complete JavaScript failure"
+    },
+    {
+      "for_phase": "Test",
+      "recommendation": "Include browser console error check in automated tests",
+      "priority": "MEDIUM",
+      "rationale": "Console errors would have caught script execution failures"
+    }
+  ]
+}

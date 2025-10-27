@@ -14,6 +14,8 @@
   }
 
   function init() {
+    initNavigation();
+    initBreadcrumbs();
     initMobileMenu();
     initSearch();
     initThemeToggle();
@@ -307,6 +309,113 @@
       "'": '&#039;'
     };
     return text.replace(/[&<>"']/g, m => map[m]);
+  }
+
+  /**
+   * Navigation Loader - Populates Sidebar from navigation.json
+   */
+  function initNavigation() {
+    const sidebar = document.getElementById('docs-sidebar');
+    if (!sidebar) return; // Not on a page with sidebar
+
+    fetch('/docs/assets/navigation.json')
+      .then(res => res.json())
+      .then(data => {
+        const categories = data.categories;
+        const sidebarNav = sidebar.querySelector('.sidebar-nav');
+
+        // Clear existing empty categories
+        sidebarNav.innerHTML = '';
+
+        // Populate each category
+        categories.forEach(category => {
+          const categoryDiv = document.createElement('div');
+          categoryDiv.className = 'sidebar-category';
+          categoryDiv.setAttribute('data-category', category.id);
+
+          // Category toggle button
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'sidebar-category-toggle';
+          button.setAttribute('aria-expanded', 'true');
+          button.setAttribute('aria-controls', 'sidebar-category-' + category.id);
+          button.innerHTML = '<svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><h2 class="sidebar-category-title">' + escapeHtml(category.name) + '</h2>';
+
+          // Category list
+          const ul = document.createElement('ul');
+          ul.className = 'sidebar-category-list';
+          ul.id = 'sidebar-category-' + category.id;
+
+          category.docs.forEach(doc => {
+            const li = document.createElement('li');
+            li.className = 'sidebar-item';
+
+            const a = document.createElement('a');
+            a.href = doc.url;
+            a.className = 'sidebar-link';
+
+            // Mark current page as active
+            if (window.location.pathname === doc.url ||
+                window.location.pathname === doc.url + '.html') {
+              a.classList.add('active');
+            }
+
+            a.textContent = doc.title;
+            li.appendChild(a);
+            ul.appendChild(li);
+          });
+
+          categoryDiv.appendChild(button);
+          categoryDiv.appendChild(ul);
+          sidebarNav.appendChild(categoryDiv);
+        });
+
+        // Re-initialize collapse handlers after navigation is populated
+        initSidebarCollapse();
+      })
+      .catch(err => console.error('Failed to load navigation:', err));
+  }
+
+  /**
+   * Breadcrumbs Loader - Populates breadcrumbs based on current URL
+   */
+  function initBreadcrumbs() {
+    const breadcrumbsList = document.querySelector('.breadcrumbs-list');
+    if (!breadcrumbsList) return; // Not on a page with breadcrumbs
+
+    fetch('/docs/assets/navigation.json')
+      .then(res => res.json())
+      .then(data => {
+        // Parse current URL to find category and page
+        const path = window.location.pathname;
+        const match = path.match(/\/docs\/([^\/]+)\/([^\/]+)/);
+
+        if (!match) return;
+
+        const categoryId = match[1];
+        const pageSlug = match[2];
+        const category = data.categories.find(c => c.id === categoryId);
+
+        if (!category) return;
+
+        const page = category.docs.find(d => d.slug === pageSlug);
+
+        if (!page) return;
+
+        // Populate breadcrumbs
+        const items = breadcrumbsList.querySelectorAll('.breadcrumbs-item');
+        if (items.length >= 3) {
+          // Home > Category > Page
+          const homeSpan = items[0].querySelector('span[itemprop="name"]');
+          const categorySpan = items[1].querySelector('span[itemprop="name"]');
+          const pageSpan = items[2].querySelector('span[itemprop="name"]');
+
+          if (homeSpan) homeSpan.textContent = 'Documentation';
+          if (categorySpan) categorySpan.textContent = category.name;
+          if (pageSpan) pageSpan.textContent = page.title;
+        }
+      })
+      .catch(err => console.error('Failed to load breadcrumbs:', err));
   }
 
 })();

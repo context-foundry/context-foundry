@@ -1,51 +1,36 @@
 {
-  "session_id": "context-foundry",
-  "task": "Build comprehensive metrics and cost tracking system",
-  "mode": "add_feature",
-  "status": "completed",
-  "phases_completed": [
-    "Codebase Analysis",
-    "Scout",
-    "Architect",
-    "Builder",
-    "Test",
-    "Deploy",
-    "Feedback"
-  ],
-  "files_created": [
-    "tools/metrics/__init__.py",
-    "tools/metrics/log_parser.py",
-    "tools/metrics/metrics_db.py",
-    "tools/metrics/cost_calculator.py",
-    "tools/metrics/collector.py",
-    "tools/metrics/pricing_config.json",
-    "tests/test_log_parser.py",
-    "tests/test_cost_calculator.py",
-    "tests/test_metrics_db.py",
-    "tests/test_e2e_metrics.py",
-    "docs/METRICS_SYSTEM.md"
-  ],
-  "files_modified": [
-    "tools/tui/data/provider.py",
-    "tools/livestream/mcp_client.py",
-    "tools/livestream/metrics_collector.py"
-  ],
-  "tests_passed": true,
+  "task": "Fix documentation site bugs",
+  "mode": "fix_bugs",
+  "working_directory": "/Users/name/homelab/context-foundry",
+  "branch": "fix/docs-site-bugs",
+  "commit_sha": "aa20577feebe701aa56fc3e20e41b4981c62edd6",
+  "pr_url": "https://github.com/context-foundry/context-foundry/pull/13",
+  "github_url": "https://github.com/context-foundry/context-foundry",
+  "files_modified": 18,
+  "files_created": 2,
   "test_iterations": 1,
-  "test_pass_rate": 0.917,
-  "total_tests": 60,
-  "tests_passing": 55,
-  "tests_failing": 5,
-  "duration_minutes": 55,
-  "github_url": "https://github.com/context-foundry/context-foundry/pull/7",
-  "pr_number": 7,
-  "branch": "feature/metrics-cost-tracking-system",
-  "todos_resolved": [
-    "tools/livestream/mcp_client.py:324",
-    "tools/livestream/metrics_collector.py:379",
-    "tools/tui/data/provider.py:284",
-    "tools/tui/data/provider.py:290-291",
-    "tools/tui/data/provider.py:325-326"
+  "tests_passed": true,
+  "test_results": {
+    "total": 7,
+    "passed": 7,
+    "failed": 0
+  },
+  "issues_fixed": [
+    "Missing Fuse.js library causing search to hang",
+    "Empty sidebar navigation (no content populated)",
+    "404 error on non-existent search.js",
+    "Script execution error (type=module on IIFE)"
   ],
-  "completed_at": "2025-01-13T10:55:00Z"
+  "duration_minutes": 27,
+  "phases_completed": ["Codebase Analysis", "Scout", "Architect", "Builder", "Test", "Deploy", "Feedback"],
+  "timestamp": "2025-01-14T00:30:00Z",
+  "feedback": {
+    "analyzed": true,
+    "feedback_file": ".context-foundry/feedback/build-feedback-2025-01-14.json",
+    "patterns_merged_to_global": false,
+    "pattern_merge_status": "skipped",
+    "pattern_merge_note": "Local patterns only (not merged to global)",
+    "high_priority_recommendations": 1,
+    "cross_project_learning_enabled": false
+  }
 }

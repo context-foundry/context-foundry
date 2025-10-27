@@ -66,7 +66,7 @@ graph LR
 - 🎯 **Autonomous decision-making** - Agents decide when to spawn new agents
 - 🏗️ **Self-orchestration** - AI orchestrates AI through meta-prompts
 
-**Learn more:** Read the complete technical breakdown in **[docs/INNOVATIONS.md](docs/INNOVATIONS.md)** - all 15 innovations explained with code examples.
+**Learn more:** Read the complete technical breakdown in **[docs/INNOVATIONS.md](docs/INNOVATIONS.md)** - all 16 innovations explained with code examples.
 
 ---
 
@@ -928,6 +928,38 @@ Use mcp__get_delegation_result for each task_id
 - Parallel time: ~12 minutes (limited by slowest task)
 - Time saved: 18 minutes (60% faster)
 
+### Example 4: BAML + Agent Skills via MCP (FREE!)
+
+**The Meta-MCP Innovation Applied:** Context Foundry's BAML integration demonstrates using MCP delegation instead of API calls - giving you FREE, UNLIMITED Agent Skills access!
+
+**Location:** `integrations/baml/`
+
+**The Breakthrough:**
+```
+Traditional: BAML → API Call → Pay per token 💸
+Context Foundry: BAML → MCP Delegation → FREE! 🎉
+```
+
+**Features:**
+- ✅ **FREE & UNLIMITED** - Runs on Claude Code subscription
+- ✅ **NO API KEYS** - Authentication inherited automatically
+- ✅ **AGENT SKILLS** - Full PDF/DOCX/data processing access via spawned Claude
+- ✅ **TYPE-SAFE** - BAML schemas for validation (not API calls)
+- ✅ **FRESH CONTEXT** - 200K tokens per spawn
+- ✅ Meta-MCP all the way down!
+
+**Quick Start:**
+```bash
+cd integrations/baml/python/
+pip install -r requirements.txt
+# NO API KEYS NEEDED!
+python examples/mcp_delegation.py  # FREE, unlimited!
+```
+
+**Cost Savings:** Process 100 PDFs - Direct API: $150 → MCP Delegation: $0 (100% savings!)
+
+**Learn More:** See [`integrations/baml/README.md`](integrations/baml/README.md) for the Meta-MCP pattern in action.
+
 ---
 
 ## Self-Healing Test Loop in Action
@@ -1404,8 +1436,8 @@ Break-even: ~5 projects per month vs API mode
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| **⭐ [docs/INNOVATIONS.md](docs/INNOVATIONS.md)** | **All 15 innovations explained with code examples** | **Everyone - START HERE!** |
-| **[docs/FAQ.md](docs/FAQ.md)** | Technical FAQ (52 questions): parallelization, token management, MCP architecture, prompt engineering | Developers, architects, AI engineers |
+| **⭐ [docs/INNOVATIONS.md](docs/INNOVATIONS.md)** | **All 16 innovations explained with code examples** | **Everyone - START HERE!** |
+| **[docs/FAQ.md](docs/FAQ.md)** | Technical FAQ (63 questions): parallelization, token management, MCP architecture, Agent Skills, prompt engineering | Developers, architects, AI engineers |
 | **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
@@ -1434,12 +1466,12 @@ Break-even: ~5 projects per month vs API mode
 1. [README.md](README.md) - Understand what Context Foundry does
 2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
 3. [USER_GUIDE.md](USER_GUIDE.md) - Learn how to use it
-4. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - Deep dive into all 15 innovations
+4. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - Deep dive into all 16 innovations
 5. [FAQ.md](FAQ.md) - Common questions answered
 
 **Developers/Contributors:**
-1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 15 innovations with code examples
-2. [docs/FAQ.md](docs/FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
+1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 16 innovations with code examples
+2. [docs/FAQ.md](docs/FAQ.md) - Technical FAQ (63 questions on architecture, Agent Skills, parallelization, etc.)
 3. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
 4. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.x architecture
 5. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works

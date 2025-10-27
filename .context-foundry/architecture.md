@@ -1,673 +1,377 @@
-# Anthropic Prompt Caching Architecture
+# Architecture: Documentation Site Fixes
 
 ## System Overview
 
+This fix addresses three critical bugs in the Context Foundry documentation site through targeted modifications to HTML script loading and JavaScript initialization logic.
+
+**Fix Categories:**
+1. Library loading (Fuse.js CDN)
+2. Script reference correction (remove non-existent search.js)
+3. Navigation population (fetch and render navigation.json)
+
+## Complete File Structure
+
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                    Autonomous Build Workflow                          │
-│                                                                        │
-│  autonomous_build_and_deploy() [mcp_server.py:1046]                  │
-│         │                                                              │
-│         ├──> Load orchestrator_prompt.txt (~9,000 tokens)            │
-│         │                                                              │
-│         ├──> Build task configuration (task, mode, working_dir)      │
-│         │                                                              │
-│         v                                                              │
-│  ┌───────────────────────────────────────────────────────────┐       │
-│  │         Cached Prompt Builder (NEW MODULE)                 │       │
-│  │  ┌─────────────────────────────────────────────────────┐  │       │
-│  │  │  1. Read orchestrator_prompt.txt                    │  │       │
-│  │  │  2. Split into STATIC (~8,500) + DYNAMIC (~500)     │  │       │
-│  │  │  3. Add cache_control marker to STATIC section      │  │       │
-│  │  │  4. Build structured prompt with cache markers      │  │       │
-│  │  └─────────────────────────────────────────────────────┘  │       │
-│  └───────────────────────────────┬───────────────────────────┘       │
-│                                  │                                    │
-│                                  v                                    │
-│         Execute: claude --print --system-prompt <cached_prompt>      │
-│                                  │                                    │
-└──────────────────────────────────┼────────────────────────────────────┘
-                                   │
-         ┌─────────────────────────┴───────────────────────┐
-         │                                                  │
-         v                                                  v
-  ┌─────────────────┐                            ┌─────────────────┐
-  │  First Request   │                            │ Subsequent Reqs │
-  │  (Cache Miss)    │                            │  (Cache Hit)    │
-  ├─────────────────┤                            ├─────────────────┤
-  │ • Send 9K tokens │                            │ • Send 500 toks │
-  │ • Create cache   │                            │ • Read cache    │
-  │ • Cost: $0.034   │                            │ • Cost: $0.003  │
-  │ • cache_write    │                            │ • cache_read    │
-  └─────────────────┘                            └─────────────────┘
-         │                                                  │
-         └─────────────────────┬────────────────────────────┘
-                               │
-                               v
-                    ┌────────────────────────┐
-                    │  Metrics Collection    │
-                    │  (Already Exists!)     │
-                    ├────────────────────────┤
-                    │ • TokenUsage class     │
-                    │ • cache_read_tokens    │
-                    │ • cache_write_tokens   │
-                    │ • CostCalculator       │
-                    │ • cache_savings calc   │
-                    └────────────────────────┘
+public/
+├── docs/
+│   ├── index.html                    [FIX: Remove search.js reference]
+│   ├── assets/
+│   │   ├── docs.js                   [MODIFY: Add navigation loader]
+│   │   ├── docs.css                  [NO CHANGE]
+│   │   ├── search-index.json         [NO CHANGE]
+│   │   └── navigation.json           [NO CHANGE]
+│   ├── getting-started/
+│   │   ├── index.html                [FIX: Add Fuse.js]
+│   │   ├── faq.html                  [FIX: Add Fuse.js]
+│   │   ├── quickstart.html           [FIX: Add Fuse.js]
+│   │   ├── readme.html               [FIX: Add Fuse.js]
+│   │   └── user-guide.html           [FIX: Add Fuse.js]
+│   ├── guides/
+│   │   ├── index.html                [FIX: Add Fuse.js]
+│   │   ├── changelog.html            [FIX: Add Fuse.js]
+│   │   ├── feedback-system.html      [FIX: Add Fuse.js]
+│   │   ├── roadmap.html              [FIX: Add Fuse.js]
+│   │   └── security.html             [FIX: Add Fuse.js]
+│   ├── technical/
+│   │   ├── index.html                [FIX: Add Fuse.js]
+│   │   ├── innovations.html          [FIX: Add Fuse.js]
+│   │   ├── architecture-diagrams.html [FIX: Add Fuse.js]
+│   │   ├── context-preservation.html [FIX: Add Fuse.js]
+│   │   ├── delegation-model.html     [FIX: Add Fuse.js]
+│   │   └── mcp-server-architecture.html [FIX: Add Fuse.js]
+│   └── reference/
+│       ├── index.html                [FIX: Add Fuse.js]
+│       ├── architecture-decisions.html [FIX: Add Fuse.js]
+│       ├── claude-code-mcp-setup.html [FIX: Add Fuse.js]
+│       └── technical-faq.html        [FIX: Add Fuse.js]
 ```
+
+**Files to modify**: 21 HTML files + 1 JS file = 22 total
 
 ## Module Specifications
 
-### 1. Cached Prompt Builder (`tools/prompts/cached_prompt_builder.py`)
+### Module 1: HTML Script Tag Fixes (20 files)
 
-**Purpose**: Build prompts with Anthropic cache control markers
+**Purpose**: Add Fuse.js library and remove incorrect script reference
 
-**Main Function**:
-```python
-def build_cached_prompt(
-    task_config: dict,
-    orchestrator_prompt_path: str = "tools/orchestrator_prompt.txt",
-    enable_caching: bool = True,
-    cache_ttl: str = "5m"
-) -> str:
-    """
-    Build orchestrator prompt with cache markers.
-    
-    Args:
-        task_config: Task configuration dict (task, mode, working_dir, etc.)
-        orchestrator_prompt_path: Path to orchestrator prompt template
-        enable_caching: Enable/disable caching (default: True)
-        cache_ttl: Cache TTL - "5m" or "1h" (default: "5m")
-    
-    Returns:
-        System prompt string with cache markers embedded
+**Files affected**: All doc pages EXCEPT `/public/docs/index.html`
+
+**Current state (BROKEN)**:
+```html
+<!-- Near end of <body>, typical doc page -->
+<script src="/docs/assets/search.js" defer></script>  <!-- 404! File doesn't exist -->
+<script src="/docs/assets/docs.js" defer></script>
+```
+
+**Target state (FIXED)**:
+```html
+<!-- Near end of <body>, typical doc page -->
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+<script src="/docs/assets/docs.js" defer></script>
+```
+
+**Implementation**:
+1. Find all HTML files: `find public/docs -name "*.html" -type f`
+2. For each file (except index.html):
+   - Locate script tags near closing `</body>`
+   - Add Fuse.js CDN before docs.js
+   - Remove search.js reference if present
+   - Keep Prism.js reference if present
+
+### Module 2: Index Page Script Fix (1 file)
+
+**Purpose**: Remove non-existent search.js from docs index page
+
+**File**: `/public/docs/index.html`
+
+**Current state (BROKEN)**:
+```html
+<!-- Line 370 -->
+<script src="/docs/assets/search.js" defer></script>
+<script src="/docs/assets/docs.js" defer></script>
+```
+
+**Target state (FIXED)**:
+```html
+<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+<script src="/docs/assets/docs.js" defer></script>
+```
+
+### Module 3: Navigation Population JavaScript (1 file)
+
+**Purpose**: Load navigation.json and populate sidebar + breadcrumbs
+
+**File**: `/public/docs/assets/docs.js`
+
+**NEW CODE TO ADD**:
+
+```javascript
+// Add to init() function (line 16):
+initNavigation();
+initBreadcrumbs();
+
+// Add new functions before closing IIFE:
+
+/**
+ * Navigation Loader - Populates Sidebar from navigation.json
+ */
+function initNavigation() {
+  const sidebar = document.getElementById('docs-sidebar');
+  if (!sidebar) return; // Not on a page with sidebar
+
+  fetch('/docs/assets/navigation.json')
+    .then(res => res.json())
+    .then(data => {
+      const categories = data.categories;
+      const sidebarNav = sidebar.querySelector('.sidebar-nav');
+      
+      // Clear existing empty categories
+      sidebarNav.innerHTML = '';
+      
+      // Populate each category
+      categories.forEach(category => {
+        const categoryDiv = document.createElement('div');
+        categoryDiv.className = 'sidebar-category';
+        categoryDiv.setAttribute('data-category', category.id);
         
-    Strategy:
-        1. Read orchestrator_prompt.txt
-        2. Split at cache boundary marker (line ~1650)
-        3. Build static section with cache marker
-        4. Append dynamic task configuration
-        5. Return combined prompt
-    """
-```
-
-**Prompt Structure**:
-```
-=== STATIC SECTION (Cacheable) ===
-YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT
-Version: v1.2.1 (No Livestream)
-...
-[All phase instructions]
-[Git workflow reference]
-[Enhancement mode reference]
-[Phase tracking templates]
-[Final output format]
-[Critical rules]
-[Error handling]
-...
-<<CACHE_BOUNDARY>>
-
-=== DYNAMIC SECTION (Not Cached) ===
-AUTONOMOUS BUILD TASK
-
-CONFIGURATION:
-{
-  "task": "...",
-  "working_directory": "...",
-  "mode": "...",
-  ...
+        // Category toggle button
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'sidebar-category-toggle';
+        button.setAttribute('aria-expanded', 'true');
+        button.setAttribute('aria-controls', `sidebar-category-${category.id}`);
+        button.innerHTML = `
+          <svg class="sidebar-category-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M6 4L10 8L6 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <h2 class="sidebar-category-title">${category.name}</h2>
+        `;
+        
+        // Category list
+        const ul = document.createElement('ul');
+        ul.className = 'sidebar-category-list';
+        ul.id = `sidebar-category-${category.id}`;
+        
+        category.docs.forEach(doc => {
+          const li = document.createElement('li');
+          li.className = 'sidebar-item';
+          
+          const a = document.createElement('a');
+          a.href = doc.url;
+          a.className = 'sidebar-link';
+          
+          // Mark current page as active
+          if (window.location.pathname === doc.url || 
+              window.location.pathname === doc.url + '.html') {
+            a.classList.add('active');
+          }
+          
+          a.textContent = doc.title;
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+        
+        categoryDiv.appendChild(button);
+        categoryDiv.appendChild(ul);
+        sidebarNav.appendChild(categoryDiv);
+      });
+      
+      // Re-initialize collapse handlers
+      initSidebarCollapse();
+    })
+    .catch(err => console.error('Failed to load navigation:', err));
 }
 
-Execute the full Scout → Architect → Builder → Test → Deploy workflow.
-Self-healing test loop is ENABLED. Fix and retry up to 3 times if tests fail.
-
-Return JSON summary when complete.
-BEGIN AUTONOMOUS EXECUTION NOW.
-```
-
-**Cache Marker Injection**:
-The cache marker is injected as a special comment at the cache boundary:
-
-```
-... end of static content ...
-
-<!-- ANTHROPIC_CACHE_CONTROL: {"type": "ephemeral", "ttl": "5m"} -->
-
-AUTONOMOUS BUILD TASK
-...
-```
-
-Claude Code will pass this to the Anthropic API which processes cache control markers.
-
-**Token Counting**:
-```python
-def count_prompt_tokens(text: str, model: str = "claude-sonnet-4") -> int:
-    """
-    Count tokens in prompt using anthropic package.
-    
-    Validates cache boundary meets minimum (1024 tokens for Sonnet).
-    """
-    from anthropic import Anthropic
-    client = Anthropic()
-    count = client.count_tokens(text)
-    return count
-```
-
-**Fallback Behavior**:
-- If cache disabled: Return prompt without markers
-- If non-Claude model: Return prompt without markers
-- If static section < 1024 tokens: Warn and disable caching
-- If Claude Code doesn't support markers: Degrade gracefully
-
-### 2. Cache Configuration (`tools/prompts/cache_config.json`)
-
-**Schema**:
-```json
-{
-  "version": "1.0.0",
-  "caching": {
-    "enabled": true,
-    "ttl": "5m",
-    "min_tokens": 1024,
-    "cache_boundary_line": 1650,
-    "models_supported": [
-      "claude-sonnet-4",
-      "claude-sonnet-3-5",
-      "claude-opus-4",
-      "claude-haiku-3-5"
-    ]
-  },
-  "prompt_version": {
-    "hash": "abc123def456",
-    "last_updated": "2025-01-13T00:00:00Z",
-    "comment": "Version hash for cache invalidation"
-  },
-  "metrics": {
-    "track_cache_hits": true,
-    "track_token_savings": true,
-    "track_cost_savings": true
-  }
+/**
+ * Breadcrumbs Loader - Populates breadcrumbs based on current URL
+ */
+function initBreadcrumbs() {
+  const breadcrumbsList = document.querySelector('.breadcrumbs-list');
+  if (!breadcrumbsList) return; // Not on a page with breadcrumbs
+  
+  fetch('/docs/assets/navigation.json')
+    .then(res => res.json())
+    .then(data => {
+      // Parse current URL to find category and page
+      const path = window.location.pathname;
+      const match = path.match(/\/docs\/([^\/]+)\/([^\/]+)/);
+      
+      if (!match) return;
+      
+      const [, categoryId, pageSlug] = match;
+      const category = data.categories.find(c => c.id === categoryId);
+      
+      if (!category) return;
+      
+      const page = category.docs.find(d => d.slug === pageSlug);
+      
+      if (!page) return;
+      
+      // Populate breadcrumbs
+      const items = breadcrumbsList.querySelectorAll('.breadcrumbs-item');
+      if (items.length >= 3) {
+        // Home > Category > Page
+        items[0].querySelector('span[itemprop="name"]').textContent = 'Documentation';
+        items[1].querySelector('span[itemprop="name"]').textContent = category.name;
+        items[2].querySelector('span[itemprop="name"]').textContent = page.title;
+      }
+    })
+    .catch(err => console.error('Failed to load breadcrumbs:', err));
 }
 ```
 
-**Configuration Loading**:
-```python
-class CacheConfig:
-    def __init__(self, config_path: str = "tools/prompts/cache_config.json"):
-        self.config = self._load_config(config_path)
-    
-    def is_caching_enabled(self) -> bool:
-        return self.config["caching"]["enabled"]
-    
-    def get_cache_ttl(self) -> str:
-        return self.config["caching"]["ttl"]
-    
-    def is_model_supported(self, model: str) -> bool:
-        supported = self.config["caching"]["models_supported"]
-        return any(m in model for m in supported)
-```
+**Integration points**:
+- Insert `initNavigation()` and `initBreadcrumbs()` calls in `init()` function (line 16)
+- Add both functions before closing `})();` at end of file
+- Ensure they run BEFORE other features that depend on navigation
 
-### 3. Cache Analysis Tool (`tools/prompts/cache_analysis.py`)
+## Implementation Steps (Ordered)
 
-**Purpose**: Analyze orchestrator prompt and recommend cache boundaries
-
-**Main Function**:
-```python
-def analyze_prompt_structure(
-    prompt_path: str = "tools/orchestrator_prompt.txt"
-) -> dict:
-    """
-    Analyze orchestrator prompt for optimal cache segmentation.
-    
-    Returns:
-        {
-            "total_lines": 1677,
-            "total_tokens": 9100,
-            "recommended_boundary": 1650,
-            "static_section": {
-                "lines": 1650,
-                "tokens": 8500,
-                "cacheable": true
-            },
-            "dynamic_section": {
-                "lines": 27,
-                "tokens": 600,
-                "cacheable": false
-            },
-            "recommendations": [
-                "Static section meets minimum token requirement (8500 > 1024)",
-                "Cache boundary at line 1650 (after 'BEGIN EXECUTION NOW')",
-                "Expected savings: 90% on cached requests"
-            ]
-        }
-    """
-```
-
-**Analysis Strategy**:
-1. Read orchestrator_prompt.txt
-2. Count tokens per section
-3. Identify natural boundaries (phase endings, section markers)
-4. Validate static section meets minimum tokens
-5. Calculate expected savings
-6. Generate recommendations
-
-**CLI Interface**:
+### Step 1: Prepare Git Branch
 ```bash
-python tools/prompts/cache_analysis.py
-
-Output:
-📊 Orchestrator Prompt Cache Analysis
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Total lines: 1677
-Total tokens: ~9,100
-
-Static section (cacheable):
-  Lines: 1-1650
-  Tokens: ~8,500
-  ✓ Meets minimum (1024)
-
-Dynamic section:
-  Lines: 1651-1677  
-  Tokens: ~600
-
-Recommended boundary: Line 1650
-Expected savings: 90% on cache hits
-Cost: $0.034 → $0.003 per build
+cd /Users/name/homelab/context-foundry
+git checkout -b fix/docs-site-bugs
+git status  # Verify we're on the new branch
 ```
 
-### 4. MCP Server Integration (`tools/mcp_server.py`)
+### Step 2: Fix Script Tags in All HTML Files
 
-**Modification Points**:
-
-**Current Code** (lines 1269-1293):
-```python
-# Load orchestrator system prompt
-orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
-if not orchestrator_prompt_path.exists():
-    return json.dumps({"status": "error", ...})
-
-with open(orchestrator_prompt_path) as f:
-    system_prompt = f.read()
-
-# Build task prompt
-task_prompt = f"""AUTONOMOUS BUILD TASK
-
-CONFIGURATION:
-{json.dumps(task_config, indent=2)}
-
-Execute the full Scout → Architect → Builder → Test → Deploy workflow.
-...
-"""
-
-# Build command
-cmd = [
-    "claude", "--print",
-    "--permission-mode", "bypassPermissions",
-    "--strict-mcp-config",
-    "--settings", '{"thinkingMode": "off"}',
-    "--system-prompt", system_prompt,
-    task_prompt
-]
-```
-
-**New Code** (with caching):
-```python
-from tools.prompts.cached_prompt_builder import build_cached_prompt
-from tools.prompts.cache_config import CacheConfig
-
-# Load cache configuration
-cache_config = CacheConfig()
-enable_caching = cache_config.is_caching_enabled()
-
-# Build cached prompt
-orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
-system_prompt = build_cached_prompt(
-    task_config=task_config,
-    orchestrator_prompt_path=str(orchestrator_prompt_path),
-    enable_caching=enable_caching,
-    cache_ttl=cache_config.get_cache_ttl()
-)
-
-# Task prompt is now embedded in system_prompt
-# Build command (same as before)
-cmd = [
-    "claude", "--print",
-    "--permission-mode", "bypassPermissions",
-    "--strict-mcp-config",
-    "--settings", '{"thinkingMode": "off"}',
-    "--system-prompt", system_prompt,
-    ""  # Empty user message (everything in system prompt)
-]
-```
-
-**Key Changes**:
-1. Import cached_prompt_builder
-2. Load cache configuration
-3. Call build_cached_prompt() instead of direct file read
-4. Task configuration embedded in system prompt (not separate arg)
-5. Cache markers handled internally by builder
-
-**Backward Compatibility**:
-- If caching disabled: Works exactly as before
-- If cache_config.json missing: Falls back to non-cached
-- No breaking changes to autonomous_build_and_deploy() signature
-
-### 5. Orchestrator Prompt Modifications (`tools/orchestrator_prompt.txt`)
-
-**Add Cache Boundary Marker** (line ~1650):
-
-```
-═══════════════════════════════════════════════════════════
-END OF STATIC ORCHESTRATOR INSTRUCTIONS
-═══════════════════════════════════════════════════════════
-
-<<CACHE_BOUNDARY_MARKER>>
-
-The following content varies per build and should NOT be cached:
-- Task description
-- Working directory
-- Mode flags
-- Configuration JSON
-```
-
-**No other changes needed** - existing prompt structure is already optimal for caching!
-
-## Integration with Existing Systems
-
-### Metrics System (Already Complete!)
-
-**No changes needed** - existing infrastructure already supports caching:
-
-✅ **TokenUsage class** (`tools/metrics/log_parser.py`):
-```python
-@dataclass
-class TokenUsage:
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0      # ← Already exists!
-    cache_write_tokens: int = 0     # ← Already exists!
-    model: Optional[str] = None
-    request_id: Optional[str] = None
-```
-
-✅ **CostCalculator** (`tools/metrics/cost_calculator.py`):
-```python
-def calculate_cost(self, usage: TokenUsage, model: Optional[str] = None) -> float:
-    pricing = self.get_model_pricing(model)
-    
-    input_cost = (usage.input_tokens / 1_000_000) * pricing['input_per_mtok']
-    output_cost = (usage.output_tokens / 1_000_000) * pricing['output_per_mtok']
-    cache_write_cost = (usage.cache_write_tokens / 1_000_000) * pricing['cache_write_per_mtok']  # ← Already works!
-    cache_read_cost = (usage.cache_read_tokens / 1_000_000) * pricing['cache_read_per_mtok']    # ← Already works!
-    
-    return input_cost + output_cost + cache_write_cost + cache_read_cost
-```
-
-✅ **Pricing Config** (`tools/metrics/pricing_config.json`):
-```json
-{
-  "claude-sonnet-4-20250514": {
-    "input_per_mtok": 3.00,
-    "output_per_mtok": 15.00,
-    "cache_write_per_mtok": 3.75,    // ← Already configured!
-    "cache_read_per_mtok": 0.30      // ← Already configured!
-  }
-}
-```
-
-**Result**: Once we populate cache_read_tokens and cache_write_tokens, everything else works automatically!
-
-## Testing Strategy
-
-### Unit Tests (`tests/test_cached_prompt_builder.py`)
-
-```python
-def test_build_cached_prompt_with_caching_enabled():
-    """Test prompt builder with caching enabled"""
-    config = {"task": "Build app", "mode": "new_project"}
-    prompt = build_cached_prompt(config, enable_caching=True)
-    
-    assert "ANTHROPIC_CACHE_CONTROL" in prompt
-    assert "AUTONOMOUS BUILD TASK" in prompt
-    assert '"task": "Build app"' in prompt
-
-def test_build_cached_prompt_with_caching_disabled():
-    """Test prompt builder with caching disabled"""
-    config = {"task": "Build app"}
-    prompt = build_cached_prompt(config, enable_caching=False)
-    
-    assert "ANTHROPIC_CACHE_CONTROL" not in prompt
-
-def test_token_counting():
-    """Test token counting meets minimum"""
-    with open("tools/orchestrator_prompt.txt") as f:
-        static_section = f.read()[:50000]  # First ~1650 lines
-    
-    tokens = count_prompt_tokens(static_section)
-    assert tokens >= 1024, f"Static section only {tokens} tokens (need 1024+)"
-
-def test_cache_boundary_marker():
-    """Test cache boundary is correctly placed"""
-    with open("tools/orchestrator_prompt.txt") as f:
-        content = f.read()
-    
-    assert "<<CACHE_BOUNDARY_MARKER>>" in content
-```
-
-### Integration Tests (`tests/test_cache_integration.py`)
-
-```python
-@mock.patch("subprocess.Popen")
-def test_autonomous_build_uses_cached_prompt(mock_popen):
-    """Test autonomous_build_and_deploy uses cached prompt builder"""
-    # Mock process
-    mock_process = MagicMock()
-    mock_process.poll.return_value = None
-    mock_popen.return_value = mock_process
-    
-    # Call autonomous build
-    result = autonomous_build_and_deploy(
-        task="Test build",
-        working_directory="/tmp/test"
-    )
-    
-    # Verify subprocess called with cache markers
-    call_args = mock_popen.call_args
-    cmd = call_args[0][0]
-    system_prompt_idx = cmd.index("--system-prompt") + 1
-    system_prompt = cmd[system_prompt_idx]
-    
-    assert "ANTHROPIC_CACHE_CONTROL" in system_prompt
-
-def test_cost_calculation_with_cache():
-    """Test cost calculator handles cached tokens correctly"""
-    usage = TokenUsage(
-        input_tokens=100,
-        output_tokens=200,
-        cache_read_tokens=8500,  # Cached static prompt
-        cache_write_tokens=0
-    )
-    
-    calc = CostCalculator()
-    cost = calc.calculate_cost(usage, "claude-sonnet-4")
-    
-    # Verify cost includes cache discount
-    expected_cost = (
-        (100 / 1_000_000) * 3.00 +      # Input
-        (200 / 1_000_000) * 15.00 +     # Output
-        (8500 / 1_000_000) * 0.30       # Cache read (90% discount!)
-    )
-    assert abs(cost - expected_cost) < 0.0001
-```
-
-### End-to-End Test (Manual)
-
+**2a. Get list of all HTML files**:
 ```bash
-# Test 1: First build (cache miss)
-echo "🧪 Test 1: First build (cache creation)"
-time foundry build test-cache-1 "Create hello.py that prints hello"
-
-# Expected:
-# - cache_write_tokens: ~8500
-# - cache_read_tokens: 0
-# - Cost: ~$0.034
-
-# Test 2: Second build within 5 min (cache hit)
-echo "🧪 Test 2: Second build (cache hit)"
-time foundry build test-cache-2 "Create goodbye.py that prints goodbye"
-
-# Expected:
-# - cache_write_tokens: 0
-# - cache_read_tokens: ~8500
-# - Cost: ~$0.003 (90% savings!)
-
-# Test 3: Wait for cache expiration
-echo "🧪 Test 3: After cache expiration (5+ min)"
-sleep 310  # Wait 5min 10sec
-time foundry build test-cache-3 "Create test.py that prints test"
-
-# Expected:
-# - cache_write_tokens: ~8500 (cache recreated)
-# - cache_read_tokens: 0
-# - Cost: ~$0.034
-
-# Verify metrics
-sqlite3 ~/.context-foundry/metrics.db << SQL
-SELECT 
-    session_id,
-    cache_write_tokens,
-    cache_read_tokens,
-    total_cost
-FROM builds
-WHERE session_id LIKE 'test-cache-%'
-ORDER BY created_at;
-SQL
+find public/docs -name "*.html" -type f > .context-foundry/html-files-list.txt
 ```
 
-## Implementation Steps
+**2b. Fix /public/docs/index.html (special case)**:
+- Read file
+- Find script tags near line 370
+- Remove `<script src="/docs/assets/search.js" defer></script>`
+- Add `<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>` before docs.js
+- Write file
 
-### Step 1: Create Cached Prompt Builder
-- File: `tools/prompts/cached_prompt_builder.py`
-- Implement: `build_cached_prompt()`, `count_prompt_tokens()`
-- Add: Cache marker injection logic
-- Validate: Token counting meets minimum
+**2c. Fix all other doc pages** (20 files):
+For each file in list (except index.html):
+- Read file
+- Find script tags near closing `</body>`
+- Check if Fuse.js already present (skip if so)
+- Add `<script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>` before docs.js
+- Remove `<script src="/docs/assets/search.js" defer></script>` if present
+- Write file
 
-### Step 2: Create Cache Configuration
-- File: `tools/prompts/cache_config.json`
-- Define: Schema with enabled, ttl, models
-- Create: `CacheConfig` class for loading
+### Step 3: Add Navigation JavaScript
 
-### Step 3: Create Cache Analysis Tool
-- File: `tools/prompts/cache_analysis.py`
-- Implement: `analyze_prompt_structure()`
-- Add: CLI interface for analysis
-- Generate: Segmentation recommendations
+**3a. Modify /public/docs/assets/docs.js**:
+- Read entire file
+- Locate `init()` function (around line 16)
+- Add calls to `initNavigation()` and `initBreadcrumbs()` after line 16
+- Add both complete functions before closing `})();`
+- Write file
 
-### Step 4: Modify Orchestrator Prompt
-- File: `tools/orchestrator_prompt.txt`
-- Add: Cache boundary marker at line ~1650
-- Document: Static vs dynamic sections
-- Validate: No functional changes
+### Step 4: Verify Changes
 
-### Step 5: Integrate with MCP Server
-- File: `tools/mcp_server.py`
-- Import: `cached_prompt_builder`, `CacheConfig`
-- Modify: `autonomous_build_and_deploy()` lines 1269-1293
-- Test: Backward compatibility
+**4a. Count modified files**:
+```bash
+git status --short | wc -l  # Should show ~22 files
+```
 
-### Step 6: Write Tests
-- File: `tests/test_cached_prompt_builder.py`
-- Tests: 10+ unit tests for prompt builder
-- File: `tests/test_cache_integration.py`
-- Tests: 5+ integration tests with mocking
+**4b. Preview one HTML change**:
+```bash
+git diff public/docs/getting-started/quickstart.html | head -50
+```
 
-### Step 7: Create Documentation
-- File: `docs/PROMPT_CACHING.md`
-- Sections: Overview, Architecture, Usage, Troubleshooting
-- Include: Cost savings examples, metrics
+**4c. Preview JavaScript change**:
+```bash
+git diff public/docs/assets/docs.js | head -100
+```
 
-## Success Criteria
+## Testing Plan
 
-✅ **Prompt builder creates valid cached prompts**
-- Cache markers correctly placed
-- Static section >= 1024 tokens
-- Dynamic content injected properly
+### Unit Tests (N/A)
+No unit tests for static site - all testing is integration/E2E
 
-✅ **MCP server integration works**
-- autonomous_build_and_deploy() uses cached prompts
-- Backward compatible (no breaking changes)
-- Falls back gracefully if caching unavailable
+### Integration Tests
 
-✅ **Token savings achieved**
-- First build: cache_write_tokens populated
-- Subsequent builds: cache_read_tokens populated
-- 80-90% token reduction on cached requests
+**Test 1: Fuse.js Loaded**
+```
+URL: http://localhost:8080/docs/getting-started/quickstart
+Open browser console
+Type: window.Fuse
+Expected: function definition (not undefined)
+```
 
-✅ **Cost savings validated**
-- CostCalculator computes correct costs
-- Cache discounts applied (0.1× for reads)
-- Session summaries show cache_savings
+**Test 2: Navigation Populated**
+```
+URL: http://localhost:8080/docs/getting-started/quickstart
+Check: Sidebar shows 4 categories with links
+Check: Breadcrumbs show "Documentation > Getting Started > Quick Start"
+Expected: All content visible and clickable
+```
 
-✅ **Tests pass**
-- 90%+ code coverage
-- Unit tests validate logic
-- Integration tests verify behavior
-- E2E test shows real savings
+**Test 3: Search Works**
+```
+URL: http://localhost:8080/docs/getting-started/quickstart
+Type in search box: "scout"
+Expected: Results dropdown appears with matching docs
+```
 
-✅ **Documentation complete**
-- PROMPT_CACHING.md comprehensive
-- Architecture diagrams included
-- Troubleshooting guide provided
+**Test 4: No Console Errors**
+```
+URL: http://localhost:8080/docs/
+Open console (F12)
+Expected: Zero 404 errors, zero JavaScript errors
+```
 
-## Cost Savings Projection
+**Test 5: Mobile Menu**
+```
+URL: http://localhost:8080/docs/getting-started/quickstart
+Resize browser to < 968px width
+Click hamburger menu icon
+Expected: Sidebar slides in from left
+```
 
-**Scenario: 50 builds per month**
+**Test 6: All Pages Load**
+```
+Test each category:
+- /docs/getting-started/faq
+- /docs/guides/changelog
+- /docs/technical/innovations
+- /docs/reference/architecture-decisions
+Expected: All pages load, sidebar works, no errors
+```
 
-**Without Caching**:
-- 50 builds × 9,000 tokens × $3.00/1M = $1.35/month
+### Success Criteria
 
-**With Caching** (5-minute TTL, sequential builds):
-- Build 1: 9,000 tokens × $3.75/1M = $0.034 (cache creation)
-- Builds 2-50: 49 × (500 + 8,500 cache) tokens = $0.147
-  - 500 regular × $3.00/1M = $0.0015 per build
-  - 8,500 cached × $0.30/1M = $0.0026 per build
-  - Total per build: $0.0041
-  - 49 builds: $0.20
+1. ✅ Zero 404 errors in browser console
+2. ✅ Sidebar displays all categories and links
+3. ✅ Search returns results for "scout", "architect", "test"
+4. ✅ Breadcrumbs show correct page hierarchy
+5. ✅ Mobile menu toggle works smoothly
+6. ✅ All 21 HTML pages render correctly
+7. ✅ `window.Fuse` is defined (library loaded)
+8. ✅ Clicking sidebar links navigates correctly
 
-**Total with caching: $0.234/month**
-**Savings: $1.12/month (83% reduction)**
+## Preventive Measures
 
-**Annual savings: $13.44/year**
+### Issue: Multiple HTML files could have inconsistent script tags
+**Prevention**: Use template/pattern for all modifications, verify with git diff
 
-For heavy users (200 builds/month): **$54/year savings**
+### Issue: Navigation.json fetch might fail
+**Prevention**: Error handling with console.error, graceful degradation
 
-## Risk Mitigation
+### Issue: Timing - navigation might load after other init functions
+**Prevention**: Call initNavigation() and initBreadcrumbs() FIRST in init()
 
-### Risk 1: Claude Code CLI Compatibility
-- **If unsupported**: Fall back to current method
-- **Monitoring**: Check logs for cache token presence
-- **Testing**: Verify with real claude CLI
+### Issue: Active page highlighting might not work
+**Prevention**: Check both `/docs/path` and `/docs/path.html` patterns
 
-### Risk 2: Prompt Version Changes
-- **Prevention**: Track prompt hash in config
-- **Warning**: Alert when hash changes
-- **Recovery**: Automatic cache recreation
+## Deployment Steps
 
-### Risk 3: Cache TTL Too Short
-- **Solution**: Make TTL configurable (5m or 1h)
-- **Monitoring**: Track cache hit rate
-- **Adjustment**: Recommend 1h for heavy users
+1. Test locally on http://localhost:8080
+2. Verify all 6 integration tests pass
+3. Commit changes with descriptive message
+4. Push to feature branch
+5. Create PR to main
+6. Merge after review
 
-### Risk 4: Token Counting Inaccuracy
-- **Prevention**: Use anthropic.count_tokens()
-- **Validation**: Add buffer (1100+ tokens)
-- **Testing**: Verify counts in E2E tests
+---
 
-## Next Phase: Builder
-
-Implementation ready. Proceed to build phase with:
-1. Parallel task execution (if applicable)
-2. Create all new files
-3. Modify existing files
-4. Run tests continuously
-5. Fix any issues immediately
+**Architecture Complete** - Ready for Build Planning (Phase 2.5)

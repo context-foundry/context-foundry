@@ -1,0 +1,111 @@
+{
+  "parallel_mode": true,
+  "total_tasks": 7,
+  "tasks": [
+    {
+      "id": "task-1",
+      "description": "Project scaffolding and configuration files",
+      "files": [
+        "README.md",
+        ".gitignore",
+        ".env.template",
+        "python/pyproject.toml",
+        "python/setup.py",
+        "python/requirements.txt",
+        "python/.env.template",
+        "typescript/package.json",
+        "typescript/tsconfig.json",
+        "typescript/.env.template"
+      ],
+      "dependencies": [],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-2",
+      "description": "BAML source files (clients, functions, types)",
+      "files": [
+        "baml_src/clients.baml",
+        "baml_src/functions.baml",
+        "baml_src/types.baml"
+      ],
+      "dependencies": [],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-3",
+      "description": "Python shared utilities and configuration",
+      "files": [
+        "python/shared/__init__.py",
+        "python/shared/config.py",
+        "python/shared/utils.py"
+      ],
+      "dependencies": ["task-1"],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-4",
+      "description": "Python examples implementation",
+      "files": [
+        "python/examples/__init__.py",
+        "python/examples/document_processing.py",
+        "python/examples/data_analysis.py",
+        "python/examples/custom_skill.py"
+      ],
+      "dependencies": ["task-2", "task-3"],
+      "estimated_time": "20 minutes"
+    },
+    {
+      "id": "task-5",
+      "description": "TypeScript shared utilities and configuration",
+      "files": [
+        "typescript/src/shared/config.ts",
+        "typescript/src/shared/utils.ts",
+        "typescript/src/index.ts"
+      ],
+      "dependencies": ["task-1"],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-6",
+      "description": "TypeScript examples implementation",
+      "files": [
+        "typescript/src/examples/documentProcessing.ts",
+        "typescript/src/examples/dataAnalysis.ts",
+        "typescript/src/examples/customSkill.ts"
+      ],
+      "dependencies": ["task-2", "task-5"],
+      "estimated_time": "20 minutes"
+    },
+    {
+      "id": "task-7",
+      "description": "Tests and documentation",
+      "files": [
+        "python/tests/__init__.py",
+        "python/tests/conftest.py",
+        "python/tests/test_document_processing.py",
+        "python/tests/test_data_analysis.py",
+        "python/tests/test_custom_skill.py",
+        "python/tests/test_integration.py",
+        "typescript/tests/documentProcessing.test.ts",
+        "typescript/tests/dataAnalysis.test.ts",
+        "typescript/tests/customSkill.test.ts",
+        "typescript/tests/integration.test.ts",
+        "test_data/sample.pdf",
+        "test_data/sample.csv",
+        "docs/SETUP.md",
+        "docs/EXAMPLES.md",
+        "docs/BEST_PRACTICES.md",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "dependencies": ["task-4", "task-6"],
+      "estimated_time": "25 minutes"
+    }
+  ],
+  "parallelism": {
+    "level_0": ["task-1", "task-2"],
+    "level_1": ["task-3", "task-5"],
+    "level_2": ["task-4", "task-6"],
+    "level_3": ["task-7"]
+  },
+  "notes": "7 tasks organized into 4 dependency levels for maximum parallelism"
+}

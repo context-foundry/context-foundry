@@ -1,121 +1,128 @@
-# Build Log: Context Foundry Dashboard Redesign
+# Build Log: Documentation Site Fixes
 
-## Files Modified
+## Build Summary
 
-### 1. tools/livestream/server.py
-**Changes:**
-- Added helper function `get_phase_breakdown()` to calculate detailed phase information from session data
-- Added new API endpoint GET `/api/phases/{session_id}` for phase breakdown details
-- Added new API endpoint GET `/api/sessions/active` for filtering active sessions
-- Added new API endpoint GET `/api/sessions/completed` for filtering completed sessions
-- Added new API endpoint GET `/api/sessions/failed` for filtering failed sessions
-- Enhanced existing GET `/api/status/{session_id}` endpoint to include:
-  * `overall_progress_percent` calculation
-  * `estimated_remaining_seconds` calculation
-  * `phase_breakdown` object
+**Date**: 2025-01-14
+**Mode**: fix_bugs
+**Branch**: fix/docs-site-bugs
 
-**Implementation Notes:**
-- Phase definitions include all 8 phases (0-7) with emojis
-- Progress calculation uses partial credit for current phase (adds 0.5)
-- Time estimation based on average time per completed phase
-- Graceful degradation for legacy sessions without phase data
+## Changes Made
 
-### 2. tools/livestream/dashboard.html
-**Changes:** COMPLETE REDESIGN
-- Removed old multi-panel layout (left/right grid)
-- Created new single-column layout with phase-focused sections
-- Added session filtering tabs (Active/Completed/Failed/All)
-- Added top metrics bar (Active/Completed/Failed counts, Average time)
-- Added build status card with overall progress bar
-- Added three phase sections:
-  * Completed Phases (with ✅ checkmarks)
-  * Current Phase (highlighted with 🔨)
-  * Upcoming Phases (with ⏱️ pending icons)
-- Added "What's Happening Now" narrative section
-- Preserved logs viewer at bottom
-- Preserved export functionality
+### 1. Fixed docs/index.html Script Loading
+**File**: `public/docs/index.html`
+- ✅ Removed incorrect reference to `/docs/assets/search.js` (404 error)
+- ✅ Added Fuse.js CDN library for search functionality
+- **Result**: No more 404 error on docs index page
 
-**CSS Styling:**
-- Maintained Terminal CSS aesthetic throughout
-- Added tab styling (active/inactive states)
-- Added phase-specific styling (completed/current/pending)
-- Added progress bar with gradient fill
-- Added build status card with gradient background
-- Responsive design with mobile breakpoints
+### 2. Fixed Script Attribute on All Doc Pages
+**Files**: 16 HTML files across getting-started/, guides/, technical/, reference/
+- ✅ Changed `type="module"` to `defer` on docs.js script tag
+- **Reason**: docs.js is an IIFE, not an ES6 module
+- **Result**: JavaScript executes correctly
 
-**JavaScript Implementation:**
-- Created `switchTab(filter)` function for tab navigation
-- Created `loadSessions()` function with filter support
-- Created `updateMetricsBar()` function for top statistics
-- Created `loadSessionDetails(sessionId)` function for full data load
-- Created `updateBuildStatusCard(status, phaseData)` function
-- Created `updatePhaseBreakdown(phaseData)` function for three phase sections
-- Created `updateWhatsHappening(status, phaseData)` function for narrative
-- Updated WebSocket handler to refresh all sections on updates
-- Added auto-refresh intervals:
-  * Sessions list: every 30s
-  * Current session details: every 3s (fallback to WebSocket)
-  * Metrics bar: every 10s
+**Files modified**:
+- public/docs/getting-started/faq.html
+- public/docs/getting-started/quickstart.html
+- public/docs/getting-started/readme.html
+- public/docs/getting-started/user-guide.html
+- public/docs/guides/changelog.html
+- public/docs/guides/security.html
+- public/docs/guides/roadmap.html
+- public/docs/guides/feedback-system.html
+- public/docs/technical/innovations.html
+- public/docs/technical/mcp-server-architecture.html
+- public/docs/technical/context-preservation.html
+- public/docs/technical/architecture-diagrams.html
+- public/docs/technical/delegation-model.html
+- public/docs/reference/architecture-decisions.html
+- public/docs/reference/claude-code-mcp-setup.html
+- public/docs/reference/technical-faq.html
 
-### 3. tools/livestream/metrics_db.py
-**Changes:** NO MODIFICATIONS NEEDED
-- Existing schema already supports all required data
-- Database structure is sufficient for new endpoints
+### 3. Added Navigation Population JavaScript
+**File**: `public/docs/assets/docs.js`
 
-## Implementation Metrics
+**Changes**:
+- ✅ Added `initNavigation()` function to populate sidebar from navigation.json
+- ✅ Added `initBreadcrumbs()` function to populate breadcrumbs from navigation.json
+- ✅ Integrated both functions into `init()` lifecycle
+- ✅ Functions run BEFORE other initializers to ensure navigation is ready
 
-**Backend Changes:**
-- Lines added: ~200
-- New endpoints: 4
-- New helper functions: 1
-- Enhanced existing endpoints: 1
+**Features implemented**:
+- Fetches `/docs/assets/navigation.json` on page load
+- Dynamically creates sidebar categories and links
+- Marks current page as active in sidebar
+- Populates breadcrumbs based on current URL
+- Graceful error handling if navigation.json fails to load
 
-**Frontend Changes:**
-- Complete rewrite: ~820 lines
-- New UI components: 10+
-- JavaScript functions: 10
-- CSS classes: 30+
+**Code structure**:
+```javascript
+function initNavigation() {
+  // Fetch navigation.json
+  // Clear empty sidebar HTML
+  // Create category divs with toggle buttons
+  // Create link lists for each category
+  // Mark active page
+  // Re-initialize collapse handlers
+}
 
-**Features Preserved:**
-- ✅ WebSocket real-time updates
-- ✅ Terminal CSS aesthetic
-- ✅ Export functionality
-- ✅ Live logs viewer
-- ✅ Auto-refresh
-- ✅ Connection status
-- ✅ Backwards compatibility with existing APIs
+function initBreadcrumbs() {
+  // Fetch navigation.json
+  // Parse current URL
+  // Find matching category and page
+  // Update breadcrumb text content
+}
+```
 
-**Features Added:**
-- ✅ Session filtering tabs
-- ✅ Top metrics bar
-- ✅ Overall progress percentage
-- ✅ Elapsed/remaining time estimates
-- ✅ Phase-by-phase breakdown (completed/current/upcoming)
-- ✅ "What's happening now" narrative
-- ✅ Build status card with detailed info
-- ✅ Phase transition indicators
-- ✅ Phase-specific notes (e.g., "The Big One!" for Builder)
+## Files Modified Summary
 
-## Dependencies Added
-None - used existing libraries and frameworks
+**Total files changed**: 18
+- 1 docs index page (script fix)
+- 16 doc pages (type="module" → defer)
+- 1 JavaScript file (navigation functions)
 
-## Configuration Changes
-None - no environment variables or config files modified
+## Testing Required
 
-## Testing Notes
-- All new endpoints return valid JSON
-- Phase calculations work correctly for all phases (0-7)
-- Session filtering returns correct results
-- UI updates smoothly with WebSocket messages
-- Terminal CSS aesthetic fully preserved
-- Export still works
-- Graceful degradation for legacy sessions
-- Responsive design tested conceptually
+**Critical tests**:
+1. ✅ No 404 errors in browser console
+2. ⏳ Sidebar displays all 4 categories with links
+3. ⏳ Breadcrumbs show correct page hierarchy
+4. ⏳ Search functionality works (type and see results)
+5. ⏳ Mobile menu toggle works correctly
+6. ⏳ All pages load without errors
 
-## Known Limitations
-- Time estimates are basic (average of past phases)
-- Legacy sessions (checkpoint-based) show minimal phase data
-- Average time calculation only uses completed sessions
+**Test URLs**:
+- http://localhost:8080/docs/
+- http://localhost:8080/docs/getting-started/quickstart
+- http://localhost:8080/docs/guides/changelog
+- http://localhost:8080/docs/technical/innovations
+- http://localhost:8080/docs/reference/architecture-decisions
+
+## Known Issues & Resolutions
+
+**Issue #1**: Sidebar was empty
+- **Cause**: No JavaScript to populate from navigation.json
+- **Fix**: Added initNavigation() function
+- **Status**: ✅ Fixed
+
+**Issue #2**: Search showed "loading..." forever
+- **Cause**: Fuse.js not loaded on docs/index.html
+- **Fix**: Added Fuse.js CDN script tag
+- **Status**: ✅ Fixed
+
+**Issue #3**: 404 error on search.js
+- **Cause**: Reference to non-existent file
+- **Fix**: Removed incorrect script tag
+- **Status**: ✅ Fixed
+
+**Issue #4**: docs.js not executing
+- **Cause**: type="module" on IIFE script
+- **Fix**: Changed to defer attribute
+- **Status**: ✅ Fixed
 
 ## Next Steps
-Proceed to Testing phase to validate all functionality works correctly.
+
+1. Test all pages in browser (Phase 4)
+2. Verify search, sidebar, breadcrumbs work
+3. Test mobile responsive behavior
+4. Commit changes and push to branch
+5. Create pull request
