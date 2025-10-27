@@ -290,6 +290,10 @@ def context_foundry_status() -> str:
 - get_delegation_result: Check status and retrieve results of async tasks
 - list_delegations: List all active and completed async tasks
 
+🎛️ **Task Control:**
+- cancel_delegation: Manually cancel/kill a running task (graceful or forced termination)
+- stream_delegation_output: Stream raw real-time output from running tasks (diagnostic tool)
+
 📊 **Pattern Management:**
 - read_global_patterns: Read patterns from global pattern storage
 - save_global_patterns: Save patterns to global pattern storage
@@ -873,6 +877,363 @@ def list_delegations() -> str:
         return json.dumps({
             "error": str(e),
             "traceback": traceback.format_exc()
+        }, indent=2)
+
+
+@mcp.tool()
+def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
+    """
+    Manually cancel/kill a running delegation task.
+
+    This allows you to stop a runaway build, unwanted task, or process that's
+    taking too long. The process will be terminated gracefully if possible,
+    or killed forcefully if needed.
+
+    Args:
+        task_id: The task ID to cancel (from delegate_to_claude_code_async or autonomous_build_and_deploy)
+        reason: Optional reason for cancellation (for logging/debugging)
+
+    Returns:
+        JSON string with cancellation status and details
+
+    Examples:
+        # Cancel a runaway build
+        result = cancel_delegation("abc-123-def-456", "Taking too long")
+
+        # Cancel without reason
+        result = cancel_delegation("abc-123-def-456")
+    """
+    try:
+        # Check if task exists
+        if task_id not in active_tasks:
+            return json.dumps({
+                "status": "error",
+                "error": f"Task ID '{task_id}' not found",
+                "message": "Use list_delegations() to see active tasks",
+                "cancelled": False
+            }, indent=2)
+
+        task_info = active_tasks[task_id]
+        process = task_info["process"]
+
+        # Check if already completed
+        poll_result = process.poll()
+        if poll_result is not None:
+            # Process already finished
+            elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
+            return json.dumps({
+                "status": "already_finished",
+                "message": "Task already completed - cannot cancel",
+                "task_id": task_id,
+                "exit_code": poll_result,
+                "elapsed_seconds": round(elapsed, 2),
+                "cancelled": False
+            }, indent=2)
+
+        # Calculate elapsed time before killing
+        elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
+
+        # Try graceful termination first (SIGTERM)
+        try:
+            process.terminate()
+            # Wait up to 5 seconds for graceful shutdown
+            try:
+                process.wait(timeout=5)
+                termination_method = "graceful (SIGTERM)"
+            except subprocess.TimeoutExpired:
+                # Force kill if graceful termination failed (SIGKILL)
+                process.kill()
+                process.wait()
+                termination_method = "forced (SIGKILL)"
+        except Exception as e:
+            # If terminate/kill fails, try kill directly
+            try:
+                process.kill()
+                process.wait()
+                termination_method = "forced (SIGKILL - fallback)"
+            except Exception as kill_error:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Failed to kill process: {str(kill_error)}",
+                    "task_id": task_id,
+                    "cancelled": False
+                }, indent=2)
+
+        # Capture any remaining output
+        try:
+            stdout = process.stdout.read() if process.stdout else ""
+            stderr = process.stderr.read() if process.stderr else ""
+        except:
+            stdout = "(could not read stdout)"
+            stderr = "(could not read stderr)"
+
+        # Update task info
+        task_info["status"] = "cancelled"
+        task_info["cancelled_at"] = datetime.now().isoformat()
+        task_info["cancellation_reason"] = reason or "Manual cancellation by user"
+        task_info["duration"] = elapsed
+        task_info["exit_code"] = -15  # Standard SIGTERM exit code
+        task_info["stdout"] = stdout
+        task_info["stderr"] = stderr
+        task_info["termination_method"] = termination_method
+
+        # Write partial output to file for debugging
+        output_file_path = _write_full_output_to_file(
+            working_directory=task_info["cwd"],
+            stdout=stdout or "(cancelled - no output)",
+            stderr=stderr or "(cancelled - no output)",
+            task_id=task_id
+        )
+        task_info["output_file"] = output_file_path
+
+        return json.dumps({
+            "status": "success",
+            "message": f"Task cancelled successfully via {termination_method}",
+            "task_id": task_id,
+            "cancelled": True,
+            "task_summary": task_info["task"][:100] + ("..." if len(task_info["task"]) > 100 else ""),
+            "working_directory": task_info["cwd"],
+            "elapsed_seconds": round(elapsed, 2),
+            "termination_method": termination_method,
+            "reason": reason or "Manual cancellation by user",
+            "output_file": output_file_path,
+            "timestamp": datetime.now().isoformat()
+        }, indent=2)
+
+    except Exception as e:
+        import traceback
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "task_id": task_id,
+            "cancelled": False
+        }, indent=2)
+
+
+@mcp.tool()
+def stream_delegation_output(
+    task_id: str,
+    lines: int = 50,
+    include_phase_info: bool = True,
+    filter_pattern: Optional[str] = None
+) -> str:
+    """
+    Stream raw, real-time output from a running or completed delegation task.
+
+    This shows the UGLY, UNFILTERED stream of what's happening:
+    - Raw stdout/stderr from the claude process
+    - LLM responses and tool calls
+    - Phase transitions (if include_phase_info=True)
+    - Agent switches and orchestrator decisions
+    - Errors and warnings as they happen
+
+    This is a diagnostic tool - the output may be hard to read but shows
+    exactly what's happening in real-time.
+
+    Args:
+        task_id: The task ID to stream output from
+        lines: Number of recent lines to show (default: 50, like tail -n 50)
+        include_phase_info: Whether to prepend current phase information (default: True)
+        filter_pattern: Optional regex pattern to filter lines (only matching lines shown)
+
+    Returns:
+        JSON string with streaming output and metadata
+
+    Examples:
+        # Show last 50 lines of output
+        stream = stream_delegation_output("abc-123-def-456")
+
+        # Show last 100 lines
+        stream = stream_delegation_output("abc-123-def-456", lines=100)
+
+        # Filter for errors only
+        stream = stream_delegation_output("abc-123-def-456", filter_pattern="error|ERROR|failed")
+
+        # Just raw output, no phase info
+        stream = stream_delegation_output("abc-123-def-456", include_phase_info=False)
+    """
+    try:
+        import re
+
+        # Check if task exists
+        if task_id not in active_tasks:
+            return json.dumps({
+                "status": "error",
+                "error": f"Task ID '{task_id}' not found",
+                "message": "Use list_delegations() to see active tasks",
+                "task_id": task_id
+            }, indent=2)
+
+        task_info = active_tasks[task_id]
+        process = task_info["process"]
+
+        # Check process status
+        poll_result = process.poll()
+        is_running = poll_result is None
+
+        elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
+
+        # Read current output from process
+        # For running processes, we need to read without blocking
+        # For completed processes, we can read all available output
+        stdout_data = ""
+        stderr_data = ""
+
+        try:
+            if is_running:
+                # For running process, read what's available without blocking
+                # This is tricky - we can't use non-blocking reads easily
+                # Instead, we'll check if we've already captured output
+                if task_info.get("stdout"):
+                    stdout_data = task_info["stdout"]
+                if task_info.get("stderr"):
+                    stderr_data = task_info["stderr"]
+
+                # Try to read more (this might block briefly)
+                # We'll use a small buffer approach
+                try:
+                    import select
+                    # Check if there's data available (Unix-only)
+                    if process.stdout and hasattr(select, 'select'):
+                        readable, _, _ = select.select([process.stdout], [], [], 0.1)
+                        if readable:
+                            # Read available data
+                            new_data = process.stdout.read(8192)  # Read up to 8KB
+                            if new_data:
+                                stdout_data += new_data
+                                task_info["stdout"] = stdout_data
+
+                    if process.stderr and hasattr(select, 'select'):
+                        readable, _, _ = select.select([process.stderr], [], [], 0.1)
+                        if readable:
+                            new_data = process.stderr.read(8192)
+                            if new_data:
+                                stderr_data += new_data
+                                task_info["stderr"] = stderr_data
+                except:
+                    # If select doesn't work (Windows or other issues), use stored data
+                    pass
+            else:
+                # Process completed - read all output
+                if task_info.get("stdout"):
+                    stdout_data = task_info["stdout"]
+                else:
+                    try:
+                        stdout_data = process.stdout.read() if process.stdout else ""
+                        task_info["stdout"] = stdout_data
+                    except:
+                        stdout_data = "(could not read stdout)"
+
+                if task_info.get("stderr"):
+                    stderr_data = task_info["stderr"]
+                else:
+                    try:
+                        stderr_data = process.stderr.read() if process.stderr else ""
+                        task_info["stderr"] = stderr_data
+                    except:
+                        stderr_data = "(could not read stderr)"
+        except Exception as read_error:
+            stdout_data = f"(error reading output: {read_error})"
+            stderr_data = ""
+
+        # Combine stdout and stderr
+        combined_output = ""
+        if stdout_data:
+            combined_output += f"=== STDOUT ===\n{stdout_data}\n\n"
+        if stderr_data:
+            combined_output += f"=== STDERR ===\n{stderr_data}\n\n"
+
+        if not combined_output:
+            combined_output = "(no output yet)\n"
+
+        # Split into lines
+        all_lines = combined_output.split('\n')
+
+        # Apply filter if specified
+        if filter_pattern:
+            try:
+                pattern = re.compile(filter_pattern, re.IGNORECASE)
+                filtered_lines = [line for line in all_lines if pattern.search(line)]
+                display_lines = filtered_lines
+                filter_info = f"Filtered by pattern '{filter_pattern}': {len(filtered_lines)} / {len(all_lines)} lines matched"
+            except re.error as e:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Invalid regex pattern: {str(e)}",
+                    "task_id": task_id
+                }, indent=2)
+        else:
+            display_lines = all_lines
+            filter_info = None
+
+        # Get last N lines
+        if len(display_lines) > lines:
+            shown_lines = display_lines[-lines:]
+            truncated = True
+            hidden_lines = len(display_lines) - lines
+        else:
+            shown_lines = display_lines
+            truncated = False
+            hidden_lines = 0
+
+        output_text = '\n'.join(shown_lines)
+
+        # Get phase information if requested
+        phase_info = {}
+        if include_phase_info:
+            try:
+                phase_data = _read_phase_info(task_info["cwd"], task_info["start_time"])
+                if phase_data:
+                    phase_info = {
+                        "current_phase": phase_data.get("current_phase", "Unknown"),
+                        "phase_number": phase_data.get("phase_number", "?/7"),
+                        "status": phase_data.get("status", "unknown"),
+                        "progress_detail": phase_data.get("progress_detail", ""),
+                        "test_iteration": phase_data.get("test_iteration", 0),
+                        "phases_completed": phase_data.get("phases_completed", [])
+                    }
+            except:
+                phase_info = {"error": "Could not read phase info"}
+
+        # Build response
+        response = {
+            "status": "success",
+            "task_id": task_id,
+            "task_summary": task_info["task"][:80] + ("..." if len(task_info["task"]) > 80 else ""),
+            "working_directory": task_info["cwd"],
+            "is_running": is_running,
+            "elapsed_seconds": round(elapsed, 2),
+            "output_info": {
+                "total_lines": len(all_lines),
+                "shown_lines": len(shown_lines),
+                "hidden_lines": hidden_lines,
+                "truncated": truncated,
+                "filter_applied": filter_pattern is not None,
+                "filter_info": filter_info
+            },
+            "raw_output": output_text,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        if include_phase_info and phase_info:
+            response["phase_info"] = phase_info
+
+        # Add helpful hints
+        if is_running:
+            response["hint"] = "Task is still running. Call this tool again to see new output."
+        else:
+            response["hint"] = f"Task completed with exit code {poll_result}. Use get_delegation_result('{task_id}') for full results."
+
+        return json.dumps(response, indent=2)
+
+    except Exception as e:
+        import traceback
+        return json.dumps({
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+            "task_id": task_id
         }, indent=2)
 
 
@@ -2139,6 +2500,8 @@ if __name__ == "__main__":
     print("   - delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)", file=sys.stderr)
     print("   - get_delegation_result: Check status and get results of async tasks", file=sys.stderr)
     print("   - list_delegations: List all active and completed async tasks", file=sys.stderr)
+    print("   - cancel_delegation: Manually cancel/kill a running task", file=sys.stderr)
+    print("   - stream_delegation_output: Stream raw real-time output from running tasks", file=sys.stderr)
     print("   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy (runs in background)", file=sys.stderr)
     print("   - read_global_patterns: Read patterns from global pattern storage", file=sys.stderr)
     print("   - save_global_patterns: Save patterns to global pattern storage", file=sys.stderr)
