@@ -1,48 +1,69 @@
 {
   "parallel_mode": true,
-  "total_tasks": 6,
+  "total_tasks": 9,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Create cached_prompt_builder.py module",
-      "files": ["tools/prompts/cached_prompt_builder.py"],
+      "description": "Create incremental directory and implement global_scout_cache.py",
+      "files": ["tools/incremental/__init__.py", "tools/incremental/global_scout_cache.py"],
       "dependencies": [],
-      "estimated_time": "20 minutes"
+      "estimated_time": "30 minutes"
     },
     {
       "id": "task-2",
-      "description": "Create cache_config.json and CacheConfig class",
-      "files": ["tools/prompts/cache_config.json", "tools/prompts/__init__.py"],
+      "description": "Implement change_detector.py with git+hash detection",
+      "files": ["tools/incremental/change_detector.py"],
       "dependencies": [],
-      "estimated_time": "10 minutes"
+      "estimated_time": "30 minutes"
     },
     {
       "id": "task-3",
-      "description": "Create cache_analysis.py tool",
-      "files": ["tools/prompts/cache_analysis.py"],
+      "description": "Implement incremental_builder.py with dependency graph",
+      "files": ["tools/incremental/incremental_builder.py"],
       "dependencies": [],
-      "estimated_time": "15 minutes"
+      "estimated_time": "40 minutes"
     },
     {
       "id": "task-4",
-      "description": "Modify orchestrator_prompt.txt with cache boundary marker",
-      "files": ["tools/orchestrator_prompt.txt"],
+      "description": "Implement test_impact_analyzer.py with coverage mapping",
+      "files": ["tools/incremental/test_impact_analyzer.py"],
       "dependencies": [],
-      "estimated_time": "5 minutes"
+      "estimated_time": "30 minutes"
     },
     {
       "id": "task-5",
-      "description": "Integrate cached prompts into mcp_server.py",
-      "files": ["tools/mcp_server.py"],
-      "dependencies": ["task-1", "task-2"],
-      "estimated_time": "15 minutes"
+      "description": "Implement incremental_docs.py with manifest tracking",
+      "files": ["tools/incremental/incremental_docs.py"],
+      "dependencies": [],
+      "estimated_time": "25 minutes"
     },
     {
       "id": "task-6",
-      "description": "Create unit and integration tests",
-      "files": ["tests/test_cached_prompt_builder.py", "tests/test_cache_integration.py"],
-      "dependencies": ["task-1", "task-2"],
+      "description": "Update cache __init__ and cache_manager for Phase 2",
+      "files": ["tools/cache/__init__.py", "tools/cache/cache_manager.py"],
+      "dependencies": ["task-1", "task-2", "task-3", "task-4", "task-5"],
       "estimated_time": "20 minutes"
+    },
+    {
+      "id": "task-7",
+      "description": "Write comprehensive unit tests for all Phase 2 modules",
+      "files": ["tests/test_global_scout_cache.py", "tests/test_change_detector.py", "tests/test_incremental_builder.py", "tests/test_test_impact_analyzer.py", "tests/test_incremental_docs.py"],
+      "dependencies": ["task-1", "task-2", "task-3", "task-4", "task-5"],
+      "estimated_time": "60 minutes"
+    },
+    {
+      "id": "task-8",
+      "description": "Update configuration and orchestrator prompt",
+      "files": [".env.example", "tools/orchestrator_prompt.txt"],
+      "dependencies": ["task-6"],
+      "estimated_time": "30 minutes"
+    },
+    {
+      "id": "task-9",
+      "description": "Update documentation (ROADMAP, merge Phase 1+2 docs, benchmarks)",
+      "files": ["ROADMAP.md", "docs/INCREMENTAL_BUILDS.md", "docs/INCREMENTAL_BUILDS_BENCHMARKS.md"],
+      "dependencies": ["task-7", "task-8"],
+      "estimated_time": "40 minutes"
     }
   ]
 }
