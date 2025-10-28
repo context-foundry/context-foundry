@@ -1,7 +1,7 @@
 {
   "$schema": "Pattern Library for Common Issues",
-  "version": "1.0.0",
-  "last_updated": "2025-10-26T06:15:00Z",
+  "version": "1.1.0",
+  "last_updated": "2025-10-28T17:45:00Z",
   "description": "Common issues encountered across builds with proven solutions",
 
   "patterns": [
@@ -240,14 +240,330 @@
           "evidence": ".context-foundry/runtime-testing-satoshi-chore-tracker.md"
         }
       ]
+    },
+    {
+      "pattern_id": "aws-lambda-inline-handler-mismatch",
+      "title": "AWS CDK Inline Lambda Handler Name Mismatch",
+      "first_seen": "2025-10-28",
+      "last_seen": "2025-10-28",
+      "frequency": 1,
+      "times_prevented": 0,
+      "severity": "HIGH",
+      "project_types": ["aws-cdk", "serverless", "lambda-functions", "infrastructure-as-code", "bedrock-agent"],
+      "tech_stack": ["aws-cdk", "typescript", "python", "lambda", "cloudformation"],
+
+      "issue": {
+        "description": "CDK Lambda function created with inline code uses filename 'index.py' but handler configuration specifies 'handler.lambda_handler', causing ImportModuleError",
+        "error_message": "Runtime.ImportModuleError: Unable to import module 'handler': No module named 'handler'",
+        "symptoms": [
+          "Lambda returns 'Internal server error' on invocation",
+          "CloudWatch logs show: Unable to import module 'handler'",
+          "Function handler configured as 'handler.lambda_handler' but code is in 'index.py'",
+          "CDK deployment succeeds but function fails at runtime",
+          "Issue not caught during CDK synth or deploy phases"
+        ],
+        "detected_in_phase": "Runtime testing (API invocation)",
+        "should_detect_in_phase": "Builder (during Lambda function creation)"
+      },
+
+      "root_cause": "When using lambda.Code.fromInline() in AWS CDK, the code is packaged into a file named 'index.py' by default, but the handler property must be updated to match ('index.lambda_handler' instead of 'handler.lambda_handler'). This mismatch is not detected during CDK synthesis or deployment.",
+
+      "solution": {
+        "scout": {
+          "action": "Identify AWS Lambda deployments and flag inline code handler risks",
+          "check": "If project uses AWS CDK with Lambda functions, warn about handler naming conventions",
+          "recommendation": "Always use lambda.Code.fromAsset() for production or ensure handler matches inline code filename"
+        },
+        "architect": {
+          "action": "Design Lambda functions with correct handler configuration",
+          "specifics": [
+            "For inline code: handler must be 'index.lambda_handler'",
+            "For asset code: handler should match actual filename (e.g., 'handler.lambda_handler' if file is handler.py)",
+            "Document handler naming convention in architecture",
+            "Consider using separate Lambda directory structure instead of inline code for complex functions"
+          ],
+          "example": {
+            "correct_inline": "new lambda.Function(this, 'MyFunction', { handler: 'index.lambda_handler', code: lambda.Code.fromInline('...') })",
+            "correct_asset": "new lambda.Function(this, 'MyFunction', { handler: 'handler.lambda_handler', code: lambda.Code.fromAsset('lambda/my-function') })"
+          }
+        },
+        "builder": {
+          "action": "Create Lambda functions with matching handler configuration",
+          "implementation_details": {
+            "inline_code": "Always use handler: 'index.lambda_handler' for Code.fromInline()",
+            "asset_code": "Match handler to actual Python filename in directory",
+            "verification": "Add comment explaining handler naming convention"
+          },
+          "fix_for_existing": "Update handler to 'index.lambda_handler' using: aws lambda update-function-configuration --function-name <name> --handler index.lambda_handler"
+        },
+        "test": {
+          "action": "Verify Lambda functions can be invoked successfully",
+          "tests": [
+            "Deploy Lambda function to AWS",
+            "Invoke function with test payload: aws lambda invoke --function-name <name> out.json",
+            "Check for ImportModuleError in CloudWatch logs",
+            "Test via API Gateway or other trigger if applicable"
+          ],
+          "validation_script": "aws logs tail /aws/lambda/<function-name> --since 5m | grep -i 'ImportModuleError'"
+        }
+      },
+
+      "prevention": {
+        "auto_apply": true,
+        "conditions": [
+          "project_type includes 'aws-cdk' OR 'lambda' OR 'serverless'",
+          "uses lambda.Code.fromInline()"
+        ],
+        "actions": [
+          "Scout: Warn about handler naming in scout-report.md",
+          "Architect: Document handler naming convention",
+          "Builder: Use 'index.lambda_handler' for all inline Lambda code",
+          "Test: Add Lambda invocation test to verify import success"
+        ]
+      },
+
+      "impact": "Critical - Lambda function completely non-functional. All API endpoints return 500 errors. Zero functionality until fixed.",
+
+      "fix_time_estimate": "2-5 minutes (simple config update)",
+
+      "aws_documentation": [
+        "https://docs.aws.amazon.com/lambda/latest/dg/python-handler.html",
+        "https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda.Function.html"
+      ],
+
+      "detection_history": [
+        {
+          "project": "bedrock-agentic-builder",
+          "date": "2025-10-28",
+          "detected_by": "API testing - 500 errors",
+          "fix_applied": "aws lambda update-function-configuration --handler index.lambda_handler",
+          "result": "Function immediately operational",
+          "root_cause_analysis": "CDK creates index.py from inline code but handler was set to handler.lambda_handler"
+        }
+      ]
+    },
+    {
+      "pattern_id": "api-gateway-path-routing-precedence",
+      "title": "API Gateway Path Routing Logic Precedence Issue",
+      "first_seen": "2025-10-28",
+      "last_seen": "2025-10-28",
+      "frequency": 1,
+      "times_prevented": 0,
+      "severity": "MEDIUM",
+      "project_types": ["api-gateway", "rest-api", "serverless", "aws-lambda", "microservices"],
+      "tech_stack": ["aws-lambda", "python", "api-gateway", "rest-api"],
+
+      "issue": {
+        "description": "Lambda function routing logic checks generic path patterns (startsWith) before specific paths, causing specific endpoints to return 404",
+        "error_message": "{'error': 'Not found'}",
+        "symptoms": [
+          "GET /builds returns 404 'Not found'",
+          "GET /build/{id} works correctly",
+          "Path logic checks '/build/' before '/builds'",
+          "Specific paths are never reached due to greedy pattern matching",
+          "Issue only affects certain path combinations"
+        ],
+        "detected_in_phase": "API testing",
+        "should_detect_in_phase": "Builder (during Lambda handler implementation)"
+      },
+
+      "root_cause": "Lambda handler routing logic uses if/elif chain that checks generic patterns (path.startswith('/build/')) before specific exact matches (path == '/builds'). The generic pattern matches first and the specific path is never evaluated.",
+
+      "solution": {
+        "scout": {
+          "action": "Identify REST API implementations and flag routing complexity",
+          "check": "If project involves API Gateway with multiple endpoints, warn about routing precedence",
+          "recommendation": "Design API paths to avoid ambiguous patterns (e.g., use /build/list instead of /builds if /build/{id} exists)"
+        },
+        "architect": {
+          "action": "Design API path structure with clear precedence",
+          "specifics": [
+            "Document routing precedence: exact matches first, then pattern matches",
+            "Avoid overlapping path patterns (e.g., /builds vs /build/)",
+            "Consider RESTful alternatives: /build?action=list instead of /builds",
+            "Plan for Lambda proxy integration routing logic"
+          ],
+          "best_practices": [
+            "Check exact matches before startsWith patterns",
+            "Order if/elif from most specific to least specific",
+            "Document routing logic in architecture"
+          ]
+        },
+        "builder": {
+          "action": "Implement routing logic with correct precedence",
+          "implementation_details": {
+            "correct_order": "1. Exact path matches (path == '/builds'), 2. Pattern matches (path.startswith('/build/'))",
+            "example_code": "if path == '/builds' and method == 'GET': return list_builds()\nelif path.startswith('/build/') and method == 'GET': return get_build()"
+          },
+          "anti_pattern": "if path.startswith('/build/'): ...\nelif path == '/builds': ... # Never reached!"
+        },
+        "test": {
+          "action": "Test all API endpoints including edge cases",
+          "tests": [
+            "Test exact path matches: GET /builds",
+            "Test pattern matches: GET /build/123",
+            "Test similar paths: /build, /builds, /build/",
+            "Verify routing logic order in code review",
+            "Add integration tests for all endpoints"
+          ]
+        }
+      },
+
+      "prevention": {
+        "auto_apply": true,
+        "conditions": [
+          "project uses API Gateway with Lambda proxy integration",
+          "multiple endpoints with similar path patterns"
+        ],
+        "actions": [
+          "Architect: Document routing precedence rules",
+          "Builder: Always check exact matches before patterns",
+          "Test: Add comprehensive endpoint testing"
+        ]
+      },
+
+      "impact": "Medium - Specific endpoints non-functional, but workarounds exist. Affects user experience but not catastrophic.",
+
+      "fix_time_estimate": "5-10 minutes (reorder if/elif statements and redeploy)",
+
+      "code_example": {
+        "before": "if path.startswith('/build/') and method == 'GET':\n    return handle_build()\nelif path == '/builds' and method == 'GET':\n    return list_builds()  # Never reached!",
+        "after": "if path == '/builds' and method == 'GET':\n    return list_builds()\nelif path.startswith('/build/') and method == 'GET':\n    return handle_build()"
+      },
+
+      "detection_history": [
+        {
+          "project": "bedrock-agentic-builder",
+          "date": "2025-10-28",
+          "detected_by": "API endpoint testing",
+          "fix_applied": "Reordered if/elif to check '/builds' before '/build/'",
+          "result": "All endpoints functional",
+          "evidence": "CDK stack redeployment with corrected routing logic"
+        }
+      ]
+    },
+    {
+      "pattern_id": "bedrock-agent-collaboration-mode",
+      "title": "AWS Bedrock Agent Defaults to SUPERVISOR Collaboration Mode",
+      "first_seen": "2025-10-28",
+      "last_seen": "2025-10-28",
+      "frequency": 1,
+      "times_prevented": 0,
+      "severity": "HIGH",
+      "project_types": ["aws-bedrock", "bedrock-agent", "ai-agents", "multi-agent-systems", "generative-ai"],
+      "tech_stack": ["aws-bedrock", "bedrock-agents", "action-groups", "lambda"],
+
+      "issue": {
+        "description": "Bedrock Agent cannot be prepared because AgentCollaboration is set to SUPERVISOR mode but no collaborators are configured",
+        "error_message": "ValidationException: This agent cannot be prepared. The AgentCollaboration attribute is set to SUPERVISOR but no agent collaborators are added.",
+        "symptoms": [
+          "Agent creation succeeds but 'Prepare' button fails",
+          "Error mentions SUPERVISOR mode and missing collaborators",
+          "Agent status stuck at NOT_PREPARED",
+          "Cannot create aliases until agent is prepared",
+          "Issue occurs even for single-agent configurations"
+        ],
+        "detected_in_phase": "Agent preparation in AWS Console",
+        "should_detect_in_phase": "Scout/Architect (during agent architecture design)"
+      },
+
+      "root_cause": "AWS Bedrock Agent console may default to SUPERVISOR collaboration mode (multi-agent orchestration) even when user wants a single agent with action groups. SUPERVISOR mode requires defining sub-agents, but standard single-agent use cases should have collaboration disabled.",
+
+      "solution": {
+        "scout": {
+          "action": "Clarify agent architecture: single agent vs multi-agent collaboration",
+          "questions": [
+            "Will this be a single agent with action groups, or a supervisor orchestrating multiple agents?",
+            "Do you need multi-agent collaboration features?",
+            "Is this a standard agent workflow or complex agent orchestration?"
+          ],
+          "recommendation": "Default to single-agent with action groups unless explicitly multi-agent"
+        },
+        "architect": {
+          "action": "Design agent collaboration architecture clearly",
+          "specifics": [
+            "Document: Single agent with N action groups (most common)",
+            "OR: Supervisor agent coordinating N sub-agents (advanced)",
+            "Specify collaboration mode: DISABLED for single agent, SUPERVISOR for multi-agent",
+            "Note: CDK cannot fully configure Bedrock Agents, manual console setup required"
+          ],
+          "agent_types": {
+            "single_agent_action_groups": "Collaboration: DISABLED. Agent directly invokes Lambda action groups.",
+            "multi_agent_supervisor": "Collaboration: SUPERVISOR. Agent delegates to sub-agents."
+          }
+        },
+        "builder": {
+          "action": "Document manual Bedrock Agent setup steps",
+          "manual_steps": [
+            "Create agent in Bedrock console",
+            "Configure action groups (Scout, Architect, Builder, Tester)",
+            "Check agent collaboration settings",
+            "If SUPERVISOR mode is set, disable it: Edit Agent → Agent Collaboration → Disable",
+            "Prepare agent",
+            "Create alias (e.g., 'prod')",
+            "Save Agent ID and Alias ID for Lambda configuration"
+          ],
+          "note": "CDK L2 constructs for Bedrock Agents are limited. Use L1 CfnAgent if available, otherwise manual setup required."
+        },
+        "test": {
+          "action": "Verify agent can be prepared and invoked",
+          "tests": [
+            "Agent status changes to PREPARED",
+            "Alias creation succeeds",
+            "Test agent in Bedrock console with sample prompts",
+            "Verify action groups are invoked correctly",
+            "Check Lambda logs for action group invocations"
+          ]
+        }
+      },
+
+      "prevention": {
+        "auto_apply": false,
+        "conditions": [
+          "project uses AWS Bedrock Agents",
+          "agent architecture includes action groups"
+        ],
+        "actions": [
+          "Scout: Clarify single vs multi-agent in requirements",
+          "Architect: Specify collaboration mode explicitly",
+          "Builder: Include agent setup checklist with collaboration mode step",
+          "Documentation: Add troubleshooting section for SUPERVISOR mode error"
+        ],
+        "manual_check_required": true,
+        "reason": "Bedrock Agent configuration is primarily manual in AWS Console. Auto-detection not feasible."
+      },
+
+      "impact": "High - Blocks agent deployment. Cannot test or use agent until resolved. Causes deployment delays.",
+
+      "fix_time_estimate": "2-5 minutes (disable collaboration mode in console)",
+
+      "aws_documentation": [
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html",
+        "https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html"
+      ],
+
+      "workaround": "Edit agent in Bedrock console → Find Agent Collaboration or Multi-Agent Collaboration section → Disable/turn off collaboration → Save → Prepare agent",
+
+      "detection_history": [
+        {
+          "project": "bedrock-agentic-builder",
+          "date": "2025-10-28",
+          "detected_by": "Manual agent preparation in AWS Console",
+          "fix_applied": "Disabled agent collaboration mode in console settings",
+          "result": "Agent prepared successfully, alias created",
+          "notes": "Agent had 4 action groups (Scout, Architect, Builder, Tester) but collaboration mode was enabled by default"
+        }
+      ],
+
+      "additional_notes": "This is a UX issue in AWS Bedrock console. The default behavior may change over time. Always verify collaboration settings match intended architecture (single-agent vs multi-agent)."
     }
   ],
 
   "statistics": {
-    "total_patterns": 2,
-    "high_severity": 2,
-    "medium_severity": 0,
+    "total_patterns": 5,
+    "high_severity": 4,
+    "medium_severity": 1,
     "low_severity": 0,
-    "auto_apply_enabled": 1
+    "auto_apply_enabled": 3
   }
 }
