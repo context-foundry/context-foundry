@@ -163,18 +163,18 @@ jobs:
         run: |
           git add .context-foundry/patterns/*.json
           git commit -m "$(cat <<'EOF'
-chore: sync community patterns - ${{ steps.metadata.outputs.date }}
+          chore: sync community patterns - ${{ steps.metadata.outputs.date }}
 
-Automated pattern sync from daily builds.
+          Automated pattern sync from daily builds.
 
-Statistics:
-- Common Issue Patterns: ${{ steps.stats.outputs.pattern_count }}
-- Scout Learnings: ${{ steps.stats.outputs.learning_count }}
-- Total Builds: ${{ steps.stats.outputs.total_builds }}
+          Statistics:
+          - Common Issue Patterns: ${{ steps.stats.outputs.pattern_count }}
+          - Scout Learnings: ${{ steps.stats.outputs.learning_count }}
+          - Total Builds: ${{ steps.stats.outputs.total_builds }}
 
-Last Updated: ${{ steps.metadata.outputs.timestamp }}
-EOF
-)"
+          Last Updated: ${{ steps.metadata.outputs.timestamp }}
+          EOF
+          )"
 
       - name: Push branch
         if: steps.check_changes.outputs.has_changes == 'true'
@@ -187,37 +187,40 @@ EOF
         if: steps.check_changes.outputs.has_changes == 'true'
         id: create_pr
         run: |
-          PR_BODY="## 🔄 Automated Pattern Sync - ${{ steps.metadata.outputs.date }}
+          PR_BODY=$(cat <<'EOF'
+          ## 🔄 Automated Pattern Sync - ${{ steps.metadata.outputs.date }}
 
-This PR contains automated pattern updates from daily builds.
+          This PR contains automated pattern updates from daily builds.
 
-### 📊 Pattern Statistics
-- **Common Issue Patterns**: ${{ steps.stats.outputs.pattern_count }}
-- **Scout Learnings**: ${{ steps.stats.outputs.learning_count }}
-- **Total Builds Analyzed**: ${{ steps.stats.outputs.total_builds }}
+          ### 📊 Pattern Statistics
+          - **Common Issue Patterns**: ${{ steps.stats.outputs.pattern_count }}
+          - **Scout Learnings**: ${{ steps.stats.outputs.learning_count }}
+          - **Total Builds Analyzed**: ${{ steps.stats.outputs.total_builds }}
 
-### ⏰ Sync Information
-- **Sync Date**: ${{ steps.metadata.outputs.timestamp }}
-- **Sync Tag**: \`${{ steps.metadata.outputs.sync_tag }}\`
+          ### ⏰ Sync Information
+          - **Sync Date**: ${{ steps.metadata.outputs.timestamp }}
+          - **Sync Tag**: \`${{ steps.metadata.outputs.sync_tag }}\`
 
-### 🔍 What's Included
-This PR syncs the global pattern library with learnings from recent builds:
-- Common issues encountered and their solutions
-- Scout agent learnings about codebase patterns
-- Updated frequency and severity data
+          ### 🔍 What's Included
+          This PR syncs the global pattern library with learnings from recent builds:
+          - Common issues encountered and their solutions
+          - Scout agent learnings about codebase patterns
+          - Updated frequency and severity data
 
-### ✅ Validation
-All patterns have been validated for:
-- Valid JSON syntax
-- No duplicate IDs
-- Required fields present
-- Proper severity levels
+          ### ✅ Validation
+          All patterns have been validated for:
+          - Valid JSON syntax
+          - No duplicate IDs
+          - Required fields present
+          - Proper severity levels
 
----
+          ---
 
-**This PR will be automatically merged after validation passes.**
+          **This PR will be automatically merged after validation passes.**
 
-Thank you for contributing to the Context Foundry pattern library! 🙏"
+          Thank you for contributing to the Context Foundry pattern library! 🙏
+          EOF
+          )
 
           # Create PR
           gh pr create \
