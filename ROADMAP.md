@@ -179,6 +179,467 @@ foundry enhance-multi "Add authentication" \
 
 **Estimated Completion:** Q4 2025
 
+---
+
+## 🔬 Foundation Sentinel Enhancements (Agent Feedback Analysis)
+
+**Status:** Under Review (January 2025)
+
+**Context:** External agent feedback proposed AWS Lambda/DynamoDB-based enhancements. This section documents what makes sense for Context Foundry's CLI-based architecture vs. what doesn't.
+
+### ⚠️ **Architecture Mismatch Analysis**
+
+The feedback assumed an **AWS serverless architecture** (Lambda, Step Functions, DynamoDB, CloudWatch), but Context Foundry is:
+- A **CLI-based tool** using Claude Code CLI
+- Uses **stateless conversation architecture** with file-based state
+- Runs **locally or in GitHub Actions**, not on AWS infrastructure
+
+**Key Insight:** We need to adapt the feedback to our architecture, not adopt AWS-specific solutions.
+
+---
+
+### ✅ **HIGH PRIORITY: Immediate Implementation**
+
+#### 1. Pattern-Aware Self-Healing Loop
+**What:** Wire existing pattern library into Tester/Architect agents during failures
+
+**Why:** We're already collecting patterns in `.context-foundry/patterns/common-issues.json` but not actively using them during builds. This is low-hanging fruit with high impact.
+
+**Implementation:**
+- Modify Tester agent prompt to load matching patterns when tests fail
+- Feed pattern matches to Architect with targeted remediation guidance
+- Update orchestrator to pass pattern context between agents
+- Add pattern matching logic based on error fingerprints
+
+**Technical Details:**
+```python
+# In lambda/tester/handler.py (or equivalent):
+def get_relevant_patterns(test_output):
+    """Load patterns matching current failure"""
+    patterns = load_patterns('.context-foundry/patterns/common-issues.json')
+    matches = [p for p in patterns if p['fingerprint'] in test_output]
+    return matches
+
+# Inject into Architect prompt:
+"""
+Previous failures with similar patterns:
+{matched_patterns}
+
+Recommended approaches:
+{pattern_solutions}
+"""
+```
+
+**Expected Impact:**
+- Faster iteration on known issues
+- Reduced token usage (targeted fixes vs. trial-and-error)
+- Self-improving system (patterns accumulate over time)
+
+**Estimated Effort:** 2-3 days
+**Priority:** ⭐⭐⭐⭐⭐ (Critical - unlocks pattern library value)
+
+---
+
+#### 2. Smart Log Summarization & Context Reduction
+**What:** Pre-process logs/test output before feeding to agents to reduce token usage by 60-80%
+
+**Why:** Context Foundry struggles with token usage. Smart filtering delivers immediate savings.
+
+**Implementation:**
+- Add pre-processing step before agent prompts
+- Extract only: error messages, stack traces, failed test names, relevant lines
+- Filter out: verbose logging, successful tests, build boilerplate
+- Use structured extraction (regex, AST parsing for Python tracebacks)
+- Save full logs to file, pass summary to agent
+
+**Technical Details:**
+```python
+# tools/log_summarizer.py
+def summarize_test_output(full_output):
+    """Extract only relevant failure info"""
+    summary = {
+        'failed_tests': extract_failed_tests(full_output),
+        'error_messages': extract_errors(full_output),
+        'stack_traces': extract_stack_traces(full_output, max_depth=5),
+        'relevant_code': extract_code_context(full_output)
+    }
+
+    # Full output saved to .context-foundry/logs/test-output.txt
+    # Summary (10-20% of original) passed to agent
+    return summary
+```
+
+**Expected Impact:**
+- 60-80% reduction in token usage for test failures
+- Faster agent responses (less to process)
+- More targeted fixes (noise filtered out)
+
+**Estimated Effort:** 3-4 days
+**Priority:** ⭐⭐⭐⭐⭐ (Critical - immediate cost savings)
+
+---
+
+#### 3. Pre-Flight Code Validation (Guardrails)
+**What:** Validate generated code BEFORE execution to catch obvious mistakes early
+
+**Why:** Saves expensive test iterations on trivial errors (missing imports, syntax errors, markdown artifacts)
+
+**Implementation:**
+- Add validation step in Builder agent output processing
+- AST parsing for syntax errors (Python: `ast.parse`, JS: esprima/acorn)
+- Import validation (check all imports exist in dependencies)
+- Markdown fence detection (catch ```python artifacts)
+- Static analysis (pylint, ruff for Python; eslint for JS)
+- Fail fast with clear error message to re-prompt Builder
+
+**Technical Details:**
+```python
+# tools/code_validator.py
+def validate_generated_code(file_path, language):
+    """Pre-flight checks before execution"""
+    issues = []
+
+    # 1. Syntax check
+    if language == 'python':
+        try:
+            ast.parse(open(file_path).read())
+        except SyntaxError as e:
+            issues.append(f"Syntax error: {e}")
+
+    # 2. Import validation
+    missing_imports = check_imports(file_path, language)
+    if missing_imports:
+        issues.append(f"Missing imports: {missing_imports}")
+
+    # 3. Markdown artifacts
+    if has_markdown_fences(file_path):
+        issues.append("Code contains markdown fences (```)")
+
+    # 4. Static analysis
+    static_issues = run_linter(file_path, language)
+    issues.extend(static_issues[:5])  # Top 5 only
+
+    return issues
+
+# In Builder output processing:
+issues = validate_generated_code(file_path, language)
+if issues:
+    return {
+        'status': 'validation_failed',
+        'issues': issues,
+        'action': 're-prompt Builder with specific fixes'
+    }
+```
+
+**Expected Impact:**
+- Catch 40-60% of common errors before test execution
+- Faster iteration (skip expensive test runs)
+- Better code quality (enforce standards early)
+
+**Estimated Effort:** 4-5 days
+**Priority:** ⭐⭐⭐⭐⭐ (Critical - prevents wasted iterations)
+
+---
+
+### ✅ **MEDIUM PRIORITY: Short-Term (Next Sprint)**
+
+#### 4. Automated GitHub Issue Creation on Build Failures
+**What:** File GitHub issue automatically when builds fail after max iterations
+
+**Why:** Tracks failures, enables manual review, creates accountability
+
+**Implementation:**
+- Hook into build completion (success/failure status)
+- On failure after max iterations, create GitHub issue
+- Include: build ID, task description, pattern matches, test summary, log links
+- Label: `build-failure`, `needs-triage`, `context-foundry`
+- Assign to repository owner or team
+
+**Technical Details:**
+```bash
+# In orchestrator or GitHub Agent:
+gh issue create \
+  --title "Build Failed: ${TASK_SUMMARY}" \
+  --body "$(cat <<EOF
+## Build Failure Report
+
+**Build ID:** ${BUILD_ID}
+**Task:** ${TASK}
+**Mode:** ${MODE}
+**Iterations:** ${ITERATION_COUNT}/${MAX_ITERATIONS}
+
+### Failure Summary
+${FAILURE_SUMMARY}
+
+### Pattern Matches
+${MATCHED_PATTERNS}
+
+### Test Output (Last Iteration)
+\`\`\`
+${TEST_OUTPUT_SUMMARY}
+\`\`\`
+
+### Full Logs
+${LOG_FILE_PATH}
+
+### Next Steps
+- [ ] Review failure context
+- [ ] Check pattern library for similar issues
+- [ ] Manual fix or adjust task requirements
+- [ ] Update patterns with learnings
+
+---
+*Auto-generated by Context Foundry*
+EOF
+)" \
+  --label "build-failure,needs-triage,context-foundry"
+```
+
+**Expected Impact:**
+- Better failure tracking and accountability
+- Pattern identification (recurring issues surface)
+- Team collaboration on difficult builds
+
+**Estimated Effort:** 1-2 days
+**Priority:** ⭐⭐⭐⭐ (High value, easy to implement)
+
+---
+
+#### 5. CLI Command for Manual Context Injection
+**What:** Allow users to inject hints/context into running or failed builds
+
+**Why:** Sometimes the agent needs human guidance to unblock
+
+**Implementation:**
+```bash
+# New CLI commands:
+foundry inject-hint <build-id> "Try using asyncio instead of threading"
+foundry inject-context <build-id> --file ./hint.md
+foundry retry-with-hint <build-id> "Check the API documentation for rate limits"
+
+# Stored in:
+.context-foundry/builds/<build-id>/manual-context.json
+```
+
+**Technical Details:**
+```python
+# tools/mcp_server.py - new MCP tool
+def inject_build_context(build_id: str, hint: str, context_file: Optional[str] = None):
+    """Inject manual context into build for next iteration"""
+    context = {
+        'timestamp': datetime.now().isoformat(),
+        'hint': hint,
+        'context_file': context_file,
+        'source': 'manual'
+    }
+
+    # Save to build directory
+    context_path = f'.context-foundry/builds/{build_id}/manual-context.json'
+    save_json(context_path, context)
+
+    # Next Architect iteration reads this file
+    return {'status': 'injected', 'path': context_path}
+```
+
+**Expected Impact:**
+- Unblock difficult builds
+- Preserve human expertise
+- Hybrid AI-human workflow
+
+**Estimated Effort:** 2-3 days
+**Priority:** ⭐⭐⭐⭐ (High value for complex builds)
+
+---
+
+#### 6. Failure Fingerprinting & Classification
+**What:** Categorize failures into types (syntax, import, logic, timeout, etc.) for better pattern matching
+
+**Why:** Enables targeted remediation and better pattern library organization
+
+**Implementation:**
+```python
+# tools/failure_classifier.py
+def classify_failure(test_output, error_logs):
+    """Classify failure into categories"""
+    categories = []
+
+    # Pattern matching on error signatures
+    if 'ModuleNotFoundError' in error_logs:
+        categories.append('missing_dependency')
+    if 'SyntaxError' in error_logs:
+        categories.append('syntax_error')
+    if 'AssertionError' in test_output:
+        categories.append('test_assertion_failed')
+    if 'timeout' in test_output.lower():
+        categories.append('timeout')
+    if 'connection refused' in error_logs.lower():
+        categories.append('service_unavailable')
+
+    # Confidence scoring
+    confidence = calculate_confidence(categories, error_logs)
+
+    return {
+        'categories': categories,
+        'confidence': confidence,
+        'fingerprint': generate_fingerprint(error_logs)
+    }
+
+# Used by pattern matcher and Architect
+```
+
+**Expected Impact:**
+- Better pattern matching accuracy
+- Targeted remediation strategies
+- Organized pattern library
+
+**Estimated Effort:** 3-4 days
+**Priority:** ⭐⭐⭐⭐ (Enables better self-healing)
+
+---
+
+### ✅ **LOW PRIORITY: Long-Term (Nice to Have)**
+
+#### 7. Local Metrics Database (SQLite)
+**What:** Track build metrics, success rates, iteration counts, pattern effectiveness
+
+**Why:** Data-driven insights, identify regressions, measure improvements
+
+**Implementation:**
+```python
+# ~/.context-foundry/metrics.db (SQLite)
+# Tables: builds, iterations, patterns_used, failures
+
+# CLI commands:
+foundry metrics --last 30 days
+foundry metrics --pattern-effectiveness
+foundry metrics --success-rate-by-project-type
+```
+
+**Estimated Effort:** 5-7 days
+**Priority:** ⭐⭐⭐ (Good to have, not critical)
+
+---
+
+#### 8. Post-Incident Review Automation
+**What:** Auto-generate markdown postmortem after build failures
+
+**Why:** Enforce learning from failures, seed pattern library
+
+**Implementation:**
+```markdown
+# Auto-generated: .context-foundry/postmortems/build-<id>.md
+
+## Build Postmortem: <Task>
+
+**Date:** 2025-01-29
+**Build ID:** abc-123-def
+**Status:** Failed
+**Iterations:** 3/3
+
+### What Happened
+<AI-generated summary>
+
+### Root Cause
+<Classification and fingerprint>
+
+### Patterns Matched
+- Pattern #42: Async context manager issues
+
+### Lessons Learned
+<AI-extracted insights>
+
+### Action Items
+- [ ] Update pattern library with this case
+- [ ] Add guardrail for this error type
+- [ ] Document workaround
+
+---
+*Auto-generated by Context Foundry*
+```
+
+**Estimated Effort:** 3-4 days
+**Priority:** ⭐⭐⭐ (Good practice, not urgent)
+
+---
+
+#### 9. GitHub Actions Dashboard (Observability)
+**What:** Enhanced GitHub Actions summary pages with metrics, visualizations
+
+**Why:** Better visibility into build health, trends over time
+
+**Implementation:**
+- Use GitHub Actions `$GITHUB_STEP_SUMMARY` for rich output
+- Generate charts (success rate, iteration distribution)
+- Link to pattern library hits
+- Trend analysis over time
+
+**Estimated Effort:** 4-5 days
+**Priority:** ⭐⭐⭐ (Nice polish, not critical)
+
+---
+
+### ❌ **REJECTED: Wrong Architecture**
+
+These features assume AWS infrastructure and don't align with Context Foundry's CLI-based design:
+
+1. **DynamoDB persistence** - Use SQLite or enhanced JSON instead
+2. **Lambda handlers** - We're a CLI tool, not a serverless API
+3. **CloudWatch monitoring** - Use GitHub Actions artifacts or local logs
+4. **EventBridge triggers** - Use GitHub Actions workflows
+5. **Step Functions** - We use sequential agent orchestration
+6. **REST API endpoints** - CLI commands instead
+
+---
+
+### 📊 **Implementation Priority Summary**
+
+**Phase 1: Quick Wins (1-2 weeks)**
+1. ⭐⭐⭐⭐⭐ Pattern-aware self-healing
+2. ⭐⭐⭐⭐⭐ Smart log summarization
+3. ⭐⭐⭐⭐⭐ Pre-flight validation
+
+**Phase 2: High Value Features (2-3 weeks)**
+4. ⭐⭐⭐⭐ Auto-create GitHub issues on failure
+5. ⭐⭐⭐⭐ Manual context injection CLI
+6. ⭐⭐⭐⭐ Failure classification system
+
+**Phase 3: Polish & Metrics (Later)**
+7. ⭐⭐⭐ Local metrics database
+8. ⭐⭐⭐ Post-incident review automation
+9. ⭐⭐⭐ GitHub Actions dashboard
+
+---
+
+### 🎯 **Success Metrics**
+
+After Phase 1 implementation, we should see:
+- **60-80% reduction** in token usage for failing builds
+- **40-60% fewer** trivial errors reaching test phase
+- **30-50% faster** iteration on known failure patterns
+- **Better pattern library utilization** (currently collected but underused)
+
+---
+
+### 🤝 **Adapted AWS Concepts**
+
+| AWS Concept | Context Foundry Adaptation |
+|-------------|---------------------------|
+| DynamoDB | SQLite (`~/.context-foundry/metrics.db`) |
+| Lambda Functions | CLI commands + Python scripts |
+| CloudWatch Logs | Local logs + GitHub Actions artifacts |
+| EventBridge | GitHub Actions workflow triggers |
+| Step Functions | Sequential agent orchestration |
+| REST API | CLI interface (`foundry <command>`) |
+| SNS/SQS | File-based state management |
+
+**Key Insight:** We can adopt the *concepts* (monitoring, structured knowledge, guardrails, failure tracking) without adopting the *AWS infrastructure*. Context Foundry's strength is simplicity - local execution, file-based state, GitHub integration. Let's enhance that, not replace it.
+
+---
+
+**Analysis Date:** January 29, 2025
+**Feedback Source:** External agent architecture review
+**Status:** Recommendations accepted, implementation roadmap created
+
 ## Completed Features
 
 ### v1.0 - Initial Release
@@ -504,4 +965,4 @@ https://github.com/snedea/context-foundry/issues
 
 ---
 
-*Last Updated: 2025-10-24*
+*Last Updated: 2025-10-29*
