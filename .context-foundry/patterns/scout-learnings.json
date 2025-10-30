@@ -1,24 +1,32 @@
 {
   "$schema": "Pattern Library for Scout Phase Learnings",
   "version": "1.0.0",
-  "last_updated": "2025-10-18T22:30:00Z",
+  "last_updated": "2025-10-30 01:35:23 UTC",
   "description": "Research insights and risk detection patterns for Scout phase",
-
   "patterns": [
     {
       "pattern_id": "browser-es6-modules-risk-detection",
       "title": "Detect CORS Risk for Browser Apps with ES6 Modules",
       "first_seen": "2025-10-18",
       "frequency": 1,
-      "project_types": ["browser-app", "web-app", "web-game"],
-
+      "project_types": [
+        "browser-app",
+        "web-app",
+        "web-game"
+      ],
       "risk_detection": {
-        "trigger_keywords": ["browser", "web", "HTML5", "Canvas", "ES6 modules", "import/export"],
+        "trigger_keywords": [
+          "browser",
+          "web",
+          "HTML5",
+          "Canvas",
+          "ES6 modules",
+          "import/export"
+        ],
         "check": "If task mentions browser/web AND uses ES6 modules",
         "flag": "⚠️ CORS RISK: ES6 modules cannot load from file:// protocol",
         "recommendation": "Include dev server (http-server) in architecture to prevent CORS issues"
       },
-
       "scout_checklist": {
         "questions_to_ask": [
           "Is this a browser-based application?",
@@ -32,17 +40,14 @@
           "Browser compatibility requirements"
         ]
       },
-
       "inclusion_in_scout_report": {
         "section": "Known Risks & Mitigations",
         "format": "⚠️ CORS RISK: This project uses ES6 modules in a browser context. Recommend including http-server for local development to avoid file:// protocol restrictions."
       },
-
       "auto_apply": true,
       "priority": "HIGH"
     }
   ],
-
   "statistics": {
     "total_patterns": 1,
     "risk_detections": 1,

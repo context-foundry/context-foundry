@@ -1,9 +1,8 @@
 {
   "$schema": "Pattern Library for Common Issues",
   "version": "1.1.0",
-  "last_updated": "2025-10-28T17:45:00Z",
+  "last_updated": "2025-10-30 01:35:23 UTC",
   "description": "Common issues encountered across builds with proven solutions",
-
   "patterns": [
     {
       "pattern_id": "x-frame-options-iframe-blocking",
@@ -13,9 +12,18 @@
       "frequency": 1,
       "times_prevented": 0,
       "severity": "HIGH",
-      "project_types": ["webcam-aggregator", "iframe-embedding-app", "content-aggregator", "dashboard-app", "multi-source-display"],
-      "tech_stack": ["nextjs", "react", "iframe-embedding"],
-
+      "project_types": [
+        "webcam-aggregator",
+        "iframe-embedding-app",
+        "content-aggregator",
+        "dashboard-app",
+        "multi-source-display"
+      ],
+      "tech_stack": [
+        "nextjs",
+        "react",
+        "iframe-embedding"
+      ],
       "issue": {
         "description": "Third-party websites block iframe embedding using X-Frame-Options: DENY/SAMEORIGIN or Content-Security-Policy frame-ancestors headers",
         "error_message": "To protect your security, [site] will not allow Firefox to display the page if another site has embedded it",
@@ -29,9 +37,7 @@
         "detected_in_phase": "Post-deployment user testing",
         "should_detect_in_phase": "Builder (during seed data validation)"
       },
-
       "root_cause": "External websites use X-Frame-Options and CSP headers to prevent clickjacking attacks. Browser enforces these headers and blocks iframe rendering. Affects sites like skylinewebcams.com, earthcam.com, webcamtaxi.com, and most commercial webcam services.",
-
       "solution": {
         "scout": {
           "action": "Detect iframe-based content aggregation and warn about embedding restrictions",
@@ -84,7 +90,6 @@
           "validation_script": "curl -I <external-url> | grep -i 'x-frame-options' to check headers"
         }
       },
-
       "prevention": {
         "auto_apply": false,
         "conditions": [
@@ -101,11 +106,8 @@
         "manual_check_required": true,
         "reason": "Some projects may legitimately embed only friendly sources. Auto-apply only if clear iframe aggregation pattern detected."
       },
-
       "impact": "Critical - 80%+ of content sources non-functional. App appears broken to users. Core functionality fails.",
-
       "fix_time_estimate": "45 minutes post-deployment, 10 minutes if included from start",
-
       "affected_sites": [
         "skylinewebcams.com",
         "earthcam.com",
@@ -113,25 +115,19 @@
         "Most commercial webcam services",
         "Many news sites, social media embeds, third-party tools"
       ],
-
       "workarounds": [
         "Server-side proxy (recommended)",
         "Use official embed APIs where available (e.g., YouTube, Twitter)",
         "Use screenshot services for non-embeddable content",
         "Request iframe-friendly URLs from content providers"
       ],
-
       "legal_considerations": "Proxying content may violate Terms of Service of some sites. Check ToS before implementing. Some sites have explicit anti-scraping clauses.",
-
       "performance_notes": "Proxy adds 500-1500ms latency on first load. Cache aggressively (60s) for real-time feeds, longer for static content. Monitor server bandwidth.",
-
       "references": [
         "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options",
         "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/frame-ancestors"
       ],
-
       "success_rate": "95% with proxy solution (some sites have additional bot protection)",
-
       "detection_history": [
         {
           "build": "worldview-live",
@@ -152,9 +148,17 @@
       "frequency": 2,
       "times_prevented": 1,
       "severity": "HIGH",
-      "project_types": ["browser-app", "es6-modules", "web-game", "web-app"],
-      "tech_stack": ["javascript", "html5", "es6-modules"],
-
+      "project_types": [
+        "browser-app",
+        "es6-modules",
+        "web-game",
+        "web-app"
+      ],
+      "tech_stack": [
+        "javascript",
+        "html5",
+        "es6-modules"
+      ],
       "issue": {
         "description": "Browser blocks ES6 module imports from file:// protocol",
         "error_message": "Origin null is not allowed by Access-Control-Allow-Origin",
@@ -166,9 +170,7 @@
         "detected_in_phase": "Manual user testing",
         "should_detect_in_phase": "Test"
       },
-
       "root_cause": "Browsers enforce CORS policy that blocks ES6 module loading from file:// for security. Unit tests with Jest+jsdom don't catch this because they mock the browser environment.",
-
       "solution": {
         "scout": {
           "action": "Flag CORS risk in scout-report.md",
@@ -209,28 +211,25 @@
           "integration_test": "If Playwright/Selenium available, test actual browser loading"
         }
       },
-
       "prevention": {
         "auto_apply": true,
-        "conditions": ["project_type includes 'browser' OR 'web'", "uses ES6 modules"],
+        "conditions": [
+          "project_type includes 'browser' OR 'web'",
+          "uses ES6 modules"
+        ],
         "actions": [
           "Scout: Add warning to scout-report.md",
           "Architect: Include http-server by default",
           "Test: Verify dev server configuration"
         ]
       },
-
       "impact": "Critical - Breaks entire application. Users cannot run the app at all.",
-
       "fix_time_estimate": "3-5 minutes",
-
       "references": [
         "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS",
         "https://v8.dev/features/modules#mjs"
       ],
-
       "success_rate": "100% when dev server included from start",
-
       "prevention_history": [
         {
           "build": "satoshi-chore-tracker",
@@ -249,9 +248,20 @@
       "frequency": 1,
       "times_prevented": 0,
       "severity": "HIGH",
-      "project_types": ["aws-cdk", "serverless", "lambda-functions", "infrastructure-as-code", "bedrock-agent"],
-      "tech_stack": ["aws-cdk", "typescript", "python", "lambda", "cloudformation"],
-
+      "project_types": [
+        "aws-cdk",
+        "serverless",
+        "lambda-functions",
+        "infrastructure-as-code",
+        "bedrock-agent"
+      ],
+      "tech_stack": [
+        "aws-cdk",
+        "typescript",
+        "python",
+        "lambda",
+        "cloudformation"
+      ],
       "issue": {
         "description": "CDK Lambda function created with inline code uses filename 'index.py' but handler configuration specifies 'handler.lambda_handler', causing ImportModuleError",
         "error_message": "Runtime.ImportModuleError: Unable to import module 'handler': No module named 'handler'",
@@ -265,9 +275,7 @@
         "detected_in_phase": "Runtime testing (API invocation)",
         "should_detect_in_phase": "Builder (during Lambda function creation)"
       },
-
       "root_cause": "When using lambda.Code.fromInline() in AWS CDK, the code is packaged into a file named 'index.py' by default, but the handler property must be updated to match ('index.lambda_handler' instead of 'handler.lambda_handler'). This mismatch is not detected during CDK synthesis or deployment.",
-
       "solution": {
         "scout": {
           "action": "Identify AWS Lambda deployments and flag inline code handler risks",
@@ -307,7 +315,6 @@
           "validation_script": "aws logs tail /aws/lambda/<function-name> --since 5m | grep -i 'ImportModuleError'"
         }
       },
-
       "prevention": {
         "auto_apply": true,
         "conditions": [
@@ -321,16 +328,12 @@
           "Test: Add Lambda invocation test to verify import success"
         ]
       },
-
       "impact": "Critical - Lambda function completely non-functional. All API endpoints return 500 errors. Zero functionality until fixed.",
-
       "fix_time_estimate": "2-5 minutes (simple config update)",
-
       "aws_documentation": [
         "https://docs.aws.amazon.com/lambda/latest/dg/python-handler.html",
         "https://docs.aws.amazon.com/cdk/api/v2/docs/aws-cdk-lib.aws_lambda.Function.html"
       ],
-
       "detection_history": [
         {
           "project": "bedrock-agentic-builder",
@@ -350,9 +353,19 @@
       "frequency": 1,
       "times_prevented": 0,
       "severity": "MEDIUM",
-      "project_types": ["api-gateway", "rest-api", "serverless", "aws-lambda", "microservices"],
-      "tech_stack": ["aws-lambda", "python", "api-gateway", "rest-api"],
-
+      "project_types": [
+        "api-gateway",
+        "rest-api",
+        "serverless",
+        "aws-lambda",
+        "microservices"
+      ],
+      "tech_stack": [
+        "aws-lambda",
+        "python",
+        "api-gateway",
+        "rest-api"
+      ],
       "issue": {
         "description": "Lambda function routing logic checks generic path patterns (startsWith) before specific paths, causing specific endpoints to return 404",
         "error_message": "{'error': 'Not found'}",
@@ -366,9 +379,7 @@
         "detected_in_phase": "API testing",
         "should_detect_in_phase": "Builder (during Lambda handler implementation)"
       },
-
       "root_cause": "Lambda handler routing logic uses if/elif chain that checks generic patterns (path.startswith('/build/')) before specific exact matches (path == '/builds'). The generic pattern matches first and the specific path is never evaluated.",
-
       "solution": {
         "scout": {
           "action": "Identify REST API implementations and flag routing complexity",
@@ -408,7 +419,6 @@
           ]
         }
       },
-
       "prevention": {
         "auto_apply": true,
         "conditions": [
@@ -421,16 +431,12 @@
           "Test: Add comprehensive endpoint testing"
         ]
       },
-
       "impact": "Medium - Specific endpoints non-functional, but workarounds exist. Affects user experience but not catastrophic.",
-
       "fix_time_estimate": "5-10 minutes (reorder if/elif statements and redeploy)",
-
       "code_example": {
         "before": "if path.startswith('/build/') and method == 'GET':\n    return handle_build()\nelif path == '/builds' and method == 'GET':\n    return list_builds()  # Never reached!",
         "after": "if path == '/builds' and method == 'GET':\n    return list_builds()\nelif path.startswith('/build/') and method == 'GET':\n    return handle_build()"
       },
-
       "detection_history": [
         {
           "project": "bedrock-agentic-builder",
@@ -450,9 +456,19 @@
       "frequency": 1,
       "times_prevented": 0,
       "severity": "HIGH",
-      "project_types": ["aws-bedrock", "bedrock-agent", "ai-agents", "multi-agent-systems", "generative-ai"],
-      "tech_stack": ["aws-bedrock", "bedrock-agents", "action-groups", "lambda"],
-
+      "project_types": [
+        "aws-bedrock",
+        "bedrock-agent",
+        "ai-agents",
+        "multi-agent-systems",
+        "generative-ai"
+      ],
+      "tech_stack": [
+        "aws-bedrock",
+        "bedrock-agents",
+        "action-groups",
+        "lambda"
+      ],
       "issue": {
         "description": "Bedrock Agent cannot be prepared because AgentCollaboration is set to SUPERVISOR mode but no collaborators are configured",
         "error_message": "ValidationException: This agent cannot be prepared. The AgentCollaboration attribute is set to SUPERVISOR but no agent collaborators are added.",
@@ -466,9 +482,7 @@
         "detected_in_phase": "Agent preparation in AWS Console",
         "should_detect_in_phase": "Scout/Architect (during agent architecture design)"
       },
-
       "root_cause": "AWS Bedrock Agent console may default to SUPERVISOR collaboration mode (multi-agent orchestration) even when user wants a single agent with action groups. SUPERVISOR mode requires defining sub-agents, but standard single-agent use cases should have collaboration disabled.",
-
       "solution": {
         "scout": {
           "action": "Clarify agent architecture: single agent vs multi-agent collaboration",
@@ -516,7 +530,6 @@
           ]
         }
       },
-
       "prevention": {
         "auto_apply": false,
         "conditions": [
@@ -532,18 +545,13 @@
         "manual_check_required": true,
         "reason": "Bedrock Agent configuration is primarily manual in AWS Console. Auto-detection not feasible."
       },
-
       "impact": "High - Blocks agent deployment. Cannot test or use agent until resolved. Causes deployment delays.",
-
       "fix_time_estimate": "2-5 minutes (disable collaboration mode in console)",
-
       "aws_documentation": [
         "https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html",
         "https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html"
       ],
-
       "workaround": "Edit agent in Bedrock console → Find Agent Collaboration or Multi-Agent Collaboration section → Disable/turn off collaboration → Save → Prepare agent",
-
       "detection_history": [
         {
           "project": "bedrock-agentic-builder",
@@ -554,11 +562,9 @@
           "notes": "Agent had 4 action groups (Scout, Architect, Builder, Tester) but collaboration mode was enabled by default"
         }
       ],
-
       "additional_notes": "This is a UX issue in AWS Bedrock console. The default behavior may change over time. Always verify collaboration settings match intended architecture (single-agent vs multi-agent)."
     }
   ],
-
   "statistics": {
     "total_patterns": 5,
     "high_severity": 4,
