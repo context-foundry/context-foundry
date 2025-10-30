@@ -162,7 +162,8 @@ jobs:
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
           git add .context-foundry/patterns/*.json
-          git commit -m "chore: sync community patterns - ${{ steps.metadata.outputs.date }}
+          git commit -m "$(cat <<'EOF'
+chore: sync community patterns - ${{ steps.metadata.outputs.date }}
 
 Automated pattern sync from daily builds.
 
@@ -171,7 +172,9 @@ Statistics:
 - Scout Learnings: ${{ steps.stats.outputs.learning_count }}
 - Total Builds: ${{ steps.stats.outputs.total_builds }}
 
-Last Updated: ${{ steps.metadata.outputs.timestamp }}"
+Last Updated: ${{ steps.metadata.outputs.timestamp }}
+EOF
+)"
 
       - name: Push branch
         if: steps.check_changes.outputs.has_changes == 'true'
