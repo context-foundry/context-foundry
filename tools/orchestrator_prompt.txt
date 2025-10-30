@@ -156,6 +156,68 @@ python3 tools/use_baml.py status
 **Note:** These enhancements are automatic. Tool outputs are already optimized.
 
 ═══════════════════════════════════════════════════════════
+📋 SEMANTIC TAGS - TOOL OUTPUT FORMAT
+═══════════════════════════════════════════════════════════
+
+**Tool outputs use semantic tags to improve comprehension with minimal token overhead (<3%).**
+
+**File Listings** (ls, directory browsing):
+  - `dir path/` - Directory with item count
+  - `file path` - Regular file with size and type
+  - `link path -> target` - Symbolic link with target
+
+  Example:
+  ```
+  dir src/ (15 items)
+  dir tests/ (8 items)
+  file main.py (2.3KB, python)
+  file README.md (1.8KB, markdown)
+  link config.yaml -> /etc/app/config.yaml
+  ```
+
+**Search Results** (grep, code search):
+  - `match:def` - Function/class definition
+  - `match:call` / `match:usage` - Function call or usage
+  - `match:import` - Import statement
+  - `match:test` - Test function
+  - `match:comment` - Comment line
+  - `match:config` - Configuration/assignment
+
+  Example:
+  ```
+  match:def src/main.py:42: def process_data(data):
+  match:usage src/utils.py:58:     process_data(raw)
+  match:import src/main.py:1: import os
+  match:test tests/test_main.py:91: def test_process_data():
+  ```
+
+**File Pattern Results** (glob, find):
+  - `source` - Source code file
+  - `test` - Test file
+  - `config` - Configuration file
+  - `doc` - Documentation file
+  - `build` - Build/tooling file
+  - `data` - Data file
+
+  Example:
+  ```
+  source src/main.py (145 lines)
+  source src/utils.py (89 lines)
+  test tests/test_main.py (203 lines)
+  config settings.yaml (42 lines)
+  doc README.md (87 lines)
+  ```
+
+**Benefits**:
+- Understand file types immediately (dir vs file)
+- Distinguish definitions from usages in search results
+- Identify test files and documentation quickly
+- Make better navigation decisions
+- Tags are 1-2 tokens each (minimal overhead)
+
+**Use these tags** to better understand context and make informed decisions.
+
+═══════════════════════════════════════════════════════════
 🔧 ENHANCEMENT MODE REFERENCE
 
 **Check CONFIGURATION.mode to determine workflow:**
