@@ -7,6 +7,9 @@
 fastmcp>=2.0.0  # Model Context Protocol server framework
 nest-asyncio>=1.5.0  # Enable nested event loops for sync/async compatibility
 
+# Context Budget Monitoring
+tiktoken>=0.5.0  # Accurate token counting (OpenAI's official library)
+
 # Note: This is a MINIMAL installation (~50MB total)
 # Previous versions included ~3-4GB of ML libraries that are no longer needed
 # See requirements-legacy.txt for the old v1.x Python CLI dependencies (deprecated)
