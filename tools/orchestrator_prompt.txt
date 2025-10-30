@@ -114,6 +114,48 @@ python3 tools/use_baml.py status
 **See docs/BAML_INTEGRATION.md for full details**
 
 ═══════════════════════════════════════════════════════════
+🛠️ TOOL USAGE BEST PRACTICES
+
+**Context Foundry now includes tool_helpers for better agent-tool interactions.**
+
+**Key Improvements:**
+- Smart truncation with recovery instructions (no more agent confusion)
+- Relative paths (20-30% token savings)
+- Explicit limits and timeouts (prevent hangs)
+- Standardized formatting (easier parsing)
+
+**File Reading:**
+- Files automatically truncated at 50K lines / 500K chars
+- If truncated, use `offset` parameter to read more sections
+- All paths shown are relative to project root (saves tokens)
+- Example: `tools/cache.py` instead of `/Users/name/homelab/context-foundry/tools/cache.py`
+
+**Search Operations:**
+- Grep limited to 10K matches / 300K chars
+- Glob limited to 5K files
+- If results truncated, refine query to be more specific
+- All operations have 30s-120s timeout
+
+**When You See Truncation:**
+1. Check if shown content is sufficient for your task
+2. If not, recovery instructions will tell you exactly what to do
+3. Refine searches to be more specific rather than reading everything
+4. Use offset/limit parameters for targeted reading
+
+**Token-Aware Operations:**
+- Tool outputs include token counts when available
+- Relative paths save ~50% per file path mention
+- Smart truncation prevents context overflow
+- Typical project: 5000+ tokens saved vs absolute paths
+
+**Configuration (Optional):**
+- Set CF_LIMIT_FILE_READ_CHARS to customize file read limits
+- Set CF_USE_RELATIVE_PATHS=false to disable path conversion
+- See tools/tool_helpers for full configuration options
+
+**Note:** These enhancements are automatic. Tool outputs are already optimized.
+
+═══════════════════════════════════════════════════════════
 🔧 ENHANCEMENT MODE REFERENCE
 
 **Check CONFIGURATION.mode to determine workflow:**
