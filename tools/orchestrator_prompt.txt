@@ -377,6 +377,26 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    ```
    This enables future builds with similar tasks to skip Scout phase entirely.
 
+6. **BACK PRESSURE: Technology Stack Validation (Optional but Recommended)**
+
+   Validate Scout's technology recommendations are feasible:
+   ```bash
+   python3 tools/back_pressure/validate_tech_stack.py .context-foundry/scout-report.md
+   ```
+
+   **If validation available and FAILS**:
+   - Log errors to .context-foundry/tech-stack-validation-errors.json
+   - Review errors and either:
+     * Re-run Scout with technology constraints, OR
+     * Note warnings but continue (don't block on tech availability)
+   - Maximum 1 validation retry
+
+   **If validation PASSES or unavailable**:
+   - Log: "✅ Technology stack validated" or "⚠️  Validation skipped"
+   - Continue to Phase 2 (Architect)
+
+   **Note**: Tech stack validation is advisory - unavailable tools won't block the build.
+
 **PHASE TRACKING (COMPLETE) - MANDATORY LAST ACTION:**
 Update phase: "Scout" (1/7, "completed", "Research complete")
 Add to phases_completed: ["Scout"]
@@ -472,6 +492,28 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 
 ✅ **Architect phase complete.**
 
+
+6. **BACK PRESSURE: Architecture Soundness Validation (Optional but Recommended)**
+
+   Validate Architect's design is complete and consistent:
+   ```bash
+   python3 tools/back_pressure/validate_architecture.py .context-foundry/architecture.md
+   ```
+
+   **If validation available and FAILS**:
+   - Log issues to .context-foundry/architecture-validation-errors.json
+   - Review issues and either:
+     * Re-run Architect with fixes, OR
+     * Note warnings but continue (don't block on minor issues)
+   - Maximum 1 validation retry
+
+   **If validation PASSES or unavailable**:
+   - Log: "✅ Architecture validated" or "⚠️  Validation skipped"
+   - Continue to Phase 2.5 (Parallel Build Planning)
+
+   **Note**: Architecture validation is advisory - minor issues won't block the build.
+
+7. **Update Phase Status (COMPLETE):**
 ⚡ **NEXT: Parallel Build Planning (MANDATORY) - Do NOT skip**
 
 ═══════════════════════════════════════════════════════════
@@ -731,6 +773,48 @@ After all code files are created, generate essential project files:
      echo "ℹ️  Git repository already exists, skipping initialization"
    fi
    ```
+═══════════════════════════════════════════════════════════
+PHASE 3.5: INTEGRATION PRE-CHECK (NEW - Fast Validation Before Test)
+═══════════════════════════════════════════════════════════
+
+**Purpose**: Catch syntax errors, import issues, and missing files BEFORE expensive test execution.
+**Expected**: 5-15 seconds vs 30-120 seconds for full test suite.
+**Catch Rate**: 30-40% of issues that would fail in Phase 4.
+
+**When to run**: After Phase 2.5 (Parallel Builders complete), BEFORE Phase 4 (Test)
+
+**BACK PRESSURE: Integration Validation**
+
+1. Execute fast pre-checks:
+   ```bash
+   python3 tools/back_pressure/integration_pre_check.py .
+   ```
+
+2. Analyze results:
+
+   **If ANY check FAILS**:
+   - Save errors to .context-foundry/integration-errors.json
+   - Analyze error type:
+     * **Syntax errors**: Return to Phase 2.5 (Builder) with specific file/line errors
+     * **Import errors**: Return to Phase 2 (Architect) - may be circular dependencies
+     * **Missing files**: Return to Phase 2.5 (Builder) - files not created
+
+   - Maximum 2 retries at Phase 3.5 level
+   - If still failing after retries: Proceed to Phase 4 (full diagnostics in test phase)
+
+   **If ALL checks PASS**:
+   - Log: "✅ Integration pre-check passed ({duration}s)"
+   - Log: "Estimated time saved vs failing in tests: {time_saved}s"
+   - Proceed to Phase 4 (Test)
+
+   **If validation unavailable or times out**:
+   - Log: "⚠️  Integration pre-check skipped"
+   - Proceed to Phase 4 (Test)
+
+**Note**: Integration pre-check is optional but highly recommended. Skipping won't block the build.
+
+✅ **Integration pre-check complete. Proceed to Phase 4 (Test).**
+
 
 **After Build Finalization:**
 - ✅ All files created (code + README + .gitignore)
