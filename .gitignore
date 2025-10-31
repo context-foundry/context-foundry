@@ -75,3 +75,6 @@ smoke_test_*.txt
 
 # Strange git artifacts
 =*
+
+# Private Extensions (user-specific, not for public repo)
+extensions/
