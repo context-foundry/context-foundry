@@ -17,8 +17,11 @@ logs/
 *.log
 
 # Session data
+.context-foundry/
+!.context-foundry/patterns/
+!.context-foundry/patterns/**
 blueprints/
-checkpoints/sessions/*.json
+checkpoints/
 checkpoints/artifacts/temp/
 checkpoints/ralph/*/
 overnight_tasks.txt
@@ -53,13 +56,22 @@ Thumbs.db
 tmp/
 temp/
 *.tmp
+*.bak
+*.bak[0-9]
+*.backup
 ace/pricing.db
+.coverage
+**/htmlcov/
 
 # Internal Planning & Testing (private, not for public repo)
 NEXT_WEEK_PRIORITIES.md
 *_PRIORITIES.md
 *_ROADMAP.md
 INTERNAL_*.md
+docs/proposals/
 test_results/
 smoke_test_*.txt
 .test_artifacts/
+
+# Strange git artifacts
+=*
