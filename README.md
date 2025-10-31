@@ -356,9 +356,9 @@ All enhancements are:
 | **Providers** | 7 AI providers supported | Claude only (optimized for quality) |
 | **Complexity** | ~3000 lines of Python | ~1400 lines (MCP + meta-prompt) |
 
-**Want the technical details?** See [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) for comprehensive explanations of what changed and why.
+**Want the technical details?** See [ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) for comprehensive explanations of what changed and why.
 
-**Using Context Foundry 1.x?** The Python CLI is preserved in `LEGACY_README.md` and still functional.
+**Using Context Foundry 1.x?** The Python CLI is preserved in `docs/archive/LEGACY_README.md` and still functional.
 
 ---
 
@@ -498,7 +498,7 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 
 ### 📖 Full FAQ
 
-**Want comprehensive answers?** See **[FAQ.md](FAQ.md)** for:
+**Want comprehensive answers?** See **[FAQ.md](docs/FAQ.md)** for:
 - Complete delegation model explanation
 - Where all prompts are located
 - How agents work and disappear
@@ -508,10 +508,10 @@ cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.
 - And much more!
 
 **Additional Documentation:**
-- **[FAQ.md](FAQ.md)** - Comprehensive Q&A (transparency focus)
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Step-by-step usage guide
+- **[FAQ.md](docs/FAQ.md)** - Comprehensive Q&A (transparency focus)
+- **[USER_GUIDE.md](docs/USER_GUIDE.md)** - Step-by-step usage guide
 - **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** - Technical deep dive on delegation
-- **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** - How self-learning works
+- **[FEEDBACK_SYSTEM.md](docs/FEEDBACK_SYSTEM.md)** - How self-learning works
 - **[docs/BAML_INTEGRATION.md](docs/BAML_INTEGRATION.md)** - Type-safe LLM outputs with BAML (v1.3.0+)
 
 ---
@@ -565,7 +565,7 @@ cat .mcp.json
 gh auth login
 ```
 
-**Detailed setup guide:** See [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) for troubleshooting and advanced configuration.
+**Detailed setup guide:** See [CLAUDE_CODE_MCP_SETUP.md](docs/CLAUDE_CODE_MCP_SETUP.md) for troubleshooting and advanced configuration.
 
 #### Nightly Builds (Bleeding Edge)
 
@@ -1502,14 +1502,14 @@ Break-even: ~5 projects per month vs API mode
 |----------|-------------|----------|
 | **[README.md](README.md)** (this file) | Quick start and overview | Everyone |
 | **[QUICKSTART.md](QUICKSTART.md)** | 5-minute setup guide | New users |
-| **[USER_GUIDE.md](USER_GUIDE.md)** | Step-by-step usage guide with examples | New users |
-| **[FAQ.md](FAQ.md)** | Comprehensive Q&A - transparency focused | Everyone |
+| **[USER_GUIDE.md](docs/USER_GUIDE.md)** | Step-by-step usage guide with examples | New users |
+| **[FAQ.md](docs/FAQ.md)** | Comprehensive Q&A - transparency focused | Everyone |
 
 ### 🔧 Setup & Configuration
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| **[CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
+| **[CLAUDE_CODE_MCP_SETUP.md](docs/CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
 | **[.mcp.json](.mcp.json)** | Project-shareable MCP configuration | Team leads |
 
 ### 🏗️ Architecture & Technical Deep Dives
@@ -1517,12 +1517,12 @@ Break-even: ~5 projects per month vs API mode
 | Document | Description | Audience |
 |----------|-------------|----------|
 | **⭐ [docs/INNOVATIONS.md](docs/INNOVATIONS.md)** | **All 19 innovations explained with code examples** | **Everyone - START HERE!** |
-| **[docs/FAQ.md](docs/FAQ.md)** | Technical FAQ (52 questions): parallelization, token management, MCP architecture, prompt engineering | Developers, architects, AI engineers |
+| **[docs/TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md)** | Technical FAQ (52 questions): parallelization, token management, MCP architecture, prompt engineering | Developers, architects, AI engineers |
 | **[docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md)** | 🎨 Visual flowcharts and sequence diagrams (Mermaid) | Visual learners, everyone! |
 | **[docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md)** | Complete MCP server technical architecture | Developers, contributors |
 | **[docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md)** | How context flows between agents (ephemeral agents + persistent files) | Developers, curious users |
 | **[docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md)** | Why delegation keeps main context clean | Technical users |
-| **[ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)** | What changed in v2.x and why | Technical users |
+| **[ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)** | What changed in v2.x and why | Technical users |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Stateless conversation architecture | Developers |
 
 ### ⚡ Agent Quality Enhancement Documentation (NEW!)
@@ -1539,7 +1539,7 @@ Break-even: ~5 projects per month vs API mode
 
 | Document | Description | Audience |
 |----------|-------------|----------|
-| **[FEEDBACK_SYSTEM.md](FEEDBACK_SYSTEM.md)** | Self-learning pattern library documentation | All users |
+| **[FEEDBACK_SYSTEM.md](docs/FEEDBACK_SYSTEM.md)** | Self-learning pattern library documentation | All users |
 | **~/.context-foundry/patterns/common-issues.json** | Global pattern library (on your machine) | Curious users |
 
 ### 📚 Reference & Legacy
@@ -1547,32 +1547,32 @@ Break-even: ~5 projects per month vs API mode
 | Document | Description | Audience |
 |----------|-------------|----------|
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes | Everyone |
-| **[ROADMAP.md](ROADMAP.md)** | Future plans | Contributors |
-| **[LEGACY_README.md](LEGACY_README.md)** | Original Context Foundry 1.x documentation | v1.x users |
+| **[ROADMAP.md](docs/ROADMAP.md)** | Future plans | Contributors |
+| **[LEGACY_README.md](docs/archive/LEGACY_README.md)** | Original Context Foundry 1.x documentation | v1.x users |
 
 ### 💡 Recommended Reading Order
 
 **New Users:**
 1. [README.md](README.md) - Understand what Context Foundry does (includes new agent quality enhancements!)
 2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
-3. [USER_GUIDE.md](USER_GUIDE.md) - Learn how to use it
+3. [USER_GUIDE.md](docs/USER_GUIDE.md) - Learn how to use it
 4. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - Deep dive into all 19 innovations
-5. [FAQ.md](FAQ.md) - Common questions answered
+5. [FAQ.md](docs/FAQ.md) - Common questions answered
 
 **Developers/Contributors:**
 1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 19 innovations with code examples
 2. [Agent Quality Enhancements](#-agent-quality-enhancements-new) - NEW! Back pressure, context budgets, tool quality, semantic tags
-3. [docs/FAQ.md](docs/FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
+3. [docs/TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
 4. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
-5. [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) - Why v2.x architecture
+5. [ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) - Why v2.x architecture
 6. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md) - How MCP server works
 7. [docs/CONTEXT_PRESERVATION.md](docs/CONTEXT_PRESERVATION.md) - How context flows
 8. [docs/DELEGATION_MODEL.md](docs/DELEGATION_MODEL.md) - Delegation architecture
 
 **Troubleshooting:**
-1. [CLAUDE_CODE_MCP_SETUP.md](CLAUDE_CODE_MCP_SETUP.md) - Setup issues
-2. [FAQ.md](FAQ.md) - Common questions
-3. [docs/FAQ.md](docs/FAQ.md) - Technical troubleshooting (parallel execution, test loops, etc.)
+1. [CLAUDE_CODE_MCP_SETUP.md](docs/CLAUDE_CODE_MCP_SETUP.md) - Setup issues
+2. [FAQ.md](docs/FAQ.md) - Common questions
+3. [TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md) - Technical troubleshooting (parallel execution, test loops, etc.)
 4. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
 
 ---
