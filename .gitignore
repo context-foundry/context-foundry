@@ -76,5 +76,37 @@ smoke_test_*.txt
 # Strange git artifacts
 =*
 
+# ═══════════════════════════════════════════════════════════
 # Private Extensions (user-specific, not for public repo)
+# ═══════════════════════════════════════════════════════════
+#
+# The extensions/ directory contains modular, user-specific
+# enhancements that teach Context Foundry specialized skills.
+#
+# CURRENT EXTENSIONS:
+#
+# 📊 extensions/flowise/ - Flowise Agent Flow Specialization
+#    - Enables Context Foundry to build production-ready Flowise
+#      multi-agent workflows from single-sentence prompts
+#    - Includes authoritative pattern reference (AGENT_PATTERN_REFERENCE.md)
+#    - Contains 13+ canonical Flowise flow templates
+#    - Validates against real Flowise export structure
+#    - Produces perfect, import-ready JSON on first build
+#
+#    Example: "Build warehouse operations flow with Workday integration"
+#    Result: Complete 9-agent system with routing, tools, knowledge sources
+#
+# WHY GITIGNORED:
+# - User-specific customizations (templates, patterns, configs)
+# - May contain proprietary flow designs
+# - Allows each user to maintain their own extension library
+# - Prevents merge conflicts from personalized extensions
+#
+# HOW TO PRESERVE:
+# - Extensions are LOCAL to your machine (not pushed to GitHub)
+# - This branch (enhancement/flowise-agent-builder) preserves
+#   the orchestrator_prompt.txt integration that references them
+# - To share: manually copy extensions/ to another user's clone
+#
+# ═══════════════════════════════════════════════════════════
 extensions/
