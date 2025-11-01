@@ -1,0 +1,247 @@
+{
+  "templates": {
+    "multi-agent": [
+      {
+        "name": "Supervisor-Worker Pattern",
+        "description": "Supervisor agent coordinates multiple specialized worker agents",
+        "use_cases": [
+          "Complex research tasks requiring multiple skills",
+          "Workflow orchestration with parallel execution",
+          "Task decomposition and delegation"
+        ],
+        "complexity": "advanced",
+        "node_count": "7-15",
+        "key_nodes": ["Supervisor Agent", "Worker Agents (3-5)", "Shared Memory"],
+        "best_for": "Tasks requiring specialization and coordination"
+      },
+      {
+        "name": "Hierarchical Multi-Agent",
+        "description": "Multiple layers of supervisors and workers",
+        "use_cases": [
+          "Large-scale complex projects",
+          "Multi-stage pipelines with dependencies",
+          "Enterprise workflow automation"
+        ],
+        "complexity": "expert",
+        "node_count": "15+",
+        "key_nodes": ["Master Supervisor", "Sub-Supervisors", "Worker Agents", "State Manager"],
+        "best_for": "Very complex workflows requiring multiple coordination levels"
+      },
+      {
+        "name": "Collaborative Agents",
+        "description": "Agents work together on shared task without strict hierarchy",
+        "use_cases": [
+          "Brainstorming and ideation",
+          "Peer review systems",
+          "Consensus building"
+        ],
+        "complexity": "advanced",
+        "node_count": "5-10",
+        "key_nodes": ["Agent Group", "Shared Context", "Aggregator"],
+        "best_for": "Tasks benefiting from diverse perspectives"
+      }
+    ],
+    "rag": [
+      {
+        "name": "Basic RAG",
+        "description": "Simple retrieval-augmented generation with vector search",
+        "use_cases": [
+          "Document Q&A",
+          "Knowledge base chatbot",
+          "Internal wiki assistant"
+        ],
+        "complexity": "beginner",
+        "node_count": "3-5",
+        "key_nodes": ["Vector Store", "Embeddings", "LLM Chain"],
+        "best_for": "Straightforward document search and answer"
+      },
+      {
+        "name": "RAG with Reranking",
+        "description": "RAG with contextual compression and reranking for better relevance",
+        "use_cases": [
+          "Enterprise search",
+          "Legal document analysis",
+          "Technical documentation assistant"
+        ],
+        "complexity": "advanced",
+        "node_count": "5-8",
+        "key_nodes": ["Vector Store", "Retriever", "Reranker", "LLM Chain"],
+        "best_for": "Cases where precision is critical"
+      },
+      {
+        "name": "Hybrid RAG",
+        "description": "Combines semantic and keyword search for optimal retrieval",
+        "use_cases": [
+          "Mixed content types (technical + conversational)",
+          "Multi-domain knowledge bases",
+          "Academic research assistant"
+        ],
+        "complexity": "advanced",
+        "node_count": "6-10",
+        "key_nodes": ["Vector Store", "BM25 Retriever", "Hybrid Retriever", "Fusion", "LLM"],
+        "best_for": "Diverse content requiring multiple search strategies"
+      },
+      {
+        "name": "Agentic RAG",
+        "description": "Agent decides when and how to retrieve, can query multiple sources",
+        "use_cases": [
+          "Research assistants",
+          "Multi-source information synthesis",
+          "Adaptive Q&A systems"
+        ],
+        "complexity": "expert",
+        "node_count": "8-12",
+        "key_nodes": ["Agent", "Multiple Retrievers", "Tool Selector", "LLM Chain"],
+        "best_for": "Complex queries requiring intelligent retrieval strategy"
+      }
+    ],
+    "workflow": [
+      {
+        "name": "Sequential Pipeline",
+        "description": "Linear sequence of processing steps",
+        "use_cases": [
+          "ETL pipelines",
+          "Content generation workflows",
+          "Data transformation"
+        ],
+        "complexity": "beginner",
+        "node_count": "3-6",
+        "key_nodes": ["Input", "Processing Chains", "Output"],
+        "best_for": "Simple linear data processing"
+      },
+      {
+        "name": "Branching Workflow",
+        "description": "Conditional logic with multiple execution paths",
+        "use_cases": [
+          "Classification and routing",
+          "Conditional content generation",
+          "Decision trees"
+        ],
+        "complexity": "moderate",
+        "node_count": "5-10",
+        "key_nodes": ["Router", "Branches", "Conditional Logic", "Merger"],
+        "best_for": "Tasks requiring different handling based on conditions"
+      },
+      {
+        "name": "Parallel Execution",
+        "description": "Multiple independent tasks run simultaneously and merge",
+        "use_cases": [
+          "Batch processing",
+          "Multi-source data aggregation",
+          "Concurrent analysis"
+        ],
+        "complexity": "moderate",
+        "node_count": "6-12",
+        "key_nodes": ["Splitter", "Parallel Chains", "Aggregator"],
+        "best_for": "Independent tasks that can run concurrently"
+      }
+    ],
+    "chatbot": [
+      {
+        "name": "Simple Chatbot",
+        "description": "Basic conversational agent with memory",
+        "use_cases": [
+          "Customer support",
+          "FAQ assistant",
+          "Personal assistant"
+        ],
+        "complexity": "beginner",
+        "node_count": "2-4",
+        "key_nodes": ["Conversation Chain", "Buffer Memory"],
+        "best_for": "Simple Q&A and conversations"
+      },
+      {
+        "name": "Chatbot with Tools",
+        "description": "Conversational agent that can use tools to accomplish tasks",
+        "use_cases": [
+          "Task-oriented assistants",
+          "Booking and reservation bots",
+          "Data lookup assistants"
+        ],
+        "complexity": "moderate",
+        "node_count": "4-8",
+        "key_nodes": ["Agent", "Memory", "Tools", "LLM"],
+        "best_for": "Conversations requiring actions beyond text responses"
+      },
+      {
+        "name": "Multi-Modal Chatbot",
+        "description": "Chatbot that handles text, images, and other modalities",
+        "use_cases": [
+          "Visual Q&A",
+          "Document understanding",
+          "Multi-media content creation"
+        ],
+        "complexity": "advanced",
+        "node_count": "6-10",
+        "key_nodes": ["Multi-Modal LLM", "Image Processor", "Memory", "Output Formatter"],
+        "best_for": "Applications requiring image/document understanding"
+      },
+      {
+        "name": "Specialized Domain Chatbot",
+        "description": "Expert chatbot with domain knowledge (RAG + tools + memory)",
+        "use_cases": [
+          "Medical advisor",
+          "Legal assistant",
+          "Technical support"
+        ],
+        "complexity": "advanced",
+        "node_count": "8-15",
+        "key_nodes": ["Agent", "RAG System", "Domain Tools", "Memory", "Guardrails"],
+        "best_for": "Domain-specific assistance requiring expertise"
+      }
+    ],
+    "specialized": [
+      {
+        "name": "Self-Healing Flow",
+        "description": "Flow that detects and recovers from errors automatically",
+        "use_cases": [
+          "Production systems",
+          "Critical workflows",
+          "High-reliability applications"
+        ],
+        "complexity": "expert",
+        "node_count": "10-15",
+        "key_nodes": ["Monitor", "Error Detector", "Recovery Agent", "Fallback Chains"],
+        "best_for": "Mission-critical applications requiring high uptime"
+      },
+      {
+        "name": "Human-in-the-Loop",
+        "description": "Flow that requests human approval at key decision points",
+        "use_cases": [
+          "High-stakes decisions",
+          "Compliance-sensitive workflows",
+          "Content moderation"
+        ],
+        "complexity": "moderate",
+        "node_count": "5-10",
+        "key_nodes": ["Agent", "Approval Gate", "Human Input", "Continuation Logic"],
+        "best_for": "Scenarios requiring human judgment"
+      },
+      {
+        "name": "Feedback Loop",
+        "description": "Flow that learns from outputs and improves over time",
+        "use_cases": [
+          "Continuous improvement systems",
+          "Adaptive assistants",
+          "Self-optimizing workflows"
+        ],
+        "complexity": "expert",
+        "node_count": "8-15",
+        "key_nodes": ["Agent", "Feedback Collector", "Evaluator", "Memory Update"],
+        "best_for": "Applications benefiting from continuous learning"
+      }
+    ]
+  },
+  "metadata": {
+    "total_templates": 19,
+    "complexity_distribution": {
+      "beginner": 3,
+      "moderate": 4,
+      "advanced": 8,
+      "expert": 4
+    },
+    "categories": ["multi-agent", "rag", "workflow", "chatbot", "specialized"],
+    "version": "1.0",
+    "last_updated": "2025-01-13T00:00:00Z"
+  }
+}

@@ -1,0 +1,3 @@
+"""
+Flowise Extension Test Suite
+"""

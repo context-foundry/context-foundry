@@ -1,0 +1,69 @@
+{
+  "parallel_mode": true,
+  "total_tasks": 9,
+  "tasks": [
+    {
+      "id": "task-1",
+      "description": "Create detector module with Flowise flow detection logic",
+      "files": ["detector.py"],
+      "dependencies": [],
+      "estimated_time": "8 minutes"
+    },
+    {
+      "id": "task-2",
+      "description": "Create analyzer module with template analysis and CLI",
+      "files": ["analyzer.py"],
+      "dependencies": [],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-3",
+      "description": "Create extensions loader with safe dynamic loading",
+      "files": ["extensions_loader.py"],
+      "dependencies": [],
+      "estimated_time": "6 minutes"
+    },
+    {
+      "id": "task-4",
+      "description": "Create prompt templates for Scout and Architect phases",
+      "files": ["prompts/scout-enhancement.txt", "prompts/architect-enhancement.txt"],
+      "dependencies": [],
+      "estimated_time": "5 minutes"
+    },
+    {
+      "id": "task-5",
+      "description": "Create integration hooks for MCP server and orchestrator",
+      "files": ["integration/mcp_server_hook.py", "integration/orchestrator_prompt_injection.txt"],
+      "dependencies": [],
+      "estimated_time": "5 minutes"
+    },
+    {
+      "id": "task-6",
+      "description": "Create pattern example files",
+      "files": ["patterns/flowise-expertise.json.example", "patterns/flow-templates.json.example"],
+      "dependencies": [],
+      "estimated_time": "6 minutes"
+    },
+    {
+      "id": "task-7",
+      "description": "Create test fixtures (sample Flowise JSONs)",
+      "files": ["tests/fixtures/supervisor_multi_agent.json", "tests/fixtures/rag_workflow.json", "tests/fixtures/simple_chatbot.json", "tests/fixtures/invalid_file.json"],
+      "dependencies": [],
+      "estimated_time": "4 minutes"
+    },
+    {
+      "id": "task-8",
+      "description": "Create test suite for all modules",
+      "files": ["tests/test_detector.py", "tests/test_analyzer.py", "tests/test_loader.py", "tests/__init__.py"],
+      "dependencies": ["task-1", "task-2", "task-3", "task-7"],
+      "estimated_time": "12 minutes"
+    },
+    {
+      "id": "task-9",
+      "description": "Create project files (README, .gitignore, __init__.py)",
+      "files": ["README.md", ".gitignore", "__init__.py"],
+      "dependencies": ["task-1", "task-2", "task-3"],
+      "estimated_time": "8 minutes"
+    }
+  ]
+}

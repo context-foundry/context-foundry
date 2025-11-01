@@ -1,0 +1,890 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -162.58207424380598,
+        "y": 117.81335679543406
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput",
+            "id": "startAgentflow_0-input-startInputType-options"
+          },
+          {
+            "label": "Flow State",
+            "name": "startState",
+            "description": "Runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "Foo"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "placeholder": "Bar"
+              }
+            ],
+            "id": "startAgentflow_0-input-startState-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput",
+          "startState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 103,
+      "height": 66,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -162.58207424380598,
+        "y": 117.81335679543406
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "position": {
+        "x": -11.580228601760105,
+        "y": 99.42548336780041
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Agent",
+        "version": 1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Classify ServiceNow tickets for HCM routing",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentModel-asyncOptions"
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "description": "A general instructions of what the condition agent should do",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInstructions-string"
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "description": "Input to be used for the condition agent",
+            "rows": 4,
+            "acceptVariable": true,
+            "default": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInput-string"
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "description": "Define the scenarios that will be used as the conditions to split the flow",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "placeholder": "User is asking for a pizza"
+              }
+            ],
+            "id": "conditionAgentAgentflow_0-input-conditionAgentScenarios-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentInstructions": "You are a ServiceNow ticket classifier specializing in HCM (Human Capital Management) issues.\n\nAnalyze the ticket and classify it into ONE of these categories:\n\nHCM Categories:\n1. Payroll and Compensation - Issues with salary, pay, deductions, bonuses, compensation\n2. Benefits Administration - Health insurance, retirement, benefits enrollment\n3. Time and Attendance - PTO, sick leave, timesheets, schedules\n4. Employee Data - Personal info updates, contact changes, employee records\n5. Onboarding and Offboarding - New hires, terminations, access provisioning\n6. Performance Management - Reviews, goals, development plans\n7. HR Compliance - Policy questions, compliance issues, regulations\n8. General HR Support - Other HR inquiries\n9. Not HCM Related - Should go to IT, Facilities, or other departments\n\nAnalyze the content carefully and select the most appropriate category.",
+          "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "Payroll and Compensation"
+            },
+            {
+              "scenario": "Benefits Administration"
+            },
+            {
+              "scenario": "Time and Attendance"
+            },
+            {
+              "scenario": "Employee Data"
+            },
+            {
+              "scenario": "Onboarding and Offboarding"
+            },
+            {
+              "scenario": "Performance Management"
+            },
+            {
+              "scenario": "HR Compliance"
+            },
+            {
+              "scenario": "General HR Support"
+            },
+            {
+              "scenario": "Other Functional Areas"
+            }
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.9,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "conditionAgentModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "Payroll and Compensation"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "Benefits Administration"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "Time and Attendance"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-3",
+            "label": 3,
+            "name": 3,
+            "description": "Employee Data"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-4",
+            "label": 4,
+            "name": 4,
+            "description": "Onboarding and Offboarding"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-5",
+            "label": 5,
+            "name": 5,
+            "description": "Performance Management"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-6",
+            "label": 6,
+            "name": 6,
+            "description": "HR Compliance"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-7",
+            "label": 7,
+            "name": 7,
+            "description": "General HR Support"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-8",
+            "label": 8,
+            "name": 8,
+            "description": "Not HCM Related"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 175,
+      "height": 220,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -11.580228601760105,
+        "y": 99.42548336780041
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_0",
+      "position": {
+        "x": 350,
+        "y": -50
+      },
+      "data": {
+        "id": "agentAgentflow_0",
+        "label": "HCM Payroll Agent",
+        "version": 1,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handle payroll and compensation tickets",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_0-input-agentModel-asyncOptions"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentMessages-array"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentTools-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "description": "Enable memory for the conversation thread",
+            "default": true,
+            "optional": true,
+            "id": "agentAgentflow_0-input-agentEnableMemory-boolean"
+          },
+          {
+            "label": "Return Response As",
+            "name": "agentReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "agentAgentflow_0-input-agentReturnResponseAs-options"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are an HCM Payroll specialist. Process this ticket:\n1. Acknowledge the issue\n2. Identify required information\n3. Provide resolution steps or escalation path\n4. Generate ticket notes for ServiceNow\n\nAssignment Group: HCM_Payroll_Team\nSLA: 4 hours for critical, 24 hours for standard"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "customTool",
+              "agentSelectedToolConfig": {
+                "selectedTool": "",
+                "returnDirect": "",
+                "customToolName": "",
+                "customToolDesc": "",
+                "customToolSchema": "",
+                "customToolFunc": "",
+                "agentSelectedTool": "customTool"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentReturnResponseAs": "assistantMessage",
+          "agentModelConfig": {
+            "credential": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.9,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_0-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 195,
+      "height": 100,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 350,
+        "y": -50
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_1",
+      "position": {
+        "x": 447.23751397588387,
+        "y": 74.86851248966647
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "HCM Benefits Agent",
+        "version": 1,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handle benefits administration tickets",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_1-input-agentModel-asyncOptions"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_1-input-agentMessages-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "optional": true,
+            "id": "agentAgentflow_1-input-agentEnableMemory-boolean"
+          },
+          {
+            "label": "Return Response As",
+            "name": "agentReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "agentAgentflow_1-input-agentReturnResponseAs-options"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are an HCM Benefits specialist. Process this ticket:\n1. Identify the benefits issue\n2. Check enrollment periods and eligibility\n3. Provide guidance or escalation\n4. Generate ticket notes\n\nAssignment Group: HCM_Benefits_Team\nSLA: 8 hours for standard requests"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentReturnResponseAs": "assistantMessage",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.7,
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 204,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 447.23751397588387,
+        "y": 74.86851248966647
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_2",
+      "position": {
+        "x": 435.5044792968806,
+        "y": 169.23850784179814
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "HCM General Agent",
+        "version": 1,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handle general HCM tickets",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_2-input-agentModel-asyncOptions"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_2-input-agentMessages-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentEnableMemory-boolean"
+          },
+          {
+            "label": "Return Response As",
+            "name": "agentReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "agentAgentflow_2-input-agentReturnResponseAs-options"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are an HCM generalist. Handle all other HCM-related tickets:\n1. Assess the request\n2. Route to appropriate sub-team if needed\n3. Provide initial response\n4. Generate ticket notes\n\nAssignment Groups:\n- Time & Attendance: HCM_Time_Team\n- Employee Data: HCM_Data_Team\n- Onboarding: HCM_Onboarding_Team\n- Performance: HCM_Performance_Team\n- Compliance: HCM_Compliance_Team\n- General: HCM_General_Support\n- Non-HCM: Service_Desk"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentReturnResponseAs": "assistantMessage",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.7,
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 201,
+      "height": 72,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 435.5044792968806,
+        "y": 169.23850784179814
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_0",
+      "position": {
+        "x": 600,
+        "y": 50
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_0",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "optional": true,
+            "id": "stickyNoteAgentflow_0-input-note-string"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "Setup Instructions:\n\n1. Import this JSON into Flowise\n2. Configure API credentials for:\n   - OpenAI/ChatGPT\n   - ServiceNow (create custom tool)\n\n3. Create ServiceNow Assignment Groups:\n   - HCM_Payroll_Team\n   - HCM_Benefits_Team\n   - HCM_Time_Team\n   - HCM_Data_Team\n   - HCM_Onboarding_Team\n   - HCM_Performance_Team\n   - HCM_Compliance_Team\n   - HCM_General_Support\n\n4. Test with sample tickets\n5. Add more agents as needed"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "stickyNote",
+      "width": 241,
+      "height": 525,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 50
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0",
+      "data": {
+        "sourceColor": "#7EE787",
+        "targetColor": "#ff8fab",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-conditionAgentAgentflow_0-conditionAgentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-0",
+      "target": "agentAgentflow_0",
+      "targetHandle": "agentAgentflow_0",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Payroll",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-0-agentAgentflow_0-agentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-1",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Benefits",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-1-agentAgentflow_1-agentAgentflow_1"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-2",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Time",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-2-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-3",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Employee Data",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-3-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-4",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Onboarding",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-4-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-5",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Performance",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-5-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-6",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Compliance",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-6-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-7",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "General HR",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-7-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-8",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Not HCM",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-8-agentAgentflow_2-agentAgentflow_2"
+    }
+  ]
+}

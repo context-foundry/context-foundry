@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "supervisor_1",
+      "type": "AgentExecutor",
+      "position": {"x": 100, "y": 100},
+      "data": {
+        "name": "Supervisor",
+        "type": "AgentExecutor",
+        "systemMessage": "You are a supervisor that coordinates worker agents.",
+        "maxIterations": 10
+      }
+    },
+    {
+      "id": "worker_search",
+      "type": "AgentExecutor",
+      "position": {"x": 300, "y": 50},
+      "data": {
+        "name": "SearchWorker",
+        "type": "AgentExecutor",
+        "systemMessage": "You search for information.",
+        "maxIterations": 5
+      }
+    },
+    {
+      "id": "worker_analyze",
+      "type": "AgentExecutor",
+      "position": {"x": 300, "y": 150},
+      "data": {
+        "name": "AnalyzeWorker",
+        "type": "AgentExecutor",
+        "systemMessage": "You analyze data.",
+        "maxIterations": 5
+      }
+    },
+    {
+      "id": "worker_format",
+      "type": "AgentExecutor",
+      "position": {"x": 300, "y": 250},
+      "data": {
+        "name": "FormatWorker",
+        "type": "AgentExecutor",
+        "systemMessage": "You format outputs.",
+        "maxIterations": 5
+      }
+    },
+    {
+      "id": "memory_1",
+      "type": "BufferMemory",
+      "position": {"x": 100, "y": 250},
+      "data": {
+        "name": "SharedMemory",
+        "type": "BufferMemory"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge1",
+      "source": "supervisor_1",
+      "target": "worker_search",
+      "type": "default"
+    },
+    {
+      "id": "edge2",
+      "source": "supervisor_1",
+      "target": "worker_analyze",
+      "type": "default"
+    },
+    {
+      "id": "edge3",
+      "source": "supervisor_1",
+      "target": "worker_format",
+      "type": "default"
+    },
+    {
+      "id": "edge4",
+      "source": "memory_1",
+      "target": "supervisor_1",
+      "type": "default"
+    }
+  ],
+  "chatflowid": "test-multi-agent-123",
+  "deployed": false
+}

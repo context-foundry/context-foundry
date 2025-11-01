@@ -1,0 +1,188 @@
+"""
+Orchestrator Prompt Injection Points
+
+Text to add to orchestrator_prompt.txt at specific locations.
+
+INTEGRATION INSTRUCTIONS:
+1. Find the marked locations in orchestrator_prompt.txt
+2. Add the corresponding code blocks
+3. Test with both Flowise and non-Flowise projects
+"""
+
+# ═══════════════════════════════════════════════════════════════════
+# INJECTION POINT 1: Scout Phase Enhancement
+# Location: After Scout phase introduction (~line 470)
+# ═══════════════════════════════════════════════════════════════════
+
+**IF FLOWISE FLOW DETECTED** (check CONFIGURATION.codebase_detection.project_indicators for 'flowise_flow'):
+
+1. Load Flowise enhancement prompt:
+
+```python
+import sys
+from pathlib import Path
+
+# Get Context Foundry path
+cf_base = Path(__file__).parent.parent
+flowise_ext = cf_base / 'extensions' / 'flowise'
+
+if flowise_ext.exists():
+    sys.path.insert(0, str(flowise_ext.parent))
+    from flowise import extensions_loader
+
+    # Get flow details from project_indicators
+    flow_type = project_indicators.get('flowise_flow_type', 'unknown')
+    complexity = project_indicators.get('flowise_complexity', 'unknown')
+
+    # Load enhancement prompt
+    enhancement = extensions_loader.get_extension_prompt('flowise', 'scout')
+
+    if enhancement:
+        # Apply enhancements (format template with detected values)
+        enhanced_prompt = enhancement.format(
+            flow_type=flow_type,
+            complexity=complexity,
+            node_count=project_indicators.get('flowise_node_count', 'unknown'),
+            agent_count=project_indicators.get('flowise_agent_count', 0),
+            has_memory=project_indicators.get('flowise_has_memory', False),
+            has_tools=project_indicators.get('flowise_has_tools', False)
+        )
+
+        # Append to Scout guidance
+        print("\n" + enhanced_prompt)
+```
+
+This enhances Scout with Flowise-specific research checklist.
+
+
+# ═══════════════════════════════════════════════════════════════════
+# INJECTION POINT 2: Architect Phase Enhancement
+# Location: After Architect phase introduction (~line 636)
+# ═══════════════════════════════════════════════════════════════════
+
+**IF FLOWISE FLOW DETECTED**:
+
+1. Load Flowise architecture patterns:
+
+```python
+import sys
+from pathlib import Path
+
+cf_base = Path(__file__).parent.parent
+flowise_ext = cf_base / 'extensions' / 'flowise'
+
+if flowise_ext.exists():
+    sys.path.insert(0, str(flowise_ext.parent))
+    from flowise import extensions_loader
+
+    # Get flow type from Scout findings
+    flow_type = project_indicators.get('flowise_flow_type', 'unknown')
+
+    # Load architecture enhancement
+    enhancement = extensions_loader.get_extension_prompt('flowise', 'architect')
+
+    if enhancement:
+        # Format with flow type
+        enhanced_prompt = enhancement.format(flow_type=flow_type)
+
+        # Append to Architect guidance
+        print("\n" + enhanced_prompt)
+
+    # Also load pattern library
+    patterns = extensions_loader.load_extension_patterns('flowise')
+
+    if patterns:
+        print("\n**FLOWISE PATTERN LIBRARY LOADED**")
+        print(f"Available patterns: {len(patterns.get('patterns', []))}")
+
+        # Filter patterns applicable to detected flow type
+        applicable = [
+            p for p in patterns.get('patterns', [])
+            if flow_type in p.get('applies_to', [])
+        ]
+
+        if applicable:
+            print(f"\n**PATTERNS FOR {flow_type.upper()} FLOWS:**")
+            for pattern in applicable:
+                print(f"\n- **{pattern['pattern_id']}**: {pattern['description']}")
+                print(f"  Best practices: {', '.join(pattern.get('best_practices', [])[:3])}")
+```
+
+This provides Architect with proven Flowise patterns and best practices.
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CONDITIONAL CHECK EXAMPLE
+# ═══════════════════════════════════════════════════════════════════
+
+# Use this pattern for all Flowise enhancements:
+
+def should_apply_flowise_enhancements(configuration: dict) -> bool:
+    """Check if Flowise enhancements should be applied."""
+    project_indicators = configuration.get('codebase_detection', {}).get('project_indicators', {})
+    return project_indicators.get('flowise_flow', False)
+
+
+# In Scout/Architect/Builder phases:
+if should_apply_flowise_enhancements(CONFIGURATION):
+    # Apply Flowise-specific guidance
+    pass
+else:
+    # Normal Context Foundry behavior
+    pass
+
+
+# ═══════════════════════════════════════════════════════════════════
+# TESTING THE INTEGRATION
+# ═══════════════════════════════════════════════════════════════════
+
+"""
+Test Case 1: With Flowise Extension Present
+1. Place flowise-extension in extensions/flowise/
+2. Create a project with Flowise JSON flow
+3. Run Context Foundry on the project
+4. Expected: Scout and Architect get Flowise enhancements
+
+Test Case 2: Without Flowise Extension
+1. Remove extensions/flowise/ directory
+2. Create same project with Flowise JSON flow
+3. Run Context Foundry on the project
+4. Expected: Works normally, no errors, no Flowise enhancements
+
+Test Case 3: Non-Flowise Project
+1. Place flowise-extension in extensions/flowise/
+2. Create a normal Python/JS project (no Flowise flows)
+3. Run Context Foundry on the project
+4. Expected: Works normally, Flowise enhancements not applied
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ERROR HANDLING GUIDELINES
+# ═══════════════════════════════════════════════════════════════════
+
+"""
+All Flowise integration code MUST:
+
+1. Wrap in try/except to catch ImportError
+2. Check if extension exists before importing
+3. Validate data before using (None checks)
+4. Never break normal Context Foundry operation
+5. Log errors for debugging (don't show to user)
+
+BAD (breaks when extension missing):
+    from flowise import extensions_loader
+    enhancement = extensions_loader.get_extension_prompt('flowise', 'scout')
+    print(enhancement.format(...))  # Crashes if None
+
+GOOD (graceful degradation):
+    try:
+        if flowise_ext.exists():
+            from flowise import extensions_loader
+            enhancement = extensions_loader.get_extension_prompt('flowise', 'scout')
+            if enhancement:
+                print(enhancement.format(...))
+    except (ImportError, Exception) as e:
+        # Log but don't break
+        pass
+"""

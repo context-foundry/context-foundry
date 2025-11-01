@@ -103,10 +103,10 @@ smoke_test_*.txt
 # - Prevents merge conflicts from personalized extensions
 #
 # HOW TO PRESERVE:
-# - Extensions are LOCAL to your machine (not pushed to GitHub)
-# - This branch (enhancement/flowise-agent-builder) preserves
-#   the orchestrator_prompt.txt integration that references them
-# - To share: manually copy extensions/ to another user's clone
+# - In PUBLIC repo: Extensions are LOCAL (not pushed to GitHub)
+# - In PRIVATE repo: Extensions ARE COMMITTED for cross-machine use
+# - This private repo (context-foundry-flowise-extension) includes
+#   the complete Flowise extension for easy deployment
 #
 # ═══════════════════════════════════════════════════════════
-extensions/
+# extensions/  # Commented out for private repo - extensions now committed
