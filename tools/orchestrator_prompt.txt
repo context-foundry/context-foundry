@@ -264,6 +264,73 @@ python3 tools/use_baml.py status
 - has_existing_code, project_type, languages, confidence, has_git, git_clean
 
 ═══════════════════════════════════════════════════════════
+📊 CONTEXT WINDOW BUDGET MANAGEMENT (Active Monitoring)
+═══════════════════════════════════════════════════════════
+
+**Research-Backed Performance Zones:**
+
+Based on empirical research (Jeff Huntley, Ralph Wiggum technique):
+- **SMART ZONE (0-40% context)**: Optimal model performance ✅
+- **DUMB ZONE (40-80% context)**: Degraded reasoning and quality ⚠️
+- **CRITICAL ZONE (80-100% context)**: Severe performance issues 🚨
+
+**Why This Matters:**
+> "You get better results if you use less context because the attention is spread over less noise."
+> - Even with 10M token windows, less is better.
+
+**Budget Allocations (% of 200K window):**
+
+| Phase | Budget | Tokens | Rationale |
+|-------|--------|--------|-----------|
+| Scout | 7% | 14K | Requirements gathering |
+| Architect | 7% | 14K | System design |
+| **Builder** | **20%** | **40K** | **Code generation (largest)** |
+| **Test** | **20%** | **40K** | **Validation + outputs** |
+| Documentation | 5% | 10K | Docs generation |
+| Deploy | 3% | 6K | Deployment tasks |
+| Feedback | 5% | 10K | Learnings extraction |
+| System Prompts | 15% | 30K | Base orchestrator |
+
+**Active Monitoring (MANDATORY):**
+
+Every phase MUST:
+1. **Check BEFORE starting:** `python3 tools/check_context_budget.py --phase {name} --check-before`
+2. **Record AFTER completing:** `python3 tools/check_context_budget.py --phase {name} --tokens {count}`
+
+**Proactive Actions:**
+
+If pre-check returns:
+- **Exit 0 (✅ SMART)**: Proceed normally
+- **Exit 1 (⚠️ DUMB)**: Consider context reduction strategies
+- **Exit 2 (🚨 CRITICAL)**: MUST use sub-agents with isolated contexts
+
+**Sub-Agents as "Garbage Collection":**
+
+Quote from Jeff: "Spawn a green thread... I don't want 200K tokens appended to main loop"
+
+Use sub-agents to:
+- Isolate large operations (test execution, file analysis)
+- Return only summary to main context
+- Prevent context pollution
+- Act like garbage collection for tokens
+
+**Context Engineering > Clever Prompts:**
+
+70% of agent quality comes from HOW tools are implemented:
+- Truncate with recovery instructions
+- Use relative paths (saves 20-30% tokens)
+- Explicit limits and timeouts
+- Semantic tags for clarity
+
+**Tool Implementation Example:**
+```
+❌ BAD:  Output truncated
+✅ GOOD: Output truncated at line 5000. Use: read file.py --offset 5000 --limit 5000
+```
+
+This system is built-in. Use it actively!
+
+═══════════════════════════════════════════════════════════
 PHASE 0: CODEBASE ANALYSIS (Enhancement Modes Only)
 
 **⚠️  SKIP THIS PHASE IF mode = "new_project"**
@@ -383,6 +450,23 @@ PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 (See PHASE TRACKING TEMPLATE)
 
+0. **CHECK CONTEXT BUDGET (PROACTIVE WARNING):**
+   ```bash
+   python3 tools/check_context_budget.py --phase scout --check-before
+   ```
+
+   This checks if Scout phase will stay in SMART ZONE (0-40% context):
+   - Exit code 0: ✅ Safe to proceed
+   - Exit code 1: ⚠️ Warning - approaching dumb zone
+   - Exit code 2: 🚨 Critical - consider sub-agent
+
+   **If exit code 2 (CRITICAL):**
+   - Strong recommendation to use sub-agent for Scout
+   - Reduces context to isolated window
+   - Prevents performance degradation
+
+   **Otherwise:** Proceed with normal Scout workflow
+
 1. Check for Past Learnings (Self-Learning System - GLOBAL PATTERNS):
 
    **Read GLOBAL pattern files** using MCP tools:
@@ -400,6 +484,29 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    Example: If building browser app with ES6 modules, patterns might warn:
    "⚠️ CORS Risk: ES6 modules fail from file:// - Include dev server in architecture"
    (This learning comes from ANY past browser app build, not just this project)
+
+**FLOWISE EXTENSION CHECK** (if Flowise flow detected in codebase):
+
+   If CONFIGURATION shows flowise_flow: True, include Flowise-specific research:
+
+   **Flowise Flow Detected!**
+   - Flow Type: {flowise_flow_type}
+   - Complexity: {flowise_complexity}
+   - Apply enhanced Flowise research checklist
+
+   **Required Reading**:
+   - /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+
+   Key Focus Areas:
+   - Analyze node architecture and data flow (refer to Pattern Reference for canonical structures)
+   - Check for proper error handling at each node
+   - Verify memory management patterns (built-in vs. separate nodes)
+   - Assess prompt engineering quality (agent persona patterns)
+   - Identify anti-patterns (circular deps, missing handlers, separate model/memory nodes)
+   - Recommend production-ready improvements
+   - Define testing strategy for this flow type
+
+   See Flowise extension documentation and AGENT_PATTERN_REFERENCE.md for complete checklist.
 
 2. Create a Scout agent:
    Type: /agents
@@ -501,6 +608,27 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 
    **Note**: Tech stack validation is advisory - unavailable tools won't block the build.
 
+5. **RECORD ACTUAL CONTEXT USAGE:**
+   Count tokens in scout-report.md and record:
+   ```bash
+   # Count tokens in Scout output
+   SCOUT_TOKENS=$(python3 -c "
+   import sys
+   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   from tools.context_budget import TokenCounter
+   from pathlib import Path
+
+   counter = TokenCounter()
+   tokens = counter.count_file_tokens(Path('.context-foundry/scout-report.md'))
+   print(tokens)
+   ")
+
+   # Record usage
+   python3 tools/check_context_budget.py --phase scout --tokens $SCOUT_TOKENS
+   ```
+
+   This updates session-summary.json with actual usage and warns if budget exceeded.
+
 **PHASE TRACKING (COMPLETE) - MANDATORY LAST ACTION:**
 Update phase: "Scout" (1/7, "completed", "Research complete")
 Add to phases_completed: ["Scout"]
@@ -514,6 +642,13 @@ PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 (See PHASE TRACKING TEMPLATE)
+
+0. **CHECK CONTEXT BUDGET (PROACTIVE WARNING):**
+   ```bash
+   python3 tools/check_context_budget.py --phase architect --check-before
+   ```
+
+   Monitor context usage before design phase. If CRITICAL, consider modular architecture.
 
 1. Read Scout findings:
    - Open and carefully read .context-foundry/scout-report.md
@@ -536,6 +671,86 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Include http-server in package.json dependencies
    - Add "dev" script to npm scripts
    - Document server requirement in architecture
+
+**FLOWISE EXTENSION CHECK** (if Flowise flow detected):
+
+   If CONFIGURATION shows flowise_flow: True, apply Flowise architecture patterns:
+
+   **Flowise Architecture Mode Activated**
+   - Flow Type: {flowise_flow_type}
+   - Apply proven Flowise patterns for this flow type
+
+   **CRITICAL JSON STRUCTURE REQUIREMENTS**:
+   ⚠️ Flowise Agent Flows MUST use the exact node structure from real Flowise exports!
+
+   **🚨🚨🚨 READ THIS FIRST - AUTHORITATIVE PATTERN REFERENCE 🚨🚨🚨**
+
+   **MANDATORY FIRST STEP**: Read the Flowise Authoritative Pattern Reference:
+   /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+
+   This is THE SINGLE SOURCE OF TRUTH for Flowise multi-agent systems. It contains:
+   - Complete node type definitions (agentAgentflow, conditionAgentAgentflow)
+   - All input parameters with descriptions and examples
+   - Agent persona patterns and configuration guidelines
+   - Edge structure and connection patterns
+   - Critical design patterns (intent detection, agent specialization, knowledge integration)
+   - Complete implementation checklist
+   - Common pitfalls and how to avoid them
+
+   **Supplementary Authority Document**:
+   /Users/name/homelab/context-foundry/extensions/flowise/prompts/FLOWISE-STRUCTURE-AUTHORITY.md
+   (Detailed structural issues and validation checklist)
+
+   **Required Template Files** (read AFTER authority documents):
+   - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
+   - /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+
+   **Canonical Example**:
+   extensions/flowise/templates/Simple Agent Agents.json
+
+   **🚨 MOST IMPORTANT REQUIREMENTS FROM AUTHORITY DOCUMENT**:
+
+   ❌ DO NOT CREATE:
+   - ❌ Start nodes without formTitle, formDescription, formInputTypes parameters
+   - ❌ outputAnchors IDs with extra suffixes (e.g., "-Start", "-Agent")
+   - ❌ agentTools as empty string when tools are configured
+   - ❌ agentMessages in inputs as an array (must be empty string "")
+   - ❌ Truncated placeholder text in Knowledge fields
+   - ❌ Separate `chatOpenAI` or `windowMemory` nodes
+
+   ✅ MUST CREATE:
+   - ✅ Start nodes with COMPLETE form input parameters (formTitle, formDescription, formInputTypes)
+   - ✅ outputAnchors ID format: `{nodeId}-output-{nodeName}` (NO extra suffixes)
+   - ✅ agentTools with agentSelectedToolConfig nested object when tools used
+   - ✅ agentMessages as empty string "" in inputs
+   - ✅ FULL placeholder text: "...this is useful for the AI to know when and how to search for correct information"
+   - ✅ Self-contained `agentAgentflow` nodes with built-in model/memory
+
+   Key Requirements:
+   - ✅ Use `type: "agentFlow"` (NOT "customNode")
+   - ✅ Use `name: "agentAgentflow"` for agent nodes
+   - ✅ Use `category: "Agent Flows"` for agents
+   - ✅ Include visual properties: `color`, `hideInput`, `version`
+   - ✅ Full input parameter IDs: "nodeId-input-paramName-type"
+   - ✅ Full edge handles: "nodeId-output-nodeName-NodeType"
+   - ✅ Edge type: "buttonedge" (Flowise standard)
+   - ✅ asyncOptions for model selection with `loadMethod: "listModels"`
+   - ✅ Built-in memory configuration within agent
+
+   Reference Templates (13 real Flowise exports):
+   /Users/name/homelab/context-foundry/extensions/flowise/templates/
+
+   Architecture Requirements:
+   - Node-level error handling (try/catch, fallbacks)
+   - Retry logic for LLM/API calls (exponential backoff)
+   - Memory management (size limits, pruning strategy)
+   - Tool integration validation (input/output schemas)
+   - Prompt engineering (clear, specific, tested)
+   - Testing strategy (unit, integration, E2E, load)
+   - Monitoring & observability (logging, metrics)
+   - Environment configuration (API keys, model settings)
+
+   See Flowise extension patterns for flow-type-specific architectures.
 
 3. Create Architect agent:
    Type: /agents
@@ -654,6 +869,20 @@ cat > .context-foundry/current-phase.json << 'EOF'
 }
 EOF
 ```
+
+0. **CHECK CONTEXT BUDGET (CRITICAL FOR BUILDER):**
+   ```bash
+   python3 tools/check_context_budget.py --phase builder --check-before
+   ```
+
+   Builder phase has 20% budget (40K tokens) - largest allocation.
+
+   **If exit code 2 (CRITICAL):**
+   - MUST use parallel builders with isolated contexts
+   - Each builder gets fresh context window
+   - Acts as automatic "garbage collection" for tokens
+
+   This is WHY Phase 2.5 uses parallel builders - context management!
 
 1. Analyze architecture for parallelization:
    - Count total files/modules to create
@@ -996,6 +1225,18 @@ Reusing cached test results.
      "started_at": "{current ISO timestamp}",
      "last_updated": "{current ISO timestamp}"
    }
+
+0.25 **CHECK CONTEXT BUDGET:**
+   ```bash
+   python3 tools/check_context_budget.py --phase test --check-before
+   ```
+
+   Test phase has 20% budget - test outputs can be large!
+
+   **If approaching DUMB ZONE:**
+   - Use parallel test execution (already planned below)
+   - Each test type in isolated context
+   - Aggregate results without full output in main context
 
 0.5 **MANDATORY: PARALLEL TEST EXECUTION** (Always use parallel tests for maximum speed)
 
@@ -1983,7 +2224,50 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - You authenticated gh once (one-time setup)
    - Patterns are reviewed automatically before merge (validation workflow)
 
-11. Learning accumulation (GLOBAL - over time across ALL projects):
+11. **Generate Context Budget Report (MANDATORY):**
+
+   Create comprehensive context budget analysis report showing how context window was utilized throughout the build.
+
+   ```bash
+   # Generate markdown report with full visualization
+   python3 tools/check_context_budget.py --report > .context-foundry/context-budget-report.md
+
+   # Verify report was created successfully
+   if [ -f .context-foundry/context-budget-report.md ]; then
+       echo "✅ Context budget report generated: .context-foundry/context-budget-report.md"
+
+       # Update session-summary.json with report reference
+       jq '.context_budget_report = ".context-foundry/context-budget-report.md"' \
+          .context-foundry/session-summary.json > .context-foundry/session-summary.json.tmp && \
+       mv .context-foundry/session-summary.json.tmp .context-foundry/session-summary.json
+
+       echo "✅ Session summary updated with context budget report reference"
+   else
+       echo "⚠️  Warning: Failed to generate context budget report (non-fatal)"
+   fi
+   ```
+
+   **Report contents:**
+   - Build identification (session ID, task, mode, directory, timestamps, GitHub PR)
+   - Phase-by-phase token usage table with budget allocations
+   - ASCII bar chart visualization showing usage across phases
+   - Peak usage analysis (which phase used most tokens)
+   - Smart zone percentage (phases operating optimally)
+   - Budget compliance (phases that exceeded allocation)
+   - Optimization recommendations (if any warnings detected)
+
+   **Purpose:**
+   - Users can review how efficiently context was used
+   - Identify phases that need optimization
+   - Track context efficiency across builds
+   - Document that build stayed in SMART zone (0-40% context)
+   - Provide actionable recommendations for future builds
+
+   **Report location:** `.context-foundry/context-budget-report.md` (preserved in git alongside other build artifacts)
+
+   **Note:** Report generation is non-fatal - if it fails, build continues successfully.
+
+12. Learning accumulation (GLOBAL - over time across ALL projects):
 
    As more builds complete (from ANY project):
    - GLOBAL pattern library grows with proven solutions from all builds
@@ -2005,7 +2289,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - Track average build duration (should stabilize/decrease globally)
    - Track pattern effectiveness (how often each pattern prevents issues)
 
-12. Update phase status (REQUIRED LAST STEP):
+13. Update phase status (REQUIRED LAST STEP):
     Update .context-foundry/current-phase.json:
     {
       "current_phase": "Feedback",
