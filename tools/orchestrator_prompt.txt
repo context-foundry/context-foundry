@@ -707,8 +707,9 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    **MUST READ** to avoid repeating past mistakes:
    - Pattern #1: Meta-description instead of complete flow
    - Pattern #2: Missing agent nodes
-   - Pattern #3: Separate config files anti-pattern
+   - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
    - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
+   - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
 
    **Required Template Files** (read AFTER authority documents):
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json

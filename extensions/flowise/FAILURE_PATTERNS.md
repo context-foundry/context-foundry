@@ -507,6 +507,223 @@ Formula Check:
 
 ---
 
+## Phantom Tool and Knowledge References
+
+### Symptom
+
+Flowise workflow imports successfully but agents show validation errors in Flowise UI:
+- **Tools section**: Shows "Tool *" required field as **blank/empty** (even though count shows tools exist)
+- **Knowledge section**: Shows "Vector Store *", "Embedding Model *", "Knowledge Name *" as **blank/empty** with placeholder text
+- User must manually configure every tool and knowledge base in Flowise UI
+
+**Example** (Internal Talent Mobility - 2025-11-01):
+```
+Agent.EmployeeProfiling validation errors:
+- Tool * (blank) - Required field
+- Tool * (blank) - Required field
+- Tool * (blank) - Required field
+- Vector Store * (blank) - Required field
+- Embedding Model * (blank) - Required field
+- Knowledge Name * (shows placeholder: "A short name for the knowledge base...")
+```
+
+### Root Cause
+
+**Builder generates PLACEHOLDER/EXAMPLE tool and knowledge references that don't exist in Flowise.**
+
+When Builder plans agent capabilities, it invents tool names based on what the agent should do:
+```json
+"agentTools": [
+  {
+    "agentSelectedTool": "queryWorkdayHCM",  // ← Invented name, not real Flowise tool
+    "agentSelectedToolRequiresHumanInput": ""
+  },
+  {
+    "agentSelectedTool": "analyzeSkillsHistory",  // ← Doesn't exist
+    "agentSelectedToolRequiresHumanInput": ""
+  }
+]
+```
+
+Similarly for knowledge bases:
+```json
+"agentKnowledgeVSEmbeddings": [
+  {
+    "vectorStore": "workday_skills_cloud",  // ← Invented reference
+    "embeddingModel": "text-embedding-3-small",
+    "knowledgeName": "A short name for the knowledge base...",  // ← Placeholder text
+    "knowledgeDescription": "Describe what the knowledge base is about...",  // ← Placeholder
+    "returnSourceDocuments": true
+  }
+]
+```
+
+**What happens in Flowise UI**:
+1. User imports workflow ✓
+2. Flowise tries to resolve "queryWorkdayHCM" tool reference
+3. **Tool doesn't exist** in Flowise tool library
+4. Dropdown shows blank (required field validation fails)
+5. Same for vector stores, embedding models, knowledge bases
+
+### Impact
+
+**User Experience**:
+- Workflow appears "broken" on import
+- Every agent shows multiple validation errors
+- User must manually configure all tools and knowledge bases
+- Time-consuming post-import setup required
+
+**Examples from Recent Builds**:
+- **Internal Talent Mobility**: 6-7 phantom tools per agent × 7 agents = ~40+ manual configurations
+- **Gig Marketplace**: Tools like "workday_get_worker_skills", "calculate_skill_similarity" don't exist
+
+### Fix
+
+**CRITICAL DECISION**: Tools and knowledge bases should be:
+1. ✅ **OMITTED ENTIRELY** (leave arrays empty) - User adds in Flowise UI
+2. ✅ **DOCUMENTED IN README** (list recommended tools to create)
+3. ❌ **NOT INVENTED** with placeholder names
+
+**CORRECT Pattern (Option 1 - Empty Arrays)**:
+```json
+{
+  "inputs": {
+    "agentModel": "chatOpenAI",
+    "agentMessages": [
+      {
+        "role": "system",
+        "content": "You are an Employee Profiling agent..."
+      }
+    ],
+    "agentTools": [],  // ← EMPTY: User configures in Flowise UI
+    "agentKnowledgeVSEmbeddings": [],  // ← EMPTY: User adds knowledge bases
+    "agentEnableMemory": true,
+    "agentMemoryType": "allMessages"
+  }
+}
+```
+
+**CORRECT Pattern (Option 2 - Documentation)**:
+
+In `README.md` or `INTEGRATION_GUIDE.md`:
+```markdown
+## Required Tool Configuration
+
+After importing the workflow to Flowise, configure these custom tools:
+
+### Agent.EmployeeProfiling Tools
+1. **queryWorkdayHCM** - Custom Tool
+   - Purpose: Query Workday HCM API for employee data
+   - Auth: OAuth 2.0
+   - Endpoint: https://api.workday.com/v1/workers
+
+2. **analyzeSkillsHistory** - Custom Tool
+   - Purpose: Analyze employee skills progression
+   - Auth: API Key
+   - Endpoint: https://api.workday.com/v1/skills
+
+### Knowledge Base Configuration
+1. **Workday Skills Cloud** - Vector Store
+   - Type: Pinecone / Weaviate / Qdrant
+   - Embedding Model: text-embedding-3-small (OpenAI)
+   - Content: Workday Skills Cloud ontology documents
+```
+
+### Prevention
+
+**During Architect Phase**:
+- [ ] Architect MUST NOT invent tool names
+- [ ] Architect MUST document required tools in architecture.md
+- [ ] If APIs are mentioned, document as "Custom Tools (user configured)"
+
+**During Builder Phase**:
+- [ ] Builder leaves `agentTools: []` empty (not placeholder names)
+- [ ] Builder leaves `agentKnowledgeVSEmbeddings: []` empty
+- [ ] Built-in tools (OpenAI web search, code interpreter) are OK to include
+- [ ] Builder creates tool documentation files instead:
+  - `tool-configs/recommended-tools.md`
+  - `knowledge-configs/recommended-knowledge-bases.md`
+
+**Validation Rules** (Test Phase):
+```bash
+# Check for phantom tool references
+for tool in $(jq -r '.nodes[].data.inputs.agentTools[]?.agentSelectedTool' flow.json 2>/dev/null); do
+  if [[ -n "$tool" ]]; then
+    echo "❌ WARNING: Found tool reference '$tool' - this may not exist in Flowise"
+    echo "   Consider removing and documenting in INTEGRATION_GUIDE.md instead"
+  fi
+done
+
+# Check for placeholder text in knowledge configs
+if jq -e '.nodes[].data.inputs.agentKnowledgeVSEmbeddings[]? | select(.knowledgeName | contains("short name"))' flow.json > /dev/null 2>&1; then
+  echo "❌ ERROR: Found placeholder text in knowledgeName field"
+  echo "   Remove placeholder entries or replace with actual knowledge base names"
+fi
+```
+
+### Documentation Template
+
+**Add to INTEGRATION_GUIDE.md**:
+```markdown
+## Post-Import Configuration
+
+This workflow requires manual configuration in Flowise UI:
+
+### 1. Custom Tools Setup
+For each agent, you'll need to create custom tools:
+
+**Agent.EmployeeProfiling**:
+- queryWorkdayHCM (Workday HCM API integration)
+- analyzeSkillsHistory (Skills analysis endpoint)
+- extractCompetencies (Competency extraction)
+
+**How to create custom tools**:
+1. In Flowise, go to Tools → Add Custom Tool
+2. Configure API endpoints, authentication, and parameters
+3. Assign tools to agents in the workflow
+
+### 2. Knowledge Base Setup
+Create vector stores for domain knowledge:
+
+**Workday Skills Cloud Knowledge Base**:
+- Vector Store: Choose (Pinecone, Weaviate, Qdrant, etc.)
+- Embedding Model: text-embedding-3-small
+- Documents: Upload Workday Skills Cloud ontology, competency definitions
+- Assign to: Agent.EmployeeProfiling, Agent.SkillsMatching
+
+### 3. Credential Configuration
+Add API credentials in Flowise Credentials Manager:
+- OpenAI API Key (for ChatGPT model)
+- Workday OAuth 2.0 credentials
+- Vector store API keys (if using cloud vector DB)
+```
+
+### Examples
+
+**WRONG (Phantom References)**:
+```json
+"agentTools": [
+  {"agentSelectedTool": "queryWorkdayHCM"},      // Doesn't exist
+  {"agentSelectedTool": "analyzeSkillsHistory"}  // Doesn't exist
+]
+```
+
+**RIGHT (Empty + Documentation)**:
+```json
+"agentTools": []  // User configures in Flowise UI
+```
+
+Plus in `INTEGRATION_GUIDE.md`:
+> **Required Tools**: Create custom tools for queryWorkdayHCM, analyzeSkillsHistory...
+
+**ACCEPTABLE (Built-in Tools Only)**:
+```json
+"agentToolsBuiltInOpenAI": ["web_search_preview", "code_interpreter"]  // ✓ Actual OpenAI tools
+"agentTools": []  // Empty for custom tools
+```
+
+---
+
 ## Example Negative Pattern
 
 **File**: `patterns/failures/enterprise-ops-center-meta-description.json`
@@ -529,8 +746,10 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.1 | 2025-11-01 | Added "Disconnected Agent Nodes" pattern from Cloud Services Operations build |
-| 1.0 | 2025-11-01 | Initial documentation of meta-description failure pattern |
+| 1.3 | 2025-11-01 | Added "Phantom Tool and Knowledge References" pattern (Pattern #5) from Internal Talent Mobility build |
+| 1.2 | 2025-11-01 | Added "Parallel Build Splitting" variant to Pattern #3 from Gig Marketplace build (06cc114d) |
+| 1.1 | 2025-11-01 | Added "Disconnected Agent Nodes" pattern (Pattern #4) from Cloud Services Operations build |
+| 1.0 | 2025-11-01 | Initial documentation with Patterns #1-3 (meta-description, missing nodes, separate config files) |
 
 ---
 
