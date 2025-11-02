@@ -861,6 +861,55 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 **Enhancement modes:** See §Enhancement Mode Reference for build planning guidance. Create feature branch first: `git checkout -b enhancement/descriptive-name`
 
+🚨 **FLOWISE EXCEPTION - CRITICAL SINGLE-FILE REQUIREMENT:**
+
+**IF this is a Flowise project** (check CONFIGURATION for `flowise_flow: True` OR check scout-report.md for "Flowise" workflow):
+
+**SPECIAL BUILD RULES FOR FLOWISE:**
+1. ❌ **DO NOT use parallel build tasks for JSON generation**
+2. ❌ **DO NOT split nodes across multiple files**
+3. ❌ **DO NOT create separate config files**
+4. ✅ **Generate EXACTLY ONE workflow JSON file** (e.g., `workflow-name.json`)
+5. ✅ **ALL nodes MUST be in single "nodes" array**
+6. ✅ **ALL edges MUST be in single "edges" array**
+7. ✅ **Self-contained structure** (no external references)
+
+**Why this is critical:**
+- Flowise imports require EXACTLY ONE JSON file per workflow
+- Creating multiple JSON files = Pattern #3 violation (Separate Config Files Anti-Pattern)
+- Parallel build tasks may attempt to split node generation → MUST be prevented
+- Example of what NOT to do:
+  ```
+  ❌ flowise-workflow-nodes-0-1.json
+  ❌ flowise-workflow-nodes-2-4.json
+  ❌ flowise-workflow-nodes-5-7.json
+  ```
+
+**Correct Flowise build approach:**
+```json
+// .context-foundry/build-tasks.json for Flowise project
+{
+  "parallel_mode": false,  // ← CRITICAL: NO parallel mode for Flowise JSON
+  "total_tasks": 1,
+  "tasks": [
+    {
+      "id": "flowise-flow",
+      "description": "Create complete Flowise workflow in single JSON file",
+      "files": ["workflow-name.json"],
+      "dependencies": [],
+      "estimated_time": "15-20 minutes"
+    }
+  ]
+}
+```
+
+**Additional Flowise project files** (these CAN be parallel):
+- Documentation (README.md, INTEGRATION_GUIDE.md) - parallel OK
+- Tool configs (tool-configs/*.json) - parallel OK
+- Knowledge configs (knowledge-configs/*.json) - parallel OK
+
+**Only the main workflow JSON must be generated as a single, non-parallel task.**
+
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update .context-foundry/current-phase.json:
 ```bash

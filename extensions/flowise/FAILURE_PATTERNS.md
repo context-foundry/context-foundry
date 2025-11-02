@@ -194,6 +194,79 @@ Builder instructions MUST include:
 - "Follow warehouse-operations-flow.json structure EXACTLY"
 - "Expected output: 1000+ lines for 10+ agent systems"
 
+### Variant: Parallel Build Splitting (Added 2025-11-01)
+
+**Symptom**:
+Instead of one workflow JSON file, Builder creates multiple split files:
+```
+❌ flowise-workflow-nodes-0-1.json  (12K)
+❌ flowise-workflow-nodes-2-4.json  (49K)
+❌ flowise-workflow-nodes-5-7.json  (46K)
+```
+
+**Root Cause**:
+Parallel build system (Phase 2.5) attempted to parallelize Flowise JSON generation by splitting node creation across multiple builder tasks. Each parallel task generated its assigned nodes, resulting in multiple JSON files instead of one complete workflow.
+
+**Why This Happens**:
+1. Builder planning phase identifies "large number of nodes" (e.g., 8 agents = 10 total nodes)
+2. Planner creates parallel tasks to speed up build: "Create nodes 0-1", "Create nodes 2-4", etc.
+3. Each parallel builder writes its own JSON file
+4. Result: 3 separate JSON files instead of 1 complete workflow
+
+**Example** (Gig Marketplace - 2025-11-01, Build ID: 06cc114d):
+- Task: Build Flowise gig marketplace with 7 specialized agents
+- Expected: `gig-marketplace-flow.json` (1 file, ~3500 lines)
+- Actual: 3 split files created by parallel builders
+- Impact: Cannot import into Flowise (expects 1 file)
+
+**Fix**:
+Orchestrator MUST prevent parallel splitting for Flowise JSON generation:
+
+```json
+// WRONG: Parallel mode for Flowise workflow JSON
+{
+  "parallel_mode": true,
+  "tasks": [
+    {"id": "nodes-0-1", "files": ["flowise-workflow-nodes-0-1.json"]},
+    {"id": "nodes-2-4", "files": ["flowise-workflow-nodes-2-4.json"]},
+    {"id": "nodes-5-7", "files": ["flowise-workflow-nodes-5-7.json"]}
+  ]
+}
+
+// CORRECT: Single task for Flowise workflow JSON
+{
+  "parallel_mode": false,  // ← CRITICAL
+  "tasks": [
+    {
+      "id": "flowise-flow",
+      "description": "Create complete Flowise workflow in single JSON file",
+      "files": ["gig-marketplace-flow.json"]
+    }
+  ]
+}
+```
+
+**Additional Prevention**:
+- Orchestrator MUST check for Flowise project detection (flowise_flow: True)
+- When detected, MUST set `parallel_mode: false` for main workflow JSON
+- Documentation files (README, guides) CAN still be parallel
+- Tool/knowledge configs CAN still be parallel
+- ONLY main workflow JSON must be single-task
+
+**Validation Rules**:
+```bash
+# Pre-deployment check for Flowise projects
+if [[ -f ".context-foundry/scout-report.md" ]] && grep -q "Flowise" .context-foundry/scout-report.md; then
+  json_file_count=$(find . -maxdepth 1 -name "*flow*.json" -o -name "*workflow*.json" | wc -l)
+
+  if [[ $json_file_count -ne 1 ]]; then
+    echo "❌ ERROR: Flowise projects must have EXACTLY 1 workflow JSON file"
+    echo "Found: $json_file_count files"
+    exit 1
+  fi
+fi
+```
+
 ---
 
 ## Disconnected Agent Nodes
