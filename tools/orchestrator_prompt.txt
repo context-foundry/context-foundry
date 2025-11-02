@@ -710,16 +710,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
    - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
    - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
-
-   **Required Standard Tools for ALL Flowise Agents**:
-   Every agent MUST include these 2 standard tools (not phantom references, these are real):
-   1. **currentDateTime**: Provides current date and time for temporal context evaluation
-   2. **searxng-search**: Federated meta-search for real-time web information
-      - Base URL: https://s.llam.ai
-      - Purpose: Helps agents verify information freshness and gather real-time data
-
-   These tools help agents evaluate search results with temporal awareness and access
-   current information. Include in EVERY agent's agentTools array.
+   - Pattern #6: Tool references before tool creation (referencing tools that don't exist in target Flowise instance)
 
    **Required Template Files** (read AFTER authority documents):
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
@@ -920,14 +911,6 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 - Knowledge configs (knowledge-configs/*.json) - parallel OK
 
 **Only the main workflow JSON must be generated as a single, non-parallel task.**
-
-**Standard Agent Tools (REQUIRED for ALL agents)**:
-Every Flowise agent MUST include these 2 tools in agentTools array:
-1. currentDateTime (temporal context)
-2. searxng-search (real-time web search, base URL: https://s.llam.ai)
-
-These are NOT phantom references (Pattern #5) - they are standard tools that should
-be configured in every agent. Do NOT leave agentTools empty - include these 2 tools.
 
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update .context-foundry/current-phase.json:

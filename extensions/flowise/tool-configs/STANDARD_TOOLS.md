@@ -1,8 +1,8 @@
-# Standard Flowise Agent Tools
+# Recommended Flowise Agent Tools (Optional)
 
-**Required for ALL Flowise agents built with Context Foundry**
+**IMPORTANT**: These tools must be created in your Flowise instance BEFORE importing workflows.
 
-These 2 tools are automatically included in every Flowise agent to provide temporal awareness and real-time information access.
+These 2 tools can enhance agent capabilities by providing temporal awareness and real-time information access. They are NOT automatically included in generated workflows - you must create them manually in Flowise UI first.
 
 ---
 
@@ -258,45 +258,43 @@ in climate policy include... [synthesizes from recent results only]"
 
 ## Integration with Context Foundry
 
-### Automatic Inclusion
+### Manual Setup Required
 
-**AGENT-NODE-TEMPLATE.json** includes both tools:
+**CRITICAL**: Generated workflows have empty tool arrays by default:
 ```json
-"agentTools": [
-  {
-    "agentSelectedTool": "currentDateTime",
-    "agentSelectedToolRequiresHumanInput": false,
-    "agentSelectedToolConfig": {
-      "agentSelectedTool": "currentDateTime"
-    }
-  },
-  {
-    "agentSelectedTool": "searxng-search",
-    "agentSelectedToolRequiresHumanInput": false,
-    "agentSelectedToolConfig": {
-      "agentSelectedTool": "searxng-search",
-      "baseUrl": "https://s.llam.ai"
-    }
-  }
-]
+"agentTools": []  // Empty - you add tools after import
 ```
 
-### Orchestrator Requirements
+**Why empty arrays?**
+- Prevents Pattern #6 (Tool References Before Tool Creation)
+- Workflows crash if they reference tools that don't exist in target Flowise instance
+- Flowise requires tools to exist BEFORE being referenced in workflows
 
-**Architect Phase** (line 714-722):
-- Reads requirement for 2 standard tools
-- Includes in all agent designs
+### How to Add These Tools to Your Workflow
 
-**Builder Phase** (line 924-930):
-- Generates agentTools array with both tools
-- Ensures NOT left empty (Pattern #5 prevention)
+**Step 1**: Create tools in Flowise UI (see setup sections above)
+**Step 2**: Import your generated workflow to Flowise
+**Step 3**: Manually add tools to each agent:
+   1. Open agent node in Flowise UI
+   2. Click "Tools" section
+   3. Add "currentDateTime" from dropdown
+   4. Add "searxng-search" from dropdown
+   5. Save agent configuration
 
-### Pattern Library Exception
+**Step 4**: Repeat for all agents that need these capabilities
 
-These tools are **exceptions to Pattern #5** (Phantom Tool References):
-- **Pattern #5**: Don't invent tool names that don't exist
-- **Exception**: currentDateTime and searxng-search ARE real, standard tools
-- **Requirement**: Include in every agent, not as phantom reference but actual config
+### Pattern Library Relationship
+
+**Pattern #6** (Tool References Before Tool Creation - CRITICAL):
+- Workflows CANNOT auto-include tools that don't exist in target instance
+- Causes 500 HTTP errors and white screen crashes
+- Solution: Empty arrays in generated JSON, manual tool addition after import
+
+**Pattern #5** (Phantom Tool References):
+- Don't invent fictional tool names like "queryWorkdayHCM"
+- currentDateTime and searxng-search are REAL tools (but must be created first)
+
+**Both patterns require empty tool arrays in generated workflows.**
 
 ---
 
@@ -385,8 +383,9 @@ These tools are **exceptions to Pattern #5** (Phantom Tool References):
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2025-11-01 | Initial documentation of standard tools requirement |
+| 2.0 | 2025-11-01 | Changed from "Required/Automatic" to "Optional/Manual" after Pattern #6 discovery |
+| 1.0 | 2025-11-01 | Initial documentation of standard tools requirement (reverted) |
 
 ---
 
-**Remember**: These 2 tools are REQUIRED in every Flowise agent. They provide temporal awareness and real-time information access that significantly improve agent decision-making quality.
+**Remember**: These 2 tools are RECOMMENDED (not required) for Flowise agents. They provide temporal awareness and real-time information access that improve agent decision-making. Create them in Flowise UI BEFORE importing workflows to avoid Pattern #6 crashes.

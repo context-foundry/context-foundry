@@ -182,32 +182,61 @@
 
 ## Tool Configuration Best Practices
 
-### Standard Tools (Required for ALL Agents)
+### ⚠️ CRITICAL: Tool Prerequisites (Pattern #6)
 
-All Flowise agents built with Context Foundry include 2 standard tools by default:
+**NEVER reference tools that don't exist in your Flowise instance.**
 
-#### 1. CurrentDateTime
+Generated workflows have **empty tool arrays** by default:
+```json
+"agentTools": []  // Safe: No references to non-existent tools
+```
+
+**Why?**
+- Flowise requires tools to exist BEFORE being referenced in workflows
+- Referencing non-existent tools causes 500 HTTP errors and white screen crashes
+- This is Pattern #6: "Tool References Before Tool Creation" (CRITICAL failure)
+
+**Correct Workflow**:
+1. ✅ Generate workflow with empty tool arrays (default)
+2. ✅ Import workflow to Flowise
+3. ✅ Create custom tools in Flowise UI
+4. ✅ Add tools to agents manually in Flowise UI
+5. ✅ Save and test
+
+**WRONG Workflow** (causes crashes):
+1. ❌ Generate workflow with tool references
+2. ❌ Import to Flowise without creating tools first
+3. ❌ Open agent node → white screen crash
+
+### Recommended Tools (Optional Enhancement)
+
+After importing your workflow, consider adding these tools for enhanced capabilities:
+
+#### 1. CurrentDateTime (Optional)
 - **Purpose**: Provides current date and time for temporal context
 - **Why**: Helps agents evaluate if search results and information are current
 - **Example Use**: "Is this news article from today or last year?"
-- **Auto-Included**: Yes (in AGENT-NODE-TEMPLATE.json)
+- **Setup**: See tool-configs/STANDARD_TOOLS.md
 
-#### 2. SearXNG Search
+#### 2. SearXNG Search (Optional)
 - **Base URL**: https://s.llam.ai
 - **Purpose**: Federated meta-search across multiple search engines
 - **Why**: Real-time information retrieval for dynamic queries
 - **Example Use**: "What are the latest industry trends?"
-- **Auto-Included**: Yes (in AGENT-NODE-TEMPLATE.json)
+- **Setup**: See tool-configs/STANDARD_TOOLS.md
 
 **Combined Benefit**:
 Agents can search for real-time information (SearXNG) and then evaluate its freshness
 (CurrentDateTime) to provide contextually aware, temporally accurate responses.
 
-**Setup Required**:
-After importing workflow to Flowise:
-1. Create `currentDateTime` custom tool (see tool-configs/STANDARD_TOOLS.md)
-2. Create `searxng-search` custom tool (see tool-configs/STANDARD_TOOLS.md)
-3. Both tools are already referenced in agent configurations
+**Setup Process** (AFTER workflow import):
+1. Create `currentDateTime` custom tool in Flowise UI (see tool-configs/STANDARD_TOOLS.md)
+2. Create `searxng-search` custom tool in Flowise UI
+3. For each agent that needs these tools:
+   - Open agent node
+   - Click "Tools" section
+   - Add tools from dropdown
+   - Save configuration
 
 **Documentation**: See `/extensions/flowise/tool-configs/STANDARD_TOOLS.md` for complete setup guide.
 

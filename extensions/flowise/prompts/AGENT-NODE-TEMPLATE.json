@@ -338,23 +338,7 @@
       "agentModel": "chatOpenAI",
       "agentMessages": "",
       "agentToolsBuiltInOpenAI": "",
-      "agentTools": [
-        {
-          "agentSelectedTool": "currentDateTime",
-          "agentSelectedToolRequiresHumanInput": false,
-          "agentSelectedToolConfig": {
-            "agentSelectedTool": "currentDateTime"
-          }
-        },
-        {
-          "agentSelectedTool": "searxng-search",
-          "agentSelectedToolRequiresHumanInput": false,
-          "agentSelectedToolConfig": {
-            "agentSelectedTool": "searxng-search",
-            "baseUrl": "https://s.llam.ai"
-          }
-        }
-      ],
+      "agentTools": [],
       "agentKnowledgeDocumentStores": "",
       "agentKnowledgeVSEmbeddings": "",
       "agentEnableMemory": true,
