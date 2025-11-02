@@ -8,8 +8,8 @@ Usage:
     print(f"Context Foundry {__version__}")
 """
 
-__version__ = "2.1.0"
-__release_date__ = "2025-10-24"
+__version__ = "2.1.1"
+__release_date__ = "2025-11-02"
 __version_info__ = tuple(int(i) for i in __version__.split("."))
 
 # Semantic versioning components

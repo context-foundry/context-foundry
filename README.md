@@ -7,7 +7,7 @@
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.1.0 - October 2025**
+**Version 2.1.1 - November 2025**
 
 > **📌 Version Note:** This is Context Foundry **v2.x** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
 

@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.1] - 2025-11-02
+
+**🎨 Flowise Extension Fully Functional:** Auto-include tools breakthrough enables complete, working Flowise workflows from first build.
+
+### ✨ Fixed - Flowise Extension Auto-Include Tools
+
+**Pattern #6: Incorrect Tool JSON Structure** - Root cause identified and corrected for Flowise workflow generation:
+
+- **Fixed Tool JSON Structure** - Corrected field names and data types for Flowise UI compatibility
+  - Tool name: `searxng-search` → `searXNG` (capital X, capital NG)
+  - Field name: `baseUrl` → `apiBase`
+  - Data type: `false` (boolean) → `""` (empty string) for `agentSelectedToolRequiresHumanInput`
+  - Added all required fields: `toolName`, `toolDescription`, `headers`, `format`, `categories`, `engines`, etc.
+
+- **Updated Templates and Documentation**
+  - `extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json` - EXACT Flowise UI export structure
+  - `tools/orchestrator_prompt.txt` - Re-added standard tools with correct structure
+  - `extensions/flowise/FAILURE_PATTERNS.md` v1.5 - Corrected Pattern #6 documentation
+  - `extensions/flowise/tool-configs/STANDARD_TOOLS.md` v3.0 - Changed from optional to auto-included
+  - `extensions/flowise/BEST_PRACTICES.md` - Updated tool configuration section
+
+- **User Validation** - Personalized Training Recommendations build (Task ID: 25f66a14)
+  - ✅ First build with CORRECT tool structure
+  - ✅ Imported to Flowise UI successfully with zero errors
+  - ✅ No crashes, no manual configuration needed
+  - ✅ User feedback: *"worked from the get-go. good job! this is a remarkable achievement."*
+
+**Impact**: All future Flowise workflows include working tools (currentDateTime + searXNG web search) from the start. Zero manual configuration required. Enhanced agent capabilities with temporal context and real-time web search validated working on first import.
+
+### 📝 Changed - Documentation Language Cleanup
+
+- Removed "production ready" terminology from Flowise extension documentation
+- Replaced with: "complete", "fully functional", "high-quality", "feature-complete"
+- Updated 12 files per user feedback to avoid overstating maturity
+
+---
+
 ## [2.1.0] - 2025-10-30
 
 **🚀 Agent Quality Enhancements Release:** Four powerful systems that dramatically improve build success rates, reduce errors, and optimize context usage based on cutting-edge coding agent research.
