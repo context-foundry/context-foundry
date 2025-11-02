@@ -646,6 +646,376 @@ Every multi-agent flow should have a **General** or **Help** agent as fallback.
 
 ---
 
+## ExecuteFlow Best Practices
+
+The ExecuteFlow node enables modular workflow composition by calling sub-flows. Follow these best practices to use it effectively.
+
+### When to Use ExecuteFlow
+
+✅ **USE when**:
+- Breaking complex workflows into modular, reusable components
+- Need to execute specialized sub-workflows conditionally
+- Creating workflow templates that can be composed
+- Isolating error-prone operations in separate flows
+- Building hierarchical agent systems (organization → department → team)
+- Reusing validation/processing logic across multiple flows
+
+❌ **DON'T use when**:
+- Simple agent-to-agent handoff (use direct connection instead)
+- Sub-flow would only be used once (inline it instead)
+- Performance is critical (ExecuteFlow adds overhead of separate flow execution)
+- Logic is trivial and doesn't warrant separate flow
+- Debugging is priority (nested flows harder to troubleshoot)
+
+### Configuration Best Practices
+
+#### Flow ID Management
+
+**✅ Good**:
+```json
+{
+  "executeFlowSelectedFlow": ""  // Empty string - user selects in Flowise UI
+}
+```
+
+**✅ Also good** (if flow ID is known and static):
+```json
+{
+  "executeFlowSelectedFlow": "clm9x8f3j0001..."  // Real Flowise flow ID
+}
+```
+
+**❌ Bad**:
+```json
+{
+  "executeFlowSelectedFlow": "{{FLOW_ID}}"  // Placeholder - will fail at runtime
+}
+```
+
+**Why**: Flow IDs must be valid Flowise flow identifiers. Use empty string in generated JSON (user selects in UI), or use variables only when dynamically selecting flows at runtime.
+
+---
+
+#### Response Attribution Strategy
+
+**User Message** (default):
+- Sub-flow response appears as **user input** to next node
+- Next agent will **respond TO** the sub-flow output
+- **Use when**: Next node should treat sub-flow output as new user input
+
+**Example**:
+```json
+{
+  "executeFlowReturnResponseAs": "userMessage"
+}
+```
+**Flow**: `Start → ExecuteFlow (Validation) → Agent (Process validated data)`
+The agent receives validation result as if user sent it.
+
+---
+
+**Assistant Message**:
+- Sub-flow response appears as **assistant response**
+- Workflow considers sub-flow as completing the interaction
+- **Use when**: Sub-flow produces the final answer, no further agent needed
+
+**Example**:
+```json
+{
+  "executeFlowReturnResponseAs": "assistantMessage"
+}
+```
+**Flow**: `Condition → ExecuteFlow (Specialized Handler)`
+The specialized handler's response is the final output.
+
+---
+
+#### Input JSON Structure
+
+**✅ Good** - Properly formatted JSON:
+```json
+{
+  "executeFlowInput": "{\"query\": \"{{question}}\", \"context\": \"{{context}}\"}"
+}
+```
+
+**✅ Minimal valid** - Empty object:
+```json
+{
+  "executeFlowInput": "{}"
+}
+```
+
+**✅ Variable interpolation** - Pass through user input:
+```json
+{
+  "executeFlowInput": "{{question}}"
+}
+```
+
+**❌ Bad** - Not valid JSON:
+```json
+{
+  "executeFlowInput": "plain text here"  // Not JSON
+}
+```
+
+**❌ Bad** - Malformed JSON:
+```json
+{
+  "executeFlowInput": "{query: value}"  // Missing quotes
+}
+```
+
+---
+
+### Common Patterns
+
+#### Pattern 1: Validation → Processing Pipeline
+
+**Use case**: Multi-stage data processing with reusable validation logic
+
+**Structure**:
+```
+Start → ExecuteFlow (Validation) → ExecuteFlow (Processing) → Agent (Results)
+```
+
+**Example**:
+```json
+{
+  "id": "executeFlowAgentflow_1",
+  "data": {
+    "label": "Validate Input",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // User selects validation flow
+      "executeFlowInput": "{{question}}",
+      "executeFlowReturnResponseAs": "userMessage"
+    }
+  }
+}
+```
+
+**When to use**:
+- Input sanitization before processing
+- Data validation with complex rules
+- Format transformation pipelines
+- Multi-step data enrichment
+
+**Benefits**:
+- Reusable validation across flows
+- Isolates validation logic
+- Easy to update validation rules
+- Clear separation of concerns
+
+---
+
+#### Pattern 2: Conditional Sub-Flow Routing
+
+**Use case**: Different workflows for different user intent categories
+
+**Structure**:
+```
+Condition → ExecuteFlow (Technical) | ExecuteFlow (Billing) | ExecuteFlow (General)
+```
+
+**Example**:
+```json
+{
+  "id": "executeFlowAgentflow_2",
+  "data": {
+    "label": "Route to Specialist Flow",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // Different flow per scenario
+      "executeFlowInput": "{\"data\": \"{{processedData}}\", \"category\": \"{{category}}\"}",
+      "executeFlowReturnResponseAs": "assistantMessage"
+    }
+  }
+}
+```
+
+**When to use**:
+- Different workflows for different departments
+- Specialized processing per category
+- Compliance-driven routing (some requests need audit flows)
+- A/B testing different flow versions
+
+**Benefits**:
+- Modular specialist flows
+- Easy to add new categories
+- Independent flow updates
+- Clear routing logic
+
+---
+
+#### Pattern 3: Hierarchical/Nested Workflows
+
+**Use case**: Multi-level organizational routing (company → department → team)
+
+**Structure**:
+```
+Parent Flow → ExecuteFlow (Department) → [Sub-flow contains ExecuteFlow (Team)]
+```
+
+**Example**:
+```json
+{
+  "id": "executeFlowAgentflow_3",
+  "data": {
+    "label": "Department Router",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // Department-level sub-flow
+      "executeFlowInput": "{{question}}",
+      "executeFlowReturnResponseAs": "userMessage"
+    }
+  }
+}
+```
+
+**When to use**:
+- Organizational hierarchies (company → department → team)
+- Multi-tier approval workflows
+- Escalation patterns (Level 1 → Level 2 → Level 3 support)
+- Recursive processing (directory traversal, nested data)
+
+**⚠️ Warning**: Avoid deep nesting (>3 levels) - causes:
+- Performance degradation (each level adds latency)
+- Difficult debugging (hard to trace execution path)
+- Increased error surface (more points of failure)
+- Complex state management
+
+**Best practice**: Flatten hierarchies where possible, use state to track levels instead of nesting.
+
+---
+
+### Security Considerations
+
+**✅ DO**:
+- Validate sub-flow IDs before execution (prevent unauthorized flow access)
+- Sanitize input JSON to prevent injection attacks
+- Use override config to enforce security policies (e.g., force temperature limits)
+- Implement access control at flow level (not just parent flow)
+- Log all sub-flow executions for audit trail
+
+**❌ DON'T**:
+- Expose sensitive data in `executeFlowInput` (use encrypted channels)
+- Trust user-provided flow IDs (validate against allowlist)
+- Pass credentials in input JSON (use Flowise credentials manager)
+- Allow unlimited nesting (set depth limits)
+- Skip validation assuming sub-flow will handle it
+
+**Example - Secure configuration**:
+```json
+{
+  "executeFlowInput": "{\"userId\": \"{{userId}}\", \"action\": \"{{action}}\"}",
+  "executeFlowOverrideConfig": "{\"temperature\": 0.3}"  // Enforce deterministic responses
+}
+```
+
+---
+
+### Performance Optimization
+
+**Minimize sub-flow calls**:
+- Cache sub-flow results when appropriate
+- Batch operations instead of multiple sequential calls
+- Consider parallelization (use Condition node to route to multiple ExecuteFlow nodes simultaneously)
+
+**Avoid anti-patterns**:
+```
+❌ Start → ExecuteFlow A → ExecuteFlow B → ExecuteFlow C → ExecuteFlow D
+   (4 sequential sub-flows = 4x latency)
+
+✅ Start → Condition → ExecuteFlow A | ExecuteFlow B | ExecuteFlow C
+   (Parallel execution = 1x latency)
+```
+
+**Monitor execution time**:
+- Sub-flow adds ~200-500ms overhead per call
+- Deep nesting multiplies latency (3 levels = 600-1500ms overhead)
+- Consider timeout configurations for long-running sub-flows
+
+---
+
+### Debugging Tips
+
+**Enable detailed logging**:
+- Log input JSON before ExecuteFlow call
+- Log sub-flow response
+- Track execution path in nested flows
+
+**Validate independently**:
+- Test sub-flow standalone before integrating
+- Use hardcoded input to verify sub-flow behavior
+- Check sub-flow error handling
+
+**Common debugging scenarios**:
+
+**Issue**: Sub-flow not executing
+```
+Check:
+1. Is flow ID valid?
+2. Is sub-flow published/active?
+3. Is input JSON valid?
+4. Are credentials configured in sub-flow?
+```
+
+**Issue**: Unexpected response attribution
+```
+Check:
+1. Is executeFlowReturnResponseAs correct?
+2. Does next node expect user or assistant message?
+3. Is conversation history preserved correctly?
+```
+
+**Issue**: State not updating
+```
+Check:
+1. Is executeFlowUpdateState configured?
+2. Are state keys correct?
+3. Is state accessible to next node?
+```
+
+---
+
+### Example: Complete Pattern Library Use Case
+
+**Scenario**: Customer support system with validation, routing, and escalation
+
+```
+1. Start Node (user question)
+      ↓
+2. ExecuteFlow (Input Validation)
+   - Validates/sanitizes user input
+   - returnResponseAs: userMessage
+      ↓
+3. Condition Node (Category Detection)
+   - Technical → 4a
+   - Billing → 4b
+   - General → 4c
+      ↓
+4a. ExecuteFlow (Technical Support Flow)
+    - Handles technical queries
+    - returnResponseAs: assistantMessage
+
+4b. ExecuteFlow (Billing Support Flow)
+    - Handles billing queries
+    - May contain nested ExecuteFlow for escalation
+    - returnResponseAs: assistantMessage
+
+4c. Agent (General Support)
+    - Handles general queries
+```
+
+This demonstrates all 3 patterns:
+- **Pattern A**: Validation → Processing
+- **Pattern B**: Conditional routing
+- **Pattern C**: Hierarchical (billing flow contains escalation sub-flow)
+
+---
+
 **For troubleshooting these best practices**, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 **For real-world examples**, see [EXAMPLES.md](docs/EXAMPLES.md)

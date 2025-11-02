@@ -299,6 +299,169 @@ This document is the **SINGLE SOURCE OF TRUTH** for Flowise agent flow JSON stru
 
 ---
 
+### ❌ ISSUE #6: ExecuteFlow Node Missing Required Fields or Invalid JSON
+
+**WRONG** (What Context Foundry might generate incorrectly):
+
+```json
+{
+  "id": "executeFlowAgentflow_1",
+  "data": {
+    "name": "executeFlowAgentflow",
+    "type": "ExecuteFlow",
+    "inputs": {
+      "executeFlowSelectedFlow": "{{FLOW_ID}}",  // ❌ Placeholder - will fail at runtime
+      "executeFlowInput": "plain text"  // ❌ Not valid JSON
+    }
+  }
+}
+```
+
+**CORRECT** (What should be generated):
+
+```json
+{
+  "id": "executeFlowAgentflow_1",
+  "position": {"x": 800.0, "y": 400.0},
+  "data": {
+    "id": "executeFlowAgentflow_1",
+    "label": "Execute Validation Flow",
+    "version": 1.1,
+    "name": "executeFlowAgentflow",
+    "type": "ExecuteFlow",
+    "color": "#9C27B0",
+    "baseClasses": ["ExecuteFlow"],
+    "category": "Agent Flows",
+    "description": "Execute another flow as a sub-workflow",
+    "inputParams": [
+      {
+        "label": "Select Flow",
+        "name": "executeFlowSelectedFlow",
+        "type": "asyncOptions",
+        "loadMethod": "listFlows",
+        "id": "executeFlowAgentflow_1-input-executeFlowSelectedFlow-asyncOptions"
+      },
+      {
+        "label": "Input (JSON)",
+        "name": "executeFlowInput",
+        "type": "json",
+        "acceptVariable": true,
+        "id": "executeFlowAgentflow_1-input-executeFlowInput-json"
+      },
+      {
+        "label": "Override Config",
+        "name": "executeFlowOverrideConfig",
+        "type": "json",
+        "optional": true,
+        "id": "executeFlowAgentflow_1-input-executeFlowOverrideConfig-json"
+      },
+      {
+        "label": "Base URL",
+        "name": "executeFlowBaseURL",
+        "type": "string",
+        "optional": true,
+        "id": "executeFlowAgentflow_1-input-executeFlowBaseURL-string"
+      },
+      {
+        "label": "Return Response As",
+        "name": "executeFlowReturnResponseAs",
+        "type": "options",
+        "options": [
+          {"label": "User Message", "name": "userMessage"},
+          {"label": "Assistant Message", "name": "assistantMessage"}
+        ],
+        "default": "userMessage",
+        "id": "executeFlowAgentflow_1-input-executeFlowReturnResponseAs-options"
+      },
+      {
+        "label": "Update State",
+        "name": "executeFlowUpdateState",
+        "type": "array",
+        "optional": true,
+        "id": "executeFlowAgentflow_1-input-executeFlowUpdateState-array"
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // ✅ Empty string (user selects in UI)
+      "executeFlowInput": "{}",  // ✅ Valid empty JSON object
+      "executeFlowOverrideConfig": "",
+      "executeFlowBaseURL": "",
+      "executeFlowReturnResponseAs": "userMessage",
+      "executeFlowUpdateState": ""
+    },
+    "outputAnchors": [
+      {
+        "id": "executeFlowAgentflow_1-output-executeFlowAgentflow",  // ✅ Correct format
+        "name": "executeFlowAgentflow",
+        "label": "Execute Flow",
+        "description": "Execute Flow",
+        "type": "ExecuteFlow"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 300,
+  "height": 400,
+  "selected": false,
+  "positionAbsolute": {"x": 800.0, "y": 400.0},
+  "dragging": false
+}
+```
+
+**REQUIREMENTS**:
+
+The following MUST be true for ExecuteFlow nodes:
+
+- [ ] `name` is EXACTLY `"executeFlowAgentflow"` (not "executeFlow" or "ExecuteFlow")
+- [ ] `type` is EXACTLY `"ExecuteFlow"` (case-sensitive)
+- [ ] `executeFlowSelectedFlow` is empty string `""` (not `"{{FLOW_ID}}"` or placeholder)
+- [ ] `executeFlowInput` is valid JSON (minimum: `"{}"`, can also be `"{{question}}"` or valid JSON string)
+- [ ] `executeFlowReturnResponseAs` is either `"userMessage"` or `"assistantMessage"` (no other values)
+- [ ] All 6 input parameters present in `inputs` object (even if empty strings)
+- [ ] Output anchor ID follows pattern: `executeFlowAgentflow_N-output-executeFlowAgentflow` (not `-output-agent` or other suffix)
+- [ ] All inputParams have correct ID format: `executeFlowAgentflow_N-input-[paramName]-[type]`
+- [ ] `version` is `1.1` (current stable version)
+- [ ] `width` is `300` and `height` is `400` (standard dimensions)
+
+**Validation Commands**:
+
+```bash
+# 1. Check executeFlowInput is valid JSON
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.inputs.executeFlowInput' workflow.json | jq empty
+# Should exit 0 (valid JSON)
+
+# 2. Check executeFlowSelectedFlow is not placeholder
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.inputs.executeFlowSelectedFlow' workflow.json | grep -q '{{FLOW_ID}}' && echo "❌ FAIL: Placeholder found" || echo "✅ PASS"
+
+# 3. Check returnResponseAs has valid value
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.inputs.executeFlowReturnResponseAs' workflow.json | grep -qE '^"(userMessage|assistantMessage)"$' && echo "✅ PASS" || echo "❌ FAIL"
+
+# 4. Check output anchor format
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.outputAnchors[0].id' workflow.json | grep -qE 'executeFlowAgentflow_[0-9]+-output-executeFlowAgentflow$' && echo "✅ PASS" || echo "❌ FAIL"
+
+# 5. Count input parameters (should be 6)
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.inputs | keys | length' workflow.json
+# Should output: 6
+
+# 6. Verify all required input keys present
+jq '.nodes[] | select(.data.name=="executeFlowAgentflow") | .data.inputs | keys' workflow.json
+# Should output: ["executeFlowSelectedFlow", "executeFlowInput", "executeFlowOverrideConfig", "executeFlowBaseURL", "executeFlowReturnResponseAs", "executeFlowUpdateState"]
+```
+
+**Common Mistakes**:
+
+1. **Placeholder flow ID**: Using `{{FLOW_ID}}` instead of empty string `""`
+2. **Invalid JSON**: Using plain text instead of JSON in `executeFlowInput`
+3. **Wrong output anchor suffix**: Using `-output-agent` instead of `-output-executeFlowAgentflow`
+4. **Missing optional fields**: Omitting `executeFlowOverrideConfig`, `executeFlowBaseURL`, or `executeFlowUpdateState` from `inputs` object
+5. **Invalid returnResponseAs**: Using values other than `"userMessage"` or `"assistantMessage"`
+6. **Wrong node name**: Using `"executeFlow"` or `"ExecuteFlow"` instead of `"executeFlowAgentflow"`
+
+---
+
 ## Start Node Requirements
 
 ### Complete inputParams Order

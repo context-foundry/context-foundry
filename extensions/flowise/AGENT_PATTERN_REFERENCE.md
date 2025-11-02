@@ -205,6 +205,322 @@ Each output connects via an edge to the appropriate specialized agent.
 
 ---
 
+### 3. ExecuteFlow Node (executeFlowAgentflow)
+
+Enables modular workflow composition by calling sub-flows (child workflows) from a parent workflow. Used for chaining, conditional sub-flow execution, and hierarchical agent architectures.
+
+#### Complete Structure
+
+```json
+{
+  "id": "executeFlowAgentflow_[NUMBER]",
+  "position": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "data": {
+    "id": "executeFlowAgentflow_[NUMBER]",
+    "label": "[Descriptive Label]",  // e.g., "Validate Input", "Process Data"
+    "version": 1.1,
+    "name": "executeFlowAgentflow",
+    "type": "ExecuteFlow",
+    "color": "#9C27B0",
+    "baseClasses": ["ExecuteFlow"],
+    "category": "Agent Flows",
+    "description": "Execute another flow as a sub-workflow",
+    "inputParams": [
+      {
+        "label": "Select Flow",
+        "name": "executeFlowSelectedFlow",
+        "type": "asyncOptions",
+        "loadMethod": "listFlows",
+        "id": "executeFlowAgentflow_[N]-input-executeFlowSelectedFlow-asyncOptions"
+      },
+      {
+        "label": "Input (JSON)",
+        "name": "executeFlowInput",
+        "type": "json",
+        "acceptVariable": true,
+        "id": "executeFlowAgentflow_[N]-input-executeFlowInput-json"
+      },
+      {
+        "label": "Override Config",
+        "name": "executeFlowOverrideConfig",
+        "type": "json",
+        "optional": true,
+        "id": "executeFlowAgentflow_[N]-input-executeFlowOverrideConfig-json"
+      },
+      {
+        "label": "Base URL",
+        "name": "executeFlowBaseURL",
+        "type": "string",
+        "optional": true,
+        "id": "executeFlowAgentflow_[N]-input-executeFlowBaseURL-string"
+      },
+      {
+        "label": "Return Response As",
+        "name": "executeFlowReturnResponseAs",
+        "type": "options",
+        "options": [
+          {"label": "User Message", "name": "userMessage"},
+          {"label": "Assistant Message", "name": "assistantMessage"}
+        ],
+        "default": "userMessage",
+        "id": "executeFlowAgentflow_[N]-input-executeFlowReturnResponseAs-options"
+      },
+      {
+        "label": "Update State",
+        "name": "executeFlowUpdateState",
+        "type": "array",
+        "optional": true,
+        "id": "executeFlowAgentflow_[N]-input-executeFlowUpdateState-array"
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "executeFlowSelectedFlow": "",
+      "executeFlowInput": "{}",
+      "executeFlowOverrideConfig": "",
+      "executeFlowBaseURL": "",
+      "executeFlowReturnResponseAs": "userMessage",
+      "executeFlowUpdateState": ""
+    },
+    "outputAnchors": [
+      {
+        "id": "executeFlowAgentflow_[N]-output-executeFlowAgentflow",
+        "name": "executeFlowAgentflow",
+        "label": "Execute Flow",
+        "description": "Execute Flow",
+        "type": "ExecuteFlow"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 300,
+  "height": 400,
+  "selected": false,
+  "positionAbsolute": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "dragging": false
+}
+```
+
+#### Key Attributes
+
+| Field | Value | Required | Notes |
+|-------|-------|----------|-------|
+| `name` | `"executeFlowAgentflow"` | Yes | MUST be exactly this |
+| `type` | `"ExecuteFlow"` | Yes | Identifies node type |
+| `color` | `"#9C27B0"` | No | Purple (distinguishes from agents/conditions) |
+| `version` | `1.1` | Yes | Current stable version |
+| `executeFlowSelectedFlow` | Flow ID string | Yes | Target sub-flow to execute |
+| `executeFlowInput` | Valid JSON | Yes | Input data for sub-flow (minimum: `"{}"`) |
+| `executeFlowReturnResponseAs` | `"userMessage"` or `"assistantMessage"` | Yes | Response attribution |
+
+#### Input Parameters Explained
+
+**executeFlowSelectedFlow** (Required)
+- Flow ID of the sub-flow to execute
+- Selected from dropdown (populated by `loadMethod: "listFlows"`)
+- Empty string in generated JSON (user selects in Flowise UI)
+
+**executeFlowInput** (Required)
+- JSON object passed to sub-flow as input
+- Supports variable interpolation: `"{{question}}"`, `"{{state.data}}"`
+- Must be valid JSON (minimum: `"{}"`)
+- Example: `"{\"query\": \"{{question}}\", \"context\": \"{{context}}\"}"`
+
+**executeFlowReturnResponseAs** (Required)
+- `"userMessage"`: Sub-flow response appears as user input to next node (default)
+- `"assistantMessage"`: Sub-flow response appears as assistant message
+- **Use userMessage when**: Next agent should respond TO the sub-flow output
+- **Use assistantMessage when**: Sub-flow completes the interaction
+
+**executeFlowOverrideConfig** (Optional)
+- Override sub-flow configuration (e.g., temperature, max tokens)
+- JSON format
+- Rarely used in practice
+
+**executeFlowBaseURL** (Optional)
+- Custom base URL for sub-flow execution
+- Useful for multi-instance Flowise deployments
+- Usually empty (uses current instance)
+
+**executeFlowUpdateState** (Optional)
+- Array of state updates to apply after sub-flow execution
+- Advanced pattern for state management
+- Format: `[{"key": "value"}]`
+
+#### Usage Examples
+
+**Pattern A: Validation → Processing Pipeline**
+
+```json
+{
+  "id": "executeFlowAgentflow_1",
+  "data": {
+    "label": "Validate Input",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // User selects "input-validation" flow in UI
+      "executeFlowInput": "{{question}}",
+      "executeFlowReturnResponseAs": "userMessage"
+    }
+  }
+}
+```
+
+**Flow**: `Start → ExecuteFlow (Validation) → Agent (Processing)`
+
+**Use when**: Need to validate/sanitize input before main processing
+
+---
+
+**Pattern B: Conditional Sub-Flow Routing**
+
+```json
+{
+  "id": "executeFlowAgentflow_2",
+  "data": {
+    "label": "Route to Specialist",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // User selects flow per routing scenario
+      "executeFlowInput": "{\"data\": \"{{processedData}}\", \"category\": \"{{category}}\"}",
+      "executeFlowReturnResponseAs": "assistantMessage"
+    }
+  }
+}
+```
+
+**Flow**: `Condition → ExecuteFlow (Technical) | ExecuteFlow (Billing) | ExecuteFlow (General)`
+
+**Use when**: Different sub-flows handle different categories of requests
+
+---
+
+**Pattern C: Hierarchical/Nested Workflows**
+
+```json
+{
+  "id": "executeFlowAgentflow_3",
+  "data": {
+    "label": "Department Router",
+    "name": "executeFlowAgentflow",
+    "inputs": {
+      "executeFlowSelectedFlow": "",  // Department-level sub-flow
+      "executeFlowInput": "{{question}}",
+      "executeFlowReturnResponseAs": "userMessage"
+    }
+  }
+}
+```
+
+**Flow**: `Parent Flow → ExecuteFlow (Department) → [Sub-flow contains ExecuteFlow (Team)]`
+
+**Use when**: Multi-level hierarchical routing (organization → department → team)
+
+**⚠️ Warning**: Avoid deep nesting (>3 levels) - causes performance degradation
+
+---
+
+#### Integration Patterns
+
+**Sequential Processing Chain**
+```
+Start → ExecuteFlow A → ExecuteFlow B → ExecuteFlow C → Agent
+```
+Use for: Multi-stage data transformation pipelines
+
+**Parallel Execution** (via Condition node)
+```
+Condition → ExecuteFlow A | ExecuteFlow B | ExecuteFlow C
+```
+Use for: Concurrent specialized processing
+
+**Hybrid Pattern**
+```
+Agent → Condition → ExecuteFlow (Validation) → Agent (Process) → ExecuteFlow (Storage)
+```
+Use for: Complex workflows mixing agents, routing, and sub-flows
+
+---
+
+#### Common Pitfalls
+
+❌ **WRONG**: Using placeholder flow IDs
+```json
+{
+  "executeFlowSelectedFlow": "{{FLOW_ID}}"  // ❌ Will fail - not a real flow ID
+}
+```
+
+✅ **CORRECT**: Empty string (user selects in UI) or real flow ID
+```json
+{
+  "executeFlowSelectedFlow": ""  // ✅ User selects in Flowise UI
+}
+```
+
+---
+
+❌ **WRONG**: Invalid JSON in executeFlowInput
+```json
+{
+  "executeFlowInput": "plain text here"  // ❌ Not valid JSON
+}
+```
+
+✅ **CORRECT**: Valid JSON string
+```json
+{
+  "executeFlowInput": "{\"key\": \"value\"}"  // ✅ Valid JSON
+}
+```
+
+---
+
+❌ **WRONG**: Incorrect output anchor ID format
+```json
+{
+  "outputAnchors": [
+    {"id": "executeFlowAgentflow_1-output-agent"}  // ❌ Wrong suffix
+  ]
+}
+```
+
+✅ **CORRECT**: Standard format
+```json
+{
+  "outputAnchors": [
+    {"id": "executeFlowAgentflow_1-output-executeFlowAgentflow"}  // ✅ Correct
+  ]
+}
+```
+
+---
+
+#### Output Anchor
+
+The ExecuteFlow node has ONE output anchor:
+
+```json
+{
+  "id": "executeFlowAgentflow_[N]-output-executeFlowAgentflow",
+  "name": "executeFlowAgentflow",
+  "label": "Execute Flow",
+  "type": "ExecuteFlow"
+}
+```
+
+This output connects to the next node in the workflow (typically an agent or another ExecuteFlow).
+
+---
+
 ## Agent Input Parameters
 
 The `inputParams` array defines what configuration options the agent supports. This is the **schema** - actual values go in the `inputs` object.
