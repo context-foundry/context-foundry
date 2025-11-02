@@ -21,16 +21,18 @@ Provides current date and time to help agents evaluate temporal relevance of inf
 
 **Tool Type**: Flowise built-in custom tool
 
-**JSON Structure**:
+**JSON Structure** (Exact Flowise UI format):
 ```json
 {
   "agentSelectedTool": "currentDateTime",
-  "agentSelectedToolRequiresHumanInput": false,
+  "agentSelectedToolRequiresHumanInput": "",
   "agentSelectedToolConfig": {
     "agentSelectedTool": "currentDateTime"
   }
 }
 ```
+
+**Note**: Use empty string `""` for `agentSelectedToolRequiresHumanInput`, NOT boolean `false`.
 
 ### Setup in Flowise
 
@@ -98,17 +100,33 @@ Federated meta-search engine that searches across multiple sources simultaneousl
 
 **Base URL**: `https://s.llam.ai`
 
-**JSON Structure**:
+**JSON Structure** (Exact Flowise UI format):
 ```json
 {
-  "agentSelectedTool": "searxng-search",
-  "agentSelectedToolRequiresHumanInput": false,
+  "agentSelectedTool": "searXNG",
+  "agentSelectedToolRequiresHumanInput": "",
   "agentSelectedToolConfig": {
-    "agentSelectedTool": "searxng-search",
-    "baseUrl": "https://s.llam.ai"
+    "apiBase": "https://s.llam.ai",
+    "toolName": "searxng-search",
+    "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+    "headers": "",
+    "format": "json",
+    "categories": "",
+    "engines": "",
+    "language": "",
+    "pageno": "",
+    "time_range": "",
+    "safesearch": "",
+    "agentSelectedTool": "searXNG"
   }
 }
 ```
+
+**Critical Field Names**:
+- ✅ `agentSelectedTool: "searXNG"` (capital XNG, NOT "searxng-search")
+- ✅ `apiBase` (NOT "baseUrl")
+- ✅ `agentSelectedToolRequiresHumanInput: ""` (empty string, NOT `false`)
+- ✅ `toolName: "searxng-search"` (lowercase, inside config)
 
 ### Setup in Flowise
 
