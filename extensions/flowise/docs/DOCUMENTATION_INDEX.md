@@ -30,23 +30,44 @@
 
 ### Runtime-Loaded During Builds
 
-These files are read automatically by the Scout/Architect phases whenever the Flowise extension activates. Keep them current to avoid stale guidance:
+Files read automatically by Scout/Architect/Builder when `flowise_flow: True`:
 
-| File | Consumed By | Purpose |
-|------|-------------|---------|
-| [AGENT_PATTERN_REFERENCE.md](../AGENT_PATTERN_REFERENCE.md) | Scout, Architect | Baseline structure and patterns |
-| [FAILURE_PATTERNS.md](../FAILURE_PATTERNS.md) | Scout, Architect, Builder | Regression guardrails and remediation steps |
-| [BEST_PRACTICES.md](../BEST_PRACTICES.md) | Scout | Prompting and planning guidance |
-| [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Architect, Builder | Canonical agent node schema |
-| [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Architect, Builder | Canonical start node schema |
+| File | Consumed By | Read Count | Purpose |
+|------|-------------|------------|---------|
+| [AGENT_PATTERN_REFERENCE.md](../AGENT_PATTERN_REFERENCE.md) | Scout, Architect | 2x | Baseline structure and patterns |
+| [FAILURE_PATTERNS.md](../FAILURE_PATTERNS.md) | Scout, Architect, Builder | 3x | Regression guardrails and remediation steps |
+| [BEST_PRACTICES.md](../BEST_PRACTICES.md) | Scout | 1x | Prompting and planning guidance |
+| [tool-configs/STANDARD_TOOLS.md](../tool-configs/STANDARD_TOOLS.md) | Scout | 1x | Required tools specification |
+| [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md) | Architect | 1x | Validation checklist |
+| [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Builder | 1x | Canonical agent node schema |
+
+**Total**: 9 explicit Read commands in orchestrator_prompt.txt
+
+### Referenced But Not Automatically Read
+
+Files mentioned in orchestrator but not loaded via Read commands:
+
+| File | Purpose | When To Use |
+|------|---------|-------------|
+| [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Start node structure | Manual reference (structure documented in AGENT_PATTERN_REFERENCE.md) |
+| templates/*.json (15 files) | Real Flowise exports | Manual comparison/validation/debugging |
+
+### Archived Files
+
+Files not currently used by orchestrator (see [prompts/archive/README.md](../prompts/archive/README.md)):
+
+| File | Original Purpose | Why Archived |
+|------|------------------|--------------|
+| prompts/archive/architect-enhancement.txt | Architect phase enhancement | Never referenced; content in AGENT_PATTERN_REFERENCE.md |
+| prompts/archive/scout-enhancement.txt | Scout phase enhancement | Never referenced; content in AGENT_PATTERN_REFERENCE.md |
+| prompts/archive/flowise-json-structure-guide.md | JSON structure guide | Never referenced; contains old patterns; superseded by AGENT_PATTERN_REFERENCE.md |
 
 ### Implementation Guides
 
 | Document | Purpose |
 |----------|---------|
-| [prompts/flowise-json-structure-guide.md](../prompts/flowise-json-structure-guide.md) | JSON structure reference |
-| [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Agent node template |
-| [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Start node template |
+| [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Agent node template (canonical structure) |
+| [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Start node template (for reference) |
 
 ### Pattern Library
 

@@ -808,9 +808,9 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    from /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
    ```
 
-   **Required Template Files** (read AFTER authority documents):
-   - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
-   - /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   **Template Files**:
+   - ✅ AGENT-NODE-TEMPLATE.json (Read by Builder at line 1073)
+   - 📖 START-NODE-TEMPLATE.json (Structure documented in AGENT_PATTERN_REFERENCE.md)
 
    **Canonical Example**:
    extensions/flowise/templates/Simple Agent Agents.json
@@ -844,8 +844,9 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - ✅ asyncOptions for model selection with `loadMethod: "listModels"`
    - ✅ Built-in memory configuration within agent
 
-   Reference Templates (13 real Flowise exports):
+   **Example Templates** (for manual reference/debugging, not automatically read):
    /Users/name/homelab/context-foundry/extensions/flowise/templates/
+   (15 real Flowise exports for comparison and validation)
 
    Architecture Requirements:
    - Node-level error handling (try/catch, fallbacks)
