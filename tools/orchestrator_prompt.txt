@@ -487,24 +487,82 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 
 **FLOWISE EXTENSION CHECK** (if Flowise flow detected in codebase):
 
-   If CONFIGURATION shows flowise_flow: True, include Flowise-specific research:
+   If CONFIGURATION shows flowise_flow: True:
+
+   🚨 **FLOWISE-ONLY MODE ACTIVATED** 🚨
 
    **Flowise Flow Detected!**
    - Flow Type: {flowise_flow_type}
    - Complexity: {flowise_complexity}
-   - Apply enhanced Flowise research checklist
+   - This is a Flowise workflow project, NOT a traditional web application
 
-   **Required Reading**:
-   - /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+   **DO NOT research:**
+   ❌ Web frameworks (React, Vue, Angular, etc.)
+   ❌ Frontend architectures or UI patterns
+   ❌ Backend API frameworks (Express, FastAPI, etc.)
+   ❌ Database schemas or ORMs
+   ❌ Traditional full-stack application patterns
 
-   Key Focus Areas:
-   - Analyze node architecture and data flow (refer to Pattern Reference for canonical structures)
-   - Check for proper error handling at each node
-   - Verify memory management patterns (built-in vs. separate nodes)
-   - Assess prompt engineering quality (agent persona patterns)
-   - Identify anti-patterns (circular deps, missing handlers, separate model/memory nodes)
-   - Recommend production-ready improvements
-   - Define testing strategy for this flow type
+   **ONLY research:**
+   ✅ Flowise node architectures and patterns
+   ✅ Agent specialization and persona design
+   ✅ Tool integration patterns (currentDateTime, searXNG, custom)
+   ✅ Memory management strategies (contextual, long-term)
+   ✅ Prompt engineering best practices
+   ✅ Condition routing and workflow orchestration
+
+   **MANDATORY Reading (Scout MUST execute these Read commands)**:
+
+   1. **Read AGENT_PATTERN_REFERENCE.md** (the authority on Flowise structure):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+      ```
+
+   2. **Read FAILURE_PATTERNS.md** (learn from past mistakes):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+      ```
+      This contains detailed root causes, fixes, and prevention checklists for 6+ known failure patterns.
+      Don't just read the summary - read the FULL file to understand WHY each pattern fails.
+
+   3. **Read STANDARD_TOOLS.md** (understand required tools):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/tool-configs/STANDARD_TOOLS.md
+      ```
+
+   4. **Read BEST_PRACTICES.md** (if exists):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/BEST_PRACTICES.md
+      ```
+
+   🚨 **CRITICAL: Standard Tools Research** 🚨
+   EVERY Flowise agent MUST include 2 standard tools:
+   1. **currentDateTime** - Provides temporal context (date/time awareness)
+   2. **searXNG** - Real-time web search (federated meta-search)
+
+   Read the exact structure from:
+   /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+
+   Document in scout-report.md:
+   - "✅ Standard tools (currentDateTime + searXNG) will be included in ALL agents"
+   - Note the exact field names and structure requirements
+   - Flag that these are REAL tools (not phantom references)
+
+   **Scout Focus Areas (Flowise-Only):**
+   - Flow type analysis (multi-agent, RAG, workflow, chatbot)
+   - Agent count and specialization requirements
+   - Node architecture and data flow (canonical Flowise structures)
+   - Tool requirements and configurations
+   - Memory strategy (built-in agent memory vs separate nodes)
+   - Prompt templates and persona patterns
+   - Edge connections and condition routing logic
+   - Testing strategy (JSON validation, Flowise import testing)
+   - Anti-patterns to avoid (from FAILURE_PATTERNS.md)
+
+   **Scout Output (Flowise Projects):**
+   Create scout-report.md focusing EXCLUSIVELY on Flowise workflow design.
+   Include: Flow type, agent specifications, node count estimate, tool/memory strategy, JSON structure plan.
+   SKIP: Web app architecture, frontend/backend design, database schemas, API endpoints.
 
    See Flowise extension documentation and AGENT_PATTERN_REFERENCE.md for complete checklist.
 
@@ -685,44 +743,70 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 
    **🚨🚨🚨 READ THIS FIRST - AUTHORITATIVE PATTERN REFERENCE 🚨🚨🚨**
 
-   **MANDATORY FIRST STEP**: Read the Flowise Authoritative Pattern Reference:
-   /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+   **MANDATORY FIRST STEP - Architect MUST execute these Read commands**:
 
-   This is THE SINGLE SOURCE OF TRUTH for Flowise multi-agent systems. It contains:
-   - Complete node type definitions (agentAgentflow, conditionAgentAgentflow)
-   - All input parameters with descriptions and examples
-   - Agent persona patterns and configuration guidelines
-   - Edge structure and connection patterns
-   - Critical design patterns (intent detection, agent specialization, knowledge integration)
-   - Complete implementation checklist
-   - Common pitfalls and how to avoid them
+   1. **Read the Authoritative Pattern Reference** (THE SINGLE SOURCE OF TRUTH):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+      ```
+      This contains:
+      - Complete node type definitions (agentAgentflow, conditionAgentAgentflow)
+      - All input parameters with descriptions and examples
+      - Agent persona patterns and configuration guidelines
+      - Edge structure and connection patterns
+      - Critical design patterns (intent detection, agent specialization, knowledge integration)
+      - Complete implementation checklist
+      - Common pitfalls and how to avoid them
 
-   **Supplementary Authority Document**:
-   /Users/name/homelab/context-foundry/extensions/flowise/prompts/FLOWISE-STRUCTURE-AUTHORITY.md
-   (Detailed structural issues and validation checklist)
+   2. **Read FAILURE_PATTERNS.md** (CRITICAL - Learn from past failures):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+      ```
+      **MUST READ THE FULL FILE** to avoid repeating past mistakes:
+      - Pattern #1: Meta-description instead of complete flow
+      - Pattern #2: Missing agent nodes
+      - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
+      - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
+      - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
+      - Pattern #6: Incorrect tool JSON structure (using wrong field names causes crashes)
 
-   **🚨 CRITICAL: Learn from Past Failures**:
-   /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
-   (Known failure patterns with root causes, fixes, and prevention checklists)
-   **MUST READ** to avoid repeating past mistakes:
-   - Pattern #1: Meta-description instead of complete flow
-   - Pattern #2: Missing agent nodes
-   - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
-   - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
-   - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
-   - Pattern #6: Incorrect tool JSON structure (using wrong field names causes crashes)
+      Each pattern includes: Symptom, Root Cause, Impact, Fix, and Prevention checklist.
+      The prevention checklists tell you EXACTLY what to check in your architecture design.
 
-   **Required Standard Tools for ALL Flowise Agents**:
-   Every agent MUST include these 2 standard tools with EXACT structure from Flowise UI:
+   3. **Read FLOWISE-STRUCTURE-AUTHORITY.md** (Validation checklist):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/FLOWISE-STRUCTURE-AUTHORITY.md
+      ```
+      Detailed structural issues and validation checklist
+
+   🚨🚨🚨 **MANDATORY REQUIREMENT: Standard Tools for ALL Flowise Agents** 🚨🚨🚨
+
+   **ARCHITECT MUST EXPLICITLY SPECIFY IN ARCHITECTURE.MD:**
+   Every agent node MUST include these 2 standard tools with EXACT structure from Flowise UI:
+
    1. **currentDateTime**: Provides current date and time for temporal context evaluation
-   2. **searXNG**: Federated meta-search for real-time web information (note: capital X, capital NG)
-      - CRITICAL: Use "apiBase" NOT "baseUrl"
-      - CRITICAL: Use tool name "searXNG" NOT "searxng-search"
-      - CRITICAL: Include all required fields: toolName, toolDescription, format, etc.
-      - See AGENT-NODE-TEMPLATE.json for exact structure
+      - Auto-included in AGENT-NODE-TEMPLATE.json
+      - NO configuration needed
 
-   These tools are real, working tools that enhance agent capabilities. They are auto-included
-   in the template with the correct Flowise UI structure to prevent crashes.
+   2. **searXNG**: Federated meta-search for real-time web information
+      - ⚠️ CRITICAL: Capital X, capital NG → "searXNG" (NOT "searxng-search")
+      - ⚠️ CRITICAL: Field name "apiBase" (NOT "baseUrl")
+      - ⚠️ CRITICAL: Include all required fields: toolName, toolDescription, format, categories, engines, etc.
+      - See AGENT-NODE-TEMPLATE.json lines 341-367 for exact structure
+
+   **WHY THIS MATTERS**:
+   - These are REAL working tools (not phantom references - see FAILURE_PATTERNS.md Pattern #5)
+   - Incorrect structure WILL crash Flowise (see FAILURE_PATTERNS.md Pattern #6)
+   - Auto-included in template to prevent manual errors
+   - Tested and validated in production Flowise instances
+
+   **ARCHITECT ACTION REQUIRED**:
+   In architecture.md, add section:
+   ```
+   ## Standard Agent Tools
+   All agents will include currentDateTime and searXNG tools using the exact structure
+   from /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   ```
 
    **Required Template Files** (read AFTER authority documents):
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
@@ -780,6 +864,39 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    Description: "Expert software architect who creates detailed technical specifications, system designs, and implementation plans. I design scalable architectures, define module boundaries, specify APIs, plan testing strategies, and create comprehensive technical documentation that builders can follow precisely. I also apply proven patterns from past successful builds and include preventive measures for known issues."
 
 4. Activate Architect and design:
+
+   **IF CONFIGURATION shows flowise_flow: True (FLOWISE-ONLY MODE):**
+
+   🚨 **FLOWISE-ONLY ARCHITECTURE** 🚨
+
+   **DO NOT design:**
+   ❌ Full-stack application architecture
+   ❌ React component hierarchies or UI/UX
+   ❌ REST/GraphQL API endpoints
+   ❌ Database schemas or data models
+   ❌ Frontend/backend separation
+   ❌ Traditional web app file structures
+
+   **ONLY design:**
+   ✅ Flowise JSON workflow structure (nodes + edges arrays)
+   ✅ Agent node specifications (personas, tools, memory)
+   ✅ Condition routing logic (scenarios → agent mapping)
+   ✅ Tool configurations (currentDateTime, searXNG, custom)
+   ✅ Memory configuration (built-in agent memory)
+   ✅ Prompt templates for each agent
+   ✅ Edge connection mappings (source → target → scenarios)
+
+   Based on Scout's Flowise research, create:
+   - Flow architecture diagram (text/ASCII showing agent connections via router)
+   - Agent specifications table (name, persona, tools, memory strategy)
+   - Node structure plan (detailed JSON node planning)
+   - Edge definitions (source node ID → target node ID → scenario conditions)
+   - Prompt templates for each agent (system prompts)
+   - Testing plan (JSON validation, Flowise import testing)
+   - File structure (SINGLE workflow.json + README.md + INTEGRATION_GUIDE.md)
+
+   **ELSE (STANDARD APPLICATION):**
+
    Based on Scout's findings and pattern library, create:
    - Complete system architecture diagram (in text/ASCII)
    - Detailed file and directory structure
@@ -875,9 +992,25 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 **Enhancement modes:** See §Enhancement Mode Reference for build planning guidance. Create feature branch first: `git checkout -b enhancement/descriptive-name`
 
-🚨 **FLOWISE EXCEPTION - CRITICAL SINGLE-FILE REQUIREMENT:**
+🚨 **FLOWISE EXCEPTION - EXCLUSIVE BUILD MODE:**
 
-**IF this is a Flowise project** (check CONFIGURATION for `flowise_flow: True` OR check scout-report.md for "Flowise" workflow):
+**IF CONFIGURATION shows flowise_flow: True (FLOWISE-ONLY MODE):**
+
+🚨 **FLOWISE-ONLY BUILD** 🚨
+
+**DO NOT build:**
+❌ React components or frontend UI files
+❌ Backend server files (Express, FastAPI, etc.)
+❌ Database schemas or migrations
+❌ API endpoint files
+❌ Traditional web app directory structure
+❌ Multiple JSON files for workflow
+❌ Separate config files that split the workflow
+
+**ONLY build:**
+✅ SINGLE workflow JSON file (e.g., `skills-inference-flow.json`)
+✅ README.md (usage instructions)
+✅ INTEGRATION_GUIDE.md (how to import into Flowise)
 
 **SPECIAL BUILD RULES FOR FLOWISE:**
 1. ❌ **DO NOT use parallel build tasks for JSON generation**
@@ -924,16 +1057,64 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 **Only the main workflow JSON must be generated as a single, non-parallel task.**
 
+🚨🚨🚨 **MANDATORY BUILDER REQUIREMENT: Read Files BEFORE Generating Agents** 🚨🚨🚨
+
+**BEFORE generating ANY agent node, Builder MUST execute these Read commands**:
+
+1. **READ FAILURE_PATTERNS.md** (understand what NOT to do):
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+   ```
+   **WHY**: Contains 6+ failure patterns with EXACT validation code to prevent crashes.
+   Pattern #6 specifically addresses the tool structure issue you MUST avoid.
+
+2. **READ the AGENT-NODE-TEMPLATE.json** (get the correct structure):
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   ```
+   **WHY**: This has the EXACT, tested, working structure for agent nodes.
+
+3. **LOCATE lines 341-367** in the template (agentTools array structure)
+
+4. **COPY the agentTools structure EXACTLY** into every agent node:
+   - currentDateTime tool (lines 341-351)
+   - searXNG tool (lines 352-367)
+
+5. **VERIFY after generation** that both tools are present in EVERY agent
+
 **Standard Agent Tools (REQUIRED for ALL agents)**:
 Every Flowise agent MUST include these 2 tools in agentTools array with EXACT Flowise UI structure:
-1. currentDateTime (temporal context)
-2. searXNG (real-time web search)
 
-CRITICAL: Use exact structure from AGENT-NODE-TEMPLATE.json:
-- Tool name: "searXNG" (capital X, capital NG) NOT "searxng-search"
-- Field: "apiBase" NOT "baseUrl"
-- RequiresHumanInput: "" (empty string) NOT false (boolean)
-- Include all fields: toolName, toolDescription, headers, format, categories, engines, etc.
+1. **currentDateTime** (temporal context)
+   - NO configuration needed
+   - Copy structure from template lines 341-351
+
+2. **searXNG** (real-time web search)
+   - ⚠️ CRITICAL: "searXNG" (capital X, capital NG) NOT "searxng-search"
+   - ⚠️ CRITICAL: Field "apiBase" NOT "baseUrl"
+   - ⚠️ CRITICAL: RequiresHumanInput: "" (empty string) NOT false (boolean)
+   - ⚠️ CRITICAL: Include ALL fields: toolName, toolDescription, headers, format, categories, engines, etc.
+   - Copy structure from template lines 352-367
+
+**WHY Builder Must Read Template First**:
+- ❌ Manual typing → Typos → Flowise crashes (Pattern #6)
+- ❌ Guessing structure → Wrong fields → Import fails
+- ✅ Copy from template → Exact structure → Works perfectly
+- ✅ Template is tested and validated → Zero errors
+
+**Validation Checklist (Builder MUST verify after generation)**:
+```python
+# Check that EVERY agent has both tools:
+import json
+flow = json.load(open('workflow.json'))
+for node in flow['nodes']:
+    if node['data']['name'] == 'agentAgentflow':
+        tools = node['data']['inputs'].get('agentTools', [])
+        tool_names = [t.get('toolName') for t in tools if isinstance(t, dict)]
+        assert 'currentDateTime' in tool_names, f"Agent {node['id']} missing currentDateTime"
+        assert 'searXNG' in tool_names, f"Agent {node['id']} missing searXNG"
+print("✅ All agents have required standard tools")
+```
 
 These are NOT phantom references (Pattern #5) and NOT incorrect structure (Pattern #6).
 They are real, working tools with correct Flowise UI JSON structure.
@@ -1238,6 +1419,70 @@ PHASE 3.5: INTEGRATION PRE-CHECK (NEW - Fast Validation Before Test)
 **After Build Finalization:**
 - ✅ All files created (code + README + .gitignore)
 - ✅ Git repository initialized with initial commit
+
+**🎨 FLOWISE PROJECTS: Generate Workflow Diagram (MANDATORY)**
+
+**IF CONFIGURATION shows flowise_flow: True:**
+
+Generate a Mermaid diagram of the workflow and embed it prominently in README:
+
+1. **Generate Mermaid Diagram:**
+   ```bash
+   python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+     <workflow-name>.json \
+     WORKFLOW-DIAGRAM.md \
+     --interactive
+   ```
+
+   This creates:
+   - `WORKFLOW-DIAGRAM.md`: Standalone diagram file with collapsible agent details
+   - Mermaid syntax with proper Flowise color scheme (green=start, pink=router, teal=agents)
+   - Interactive <details> section with agent descriptions table
+
+2. **Embed Diagram in README:**
+
+   Insert the diagram content RIGHT AFTER the hero/title section, BEFORE "## Overview":
+
+   ```markdown
+   # {Project Name}
+
+   {One-line description}
+
+   ## 📊 Workflow Architecture
+
+   **[View Full Workflow Diagram →](./WORKFLOW-DIAGRAM.md)**
+
+   {Paste entire Mermaid diagram from WORKFLOW-DIAGRAM.md here}
+
+   ---
+
+   ## Overview
+   {Rest of README continues...}
+   ```
+
+3. **Why This Is Critical:**
+   - ✅ GitHub natively renders Mermaid diagrams
+   - ✅ Users see workflow structure immediately without opening Flowise
+   - ✅ Interactive expandable section shows agent details
+   - ✅ Prominent placement at top ensures visibility
+   - ✅ Separate .md file allows deep-linking to diagram
+
+4. **Validation:**
+   ```bash
+   # Verify files exist
+   test -f WORKFLOW-DIAGRAM.md && echo "✅ Diagram file created" || echo "❌ Missing WORKFLOW-DIAGRAM.md"
+
+   # Verify README contains mermaid block
+   grep -q "```mermaid" README.md && echo "✅ Diagram embedded in README" || echo "❌ Diagram not embedded"
+
+   # Verify interactive section exists
+   grep -q "<details>" WORKFLOW-DIAGRAM.md && echo "✅ Interactive section included" || echo "⚠️  Missing interactive details"
+   ```
+
+**This step is MANDATORY for all Flowise projects** - diagrams are essential for understanding multi-agent workflows.
+
+**End of Flowise diagram generation**
+
 - ✅ Ready to proceed to Phase 4 (Test)
 
 ═══════════════════════════════════════════════════════════
@@ -1402,6 +1647,126 @@ Reusing cached test results.
    Description: "Expert QA engineer who validates implementations thoroughly. I run all tests, check for errors and edge cases, validate against requirements, analyze failures deeply, and provide detailed reports with specific recommendations for fixes. I also run pattern-based integration tests to catch known issues that unit tests miss."
 
 3. Activate Tester and validate:
+
+   🚨 **FLOWISE PROJECTS: Mandatory Standard Tools Validation** 🚨
+
+   **IF this is a Flowise project** (check CONFIGURATION for flowise_flow: True):
+
+   **BEFORE running any other tests, Tester MUST validate standard tools:**
+
+   ```bash
+   # Create validation script
+   cat > /tmp/validate_flowise_tools.py << 'VALIDATION_SCRIPT'
+#!/usr/bin/env python3
+import json
+import sys
+from pathlib import Path
+
+# Find all .json files in current directory
+json_files = list(Path('.').glob('*.json'))
+flowise_files = []
+
+for file in json_files:
+    try:
+        with open(file) as f:
+            data = json.load(f)
+            if 'nodes' in data and 'edges' in data:
+                flowise_files.append(file)
+    except:
+        continue
+
+if not flowise_files:
+    print("⚠️  No Flowise JSON files found")
+    sys.exit(0)
+
+print(f"🔍 Validating {len(flowise_files)} Flowise workflow(s)...")
+
+all_passed = True
+for workflow_file in flowise_files:
+    print(f"\n📄 Checking: {workflow_file}")
+
+    with open(workflow_file) as f:
+        flow = json.load(f)
+
+    agents = [n for n in flow['nodes'] if n.get('data', {}).get('name') == 'agentAgentflow']
+
+    if not agents:
+        print("  ℹ️  No agent nodes found (may be non-agent flow)")
+        continue
+
+    print(f"  Found {len(agents)} agent(s)")
+
+    for agent in agents:
+        agent_id = agent['id']
+        agent_label = agent.get('data', {}).get('label', 'Unknown')
+        tools = agent.get('data', {}).get('inputs', {}).get('agentTools', [])
+
+        # Handle both array of objects and empty string
+        if isinstance(tools, str):
+            tools = []
+
+        tool_names = [t.get('toolName') for t in tools if isinstance(t, dict)]
+
+        # Check for required tools
+        has_datetime = 'currentDateTime' in tool_names
+        has_searxng = 'searXNG' in tool_names
+
+        if not has_datetime:
+            print(f"  ❌ FAIL: Agent '{agent_label}' ({agent_id}) missing currentDateTime tool")
+            all_passed = False
+
+        if not has_searxng:
+            print(f"  ❌ FAIL: Agent '{agent_label}' ({agent_id}) missing searXNG tool")
+            all_passed = False
+
+        if has_datetime and has_searxng:
+            print(f"  ✅ PASS: Agent '{agent_label}' has both required tools")
+
+            # Validate searXNG structure
+            searxng_tool = next((t for t in tools if t.get('toolName') == 'searXNG'), None)
+            if searxng_tool:
+                if 'apiBase' not in searxng_tool:
+                    print(f"  ⚠️  WARNING: searXNG missing 'apiBase' field (should be 'apiBase' not 'baseUrl')")
+                    all_passed = False
+
+if all_passed:
+    print("\n✅ ALL AGENTS HAVE REQUIRED STANDARD TOOLS")
+    sys.exit(0)
+else:
+    print("\n❌ VALIDATION FAILED: Some agents missing required tools")
+    print("\n🔧 FIX REQUIRED:")
+    print("1. Read template: /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json")
+    print("2. Copy agentTools structure from lines 341-367")
+    print("3. Add to EVERY agent node's inputs.agentTools array")
+    print("4. Re-run this validation")
+    sys.exit(1)
+VALIDATION_SCRIPT
+
+   python3 /tmp/validate_flowise_tools.py
+
+   VALIDATION_EXIT_CODE=$?
+   ```
+
+   **IF validation FAILS (exit code 1)**:
+   - ❌ **STOP all other testing immediately**
+   - ❌ Mark test phase as FAILED
+   - Return to Builder phase with specific instructions:
+     ```
+     Builder must:
+     1. Read AGENT-NODE-TEMPLATE.json (lines 341-367)
+     2. Add currentDateTime and searXNG tools to EVERY agent
+     3. Use EXACT structure from template (no modifications)
+     4. Re-run validation before proceeding
+     ```
+   - Do NOT proceed to other tests until tools are fixed
+
+   **IF validation PASSES (exit code 0)**:
+   - ✅ Log: "Standard tools validation passed"
+   - ✅ Proceed to other Flowise-specific tests
+   - ✅ Continue with remaining test suite
+
+   **End of Flowise-specific validation**
+
    - Run ALL tests as specified in architecture
    - **Run pattern-based integration tests (if applicable)**
    - For automated tests: Execute test suite and capture results

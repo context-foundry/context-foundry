@@ -40,7 +40,9 @@ This comprehensive reference defines the canonical way to structure Flowise agen
 - ✅ **Extract patterns** from template JSONs
 - ✅ **Enhance Scout phase** with Flowise research checklist
 - ✅ **Enhance Architect phase** with proven patterns
-- ✅ **CLI tools** for template analysis
+- ✅ **Generate Mermaid diagrams** for visual workflow documentation
+- ✅ **Auto-embed diagrams in README** with interactive agent details
+- ✅ **CLI tools** for template analysis and diagram generation
 - ✅ **Zero dependencies** (Python stdlib only)
 - ✅ **100% test coverage** (comprehensive unit tests)
 
@@ -114,7 +116,36 @@ Has Tools: True
 Expertise Level: advanced
 ```
 
-### 3. Template Analysis
+### 3. Generate Mermaid Workflow Diagrams
+
+Create beautiful visual diagrams of Flowise workflows for GitHub README:
+
+```bash
+# Generate diagram with interactive agent details
+python3 mermaid_generator.py path/to/workflow.json WORKFLOW-DIAGRAM.md --interactive
+
+# Generate basic diagram only
+python3 mermaid_generator.py path/to/workflow.json output.md
+
+# Output to stdout
+python3 mermaid_generator.py path/to/workflow.json
+```
+
+**Output:**
+- Mermaid diagram with Flowise color scheme (green=start, pink=router, teal=agents)
+- Proper node shapes (stadium for start, hexagon for router, rectangle for agents)
+- Labeled edges showing routing scenarios
+- Optional interactive `<details>` section with agent descriptions table
+- GitHub natively renders Mermaid - instant visualization in README
+
+**Automatic Integration:**
+When building Flowise projects, Context Foundry automatically:
+1. Generates `WORKFLOW-DIAGRAM.md` after build completion
+2. Embeds diagram prominently in README hero section
+3. Includes interactive collapsible agent details
+4. Validates diagram files exist before proceeding to tests
+
+### 4. Template Analysis
 
 Analyze Flowise templates to extract patterns:
 
@@ -144,7 +175,7 @@ Most Common Connection Patterns:
   - agent-to-tool: 15 occurrences
 ```
 
-### 4. Pattern Library
+### 5. Pattern Library
 
 Load and use pattern library:
 
@@ -165,6 +196,7 @@ if patterns:
 flowise-extension/
 ├── detector.py              # Flow detection logic
 ├── analyzer.py              # Template analyzer with CLI
+├── mermaid_generator.py     # Mermaid diagram generator
 ├── extensions_loader.py     # Safe dynamic loader
 ├── patterns/
 │   ├── flowise-expertise.json.example   # Pattern library
