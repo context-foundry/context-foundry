@@ -584,7 +584,15 @@ Similarly for knowledge bases:
 2. ✅ **DOCUMENTED IN README** (list recommended tools to create)
 3. ❌ **NOT INVENTED** with placeholder names
 
-**CORRECT Pattern (Option 1 - Empty Arrays)**:
+**⚠️ EXCEPTION: Standard Tools (Added Nov 2025)**:
+As of November 2025, ALL agents include 2 standard tools (NOT phantom references):
+- **currentDateTime**: Real tool providing temporal context
+- **searxng-search**: Real federated search tool (base: https://s.llam.ai)
+
+These are NOT phantom references - they are real, required tools with actual implementations.
+See: `/extensions/flowise/tool-configs/STANDARD_TOOLS.md`
+
+**CORRECT Pattern (Option 1 - Standard Tools Only)**:
 ```json
 {
   "inputs": {
@@ -595,8 +603,38 @@ Similarly for knowledge bases:
         "content": "You are an Employee Profiling agent..."
       }
     ],
-    "agentTools": [],  // ← EMPTY: User configures in Flowise UI
+    "agentTools": [
+      {
+        "agentSelectedTool": "currentDateTime",
+        "agentSelectedToolRequiresHumanInput": false,
+        "agentSelectedToolConfig": {
+          "agentSelectedTool": "currentDateTime"
+        }
+      },
+      {
+        "agentSelectedTool": "searxng-search",
+        "agentSelectedToolRequiresHumanInput": false,
+        "agentSelectedToolConfig": {
+          "agentSelectedTool": "searxng-search",
+          "baseUrl": "https://s.llam.ai"
+        }
+      }
+    ],  // ← Standard tools included, custom tools documented separately
     "agentKnowledgeVSEmbeddings": [],  // ← EMPTY: User adds knowledge bases
+    "agentEnableMemory": true,
+    "agentMemoryType": "allMessages"
+  }
+}
+```
+
+**LEGACY Pattern (Pre-Nov 2025 - Empty Arrays)**:
+```json
+{
+  "inputs": {
+    "agentModel": "chatOpenAI",
+    "agentMessages": [...],
+    "agentTools": [],  // ← Old approach: completely empty
+    "agentKnowledgeVSEmbeddings": [],
     "agentEnableMemory": true,
     "agentMemoryType": "allMessages"
   }
