@@ -1432,13 +1432,17 @@ Generate a Mermaid diagram of the workflow and embed it prominently in README:
    python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
      <workflow-name>.json \
      WORKFLOW-DIAGRAM.md \
-     --interactive
+     --interactive \
+     --badges \
+     --legend
    ```
 
    This creates:
-   - `WORKFLOW-DIAGRAM.md`: Standalone diagram file with collapsible agent details
-   - Mermaid syntax with proper Flowise color scheme (green=start, pink=router, teal=agents)
+   - `WORKFLOW-DIAGRAM.md`: Standalone diagram file with all enhancements
+   - Mermaid syntax with proper Flowise color scheme and emoji icons
+   - Flow metadata badges (node count, agents, complexity)
    - Interactive <details> section with agent descriptions table
+   - Complete node type legend (all 14 node types)
 
 2. **Embed Diagram in README:**
 

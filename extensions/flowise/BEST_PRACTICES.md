@@ -1016,6 +1016,169 @@ This demonstrates all 3 patterns:
 
 ---
 
+## Mermaid Diagram Generation
+
+Context Foundry automatically generates beautiful Mermaid diagrams for Flowise workflows with authentic styling, emoji icons, and intelligent layout.
+
+### Features
+
+**✅ Authentic Flowise Styling**
+- 12+ node types with correct shapes and colors from Flowise UI
+- Emoji icons for quick visual identification
+- Intelligent layout direction (TD vs LR based on complexity)
+
+**✅ Flow Metadata Badges**
+- Total nodes count
+- Agent count
+- Complexity level (Simple/Moderate/Complex)
+- Memory and tools indicators
+
+**✅ Interactive Documentation**
+- Collapsible agent details table with emojis
+- Visual node type legend with all 14 node types
+- Flow metadata summary
+
+### Node Type Reference
+
+All 14 supported Flowise node types render with authentic colors:
+
+| Type | Shape | Color | Icon |
+|------|-------|-------|------|
+| Start | Stadium | Green `#7EE787` | 🚀 |
+| Agent | Rectangle | Teal `#4DD0E1` | 🤖 |
+| ConditionAgent | Hexagon | Pink `#ff8fab` | 🎯 |
+| Condition | Diamond | Orange `#FFB938` | 🔀 |
+| LLM | Rounded | Blue `#64B5F6` | 💬 |
+| Tool | Trapezoid | Brown `#d4a373` | 🔧 |
+| ExecuteFlow | Rectangle | Olive `#a3b18a` | ▶️ |
+| CustomFunction | Rectangle | Purple `#E4B7FF` | ⚙️ |
+| HTTP | Rectangle | Red `#FF7F7F` | 🌐 |
+| HumanInput | Hexagon | Indigo `#6E6EFD` | 👤 |
+| DirectReply | Rectangle | Mint `#4DDBBB` | 💭 |
+| Loop | Stadium | Coral `#FFA07A` | 🔄 |
+| Iteration | Rectangle | Lavender `#9C89B8` | 🔁 |
+| StickyNote | Rectangle | Yellow `#fee440` | 📝 |
+
+### CLI Usage
+
+**Basic usage** (all features enabled by default):
+```bash
+python3 mermaid_generator.py workflow.json DIAGRAM.md
+```
+
+**Output includes**:
+- Mermaid diagram with emojis
+- Flow metadata badges
+- Interactive agent details table
+- Node type legend
+
+**Custom options**:
+```bash
+# Minimal output (no interactive features)
+python3 mermaid_generator.py workflow.json DIAGRAM.md --no-interactive
+
+# Badges only (no legend)
+python3 mermaid_generator.py workflow.json DIAGRAM.md --badges
+
+# Legend only (no badges)
+python3 mermaid_generator.py workflow.json DIAGRAM.md --legend
+
+# Detailed node descriptions
+python3 mermaid_generator.py workflow.json DIAGRAM.md --include-details
+```
+
+### Layout Direction
+
+The generator intelligently chooses graph direction for optimal readability:
+
+**Top-Down (TD)** - Simple flows:
+- ≤5 nodes
+- Linear structure
+- Easy to follow vertically
+
+**Left-Right (LR)** - Complex flows:
+- >10 nodes
+- Multiple branches (≥2 branching points)
+- Better horizontal space utilization
+
+### Generated Output Example
+
+```markdown
+![Nodes](https://img.shields.io/badge/Nodes-8-blue) ![Agents](https://img.shields.io/badge/Agents-5-green) ![Complexity](https://img.shields.io/badge/Complexity-Moderate-yellow)
+
+---
+
+**Total Nodes**: 8 | **Agents**: 5 | **Complexity**: Moderate
+
+\`\`\`mermaid
+graph LR
+    start([🚀 Start Node])
+    router{{🎯 Intent Router}}
+    agent1[🤖 Technical Agent]
+    agent2[🤖 Billing Agent]
+    ...
+\`\`\`
+
+<details>
+<summary><b>🔍 View Agent Details (Click to Expand)</b></summary>
+
+| Agent | Type | Description |
+|-------|------|-------------|
+| 🚀 Start Node | Start | Workflow entry point |
+| 🎯 Intent Router | ConditionAgent | Routes to specialist |
+| 🤖 Technical Agent | Agent | Handles tech support |
+...
+
+</details>
+
+### 🎨 Node Type Legend
+| Icon | Type | Description |
+|------|------|-------------|
+| 🚀 | Start | Entry point of the workflow |
+| 🤖 | Agent | AI agent with reasoning |
+...
+```
+
+### Embedding in README
+
+The orchestrator automatically embeds diagrams prominently in README:
+
+```markdown
+# Project Name
+
+Description...
+
+## 📊 Workflow Architecture
+
+**[View Full Workflow Diagram →](./WORKFLOW-DIAGRAM.md)**
+
+[Badges display here]
+
+[Mermaid diagram renders here]
+
+[Interactive details expand here]
+
+---
+
+## Overview
+...
+```
+
+### Tips for Beautiful Diagrams
+
+**✅ DO**:
+- Let the generator choose layout direction automatically
+- Use descriptive node labels (they'll get emojis automatically)
+- Include node descriptions (shown in interactive table)
+- Keep workflows focused (8-12 nodes optimal for readability)
+
+**❌ DON'T**:
+- Override node colors in Flowise (generator uses authentic colors)
+- Create overly complex flows (>15 nodes hard to visualize)
+- Skip the interactive section (users love the details table)
+
+---
+
 **For troubleshooting these best practices**, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 **For real-world examples**, see [EXAMPLES.md](docs/EXAMPLES.md)
