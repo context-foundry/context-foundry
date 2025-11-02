@@ -1385,6 +1385,87 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
                 result["confidence"] = "high"
                 break
 
+    # ═══════════════════════════════════════════════════════════════════
+    # FLOWISE EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+    try:
+        # Try to import Flowise extension loader
+        import sys
+        from pathlib import Path
+
+        # Get Context Foundry installation path
+        cf_base = Path(__file__).parent.parent
+
+        # Check if extensions/flowise exists
+        flowise_ext_path = cf_base / 'extensions' / 'flowise'
+
+        if flowise_ext_path.exists():
+            # Add to sys.path if not already there
+            ext_parent = str(flowise_ext_path.parent)
+            if ext_parent not in sys.path:
+                sys.path.insert(0, ext_parent)
+
+            # Import the extension
+            from flowise import extensions_loader
+
+            # Load Flowise detectors
+            flowise_detectors = extensions_loader.load_extension_detectors()
+
+            if flowise_detectors and 'flowise' in flowise_detectors:
+                # Check for Flowise JSON files in project directory
+                json_files = list(directory.glob("*.json"))
+
+                # Sample first 10 JSON files to avoid performance issues
+                for json_file in json_files[:10]:
+                    try:
+                        detection = flowise_detectors['flowise'].detect_flowise_flow(json_file)
+
+                        if detection.get('is_flowise'):
+                            # Flowise flow detected!
+                            print(f"🔍 Flowise Extension: Detected {detection.get('flow_type')} flow in {json_file}")
+                            print(f"   - Complexity: {detection.get('complexity')}")
+                            print(f"   - Nodes: {detection.get('node_count', 0)}")
+                            print(f"   - Agents: {detection.get('agent_count', 0)}")
+                            print(f"   - Has Memory: {detection.get('has_memory', False)}")
+                            print(f"   - Has Tools: {detection.get('has_tools', False)}")
+
+                            result['flowise_flow'] = True
+                            result['flowise_flow_type'] = detection.get('flow_type')
+                            result['flowise_complexity'] = detection.get('complexity')
+                            result['flowise_node_count'] = detection.get('node_count', 0)
+                            result['flowise_agent_count'] = detection.get('agent_count', 0)
+                            result['flowise_has_memory'] = detection.get('has_memory', False)
+                            result['flowise_has_tools'] = detection.get('has_tools', False)
+
+                            # Update project classification
+                            if result["project_type"] is None or result["confidence"] != 'high':
+                                result["project_type"] = 'flowise-workflow'
+                                result["confidence"] = 'high'
+
+                            # Add to languages list
+                            if 'flowise' not in result["languages"]:
+                                result["languages"].append('flowise')
+
+                            # Add the detected flow file
+                            result["project_files"].append(str(json_file))
+
+                            print(f"✅ Flowise Extension: Setting flowise_flow=True in CONFIGURATION")
+
+                            # Stop after first detection (optimization)
+                            break
+
+                    except Exception as e:
+                        # Don't fail entire detection if one file has issues
+                        print(f"⚠️  Flowise Extension: Error checking {json_file}: {e}")
+                        continue
+
+    except (ImportError, Exception):
+        # Flowise extension not installed or error - continue without it
+        pass
+    # ═══════════════════════════════════════════════════════════════════
+    # END FLOWISE EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+
     return result
 
 
@@ -1573,6 +1654,60 @@ Auto-correcting to use_parallel=False...
         # Detect existing codebase
         codebase_info = _detect_existing_codebase(final_working_dir)
 
+        # ═══════════════════════════════════════════════════════════════════
+        # FLOWISE KEYWORD DETECTION (for new Flowise projects)
+        # ═══════════════════════════════════════════════════════════════════
+        # If file-based detection didn't find Flowise flows, check task keywords
+        if not codebase_info.get('flowise_flow', False):
+            task_lower = task.lower()
+            flowise_keywords = [
+                'flowise',
+                'agent flow',
+                'multi-agent flow',
+                'chatflow',
+                'agentflow',
+                'flowise workflow'
+            ]
+
+            if any(keyword in task_lower for keyword in flowise_keywords):
+                # Activate Flowise extension based on keywords
+                print(f"🔍 Flowise Extension: Keyword detection triggered!", file=sys.stderr)
+                print(f"   Task contains Flowise keywords", file=sys.stderr)
+
+                codebase_info['flowise_flow'] = True
+
+                # Infer flow type from task description
+                if 'multi-agent' in task_lower or 'multi agent' in task_lower:
+                    codebase_info['flowise_flow_type'] = 'multi-agent'
+                    print(f"   Inferred flow type: multi-agent", file=sys.stderr)
+                elif 'rag' in task_lower or 'retrieval' in task_lower:
+                    codebase_info['flowise_flow_type'] = 'rag'
+                    print(f"   Inferred flow type: rag", file=sys.stderr)
+                elif 'workflow' in task_lower or 'orchestrat' in task_lower:
+                    codebase_info['flowise_flow_type'] = 'workflow'
+                    print(f"   Inferred flow type: workflow", file=sys.stderr)
+                elif 'chatbot' in task_lower or 'chat' in task_lower:
+                    codebase_info['flowise_flow_type'] = 'chatbot'
+                    print(f"   Inferred flow type: chatbot", file=sys.stderr)
+                else:
+                    codebase_info['flowise_flow_type'] = 'general'
+                    print(f"   Inferred flow type: general", file=sys.stderr)
+
+                # Set default complexity for new projects
+                codebase_info['flowise_complexity'] = 'moderate'
+
+                # Add flowise to languages if not already there
+                if 'flowise' not in codebase_info["languages"]:
+                    codebase_info["languages"].append('flowise')
+
+                print(f"✅ Flowise Extension: Setting flowise_flow=True via keyword detection", file=sys.stderr)
+
+                # Update project type if not already set
+                if codebase_info["project_type"] is None:
+                    codebase_info["project_type"] = 'flowise-workflow'
+                    codebase_info["confidence"] = 'medium'
+        # ═══════════════════════════════════════════════════════════════════
+
         # Detect task intent from description
         detected_intent = _detect_task_intent(task)
 
@@ -1643,6 +1778,14 @@ Auto-correcting to use_parallel=False...
             # Smart Incremental Builds (Phase 1 implementation)
             "incremental": incremental and not force_rebuild,  # Enable only if incremental=True and not forced rebuild
             "force_rebuild": force_rebuild,
+            # Flowise extension fields (TOP LEVEL for orchestrator access)
+            "flowise_flow": codebase_info.get("flowise_flow", False),
+            "flowise_flow_type": codebase_info.get("flowise_flow_type"),
+            "flowise_complexity": codebase_info.get("flowise_complexity"),
+            "flowise_node_count": codebase_info.get("flowise_node_count", 0),
+            "flowise_agent_count": codebase_info.get("flowise_agent_count", 0),
+            "flowise_has_memory": codebase_info.get("flowise_has_memory", False),
+            "flowise_has_tools": codebase_info.get("flowise_has_tools", False),
             # Enhancement mode: Include codebase detection results
             "codebase_detection": {
                 "has_existing_code": codebase_info["has_code"],
@@ -1652,7 +1795,15 @@ Auto-correcting to use_parallel=False...
                 "has_git": codebase_info["has_git"],
                 "git_clean": codebase_info["git_clean"],
                 "project_files": codebase_info["project_files"][:10],  # Limit to first 10 files
-                "detected_intent": detected_intent
+                "detected_intent": detected_intent,
+                # Flowise extension fields (NESTED for backward compatibility)
+                "flowise_flow": codebase_info.get("flowise_flow", False),
+                "flowise_flow_type": codebase_info.get("flowise_flow_type"),
+                "flowise_complexity": codebase_info.get("flowise_complexity"),
+                "flowise_node_count": codebase_info.get("flowise_node_count", 0),
+                "flowise_agent_count": codebase_info.get("flowise_agent_count", 0),
+                "flowise_has_memory": codebase_info.get("flowise_has_memory", False),
+                "flowise_has_tools": codebase_info.get("flowise_has_tools", False)
             }
         }
 
