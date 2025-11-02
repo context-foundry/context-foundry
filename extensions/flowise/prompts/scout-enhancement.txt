@@ -37,9 +37,9 @@ Analyze the detected Flowise flow structure:
 
 ## 2. Flow Quality Benchmarks (1000-Star Criteria)
 
-High-quality Flowise flows exhibit these production-ready characteristics:
+High-quality Flowise flows exhibit these characteristics:
 
-✓ **Production-Ready Error Handling**
+✓ **Robust Error Handling**
   - Every external call has try/catch logic
   - Fallback responses defined for all failure modes
   - User-friendly error messages (not stack traces)
