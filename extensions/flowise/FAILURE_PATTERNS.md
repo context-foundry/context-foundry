@@ -584,7 +584,7 @@ Similarly for knowledge bases:
 **⚠️ APPROACH EVOLUTION - Nov 2025 Update**
 
 **CURRENT Approach (Nov 2025+)**: Standard tools + documented custom tools
-1. ✅ **INCLUDE STANDARD TOOLS** (currentDateTime + searxng-search) - Real, working tools
+1. ✅ **INCLUDE STANDARD TOOLS** (currentDateTime + searXNG) - Real, working tools
 2. ✅ **DOCUMENT CUSTOM TOOLS** in README - User adds in Flowise UI
 3. ✅ **OMIT KNOWLEDGE BASES** (leave empty) - User configures in Flowise UI
 4. ❌ **DO NOT INVENT** placeholder tool/knowledge names
@@ -592,7 +592,7 @@ Similarly for knowledge bases:
 **Standard Tools (Required as of Nov 2025)**:
 ALL agents MUST include these 2 standard tools (NOT phantom references):
 - **currentDateTime**: Real tool providing temporal context
-- **searxng-search**: Real federated search tool (base: https://s.llam.ai)
+- **searXNG**: Real federated search tool (apiBase: https://s.llam.ai)
 
 These are NOT phantom references - they are real, required tools with actual implementations.
 See: `/extensions/flowise/tool-configs/STANDARD_TOOLS.md`
@@ -605,30 +605,36 @@ Leave all arrays completely empty (`agentTools: []`). This approach is NO LONGER
 {
   "inputs": {
     "agentModel": "chatOpenAI",
-    "agentMessages": [
-      {
-        "role": "system",
-        "content": "You are an Employee Profiling agent..."
-      }
-    ],
+    "agentMessages": "",
     "agentTools": [
       {
         "agentSelectedTool": "currentDateTime",
-        "agentSelectedToolRequiresHumanInput": false,
+        "agentSelectedToolRequiresHumanInput": "",
         "agentSelectedToolConfig": {
           "agentSelectedTool": "currentDateTime"
         }
       },
       {
-        "agentSelectedTool": "searxng-search",
-        "agentSelectedToolRequiresHumanInput": false,
+        "agentSelectedTool": "searXNG",
+        "agentSelectedToolRequiresHumanInput": "",
         "agentSelectedToolConfig": {
-          "agentSelectedTool": "searxng-search",
-          "baseUrl": "https://s.llam.ai"
+          "apiBase": "https://s.llam.ai",
+          "toolName": "searxng-search",
+          "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+          "headers": "",
+          "format": "json",
+          "categories": "",
+          "engines": "",
+          "language": "",
+          "pageno": "",
+          "time_range": "",
+          "safesearch": "",
+          "agentSelectedTool": "searXNG"
         }
       }
     ],  // ← Standard tools included, custom tools documented separately
-    "agentKnowledgeVSEmbeddings": [],  // ← EMPTY: User adds knowledge bases
+    "agentKnowledgeDocumentStores": "",
+    "agentKnowledgeVSEmbeddings": "",
     "agentEnableMemory": true,
     "agentMemoryType": "allMessages"
   }
@@ -683,8 +689,10 @@ After importing the workflow to Flowise, configure these custom tools:
 - [ ] If APIs are mentioned, document as "Custom Tools (user configured)"
 
 **During Builder Phase** (Nov 2025+ Approach):
-- [ ] Builder INCLUDES standard tools (currentDateTime + searxng-search) in `agentTools`
+- [ ] Builder INCLUDES standard tools (currentDateTime + searXNG) in `agentTools`
 - [ ] Builder uses exact Flowise UI structure for standard tools (see Pattern #6)
+- [ ] Builder uses correct tool names: "searXNG" NOT "searxng-search"
+- [ ] Builder uses correct field names: "apiBase" NOT "baseUrl"
 - [ ] Builder leaves `agentKnowledgeVSEmbeddings: []` empty (user configures in UI)
 - [ ] For custom tools: Builder creates documentation files (not JSON references)
 - [ ] Built-in tools (OpenAI web search, code interpreter) are OK to include in agentToolsBuiltInOpenAI
@@ -693,14 +701,32 @@ After importing the workflow to Flowise, configure these custom tools:
 
 **Validation Rules** (Test Phase - Nov 2025+ Updated):
 ```bash
-# Check for phantom tool references (allow standard tools)
+# Check for correct standard tool names
 for tool in $(jq -r '.nodes[].data.inputs.agentTools[]?.agentSelectedTool' flow.json 2>/dev/null); do
-  if [[ -n "$tool" && "$tool" != "currentDateTime" && "$tool" != "searxng-search" ]]; then
-    echo "❌ WARNING: Found custom tool reference '$tool' - this may not exist in Flowise"
-    echo "   Standard tools (currentDateTime, searxng-search) are OK"
+  if [[ -n "$tool" && "$tool" != "currentDateTime" && "$tool" != "searXNG" ]]; then
+    echo "❌ WARNING: Found non-standard tool reference '$tool'"
+    echo "   Standard tools must be: 'currentDateTime' and 'searXNG' (capital XNG!)"
     echo "   Custom tools should be documented in INTEGRATION_GUIDE.md instead"
   fi
 done
+
+# Check for correct searXNG structure (apiBase not baseUrl)
+if jq -e '.nodes[].data.inputs.agentTools[]? | select(.agentSelectedTool == "searXNG") | select(.agentSelectedToolConfig.baseUrl)' flow.json > /dev/null 2>&1; then
+  echo "❌ ERROR: searXNG uses 'baseUrl' - should be 'apiBase'"
+  echo "   Fix: Change agentSelectedToolConfig.baseUrl to agentSelectedToolConfig.apiBase"
+fi
+
+# Check for boolean instead of empty string in agentSelectedToolRequiresHumanInput
+if jq -e '.nodes[].data.inputs.agentTools[]? | select(.agentSelectedToolRequiresHumanInput == true or .agentSelectedToolRequiresHumanInput == false)' flow.json > /dev/null 2>&1; then
+  echo "❌ ERROR: agentSelectedToolRequiresHumanInput uses boolean (true/false)"
+  echo "   Fix: Use empty string \"\" instead of false, or omit the field"
+fi
+
+# Check for incorrect tool name "searxng-search" instead of "searXNG"
+if jq -e '.nodes[].data.inputs.agentTools[]? | select(.agentSelectedTool == "searxng-search")' flow.json > /dev/null 2>&1; then
+  echo "❌ ERROR: Found 'searxng-search' - should be 'searXNG' (capital XNG)"
+  echo "   Note: 'searxng-search' goes in agentSelectedToolConfig.toolName, NOT agentSelectedTool"
+fi
 
 # Check for placeholder text in knowledge configs
 if jq -e '.nodes[].data.inputs.agentKnowledgeVSEmbeddings[]? | select(.knowledgeName | contains("short name"))' flow.json > /dev/null 2>&1; then
@@ -761,20 +787,30 @@ Add API credentials in Flowise Credentials Manager:
 "agentTools": [
   {
     "agentSelectedTool": "currentDateTime",
-    "agentSelectedToolRequiresHumanInput": false,
+    "agentSelectedToolRequiresHumanInput": "",
     "agentSelectedToolConfig": {
       "agentSelectedTool": "currentDateTime"
     }
   },
   {
-    "agentSelectedTool": "searxng-search",
-    "agentSelectedToolRequiresHumanInput": false,
+    "agentSelectedTool": "searXNG",
+    "agentSelectedToolRequiresHumanInput": "",
     "agentSelectedToolConfig": {
-      "agentSelectedTool": "searxng-search",
-      "baseUrl": "https://s.llam.ai"
+      "apiBase": "https://s.llam.ai",
+      "toolName": "searxng-search",
+      "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+      "headers": "",
+      "format": "json",
+      "categories": "",
+      "engines": "",
+      "language": "",
+      "pageno": "",
+      "time_range": "",
+      "safesearch": "",
+      "agentSelectedTool": "searXNG"
     }
   }
-]  // ✓ Standard tools included
+]  // ✓ Standard tools included with EXACT Flowise UI structure
 ```
 
 Plus in `INTEGRATION_GUIDE.md`:
