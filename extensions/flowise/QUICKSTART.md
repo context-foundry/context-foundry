@@ -1,6 +1,6 @@
 # Quick Start - Flowise Agent Builder
 
-> Build production-ready Flowise multi-agent workflows from single sentences in ~20 minutes.
+> Build complete Flowise multi-agent workflows from single sentences in ~20 minutes.
 
 This guide gets you from zero to your first successful Flowise flow build in **10 minutes**.
 
@@ -188,7 +188,7 @@ grep -c '"type": "asyncOptions"' customer-service-flow.json
    - 4-5 specialized agent nodes
    - All connections visible
 
-✅ **Success**: If the flow imports cleanly and all nodes render, you have a production-ready Flowise flow!
+✅ **Success**: If the flow imports cleanly and all nodes render, you have a complete working Flowise flow!
 
 #### 3. Documentation Completeness
 
@@ -257,6 +257,6 @@ inventory tracking, order fulfillment, and equipment maintenance
 
 ---
 
-🎉 **Congratulations!** You just built your first production-ready Flowise multi-agent workflow from a single sentence.
+🎉 **Congratulations!** You just built your first complete Flowise multi-agent workflow from a single sentence.
 
 🤖 **Powered by Context Foundry Flowise Extension**

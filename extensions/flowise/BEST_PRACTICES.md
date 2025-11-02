@@ -1,6 +1,6 @@
 # Best Practices - Flowise Agent Builder
 
-**Guidelines for optimal results and production-ready Flowise flows**
+**Guidelines for optimal results and high-quality Flowise workflows**
 
 ---
 
@@ -170,7 +170,7 @@
 
 **Characteristics**:
 - ✅ Comprehensive coverage
-- ✅ Production-ready
+- ✅ Feature-complete
 - ✅ Handles complex scenarios
 - ❌ Longer build time
 - ❌ More complex testing

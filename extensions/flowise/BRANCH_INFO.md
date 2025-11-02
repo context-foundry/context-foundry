@@ -8,7 +8,7 @@
 
 ## 🎯 What This Branch Is
 
-This branch preserves a special version of Context Foundry with **Flowise agent flow specialization** - the ability to build production-ready, multi-agent Flowise workflows from single-sentence prompts.
+This branch preserves a special version of Context Foundry with **Flowise agent flow specialization** - the ability to build complete, multi-agent Flowise workflows from single-sentence prompts.
 
 ### The Capability
 

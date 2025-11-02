@@ -1,6 +1,6 @@
 # Flowise Extension for Context Foundry
 
-A **private, modular extension framework** that teaches Context Foundry to become a Flowise expert. This extension automatically detects Flowise agent flows and provides world-class guidance for building production-ready workflows.
+A **private, modular extension framework** that teaches Context Foundry to become a Flowise expert. This extension automatically detects Flowise agent flows and provides world-class guidance for building high-quality workflows.
 
 ## Overview
 

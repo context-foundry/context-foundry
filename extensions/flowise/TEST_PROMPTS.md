@@ -8,7 +8,7 @@
 
 ## ✅ Verified Working Example
 
-This prompt has been tested and produces a perfect, production-ready Flowise flow:
+This prompt has been tested and produces a perfect, complete Flowise flow:
 
 ### Warehouse Operations (Complex)
 
@@ -422,7 +422,7 @@ Your testing is successful if:
 4. Wait 10-15 minutes
 5. Check the generated JSON imports into Flowise
 
-**That's it!** You now have a production-ready Flowise flow built from a single sentence.
+**That's it!** You now have a complete Flowise flow built from a single sentence.
 
 ---
 
