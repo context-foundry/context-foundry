@@ -1,8 +1,8 @@
-# Recommended Flowise Agent Tools (Optional)
+# Standard Flowise Agent Tools (Auto-Included)
 
-**IMPORTANT**: These tools must be created in your Flowise instance BEFORE importing workflows.
+**Auto-included in ALL Flowise agents built with Context Foundry**
 
-These 2 tools can enhance agent capabilities by providing temporal awareness and real-time information access. They are NOT automatically included in generated workflows - you must create them manually in Flowise UI first.
+These 2 tools are automatically included in every Flowise agent with the CORRECT Flowise UI JSON structure to provide temporal awareness and real-time information access. They are built-in Flowise tools that work immediately upon import.
 
 ---
 
@@ -258,43 +258,61 @@ in climate policy include... [synthesizes from recent results only]"
 
 ## Integration with Context Foundry
 
-### Manual Setup Required
+### Automatic Inclusion with Correct Structure
 
-**CRITICAL**: Generated workflows have empty tool arrays by default:
+**AUTO-INCLUDED**: Generated workflows have these tools with EXACT Flowise UI structure:
 ```json
-"agentTools": []  // Empty - you add tools after import
+"agentTools": [
+  {
+    "agentSelectedTool": "currentDateTime",
+    "agentSelectedToolRequiresHumanInput": "",
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "currentDateTime"
+    }
+  },
+  {
+    "agentSelectedTool": "searXNG",  // Note: capital X, capital NG
+    "agentSelectedToolRequiresHumanInput": "",
+    "agentSelectedToolConfig": {
+      "apiBase": "https://s.llam.ai",  // Note: "apiBase" not "baseUrl"
+      "toolName": "searxng-search",
+      "toolDescription": "Federated web/meta search...",
+      "headers": "",
+      "format": "json",
+      // ... all required fields
+      "agentSelectedTool": "searXNG"
+    }
+  }
+]
 ```
 
-**Why empty arrays?**
-- Prevents Pattern #6 (Tool References Before Tool Creation)
-- Workflows crash if they reference tools that don't exist in target Flowise instance
-- Flowise requires tools to exist BEFORE being referenced in workflows
+**Why this structure?**
+- Matches EXACT output from Flowise UI when tools are added manually
+- Prevents Pattern #6 (Incorrect Tool JSON Structure)
+- Tools are built-in to Flowise, work immediately upon import
+- No manual setup required after import
 
-### How to Add These Tools to Your Workflow
+### CRITICAL: Field Name Accuracy
 
-**Step 1**: Create tools in Flowise UI (see setup sections above)
-**Step 2**: Import your generated workflow to Flowise
-**Step 3**: Manually add tools to each agent:
-   1. Open agent node in Flowise UI
-   2. Click "Tools" section
-   3. Add "currentDateTime" from dropdown
-   4. Add "searxng-search" from dropdown
-   5. Save agent configuration
+**Pattern #6 was caused by wrong field names**:
+- ❌ WRONG: "searxng-search" → ✅ RIGHT: "searXNG"
+- ❌ WRONG: "baseUrl" → ✅ RIGHT: "apiBase"
+- ❌ WRONG: `false` (boolean) → ✅ RIGHT: `""` (empty string)
 
-**Step 4**: Repeat for all agents that need these capabilities
+We discovered this by exporting a working workflow from Flowise UI and comparing structures.
 
 ### Pattern Library Relationship
 
-**Pattern #6** (Tool References Before Tool Creation - CRITICAL):
-- Workflows CANNOT auto-include tools that don't exist in target instance
-- Causes 500 HTTP errors and white screen crashes
-- Solution: Empty arrays in generated JSON, manual tool addition after import
+**Pattern #6** (Incorrect Tool JSON Structure - FIXED):
+- Initial diagnosis: "Tools must be created first" (WRONG)
+- True root cause: "Used wrong JSON field names and types" (CORRECT)
+- Solution: Use EXACT Flowise UI structure from template
 
 **Pattern #5** (Phantom Tool References):
 - Don't invent fictional tool names like "queryWorkdayHCM"
-- currentDateTime and searxng-search are REAL tools (but must be created first)
+- currentDateTime and searXNG are REAL built-in tools
 
-**Both patterns require empty tool arrays in generated workflows.**
+**Key learning**: Always use structure from actual Flowise UI exports, not invented structure.
 
 ---
 
@@ -383,9 +401,10 @@ in climate policy include... [synthesizes from recent results only]"
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.0 | 2025-11-01 | Changed from "Required/Automatic" to "Optional/Manual" after Pattern #6 discovery |
-| 1.0 | 2025-11-01 | Initial documentation of standard tools requirement (reverted) |
+| 3.0 | 2025-11-01 | FINAL FIX: Changed back to "Auto-Included" with CORRECT Flowise UI structure - Pattern #6 was wrong field names, not missing tools! |
+| 2.0 | 2025-11-01 | Changed from "Required/Automatic" to "Optional/Manual" after initial Pattern #6 diagnosis (later corrected) |
+| 1.0 | 2025-11-01 | Initial documentation of standard tools requirement (initial attempt with wrong structure) |
 
 ---
 
-**Remember**: These 2 tools are RECOMMENDED (not required) for Flowise agents. They provide temporal awareness and real-time information access that improve agent decision-making. Create them in Flowise UI BEFORE importing workflows to avoid Pattern #6 crashes.
+**Remember**: These 2 tools are AUTO-INCLUDED in all generated workflows with the CORRECT Flowise UI JSON structure. They work immediately upon import with no manual setup required.

@@ -13,7 +13,7 @@
 3. [Separate Config Files Anti-Pattern](#separate-config-files-anti-pattern)
 4. [Disconnected Agent Nodes](#disconnected-agent-nodes)
 5. [Phantom Tool and Knowledge References](#phantom-tool-and-knowledge-references)
-6. [Tool References Before Tool Creation (Pattern #6)](#tool-references-before-tool-creation-pattern-6)
+6. [Incorrect Tool JSON Structure (Pattern #6)](#incorrect-tool-json-structure-pattern-6)
 7. [Prevention Checklist](#prevention-checklist)
 
 ---
@@ -764,7 +764,7 @@ Plus in `INTEGRATION_GUIDE.md`:
 
 ---
 
-## Tool References Before Tool Creation (Pattern #6)
+## Incorrect Tool JSON Structure (Pattern #6)
 
 ### Symptom
 
@@ -789,19 +789,21 @@ All 8 agents have:
 
 ### Root Cause
 
-**Workflow JSON references tools that don't exist in the target Flowise instance.**
+**Workflow JSON uses INCORRECT tool structure - wrong field names, wrong data types, wrong tool names.**
 
 When Flowise UI loads an agent node, it:
 1. Reads `agentTools` array from workflow JSON
-2. Attempts to fetch tool metadata for each referenced tool (API call to `/api/v1/tools/searxng-search`)
-3. **Tool doesn't exist** → Server returns 500 HTTP error
-4. UI tries to parse error response as JSON → Parse error
-5. React component crashes trying to render invalid tool data → White screen
+2. Attempts to parse tool configuration with expected field names
+3. **Field names don't match** (e.g., "baseUrl" instead of "apiBase") → Server returns 500 HTTP error
+4. **Tool name doesn't match** (e.g., "searxng-search" instead of "searXNG") → Tool not found
+5. UI tries to parse error response as JSON → Parse error
+6. React component crashes trying to render invalid tool data → White screen
 
-**This is a Flowise platform constraint**:
-- Tools MUST exist in Flowise instance BEFORE being referenced in workflows
-- There is NO "create missing tools" auto-import mechanism
-- Tool references are NOT validated during JSON import (only at UI render time)
+**The issue is JSON structure, NOT missing tools**:
+- Tools are built-in to Flowise (currentDateTime, searXNG)
+- But we used WRONG field names and structure
+- Must match EXACT structure that Flowise UI generates
+- Discovered by comparing working export vs our generated structure
 
 ### Impact
 
@@ -810,54 +812,62 @@ When Flowise UI loads an agent node, it:
 **User Experience**: Extremely confusing - workflow appears to import successfully but is broken
 
 **Example from Recent Builds**:
-- **Internal Talent Mobility** (task 1d8490fa): Built with standard tools feature (commit 91a13ef)
-  - All 8 agents reference currentDateTime + searxng-search
-  - Tools don't exist in instance → complete workflow failure
-- **Personalized Onboarding** (task 6b1e009f): Built before standard tools feature (commit f3a8171)
-  - All 10 agents have empty `agentTools: []`
-  - No tool references → workflow works perfectly ✓
+- **Internal Talent Mobility** (task 1d8490fa): Built with INCORRECT tool structure (commit 91a13ef)
+  - Used "searxng-search" instead of "searXNG"
+  - Used "baseUrl" instead of "apiBase"
+  - Used `false` instead of `""` for requiresHumanInput
+  - Result: 500 errors and white screen crashes
+- **Personalized Onboarding** (re-export after manual fix): Tools added via Flowise UI
+  - Uses "searXNG" (correct name)
+  - Uses "apiBase" (correct field)
+  - Uses `""` (correct type)
+  - Result: Workflow works perfectly ✓
 
 ### Fix Applied
 
-**Reverted auto-include standard tools feature** (2025-11-01)
+**Corrected tool JSON structure to match Flowise UI output** (2025-11-01 - after discovering true root cause)
 
-The standard tools feature (commit 91a13ef - Nov 2025) was well-intentioned but fundamentally incompatible with Flowise's architecture:
+The initial fix (commit a743294) removed tools entirely, but the REAL issue was using wrong structure:
 
-1. **Reverted AGENT-NODE-TEMPLATE.json**
-   - Changed `agentTools: [currentDateTime, searxng-search]` → `agentTools: []`
-   - Restored to working empty array pattern
+1. **Updated AGENT-NODE-TEMPLATE.json with CORRECT structure**
+   - Changed tool name: "searxng-search" → "searXNG"
+   - Changed field: "baseUrl" → "apiBase"
+   - Changed type: `false` → `""`
+   - Added all required fields: toolName, toolDescription, headers, format, categories, engines, language, etc.
 
-2. **Removed orchestrator requirements**
-   - Deleted "Required Standard Tools" section from Architect phase (lines 714-722)
-   - Deleted standard tools enforcement from Builder phase (lines 915-921)
-   - Added Pattern #6 to known failure patterns list
+2. **Re-added orchestrator requirements with correct structure**
+   - Added back "Required Standard Tools" to Architect phase
+   - Added back standard tools enforcement to Builder phase
+   - Specified EXACT field names and structure to match Flowise UI
 
 3. **Updated STANDARD_TOOLS.md**
-   - Changed from "Required for ALL agents" → "Recommended manual setup"
-   - Added prerequisite: Tools must be created in Flowise UI FIRST
-   - Documented manual setup process
+   - Changed back to "Auto-included (with correct structure)"
+   - Documented exact Flowise UI structure
+   - Emphasized critical field name differences
 
-**Why this approach**:
-- Standard tools (currentDateTime, searxng-search) are GOOD IDEAS ✓
-- But they CANNOT be auto-included in generated workflows ❌
-- Flowise platform requires tools to exist BEFORE reference (chicken/egg problem)
-- Solution: Document recommended tools, let users create them manually
+**Discovery process**:
+- User exported personalized-onboarding workflow AFTER adding tools via Flowise UI
+- Compared working structure vs our broken structure
+- Found multiple field name and type mismatches
+- Updated to use EXACT Flowise UI structure
 
 ### Prevention
 
-**CRITICAL RULE**: NEVER reference tools that don't exist in target Flowise instance.
+**CRITICAL RULE**: Use EXACT JSON structure from Flowise UI exports, not invented structure.
 
 **Before generating workflow JSON**:
-- [ ] Verify all referenced tools exist in target Flowise instance
-- [ ] If tools don't exist, use empty arrays: `"agentTools": []`
-- [ ] Document required tools in README.md / INTEGRATION_GUIDE.md instead
-- [ ] Let users create tools in Flowise UI first, THEN add to workflow
+- [ ] Reference AGENT-NODE-TEMPLATE.json for exact tool structure
+- [ ] Use correct tool names: "searXNG" NOT "searxng-search", "currentDateTime" (correct)
+- [ ] Use correct field names: "apiBase" NOT "baseUrl"
+- [ ] Use correct data types: `""` (empty string) NOT `false` (boolean)
+- [ ] Include ALL required fields (toolName, toolDescription, format, etc.)
 
 **Builder phase requirements**:
-- [ ] Use empty arrays for all agent tools: `"agentTools": []`
-- [ ] Use empty arrays for knowledge bases: `"agentKnowledgeVSEmbeddings": []`
-- [ ] Document recommended tools in separate documentation section
-- [ ] Do NOT auto-include ANY tools (even "standard" ones)
+- [ ] Copy tool structure EXACTLY from AGENT-NODE-TEMPLATE.json
+- [ ] Do NOT invent or modify field names
+- [ ] Do NOT change data types (string vs boolean)
+- [ ] Do NOT omit fields from the template
+- [ ] When in doubt, export a working workflow from Flowise UI and compare
 
 **Documentation pattern**:
 ```markdown
@@ -880,22 +890,24 @@ After creating these tools in Flowise, you can manually add them to agents.
 
 ### Examples
 
-**WRONG (Auto-Include Tools)**:
+**WRONG (Incorrect JSON Structure)**:
 ```json
 {
   "inputs": {
     "agentTools": [
       {
-        "agentSelectedTool": "currentDateTime",  // ❌ Assumes tool exists
+        "agentSelectedTool": "currentDateTime",
+        "agentSelectedToolRequiresHumanInput": false,  // ❌ Boolean!
         "agentSelectedToolConfig": {
           "agentSelectedTool": "currentDateTime"
         }
       },
       {
-        "agentSelectedTool": "searxng-search",  // ❌ Causes 500 error
+        "agentSelectedTool": "searxng-search",  // ❌ Wrong name!
+        "agentSelectedToolRequiresHumanInput": false,  // ❌ Boolean!
         "agentSelectedToolConfig": {
           "agentSelectedTool": "searxng-search",
-          "baseUrl": "https://s.llam.ai"
+          "baseUrl": "https://s.llam.ai"  // ❌ Wrong field!
         }
       }
     ]
@@ -903,40 +915,52 @@ After creating these tools in Flowise, you can manually add them to agents.
 }
 ```
 
-**RIGHT (Empty Arrays + Documentation)**:
+**RIGHT (Correct Flowise UI Structure)**:
 ```json
 {
   "inputs": {
-    "agentTools": [],  // ✓ Safe: No references to non-existent tools
-    "agentKnowledgeVSEmbeddings": []  // ✓ Safe: User adds after import
+    "agentTools": [
+      {
+        "agentSelectedTool": "currentDateTime",
+        "agentSelectedToolRequiresHumanInput": "",  // ✓ Empty string
+        "agentSelectedToolConfig": {
+          "agentSelectedTool": "currentDateTime"
+        }
+      },
+      {
+        "agentSelectedTool": "searXNG",  // ✓ Correct name!
+        "agentSelectedToolRequiresHumanInput": "",  // ✓ Empty string
+        "agentSelectedToolConfig": {
+          "apiBase": "https://s.llam.ai",  // ✓ Correct field!
+          "toolName": "searxng-search",
+          "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+          "headers": "",
+          "format": "json",
+          "categories": "",
+          "engines": "",
+          "language": "",
+          "pageno": "",
+          "time_range": "",
+          "safesearch": "",
+          "agentSelectedTool": "searXNG"
+        }
+      }
+    ]
   }
 }
 ```
 
-Plus in `README.md`:
-```markdown
-## Optional Enhancements
-
-This workflow works out-of-the-box with empty tool arrays. To add capabilities:
-
-### Recommended Tools
-- currentDateTime (temporal awareness)
-- searxng-search (real-time web search)
-
-See INTEGRATION_GUIDE.md for setup instructions.
-```
-
 ### Related Patterns
 
-**Pattern #5** (Phantom Tool References) vs **Pattern #6** (Tool References Before Creation):
+**Pattern #5** (Phantom Tool References) vs **Pattern #6** (Incorrect Tool JSON Structure):
 - **Pattern #5**: Inventing tool names that don't exist (`queryWorkdayHCM`, `analyzeSkillsHistory`)
-- **Pattern #6**: Referencing REAL tool names that aren't created yet (`currentDateTime`, `searxng-search`)
+- **Pattern #6**: Using REAL tools but with wrong JSON structure (wrong field names, wrong data types)
 
-Both cause similar symptoms (validation errors, UI issues) but different root causes:
-- Pattern #5: Tool names are fictional/invented
-- Pattern #6: Tool names are real but tools aren't installed in instance
+Both cause similar symptoms (500 errors, UI crashes) but different root causes:
+- Pattern #5: Tool names are completely fictional/invented → Fix: Don't invent tools, use empty arrays
+- Pattern #6: Tool names are real but structure is wrong → Fix: Use EXACT Flowise UI structure
 
-**Both fixed the same way**: Use empty arrays, document tools separately.
+**Key difference**: Pattern #5 is about tool existence, Pattern #6 is about JSON correctness.
 
 ---
 
@@ -962,7 +986,8 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.4 | 2025-11-01 | Added "Tool References Before Tool Creation" (Pattern #6) - Reverted auto-include standard tools feature causing workflow crashes |
+| 1.5 | 2025-11-01 | CORRECTED Pattern #6 root cause: "Incorrect Tool JSON Structure" - discovered true issue was wrong field names/types, not missing tools |
+| 1.4 | 2025-11-01 | Added "Tool References Before Tool Creation" (Pattern #6) - initial diagnosis (later corrected) |
 | 1.3 | 2025-11-01 | Added "Phantom Tool and Knowledge References" pattern (Pattern #5) from Internal Talent Mobility build |
 | 1.2 | 2025-11-01 | Added "Parallel Build Splitting" variant to Pattern #3 from Gig Marketplace build (06cc114d) |
 | 1.1 | 2025-11-01 | Added "Disconnected Agent Nodes" pattern (Pattern #4) from Cloud Services Operations build |

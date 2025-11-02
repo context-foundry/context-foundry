@@ -710,7 +710,19 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
    - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
    - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
-   - Pattern #6: Tool references before tool creation (referencing tools that don't exist in target Flowise instance)
+   - Pattern #6: Incorrect tool JSON structure (using wrong field names causes crashes)
+
+   **Required Standard Tools for ALL Flowise Agents**:
+   Every agent MUST include these 2 standard tools with EXACT structure from Flowise UI:
+   1. **currentDateTime**: Provides current date and time for temporal context evaluation
+   2. **searXNG**: Federated meta-search for real-time web information (note: capital X, capital NG)
+      - CRITICAL: Use "apiBase" NOT "baseUrl"
+      - CRITICAL: Use tool name "searXNG" NOT "searxng-search"
+      - CRITICAL: Include all required fields: toolName, toolDescription, format, etc.
+      - See AGENT-NODE-TEMPLATE.json for exact structure
+
+   These tools are real, working tools that enhance agent capabilities. They are auto-included
+   in the template with the correct Flowise UI structure to prevent crashes.
 
    **Required Template Files** (read AFTER authority documents):
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
@@ -911,6 +923,20 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 - Knowledge configs (knowledge-configs/*.json) - parallel OK
 
 **Only the main workflow JSON must be generated as a single, non-parallel task.**
+
+**Standard Agent Tools (REQUIRED for ALL agents)**:
+Every Flowise agent MUST include these 2 tools in agentTools array with EXACT Flowise UI structure:
+1. currentDateTime (temporal context)
+2. searXNG (real-time web search)
+
+CRITICAL: Use exact structure from AGENT-NODE-TEMPLATE.json:
+- Tool name: "searXNG" (capital X, capital NG) NOT "searxng-search"
+- Field: "apiBase" NOT "baseUrl"
+- RequiresHumanInput: "" (empty string) NOT false (boolean)
+- Include all fields: toolName, toolDescription, headers, format, categories, engines, etc.
+
+These are NOT phantom references (Pattern #5) and NOT incorrect structure (Pattern #6).
+They are real, working tools with correct Flowise UI JSON structure.
 
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update .context-foundry/current-phase.json:

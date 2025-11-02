@@ -338,7 +338,33 @@
       "agentModel": "chatOpenAI",
       "agentMessages": "",
       "agentToolsBuiltInOpenAI": "",
-      "agentTools": [],
+      "agentTools": [
+        {
+          "agentSelectedTool": "currentDateTime",
+          "agentSelectedToolRequiresHumanInput": "",
+          "agentSelectedToolConfig": {
+            "agentSelectedTool": "currentDateTime"
+          }
+        },
+        {
+          "agentSelectedTool": "searXNG",
+          "agentSelectedToolRequiresHumanInput": "",
+          "agentSelectedToolConfig": {
+            "apiBase": "https://s.llam.ai",
+            "toolName": "searxng-search",
+            "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+            "headers": "",
+            "format": "json",
+            "categories": "",
+            "engines": "",
+            "language": "",
+            "pageno": "",
+            "time_range": "",
+            "safesearch": "",
+            "agentSelectedTool": "searXNG"
+          }
+        }
+      ],
       "agentKnowledgeDocumentStores": "",
       "agentKnowledgeVSEmbeddings": "",
       "agentEnableMemory": true,

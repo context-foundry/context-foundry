@@ -182,63 +182,83 @@
 
 ## Tool Configuration Best Practices
 
-### ⚠️ CRITICAL: Tool Prerequisites (Pattern #6)
+### ✅ Standard Tools (Auto-Included with Correct Structure)
 
-**NEVER reference tools that don't exist in your Flowise instance.**
+**All Flowise agents now include 2 standard tools automatically with CORRECT Flowise UI JSON structure:**
 
-Generated workflows have **empty tool arrays** by default:
+Generated workflows have **populated tool arrays** with exact structure:
 ```json
-"agentTools": []  // Safe: No references to non-existent tools
+"agentTools": [
+  {
+    "agentSelectedTool": "currentDateTime",
+    "agentSelectedToolRequiresHumanInput": "",
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "currentDateTime"
+    }
+  },
+  {
+    "agentSelectedTool": "searXNG",  // CRITICAL: capital X, capital NG
+    "agentSelectedToolRequiresHumanInput": "",  // CRITICAL: empty string, not boolean
+    "agentSelectedToolConfig": {
+      "apiBase": "https://s.llam.ai",  // CRITICAL: apiBase, not baseUrl
+      "toolName": "searxng-search",
+      "toolDescription": "Federated web/meta search...",
+      // ... all required fields
+    }
+  }
+]
 ```
 
-**Why?**
-- Flowise requires tools to exist BEFORE being referenced in workflows
-- Referencing non-existent tools causes 500 HTTP errors and white screen crashes
-- This is Pattern #6: "Tool References Before Tool Creation" (CRITICAL failure)
+**Why this works now?**
+- Fixed Pattern #6: ROOT CAUSE was wrong JSON structure, NOT missing tools
+- We were using "baseUrl" instead of "apiBase"
+- We were using "searxng-search" instead of "searXNG"
+- We were using `false` (boolean) instead of `""` (empty string)
+- Now using EXACT structure from Flowise UI exports
 
-**Correct Workflow**:
-1. ✅ Generate workflow with empty tool arrays (default)
-2. ✅ Import workflow to Flowise
-3. ✅ Create custom tools in Flowise UI
-4. ✅ Add tools to agents manually in Flowise UI
-5. ✅ Save and test
+**No manual setup required** - tools work immediately upon import!
 
-**WRONG Workflow** (causes crashes):
-1. ❌ Generate workflow with tool references
-2. ❌ Import to Flowise without creating tools first
-3. ❌ Open agent node → white screen crash
+### Pattern #6 Learning: Incorrect Tool JSON Structure
 
-### Recommended Tools (Optional Enhancement)
+**What we initially thought** (WRONG):
+- Tools must be created in Flowise UI first
+- Can't auto-include tools in generated workflows
 
-After importing your workflow, consider adding these tools for enhanced capabilities:
+**What we discovered** (CORRECT):
+- Tools ARE built-in to Flowise (currentDateTime, searXNG)
+- Problem was we used WRONG field names and data types
+- Fixed by copying exact structure from Flowise UI export
 
-#### 1. CurrentDateTime (Optional)
+**Key fields that were wrong**:
+- Tool name: "searxng-search" → "searXNG"
+- Field: "baseUrl" → "apiBase"
+- Type: `false` → `""`
+
+### Standard Tool Capabilities (Auto-Included)
+
+#### 1. CurrentDateTime
 - **Purpose**: Provides current date and time for temporal context
 - **Why**: Helps agents evaluate if search results and information are current
 - **Example Use**: "Is this news article from today or last year?"
-- **Setup**: See tool-configs/STANDARD_TOOLS.md
+- **Auto-Included**: ✅ Yes, in all generated workflows
 
-#### 2. SearXNG Search (Optional)
+#### 2. SearXNG Search
 - **Base URL**: https://s.llam.ai
 - **Purpose**: Federated meta-search across multiple search engines
 - **Why**: Real-time information retrieval for dynamic queries
 - **Example Use**: "What are the latest industry trends?"
-- **Setup**: See tool-configs/STANDARD_TOOLS.md
+- **Auto-Included**: ✅ Yes, in all generated workflows
 
 **Combined Benefit**:
 Agents can search for real-time information (SearXNG) and then evaluate its freshness
 (CurrentDateTime) to provide contextually aware, temporally accurate responses.
 
-**Setup Process** (AFTER workflow import):
-1. Create `currentDateTime` custom tool in Flowise UI (see tool-configs/STANDARD_TOOLS.md)
-2. Create `searxng-search` custom tool in Flowise UI
-3. For each agent that needs these tools:
-   - Open agent node
-   - Click "Tools" section
-   - Add tools from dropdown
-   - Save configuration
+**Import Process** (SIMPLE - tools work immediately):
+1. Generate workflow with Context Foundry (tools auto-included with correct structure)
+2. Import JSON to Flowise
+3. Test workflow - tools work immediately, no setup needed!
 
-**Documentation**: See `/extensions/flowise/tool-configs/STANDARD_TOOLS.md` for complete setup guide.
+**Documentation**: See `/extensions/flowise/tool-configs/STANDARD_TOOLS.md` for technical details and field structure.
 
 ---
 
