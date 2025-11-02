@@ -852,16 +852,18 @@ Tools created in Flowise and connected to agents:
 "agentTools": [
   {
     "agentSelectedTool": "calculate_payroll",
-    "agentSelectedToolRequiresHumanInput": false
+    "agentSelectedToolRequiresHumanInput": ""
   },
   {
     "agentSelectedTool": "approve_time_off",
-    "agentSelectedToolRequiresHumanInput": true  // Sensitive operation
+    "agentSelectedToolRequiresHumanInput": ""  // Configure human approval in Flowise UI
   }
 ]
 ```
 
-**Human-in-the-loop**: Set `agentSelectedToolRequiresHumanInput: true` for sensitive operations requiring approval.
+**Note**: Use empty string `""` for `agentSelectedToolRequiresHumanInput` in JSON (NOT boolean `true`/`false`). Configure human-in-the-loop approval in the Flowise UI after importing the workflow.
+
+**Custom Tools Reminder**: These are example/placeholder tool names for documentation purposes. Per Pattern #5, do NOT include custom tool references in generated JSON - document them in README/INTEGRATION_GUIDE instead. Only standard tools (currentDateTime, searXNG) should be in the JSON.
 
 ---
 
