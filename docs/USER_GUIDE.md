@@ -2272,6 +2272,78 @@ If a build fails, you can:
    - max_test_iterations: 5  # Try more times
    ```
 
+### Training Extensions
+
+**Context Foundry can learn new capabilities through documentation-based training.**
+
+Unlike traditional machine learning (which requires model retraining), Context Foundry learns by reading markdown files during each build. This means you can teach it new patterns, tools, and workflows simply by documenting them.
+
+**How it works:**
+
+1. **Documentation is the Source of Truth**
+   - Context Foundry reads markdown files during Scout/Architect/Builder phases
+   - If you document a pattern in the right place, it will be applied
+   - Changes take effect immediately - no ML model retraining required
+
+2. **The Four Knowledge Types**
+   - **Structural Knowledge**: How things are built (node schemas, file structures)
+   - **Behavioral Knowledge**: How to use things (best practices, patterns)
+   - **Avoidance Knowledge**: What NOT to do (anti-patterns, common mistakes)
+   - **Validation Knowledge**: How to verify correctness (checklists, tests)
+
+3. **Example: The Flowise Extension**
+   - Teaches Context Foundry to build Flowise multi-agent workflows
+   - Documented in `extensions/flowise/AGENT_PATTERN_REFERENCE.md`
+   - Builder reads this file and applies the patterns automatically
+   - Mistakes are logged in `FAILURE_PATTERNS.md` to prevent repetition
+
+**Learning Resources:**
+
+- **[Flowise Training Guide](../extensions/flowise/docs/TRAINING_GUIDE.md)** 🎓 Complete masterclass on extension training
+  - Step-by-step process for adding new node types (HTTP, custom tools, etc.)
+  - The Four Knowledge Types explained with examples
+  - Worked examples and troubleshooting
+  - How to validate your training worked
+
+**Quick Example:**
+
+```markdown
+# To teach Context Foundry a new pattern:
+
+1. Identify what knowledge type you're adding
+   - Structure? → AGENT_PATTERN_REFERENCE.md
+   - Behavior? → BEST_PRACTICES.md
+   - Avoidance? → FAILURE_PATTERNS.md
+   - Validation? → FLOWISE-STRUCTURE-AUTHORITY.md
+
+2. Add your documentation with examples
+   - Be explicit and detailed
+   - Include canonical examples from real templates
+   - Show both correct ✅ and incorrect ❌ approaches
+
+3. Test it
+   - Run a build that would use your new pattern
+   - Check .context-foundry/build-log.md to see if pattern was applied
+   - Verify the generated code matches your documentation
+
+4. Iterate
+   - If pattern wasn't applied, make documentation more explicit
+   - If pattern was misunderstood, add more examples
+   - Document edge cases you discover
+```
+
+**Why this matters:**
+
+Traditional AI systems require expensive retraining to learn new capabilities. Context Foundry learns by reading documentation, making it:
+
+- ✅ **Instantly updatable** - Changes take effect immediately
+- ✅ **Transparent** - You can see exactly what the AI knows
+- ✅ **Collaborative** - Team members can contribute patterns
+- ✅ **Version controlled** - Documentation is tracked in Git
+- ✅ **Cost-effective** - No GPU clusters needed for training
+
+**See the [Flowise Training Guide](../extensions/flowise/docs/TRAINING_GUIDE.md) for a comprehensive walkthrough.**
+
 ---
 
 ## Next Steps

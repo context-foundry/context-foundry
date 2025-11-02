@@ -16,6 +16,12 @@
    - The single source of truth for Flowise multi-agent systems
    - Complete node definitions, patterns, and implementation checklist
 
+### For Extension Developers
+1. **[Training Guide](./TRAINING_GUIDE.md)** 🎓 **NEW!** - Master how to teach the extension new capabilities
+   - Complete masterclass on documentation-based training
+   - Step-by-step process for adding new node types
+   - Worked examples and troubleshooting
+
 ---
 
 ## 📖 Core Documentation
@@ -144,6 +150,22 @@ Files not currently used by orchestrator (see [prompts/archive/README.md](../pro
   - Section: "Agent Input Parameters > Custom Tools"
   - Section: "Critical Design Patterns > Knowledge Integration"
 
+### "I want to teach the extension new node types"
+
+**🎓 Start here**: [Training Guide](./TRAINING_GUIDE.md) → Complete masterclass on extension training
+
+**Deep dive**:
+- [AGENT_PATTERN_REFERENCE.md](../AGENT_PATTERN_REFERENCE.md) - Where to document node structures
+- [FAILURE_PATTERNS.md](../FAILURE_PATTERNS.md) - How the system learns from mistakes
+- [BEST_PRACTICES.md](../BEST_PRACTICES.md) - Where to document usage patterns
+- [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md) - Where to add validation rules
+
+**Key Concepts**:
+- Training = Writing Documentation (no ML model retraining)
+- AI reads docs during each build
+- Changes take effect immediately
+- Documentation is the source of truth
+
 ---
 
 ## 🛠️ Templates and Examples
@@ -263,13 +285,15 @@ The orchestrator prompt automatically references:
 4. **Practice**: Build multi-agent flow with intent detection
 5. **Analyze**: Use `analyzer.py` on your flows
 
-### Advanced Path
+### Advanced Path (Extension Development)
 
-1. **Read**: [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md)
-2. **Study**: All 13 templates to understand pattern variations
-3. **Analyze**: `patterns/flowise-expertise.json` for frequency data
-4. **Practice**: Build complex multi-level routing with knowledge integration
-5. **Contribute**: Add new patterns to pattern library
+1. **Read**: [Training Guide](./TRAINING_GUIDE.md) - Master extension training process
+2. **Read**: [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md)
+3. **Study**: All 13 templates to understand pattern variations
+4. **Analyze**: `patterns/flowise-expertise.json` for frequency data
+5. **Practice**: Build complex multi-level routing with knowledge integration
+6. **Practice**: Add a new node type (follow HTTP node example in Training Guide)
+7. **Contribute**: Add new patterns to pattern library
 
 ---
 

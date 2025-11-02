@@ -32,6 +32,15 @@ This comprehensive reference defines the canonical way to structure Flowise agen
 - **[SELF-CONTAINED-AGENTS-FIX.md](./SELF-CONTAINED-AGENTS-FIX.md)** - Critical fix for self-contained agent architecture
 - **[prompts/FLOWISE-STRUCTURE-AUTHORITY.md](./prompts/FLOWISE-STRUCTURE-AUTHORITY.md)** - Detailed structural validation checklist
 
+### Guides
+
+- **[Training Guide](./docs/TRAINING_GUIDE.md)** 🎓 **NEW!** - Master how to teach the extension new capabilities
+  - Complete masterclass on documentation-based training
+  - Step-by-step process for adding new node types (HTTP, custom tools, knowledge nodes, etc.)
+  - Worked examples and troubleshooting
+  - The Four Knowledge Types: Structural, Behavioral, Avoidance, and Validation
+- **[Documentation Index](./docs/DOCUMENTATION_INDEX.md)** - Navigation hub for all Flowise documentation
+
 ## Features
 
 - ✅ **Auto-detect Flowise flows** (multi-agent, RAG, workflow, chatbot)
