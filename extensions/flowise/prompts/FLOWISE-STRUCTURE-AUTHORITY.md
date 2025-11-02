@@ -588,7 +588,7 @@ Every requirement in this document exists because:
 **Canonical Example**: `/Users/name/Downloads/Simple Agent Agents.json`
 **Agent Template**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json`
 **Start Template**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json`
-**Structure Guide**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/flowise-json-structure-guide.md`
+**Current Structure Guide**: `/Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md`
 
 ---
 

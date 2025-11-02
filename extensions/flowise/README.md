@@ -31,7 +31,6 @@ This comprehensive reference defines the canonical way to structure Flowise agen
 
 - **[SELF-CONTAINED-AGENTS-FIX.md](./SELF-CONTAINED-AGENTS-FIX.md)** - Critical fix for self-contained agent architecture
 - **[prompts/FLOWISE-STRUCTURE-AUTHORITY.md](./prompts/FLOWISE-STRUCTURE-AUTHORITY.md)** - Detailed structural validation checklist
-- **[prompts/flowise-json-structure-guide.md](./prompts/flowise-json-structure-guide.md)** - JSON structure guide
 
 ## Features
 

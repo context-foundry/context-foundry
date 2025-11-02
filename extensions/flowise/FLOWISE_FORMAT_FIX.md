@@ -42,7 +42,7 @@ Context Foundry generated Flowise flows with **generic node structure** instead 
 ## What Was Fixed
 
 ### 1. Created Structure Guide ✅
-**File**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/flowise-json-structure-guide.md`
+**File**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/archive/flowise-json-structure-guide.md` *(archived - superseded by AGENT_PATTERN_REFERENCE.md)*
 
 Complete guide with:
 - ✅ Correct vs incorrect examples
@@ -88,7 +88,8 @@ You can manually recreate the shipping flow using the correct structure:
 
 1. **Read the guide**:
    ```bash
-   cat /Users/name/homelab/context-foundry/extensions/flowise/prompts/flowise-json-structure-guide.md
+   # Note: File later archived - superseded by AGENT_PATTERN_REFERENCE.md
+   cat /Users/name/homelab/context-foundry/extensions/flowise/prompts/archive/flowise-json-structure-guide.md
    ```
 
 2. **Reference your templates**:

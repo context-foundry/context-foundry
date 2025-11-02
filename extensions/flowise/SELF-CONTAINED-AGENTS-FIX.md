@@ -102,7 +102,7 @@ Complete canonical template based on `/Users/name/Downloads/Simple Agent Agents.
 - ✅ `agentModelConfig` structure
 
 ### 2. Updated Structure Guide ✅
-**File**: `extensions/flowise/prompts/flowise-json-structure-guide.md`
+**File**: `extensions/flowise/prompts/archive/flowise-json-structure-guide.md` *(later archived - superseded by AGENT_PATTERN_REFERENCE.md)*
 
 Added critical sections:
 - ⚠️ Warning about self-contained agents at the top
@@ -146,7 +146,7 @@ Added emphatic requirements:
 2. `extensions/flowise/SELF-CONTAINED-AGENTS-FIX.md` - This document
 
 ### Modified:
-1. `extensions/flowise/prompts/flowise-json-structure-guide.md` - Added self-contained agent section
+1. `extensions/flowise/prompts/archive/flowise-json-structure-guide.md` *(later archived - superseded by AGENT_PATTERN_REFERENCE.md)* - Added self-contained agent section
 2. `tools/orchestrator_prompt.txt` - Added critical requirements for Architect phase
 
 ---
@@ -229,7 +229,7 @@ grep -c '"agentModelConfig"' flow.json
 - `/Users/name/homelab/context-foundry/extensions/flowise/templates/`
 
 **Updated Guides:**
-- `/Users/name/homelab/context-foundry/extensions/flowise/prompts/flowise-json-structure-guide.md`
+- `/Users/name/homelab/context-foundry/extensions/flowise/prompts/archive/flowise-json-structure-guide.md` *(archived - superseded by AGENT_PATTERN_REFERENCE.md)*
 - `/Users/name/homelab/context-foundry/tools/orchestrator_prompt.txt`
 
 ---
