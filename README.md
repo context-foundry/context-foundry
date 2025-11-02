@@ -9,8 +9,6 @@
 
 **Version 2.1.1 - November 2025**
 
-> **📌 Version Note:** This is Context Foundry **v2.x** (MCP server for Claude Code). For the legacy **v1.0** Python CLI with multi-provider support, see the [`v1.x-legacy` branch](https://github.com/context-foundry/context-foundry/tree/v1.x-legacy) or download [`v1.0-final` release](https://github.com/context-foundry/context-foundry/releases/tag/v1.0-final).
-
 ---
 
 ## What is Context Foundry?
@@ -22,7 +20,7 @@ Unlike traditional AI coding tools that require constant supervision, Context Fo
 - Designs architecture (Architect phase)
 - Implements code with tests (Builder phase)
 - Auto-fixes test failures (Test phase with self-healing)
-- **Captures screenshots automatically** (Screenshot phase - NEW!)
+- **Captures screenshots automatically** (Screenshot phase)
 - Documents everything with visual guides (Documentation phase)
 - Deploys to GitHub (Deployment phase)
 
@@ -229,7 +227,7 @@ Context Foundry introduces **19 groundbreaking innovations** that transform AI s
 14. **TUI Real-time Monitoring** - Textual framework terminal dashboard
 15. **Livestream Integration** - WebSocket-based remote monitoring
 
-### ⚡ Agent Quality Enhancements (NEW in v2.1.0!)
+### ⚡ Agent Quality Enhancements
 
 16. **Back Pressure System** - Validation friction prevents bad code from progressing (wheel metaphor: generation on top, validation on bottom)
 17. **Context Budget Monitoring** - Real-time token tracking with smart/dumb zone detection (0-40% = optimal, 40-100% = degraded)
@@ -240,7 +238,7 @@ Context Foundry introduces **19 groundbreaking innovations** that transform AI s
 
 ---
 
-## 🚀 Agent Quality Enhancements (New!)
+## 🚀 Agent Quality Enhancements
 
 Context Foundry recently integrated **4 powerful agent quality systems** based on cutting-edge research from coding agent pioneers. These enhancements dramatically improve build success rates, reduce errors, and optimize context usage.
 
@@ -340,25 +338,6 @@ All enhancements are:
 - ✅ **Production-ready** - Merged to main and deployed
 - ✅ **Backward compatible** - No breaking changes
 - ✅ **Configurable** - Can be tuned per language/project
-
----
-
-### What Changed from 1.x?
-
-| Feature | 1.x (Python CLI) | 2.x (MCP Server) |
-|---------|------------------|-------------------|
-| **Orchestration** | Python scripts + API calls | Native Claude `/agents` + meta-prompts |
-| **Cost Model** | Pay-per-token API | Claude subscription (unlimited) |
-| **Testing** | Manual review at checkpoints | Self-healing auto-fix loops |
-| **Deployment** | Manual git operations | Automatic GitHub deployment |
-| **Tool Access** | Limited to Python functions | Full Claude Code tool suite (Read, Edit, Bash, etc.) |
-| **Context** | API conversation history | File-based artifacts (.context-foundry/) |
-| **Providers** | 7 AI providers supported | Claude only (optimized for quality) |
-| **Complexity** | ~3000 lines of Python | ~1400 lines (MCP + meta-prompt) |
-
-**Want the technical details?** See [ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) for comprehensive explanations of what changed and why.
-
-**Using Context Foundry 1.x?** The Python CLI is preserved in `docs/archive/LEGACY_README.md` and still functional.
 
 ---
 
@@ -747,7 +726,7 @@ Use mcp__list_delegations
 
 ---
 
-## ⚡ Smart Incremental Builds (NEW in v2.1.0)
+## ⚡ Smart Incremental Builds
 
 **Speed up repeated builds by 10-40%** with intelligent caching and phase skipping!
 
@@ -1369,7 +1348,6 @@ context-foundry/
 │   ├── CLAUDE_CODE_MCP_SETUP.md   # MCP setup and troubleshooting
 │   └── (other documentation)
 ├── ARCHITECTURE_DECISIONS.md       # Technical deep dive (v2.x changes)
-├── LEGACY_README.md                # Original 1.x documentation
 ├── README.md                       # This file (v2.x)
 └── requirements-mcp.txt            # MCP server dependencies
 ```
@@ -1473,23 +1451,13 @@ Based on real-world usage:
 | **Token efficiency** | No limits (file-based context) |
 | **Code quality** | 90%+ test coverage |
 
-### Cost Comparison
-
-**Context Foundry 1.x (API mode):**
-```
-Per project: $3-10 (pay-per-token)
-100 projects: $300-1000
-```
+### Cost Model
 
 **Context Foundry (Claude subscription):**
 ```
 Subscription: Unlimited usage included
-100 projects: Covered by subscription
-
-Break-even: ~5 projects per month vs API mode
+All projects: Covered by subscription
 ```
-
-**Savings:** 95%+ for heavy users
 
 ---
 
@@ -1524,7 +1492,7 @@ Break-even: ~5 projects per month vs API mode
 | **[ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)** | What changed in v2.x and why | Technical users |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | Stateless conversation architecture | Developers |
 
-### ⚡ Agent Quality Enhancement Documentation (NEW!)
+### ⚡ Agent Quality Enhancement Documentation
 
 | Document | Description | Audience |
 |----------|-------------|----------|
@@ -1541,18 +1509,17 @@ Break-even: ~5 projects per month vs API mode
 | **[FEEDBACK_SYSTEM.md](docs/FEEDBACK_SYSTEM.md)** | Self-learning pattern library documentation | All users |
 | **~/.context-foundry/patterns/common-issues.json** | Global pattern library (on your machine) | Curious users |
 
-### 📚 Reference & Legacy
+### 📚 Reference
 
 | Document | Description | Audience |
 |----------|-------------|----------|
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and release notes | Everyone |
 | **[ROADMAP.md](docs/ROADMAP.md)** | Future plans | Contributors |
-| **[LEGACY_README.md](docs/archive/LEGACY_README.md)** | Original Context Foundry 1.x documentation | v1.x users |
 
 ### 💡 Recommended Reading Order
 
 **New Users:**
-1. [README.md](README.md) - Understand what Context Foundry does (includes new agent quality enhancements!)
+1. [README.md](README.md) - Understand what Context Foundry does
 2. [QUICKSTART.md](QUICKSTART.md) - Get set up in 5 minutes
 3. [USER_GUIDE.md](docs/USER_GUIDE.md) - Learn how to use it
 4. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - Deep dive into all 19 innovations
@@ -1560,7 +1527,7 @@ Break-even: ~5 projects per month vs API mode
 
 **Developers/Contributors:**
 1. [docs/INNOVATIONS.md](docs/INNOVATIONS.md) - 🎨 START HERE! All 19 innovations with code examples
-2. [Agent Quality Enhancements](#-agent-quality-enhancements-new) - NEW! Back pressure, context budgets, tool quality, semantic tags
+2. [Agent Quality Enhancements](#-agent-quality-enhancements) - Back pressure, context budgets, tool quality, semantic tags
 3. [docs/TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md) - Technical FAQ (52 questions on architecture, parallelization, etc.)
 4. [docs/ARCHITECTURE_DIAGRAMS.md](docs/ARCHITECTURE_DIAGRAMS.md) - Visual flowcharts and sequence diagrams
 5. [ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md) - Why v2.x architecture
@@ -1634,7 +1601,6 @@ MIT License - See LICENSE file for details
 
 Context Foundry builds upon:
 - **Anthropic's Claude Code** - Native agent capabilities and MCP protocol
-- **Context Foundry 1.x** - Original Scout/Architect/Builder workflow
 - **[Dexter Horthy's](https://youtu.be/IS_y40zY-hc) "anti-vibe coding"** - Systematic approach over chaotic iteration
 - **[Anthropic Agent SDK patterns](https://www.anthropic.com/engineering/building-agents-with-the-claude-agent-sdk)** - Agent orchestration techniques
 
