@@ -28,6 +28,18 @@
 | [SELF-CONTAINED-AGENTS-FIX.md](../SELF-CONTAINED-AGENTS-FIX.md) | Critical architectural fix | Debugging agent structure issues |
 | [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md) | Structural validation checklist | Validating JSON structure |
 
+### Runtime-Loaded During Builds
+
+These files are read automatically by the Scout/Architect phases whenever the Flowise extension activates. Keep them current to avoid stale guidance:
+
+| File | Consumed By | Purpose |
+|------|-------------|---------|
+| [AGENT_PATTERN_REFERENCE.md](../AGENT_PATTERN_REFERENCE.md) | Scout, Architect | Baseline structure and patterns |
+| [FAILURE_PATTERNS.md](../FAILURE_PATTERNS.md) | Scout, Architect, Builder | Regression guardrails and remediation steps |
+| [BEST_PRACTICES.md](../BEST_PRACTICES.md) | Scout | Prompting and planning guidance |
+| [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Architect, Builder | Canonical agent node schema |
+| [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Architect, Builder | Canonical start node schema |
+
 ### Implementation Guides
 
 | Document | Purpose |

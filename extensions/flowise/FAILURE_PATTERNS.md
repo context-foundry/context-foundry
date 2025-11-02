@@ -581,18 +581,24 @@ Similarly for knowledge bases:
 
 ### Fix
 
-**CRITICAL DECISION**: Tools and knowledge bases should be:
-1. ✅ **OMITTED ENTIRELY** (leave arrays empty) - User adds in Flowise UI
-2. ✅ **DOCUMENTED IN README** (list recommended tools to create)
-3. ❌ **NOT INVENTED** with placeholder names
+**⚠️ APPROACH EVOLUTION - Nov 2025 Update**
 
-**⚠️ EXCEPTION: Standard Tools (Added Nov 2025)**:
-As of November 2025, ALL agents include 2 standard tools (NOT phantom references):
+**CURRENT Approach (Nov 2025+)**: Standard tools + documented custom tools
+1. ✅ **INCLUDE STANDARD TOOLS** (currentDateTime + searxng-search) - Real, working tools
+2. ✅ **DOCUMENT CUSTOM TOOLS** in README - User adds in Flowise UI
+3. ✅ **OMIT KNOWLEDGE BASES** (leave empty) - User configures in Flowise UI
+4. ❌ **DO NOT INVENT** placeholder tool/knowledge names
+
+**Standard Tools (Required as of Nov 2025)**:
+ALL agents MUST include these 2 standard tools (NOT phantom references):
 - **currentDateTime**: Real tool providing temporal context
 - **searxng-search**: Real federated search tool (base: https://s.llam.ai)
 
 These are NOT phantom references - they are real, required tools with actual implementations.
 See: `/extensions/flowise/tool-configs/STANDARD_TOOLS.md`
+
+**LEGACY Approach (Pre-Nov 2025 - DEPRECATED)**:
+Leave all arrays completely empty (`agentTools: []`). This approach is NO LONGER USED.
 
 **CORRECT Pattern (Option 1 - Standard Tools Only)**:
 ```json
@@ -676,21 +682,23 @@ After importing the workflow to Flowise, configure these custom tools:
 - [ ] Architect MUST document required tools in architecture.md
 - [ ] If APIs are mentioned, document as "Custom Tools (user configured)"
 
-**During Builder Phase**:
-- [ ] Builder leaves `agentTools: []` empty (not placeholder names)
-- [ ] Builder leaves `agentKnowledgeVSEmbeddings: []` empty
-- [ ] Built-in tools (OpenAI web search, code interpreter) are OK to include
-- [ ] Builder creates tool documentation files instead:
+**During Builder Phase** (Nov 2025+ Approach):
+- [ ] Builder INCLUDES standard tools (currentDateTime + searxng-search) in `agentTools`
+- [ ] Builder uses exact Flowise UI structure for standard tools (see Pattern #6)
+- [ ] Builder leaves `agentKnowledgeVSEmbeddings: []` empty (user configures in UI)
+- [ ] For custom tools: Builder creates documentation files (not JSON references)
+- [ ] Built-in tools (OpenAI web search, code interpreter) are OK to include in agentToolsBuiltInOpenAI
   - `tool-configs/recommended-tools.md`
   - `knowledge-configs/recommended-knowledge-bases.md`
 
-**Validation Rules** (Test Phase):
+**Validation Rules** (Test Phase - Nov 2025+ Updated):
 ```bash
-# Check for phantom tool references
+# Check for phantom tool references (allow standard tools)
 for tool in $(jq -r '.nodes[].data.inputs.agentTools[]?.agentSelectedTool' flow.json 2>/dev/null); do
-  if [[ -n "$tool" ]]; then
-    echo "❌ WARNING: Found tool reference '$tool' - this may not exist in Flowise"
-    echo "   Consider removing and documenting in INTEGRATION_GUIDE.md instead"
+  if [[ -n "$tool" && "$tool" != "currentDateTime" && "$tool" != "searxng-search" ]]; then
+    echo "❌ WARNING: Found custom tool reference '$tool' - this may not exist in Flowise"
+    echo "   Standard tools (currentDateTime, searxng-search) are OK"
+    echo "   Custom tools should be documented in INTEGRATION_GUIDE.md instead"
   fi
 done
 
@@ -748,18 +756,39 @@ Add API credentials in Flowise Credentials Manager:
 ]
 ```
 
-**RIGHT (Empty + Documentation)**:
+**RIGHT (Nov 2025+ - Standard Tools + Documentation)**:
 ```json
-"agentTools": []  // User configures in Flowise UI
+"agentTools": [
+  {
+    "agentSelectedTool": "currentDateTime",
+    "agentSelectedToolRequiresHumanInput": false,
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "currentDateTime"
+    }
+  },
+  {
+    "agentSelectedTool": "searxng-search",
+    "agentSelectedToolRequiresHumanInput": false,
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "searxng-search",
+      "baseUrl": "https://s.llam.ai"
+    }
+  }
+]  // ✓ Standard tools included
 ```
 
 Plus in `INTEGRATION_GUIDE.md`:
-> **Required Tools**: Create custom tools for queryWorkdayHCM, analyzeSkillsHistory...
+> **Custom Tools (User Configured)**: Create custom tools in Flowise for queryWorkdayHCM, analyzeSkillsHistory...
 
-**ACCEPTABLE (Built-in Tools Only)**:
+**LEGACY (Pre-Nov 2025 - DEPRECATED)**:
+```json
+"agentTools": []  // Old approach: completely empty
+```
+
+**ACCEPTABLE (Built-in OpenAI Tools)**:
 ```json
 "agentToolsBuiltInOpenAI": ["web_search_preview", "code_interpreter"]  // ✓ Actual OpenAI tools
-"agentTools": []  // Empty for custom tools
+"agentTools": [/* standard tools here */]  // Include standard tools even with built-in tools
 ```
 
 ---
