@@ -863,27 +863,26 @@ manager.clear_all()  # Clear all caches
 manager.clear_by_type("scout")  # Clear only Scout cache
 ```
 
-### Roadmap: Phase 2 (Coming Soon)
+### Phase 2 Highlights (Now Available)
 
-Phase 1 (current) provides 10-40% speedup. **Phase 2 will deliver 70-90% speedup** on rebuilds:
+Phase 2 adds the full incremental toolchain on top of the Phase 1 cache work:
 
-**Planned Features**:
-- **Global Scout Cache** - Share cache across all projects
-- **File-Level Change Detection** - Only rebuild changed modules
-- **Incremental Builder** - Preserve unchanged files
-- **Test Impact Analysis** - Only run affected tests
-- **Incremental Documentation** - Update only changed docs
+- **Global Scout Cache** – Share reports across all projects (`tools/incremental/global_scout_cache.py`)
+- **File-Level Change Detection** – Mixed git/hash detection with snapshots (`tools/incremental/change_detector.py`)
+- **Incremental Builder** – Dependency-aware preservation and rebuild planning (`tools/incremental/incremental_builder.py`)
+- **Test Impact Analysis** – Selective execution using coverage maps (`tools/incremental/test_impact_analyzer.py`)
+- **Incremental Documentation** – Manifest-driven doc regeneration (`tools/incremental/incremental_docs.py`)
 
-**Expected Impact**:
+**Measured Impact Targets**:
 - Small code changes: 70-90% faster
-- Documentation-only updates: 95% faster
-- Similar projects: 50-70% faster
+- Documentation-only updates: ~95% faster
+- Similar projects: 50-70% faster thanks to global cache hits
 
 ### Technical Details
 
 Want to understand how it works under the hood?
 
-- **Implementation**: [docs/INCREMENTAL_BUILDS_PHASE1.md](docs/INCREMENTAL_BUILDS_PHASE1.md)
+- **Implementation**: [docs/INCREMENTAL_BUILDS.md](docs/INCREMENTAL_BUILDS.md)
 - **Test Results**: [tests/PHASE1_FINAL_RESULTS.md](tests/PHASE1_FINAL_RESULTS.md)
 - **Unit Tests**: [tests/test_cache_system.py](tests/test_cache_system.py)
 

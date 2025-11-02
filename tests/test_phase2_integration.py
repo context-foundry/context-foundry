@@ -71,30 +71,41 @@ class TestGlobalScoutCache:
         # Keys should be identical (normalized)
         assert key1 == key2
 
-    def test_global_cache_save_and_retrieve(self):
+    def test_global_cache_save_and_retrieve(self, monkeypatch):
         """Test saving and retrieving from global cache."""
-        # Clear cache first
-        clear_global_scout_cache()
+        # Use temp directory for testing to avoid permission issues
+        with tempfile.TemporaryDirectory() as tmpdir:
+            temp_cache_dir = Path(tmpdir) / "global-cache" / "scout"
+            temp_cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save a Scout report
-        task = "Build a test application"
-        project_type = "web-app"
-        tech_stack = ["react", "typescript"]
-        scout_report = "# Scout Report\n\nThis is a test report."
+            # Override get_global_cache_dir to return temp directory
+            monkeypatch.setattr(
+                "incremental.global_scout_cache.get_global_cache_dir",
+                lambda: temp_cache_dir
+            )
 
-        save_scout_report_to_global_cache(
-            task, project_type, tech_stack, scout_report
-        )
+            # Clear cache first
+            clear_global_scout_cache()
 
-        # Retrieve it
-        cached_report = get_cached_scout_report_global(
-            task, project_type, tech_stack
-        )
+            # Save a Scout report
+            task = "Build a test application"
+            project_type = "web-app"
+            tech_stack = ["react", "typescript"]
+            scout_report = "# Scout Report\n\nThis is a test report."
 
-        assert cached_report == scout_report
+            save_scout_report_to_global_cache(
+                task, project_type, tech_stack, scout_report
+            )
 
-        # Cleanup
-        clear_global_scout_cache()
+            # Retrieve it
+            cached_report = get_cached_scout_report_global(
+                task, project_type, tech_stack
+            )
+
+            assert cached_report == scout_report
+
+            # Cleanup
+            clear_global_scout_cache()
 
 
 class TestChangeDetector:
