@@ -701,6 +701,15 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    /Users/name/homelab/context-foundry/extensions/flowise/prompts/FLOWISE-STRUCTURE-AUTHORITY.md
    (Detailed structural issues and validation checklist)
 
+   **🚨 CRITICAL: Learn from Past Failures**:
+   /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+   (Known failure patterns with root causes, fixes, and prevention checklists)
+   **MUST READ** to avoid repeating past mistakes:
+   - Pattern #1: Meta-description instead of complete flow
+   - Pattern #2: Missing agent nodes
+   - Pattern #3: Separate config files anti-pattern
+   - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
+
    **Required Template Files** (read AFTER authority documents):
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/START-NODE-TEMPLATE.json
    - /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
@@ -1495,6 +1504,87 @@ PYTHON_SCRIPT
          "phases_completed": ["Scout", "Architect", "Builder"],
          "last_updated": "{current ISO timestamp}"
        }
+
+   a3. **FLOWISE PROJECTS ONLY**: Update FAILURE_PATTERNS.md with new learnings:
+
+       **IF this is a Flowise project** (check CONFIGURATION for flowise_flow: True):
+
+       Analyze the test failures and validation errors for common Flowise-specific patterns:
+
+       ```bash
+       # Check if this is a Flowise failure pattern worth documenting
+       # Look for patterns like:
+       # - Wrong node types (type: "customNode" instead of "agentFlow")
+       # - Disconnected agents (nodes not connected to router)
+       # - Missing required fields (credentials, tools, messages)
+       # - Structural issues (wrong file format, missing nodes)
+
+       # Read current failure patterns
+       PATTERNS_FILE="/Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md"
+
+       # If pattern is NEW and significant:
+       # - Add new pattern section to FAILURE_PATTERNS.md
+       # - Include: Symptom, Root Cause, Impact, Fix, Prevention
+       # - Update Table of Contents
+       # - Increment version number
+       # - Add to Version History table
+
+       # Example new pattern documentation:
+       cat >> "$PATTERNS_FILE" << 'EOF'
+
+## Pattern #{N}: {Pattern Name}
+
+### Symptom
+{What the user/builder sees - specific error messages, visual issues}
+
+### Root Cause
+{Why this happened - technical explanation}
+{What Builder did wrong or misunderstood}
+
+### Impact
+- **Severity**: CRITICAL/HIGH/MEDIUM/LOW
+- **Frequency**: {How often this occurs}
+- **User Experience**: {Impact on end users}
+
+### Fix
+{Step-by-step fix for this specific issue}
+
+### Prevention
+**During {Phase} Phase**:
+- [ ] {Specific check/action to prevent}
+- [ ] {Another preventive measure}
+
+**Validation Rules** (Builder MUST check):
+```python
+{Python validation code example}
+```
+
+---
+EOF
+
+       # Update Table of Contents
+       # Update Version History
+       # Commit to extension repository
+       ```
+
+       **Pattern Documentation Guidelines**:
+       - Only document REPEATABLE patterns (not one-off errors)
+       - Focus on Flowise-specific issues (not general coding errors)
+       - Include concrete validation code when possible
+       - Link to successful examples for reference
+       - Keep patterns actionable and specific
+
+       **Common Flowise Patterns to Watch For**:
+       1. Node type mismatches
+       2. Connection/edge issues (disconnected nodes)
+       3. Field format errors (arrays vs strings vs objects)
+       4. Missing required configurations
+       5. Structural integrity violations
+
+       After documenting:
+       - Save to: /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+       - This will be loaded in NEXT build's Architect phase
+       - Creates continuous learning loop
 
    b. Return to PHASE 2 (Architect) for redesign:
       - Architect agent analyzes test failure report
