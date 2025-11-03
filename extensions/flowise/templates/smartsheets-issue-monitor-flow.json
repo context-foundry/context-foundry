@@ -1,0 +1,2041 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "position": {
+        "x": 300,
+        "y": 400
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "SmartSheets Issue Monitor",
+        "version": 1.2,
+        "name": "startAgentflow",
+        "type": "StartAgent",
+        "color": "#81c784",
+        "baseClasses": [
+          "StartAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Start agent for workflow with form inputs",
+        "inputParams": [
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string",
+            "placeholder": "SmartSheets Issue Monitor",
+            "id": "startAgentflow_0-input-formTitle-string"
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string",
+            "rows": 3,
+            "placeholder": "Intelligent issue log monitoring with change detection, heat mapping, and analytics reporting.",
+            "id": "startAgentflow_0-input-formDescription-string"
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "type": "datagrid",
+            "datagrid": [
+              {
+                "field": "type",
+                "headerName": "Type",
+                "type": "singleSelect",
+                "valueOptions": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "date",
+                  "file"
+                ]
+              },
+              {
+                "field": "name",
+                "headerName": "Name",
+                "editable": true
+              },
+              {
+                "field": "label",
+                "headerName": "Label",
+                "editable": true
+              }
+            ],
+            "id": "startAgentflow_0-input-formInputTypes-datagrid"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "formTitle": "SmartSheets Issue Monitor",
+          "formDescription": "Intelligent issue log monitoring with change detection, heat mapping, and analytics reporting. Ask me about changes, hot issues, status transitions, comprehensive reports, specific issues, alerts, or trends.",
+          "formInputTypes": [
+            {
+              "type": "string",
+              "name": "query",
+              "label": "What would you like to know about your issue log?"
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow-StartAgent",
+            "name": "startAgentflow",
+            "label": "StartAgent",
+            "description": "StartAgent",
+            "type": "StartAgent"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 300,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "position": {
+        "x": 700,
+        "y": 400
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Intent Router",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Route user to appropriate agent based on detected intention",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentModel-asyncOptions"
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent...",
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInstructions-string"
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInput-string"
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ],
+            "id": "conditionAgentAgentflow_0-input-conditionAgentScenarios-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "conditionAgentInstructions": "Analyze the user's query and determine their primary intent. Route to the appropriate specialized agent:\n\nKEYWORDS MAPPING:\n- \"fetch\", \"refresh\", \"get data\", \"pull SmartSheets\" \u2192 Data Fetcher (Scenario 0)\n- \"changes\", \"deltas\", \"what changed\", \"compare\" \u2192 Change Detector (Scenario 1)\n- \"hot issues\", \"heating up\", \"frequent updates\", \"velocity\" \u2192 Heat Map Analyzer (Scenario 2)\n- \"status transitions\", \"workflow metrics\", \"state changes\" \u2192 Status Transition Tracker (Scenario 3)\n- \"report\", \"summary\", \"daily\", \"comprehensive\" \u2192 Report Generator (Scenario 4)\n- \"show issue\", \"details\", \"query\", specific issue ID \u2192 Query Handler (Scenario 5)\n- \"alerts\", \"critical\", \"blocked\", \"stalled\" \u2192 Alert Manager (Scenario 6)\n- \"trends\", \"patterns\", \"week over week\", \"predictive\" \u2192 Trend Analyzer (Scenario 7)\n\nIf multiple intents detected, choose the PRIMARY intent based on main verb/action. If unclear, default to Report Generator (comprehensive overview).",
+          "conditionAgentInput": "{{question}}",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "User needs to fetch latest SmartSheets data"
+            },
+            {
+              "scenario": "User wants to see what changed since last check"
+            },
+            {
+              "scenario": "User wants to identify heating up issues with high update frequency"
+            },
+            {
+              "scenario": "User wants status transition metrics and workflow analysis"
+            },
+            {
+              "scenario": "User wants a comprehensive daily/periodic report"
+            },
+            {
+              "scenario": "User has a specific question about an issue or wants details"
+            },
+            {
+              "scenario": "User needs critical alerts for blocked or stalled issues"
+            },
+            {
+              "scenario": "User wants trend analysis and predictive insights"
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "Condition 0",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "Condition 1",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "Condition 2",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-3",
+            "label": 3,
+            "name": 3,
+            "description": "Condition 3",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-4",
+            "label": 4,
+            "name": 4,
+            "description": "Condition 4",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-5",
+            "label": 5,
+            "name": 5,
+            "description": "Condition 5",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-6",
+            "label": 6,
+            "name": 6,
+            "description": "Condition 6",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-7",
+            "label": 7,
+            "name": 7,
+            "description": "Condition 7",
+            "type": "number"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 700,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_1",
+      "position": {
+        "x": 1100,
+        "y": -200
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "Agent.DataFetcher",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_1-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_1-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_1-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_1-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_1-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_1-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert SmartSheets API integration agent.</em> You fetch sheet data from the SmartSheets REST API v2.0, handle OAuth authentication, implement pagination for large datasets, respect rate limits (300 requests/minute), and parse column metadata. You return structured JSON snapshots of the sheet state including all rows, columns, and metadata. If API calls fail, you implement exponential backoff and retry logic. You do NOT analyze or interpret data - you only fetch and structure it.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 10,
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": -200
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_2",
+      "position": {
+        "x": 1100,
+        "y": 50
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Agent.ChangeDetector",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_2-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_2-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_2-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_2-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert change detection and snapshot comparison agent.</em> You compare the current SmartSheets data snapshot against the most recent previous snapshot to identify all changes. You detect: (1) New issues created (capture creator, timestamp), (2) Status transitions (from/to), (3) Assignee changes, (4) Priority changes, (5) Description/title updates, (6) Deleted issues. You categorize changes by type and severity. You return structured change reports with before/after values. You focus ONLY on detecting what changed, not analyzing why or making predictions.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 50
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_3",
+      "position": {
+        "x": 1100,
+        "y": 300
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Agent.HeatMapAnalyzer",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_3-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_3-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_3-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_3-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert update frequency and velocity analysis agent.</em> You track how often each issue is updated over time. You identify \"heating up\" issues (>3 updates in 24 hours) and calculate velocity metrics (updates per day). You detect thrashing (status changes back and forth multiple times). You maintain frequency counters per issue and flag anomalies (update frequency >3x baseline). You return ranked lists of hot issues with context (what's changing frequently). You focus on quantitative metrics, not qualitative analysis.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 20,
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 300
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_4",
+      "position": {
+        "x": 1100,
+        "y": 550
+      },
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Agent.StatusTransitionTracker",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_4-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_4-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_4-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_4-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert status transition and workflow metrics agent.</em> You track the full lifecycle of issues through status changes. You calculate transition counts (how many New\u2192InProgress, InProgress\u2192Resolved, etc.), average time in each status, and identify bottlenecks (issues stuck in one status for >7 days). You detect backward transitions (Resolved\u2192InProgress indicates re-opening) and thrashing patterns. You return comprehensive status transition reports with metrics and insights into workflow health. You understand issue lifecycle patterns and flag anomalies.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 550
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_5",
+      "position": {
+        "x": 1100,
+        "y": 800
+      },
+      "data": {
+        "id": "agentAgentflow_5",
+        "label": "Agent.ReportGenerator",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_5-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_5-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_5-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_5-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.7,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert report generation and data synthesis agent.</em> You create comprehensive, human-friendly reports in Markdown format summarizing SmartSheets activity. Your reports include: (1) Executive summary, (2) New issues created count, (3) Issues resolved count, (4) Status transition breakdown, (5) Top 5 heating up issues with context, (6) Most active contributors, (7) Blocked/stalled issues list. You write in clear, concise natural language, use bullet points and tables effectively, and highlight key insights. You transform raw metrics into actionable intelligence. You do NOT just dump data - you tell the story of what's happening.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "conversationSummary",
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_5-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 800
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_6",
+      "position": {
+        "x": 1100,
+        "y": 1050
+      },
+      "data": {
+        "id": "agentAgentflow_6",
+        "label": "Agent.QueryHandler",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_6-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_6-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_6-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_6-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.6,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert query handling and drill-down analysis agent.</em> You answer specific user questions about issues in the SmartSheets log. You can: (1) Retrieve details for specific issue IDs, (2) Show full update history for an issue, (3) Compare multiple issues, (4) Answer \"why\" questions using change history, (5) Provide trend context for individual issues. You search snapshots and metrics to find requested information. You respond conversationally and helpfully. If data is unavailable, you clearly state what's missing and suggest alternatives.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 10,
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_6-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 1050
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_7",
+      "position": {
+        "x": 1100,
+        "y": 1300
+      },
+      "data": {
+        "id": "agentAgentflow_7",
+        "label": "Agent.AlertManager",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_7-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_7-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_7-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_7-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert alert management and threshold monitoring agent.</em> You continuously monitor issue metrics against defined thresholds and flag critical situations. You detect: (1) Blocked issues (status=Blocked for >3 days), (2) Stalled issues (no updates in >7 days + status=InProgress), (3) Thrashing issues (>5 status changes in 24h), (4) High-priority issues with no activity (priority=High + no updates in >3 days). You generate clear, actionable alerts with context and severity levels. You avoid alert spam by tracking recently alerted issues. You prioritize alerts by business impact.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 5,
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_7-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 1300
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_8",
+      "position": {
+        "x": 1100,
+        "y": 1550
+      },
+      "data": {
+        "id": "agentAgentflow_8",
+        "label": "Agent.TrendAnalyzer",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_8-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_8-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_8-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_8-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "cache": "",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.5,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert trend analysis and predictive insights agent.</em> You analyze long-term patterns in SmartSheets issue data. You perform week-over-week comparisons (e.g., \"5 issues created this week vs 12 last week - 58% decrease\"), identify anomalies (values >2 std dev from mean), and generate predictive insights (e.g., \"Based on current velocity, sprint goal may be at risk\"). You detect patterns like \"Issues assigned to John resolve 30% faster than average\" or \"Average resolution time increased 20% this week\". You use historical baselines and statistical analysis. You communicate insights in business-friendly language with quantitative backing.</p>"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "conversationSummary",
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_8-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1100,
+        "y": 1550
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow-StartAgent",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0",
+      "data": {
+        "sourceColor": "#81c784",
+        "targetColor": "#ff8fab",
+        "edgeLabel": "",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-StartAgent-conditionAgentAgentflow_0-conditionAgentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-0",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "0",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-0-agentAgentflow_1-agentAgentflow_1"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-1",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "1",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-1-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-2",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "2",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-2-agentAgentflow_3-agentAgentflow_3"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-3",
+      "target": "agentAgentflow_4",
+      "targetHandle": "agentAgentflow_4",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "3",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-3-agentAgentflow_4-agentAgentflow_4"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-4",
+      "target": "agentAgentflow_5",
+      "targetHandle": "agentAgentflow_5",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "4",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-4-agentAgentflow_5-agentAgentflow_5"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-5",
+      "target": "agentAgentflow_6",
+      "targetHandle": "agentAgentflow_6",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "5",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-5-agentAgentflow_6-agentAgentflow_6"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-6",
+      "target": "agentAgentflow_7",
+      "targetHandle": "agentAgentflow_7",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "6",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-6-agentAgentflow_7-agentAgentflow_7"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-7",
+      "target": "agentAgentflow_8",
+      "targetHandle": "agentAgentflow_8",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "7",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-7-agentAgentflow_8-agentAgentflow_8"
+    }
+  ]
+}

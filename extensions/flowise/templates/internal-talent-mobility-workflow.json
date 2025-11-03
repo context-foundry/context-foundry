@@ -1,0 +1,2296 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "position": {
+        "x": 50,
+        "y": 100
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1,
+        "name": "startAgentflow",
+        "type": "StartAgent",
+        "color": "#90EE90",
+        "baseClasses": [
+          "StartAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Entry point for the agent workflow",
+        "inputParams": [
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string",
+            "placeholder": "Form Title",
+            "id": "startAgentflow_0-input-formTitle-string"
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Form Description",
+            "id": "startAgentflow_0-input-formDescription-string"
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "type": "array",
+            "array": [
+              {
+                "label": "Label",
+                "name": "label",
+                "type": "string",
+                "id": "startAgentflow_0-input-formInputTypes-array-label-string"
+              },
+              {
+                "label": "Name",
+                "name": "name",
+                "type": "string",
+                "id": "startAgentflow_0-input-formInputTypes-array-name-string"
+              },
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Text",
+                    "name": "text"
+                  },
+                  {
+                    "label": "Text Area",
+                    "name": "textarea"
+                  },
+                  {
+                    "label": "Number",
+                    "name": "number"
+                  },
+                  {
+                    "label": "Email",
+                    "name": "email"
+                  },
+                  {
+                    "label": "File",
+                    "name": "file"
+                  }
+                ],
+                "default": "text",
+                "id": "startAgentflow_0-input-formInputTypes-array-type-options"
+              },
+              {
+                "label": "Placeholder",
+                "name": "placeholder",
+                "type": "string",
+                "optional": true,
+                "id": "startAgentflow_0-input-formInputTypes-array-placeholder-string"
+              }
+            ],
+            "id": "startAgentflow_0-input-formInputTypes-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "formTitle": "Internal Talent Mobility Assistant",
+          "formDescription": "Intelligent internal hiring and career matching powered by Workday Skills Cloud. Ask about role opportunities, career paths, employee skills, or talent analytics.",
+          "formInputTypes": [
+            {
+              "label": "Your Question or Request",
+              "name": "question",
+              "type": "text",
+              "placeholder": "Ask about role opportunities, career paths, or employee matching..."
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow-StartAgent",
+            "name": "startAgentflow",
+            "label": "Start Agent",
+            "description": "Start Agent",
+            "type": "StartAgent"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 50,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "conditionAgentAgentflow_1",
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_1",
+        "label": "Detect User Intention",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Route user to appropriate agent based on detected intention",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_1-input-conditionAgentModel-asyncOptions"
+          },
+          {
+            "label": "Model Config",
+            "name": "conditionAgentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "conditionAgentAgentflow_1-input-conditionAgentModelConfig-json"
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent...",
+            "id": "conditionAgentAgentflow_1-input-conditionAgentInstructions-string"
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true,
+            "id": "conditionAgentAgentflow_1-input-conditionAgentInput-string"
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2,
+                "id": "conditionAgentAgentflow_1-input-conditionAgentScenarios-array-scenario-string"
+              }
+            ],
+            "id": "conditionAgentAgentflow_1-input-conditionAgentScenarios-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "conditionAgentInstructions": "Analyze the user's question and determine their primary intent. Look for keywords:\n\n- Opportunity: 'new role', 'requisition', 'hiring need', 'project opening'\n- Profiling: 'employee profile', 'skills inventory', 'experience history'\n- Matching: 'match candidate', 'skill fit', 'qualifications', 'competency gap'\n- Career: 'career path', 'opportunity', 'advancement', 'growth', 'development'\n- Performance: 'performance review', 'readiness', 'validation', 'manager feedback'\n- Notification: 'notify', 'alert', 'message', 'engagement', 'communication'\n- Analytics: 'metrics', 'reporting', 'trends', 'internal fill rate', 'retention'\n- Help: 'how do I', 'what is', 'help me', 'clarify'\n\nIf multiple intents detected, choose the PRIMARY intent. If unclear, route to General Help (scenario 7).",
+          "conditionAgentInput": "{{ question }}",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "User is reporting a new role opening or project need"
+            },
+            {
+              "scenario": "User is asking about employee profiles, skills, or experience"
+            },
+            {
+              "scenario": "User is asking about skill matching, competencies, or qualifications"
+            },
+            {
+              "scenario": "User is asking about career paths, opportunities, or growth"
+            },
+            {
+              "scenario": "User is asking about performance, readiness, or validation"
+            },
+            {
+              "scenario": "User is asking about notifications, engagement, or communication"
+            },
+            {
+              "scenario": "User is asking about analytics, metrics, or reporting"
+            },
+            {
+              "scenario": "User needs general help, clarification, or navigation"
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_1-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "Condition 0",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "Condition 1",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "Condition 2",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-3",
+            "label": 3,
+            "name": 3,
+            "description": "Condition 3",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-4",
+            "label": 4,
+            "name": 4,
+            "description": "Condition 4",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-5",
+            "label": 5,
+            "name": 5,
+            "description": "Condition 5",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-6",
+            "label": 6,
+            "name": 6,
+            "description": "Condition 6",
+            "type": "number"
+          },
+          {
+            "id": "conditionAgentAgentflow_1-output-7",
+            "label": 7,
+            "name": 7,
+            "description": "Condition 7",
+            "type": "number"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 400,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_2",
+      "position": {
+        "x": 800,
+        "y": -400
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Agent.OpportunityDetection",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_2-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_2-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_2-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_2-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_2-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_2-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_2-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_2-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_2-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_2-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_2-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_2-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.5,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Opportunity Detection agent for internal talent mobility.</em> You monitor and analyze new role openings, project needs, and employee growth signals. When a hiring manager reports a new requisition or an employee expresses career interest, you capture the opportunity details and trigger the matching process. You extract role requirements, identify urgency, and classify opportunity types (permanent role, project rotation, lateral move, promotion). You do NOT perform candidate matching - that is handled by the Skills Matching agent. Your role is purely opportunity intake and classification.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 800,
+        "y": -400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_3",
+      "position": {
+        "x": 1150,
+        "y": -400
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Agent.EmployeeProfiling",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_3-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_3-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_3-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_3-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_3-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_3-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_3-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_3-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_3-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_3-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_3-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_3-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.5,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Employee Profiling agent specializing in Workday HCM data analysis.</em> You retrieve and analyze comprehensive employee profiles including skills inventory, work history, performance reviews, certifications, and career aspirations. You query Workday HCM APIs to access employee master data, organizational structure, job history, and manager feedback. You infer skills from job titles and project experience when formal skill records are incomplete. You do NOT perform skill matching - you provide the profiling data that the Skills Matching agent will use. Focus on accuracy, completeness, and privacy compliance (GDPR).</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1150,
+        "y": -400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_4",
+      "position": {
+        "x": 1500,
+        "y": -400
+      },
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Agent.SkillsMatching",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_4-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_4-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_4-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_4-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_4-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_4-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_4-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_4-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_4-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_4-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_4-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_4-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Skills Matching agent powered by Workday Skills Cloud.</em> You perform sophisticated skill-based matching between employee capabilities and role requirements. You use the Workday Skills Cloud unified taxonomy to identify exact matches, adjacent matches (transferable skills), and growth opportunity matches (70%+ fit). You infer skills from work history, map related skills (e.g., project management \u2192 team leadership), and perform skill gap analysis. You calculate skill fit scores (percentage match) and identify which skills are present vs. missing. You prioritize candidates by: 1) Exact skill match, 2) Adjacent skills, 3) Growth potential with training. You do NOT validate performance - that is handled by the Performance Validation agent.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1500,
+        "y": -400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_5",
+      "position": {
+        "x": 800,
+        "y": 100
+      },
+      "data": {
+        "id": "agentAgentflow_5",
+        "label": "Agent.CareerPathRecommendation",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_5-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_5-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_5-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_5-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_5-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_5-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_5-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_5-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_5-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_5-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_5-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_5-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.7,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Career Path Recommendation agent specializing in internal mobility.</em> You provide personalized career opportunity recommendations and development paths. You analyze employee career interests, current skills, and growth goals to suggest: 1) Internal roles that match their aspirations, 2) Non-obvious fit opportunities (hidden gems), 3) Development paths to reach dream roles, 4) Skill gaps to bridge for target roles. You prioritize based on employee interests AND organizational needs. Your recommendations are encouraging but realistic, highlighting both immediate opportunities (70%+ skill fit) and aspirational paths (with development plan). You create compelling narratives like \"You might be a good fit for [role] based on your experience with [X]\". You do NOT send notifications - that is handled by the Notification Engagement agent.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_5-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 800,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_6",
+      "position": {
+        "x": 1150,
+        "y": 100
+      },
+      "data": {
+        "id": "agentAgentflow_6",
+        "label": "Agent.PerformanceValidation",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_6-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_6-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_6-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_6-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_6-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_6-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_6-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_6-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_6-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_6-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_6-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_6-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Performance Validation agent for talent mobility decisions.</em> You review employee performance history, manager feedback, and achievement records to validate readiness for new opportunities. You analyze performance ratings, accomplishment records, manager comments, and peer feedback to assess: 1) Current performance level (meets/exceeds expectations), 2) Readiness for advancement (demonstrated capabilities), 3) Risk factors (performance concerns, development areas), 4) Manager endorsement signals. You provide objective assessments like \"High performer ready for advancement\" or \"Development needed in [area] before role change\". You flag concerns early to prevent poor fits. You do NOT make final hiring decisions - you provide validation input for managers. Maintain confidentiality and equal opportunity principles.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_6-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1150,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_7",
+      "position": {
+        "x": 1500,
+        "y": 100
+      },
+      "data": {
+        "id": "agentAgentflow_7",
+        "label": "Agent.NotificationEngagement",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_7-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_7-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_7-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_7-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_7-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_7-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_7-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_7-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_7-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_7-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_7-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_7-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.8,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Notification & Engagement agent for internal mobility programs.</em> You craft and deliver personalized notifications to employees and managers about career opportunities. You send: 1) Employee alerts about matched opportunities (\"You might be interested in...\"), 2) Manager recommendations about internal candidates (\"5 internal candidates match your role\"), 3) Career coaching messages (\"Consider developing [skill] for [opportunity]\"). Your messages are personalized, encouraging, and actionable. You use the employee's name, reference their specific experience, and explain WHY they're a good fit. You respect notification preferences (frequency, channels) and ensure messages are timely but not overwhelming. You do NOT send notifications without proper context from other agents (matching, validation).</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_7-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1500,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_8",
+      "position": {
+        "x": 800,
+        "y": 600
+      },
+      "data": {
+        "id": "agentAgentflow_8",
+        "label": "Agent.AnalyticsInsights",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_8-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_8-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_8-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_8-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_8-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_8-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_8-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_8-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_8-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_8-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_8-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_8-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.5,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Analytics & Insights agent for internal mobility programs.</em> You track and report on key metrics including: 1) Internal fill rate (% of roles filled internally vs externally), 2) Time-to-fill comparison (internal vs external candidates), 3) Employee retention rate (mobility participants vs non-participants), 4) Skills utilization (% of workforce skills used effectively), 5) Career progression velocity (time to promotion/rotation). You access historical data from Workday HCM and Talent Marketplace to identify trends, measure program effectiveness, and surface insights like \"Internal candidates fill roles 40% faster\" or \"Mobility participants have 2x retention rate\". You create visualizations (when supported) and actionable recommendations for HR leadership. You do NOT access individual employee performance details - you work with aggregated, anonymized data.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_8-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 800,
+        "y": 600
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_9",
+      "position": {
+        "x": 1150,
+        "y": 600
+      },
+      "data": {
+        "id": "agentAgentflow_9",
+        "label": "Agent.GeneralHelp",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_9-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Model Config",
+            "name": "agentModelConfig",
+            "type": "json",
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_9-input-agentModelConfig-json"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ],
+                "default": "system",
+                "id": "agentAgentflow_9-input-agentMessages-array-role-options"
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4,
+                "id": "agentAgentflow_9-input-agentMessages-array-content-string"
+              }
+            ],
+            "id": "agentAgentflow_9-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true,
+                "id": "agentAgentflow_9-input-agentTools-array-agentSelectedTool-asyncOptions"
+              },
+              {
+                "label": "Tool Config",
+                "name": "agentSelectedToolConfig",
+                "type": "json",
+                "optional": true,
+                "id": "agentAgentflow_9-input-agentTools-array-agentSelectedToolConfig-json"
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true,
+                "id": "agentAgentflow_9-input-agentTools-array-agentSelectedToolRequiresHumanInput-boolean"
+              }
+            ],
+            "id": "agentAgentflow_9-input-agentTools-array",
+            "display": true
+          },
+          {
+            "label": "Knowledge (Document Stores)",
+            "name": "agentKnowledgeDocumentStores",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_9-input-agentKnowledgeDocumentStores-array"
+          },
+          {
+            "label": "Knowledge (Vector Embeddings)",
+            "name": "agentKnowledgeVSEmbeddings",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_9-input-agentKnowledgeVSEmbeddings-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_9-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary"
+              },
+              {
+                "label": "Conversation Summary Buffer",
+                "name": "conversationSummaryBuffer"
+              }
+            ],
+            "default": "allMessages",
+            "id": "agentAgentflow_9-input-agentMemoryType-options",
+            "display": true,
+            "additionalParams": true
+          },
+          {
+            "label": "Memory Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 20,
+            "step": 1,
+            "optional": true,
+            "additionalParams": true,
+            "id": "agentAgentflow_9-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.6,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are a General Help agent for the Internal Talent Mobility system.</em> You handle questions that don't fit into other specialized agent categories. You provide: 1) Navigation assistance (\"How do I update my career interests?\"), 2) System explanations (\"What is the Skills Cloud?\"), 3) Career coaching (\"What does internal mobility mean?\"), 4) Clarification requests (\"Can you explain that differently?\"). You have general knowledge of all system capabilities and can direct users to the appropriate specialized agent when their needs become clear. You are friendly, patient, and educational. When answering questions about specific domains (payroll, benefits, etc.) that aren't covered by this workflow, politely explain that those are outside your scope and suggest contacting the appropriate department.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            },
+            {
+              "agentSelectedTool": "searxng-search",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searxng-search",
+                "baseUrl": "https://s.llam.ai"
+              },
+              "agentSelectedToolRequiresHumanInput": false
+            }
+          ],
+          "agentKnowledgeDocumentStores": [],
+          "agentKnowledgeVSEmbeddings": [],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentMemoryWindowSize": 20
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_9-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "description": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1150,
+        "y": 600
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow-StartAgent",
+      "target": "conditionAgentAgentflow_1",
+      "targetHandle": "conditionAgentAgentflow_1",
+      "data": {
+        "sourceColor": "#90EE90",
+        "targetColor": "#ff8fab",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-StartAgent-conditionAgentAgentflow_1-conditionAgentAgentflow_1"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-0",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "0",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-0-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-1",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "1",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-1-agentAgentflow_3-agentAgentflow_3"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-2",
+      "target": "agentAgentflow_4",
+      "targetHandle": "agentAgentflow_4",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "2",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-2-agentAgentflow_4-agentAgentflow_4"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-3",
+      "target": "agentAgentflow_5",
+      "targetHandle": "agentAgentflow_5",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "3",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-3-agentAgentflow_5-agentAgentflow_5"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-4",
+      "target": "agentAgentflow_6",
+      "targetHandle": "agentAgentflow_6",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "4",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-4-agentAgentflow_6-agentAgentflow_6"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-5",
+      "target": "agentAgentflow_7",
+      "targetHandle": "agentAgentflow_7",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "5",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-5-agentAgentflow_7-agentAgentflow_7"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-6",
+      "target": "agentAgentflow_8",
+      "targetHandle": "agentAgentflow_8",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "6",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-6-agentAgentflow_8-agentAgentflow_8"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-7",
+      "target": "agentAgentflow_9",
+      "targetHandle": "agentAgentflow_9",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "7",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-7-agentAgentflow_9-agentAgentflow_9"
+    }
+  ]
+}

@@ -332,14 +332,14 @@ def generate_mermaid(workflow_json: Dict, include_details: bool = False) -> str:
         f"graph {direction}"
     ]
 
-    # Add nodes with styled shapes and emojis
+    # Add nodes with styled shapes (no emojis in boxes - too crowded)
     for node_id, info in nodes_info.items():
         shape_template = info["shape"]
         color = info["color"]
         emoji = info["emoji"]
         safe_label = sanitize_label(info["label"])
-        # Include emoji in label
-        label_with_emoji = f"{emoji} {safe_label}"
+        # Use clean label without emoji (emojis make boxes tacky and crowded)
+        label_with_emoji = safe_label
         node_def = f"    {node_id}{shape_template.format(label_with_emoji)}"
         mermaid_lines.append(node_def)
 

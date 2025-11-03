@@ -14,7 +14,9 @@
 4. [Disconnected Agent Nodes](#disconnected-agent-nodes)
 5. [Phantom Tool and Knowledge References](#phantom-tool-and-knowledge-references)
 6. [Incorrect Tool JSON Structure (Pattern #6)](#incorrect-tool-json-structure-pattern-6)
-7. [Prevention Checklist](#prevention-checklist)
+7. [ConditionAgent Incomplete Scenarios (Pattern #7)](#conditionagent-incomplete-scenarios-pattern-7)
+8. [Agent Nodes Missing inputParams (Pattern #8)](#agent-nodes-missing-inputparams-pattern-8)
+9. [Prevention Checklist](#prevention-checklist)
 
 ---
 
@@ -458,6 +460,246 @@ Formula Check:
   total_edges = N + 1
   router_outputs = N (must equal agent count)
 ```
+
+---
+
+## Agent Nodes Missing inputParams (Pattern #8)
+
+### Symptom
+
+**User Report** (2025-11-02):
+> "When I double click on an agent in the ecommerce-support-flow.json, nothing happens. Agent.OrderTracking, Agent.Returns, Agent.Payment, etc. - nothing happens when I double click on them. I'm afraid the code is broken somewhere."
+
+**Behavior in Flowise UI**:
+- ✅ Workflow imports successfully
+- ✅ All nodes appear on canvas with correct positions
+- ✅ All edges/connections render correctly
+- ❌ Double-clicking any agent node does NOTHING (no edit dialog)
+- ❌ Cannot modify agent settings (model, messages, tools, memory)
+- ❌ Workflow appears complete but agents are completely uneditable
+
+**Severity**: CRITICAL - Workflow unusable without ability to edit agents
+
+### Root Cause
+
+**Agent nodes missing `inputParams` array**
+
+The generated agent nodes have this structure:
+```json
+{
+  "data": {
+    "id": "agentAgentflow_1",
+    "label": "Agent.OrderTracking",
+    "name": "agentAgentflow",
+    "type": "Agent",
+    "inputs": {
+      "agentModel": "chatOpenAI",
+      "agentMessages": [...],
+      "agentTools": [...]
+    }
+  }
+}
+```
+
+But they're **missing the critical `inputParams` array**:
+```json
+{
+  "data": {
+    "inputParams": [  // ← MISSING!
+      {
+        "label": "Model",
+        "name": "agentModel",
+        "type": "asyncOptions",
+        ...
+      },
+      // ... 14 more parameter definitions
+    ],
+    "inputs": { /* actual values */ }
+  }
+}
+```
+
+### What is inputParams?
+
+**`inputParams` is the UI SCHEMA** - it tells Flowise:
+- What fields to display when editing the node
+- What type each field is (text, dropdown, array, etc.)
+- What options are available (for dropdowns)
+- Whether fields are optional or required
+- How to render each field (with proper UI controls)
+
+**`inputs` is the DATA** - the actual values for those fields
+
+**Without inputParams**, Flowise UI has no schema to render the edit form, so double-clicking does nothing.
+
+### Comparison: Template vs Generated
+
+**AGENT-NODE-TEMPLATE.json (CORRECT)**:
+```json
+{
+  "data": {
+    "inputParams": [
+      {
+        "label": "Model",
+        "name": "agentModel",
+        "type": "asyncOptions",
+        "loadMethod": "listModels",
+        "id": "agentAgentflow_0-input-agentModel-asyncOptions"
+      },
+      {
+        "label": "Messages",
+        "name": "agentMessages",
+        "type": "array",
+        "array": [...]
+      }
+      // ... 13 more inputParam objects (15 total)
+    ],
+    "inputs": {
+      "agentModel": "chatOpenAI",
+      "agentMessages": [{"role": "system", "content": "..."}]
+    }
+  }
+}
+```
+
+**ecommerce-support-flow.json Agent Nodes (WRONG)**:
+```json
+{
+  "data": {
+    // ❌ inputParams array completely missing!
+    "inputs": {
+      "agentModel": "chatOpenAI",
+      "agentMessages": [{"role": "system", "content": "..."}]
+    }
+  }
+}
+```
+
+### Impact
+
+**User Experience**:
+- Workflow imports without errors (misleading - appears successful)
+- All nodes visible on canvas
+- Cannot edit ANY agent settings via UI
+- Must manually add ~300 lines of inputParams JSON per agent (8 agents = 2400+ lines!)
+- **Production blocker** - workflow cannot be customized or debugged
+
+**Why This is Worse Than Other Patterns**:
+- Pattern #7 (incomplete scenarios) - at least you CAN open the node, just fields are blank
+- Pattern #8 (missing inputParams) - you CAN'T EVEN OPEN the node
+
+### Detection
+
+**In Flowise UI** (fastest):
+1. Import the workflow JSON
+2. Double-click any agent node
+3. If NOTHING happens (no edit dialog) → inputParams is missing
+
+**In JSON file**:
+```bash
+# Search for inputParams in agent nodes
+cat workflow.json | jq '.nodes[] | select(.data.type == "Agent") | has("data") and (.data | has("inputParams"))'
+
+# Should return: true for each agent
+# If returns: false or null → PATTERN VIOLATED
+```
+
+**Quick check**:
+```bash
+grep -c "\"inputParams\"" workflow.json
+# Should be >= number of agent nodes
+# If 0 → CRITICAL BUG
+```
+
+### Fix Required
+
+**MUST copy the complete inputParams array** from AGENT-NODE-TEMPLATE.json to every generated agent node.
+
+**Required inputParams (15 total)**:
+1. `agentModel` - Model selection
+2. `agentMessages` - System/user messages array
+3. `agentTools` - Tools selection array
+4. `agentToolsBuiltInOpenAI` - OpenAI built-in tools
+5. `agentToolsBuiltInAnthropic` - Anthropic built-in tools
+6. `agentToolsBuiltInGemini` - Gemini built-in tools
+7. `agentKnowledgeDocumentStores` - Document stores
+8. `agentKnowledgeVSEmbeddings` - Vector embeddings
+9. `agentEnableMemory` - Memory toggle
+10. `agentMemoryType` - Memory type selection
+11. `agentMemoryWindowSize` - Window size
+12. `agentMemoryMaxTokenLimit` - Token limit
+13. `agentReturnResponseAs` - Response type
+14. `agentUpdateState` - State updates
+15. Model configuration object
+
+### Prevention
+
+**Before generating agent nodes**:
+- [ ] Reference AGENT-NODE-TEMPLATE.json for complete structure
+- [ ] Copy the ENTIRE inputParams array (15 objects, ~200 lines)
+- [ ] Do NOT just copy inputs - MUST include inputParams
+- [ ] Verify inputParams array exists in template (line 17+)
+
+**During Builder phase**:
+- [ ] For EVERY agent node, include both inputParams AND inputs
+- [ ] inputParams defines the SCHEMA (what fields exist)
+- [ ] inputs contains the DATA (values for those fields)
+- [ ] Both are required - inputParams is NOT optional
+
+**Post-generation validation**:
+```bash
+# Count inputParams arrays (should match agent count)
+agent_count=$(cat workflow.json | jq '[.nodes[] | select(.data.type == "Agent")] | length')
+inputparams_count=$(grep -c '"inputParams"' workflow.json)
+
+if [ "$inputparams_count" -lt "$agent_count" ]; then
+  echo "❌ CRITICAL: Some agent nodes missing inputParams"
+  echo "Expected: $agent_count, Found: $inputparams_count"
+fi
+```
+
+### Template Reference
+
+**Source**: `extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json`
+
+**Lines**: 17-210 (inputParams array definition)
+
+**Size**: ~200 lines for 15 inputParam objects
+
+**Critical Note**: This array is NOT optional. It is as essential as the `inputs` object.
+
+### Relationship to Other Patterns
+
+**Similar but different**:
+- **Pattern #4** (condition-agent-no-scenarios): Missing scenarios array → can't route
+- **Pattern #7** (condition-agent-incomplete-scenarios): Scenarios exist but incomplete → can edit but fields blank
+- **Pattern #8** (agent-missing-inputparams): No schema at all → can't even open node
+
+**Root cause similarity**:
+All three involve missing or incomplete array structures that define UI schemas.
+
+### Added to Global Pattern Library
+
+This pattern has been added to:
+- `/Users/name/.context-foundry/patterns/common-issues.json`
+- Pattern ID: `agent-missing-inputparams`
+- Severity: CRITICAL
+- First seen: 2025-11-02 (ecommerce-support-workflow build)
+- Total patterns: 10 (was 9)
+
+### Quick Fix for Existing Workflows
+
+If you have a broken workflow with missing inputParams:
+
+1. Open AGENT-NODE-TEMPLATE.json
+2. Copy lines 17-210 (the complete inputParams array)
+3. For each agent node in your workflow JSON:
+   - Add `"inputParams": [...]` before the `"inputs": {...}` line
+   - Paste the copied inputParams array
+   - Update the `id` fields to match your agent node ID
+4. Save and re-import to Flowise
+
+**Note**: This is manual work. Better to prevent the issue by ensuring Context Foundry generates it correctly.
 
 ---
 
@@ -933,6 +1175,171 @@ The initial fix (commit a743294) removed tools entirely, but the REAL issue was 
 - [ ] Do NOT change data types (string vs boolean)
 - [ ] Do NOT omit fields from the template
 - [ ] When in doubt, export a working workflow from Flowise UI and compare
+
+---
+
+## ConditionAgent Incomplete Scenarios (Pattern #7)
+
+### Symptom
+
+**User Report** (2025-11-02):
+> "The node 'Detect User Intention' is not populated - all scenarios 0-7 show blank Model, Instructions, and Input fields in Flowise UI"
+
+Generated ConditionAgent has:
+- ✅ Main fields populated: `conditionAgentModel`, `conditionAgentInstructions`, `conditionAgentInput`
+- ❌ All scenarios (0-7) show blank in UI: Model = blank, Instructions = blank, Input = blank
+- ❌ Scenarios array only contains simple objects: `{"scenario": "description"}`
+- ❌ Missing: `model`, `instructions`, `input` fields for EACH scenario
+
+**Severity**: CRITICAL - Router cannot function, requires manual configuration of 8+ scenarios
+
+### Root Cause
+
+**Incorrect scenarios array structure**
+
+The `conditionAgentScenarios` array was generated with simple description-only objects:
+
+```json
+"conditionAgentScenarios": [
+  {"scenario": "Order status, tracking, delivery questions"},
+  {"scenario": "Returns, refunds, RMA, exchanges"},
+  {"scenario": "Product information, specs, availability"},
+  ...
+]
+```
+
+But Flowise UI expects **complete configuration objects** for each scenario with model, instructions, and input fields.
+
+### Impact
+
+- **UI shows blank fields**: All 8 scenarios appear unconfigured in Flowise UI
+- **Manual work required**: User must manually configure Model, Instructions, Input for 8+ scenarios
+- **Router non-functional**: Workflow cannot route without scenario configuration
+- **User confusion**: Main ConditionAgent fields work, but scenarios don't - unclear why
+- **Production blocker**: Workflow cannot be used until all scenarios manually fixed
+
+### Fix Required
+
+Each scenario must be a **complete configuration object**, not just a description string.
+
+**WRONG (Current)**:
+```json
+"conditionAgentScenarios": [
+  {"scenario": "Order status, tracking, delivery questions"}
+]
+```
+
+**CORRECT (Required)**:
+```json
+"conditionAgentScenarios": [
+  {
+    "scenario": "Order status, tracking, delivery questions",
+    "model": "chatOpenAI",
+    "instructions": "Route to Order Tracking when user asks about: order status, tracking number, delivery estimates, shipment updates, 'where is my order' (WISMO). Exception: if mentions 'return order' route to Returns instead.",
+    "input": "{{question}}"
+  },
+  {
+    "scenario": "Returns, refunds, RMA, exchanges",
+    "model": "chatOpenAI",
+    "instructions": "Route to Returns when user asks about: return policy, refund status, RMA processing, exchanges, defective items, damaged products. Exception: informational-only questions like 'What is your return policy?' may go to General Help.",
+    "input": "{{question}}"
+  }
+]
+```
+
+**Critical Requirements**:
+1. ✅ **scenario**: Description of what triggers this route
+2. ✅ **model**: MUST match parent `conditionAgentModel` (e.g., "chatOpenAI")
+3. ✅ **instructions**: Routing logic with keywords, exceptions, and context rules
+4. ✅ **input**: Usually `"{{question}}"` to pass user input to scenario evaluation
+
+### Prevention
+
+**Before generating ConditionAgent**:
+- [ ] Check AGENT_PATTERN_REFERENCE.md Section 2.2 for complete scenario structure
+- [ ] Each scenario is a FULL object with 4 fields: scenario, model, instructions, input
+- [ ] Model field matches parent conditionAgentModel exactly
+- [ ] Instructions include keywords, exceptions, and routing rules
+- [ ] Input field is `"{{question}}"` or appropriate variable
+
+**During Builder phase**:
+- [ ] Generate complete scenario objects, not just descriptions
+- [ ] Copy model from parent conditionAgentModel to each scenario
+- [ ] Write detailed routing instructions for each scenario
+- [ ] Include exception handling in instructions (e.g., "if X then route to Y instead")
+
+**Test in Flowise UI**:
+- [ ] Open ConditionAgent node after import
+- [ ] Verify each scenario (0, 1, 2...) shows:
+  - ✅ Model: chatOpenAI (or parent model)
+  - ✅ Instructions: populated with routing logic
+  - ✅ Input: {{question}}
+- [ ] If ANY scenario shows blank Model/Instructions/Input → PATTERN VIOLATED
+
+### Template
+
+**Complete Scenario Object Template**:
+```json
+{
+  "scenario": "[Clear description of routing trigger]",
+  "model": "chatOpenAI",
+  "instructions": "[Routing logic]\n- Keywords: [list]\n- Route to: Scenario [N] ([Agent.Name])\n- Exceptions: [special cases]",
+  "input": "{{question}}"
+}
+```
+
+**Multi-Agent Router Example** (8 scenarios):
+```json
+"conditionAgentScenarios": [
+  {
+    "scenario": "Order Tracking - status, tracking, delivery",
+    "model": "chatOpenAI",
+    "instructions": "Keywords: order status, tracking, WISMO, delivery estimate\nRoute to: Scenario 0 (Agent.OrderTracking)\nException: return order → Scenario 1",
+    "input": "{{question}}"
+  },
+  {
+    "scenario": "Returns - refunds, RMA, exchanges",
+    "model": "chatOpenAI",
+    "instructions": "Keywords: return, refund, RMA, exchange, defective\nRoute to: Scenario 1 (Agent.Returns)\nException: informational only → Scenario 7",
+    "input": "{{question}}"
+  }
+  // ... 6 more complete scenario objects
+]
+```
+
+### Detection in Code Review
+
+**Automated check**:
+```python
+# Check if scenarios are complete
+for scenario in data['inputs']['conditionAgentScenarios']:
+    assert 'scenario' in scenario, "Missing scenario description"
+    assert 'model' in scenario, "Missing model field - CRITICAL"
+    assert 'instructions' in scenario, "Missing instructions - CRITICAL"
+    assert 'input' in scenario, "Missing input field - CRITICAL"
+    assert scenario['model'] == parent_model, "Model mismatch"
+```
+
+**Manual verification**:
+1. Open generated JSON in editor
+2. Search for `"conditionAgentScenarios"`
+3. Verify each scenario object has 4 fields minimum
+4. If only `{"scenario": "..."}` → BUG DETECTED
+
+### Related Patterns
+
+- Pattern #4: condition-agent-no-scenarios (no scenarios at all)
+- Pattern #7: condition-agent-incomplete-scenarios (scenarios exist but incomplete)
+
+### Added to Global Pattern Library
+
+This pattern has been added to:
+- `/Users/name/.context-foundry/patterns/common-issues.json`
+- Pattern ID: `condition-agent-incomplete-scenarios`
+- Severity: CRITICAL
+- First seen: 2025-11-02 (ecommerce-support-workflow build)
+
+---
 
 **Documentation pattern**:
 ```markdown

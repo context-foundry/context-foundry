@@ -1,0 +1,143 @@
+{
+  "id": "enterprise-ops-command-center",
+  "name": "Enterprise Operations Command Center",
+  "description": "Comprehensive multi-agent system for enterprise operations management with 11 specialized departmental agents and intelligent intent routing",
+  "category": "Multi-Agent Systems",
+  "type": "AGENTFLOW",
+  "version": "1.0.0",
+  "deployed": false,
+  "isPublic": false,
+  "author": "Context Foundry",
+  "metadata": {
+    "agents": 11,
+    "departments": ["sales", "marketing", "hr", "finance", "it", "legal", "operations", "support", "product", "engineering", "executive"],
+    "features": ["intelligent_routing", "cross_department_workflows", "enterprise_integrations", "executive_analytics"],
+    "llmProviders": ["openai", "anthropic"],
+    "toolIntegrations": ["salesforce", "jira", "zendesk", "quickbooks", "github", "slack", "datadog"]
+  },
+  "nodes": [
+    {
+      "id": "router_intent_0",
+      "position": {"x": 400, "y": 100},
+      "type": "customNode",
+      "data": {
+        "id": "router_intent_0",
+        "label": "Intent Router",
+        "version": 2,
+        "name": "intentRouter",
+        "type": "LLMChain",
+        "baseClasses": ["LLMChain", "BaseChain"],
+        "category": "Routing",
+        "description": "Routes user queries to appropriate department agent based on intent classification",
+        "inputs": {
+          "model": "{{llm_router}}",
+          "prompt": "{{prompt_router}}"
+        }
+      }
+    },
+    {
+      "id": "llm_router",
+      "position": {"x": 200, "y": 50},
+      "type": "customNode",
+      "data": {
+        "id": "llm_router",
+        "label": "Router LLM",
+        "version": 1,
+        "name": "chatOpenAI",
+        "type": "ChatOpenAI",
+        "baseClasses": ["ChatOpenAI", "BaseChatModel"],
+        "category": "Chat Models",
+        "inputs": {
+          "modelName": "gpt-3.5-turbo",
+          "temperature": 0.1,
+          "maxTokens": 500,
+          "openAIApiKey": "{{OPENAI_API_KEY}}"
+        }
+      }
+    },
+    {
+      "id": "prompt_router",
+      "position": {"x": 200, "y": 150},
+      "type": "customNode",
+      "data": {
+        "id": "prompt_router",
+        "label": "Router Prompt",
+        "version": 1,
+        "name": "promptTemplate",
+        "type": "PromptTemplate",
+        "baseClasses": ["PromptTemplate"],
+        "category": "Prompts",
+        "inputs": {
+          "template": "You are an enterprise operations intent classifier. Analyze the user query and determine which department should handle it.\n\nDEPARTMENTS:\n1. SALES - CRM, pipeline, deals, forecasting\n2. MARKETING - campaigns, analytics, content\n3. HR - recruitment, onboarding, employees\n4. FINANCE - accounting, budgets, expenses\n5. IT - infrastructure, helpdesk, systems\n6. LEGAL - contracts, compliance\n7. OPERATIONS - logistics, supply chain\n8. SUPPORT - tickets, customer issues\n9. PRODUCT - roadmap, features\n10. ENGINEERING - development, deployments\n11. EXECUTIVE - KPIs, dashboards, analytics\n\nQuery: {input}\n\nRespond with ONLY the department name (lowercase).",
+          "inputVariables": ["input"]
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "llm_router",
+      "sourceHandle": "llm_router-output-chatOpenAI-ChatOpenAI|BaseChatModel",
+      "target": "router_intent_0",
+      "targetHandle": "router_intent_0-input-model-BaseLanguageModel",
+      "type": "buttonedge",
+      "id": "llm_router-router_intent_0"
+    },
+    {
+      "source": "prompt_router",
+      "sourceHandle": "prompt_router-output-promptTemplate-PromptTemplate",
+      "target": "router_intent_0",
+      "targetHandle": "router_intent_0-input-prompt-PromptTemplate",
+      "type": "buttonedge",
+      "id": "prompt_router-router_intent_0"
+    }
+  ],
+  "agentConfigurations": {
+    "note": "Full agent node definitions available in src/agents/*.json files. Import those configurations into Flowise and connect to router.",
+    "agentFiles": [
+      "src/agents/sales-agent-config.json",
+      "src/agents/marketing-agent-config.json",
+      "src/agents/hr-agent-config.json",
+      "src/agents/finance-agent-config.json",
+      "src/agents/it-agent-config.json",
+      "src/agents/legal-agent-config.json",
+      "src/agents/operations-agent-config.json",
+      "src/agents/support-agent-config.json",
+      "src/agents/product-agent-config.json",
+      "src/agents/engineering-agent-config.json",
+      "src/agents/executive-agent-config.json"
+    ],
+    "routerConfiguration": "src/router/intent-classifier-config.json",
+    "toolsConfiguration": "src/tools/enterprise-tools-config.json"
+  },
+  "importInstructions": {
+    "step1": "Import this JSON file into Flowise",
+    "step2": "Configure API credentials in Flowise Credential Manager",
+    "step3": "Add agent nodes for each department using configurations in src/agents/",
+    "step4": "Connect router output to each agent input",
+    "step5": "Add tools to each agent as specified in src/tools/enterprise-tools-config.json",
+    "step6": "Test routing with sample queries",
+    "step7": "Deploy and monitor"
+  },
+  "architecture": {
+    "pattern": "Hierarchical Coordinator-Worker",
+    "workflow": "User Query → Router → Department Agent → Response",
+    "routing": "LLM-based intent classification",
+    "agents": 11,
+    "totalNodes": "40+",
+    "totalEdges": "50+"
+  },
+  "testing": {
+    "intentClassificationTests": "tests/intent-classification-tests.json",
+    "agentResponseTests": "tests/agent-response-tests.json",
+    "integrationTests": "tests/integration-tests.json",
+    "expectedAccuracy": ">90% intent routing accuracy"
+  },
+  "documentation": {
+    "installation": "docs/INSTALLATION.md",
+    "usage": "docs/USAGE.md",
+    "integrations": "docs/INTEGRATION_GUIDES.md",
+    "agentSpecs": "docs/AGENT_SPECIFICATIONS.md",
+    "apiReference": "docs/API_REFERENCE.md"
+  }
+}

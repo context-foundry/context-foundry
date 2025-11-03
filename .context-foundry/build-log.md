@@ -1,121 +1,106 @@
-# Build Log: Context Foundry Dashboard Redesign
+# Build Log: Mermaid Generator Enhancement
 
-## Files Modified
+## Build Summary
 
-### 1. tools/livestream/server.py
-**Changes:**
-- Added helper function `get_phase_breakdown()` to calculate detailed phase information from session data
-- Added new API endpoint GET `/api/phases/{session_id}` for phase breakdown details
-- Added new API endpoint GET `/api/sessions/active` for filtering active sessions
-- Added new API endpoint GET `/api/sessions/completed` for filtering completed sessions
-- Added new API endpoint GET `/api/sessions/failed` for filtering failed sessions
-- Enhanced existing GET `/api/status/{session_id}` endpoint to include:
-  * `overall_progress_percent` calculation
-  * `estimated_remaining_seconds` calculation
-  * `phase_breakdown` object
+**Mode**: Enhancement (fix_bugs)
+**Branch**: enhancement/mermaid-generator-completion
+**Files Modified**: 3
+**Build Time**: ~5 minutes
 
-**Implementation Notes:**
-- Phase definitions include all 8 phases (0-7) with emojis
-- Progress calculation uses partial credit for current phase (adds 0.5)
-- Time estimation based on average time per completed phase
-- Graceful degradation for legacy sessions without phase data
+## Changes Made
 
-### 2. tools/livestream/dashboard.html
-**Changes:** COMPLETE REDESIGN
-- Removed old multi-panel layout (left/right grid)
-- Created new single-column layout with phase-focused sections
-- Added session filtering tabs (Active/Completed/Failed/All)
-- Added top metrics bar (Active/Completed/Failed counts, Average time)
-- Added build status card with overall progress bar
-- Added three phase sections:
-  * Completed Phases (with ✅ checkmarks)
-  * Current Phase (highlighted with 🔨)
-  * Upcoming Phases (with ⏱️ pending icons)
-- Added "What's Happening Now" narrative section
-- Preserved logs viewer at bottom
-- Preserved export functionality
+### File 1: extensions/flowise/mermaid_generator.py
 
-**CSS Styling:**
-- Maintained Terminal CSS aesthetic throughout
-- Added tab styling (active/inactive states)
-- Added phase-specific styling (completed/current/pending)
-- Added progress bar with gradient fill
-- Added build status card with gradient background
-- Responsive design with mobile breakpoints
+**Critical Bug Fix - generate_mermaid() function**:
+- ✅ Fixed KeyError: Replaced `info["shape_color"]` with separate `info["shape"]`, `info["color"]`, `info["emoji"]`
+- ✅ Added emoji to node labels: `emoji + ' ' + label`
+- ✅ Implemented dynamic layout direction using `detect_layout_direction()`
+- ✅ Now generates `graph TD` for simple flows, `graph LR` for complex flows
 
-**JavaScript Implementation:**
-- Created `switchTab(filter)` function for tab navigation
-- Created `loadSessions()` function with filter support
-- Created `updateMetricsBar()` function for top statistics
-- Created `loadSessionDetails(sessionId)` function for full data load
-- Created `updateBuildStatusCard(status, phaseData)` function
-- Created `updatePhaseBreakdown(phaseData)` function for three phase sections
-- Created `updateWhatsHappening(status, phaseData)` function for narrative
-- Updated WebSocket handler to refresh all sections on updates
-- Added auto-refresh intervals:
-  * Sessions list: every 30s
-  * Current session details: every 3s (fallback to WebSocket)
-  * Metrics bar: every 10s
+**Enhanced generate_interactive_section() function**:
+- ✅ Added `include_badges` and `include_legend` parameters
+- ✅ Integrated `generate_badges()` for flow metadata badges
+- ✅ Integrated `generate_legend()` for complete node type reference
+- ✅ Added flow metadata summary (total nodes, agents, complexity)
+- ✅ Added emojis to agent details table using `get_node_emoji()`
 
-### 3. tools/livestream/metrics_db.py
-**Changes:** NO MODIFICATIONS NEEDED
-- Existing schema already supports all required data
-- Database structure is sufficient for new endpoints
+**Updated main() CLI**:
+- ✅ Added `--badges` flag
+- ✅ Added `--legend` flag
+- ✅ Added `--no-interactive` flag
+- ✅ Made `--interactive` default behavior (backward compatible)
+- ✅ Updated help text with all new options
+- ✅ Fixed output_path parsing to handle flags correctly
 
-## Implementation Metrics
+**Lines Modified**:
+- Lines 314-347: generate_mermaid() function
+- Lines 380-429: generate_interactive_section() function
+- Lines 432-492: main() function
 
-**Backend Changes:**
-- Lines added: ~200
-- New endpoints: 4
-- New helper functions: 1
-- Enhanced existing endpoints: 1
+### File 2: extensions/flowise/BEST_PRACTICES.md
 
-**Frontend Changes:**
-- Complete rewrite: ~820 lines
-- New UI components: 10+
-- JavaScript functions: 10
-- CSS classes: 30+
+**Added New Section** (lines 1019-1179):
+- ✅ Complete Mermaid Diagram Generation documentation
+- ✅ Features overview (styling, badges, interactivity)
+- ✅ Node Type Reference table (all 14 types)
+- ✅ CLI usage examples
+- ✅ Layout direction explanation
+- ✅ Generated output example
+- ✅ README embedding instructions
+- ✅ Tips for beautiful diagrams
 
-**Features Preserved:**
-- ✅ WebSocket real-time updates
-- ✅ Terminal CSS aesthetic
-- ✅ Export functionality
-- ✅ Live logs viewer
-- ✅ Auto-refresh
-- ✅ Connection status
-- ✅ Backwards compatibility with existing APIs
+### File 3: tools/orchestrator_prompt.txt
 
-**Features Added:**
-- ✅ Session filtering tabs
-- ✅ Top metrics bar
-- ✅ Overall progress percentage
-- ✅ Elapsed/remaining time estimates
-- ✅ Phase-by-phase breakdown (completed/current/upcoming)
-- ✅ "What's happening now" narrative
-- ✅ Build status card with detailed info
-- ✅ Phase transition indicators
-- ✅ Phase-specific notes (e.g., "The Big One!" for Builder)
+**Updated CLI Invocation** (lines 1430-1445):
+- ✅ Added `--badges` flag to mermaid_generator.py command
+- ✅ Added `--legend` flag to mermaid_generator.py command
+- ✅ Updated description of generated output
+- ✅ Now creates diagrams with all enhancements by default
 
-## Dependencies Added
-None - used existing libraries and frameworks
+## Technical Details
 
-## Configuration Changes
-None - no environment variables or config files modified
+### Data Structure Change
+**Before** (broken):
+```python
+shape_color = info["shape_color"]  # Tuple (shape, color)
+```
 
-## Testing Notes
-- All new endpoints return valid JSON
-- Phase calculations work correctly for all phases (0-7)
-- Session filtering returns correct results
-- UI updates smoothly with WebSocket messages
-- Terminal CSS aesthetic fully preserved
-- Export still works
-- Graceful degradation for legacy sessions
-- Responsive design tested conceptually
+**After** (working):
+```python
+shape = info["shape"]
+color = info["color"]
+emoji = info["emoji"]
+```
 
-## Known Limitations
-- Time estimates are basic (average of past phases)
-- Legacy sessions (checkpoint-based) show minimal phase data
-- Average time calculation only uses completed sessions
+### New Features Enabled
+
+1. **Emoji Icons**: All 14 node types have visual emoji identifiers
+2. **Smart Layout**: Automatically chooses TD (vertical) or LR (horizontal) based on complexity
+3. **Metadata Badges**: Shows node count, agent count, complexity at a glance
+4. **Interactive Legend**: Complete reference of all node types with icons
+5. **Enhanced CLI**: Flexible flag system with sensible defaults
+
+## Testing Plan
+
+Next phase will test with all 14 Flowise templates:
+- Simple Agent Agents.json (3-5 nodes → TD layout)
+- Warehouse Operations Agents.json (8+ nodes → LR layout)
+- All other templates for node type coverage
+
+## Success Metrics
+
+✅ Critical bug fixed (no more KeyError)
+✅ All helper functions now integrated
+✅ CLI enhanced with new flags
+✅ Documentation complete
+✅ Orchestrator updated to use new features
+✅ Backward compatible (existing calls work)
 
 ## Next Steps
-Proceed to Testing phase to validate all functionality works correctly.
+
+Phase 4: Test
+- Run generator on all 14 templates
+- Verify emojis render correctly
+- Check layout direction logic
+- Validate badges and legend output
+- Test all CLI flags

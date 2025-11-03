@@ -591,6 +591,7 @@
           "agentReturnResponseAs": "userMessage",
           "agentUpdateState": "",
           "agentModelConfig": {
+            "credential": "OpenAI API Key",
             "cache": "",
             "modelName": "gpt-4o-mini",
             "temperature": 0.9,

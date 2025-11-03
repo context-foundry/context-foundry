@@ -1421,70 +1421,121 @@ PHASE 3.5: INTEGRATION PRE-CHECK (NEW - Fast Validation Before Test)
 - ✅ All files created (code + README + .gitignore)
 - ✅ Git repository initialized with initial commit
 
-**🎨 FLOWISE PROJECTS: Generate Workflow Diagram (MANDATORY)**
+**🎨 FLOWISE PROJECTS: Generate Workflow Diagram (MANDATORY - BLOCKING)**
 
 **IF CONFIGURATION shows flowise_flow: True:**
 
-Generate a Mermaid diagram of the workflow and embed it prominently in README:
+**⚠️ CRITICAL SEQUENCE - FOLLOW IN EXACT ORDER:**
 
-1. **Generate Mermaid Diagram:**
-   ```bash
-   python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
-     <workflow-name>.json \
-     WORKFLOW-DIAGRAM.md \
-     --interactive \
-     --badges \
-     --legend
-   ```
+This is a BLOCKING requirement. Build MUST NOT proceed to next phase until validation passes.
 
-   This creates:
-   - `WORKFLOW-DIAGRAM.md`: Standalone diagram file with all enhancements
-   - Mermaid syntax with proper Flowise color scheme and emoji icons
-   - Flow metadata badges (node count, agents, complexity)
-   - Interactive <details> section with agent descriptions table
-   - Complete node type legend (all 14 node types)
+**STEP 1: Generate Mermaid Diagram File FIRST**
 
-2. **Embed Diagram in README:**
+Run this command BEFORE creating or finalizing README.md:
 
-   Insert the diagram content RIGHT AFTER the hero/title section, BEFORE "## Overview":
+```bash
+python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+  <workflow-name>.json \
+  WORKFLOW-DIAGRAM.md \
+  --interactive \
+  --badges \
+  --legend
+```
 
-   ```markdown
-   # {Project Name}
+This creates:
+- `WORKFLOW-DIAGRAM.md`: Standalone diagram file with all enhancements
+- Mermaid syntax with proper Flowise color scheme and emoji icons
+- Flow metadata badges (node count, agents, complexity)
+- Interactive <details> section with agent descriptions table
+- Complete node type legend (all 14 node types)
 
-   {One-line description}
+**Verify WORKFLOW-DIAGRAM.md exists before continuing:**
+```bash
+test -f WORKFLOW-DIAGRAM.md || { echo "❌ FATAL: WORKFLOW-DIAGRAM.md not created"; exit 1; }
+```
 
-   ## 📊 Workflow Architecture
+---
 
-   **[View Full Workflow Diagram →](./WORKFLOW-DIAGRAM.md)**
+**STEP 2: Read Diagram Content**
 
-   {Paste entire Mermaid diagram from WORKFLOW-DIAGRAM.md here}
+```bash
+# Extract the full diagram content for embedding
+DIAGRAM_CONTENT=$(cat WORKFLOW-DIAGRAM.md)
+```
 
-   ---
+---
 
-   ## Overview
-   {Rest of README continues...}
-   ```
+**STEP 3: Embed Diagram in README (BEFORE FINALIZING README)**
 
-3. **Why This Is Critical:**
-   - ✅ GitHub natively renders Mermaid diagrams
-   - ✅ Users see workflow structure immediately without opening Flowise
-   - ✅ Interactive expandable section shows agent details
-   - ✅ Prominent placement at top ensures visibility
-   - ✅ Separate .md file allows deep-linking to diagram
+Insert the COMPLETE diagram content RIGHT AFTER the hero/title section, BEFORE "## Overview":
 
-4. **Validation:**
-   ```bash
-   # Verify files exist
-   test -f WORKFLOW-DIAGRAM.md && echo "✅ Diagram file created" || echo "❌ Missing WORKFLOW-DIAGRAM.md"
+**Exact Structure:**
+```markdown
+# {Project Name}
 
-   # Verify README contains mermaid block
-   grep -q "```mermaid" README.md && echo "✅ Diagram embedded in README" || echo "❌ Diagram not embedded"
+{One-line description}
 
-   # Verify interactive section exists
-   grep -q "<details>" WORKFLOW-DIAGRAM.md && echo "✅ Interactive section included" || echo "⚠️  Missing interactive details"
-   ```
+## 📊 Workflow Architecture
 
-**This step is MANDATORY for all Flowise projects** - diagrams are essential for understanding multi-agent workflows.
+**[View Full Workflow Diagram →](./WORKFLOW-DIAGRAM.md)**
+
+{PASTE ENTIRE CONTENT FROM WORKFLOW-DIAGRAM.md HERE - badges, mermaid block, interactive details, legend, everything}
+
+---
+
+## Overview
+{Rest of README continues...}
+```
+
+**Key Points:**
+- Include ALL content from WORKFLOW-DIAGRAM.md (not just the mermaid block)
+- Include badges, interactive <details> section, and legend
+- Place AFTER title/description, BEFORE "## Overview"
+- Add horizontal rule `---` separator after diagram section
+
+---
+
+**STEP 4: Validation (BLOCKING - MUST PASS)**
+
+Run these checks and FAIL THE BUILD if any check fails:
+
+```bash
+# Check 1: WORKFLOW-DIAGRAM.md exists
+test -f WORKFLOW-DIAGRAM.md || { echo "❌ BLOCKING FAILURE: Missing WORKFLOW-DIAGRAM.md"; exit 1; }
+
+# Check 2: README contains ```mermaid block
+grep -q '```mermaid' README.md || { echo "❌ BLOCKING FAILURE: Diagram not embedded in README"; exit 1; }
+
+# Check 3: README contains interactive details section
+grep -q '<details>' README.md || { echo "❌ BLOCKING FAILURE: Missing interactive <details> section in README"; exit 1; }
+
+# Check 4: README contains badges
+grep -q 'img.shields.io/badge' README.md || { echo "❌ BLOCKING FAILURE: Missing diagram badges in README"; exit 1; }
+
+# Check 5: README contains "Workflow Architecture" section
+grep -q '## 📊 Workflow Architecture' README.md || { echo "❌ BLOCKING FAILURE: Missing Workflow Architecture section in README"; exit 1; }
+
+# All checks passed
+echo "✅ All Mermaid diagram validations PASSED"
+```
+
+**If ANY validation fails:**
+1. DO NOT proceed to next phase
+2. Re-generate WORKFLOW-DIAGRAM.md
+3. Re-embed in README
+4. Run validation again
+5. Only proceed when ALL checks pass
+
+---
+
+**Why This Is Critical:**
+- ✅ GitHub natively renders Mermaid diagrams
+- ✅ Users see workflow structure immediately without opening Flowise
+- ✅ Interactive expandable section shows agent details
+- ✅ Prominent placement at top ensures visibility
+- ✅ Separate .md file allows deep-linking to diagram
+
+**THIS IS A BLOCKING REQUIREMENT** - Flowise projects without embedded diagrams are considered INCOMPLETE and MUST NOT be deployed.
 
 **End of Flowise diagram generation**
 

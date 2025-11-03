@@ -1,0 +1,1165 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -200,
+        "y": 100
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput"
+              },
+              {
+                "label": "Form Input",
+                "name": "formInput"
+              }
+            ],
+            "default": "chatInput",
+            "id": "startAgentflow_0-input-startInputType-options",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 116,
+      "height": 68,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -200,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 200,
+        "y": 100
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Intent Router",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Route user to appropriate agent based on detected intention",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "id": "conditionAgentAgentflow_0-input-conditionAgentInstructions-string",
+            "display": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ],
+            "id": "conditionAgentAgentflow_0-input-conditionAgentScenarios-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "conditionAgentInstructions": "Analyze the user's DHL logistics question and route to the appropriate specialized agent.\n\nINTENT DETECTION KEYWORDS:\n- EXPRESS [0]: express, priority, overnight, same-day, urgent, time-sensitive, fast delivery\n- CUSTOMS [1]: customs, duty, tariff, import, export, documentation, HS code, clearance, international regulations\n- SUPPLY CHAIN [2]: supply chain, warehousing, inventory, distribution, fulfillment, logistics planning\n- FREIGHT [3]: freight, cargo, container, pallet, bulk shipment, air freight, ocean freight, ground transport\n- CUSTOMER SERVICE [4]: tracking, where is my package, delivery status, problem, claim, reroute, support\n- TECHNOLOGY [5]: tracking system, drone, automation, API, mobile app, MyDHL, digital platform\n- SUSTAINABILITY [6]: carbon footprint, green shipping, electric vehicle, sustainable, GoGreen, eco-friendly\n- GLOBAL OPS [7]: countries served, hub location, regional service, network coverage, general DHL information\n\nRULES:\n1. If multiple intents detected, choose PRIMARY intent\n2. Customer service queries (tracking, status, problems) → CUSTOMER SERVICE [4]\n3. Green/eco shipping options → SUSTAINABILITY [6], not FREIGHT [3]\n4. Technology/innovation questions → TECHNOLOGY [5]\n5. If unsure, route to GLOBAL OPS [7]",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "User is asking about express delivery, priority shipping, overnight, same-day, or time-sensitive shipments"
+            },
+            {
+              "scenario": "User is asking about customs clearance, international regulations, duty, tariff, import/export documentation"
+            },
+            {
+              "scenario": "User is asking about supply chain management, warehousing, inventory, distribution, or fulfillment"
+            },
+            {
+              "scenario": "User is asking about freight transport, cargo shipping, containers, pallets, or bulk shipments"
+            },
+            {
+              "scenario": "User is asking about shipment tracking, delivery status, customer support, claims, or problems"
+            },
+            {
+              "scenario": "User is asking about tracking systems, drones, automation, APIs, mobile apps, or digital platforms"
+            },
+            {
+              "scenario": "User is asking about carbon footprint, green shipping, electric vehicles, sustainability, or GoGreen program"
+            },
+            {
+              "scenario": "User is asking about global coverage, hub locations, regional services, network information, or general DHL questions"
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-0",
+            "label": "0",
+            "name": 0,
+            "description": "Condition 0"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-1",
+            "label": "1",
+            "name": 1,
+            "description": "Condition 1"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-2",
+            "label": "2",
+            "name": 2,
+            "description": "Condition 2"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-3",
+            "label": "3",
+            "name": 3,
+            "description": "Condition 3"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-4",
+            "label": "4",
+            "name": 4,
+            "description": "Condition 4"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-5",
+            "label": "5",
+            "name": 5,
+            "description": "Condition 5"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-6",
+            "label": "6",
+            "name": 6,
+            "description": "Condition 6"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-7",
+            "label": "7",
+            "name": 7,
+            "description": "Condition 7"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 200,
+        "y": 100
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_1",
+      "position": {
+        "x": -400,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "Agent.Express",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_1-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_1-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_1-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_1-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_1-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Express Delivery agent specializing in time-critical shipments.</em> You handle express shipping options (same-day, overnight, 2-day), priority package processing, delivery time estimation, and special handling requirements (fragile, perishable, hazardous materials). You provide tracking numbers and coordinate with DHL's global express network across 220+ countries. You integrate with DHL's real-time tracking system. You do NOT handle customs documentation, freight cargo, or general customer support - defer those to specialized agents.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -400,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_2",
+      "position": {
+        "x": -200,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Agent.Customs",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_2-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_2-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_2-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_2-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Customs Clearance agent with international trade expertise.</em> You handle customs documentation (commercial invoices, packing lists, certificates of origin), tariff classification, Harmonized System (HS) codes, duty and tax calculation, and country-specific import/export regulations across 220+ countries. You ensure compliance with international trade laws and expedite customs processing. You do NOT handle shipping logistics or delivery - focus only on customs clearance processes.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": -200,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_3",
+      "position": {
+        "x": 0,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Agent.SupplyChain",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_3-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_3-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_3-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_3-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Supply Chain Management agent specializing in end-to-end logistics.</em> You handle warehousing solutions, inventory management, distribution network optimization, fulfillment center coordination, and multi-location logistics planning. You work with DHL's global supply chain infrastructure and integrate with enterprise resource planning (ERP) systems. You provide strategic supply chain consulting and operational support. You do NOT handle individual shipment tracking or customs - those are handled by other agents.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 0,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_4",
+      "position": {
+        "x": 200,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Agent.Freight",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_4-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_4-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_4-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_4-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Freight Transport agent for large-scale cargo operations.</em> You coordinate air freight, ocean freight, and ground transport for bulk shipments, pallets, and containers. You handle freight rate calculations, carrier selection, transit time estimation, and multi-modal transport planning. You work with DHL's global freight network and major shipping lanes. You focus on cargo logistics - NOT express parcels or small packages (defer those to Express agent).</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 200,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_5",
+      "position": {
+        "x": 400,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_5",
+        "label": "Agent.CustomerService",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_5-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_5-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_5-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_5-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.5,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Customer Service agent providing comprehensive support.</em> You handle shipment tracking inquiries, delivery status updates, address corrections, rerouting requests, claims processing, and general customer questions. You have access to DHL's tracking system and can assist with problem resolution. You provide empathetic, helpful service and escalate complex issues appropriately. For technical questions about customs, freight options, or sustainability programs, guide users to ask more specific questions to reach specialized agents.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_5-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 400,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_6",
+      "position": {
+        "x": 600,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_6",
+        "label": "Agent.Technology",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_6-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_6-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_6-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_6-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Technology & Innovation agent specializing in logistics technology.</em> You provide information about DHL's real-time tracking systems, drone delivery programs, warehouse automation (robotics, AI), electric vehicle fleet, digital platforms (MyDHL+, mobile apps), and API integration capabilities. You explain how DHL uses technology to enhance logistics efficiency and customer experience. You focus on technology and innovation - NOT operational logistics (shipping, customs, etc.).</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_6-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_7",
+      "position": {
+        "x": 800,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_7",
+        "label": "Agent.Sustainability",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_7-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_7-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_7-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_7-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Sustainability agent focused on eco-friendly logistics solutions.</em> You provide information about DHL's GoGreen program, carbon-neutral shipping options, carbon emissions tracking and offsetting, electric vehicle fleet, sustainable packaging solutions, and environmental compliance initiatives. You help customers make environmentally responsible shipping choices and explain DHL's commitment to sustainability goals. You focus on environmental aspects - defer operational shipping questions to other agents.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_7-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 800,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_8",
+      "position": {
+        "x": 1000,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_8",
+        "label": "Agent.GlobalOps",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Dynamically choose and utilize tools during runtime",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_8-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": true,
+            "id": "agentAgentflow_8-input-agentEnableMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "default": "windowSize",
+            "id": "agentAgentflow_8-input-agentMemoryType-options",
+            "display": true
+          },
+          {
+            "label": "Window Size",
+            "name": "agentMemoryWindowSize",
+            "type": "number",
+            "default": 30,
+            "id": "agentAgentflow_8-input-agentMemoryWindowSize-number"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert DHL Global Operations agent managing worldwide network coordination.</em> You provide information about DHL's coverage across 220+ countries, hub and facility locations, regional service availability, Deutsche Post integration, and international network capabilities. You answer general questions about DHL's global presence and operations. If users have specific questions about shipping, customs, sustainability, or other specialized topics, guide them to ask more focused questions to reach the appropriate specialized agent.</p>"
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "windowSize",
+          "agentMemoryWindowSize": 30,
+          "agentTools": "",
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": ""
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_8-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 500,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 1000,
+        "y": 400
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0",
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-conditionAgentAgentflow_0-conditionAgentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-0",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "0",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-0-agentAgentflow_1-agentAgentflow_1"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-1",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "1",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-1-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-2",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "2",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-2-agentAgentflow_3-agentAgentflow_3"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-3",
+      "target": "agentAgentflow_4",
+      "targetHandle": "agentAgentflow_4",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "3",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-3-agentAgentflow_4-agentAgentflow_4"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-4",
+      "target": "agentAgentflow_5",
+      "targetHandle": "agentAgentflow_5",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "4",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-4-agentAgentflow_5-agentAgentflow_5"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-5",
+      "target": "agentAgentflow_6",
+      "targetHandle": "agentAgentflow_6",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "5",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-5-agentAgentflow_6-agentAgentflow_6"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-6",
+      "target": "agentAgentflow_7",
+      "targetHandle": "agentAgentflow_7",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "6",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-6-agentAgentflow_7-agentAgentflow_7"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-7",
+      "target": "agentAgentflow_8",
+      "targetHandle": "agentAgentflow_8",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "7",
+        "isHumanInput": false
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-7-agentAgentflow_8-agentAgentflow_8"
+    }
+  ]
+}

@@ -170,7 +170,29 @@ Central routing node that detects user intent and directs to appropriate special
         {"scenario": "User is asking about HCM Core"},
         {"scenario": "User is asking about Payroll"},
         // ... up to 20+ scenarios
-      ]
+      ],
+      "conditionAgentModelConfig": {
+        "credential": "OpenAI API Key",
+        "modelName": "gpt-4o-mini",
+        "temperature": 0.2,
+        "streaming": true,
+        "maxTokens": "",
+        "topP": "",
+        "frequencyPenalty": "",
+        "presencePenalty": "",
+        "timeout": "",
+        "strictToolCalling": "",
+        "stopSequence": "",
+        "basepath": "",
+        "proxyUrl": "",
+        "baseOptions": "",
+        "allowImageUploads": "",
+        "imageResolution": "low",
+        "reasoning": "",
+        "reasoningEffort": "",
+        "reasoningSummary": "",
+        "conditionAgentModel": "chatOpenAI"
+      }
     },
     "outputAnchors": [
       {"id": "...-output-0", "label": 0, "name": 0, "description": "Condition 0"},
@@ -193,15 +215,94 @@ Central routing node that detects user intent and directs to appropriate special
 | `color` | `"#ff8fab"` | Standard condition color (pink) |
 | `version` | `1.1` | Current stable version |
 
+#### Model Configuration
+
+The `conditionAgentModelConfig` object configures the LLM used for routing decisions:
+
+```json
+"conditionAgentModelConfig": {
+  "credential": "OpenAI API Key",
+  "modelName": "gpt-4o-mini",        // Fast, cost-effective for routing
+  "temperature": 0.2,                 // LOW for deterministic routing (0.1-0.3)
+  "streaming": true,
+  "maxTokens": "",
+  "topP": "",
+  "frequencyPenalty": "",
+  "presencePenalty": "",
+  "timeout": "",
+  "strictToolCalling": "",
+  "stopSequence": "",
+  "basepath": "",
+  "proxyUrl": "",
+  "baseOptions": "",
+  "allowImageUploads": "",
+  "imageResolution": "low",
+  "reasoning": "",
+  "reasoningEffort": "",
+  "reasoningSummary": "",
+  "conditionAgentModel": "chatOpenAI"   // Must match conditionAgentModel value
+}
+```
+
+**Critical Fields:**
+
+| Field | Recommended Value | Notes |
+|-------|------------------|-------|
+| `modelName` | `"gpt-4o-mini"` or `"claude-sonnet-4-0"` | Fast models for routing |
+| `temperature` | `0.1` - `0.3` | **MUST be low** for consistent routing |
+| `streaming` | `true` | Standard for all agents |
+| `conditionAgentModel` | `"chatOpenAI"`, `"chatAnthropic"`, `"chatGemini"` | Must match parent `conditionAgentModel` field |
+
+**Temperature Importance:**
+
+ConditionAgent routing decisions MUST be deterministic and consistent. High temperature (0.7-0.9) causes:
+- ❌ Inconsistent routing for same questions
+- ❌ Unpredictable agent selection
+- ❌ Poor user experience
+
+**Always use temperature 0.1-0.3 for ConditionAgent nodes.**
+
 #### Critical: Output Anchors
 
-The condition node creates one output anchor for each scenario:
+The condition node creates **one output anchor for each scenario** with a specific structure.
 
-- Index 0 corresponds to first scenario
-- Index 1 corresponds to second scenario
+**Output Anchor Format:**
+
+```json
+{
+  "id": "conditionAgentAgentflow_[N]-output-[INDEX]",
+  "label": [INDEX],                    // Numeric: 0, 1, 2, etc.
+  "name": [INDEX],                     // Same as label
+  "description": "[SCENARIO_TEXT]"     // Human-readable scenario description
+}
+```
+
+**Rules:**
+- `id` format: `[nodeId]-output-[index]` (index is zero-based)
+- `label` and `name`: Always numeric index (0, 1, 2, ...)
+- `description`: Should match or summarize the scenario text for clarity
+
+**Example:**
+
+For a scenario: `{"scenario": "Payroll and Compensation"}`
+
+The output anchor is:
+```json
+{
+  "id": "conditionAgentAgentflow_0-output-0",
+  "label": 0,
+  "name": 0,
+  "description": "Payroll and Compensation"
+}
+```
+
+**Index Mapping:**
+- Scenario at index 0 → output-0
+- Scenario at index 1 → output-1
+- Scenario at index 2 → output-2
 - etc.
 
-Each output connects via an edge to the appropriate specialized agent.
+**Important:** Each output anchor connects via an edge to the appropriate specialized agent. Multiple outputs CAN connect to the same agent (see "Multiple Scenarios to Same Agent" pattern).
 
 ---
 
@@ -904,9 +1005,9 @@ The `agentModelConfig` object contains model-specific settings:
 
 ```json
 "agentModelConfig": {
-  "credential": "",
-  "modelName": "gpt-4o-mini",  // or "claude-sonnet-4-0", "claude-opus-4-0"
-  "temperature": 0.1,           // 0.1 for deterministic, 0.9 for creative
+  "credential": "OpenAI API Key",  // Standard credential name in Flowise (see note below)
+  "modelName": "gpt-4o-mini",      // or "claude-sonnet-4-0", "claude-opus-4-0"
+  "temperature": 0.1,              // 0.1 for deterministic, 0.9 for creative
   "streaming": true,
   "maxTokens": "",
   "topP": "",
@@ -923,9 +1024,33 @@ The `agentModelConfig` object contains model-specific settings:
   "reasoning": "",
   "reasoningEffort": "",
   "reasoningSummary": "",
-  "agentModel": "chatOpenAI"    // or "chatAnthropic", "chatGemini"
+  "agentModel": "chatOpenAI"       // or "chatAnthropic", "chatGemini"
 }
 ```
+
+**Credential Configuration:**
+
+The `credential` field references a credential name configured in the Flowise UI. Use these standard names:
+
+| Model Platform | Standard Credential Name | Field Value |
+|---------------|-------------------------|-------------|
+| OpenAI (ChatGPT) | `"OpenAI API Key"` | `"credential": "OpenAI API Key"` |
+| Anthropic (Claude) | `"Anthropic API Key"` | `"credential": "Anthropic API Key"` |
+| Google (Gemini) | `"Google API Key"` | `"credential": "Google API Key"` |
+
+**Important:**
+- ✅ Use the EXACT credential name (case-sensitive) that exists in Flowise
+- ✅ Create credentials once in Flowise UI, then reference by name in all agents
+- ✅ This allows credential rotation without modifying workflow JSON
+- ❌ Never hardcode API keys in JSON (security risk)
+- ❌ Empty string `""` works but requires manual configuration after import
+
+**Setup in Flowise:**
+1. Go to Flowise UI → Credentials
+2. Create new credential named exactly `"OpenAI API Key"` (for OpenAI models)
+3. Paste your actual API key
+4. Save
+5. All agents with `"credential": "OpenAI API Key"` will automatically use it
 
 #### Temperature Guidelines
 
@@ -1076,20 +1201,181 @@ User Input → Condition Node → [Scenario Matching] → Specialized Agent
 
 ### 3. Scout Mode Pattern
 
-Enables condition node to make intelligent routing decisions.
+**Definition:** Scout Mode is a design pattern for ConditionAgent instructions that enables intelligent, context-aware routing through detailed guidance and decision rules.
 
-**Key Elements:**
+**Core Concept:** Instead of simple keyword matching, Scout Mode instructions teach the routing agent HOW to analyze user intent, WHEN to ask clarifying questions, and HOW to handle ambiguous or multi-domain requests.
 
-1. **Detailed routing instructions** - Tell condition agent how to analyze and route
-2. **Keyword mapping** - Map common keywords to specific agents
-3. **Fallback routing** - What to do if intent unclear
-4. **Multi-intent handling** - How to handle questions spanning multiple domains
+**When to Use Scout Mode:**
+- Complex routing scenarios (8+ agents)
+- Overlapping domains or keywords
+- Need for clarification logic
+- Multi-intent handling required
+- Cross-functional routing rules
 
-**Example Instructions:**
+**Scout Mode vs. Simple Routing:**
+
+| Feature | Simple Routing | Scout Mode |
+|---------|---------------|------------|
+| Instructions | 2-3 sentences + keyword list | Structured sections with rules |
+| Keywords | List only | List + context rules + priorities |
+| Ambiguity | Direct to fallback | Attempt clarification first |
+| Multi-intent | Not addressed | Explicit handling rules |
+| Complexity | 3-5 scenarios | 8-20+ scenarios |
+| Use Case | Straightforward categories | Complex overlapping domains |
+
+---
+
+#### Scout Mode Key Elements
+
+**1. Detailed Routing Instructions**
+
+Tell the condition agent HOW to analyze requests, not just WHAT to look for:
 
 ```json
-"conditionAgentInstructions": "Analyze the user's question and determine their primary intent. Look for keywords:\n\n- Navigation: 'how do I find', 'where is', 'navigate to', 'page location'\n- Payroll: 'paycheck', 'direct deposit', 'payment', 'withholding'\n- HCM: 'employee data', 'compensation', 'job change'\n- Benefits: 'health insurance', 'enrollment', '401k'\n\nIf multiple intents detected, choose the PRIMARY intent. If unclear, route to General Help agent."
+"conditionAgentInstructions": "You are a routing specialist for HCM inquiries.
+
+ANALYSIS PROCESS:
+1. Identify primary keywords and their context
+2. Determine user's main goal (information, action, troubleshooting)
+3. Consider urgency indicators (ASAP, urgent, blocked)
+4. Check for role-specific requests (manager, employee, HR admin)
+
+Route to the agent that best matches the PRIMARY intent..."
 ```
+
+**2. Keyword Mapping with Context Rules**
+
+Map keywords to agents with conditional logic:
+
+```
+Navigation keywords: 'how do I find', 'where is', 'navigate to', 'page location'
+  → Route to Navigation Agent
+  → EXCEPTION: If also mentions 'permission denied' or 'access blocked', route to Security Agent instead
+
+Payroll keywords: 'paycheck', 'direct deposit', 'payment', 'withholding', 'salary'
+  → Route to Payroll Agent
+  → EXCEPTION: If question is 'How do I find my paycheck?' (navigational), route to Navigation Agent
+  → EXCEPTION: If about bank account update (not payment inquiry), route to Employee Data Agent
+```
+
+**3. Fallback Routing Logic**
+
+Define escalation path when intent is unclear:
+
+```
+If intent is ambiguous or spans multiple domains:
+1. Check if question is simple enough for General Help agent
+2. If technical complexity detected, default to most specialized agent
+3. If completely unclear, route to General Help with instruction to clarify
+
+Priority order:
+  Critical/Urgent → Route to most likely agent (bias toward action)
+  Informational → Route to General Help for triage
+  Troubleshooting → Route to technical specialist
+```
+
+**4. Multi-Intent Handling Rules**
+
+Handle questions spanning multiple domains:
+
+```
+When question involves MULTIPLE domains:
+- "I need to update my address for payroll and benefits"
+  → Route to Employee Data Agent (PRIMARY action: address update)
+  → Agent can coordinate with Payroll/Benefits as needed
+
+- "How do I find the payroll page and what's my YTD earnings?"
+  → Route to Payroll Agent (PRIMARY intent: payroll information)
+  → Navigation is secondary, agent can provide page location
+
+RULE: Choose the agent that handles the PRIMARY/CORE action, not the peripheral elements.
+```
+
+---
+
+#### Scout Mode Example (Full Implementation)
+
+```json
+"conditionAgentInstructions": "You are an intelligent HCM routing agent using Scout Mode.
+
+ROUTING PROCESS:
+1. Analyze user input for primary intent
+2. Identify keywords and context
+3. Apply conditional routing rules
+4. Select the most appropriate specialist
+
+KEYWORD → AGENT MAPPING:
+
+Navigation:
+- Keywords: 'how do I find', 'where is', 'navigate to', 'locate page', 'can't find'
+- Route to: Navigation Agent
+- Exception: If mentions 'access denied' → Security Agent
+
+Payroll:
+- Keywords: 'paycheck', 'direct deposit', 'payment', 'salary', 'withholding', 'W-2', 'pay stub'
+- Route to: Payroll Agent
+- Exception: If only about 'finding' paycheck → Navigation Agent
+
+Benefits:
+- Keywords: 'health insurance', 'dental', '401k', 'retirement', 'enrollment', 'FSA', 'HSA'
+- Route to: Benefits Agent
+- Exception: Simple benefit questions → General Help Agent
+
+Employee Data:
+- Keywords: 'update address', 'phone number', 'emergency contact', 'personal info', 'name change'
+- Route to: Employee Data Agent
+
+Time & Attendance:
+- Keywords: 'PTO', 'time off', 'vacation', 'sick leave', 'timesheet', 'hours worked'
+- Route to: Time & Attendance Agent
+
+MULTI-INTENT HANDLING:
+- If question spans multiple domains, route to the agent handling the PRIMARY action
+- Example: 'Update my address for payroll' → Employee Data Agent (core action: update)
+
+FALLBACK RULES:
+- If intent unclear and informational → General Help Agent
+- If intent unclear but urgent → Most likely specialist (bias toward action)
+- If completely ambiguous → General Help Agent with clarification request
+
+CONTEXT AWARENESS:
+- 'Urgent', 'ASAP', 'blocked' → Prioritize routing to action-capable agents
+- 'How do I...', 'Where can I...' → Often navigational, check for Navigation keywords first
+- Question marks with no action verbs → Likely informational, consider General Help"
+```
+
+---
+
+#### Scout Mode Benefits
+
+- ✅ Handles complex overlapping domains
+- ✅ Reduces mis-routing and user frustration
+- ✅ Enables context-aware decisions
+- ✅ Provides clear escalation paths
+- ✅ Supports clarification and triage logic
+
+---
+
+#### When NOT to Use Scout Mode
+
+- ✗ Simple, non-overlapping categories (use basic routing instead)
+- ✗ 3-5 clearly distinct scenarios
+- ✗ Keywords have no overlap
+- ✗ No need for clarification logic
+
+**Simple Routing Example (No Scout Mode Needed):**
+
+```json
+"conditionAgentInstructions": "Classify the inquiry:
+
+1. Technical Support - IT issues, system problems, errors
+2. Billing - Invoices, payments, charges
+3. General Help - All other inquiries
+
+Select the most appropriate category."
+```
+
+This simple case doesn't need Scout Mode - categories are distinct, no overlap, no complex rules needed.
 
 ### 4. Multi-Level Routing
 
@@ -1120,7 +1406,71 @@ Agent A's output connects to Agent B:
 }
 ```
 
-### 5. Knowledge Integration
+### 5. Multiple Scenarios to Same Agent Pattern
+
+**Valid Pattern**: Multiple scenario outputs CAN connect to the same agent.
+
+**When to Use:**
+- Different routing reasons but same handling logic
+- Analytics benefit from separate scenario tracking
+- User clarity through explicit scenario names vs. combined catch-all
+- Future flexibility (easy to split agents later if needed)
+
+**Example:**
+
+```json
+"conditionAgentScenarios": [
+  {"scenario": "Time and Attendance Issues"},     // Output 2
+  {"scenario": "Employee Data Updates"},          // Output 3
+  {"scenario": "Onboarding Questions"},           // Output 4
+  {"scenario": "Performance Management"}          // Output 5
+]
+
+// Edges - Multiple scenarios route to same agent:
+[
+  {
+    "source": "conditionAgentAgentflow_0",
+    "sourceHandle": "conditionAgentAgentflow_0-output-2",
+    "target": "agentAgentflow_5",  // HCM General Agent
+    "data": { "edgeLabel": "Time" }
+  },
+  {
+    "source": "conditionAgentAgentflow_0",
+    "sourceHandle": "conditionAgentAgentflow_0-output-3",
+    "target": "agentAgentflow_5",  // SAME agent
+    "data": { "edgeLabel": "Employee Data" }
+  },
+  {
+    "source": "conditionAgentAgentflow_0",
+    "sourceHandle": "conditionAgentAgentflow_0-output-4",
+    "target": "agentAgentflow_5",  // SAME agent
+    "data": { "edgeLabel": "Onboarding" }
+  },
+  {
+    "source": "conditionAgentAgentflow_0",
+    "sourceHandle": "conditionAgentAgentflow_0-output-5",
+    "target": "agentAgentflow_5",  // SAME agent
+    "data": { "edgeLabel": "Performance" }
+  }
+]
+```
+
+**Benefits:**
+- ✅ Clearer routing analytics (track which scenario triggered)
+- ✅ More explicit intent categories in condition instructions
+- ✅ Easier to split agents later without changing condition node
+- ✅ Better visibility in Flowise UI (multiple labeled edges)
+
+**Use Case Example:**
+
+An HCM General Agent can handle multiple categories that don't warrant dedicated specialists:
+- Time & Attendance (not complex enough for dedicated agent)
+- Employee Data updates (simple updates, not full data management)
+- Onboarding questions (general guidance, not full onboarding workflow)
+
+Rather than creating 4 separate agents or one vague "Other" scenario, use explicit scenarios that route to the same generalist agent.
+
+### 6. Knowledge Integration
 
 Agents can access two types of knowledge:
 
@@ -1150,7 +1500,7 @@ Agents can access two types of knowledge:
 ]
 ```
 
-### 6. Tool Configuration
+### 7. Tool Configuration
 
 #### Built-in Tools
 

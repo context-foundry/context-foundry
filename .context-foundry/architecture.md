@@ -1,412 +1,474 @@
-# Architecture: Smart Incremental Builds Phase 2
+# Architecture: Flowise Mermaid Generator Enhancement
 
-## System Architecture Overview
+## Overview
 
-```
-Phase 2 Incremental Build System
-═══════════════════════════════════════════════════════════════
-
-┌─────────────────────────────────────────────────────────────┐
-│                     Orchestrator                             │
-│  (tools/orchestrator_prompt.txt - Phase 2 integration)      │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-    ┌──────────────┼──────────────┬──────────────┬────────────┐
-    │              │              │              │            │
-    ▼              ▼              ▼              ▼            ▼
-┌────────┐   ┌─────────┐   ┌──────────┐   ┌─────────┐  ┌─────────┐
-│ Global │   │ Change  │   │Increment │   │  Test   │  │Increm.  │
-│ Scout  │   │Detector │   │ Builder  │   │ Impact  │  │  Docs   │
-│ Cache  │   │         │   │          │   │Analyzer │  │         │
-└────────┘   └─────────┘   └──────────┘   └─────────┘  └─────────┘
-    │              │              │              │            │
-    ▼              ▼              ▼              ▼            ▼
-┌────────────────────────────────────────────────────────────────┐
-│            ~/.context-foundry/global-cache/                    │
-│            .context-foundry/cache/ (project-local)             │
-└────────────────────────────────────────────────────────────────┘
-```
-
-## Module Breakdown
-
-### 1. Global Scout Cache (`tools/incremental/global_scout_cache.py`)
-
-**Purpose**: Share Scout analysis across all projects
-
-**API**:
-```python
-def get_global_cache_dir() -> Path:
-    """Returns ~/.context-foundry/global-cache/scout/"""
-
-def generate_global_scout_key(
-    task: str,
-    project_type: str,
-    tech_stack: List[str]
-) -> str:
-    """Generate cache key from semantic components"""
-
-def get_cached_scout_report_global(
-    task: str,
-    project_type: str,
-    tech_stack: List[str],
-    ttl_hours: int = 168  # 7 days
-) -> Optional[str]:
-    """Retrieve Scout report from global cache"""
-
-def save_scout_report_to_global_cache(
-    task: str,
-    project_type: str,
-    tech_stack: List[str],
-    scout_report: str,
-    metadata: Dict[str, Any]
-) -> None:
-    """Save Scout report to global cache with metadata"""
-
-def find_similar_cached_reports(
-    task: str,
-    project_type: str,
-    tech_stack: List[str],
-    similarity_threshold: float = 0.85
-) -> List[Tuple[str, float, Dict]]:
-    """Find similar cached reports by semantic similarity"""
-```
-
-**Cache Entry Structure**:
-```json
-{
-  "cache_key": "hash123...",
-  "task": "Build a weather app with React",
-  "normalized_task": "build weather app react",
-  "project_type": "web-app",
-  "tech_stack": ["react", "javascript", "es6"],
-  "created_at": "2025-01-13T00:00:00Z",
-  "accessed_count": 5,
-  "last_accessed": "2025-01-13T10:30:00Z",
-  "scout_report": "# Scout Report\n...",
-  "metadata": {
-    "success": true,
-    "build_duration_minutes": 12.5
-  }
-}
-```
-
-### 2. Change Detector (`tools/incremental/change_detector.py`)
-
-**Purpose**: Detect which files changed since last build
-
-**API**:
-```python
-def get_last_build_snapshot_path(working_directory: str) -> Path:
-    """Returns .context-foundry/last-build-snapshot.json"""
-
-def capture_build_snapshot(working_directory: str) -> Dict[str, Any]:
-    """Capture current state: git SHA + file hashes"""
-
-def detect_changes(
-    working_directory: str,
-    previous_snapshot: Dict[str, Any]
-) -> ChangeReport:
-    """Detect changes between snapshots"""
-
-@dataclass
-class ChangeReport:
-    changed_files: List[str]  # Files modified
-    added_files: List[str]    # New files
-    deleted_files: List[str]  # Removed files
-    unchanged_files: List[str]  # Same as before
-    change_percentage: float  # % of files changed
-    git_available: bool  # Whether git was used
-    git_diff_sha: Optional[str]  # Git commit SHA
-```
-
-**Snapshot Structure**:
-```json
-{
-  "timestamp": "2025-01-13T00:00:00Z",
-  "git_sha": "abc123...",
-  "git_available": true,
-  "file_hashes": {
-    "tools/mcp_server.py": "sha256...",
-    "tools/cache/scout_cache.py": "sha256..."
-  },
-  "total_files": 45
-}
-```
-
-### 3. Incremental Builder (`tools/incremental/incremental_builder.py`)
-
-**Purpose**: Preserve unchanged files, rebuild only affected files
-
-**API**:
-```python
-def build_dependency_graph(
-    working_directory: str,
-    source_files: List[str]
-) -> DependencyGraph:
-    """Build dependency graph from source code"""
-
-def find_affected_files(
-    graph: DependencyGraph,
-    changed_files: List[str]
-) -> List[str]:
-    """Find files affected by changes (transitive dependencies)"""
-
-def preserve_unchanged_files(
-    working_directory: str,
-    previous_build_dir: str,
-    unchanged_files: List[str]
-) -> int:
-    """Copy unchanged files from previous build"""
-
-def create_incremental_build_plan(
-    working_directory: str,
-    change_report: ChangeReport
-) -> BuildPlan:
-    """Generate build plan with preservation + rebuild lists"""
-
-@dataclass
-class BuildPlan:
-    files_to_preserve: List[str]  # Copy from previous build
-    files_to_rebuild: List[str]   # Regenerate
-    files_to_create: List[str]    # New files
-    dependency_order: List[str]   # Build order
-    estimated_time_saved_minutes: float
-```
-
-**Dependency Graph Structure**:
-```json
-{
-  "nodes": {
-    "tools/mcp_server.py": {
-      "type": "python",
-      "imports": ["tools.cache.scout_cache", "tools.config_manager"]
-    },
-    "tools/cache/scout_cache.py": {
-      "type": "python",
-      "imports": ["tools.cache"]
-    }
-  },
-  "edges": [
-    ["tools/mcp_server.py", "tools/cache/scout_cache.py"],
-    ["tools/mcp_server.py", "tools/config_manager.py"]
-  ]
-}
-```
-
-### 4. Test Impact Analyzer (`tools/incremental/test_impact_analyzer.py`)
-
-**Purpose**: Run only tests affected by code changes
-
-**API**:
-```python
-def build_test_coverage_map(
-    working_directory: str,
-    test_framework: str = "pytest"
-) -> TestCoverageMap:
-    """Build mapping of tests → source files"""
-
-def find_affected_tests(
-    coverage_map: TestCoverageMap,
-    changed_files: List[str]
-) -> List[str]:
-    """Find tests that need to run"""
-
-def create_test_plan(
-    working_directory: str,
-    change_report: ChangeReport,
-    coverage_map: Optional[TestCoverageMap] = None
-) -> TestPlan:
-    """Generate selective test execution plan"""
-
-@dataclass
-class TestPlan:
-    tests_to_run: List[str]  # Affected tests
-    tests_to_skip: List[str]  # Unaffected tests
-    run_all: bool  # Fallback to running all
-    reason: str  # Why this plan was chosen
-    estimated_time_saved_minutes: float
-```
-
-**Coverage Map Structure**:
-```json
-{
-  "framework": "pytest",
-  "tests": {
-    "tests/test_scout_cache.py::test_generate_key": {
-      "covers": ["tools/cache/scout_cache.py"],
-      "duration_seconds": 0.15
-    },
-    "tests/test_mcp_server.py::test_build": {
-      "covers": ["tools/mcp_server.py", "tools/config_manager.py"],
-      "duration_seconds": 2.3
-    }
-  },
-  "total_duration_seconds": 45.2
-}
-```
-
-### 5. Incremental Docs (`tools/incremental/incremental_docs.py`)
-
-**Purpose**: Update only documentation affected by changes
-
-**API**:
-```python
-def build_docs_manifest(
-    working_directory: str
-) -> DocsManifest:
-    """Map documentation files to source files"""
-
-def find_affected_docs(
-    manifest: DocsManifest,
-    changed_files: List[str]
-) -> List[str]:
-    """Find docs that need regeneration"""
-
-def create_docs_plan(
-    working_directory: str,
-    change_report: ChangeReport
-) -> DocsPlan:
-    """Generate selective documentation update plan"""
-
-@dataclass
-class DocsPlan:
-    docs_to_regenerate: List[str]  # Affected docs
-    docs_to_preserve: List[str]    # Unchanged docs
-    screenshots_to_preserve: List[str]  # Unchanged UI
-    readme_sections_to_update: List[str]  # Specific sections
-    regenerate_all: bool  # Fallback
-    reason: str
-```
-
-**Docs Manifest Structure**:
-```json
-{
-  "documentation": {
-    "docs/ARCHITECTURE.md": {
-      "sources": ["tools/mcp_server.py", "tools/orchestrator_prompt.txt"],
-      "auto_generated": false
-    },
-    "docs/screenshots/hero.png": {
-      "sources": ["src/main.js", "src/App.jsx"],
-      "auto_generated": true,
-      "ui_component": true
-    }
-  },
-  "readme_sections": {
-    "## Installation": {
-      "sources": ["setup.py", "requirements.txt"]
-    },
-    "## API Reference": {
-      "sources": ["tools/mcp_server.py"]
-    }
-  }
-}
-```
+Fix partially-implemented features in `mermaid_generator.py` by updating functions to use the new data structure (separate `shape`, `color`, `emoji` fields instead of `shape_color` tuple).
 
 ## File Structure
 
 ```
+extensions/flowise/
+├── mermaid_generator.py       # MODIFY: Fix generate_mermaid(), enhance interactive section, update CLI
+├── BEST_PRACTICES.md          # MODIFY: Add diagram generation documentation
+└── templates/                 # USE FOR TESTING: 14 real Flowise workflows
+    ├── Simple Agent Agents.json
+    ├── Agentic RAG Agents.json
+    └── ...12 more
+
 tools/
-├── incremental/
-│   ├── __init__.py
-│   ├── global_scout_cache.py    (NEW - 200 lines)
-│   ├── change_detector.py       (NEW - 250 lines)
-│   ├── incremental_builder.py   (NEW - 300 lines)
-│   ├── test_impact_analyzer.py  (NEW - 250 lines)
-│   └── incremental_docs.py      (NEW - 200 lines)
-├── cache/
-│   ├── __init__.py              (UPDATED - add Phase 2 imports)
-│   ├── scout_cache.py           (UNCHANGED - Phase 1)
-│   ├── test_cache.py            (UNCHANGED - Phase 1)
-│   └── cache_manager.py         (UPDATED - integrate Phase 2)
-└── orchestrator_prompt.txt      (UPDATED - Phase 2 integration)
-
-tests/
-├── test_global_scout_cache.py   (NEW)
-├── test_change_detector.py      (NEW)
-├── test_incremental_builder.py  (NEW)
-├── test_test_impact_analyzer.py (NEW)
-├── test_incremental_docs.py     (NEW)
-└── test_phase2_integration.py   (NEW)
-
-~/.context-foundry/
-└── global-cache/
-    └── scout/                    (NEW - global cache)
-        ├── cache-{hash1}.json
-        └── cache-{hash2}.json
-
-.context-foundry/
-├── cache/                        (EXISTING - Phase 1)
-├── last-build-snapshot.json      (NEW - Phase 2)
-├── build-graph.json              (NEW - Phase 2)
-├── test-coverage-map.json        (NEW - Phase 2)
-└── docs-manifest.json            (NEW - Phase 2)
+└── orchestrator_prompt.txt    # MODIFY: Update lines 1424-1485 with new CLI flags
 ```
 
-## Implementation Steps (Ordered)
+## Module Specifications
 
-1. **Create tools/incremental/ directory and __init__.py**
-2. **Implement global_scout_cache.py**
-   - Copy patterns from scout_cache.py
-   - Change cache location to global
-   - Add project_type + tech_stack to cache key
-   - Implement similarity search
-3. **Implement change_detector.py**
-   - Git diff logic with subprocess
-   - SHA256 hashing fallback
-   - Snapshot save/load
-   - Change detection and reporting
-4. **Implement incremental_builder.py**
-   - Dependency graph builder (static analysis)
-   - Transitive dependency finder
-   - File preservation logic
-   - Build plan generator
-5. **Implement test_impact_analyzer.py**
-   - Coverage map parser (pytest + coverage.py)
-   - Affected test finder
-   - Test plan generator
-6. **Implement incremental_docs.py**
-   - Docs manifest builder
-   - Affected docs finder
-   - Docs plan generator
-7. **Update tools/cache/__init__.py** to export Phase 2 modules
-8. **Update tools/cache/cache_manager.py** to manage Phase 2 caches
-9. **Update tools/orchestrator_prompt.txt** to use Phase 2 features
-10. **Add configuration to .env.example**
-11. **Write comprehensive tests**
-12. **Update documentation**
+### Module 1: mermaid_generator.py Core Fixes
+
+**File**: `extensions/flowise/mermaid_generator.py`
+
+**Changes Required**:
+
+#### Change 1: Fix generate_mermaid() function (Lines 314-370)
+
+**Current Issue**:
+```python
+# Line 334-336 (BROKEN):
+shape_template, color = info["shape_color"]  # ❌ KeyError: 'shape_color'
+safe_label = sanitize_label(info["label"])
+node_def = f"    {node_id}{shape_template.format(safe_label)}"
+```
+
+**Fix**:
+```python
+# NEW (Lines 334-340):
+shape_template = info["shape"]
+color = info["color"]
+emoji = info["emoji"]
+safe_label = sanitize_label(info["label"])
+# Include emoji in label
+label_with_emoji = f"{emoji} {safe_label}"
+node_def = f"    {node_id}{shape_template.format(label_with_emoji)}"
+```
+
+**Rationale**: 
+- `extract_node_info()` now returns dict with separate keys (lines 126-159)
+- Must access fields individually, not as tuple
+- Emoji should be part of the node label for visual enhancement
+
+#### Change 2: Dynamic Layout Direction (Line 329)
+
+**Current**:
+```python
+# Line 329 (HARDCODED):
+"graph TD"
+```
+
+**Fix**:
+```python
+# Line 329 (DYNAMIC):
+direction = detect_layout_direction(nodes, edges)
+mermaid_lines.append(f"graph {direction}")
+```
+
+**Rationale**:
+- `detect_layout_direction()` already exists (lines 226-254)
+- Returns "TD" for simple flows (≤5 nodes)
+- Returns "LR" for complex flows (>10 nodes or ≥2 branches)
+- Improves readability of generated diagrams
+
+#### Change 3: Enhance generate_interactive_section() (Lines 373-399)
+
+**Current**: Basic agent table only
+
+**Add**:
+1. Badges at top (before `<details>`)
+2. Flow metadata section
+3. Legend after details
+
+**New Structure**:
+```python
+def generate_interactive_section(workflow_json: Dict, include_badges: bool = True, include_legend: bool = True) -> str:
+    """Generate an interactive/collapsible section with agent details."""
+    nodes = workflow_json.get("nodes", [])
+    metadata = extract_flow_metadata(workflow_json)
+    
+    sections = []
+    
+    # 1. Add badges if requested
+    if include_badges:
+        badges = generate_badges(metadata)
+        sections.extend([badges, "", "---", ""])
+    
+    # 2. Flow metadata
+    sections.extend([
+        f"**Total Nodes**: {metadata['total_nodes']} | ",
+        f"**Agents**: {metadata['agent_count']} | ",
+        f"**Complexity**: {metadata['complexity']}",
+        "",
+    ])
+    
+    # 3. Collapsible agent details
+    sections.extend([
+        "<details>",
+        "<summary><b>🔍 View Agent Details (Click to Expand)</b></summary>",
+        "",
+        "| Agent | Type | Description |",
+        "|-------|------|-------------|"
+    ])
+    
+    for node in nodes:
+        data = node.get("data", {})
+        label = sanitize_label(data.get("label", "Unlabeled"))
+        node_type = data.get("type", "Unknown")
+        emoji = get_node_emoji(node_type)  # ADD emoji to table
+        description = sanitize_label(data.get("description", "No description"))
+        
+        # Include emoji in agent column
+        sections.append(f"| {emoji} {label} | {node_type} | {description} |")
+    
+    sections.extend(["", "</details>", ""])
+    
+    # 4. Add legend if requested
+    if include_legend:
+        sections.extend(["", generate_legend()])
+    
+    return "\n".join(sections)
+```
+
+**Rationale**:
+- Badges provide quick overview (nodes, agents, complexity)
+- Metadata shows key stats
+- Emojis in table improve visual scanning
+- Legend helps users understand node types
+
+#### Change 4: Update main() CLI (Lines 402-447)
+
+**Add new flags**:
+```python
+# Parse new arguments
+include_badges = "--badges" in sys.argv or "--interactive" in sys.argv
+include_legend = "--legend" in sys.argv or "--interactive" in sys.argv
+# Make --interactive default if no other flags specified
+if len(sys.argv) == 3:  # Only input and output files
+    include_interactive = True
+    include_badges = True
+    include_legend = True
+else:
+    include_interactive = "--interactive" in sys.argv
+
+# Update help text
+print("Options:")
+print("  --include-details    Include detailed node descriptions")
+print("  --interactive        Include interactive/collapsible agent details (default if no flags)")
+print("  --badges             Include flow metadata badges")
+print("  --legend             Include node type legend")
+print("  --no-interactive     Disable interactive features")
+```
+
+**Update interactive section call**:
+```python
+# Line 433-435 (CURRENT):
+if include_interactive:
+    interactive_section = generate_interactive_section(workflow_json)
+
+# NEW:
+if include_interactive:
+    interactive_section = generate_interactive_section(
+        workflow_json,
+        include_badges=include_badges,
+        include_legend=include_legend
+    )
+```
+
+**Rationale**:
+- `--interactive` becomes default (best UX)
+- `--badges` and `--legend` control individual features
+- `--no-interactive` allows disabling for minimal output
+- Backward compatible: existing calls work unchanged
+
+### Module 2: Documentation Updates
+
+**File**: `extensions/flowise/BEST_PRACTICES.md`
+
+**Add New Section** (after line 1018, before troubleshooting):
+
+```markdown
+---
+
+## Mermaid Diagram Generation
+
+Context Foundry automatically generates beautiful Mermaid diagrams for Flowise workflows.
+
+### Features
+
+**✅ Authentic Flowise Styling**
+- 12+ node types with correct shapes and colors
+- Emoji icons for quick visual identification
+- Intelligent layout direction (TD vs LR based on complexity)
+
+**✅ Flow Metadata Badges**
+- Total nodes count
+- Agent count
+- Complexity level (Simple/Moderate/Complex)
+- Memory and tools indicators
+
+**✅ Interactive Documentation**
+- Collapsible agent details table
+- Visual node type legend
+- Emoji-enhanced readability
+
+### Generated Output Example
+
+```markdown
+![Nodes](https://img.shields.io/badge/Nodes-8-blue) ![Agents](https://img.shields.io/badge/Agents-5-green) ![Complexity](https://img.shields.io/badge/Complexity-Moderate-yellow)
+
+---
+
+**Total Nodes**: 8 | **Agents**: 5 | **Complexity**: Moderate
+
+[Mermaid diagram here]
+
+<details>
+<summary><b>🔍 View Agent Details</b></summary>
+
+| Agent | Type | Description |
+|-------|------|-------------|
+| 🚀 Start | Start | Workflow entry point |
+| 🎯 Router | ConditionAgent | Intent detection |
+| 🤖 Technical | Agent | Technical support |
+...
+
+</details>
+
+### 🎨 Node Type Legend
+| Icon | Type | Description |
+|------|------|-------------|
+| 🚀 | Start | Entry point |
+| 🤖 | Agent | AI agent |
+...
+```
+
+### CLI Usage
+
+**Basic usage** (all features enabled by default):
+```bash
+python3 mermaid_generator.py workflow.json DIAGRAM.md
+```
+
+**Custom options**:
+```bash
+# Minimal output (no badges, no legend)
+python3 mermaid_generator.py workflow.json DIAGRAM.md --no-interactive
+
+# Badges only
+python3 mermaid_generator.py workflow.json DIAGRAM.md --badges
+
+# Legend only
+python3 mermaid_generator.py workflow.json DIAGRAM.md --legend
+```
+
+### Layout Direction
+
+The generator intelligently chooses graph direction:
+
+**Top-Down (TD)** - Simple flows:
+- ≤5 nodes
+- Linear structure
+- Easy to follow vertically
+
+**Left-Right (LR)** - Complex flows:
+- >10 nodes
+- Multiple branches (≥2 branching points)
+- Better horizontal space utilization
+
+### Embedding in README
+
+The orchestrator automatically embeds diagrams prominently in README:
+
+```markdown
+# Project Name
+
+Description...
+
+## 📊 Workflow Architecture
+
+**[View Full Workflow Diagram →](./WORKFLOW-DIAGRAM.md)**
+
+[Badges here]
+
+[Mermaid diagram here]
+
+[Interactive details here]
+
+---
+
+## Overview
+...
+```
+
+### Node Type Reference
+
+All 14 supported Flowise node types render with authentic colors:
+
+| Type | Shape | Color | Icon |
+|------|-------|-------|------|
+| Start | Stadium | Green | 🚀 |
+| Agent | Rectangle | Teal | 🤖 |
+| ConditionAgent | Hexagon | Pink | 🎯 |
+| LLM | Rounded | Blue | 💬 |
+| Tool | Trapezoid | Brown | 🔧 |
+| ExecuteFlow | Rectangle | Olive | ▶️ |
+| CustomFunction | Rectangle | Purple | ⚙️ |
+| HTTP | Rectangle | Red | 🌐 |
+| HumanInput | Hexagon | Indigo | 👤 |
+| DirectReply | Rectangle | Mint | 💭 |
+| Loop | Stadium | Coral | 🔄 |
+| Iteration | Rectangle | Lavender | 🔁 |
+| StickyNote | Rectangle | Yellow | 📝 |
+| Condition | Diamond | Orange | 🔀 |
+
+---
+```
+
+**Rationale**: Comprehensive documentation for users and future maintainers
+
+### Module 3: Orchestrator Prompt Update
+
+**File**: `tools/orchestrator_prompt.txt`
+
+**Lines to Modify**: 1424-1485 (Flowise diagram generation section)
+
+**Current** (approximate line 1450):
+```
+python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+  <workflow-name>.json \
+  WORKFLOW-DIAGRAM.md \
+  --interactive
+```
+
+**Update to**:
+```
+python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+  <workflow-name>.json \
+  WORKFLOW-DIAGRAM.md \
+  --interactive \
+  --badges \
+  --legend
+```
+
+**Rationale**: Enable all new features by default in orchestrator
+
+## Implementation Steps
+
+1. **Fix generate_mermaid() critical bug**
+   - Replace `shape_color` tuple access with individual field access
+   - Add emoji to node labels
+   - Use dynamic layout direction
+
+2. **Enhance generate_interactive_section()**
+   - Add badges parameter
+   - Add legend parameter
+   - Include metadata section
+   - Use emojis in agent table
+
+3. **Update main() CLI**
+   - Add `--badges`, `--legend`, `--no-interactive` flags
+   - Make `--interactive` default
+   - Update help text
+
+4. **Update BEST_PRACTICES.md**
+   - Add Mermaid Diagram Generation section
+   - Include examples and reference tables
+
+5. **Update orchestrator_prompt.txt**
+   - Add `--badges --legend` to CLI invocation
 
 ## Testing Requirements
 
-### Unit Tests
-- Each module tested independently
-- Mock file system operations
-- Test both git and non-git scenarios
-- Test graceful fallbacks
+### Unit Testing (Manual)
 
-### Integration Tests
-- Phase 1 + Phase 2 working together
-- Full build with incremental features
-- Verify caching across phases
+**Test 1: Simple Flow (TD Layout)**
+```bash
+python3 extensions/flowise/mermaid_generator.py \
+  extensions/flowise/templates/Simple\ Agent\ Agents.json \
+  /tmp/test-simple.md
+```
 
-### Performance Benchmarks
-- Measure actual speedup on real projects
-- Compare Phase 1 vs Phase 2 performance
-- Validate 70-90% speedup claims
+**Verify**:
+- Layout is `graph TD`
+- All nodes have emojis: `🚀 Start`, `🎯 Router`, `🤖 Agent`
+- Badges display correctly
+- Legend includes all node types in the flow
 
-### Regression Tests
-- Ensure Phase 1 functionality unchanged
-- Backward compatibility tests
-- Existing cache formats still valid
+**Test 2: Complex Flow (LR Layout)**
+```bash
+python3 extensions/flowise/mermaid_generator.py \
+  extensions/flowise/templates/Warehouse\ Operations\ Agents.json \
+  /tmp/test-complex.md
+```
+
+**Verify**:
+- Layout is `graph LR` (8+ agents = complex)
+- All node types render with correct shapes/colors
+- Agent count badge shows correct number
+
+**Test 3: All 14 Templates**
+```bash
+for template in extensions/flowise/templates/*.json; do
+    echo "Testing: $template"
+    python3 extensions/flowise/mermaid_generator.py "$template" /tmp/test-output.md
+    if [ $? -ne 0 ]; then
+        echo "FAILED: $template"
+        exit 1
+    fi
+done
+echo "✅ All 14 templates passed"
+```
+
+**Test 4: CLI Flags**
+```bash
+# Test --badges only
+python3 mermaid_generator.py template.json /tmp/test.md --badges
+
+# Test --legend only
+python3 mermaid_generator.py template.json /tmp/test.md --legend
+
+# Test --no-interactive
+python3 mermaid_generator.py template.json /tmp/test.md --no-interactive
+```
+
+### Integration Testing
+
+**Test 5: GitHub Markdown Rendering**
+1. Generate diagram for Simple Agent template
+2. Copy output to GitHub README
+3. Verify:
+   - Mermaid renders correctly
+   - Emojis display
+   - Badges load (shields.io URLs)
+   - Interactive details expand/collapse
 
 ## Success Criteria
 
-✅ Global Scout cache reduces Scout time by 80%+ for similar projects  
-✅ Change detection works with and without git  
-✅ Incremental Builder preserves 70%+ files on small changes  
-✅ Test impact analysis runs 60% fewer tests  
-✅ Docs updates skip 90%+ unchanged content  
-✅ All existing tests pass  
-✅ New tests achieve 90%+ coverage  
-✅ Performance benchmarks validate claims  
-✅ No breaking changes to Phase 1
+✅ `generate_mermaid()` uses new data structure (no KeyError)
+✅ All node labels include emojis
+✅ Layout direction is dynamic (TD for simple, LR for complex)
+✅ Interactive section includes badges and legend
+✅ CLI has `--badges`, `--legend`, `--no-interactive` flags
+✅ All 14 template flows generate without errors
+✅ Documentation updated with examples
+✅ Orchestrator prompt updated with new flags
+✅ Backward compatible (existing calls work)
+
+## Risk Mitigation
+
+**Risk**: Emoji rendering fails in some Markdown viewers
+**Mitigation**: Test with GitHub (primary target), fall back gracefully
+
+**Risk**: Badge URLs malformed
+**Mitigation**: Use `urllib.parse.quote()` for special characters
+
+**Risk**: Breaking existing users
+**Mitigation**: Make features default but allow disabling with `--no-*` flags
+
+**Risk**: Layout detection chooses wrong direction
+**Mitigation**: Tune thresholds based on test results (currently: 5 nodes = TD, 10+ = LR)

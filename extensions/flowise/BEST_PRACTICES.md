@@ -550,6 +550,237 @@ Problem: Too vague, single keyword
 4. ✅ Be specific about intent
 5. ❌ Don't overlap scenarios
 
+### Keyword Conflict Resolution
+
+**Problem:** Keywords that could match multiple scenarios cause routing ambiguity.
+
+#### Strategy 1: Specificity Hierarchy
+
+Make scenarios more specific to avoid overlap:
+
+**Before (Overlapping):**
+```json
+{
+  "scenario": "Questions about time"  // Too vague
+}
+{
+  "scenario": "Questions about payroll"  // Could include time-related questions
+}
+```
+
+**After (Specific):**
+```json
+{
+  "scenario": "Questions about time off, PTO, vacation, leave requests, or time-away balances"
+}
+{
+  "scenario": "Questions about payroll timing, payment dates, pay periods, or paycheck schedules"
+}
+```
+
+**Result:** "When do I get paid?" clearly routes to Payroll. "When can I take PTO?" routes to Time Off.
+
+---
+
+#### Strategy 2: Negative Keywords
+
+Use exclusion clauses to disambiguate:
+
+```json
+{
+  "scenario": "Payroll questions about salary, payment, deductions, or withholding (NOT about updating bank account - that's Employee Data)"
+}
+```
+
+This explicitly tells the router what NOT to route to Payroll, reducing mis-classification.
+
+---
+
+#### Strategy 3: Conditional Routing in Instructions
+
+When keywords overlap, use conditional logic in `conditionAgentInstructions`:
+
+```json
+{
+  "conditionAgentInstructions": "...
+
+KEYWORD CONFLICT RESOLUTION:
+
+'Payroll' keyword appears in question:
+  - If combined with 'bank account', 'routing number', 'direct deposit setup' → Employee Data Agent
+  - If combined with 'missing payment', 'pay stub', 'deduction', 'W-2' → Payroll Agent
+  - If only 'How do I find payroll?' (navigational) → Navigation Agent
+
+'Time' keyword appears in question:
+  - If combined with 'off', 'PTO', 'vacation', 'leave' → Time & Attendance Agent
+  - If combined with 'payroll runs', 'payment date', 'when paid' → Payroll Agent
+  - If combined with 'submit timesheet', 'clock in' → Time & Attendance Agent
+
+..."
+}
+```
+
+---
+
+#### Strategy 4: Context-Based Disambiguation
+
+Use surrounding words to determine intent:
+
+**Example: "Address" keyword**
+
+- "Update my address" → Employee Data Agent (data modification)
+- "What's the office address?" → General Info/Facilities Agent
+- "Email address change" → IT/Systems Agent
+
+**Implementation:**
+
+```json
+{
+  "conditionAgentInstructions": "...
+
+'Address' disambiguation:
+- Personal/home address updates → Employee Data
+- Office/facility location → Facilities/General Help
+- Email/system address → IT Support
+
+..."
+}
+```
+
+---
+
+#### Strategy 5: Primary Intent Rule
+
+When a question has multiple valid keywords, route based on PRIMARY intent:
+
+**Question:** "I need to update my address for payroll and benefits"
+
+**Analysis:**
+- Keywords match: Employee Data (address update), Payroll, Benefits
+- PRIMARY action: Updating address (a data modification)
+- SECONDARY effects: Impacts payroll and benefits (but not separate actions)
+
+**Route to:** Employee Data Agent
+
+**Rule:** "When multiple domains detected, route to the agent handling the PRIMARY user action, not peripheral impacts."
+
+---
+
+#### Strategy 6: Priority Order
+
+Define explicit priority when keywords truly conflict:
+
+```json
+{
+  "conditionAgentInstructions": "...
+
+PRIORITY ORDER FOR OVERLAPPING KEYWORDS:
+
+If a question could match multiple scenarios, use this priority:
+1. Security/Access issues (highest priority - always route here first)
+2. Data modification actions (updates, changes, corrections)
+3. Specialized domain agents (Payroll, Benefits, etc.)
+4. Navigation assistance
+5. General information (lowest priority - fallback)
+
+Example: 'Update my payroll withholding'
+- Matches: Employee Data (update action) AND Payroll (withholding)
+- Priority: Data modification > Specialized domain
+- Route to: Employee Data Agent
+
+..."
+}
+```
+
+---
+
+### Conflict Resolution Examples
+
+#### Example 1: "Payroll" + "Bank Account"
+
+**Ambiguity:** Both Payroll and Employee Data agents could handle this.
+
+**Solution:**
+```json
+{
+  "scenario": "Employee Data Updates",
+  "keywords": "update address, phone, emergency contact, bank account, routing number"
+}
+
+{
+  "scenario": "Payroll Inquiries",
+  "keywords": "paycheck, pay stub, salary, deductions (NOT bank account setup)"
+}
+
+// In instructions:
+"Bank account or direct deposit SETUP → Employee Data
+Bank account inquiry (verify deposit received) → Payroll"
+```
+
+---
+
+#### Example 2: "Benefits" + "Enrollment"
+
+**Ambiguity:** Could be navigation ("How do I enroll?") or benefits question ("What can I enroll in?").
+
+**Solution:**
+```json
+{
+  "conditionAgentInstructions": "...
+
+'Enrollment' + 'Benefits':
+- 'How do I...' or 'Where do I...' (navigational phrasing) → Navigation Agent
+- 'What benefits...', 'Which plans...', 'Coverage details' (informational) → Benefits Agent
+- 'Enroll me...', 'I want to enroll' (action during open enrollment) → Benefits Agent
+
+..."
+}
+```
+
+---
+
+#### Example 3: "Time" (Multiple Meanings)
+
+**Ambiguity:** Could mean time off, time tracking, or temporal timing.
+
+**Solution:**
+```json
+{
+  "scenario": "Time and Attendance - Questions about PTO, vacation, sick leave, time-off balances, or timesheet submission"
+}
+
+{
+  "scenario": "Payroll - Questions about payment dates, pay periods, when payroll runs, or paycheck timing"
+}
+
+// Clear differentiation through specific keywords
+// "Time off" vs "Time payroll runs" → Different agents
+```
+
+---
+
+### Testing for Conflicts
+
+**Validation Process:**
+
+1. List all keywords across all scenarios
+2. Identify overlaps (same word in multiple scenarios)
+3. Create test questions using overlapping keywords
+4. Verify routing matches PRIMARY intent
+5. Add disambiguation rules if needed
+
+**Example Test Matrix:**
+
+| Test Question | Keyword Overlap | Expected Route | Actual Route | Status |
+|--------------|----------------|----------------|--------------|--------|
+| "Update bank account" | Payroll + Employee Data | Employee Data | ✅ Employee Data | Pass |
+| "When is payroll?" | Payroll + Time | Payroll | ✅ Payroll | Pass |
+| "How do I find benefits?" | Benefits + Navigation | Navigation | ❌ Benefits | Fail - Add rule |
+
+When tests fail, add conditional routing rules or refine scenario keywords.
+
+---
+
 ### Fallback Handling
 
 **General agent pattern**:
@@ -571,6 +802,470 @@ Every multi-agent flow should have a **General** or **Help** agent as fallback.
 ```html
 <p><em>You are a General Help agent.</em> You assist with questions that don't fit other specialized agents, provide clarification, and help users navigate to the right agent. You ask clarifying questions when intent is unclear and maintain a friendly, helpful tone. If you determine the user needs a specialized agent, guide them by saying "Let me connect you with our [X] specialist who can help with that."</p>
 ```
+
+### Edge Label Conventions
+
+**Purpose:** Edge labels in Flowise provide visual clarity about routing paths from ConditionAgent to specialized agents.
+
+#### Recommendation: Use Descriptive Labels
+
+**✅ Best Practice:**
+```json
+{
+  "source": "conditionAgentAgentflow_0",
+  "sourceHandle": "conditionAgentAgentflow_0-output-2",
+  "target": "agentAgentflow_5",
+  "data": {
+    "edgeLabel": "Payroll"  // Descriptive, not "2"
+  }
+}
+```
+
+**❌ Avoid:**
+```json
+{
+  "data": {
+    "edgeLabel": "2"  // Numeric only - unclear what scenario this represents
+  }
+}
+```
+
+#### Benefits of Descriptive Labels
+
+1. **✅ Easier to read workflow** in Flowise UI
+2. **✅ Self-documenting** - edge label shows what scenario triggers it
+3. **✅ Helpful for troubleshooting** routing issues
+4. **✅ Better for stakeholder demos** - non-technical viewers can understand flow
+5. **✅ Reduces need for external documentation**
+
+#### Label Naming Pattern
+
+Use the first 1-3 words of the scenario description as the edge label:
+
+| Scenario | Edge Label | Notes |
+|----------|-----------|-------|
+| `"Payroll and Compensation"` | `"Payroll"` | Shortened to core keyword |
+| `"Benefits Administration"` | `"Benefits"` | Single word sufficient |
+| `"Time and Attendance"` | `"Time"` or `"Time & Attendance"` | Either works, prefer brevity |
+| `"Employee Data Updates"` | `"Employee Data"` | Two words for clarity |
+| `"General HR Support"` | `"General HR"` | Keep descriptive |
+
+#### Multiple Edges to Same Agent
+
+When multiple scenarios route to the same agent, descriptive labels are **essential**:
+
+```json
+// Scenario 2 → General Agent
+{
+  "data": {
+    "edgeLabel": "Time"  // Clear which scenario triggered
+  }
+},
+// Scenario 3 → General Agent (SAME agent)
+{
+  "data": {
+    "edgeLabel": "Employee Data"  // Different label, same target
+  }
+},
+// Scenario 4 → General Agent (SAME agent)
+{
+  "data": {
+    "edgeLabel": "Onboarding"  // Another distinct label
+  }
+}
+```
+
+**Why important:** Without descriptive labels, you can't tell why the General Agent was selected. Labels provide routing traceability.
+
+#### Edge Label Length Guidelines
+
+- **Optimal:** 1-3 words (e.g., "Payroll", "Benefits", "Employee Data")
+- **Maximum:** 15-20 characters (longer labels wrap in Flowise UI)
+- **Avoid:** Full scenario text (too verbose)
+
+**Examples:**
+
+```
+✅ "Payroll"              (8 chars)
+✅ "Benefits"             (8 chars)
+✅ "Time Off"             (8 chars)
+✅ "Employee Data"        (13 chars)
+✅ "General Help"         (12 chars)
+❌ "Payroll and Compensation Issues" (37 chars - too long)
+```
+
+#### Technical Format
+
+Edge labels are set in the `data.edgeLabel` field:
+
+```json
+{
+  "source": "conditionAgentAgentflow_0",
+  "sourceHandle": "conditionAgentAgentflow_0-output-[INDEX]",
+  "target": "agentAgentflow_[N]",
+  "targetHandle": "agentAgentflow_[N]",
+  "data": {
+    "sourceColor": "#ff8fab",  // Condition node color (pink)
+    "targetColor": "#4DD0E1",  // Agent node color (teal)
+    "edgeLabel": "[DESCRIPTIVE_LABEL]",  // Key field
+    "isHumanInput": false
+  },
+  "type": "agentFlow",
+  "id": "[SOURCE]-[SOURCE_HANDLE]-[TARGET]-[TARGET_HANDLE]"
+}
+```
+
+#### Consistency Across Workflow
+
+Maintain consistent naming style across all edges:
+
+**✅ Consistent:**
+```
+"Payroll"
+"Benefits"
+"Time Off"
+"Employee Data"
+```
+All use short, noun-based labels.
+
+**❌ Inconsistent:**
+```
+"Payroll"
+"Benefits Administration Team"
+"Time"
+"Employee Data Updates and Changes"
+```
+Mixed lengths and styles - harder to scan visually.
+
+---
+
+## ConditionAgent Instructions Design
+
+### Overview
+
+The `conditionAgentInstructions` field is the "brain" of your routing logic. Well-designed instructions lead to accurate routing; poor instructions cause frustration and mis-routing.
+
+### Two Proven Patterns
+
+#### Pattern A: Brief Keyword-Based (3-8 Scenarios)
+
+**When to Use:**
+- Simple routing with clear categories
+- Limited keyword overlap
+- Straightforward domain boundaries
+- Small number of agents (3-8)
+
+**Structure:**
+```
+[One sentence role definition]
+
+[Action directive]
+
+[Numbered or bulleted list of categories with keywords]
+
+[Final instruction to select category]
+```
+
+**Example:**
+
+```json
+{
+  "conditionAgentInstructions": "You are a ServiceNow ticket classifier for HCM issues.
+
+Analyze the ticket and classify it into ONE category:
+
+1. Payroll and Compensation - Issues with salary, pay, deductions, bonuses, withholding
+2. Benefits Administration - Health insurance, retirement, benefits enrollment, FSA, HSA
+3. Time and Attendance - PTO, sick leave, timesheets, schedules, hours worked
+4. Employee Data - Personal info updates, contact changes, address updates
+5. General HR Support - Other HR inquiries that don't fit above categories
+
+Select the most appropriate category based on the primary intent."
+}
+```
+
+**Characteristics:**
+- ✅ Fast routing decisions (low latency)
+- ✅ Easy to maintain and update
+- ✅ Clear keyword-to-agent mapping
+- ✅ Works well for non-overlapping domains
+- ❌ Limited guidance for edge cases
+- ❌ No complex conditional rules
+
+**Use this pattern when:** Categories are distinct, keywords don't overlap significantly, and routing decisions are straightforward.
+
+---
+
+#### Pattern B: Comprehensive Structured (8+ Scenarios)
+
+**When to Use:**
+- Complex routing with overlapping domains
+- Need for conditional routing rules
+- Cross-functional workflows
+- Guardrails required (PII, compliance)
+- Large number of agents (8-20+)
+
+**Structure (Plain Text or HTML):**
+
+```
+[Detailed Persona & Role]
+
+[Routing Process/Steps]
+
+[Keyword → Agent Mapping with Exceptions]
+
+[Multi-Intent Handling Rules]
+
+[Fallback/Escalation Logic]
+
+[Context Awareness Rules]
+```
+
+**Example (Plain Text):**
+
+```json
+{
+  "conditionAgentInstructions": "You are an intelligent Workday Support Router with expertise in HCM processes.
+
+ROUTING PROCESS:
+1. Analyze the user's question for primary intent
+2. Identify keywords and their context
+3. Apply conditional routing rules below
+4. Select the most appropriate specialist
+
+KEYWORD → AGENT MAPPING:
+
+Navigation Basics:
+- Keywords: 'how do I find', 'where is', 'navigate to', 'locate', 'can't find', 'page location'
+- Route to: Agent.NavigationBasics
+- Exception: If mentions 'permission denied' or 'access blocked' → Agent.SecurityAccess
+
+Payroll:
+- Keywords: 'paycheck', 'pay stub', 'salary', 'withholding', 'direct deposit', 'W-2', 'payment'
+- Route to: Agent.Payroll
+- Exception: If question is 'How do I find my paycheck?' (navigational intent) → Agent.NavigationBasics
+- Exception: If about updating bank account (not payment inquiry) → Agent.EmployeeData
+
+Benefits:
+- Keywords: 'health insurance', 'dental', '401k', 'retirement', 'FSA', 'HSA', 'enrollment'
+- Route to: Agent.Benefits
+- Exception: General benefit questions during non-enrollment periods → Agent.GeneralHelp
+
+Employee Data:
+- Keywords: 'update address', 'phone number', 'emergency contact', 'personal info', 'name change', 'demographic'
+- Route to: Agent.EmployeeData
+
+MULTI-INTENT HANDLING:
+- If question spans multiple domains (e.g., 'Update my address for payroll and benefits'):
+  → Route to agent handling PRIMARY action (Employee Data for address update)
+  → That agent can coordinate with other domains as needed
+
+- If question has navigational + functional intent (e.g., 'How do I access payroll to check my pay?'):
+  → Route to functional agent (Payroll) - they can provide navigation guidance
+
+FALLBACK RULES:
+- Unclear informational questions → Agent.GeneralHelp
+- Unclear urgent/action requests → Route to most likely specialist
+- Completely ambiguous → Agent.GeneralHelp with instruction to clarify
+
+CONTEXT AWARENESS:
+- Urgency indicators ('urgent', 'ASAP', 'blocked', 'critical') → Bias toward action-capable specialist
+- Navigation phrases ('how do I', 'where can I') → Check Navigation keywords first
+- Questions with no action verbs → Likely informational, consider General Help"
+}
+```
+
+**Example (HTML-Formatted):**
+
+```json
+{
+  "conditionAgentInstructions": "<h3>Agent Persona & Core Directive</h3>
+<p>You are a <strong>Workday Support Router</strong> with deep expertise in HCM processes, system navigation, and HR operations. Your mission is to analyze user inquiries and route them to the most appropriate specialist agent.</p>
+
+<h3>Primary Flow</h3>
+<ol>
+<li><strong>Greet & Inquire:</strong> Understand the user's core need</li>
+<li><strong>Analyze Intent:</strong> Identify primary keywords and context</li>
+<li><strong>Apply Rules:</strong> Use keyword mapping and conditional logic below</li>
+<li><strong>Route:</strong> Connect user to the best specialist</li>
+</ol>
+
+<h3>Critical Guardrails</h3>
+<ul>
+<li>⛔ Never ask for sensitive PII (SSN, bank details) - route to secure agents</li>
+<li>⛔ Do not attempt to answer specialized questions - route to experts</li>
+<li>⛔ If in doubt, route to General Help for triage</li>
+</ul>
+
+<h3>Intent → Agent Mapping</h3>
+
+<h4>Payroll Specialist</h4>
+<ul>
+<li><strong>Keywords/Intents:</strong> 'paycheck', 'pay stub', 'direct deposit', 'salary', 'W-2', 'withholding', 'YTD earnings', 'payment date', 'deductions'</li>
+<li><strong>Handoff:</strong> Agent.Payroll</li>
+<li><strong>Exception:</strong> If question is <em>only</em> about finding/navigating to payroll page → Agent.NavigationBasics</li>
+<li><strong>Exception:</strong> If about bank account updates → Agent.EmployeeData</li>
+</ul>
+
+<h4>Benefits Administration</h4>
+<ul>
+<li><strong>Keywords/Intents:</strong> 'health insurance', 'dental', 'vision', '401k', 'retirement', 'FSA', 'HSA', 'enrollment', 'dependent', 'life insurance'</li>
+<li><strong>Handoff:</strong> Agent.Benefits</li>
+<li><strong>Exception:</strong> Simple benefit FAQ during non-enrollment → Agent.GeneralHelp</li>
+</ul>
+
+<h4>Navigation Basics</h4>
+<ul>
+<li><strong>Keywords/Intents:</strong> 'how do I find', 'where is', 'navigate to', 'page location', 'can't find', 'worklet', 'menu', 'search'</li>
+<li><strong>Handoff:</strong> Agent.NavigationBasics</li>
+<li><strong>Exception:</strong> If mentions access/permission issues → Agent.SecurityAccess</li>
+</ul>
+
+<h3>Cross-Topic Routing Rules</h3>
+<p>When a question involves multiple domains:</p>
+<ul>
+<li><strong>'Update my address for payroll'</strong> → Agent.EmployeeData (primary action: data update)</li>
+<li><strong>'Where do I enroll in benefits?'</strong> → Agent.NavigationBasics (primary: navigation) OR Agent.Benefits if enrollment period active</li>
+<li><strong>'How do I check my paycheck and YTD?'</strong> → Agent.Payroll (primary: payroll information; agent can guide navigation)</li>
+</ul>
+
+<h3>Fallback & Escalation</h3>
+<p>If intent is unclear:</p>
+<ul>
+<li>Informational/casual → Agent.GeneralHelp</li>
+<li>Urgent/action-oriented → Route to most likely specialist (bias toward helping)</li>
+<li>Completely ambiguous → Agent.GeneralHelp with clarification request</li>
+</ul>"
+}
+```
+
+**Characteristics:**
+- ✅ Handles complex overlapping scenarios
+- ✅ Clear guardrails for sensitive data
+- ✅ Conditional routing rules
+- ✅ Multi-intent handling logic
+- ✅ Context-aware decisions
+- ❌ Longer to write and maintain
+- ❌ Higher token usage per routing decision
+
+**Use this pattern when:** Domains overlap, keywords conflict, need for conditional rules, complex cross-functional workflows, or compliance/security guardrails required.
+
+---
+
+### Choosing Pattern A vs. Pattern B
+
+| Criteria | Pattern A | Pattern B |
+|----------|-----------|-----------|
+| **Number of Scenarios** | 3-8 | 8-20+ |
+| **Keyword Overlap** | Minimal | Significant |
+| **Edge Cases** | Few | Many |
+| **Conditional Rules** | Not needed | Required |
+| **Guardrails (PII, Compliance)** | Not needed | Required |
+| **Clarification Logic** | Simple fallback | Multi-turn possible |
+| **Maintenance Effort** | Low | Medium-High |
+| **Routing Accuracy** | Good (for simple cases) | Excellent (for complex cases) |
+| **Token Usage** | Low | Medium-High |
+
+---
+
+### Common Mistakes to Avoid
+
+#### ❌ Mistake 1: Vague Instructions
+
+**Bad:**
+```json
+{
+  "conditionAgentInstructions": "Route the question to the right agent."
+}
+```
+
+**Problem:** No keyword mapping, no rules, no guidance.
+
+**Fix:** Provide clear keyword mapping and routing rules (use Pattern A or B).
+
+---
+
+#### ❌ Mistake 2: No Exception Handling
+
+**Bad:**
+```json
+{
+  "conditionAgentInstructions": "Payroll keywords → Payroll Agent"
+}
+```
+
+**Problem:** Doesn't handle edge cases like navigational questions about payroll.
+
+**Fix:** Add exception rules: "If question is 'How do I find payroll?' → Navigation Agent"
+
+---
+
+#### ❌ Mistake 3: Overlapping Keywords with No Priority
+
+**Bad:**
+```json
+"Scenario 1: Questions about time (→ Time Agent)
+Scenario 2: Questions about payroll (→ Payroll Agent)"
+```
+
+**Problem:** "What time does payroll run?" matches both. No guidance on which takes priority.
+
+**Fix:** Define priority rules or conditional logic: "If 'time' relates to schedules/PTO → Time Agent. If 'time' relates to payment timing → Payroll Agent."
+
+---
+
+#### ❌ Mistake 4: No Fallback
+
+**Bad:** Only specific scenarios, no general/help agent.
+
+**Problem:** Unclear questions or greetings have nowhere to route.
+
+**Fix:** Always include a General Help/Fallback scenario as the last option.
+
+---
+
+#### ❌ Mistake 5: Too Many Instructions (Token Bloat)
+
+**Bad:** 2000+ word instructions with every possible edge case documented.
+
+**Problem:** High token cost, slower routing, model confusion.
+
+**Fix:** Be concise. Use structured sections. Focus on common patterns, not exhaustive rules.
+
+**Optimal Length:**
+- Pattern A: 100-300 words
+- Pattern B: 300-800 words
+
+---
+
+### Testing Your Instructions
+
+**Validation Questions:**
+
+1. ✅ Are keywords clearly mapped to scenarios?
+2. ✅ Are exception/conditional rules documented?
+3. ✅ Is there a fallback for unclear requests?
+4. ✅ Are multi-intent cases handled?
+5. ✅ Is the structure easy to read (sections, bullets)?
+6. ✅ Is length appropriate (not too verbose)?
+
+**Test Cases:**
+
+Create test questions for each scenario and edge cases:
+
+```json
+{
+  "test_cases": [
+    {"input": "What's my pay stub?", "expected_route": "Payroll Agent"},
+    {"input": "How do I find my pay stub?", "expected_route": "Navigation Agent (exception)"},
+    {"input": "Update my address for payroll", "expected_route": "Employee Data (multi-intent)"},
+    {"input": "Hello", "expected_route": "General Help (fallback)"},
+    {"input": "I'm confused", "expected_route": "General Help (fallback)"}
+  ]
+}
+```
+
+Test each case in Flowise to verify correct routing.
 
 ---
 
@@ -643,6 +1338,65 @@ Every multi-agent flow should have a **General** or **Help** agent as fallback.
    - Use read-only keys where possible
    - Limit permissions to only what's needed
    - Create service accounts for automation
+
+### Credential Naming Convention in Flowise
+
+**Standard Credential Names:**
+
+Use these exact credential names when creating credentials in the Flowise UI. This allows generated workflows to work immediately after import without manual configuration.
+
+| Model Platform | Standard Credential Name | Used In Field |
+|---------------|-------------------------|---------------|
+| OpenAI (ChatGPT, GPT-4) | `OpenAI API Key` | `"credential": "OpenAI API Key"` |
+| Anthropic (Claude) | `Anthropic API Key` | `"credential": "Anthropic API Key"` |
+| Google (Gemini) | `Google API Key` | `"credential": "Google API Key"` |
+
+**Setup Process:**
+
+1. **Create Credential in Flowise** (one time per platform):
+   - Navigate to Flowise UI → Credentials
+   - Click "Add Credential"
+   - Select credential type (e.g., "OpenAI API")
+   - **Name it exactly**: `OpenAI API Key` (case-sensitive)
+   - Paste your actual API key
+   - Save
+
+2. **Reference in JSON**:
+   ```json
+   "agentModelConfig": {
+     "credential": "OpenAI API Key",  // Must match credential name in Flowise
+     "modelName": "gpt-4o-mini",
+     "agentModel": "chatOpenAI"
+   }
+   ```
+
+3. **Import Workflow**:
+   - Import JSON into Flowise
+   - All agents automatically use the credential
+   - No manual configuration needed
+
+**Benefits:**
+
+- ✅ **One-time setup**: Create credential once, use in all workflows
+- ✅ **Automatic connection**: Imported workflows work immediately
+- ✅ **Easy rotation**: Update key in Flowise UI, all workflows get new key
+- ✅ **No manual wiring**: No need to select credential for each agent after import
+- ✅ **Consistent pattern**: All Context Foundry generated workflows follow this standard
+
+**Important:**
+
+- ⚠️ Credential name MUST match exactly (case-sensitive)
+- ⚠️ Use empty string `""` only if credential doesn't exist in Flowise yet
+- ⚠️ If name doesn't match, agents will show "No credential selected" error
+- ⚠️ Different Flowise instances may have different credential names (adjust as needed)
+
+**Example Error (credential name mismatch):**
+
+```
+❌ "credential": "openai_key"  // Wrong - not the standard name
+❌ "credential": "OpenAI Key"  // Wrong - missing "API"
+✅ "credential": "OpenAI API Key"  // Correct - exact match
+```
 
 ---
 
