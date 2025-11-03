@@ -17,13 +17,15 @@ This extension augments Context Foundry with deep Flowise expertise through:
 **[AGENT_PATTERN_REFERENCE.md](./AGENT_PATTERN_REFERENCE.md)** - The single source of truth for Flowise multi-agent systems
 
 This comprehensive reference defines the canonical way to structure Flowise agent flows:
-- ✅ Complete node type definitions (agentAgentflow, conditionAgentAgentflow)
+- ✅ Complete node type definitions (agentAgentflow, conditionAgentAgentflow, **executeFlowAgentflow**)
 - ✅ All input parameters with descriptions and examples
 - ✅ Agent persona patterns and configuration guidelines
 - ✅ Edge structure and connection patterns
-- ✅ Critical design patterns (intent detection, agent specialization, knowledge integration)
+- ✅ Critical design patterns (intent detection, agent specialization, knowledge integration, **sub-flow execution**)
 - ✅ Complete implementation checklist
 - ✅ Common pitfalls and how to avoid them
+
+**NEW**: ExecuteFlow node support enables modular workflow composition with sub-flow execution and state management.
 
 **When to use**: Reference this document when designing or validating Flowise multi-agent architectures.
 
@@ -48,6 +50,7 @@ This comprehensive reference defines the canonical way to structure Flowise agen
 - ✅ **Extract patterns** from template JSONs
 - ✅ **Enhance Scout phase** with Flowise research checklist
 - ✅ **Enhance Architect phase** with proven patterns
+- ✅ **ExecuteFlow node support** 🆕 - Modular sub-flow execution with state management
 - ✅ **Generate Mermaid diagrams** for visual workflow documentation
 - ✅ **Auto-embed diagrams in README** with interactive agent details
 - ✅ **CLI tools** for template analysis and diagram generation
