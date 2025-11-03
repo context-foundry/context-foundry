@@ -2,6 +2,10 @@
   <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
 </div>
 
+<div align="center">
+  <img src="docs/assets/ContextFoundry.gif" alt="Context Foundry in Action" width="800">
+</div>
+
 # 🏭 Context Foundry
 
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
