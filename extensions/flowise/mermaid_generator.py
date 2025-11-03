@@ -63,8 +63,8 @@ def get_node_style(node_type: str, node_data: Dict) -> tuple:
         "Agent": ("[{}]", "#4DD0E1"),
 
         # Condition nodes - Diamond, orange / Hexagon, pink
-        "Condition": ("{{&{}&#}}", "#FFB938"),
-        "ConditionAgent": ("{{&{}&#}}", "#ff8fab"),
+        "Condition": ("{{{{{}}}}}", "#FFB938"),
+        "ConditionAgent": ("{{{{{}}}}}", "#ff8fab"),
 
         # LLM nodes - Rounded rectangle, blue
         "LLM": ("(({}))", "#64B5F6"),
@@ -82,7 +82,7 @@ def get_node_style(node_type: str, node_data: Dict) -> tuple:
         "HTTP": ("[{}]", "#FF7F7F"),
 
         # HumanInput - Hexagon, indigo
-        "HumanInput": ("{{&{}&#}}", "#6E6EFD"),
+        "HumanInput": ("{{{{{}}}}}", "#6E6EFD"),
 
         # DirectReply - Rectangle, mint
         "DirectReply": ("[{}]", "#4DDBBB"),
