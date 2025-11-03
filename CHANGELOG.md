@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.2] - 2025-11-02
+
+**🎨 Visual Documentation & Flowise Architecture Template:** Enhanced README with demo gif and complete Flowise representation of Context Foundry's multi-agent architecture.
+
+### ✨ Added - Visual Assets
+
+**Demo GIF** - Added animated demonstration of Context Foundry in action
+- `docs/assets/ContextFoundry.gif` (6.84 MB) - Complete build workflow visualization
+- Prominently displayed in README hero section
+- Shows autonomous build process from start to finish
+
+### 🏗️ Added - Flowise Architecture Template
+
+**Complete Multi-Agent Workflow Representation** - Visual documentation of Context Foundry's 8-phase architecture
+- `flowise-templates/context-foundry-architecture.json` (909 lines)
+  - 13 nodes: 11 specialized agents + 2 condition routers
+  - 14 edges: Sequential workflow + self-healing loop
+  - All 8 phases mapped: Scout → Architect → Parallel Builders → Integration → Test → Screenshot → Docs → Deploy → Feedback
+  - Self-healing test loop with automatic failure recovery (up to 3 iterations)
+  - Parallel execution representation (Phase 2.5 builders, Phase 4.5 tests)
+  - File-based context system architecture
+  - Pattern learning integration
+  - Context budget monitoring (84% utilization, 16% buffer)
+
+- `flowise-templates/context-foundry-architecture-README.md` (396 lines)
+  - Comprehensive agent descriptions
+  - Performance metrics and speedups
+  - Agent quality enhancements documentation
+  - Visual Mermaid diagram
+  - Usage instructions
+
+**Architecture Highlights:**
+- **11 Specialized Agents**:
+  - Scout (Phase 1): Research & requirements
+  - Architect (Phase 2): System design
+  - Parallel Builders (Phase 2.5): 2-8 concurrent implementation
+  - Integration (Phase 3): Validation & pre-checks
+  - Test (Phase 4): Comprehensive test suite
+  - Self-Healing (Phase 4.x): Automatic failure recovery
+  - Screenshot (Phase 4.5): Visual documentation capture
+  - Documentation (Phase 5): README generation
+  - Deploy (Phase 6): GitHub deployment
+  - Feedback (Phase 7): Pattern learning
+
+- **2 Intelligent Routers**:
+  - Build Intent Router: Detects software build requests
+  - Test Result Router: Routes based on pass/fail (triggers self-healing)
+
+- **Performance Metrics**:
+  - 30-45% faster with parallel builders
+  - 60-70% faster with parallel tests
+  - 95% test auto-fix success within 3 iterations
+  - 7-15 minute average build time
+
+**Purpose:**
+- Educational tool for visualizing Context Foundry workflow
+- Reference implementation for multi-agent systems
+- Architecture documentation for contributors
+- Flowise template adaptable for other projects
+
+### 📝 Changed - README Enhancement
+
+- Added animated demo gif to hero section
+- Maintained existing banner and branding
+- Improved visual engagement for new users
+
+---
+
 ## [2.1.1] - 2025-11-02
 
 **🎨 Flowise Extension Fully Functional:** Auto-include tools breakthrough enables complete, working Flowise workflows from first build.
