@@ -1427,19 +1427,40 @@ PHASE 3.5: INTEGRATION PRE-CHECK (NEW - Fast Validation Before Test)
 
 **⚠️ CRITICAL SEQUENCE - FOLLOW IN EXACT ORDER:**
 
-This is a BLOCKING requirement. Build MUST NOT proceed to next phase until validation passes.
+**THIS IS A BLOCKING REQUIREMENT - ENFORCED WITH EXIT CODES**
+
+The build MUST NOT proceed to Phase 4 (Test) until ALL validation passes.
+Validation failures will cause `exit 1` and terminate the build process.
+This prevents deployment of Flowise workflows without visual documentation.
 
 **STEP 1: Generate Mermaid Diagram File FIRST**
 
 Run this command BEFORE creating or finalizing README.md:
 
 ```bash
+# Execute mermaid generator
 python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
   <workflow-name>.json \
   WORKFLOW-DIAGRAM.md \
   --interactive \
   --badges \
   --legend
+
+# MANDATORY: Check if command succeeded
+if [ $? -ne 0 ]; then
+    echo "❌ FATAL ERROR: mermaid_generator.py failed to execute"
+    echo "Build is BLOCKED - cannot proceed without workflow diagram"
+    exit 1
+fi
+
+# MANDATORY: Verify file was created
+if [ ! -f WORKFLOW-DIAGRAM.md ]; then
+    echo "❌ FATAL ERROR: WORKFLOW-DIAGRAM.md was not created"
+    echo "Build is BLOCKED - file must exist before continuing"
+    exit 1
+fi
+
+echo "✅ WORKFLOW-DIAGRAM.md created successfully"
 ```
 
 This creates:
@@ -1448,11 +1469,6 @@ This creates:
 - Flow metadata badges (node count, agents, complexity)
 - Interactive <details> section with agent descriptions table
 - Complete node type legend (all 14 node types)
-
-**Verify WORKFLOW-DIAGRAM.md exists before continuing:**
-```bash
-test -f WORKFLOW-DIAGRAM.md || { echo "❌ FATAL: WORKFLOW-DIAGRAM.md not created"; exit 1; }
-```
 
 ---
 
@@ -1497,34 +1513,67 @@ Insert the COMPLETE diagram content RIGHT AFTER the hero/title section, BEFORE "
 
 **STEP 4: Validation (BLOCKING - MUST PASS)**
 
-Run these checks and FAIL THE BUILD if any check fails:
+**YOU MUST EXECUTE THESE EXACT COMMANDS - BUILD WILL FAIL IF ANY CHECK FAILS:**
 
 ```bash
+echo "Running MANDATORY Mermaid diagram validation checks..."
+echo ""
+
 # Check 1: WORKFLOW-DIAGRAM.md exists
-test -f WORKFLOW-DIAGRAM.md || { echo "❌ BLOCKING FAILURE: Missing WORKFLOW-DIAGRAM.md"; exit 1; }
+echo "Check 1/5: Verifying WORKFLOW-DIAGRAM.md exists..."
+if [ ! -f WORKFLOW-DIAGRAM.md ]; then
+    echo "❌ BLOCKING FAILURE: Missing WORKFLOW-DIAGRAM.md"
+    echo "Build STOPPED - cannot proceed to Phase 4 (Test)"
+    exit 1
+fi
+echo "✅ Pass"
 
 # Check 2: README contains ```mermaid block
-grep -q '```mermaid' README.md || { echo "❌ BLOCKING FAILURE: Diagram not embedded in README"; exit 1; }
+echo "Check 2/5: Verifying README contains mermaid diagram..."
+if ! grep -q '```mermaid' README.md; then
+    echo "❌ BLOCKING FAILURE: Diagram not embedded in README"
+    echo "Build STOPPED - README must contain mermaid code block"
+    exit 1
+fi
+echo "✅ Pass"
 
 # Check 3: README contains interactive details section
-grep -q '<details>' README.md || { echo "❌ BLOCKING FAILURE: Missing interactive <details> section in README"; exit 1; }
+echo "Check 3/5: Verifying README contains interactive details..."
+if ! grep -q '<details>' README.md; then
+    echo "❌ BLOCKING FAILURE: Missing interactive <details> section in README"
+    echo "Build STOPPED - README must include collapsible agent details"
+    exit 1
+fi
+echo "✅ Pass"
 
 # Check 4: README contains badges
-grep -q 'img.shields.io/badge' README.md || { echo "❌ BLOCKING FAILURE: Missing diagram badges in README"; exit 1; }
+echo "Check 4/5: Verifying README contains diagram badges..."
+if ! grep -q 'img.shields.io/badge' README.md; then
+    echo "❌ BLOCKING FAILURE: Missing diagram badges in README"
+    echo "Build STOPPED - README must include workflow metadata badges"
+    exit 1
+fi
+echo "✅ Pass"
 
 # Check 5: README contains "Workflow Architecture" section
-grep -q '## 📊 Workflow Architecture' README.md || { echo "❌ BLOCKING FAILURE: Missing Workflow Architecture section in README"; exit 1; }
+echo "Check 5/5: Verifying README contains Workflow Architecture section..."
+if ! grep -q '## 📊 Workflow Architecture' README.md; then
+    echo "❌ BLOCKING FAILURE: Missing Workflow Architecture section in README"
+    echo "Build STOPPED - README must have dedicated diagram section"
+    exit 1
+fi
+echo "✅ Pass"
 
-# All checks passed
-echo "✅ All Mermaid diagram validations PASSED"
+echo ""
+echo "✅ ✅ ✅ All 5 Mermaid diagram validations PASSED"
+echo "Build may proceed to Phase 4 (Test)"
 ```
 
-**If ANY validation fails:**
-1. DO NOT proceed to next phase
-2. Re-generate WORKFLOW-DIAGRAM.md
-3. Re-embed in README
-4. Run validation again
-5. Only proceed when ALL checks pass
+**IMPORTANT**: If ANY validation fails:
+- The build MUST STOP immediately
+- DO NOT proceed to Phase 4 (Test)
+- DO NOT deploy to GitHub
+- The exit 1 command will terminate the build process
 
 ---
 
