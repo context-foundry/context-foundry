@@ -16,7 +16,8 @@
 6. [Incorrect Tool JSON Structure (Pattern #6)](#incorrect-tool-json-structure-pattern-6)
 7. [ConditionAgent Incomplete Scenarios (Pattern #7)](#conditionagent-incomplete-scenarios-pattern-7)
 8. [Agent Nodes Missing inputParams (Pattern #8)](#agent-nodes-missing-inputparams-pattern-8)
-9. [Prevention Checklist](#prevention-checklist)
+9. [Missing Mermaid Diagram (Pattern #9)](#missing-mermaid-diagram-pattern-9)
+10. [Prevention Checklist](#prevention-checklist)
 
 ---
 
@@ -703,6 +704,273 @@ If you have a broken workflow with missing inputParams:
 
 ---
 
+## Missing Mermaid Diagram (Pattern #9)
+
+### Symptom
+
+**User Report** (2025-11-02):
+> "The mermaid .md file did not populate in the readme of this flow/repository: personalized-training-flow. The idea is not to update this one, as much as the importance of ensuring that no matter what, the next flow, absolutely creates a mermaid flow .md file"
+
+Generated Flowise workflow repository is missing:
+- ❌ No `WORKFLOW-DIAGRAM.md` file in repository root
+- ❌ No mermaid diagram embedded in README.md
+- ❌ Workflow structure not visualized
+- ❌ Agent connections not documented visually
+
+**Severity**: HIGH - Workflow lacks critical visual documentation
+**Impact**: Users cannot quickly understand workflow structure, agent relationships, or routing logic
+
+### Root Cause
+
+**Documentation phase skipped or mermaid_generator.py not executed**
+
+The orchestrator has explicit instructions (lines 1437-1540) that state:
+> "THIS IS A BLOCKING REQUIREMENT - Flowise projects without embedded diagrams are considered INCOMPLETE and MUST NOT be deployed."
+
+But the build completed without:
+1. Running the mermaid_generator.py script
+2. Creating WORKFLOW-DIAGRAM.md file
+3. Embedding diagram in README.md
+4. Running diagram validation checks
+
+**Why This Happens**:
+- Documentation phase may have been skipped during deployment
+- Mermaid generator script may have failed silently
+- Validation checks (lines 1506-1519) were not executed
+- Builder completed without creating diagram files
+
+### Impact
+
+**User Experience**:
+- Cannot visualize workflow structure at a glance
+- Must manually read through JSON to understand agent connections
+- No quick reference for routing logic
+- Missing professional documentation polish
+
+**Examples from Recent Builds**:
+- **Personalized Training Recommendations** (task 489ac13f): No WORKFLOW-DIAGRAM.md created
+- User had to manually understand the 13-node structure by reading JSON
+
+### Fix Required
+
+**MUST execute mermaid_generator.py and embed diagram in README.md**
+
+According to orchestrator instructions (lines 1437-1546), Builder MUST:
+
+1. **Generate standalone diagram file**:
+```bash
+python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+  personalized-training-recommendations-flow.json \
+  WORKFLOW-DIAGRAM.md \
+  --badges --interactive --legend --include-details
+```
+
+2. **Embed complete diagram in README.md**:
+- Extract full content from WORKFLOW-DIAGRAM.md
+- Insert RIGHT AFTER hero/title section, BEFORE "## Overview"
+- Include ALL content (badges, mermaid block, interactive details, legend)
+- Add horizontal rule `---` separator after diagram
+
+3. **Run validation checks**:
+```bash
+# Check 1: WORKFLOW-DIAGRAM.md exists
+test -f WORKFLOW-DIAGRAM.md || exit 1
+
+# Check 2: README contains mermaid block
+grep -q '```mermaid' README.md || exit 1
+
+# Check 3: README contains diagram badges
+grep -q 'img.shields.io/badge' README.md || exit 1
+```
+
+### Prevention
+
+**Before Documentation Phase**:
+- [ ] Verify Flowise project detection is active
+- [ ] Confirm mermaid_generator.py exists and is executable
+- [ ] Ensure workflow JSON file is finalized and valid
+
+**During Documentation Phase** (REQUIRED):
+- [ ] Run mermaid_generator.py with all flags (--badges --interactive --legend --include-details)
+- [ ] Generate WORKFLOW-DIAGRAM.md in repository root
+- [ ] Extract complete diagram content
+- [ ] Embed in README.md after title, before "## Overview"
+- [ ] Add horizontal rule separator
+
+**After Documentation Phase** (BLOCKING VALIDATION):
+- [ ] WORKFLOW-DIAGRAM.md file exists in repo root
+- [ ] README.md contains `\`\`\`mermaid` code block
+- [ ] README.md contains diagram badges (img.shields.io)
+- [ ] Mermaid syntax is valid (no rendering errors)
+- [ ] All agents appear in diagram
+- [ ] Routing connections are visible
+
+### Required Files
+
+**WORKFLOW-DIAGRAM.md** (Standalone):
+```markdown
+# Personalized Training Recommendations - Workflow Diagram
+
+![Agents](https://img.shields.io/badge/Agents-6-blue)
+![Nodes](https://img.shields.io/badge/Nodes-13-green)
+![Complexity](https://img.shields.io/badge/Complexity-Advanced-orange)
+
+\`\`\`mermaid
+graph TD
+    Start[Start: Form Input] --> Supervisor
+    Supervisor[Supervisor: LLM Coordinator] --> Router{Route to Agent}
+
+    Router -->|Skills Gap| Agent1[Skills Gap Analyzer]
+    Router -->|Availability| Agent2[Availability Matcher]
+    Router -->|Experience| Agent3[Experience Level Advisor]
+    Router -->|Project| Agent4[Project Alignment]
+    Router -->|Career| Agent5[Career Path Consultant]
+    Router -->|Finish| Synthesizer[Recommendation Synthesizer]
+
+    Agent1 --> Loop1[Loop Back]
+    Agent2 --> Loop2[Loop Back]
+    Agent3 --> Loop3[Loop Back]
+    Agent4 --> Loop4[Loop Back]
+    Agent5 --> Loop5[Loop Back]
+
+    Loop1 --> Supervisor
+    Loop2 --> Supervisor
+    Loop3 --> Supervisor
+    Loop4 --> Supervisor
+    Loop5 --> Supervisor
+\`\`\`
+
+### Interactive Details
+Click nodes to expand:
+- **Start**: Form input collecting 6 profile dimensions
+- **Supervisor**: Coordinates multi-agent consultation
+- **Router**: Routes to appropriate specialist agent
+- **Agents**: 5 specialist agents for comprehensive analysis
+- **Synthesizer**: Combines insights into actionable plan
+```
+
+**README.md** (Embedded):
+```markdown
+# Personalized Training Recommendations
+
+> Multi-agent system for personalized training analysis
+
+---
+
+## Workflow Architecture
+
+![Agents](https://img.shields.io/badge/Agents-6-blue)
+![Nodes](https://img.shields.io/badge/Nodes-13-green)
+![Complexity](https://img.shields.io/badge/Complexity-Advanced-orange)
+
+\`\`\`mermaid
+graph TD
+    Start[Start: Form Input] --> Supervisor
+    ...
+\`\`\`
+
+### Interactive Details
+...
+
+---
+
+## Overview
+
+This workflow provides personalized training recommendations...
+```
+
+### Validation Script
+
+**Add to orchestrator test phase** (after documentation):
+
+```bash
+#!/bin/bash
+# Flowise Mermaid Diagram Validation (BLOCKING)
+
+echo "🔍 Validating Mermaid diagram generation..."
+
+# Check 1: WORKFLOW-DIAGRAM.md exists
+if [ ! -f "WORKFLOW-DIAGRAM.md" ]; then
+  echo "❌ BLOCKING FAILURE: WORKFLOW-DIAGRAM.md not found"
+  echo "   This is a REQUIRED file for all Flowise workflows"
+  echo "   Run: python3 mermaid_generator.py workflow.json WORKFLOW-DIAGRAM.md --badges --interactive"
+  exit 1
+fi
+echo "✅ WORKFLOW-DIAGRAM.md exists"
+
+# Check 2: README contains mermaid block
+if ! grep -q '```mermaid' README.md; then
+  echo "❌ BLOCKING FAILURE: Diagram not embedded in README"
+  echo "   Mermaid block must be inserted after title, before '## Overview'"
+  exit 1
+fi
+echo "✅ Mermaid block embedded in README"
+
+# Check 3: README contains diagram badges
+if ! grep -q 'img.shields.io/badge' README.md; then
+  echo "❌ BLOCKING FAILURE: Missing diagram badges in README"
+  echo "   Badges show agent count, node count, and complexity at a glance"
+  exit 1
+fi
+echo "✅ Diagram badges present in README"
+
+# Check 4: Diagram contains agent nodes
+agent_count=$(grep -c "Agent\[" WORKFLOW-DIAGRAM.md || echo "0")
+if [ "$agent_count" -lt 3 ]; then
+  echo "❌ WARNING: Only $agent_count agents found in diagram"
+  echo "   Expected 3+ for multi-agent workflow"
+fi
+echo "✅ Diagram contains $agent_count agent nodes"
+
+echo "✅ All Mermaid diagram validations PASSED"
+```
+
+### Quick Fix for Existing Workflows
+
+If you have a deployed workflow without mermaid diagram:
+
+1. Navigate to workflow directory
+2. Run mermaid generator:
+```bash
+cd /path/to/workflow
+python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+  workflow-flow.json \
+  WORKFLOW-DIAGRAM.md \
+  --badges --interactive --legend --include-details
+```
+3. Copy content from WORKFLOW-DIAGRAM.md
+4. Open README.md
+5. Paste diagram content after title, before "## Overview"
+6. Commit and push
+
+### Why This Matters
+
+**Professional Documentation**:
+- Visual diagrams are industry standard for workflow documentation
+- GitHub renders mermaid natively - no external tools needed
+- Users understand structure in seconds vs minutes
+
+**Debugging & Maintenance**:
+- Quick reference for troubleshooting routing issues
+- Easy to identify disconnected nodes
+- Clear view of agent relationships
+
+**User Experience**:
+- First impression of workflow quality
+- Reduces time-to-understanding
+- Enables faster onboarding
+
+### Added to Global Pattern Library
+
+This pattern has been added to:
+- `/Users/name/.context-foundry/patterns/common-issues.json`
+- Pattern ID: `flowise-missing-mermaid-diagram`
+- Severity: HIGH
+- First seen: 2025-11-02 (personalized-training-recommendations build)
+- Total patterns: 11 (was 10)
+
+---
+
 ## Prevention Checklist
 
 ### Before Build Starts
@@ -712,6 +980,7 @@ If you have a broken workflow with missing inputParams:
 - [ ] AGENT_PATTERN_REFERENCE.md loaded
 - [ ] warehouse-operations-flow.json set as canonical reference
 - [ ] Builder knows agent count and complexity
+- [ ] mermaid_generator.py script exists and is executable
 
 ### During Build (Scout Phase)
 
@@ -734,6 +1003,14 @@ If you have a broken workflow with missing inputParams:
 - [ ] Model configs inline in agentModelConfig
 - [ ] Memory configs inline in agentEnableMemory/agentMemoryType
 
+### During Build (Documentation Phase)
+
+- [ ] Run mermaid_generator.py to create WORKFLOW-DIAGRAM.md
+- [ ] Generate with all flags: --badges --interactive --legend --include-details
+- [ ] Embed complete mermaid diagram in README.md
+- [ ] Add diagram badges (Agents, Nodes, Complexity)
+- [ ] Place diagram after title, before "## Overview"
+
 ### Before Build Completes (Test Phase)
 
 - [ ] JSON file size > 800 lines (for 10+ agents)
@@ -741,6 +1018,9 @@ If you have a broken workflow with missing inputParams:
 - [ ] No `"customNode"` types
 - [ ] No external file references
 - [ ] Structure matches warehouse-operations-flow.json
+- [ ] WORKFLOW-DIAGRAM.md exists (BLOCKING)
+- [ ] README.md contains ```mermaid block (BLOCKING)
+- [ ] README.md contains diagram badges (BLOCKING)
 
 ### After Build (Validation)
 
@@ -748,6 +1028,7 @@ If you have a broken workflow with missing inputParams:
 - [ ] All agents visible on canvas
 - [ ] Routing connections present
 - [ ] Test with sample queries works
+- [ ] Mermaid diagram renders correctly on GitHub
 
 ---
 
@@ -1458,6 +1739,7 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.6 | 2025-11-02 | Added "Missing Mermaid Diagram" (Pattern #9) - BLOCKING requirement for visual documentation from personalized-training-recommendations build |
 | 1.5 | 2025-11-01 | CORRECTED Pattern #6 root cause: "Incorrect Tool JSON Structure" - discovered true issue was wrong field names/types, not missing tools |
 | 1.4 | 2025-11-01 | Added "Tool References Before Tool Creation" (Pattern #6) - initial diagnosis (later corrected) |
 | 1.3 | 2025-11-01 | Added "Phantom Tool and Knowledge References" pattern (Pattern #5) from Internal Talent Mobility build |
