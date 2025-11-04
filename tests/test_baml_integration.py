@@ -290,37 +290,47 @@ class TestFallbackBehavior:
         assert "JSON fallback" in captured.err
 
 
-class TestBackwardCompatibility:
-    """Test backward compatibility with JSON mode"""
+class TestBAMLRequired:
+    """Test that BAML is required and fails hard when unavailable"""
 
-    def test_json_mode_works_without_baml(self):
-        """Test that JSON mode works even if BAML is unavailable"""
-        # update_phase_with_baml should always return a valid dict
-        phase_info = update_phase_with_baml(
-            phase="Test",
-            status="testing",
-            detail="Testing backward compatibility"
+    def test_baml_must_be_available(self):
+        """Test that BAML is available (required dependency)"""
+        # BAML is now a required dependency - it must be available
+        assert is_baml_available(), (
+            "BAML must be available. Install with: pip install baml-py\n"
+            f"Error: {get_baml_error()}"
         )
 
-        assert isinstance(phase_info, dict)
-        assert "session_id" in phase_info
-        assert "current_phase" in phase_info
-        assert "status" in phase_info
+    def test_update_phase_fails_without_baml(self):
+        """Test that phase tracking fails hard without BAML"""
+        # Mock BAML as unavailable
+        with patch('tools.baml_integration.is_baml_available', return_value=False):
+            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+                # Should raise RuntimeError, not return JSON fallback
+                with pytest.raises(RuntimeError, match="BAML is required"):
+                    update_phase_with_baml(
+                        phase="Test",
+                        status="testing",
+                        detail="Testing BAML requirement"
+                    )
 
-    def test_validate_works_without_baml(self):
-        """Test that validation works in JSON mode"""
+    def test_validate_fails_without_baml(self):
+        """Test that validation fails hard without BAML"""
         valid_json = json.dumps({
             "session_id": "test",
             "current_phase": "Test",
             "status": "testing"
         })
 
-        valid, phase_info, error = validate_phase_info(valid_json)
+        # Mock BAML as unavailable
+        with patch('tools.baml_integration.is_baml_available', return_value=False):
+            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+                # Should fail, not validate in JSON mode
+                valid, phase_info, error = validate_phase_info(valid_json)
 
-        # Should validate successfully in JSON mode
-        assert valid is True
-        assert phase_info is not None
-        assert error is None
+                # Validation should fail when BAML unavailable
+                assert valid is False
+                assert "BAML is required" in error
 
 
 if __name__ == "__main__":

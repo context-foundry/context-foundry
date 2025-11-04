@@ -21,6 +21,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Import version management (single source of truth)
 from tools.version import get_version, VERSION_INFO
 
+# Import BAML integration for type-safe phase tracking
+from tools.baml_integration import (
+    update_phase_with_baml,
+    is_baml_available,
+    get_baml_error
+)
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context
@@ -308,6 +315,88 @@ def context_foundry_status() -> str:
 All tools work with both Claude Desktop and Claude Code CLI without requiring API keys.
 The autonomous build system inherits your Claude authentication automatically.
 """
+
+
+@mcp.tool()
+def update_build_phase(
+    working_directory: str,
+    phase: str,
+    status: str,
+    detail: str,
+    iteration: int = 0
+) -> str:
+    """
+    Update build phase tracking using BAML (type-safe, validated).
+
+    This is the REQUIRED method for phase tracking in Context Foundry builds.
+    Uses BAML for type-safe structured validation (replaces manual JSON writing).
+
+    Args:
+        working_directory: Project directory path
+        phase: Phase name (Scout, Architect, Builder, Test, Deploy, etc.)
+        status: Phase status (researching, designing, building, testing, etc.)
+        detail: Human-readable progress description
+        iteration: Test iteration number (default: 0)
+
+    Returns:
+        JSON string with phase tracking information
+
+    Example:
+        result = update_build_phase(
+            working_directory="/Users/name/homelab/my-project",
+            phase="Scout",
+            status="researching",
+            detail="Analyzing requirements and best practices",
+            iteration=0
+        )
+
+    Note:
+        - BAML must be available (baml-py installed, OPENAI_API_KEY set)
+        - Fails hard if BAML unavailable (no fallback)
+        - Writes to .context-foundry/current-phase.json
+        - Uses temperature 0.0 for deterministic outputs
+    """
+    try:
+        # Ensure working directory exists
+        work_dir = Path(working_directory).resolve()
+        if not work_dir.exists():
+            return json.dumps({
+                "error": f"Working directory does not exist: {working_directory}"
+            })
+
+        # Create .context-foundry directory if needed
+        cf_dir = work_dir / ".context-foundry"
+        cf_dir.mkdir(exist_ok=True)
+
+        # Extract session_id from working directory name
+        session_id = work_dir.name
+
+        # Call BAML for type-safe phase tracking
+        phase_info = update_phase_with_baml(
+            phase=phase,
+            status=status,
+            detail=detail,
+            session_id=session_id,
+            iteration=iteration
+        )
+
+        # Write to phase file
+        phase_file = cf_dir / "current-phase.json"
+        phase_file.write_text(json.dumps(phase_info, indent=2))
+
+        return json.dumps({
+            "success": True,
+            "phase_file": str(phase_file),
+            "phase_info": phase_info
+        }, indent=2)
+
+    except Exception as e:
+        error_msg = f"Failed to update build phase: {e}"
+        return json.dumps({
+            "error": error_msg,
+            "baml_available": is_baml_available(),
+            "baml_error": get_baml_error() if not is_baml_available() else None
+        }, indent=2)
 
 
 @mcp.tool()
@@ -1599,6 +1688,25 @@ def autonomous_build_and_deploy(
         all_builds = list_delegations()
     """
     try:
+        # ═══════════════════════════════════════════════════════════════════════
+        # BAML VERIFICATION: Required for type-safe phase tracking
+        # ═══════════════════════════════════════════════════════════════════════
+        if not is_baml_available():
+            error_msg = (
+                "❌ BAML is required but not available.\n"
+                f"Error: {get_baml_error()}\n\n"
+                "BAML is required for type-safe phase tracking in Context Foundry builds.\n"
+                "Install with: pip install baml-py\n"
+                "Set API key: export OPENAI_API_KEY=your-key\n"
+            )
+            return json.dumps({
+                "error": error_msg,
+                "baml_available": False,
+                "baml_error": get_baml_error()
+            }, indent=2)
+
+        print("✅ BAML is available and ready for phase tracking", file=sys.stderr)
+
         # Determine final working directory FIRST (needed for both modes)
         working_dir_input = Path(working_directory)
         if working_dir_input.is_absolute():

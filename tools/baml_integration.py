@@ -311,21 +311,17 @@ def update_phase_with_baml(
                 raise
 
         except Exception as e:
-            # Fall through to JSON mode
-            print(f"⚠️  BAML validation failed, using JSON fallback: {e}", file=sys.stderr)
+            # BAML is required - fail hard, no fallback
+            error_msg = f"BAML phase tracking failed: {e}"
+            print(f"❌ {error_msg}", file=sys.stderr)
+            raise RuntimeError(error_msg) from e
 
-    # JSON fallback
-    return {
-        "session_id": session_id,
-        "current_phase": phase,
-        "phase_number": "N/A",  # Would be calculated
-        "status": status,
-        "progress_detail": detail,
-        "test_iteration": iteration,
-        "phases_completed": [],  # Would be tracked
-        "started_at": datetime.utcnow().isoformat() + "Z",
-        "last_updated": datetime.utcnow().isoformat() + "Z"
-    }
+    # BAML is required - no fallback to JSON
+    raise RuntimeError(
+        "BAML is required but not available. "
+        "Ensure baml-py is installed and OPENAI_API_KEY is set. "
+        "Run: pip install baml-py && export OPENAI_API_KEY=your-key"
+    )
 
 
 def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
@@ -338,64 +334,58 @@ def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, 
     Returns:
         Tuple of (valid: bool, phase_info: Optional[Dict], error: Optional[str])
     """
-    # Try BAML validation first
-    if is_baml_available():
-        try:
-            client = get_baml_client()
-            if client is None:
-                raise Exception("BAML client not available")
+    # BAML is required for validation
+    if not is_baml_available():
+        error_msg = (
+            "BAML is required but not available. "
+            "Ensure baml-py is installed and OPENAI_API_KEY is set. "
+            f"Error: {get_baml_error()}"
+        )
+        return False, None, error_msg
 
-            # Call BAML ValidatePhaseInfo function
-            ctx = client.create_context_manager()
-            result = client.call_function_sync(
-                function_name="ValidatePhaseInfo",
-                args={
-                    "json_string": phase_info_json
-                },
-                ctx=ctx,
-                tb=None,
-                cb=None,
-                collectors=[],
-                env_vars=get_baml_env_vars(),
-                tags=None
-            )
-
-            # Parse the result using unstable_internal_repr
-            internal_repr_str = result.unstable_internal_repr()
-            internal_repr = json.loads(internal_repr_str)
-
-            if "Success" in internal_repr and "content" in internal_repr["Success"]:
-                content = internal_repr["Success"]["content"]
-                # Strip markdown code blocks
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.startswith("```"):
-                    content = content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                validated_data = json.loads(content.strip())
-                return True, validated_data, None
-
-            return True, internal_repr, None
-
-        except Exception as e:
-            # Fall through to JSON validation
-            print(f"⚠️  BAML phase validation failed, using JSON fallback: {e}", file=sys.stderr)
-
-    # JSON fallback validation
     try:
-        phase_info = json.loads(phase_info_json)
+        client = get_baml_client()
+        if client is None:
+            raise Exception("BAML client not available")
 
-        # Basic validation
-        required_fields = ["session_id", "current_phase", "status"]
-        for field in required_fields:
-            if field not in phase_info:
-                return False, None, f"Missing required field: {field}"
+        # Call BAML ValidatePhaseInfo function
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="ValidatePhaseInfo",
+            args={
+                "json_string": phase_info_json
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars=get_baml_env_vars(),
+            tags=None
+        )
 
-        return True, phase_info, None
+        # Parse the result using unstable_internal_repr
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
 
-    except json.JSONDecodeError as e:
-        return False, None, f"Invalid JSON: {e}"
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            # Strip markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            validated_data = json.loads(content.strip())
+            return True, validated_data, None
+
+        return True, internal_repr, None
+
+    except Exception as e:
+        # BAML is required - fail hard, no fallback
+        error_msg = f"BAML validation failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        return False, None, error_msg
 
 
 def generate_scout_report_baml(
