@@ -324,7 +324,7 @@ def update_phase_with_baml(
     )
 
 
-def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
+def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
     """
     Validate phase tracking JSON using BAML schema.
 
@@ -332,7 +332,10 @@ def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, 
         phase_info_json: JSON string to validate
 
     Returns:
-        Tuple of (valid: bool, phase_info: Optional[Dict], error: Optional[str])
+        Validated phase info dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or validation fails
     """
     # BAML is required for validation
     if not is_baml_available():
@@ -341,12 +344,12 @@ def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, 
             "Ensure baml-py is installed and OPENAI_API_KEY is set. "
             f"Error: {get_baml_error()}"
         )
-        return False, None, error_msg
+        raise RuntimeError(error_msg)
 
     try:
         client = get_baml_client()
         if client is None:
-            raise Exception("BAML client not available")
+            raise RuntimeError("BAML client not available")
 
         # Call BAML ValidatePhaseInfo function
         ctx = client.create_context_manager()
@@ -377,22 +380,22 @@ def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, 
             if content.endswith("```"):
                 content = content[:-3]
             validated_data = json.loads(content.strip())
-            return True, validated_data, None
+            return validated_data
 
-        return True, internal_repr, None
+        return internal_repr
 
     except Exception as e:
-        # BAML is required - fail hard, no fallback
+        # BAML is required - fail hard
         error_msg = f"BAML validation failed: {e}"
         print(f"❌ {error_msg}", file=sys.stderr)
-        return False, None, error_msg
+        raise RuntimeError(error_msg) from e
 
 
 def generate_scout_report_baml(
     task_description: str,
     codebase_analysis: str,
     past_patterns: str = ""
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Generate structured Scout report using BAML.
 
@@ -402,15 +405,20 @@ def generate_scout_report_baml(
         past_patterns: Past patterns to consider
 
     Returns:
-        ScoutReport dict or None if BAML unavailable
+        ScoutReport dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or generation fails
     """
     if not is_baml_available():
-        return None
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
 
     try:
         client = get_baml_client()
         if client is None:
-            return None
+            raise RuntimeError("BAML client not available")
 
         # Call BAML GenerateScoutReport function
         ctx = client.create_context_manager()
@@ -447,14 +455,15 @@ def generate_scout_report_baml(
         return internal_repr
 
     except Exception as e:
-        print(f"⚠️  BAML Scout report generation failed: {e}", file=sys.stderr)
-        return None
+        error_msg = f"BAML Scout report generation failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
 
 
 def generate_architecture_baml(
     scout_report_json: str,
     flagged_risks: List[str]
-) -> Optional[Dict[str, Any]]:
+) -> Dict[str, Any]:
     """
     Generate structured architecture blueprint using BAML.
 
@@ -463,15 +472,20 @@ def generate_architecture_baml(
         flagged_risks: List of flagged risks
 
     Returns:
-        ArchitectureBlueprint dict or None if BAML unavailable
+        ArchitectureBlueprint dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or generation fails
     """
     if not is_baml_available():
-        return None
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
 
     try:
         client = get_baml_client()
         if client is None:
-            return None
+            raise RuntimeError("BAML client not available")
 
         # Call BAML GenerateArchitecture function
         ctx = client.create_context_manager()
@@ -507,11 +521,12 @@ def generate_architecture_baml(
         return internal_repr
 
     except Exception as e:
-        print(f"⚠️  BAML Architecture generation failed: {e}", file=sys.stderr)
-        return None
+        error_msg = f"BAML Architecture generation failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
 
 
-def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
+def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
     """
     Validate builder task result using BAML.
 
@@ -519,15 +534,20 @@ def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
         result_json: Build result JSON
 
     Returns:
-        BuildTaskResult dict or None if BAML unavailable
+        BuildTaskResult dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or validation fails
     """
     if not is_baml_available():
-        return None
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
 
     try:
         client = get_baml_client()
         if client is None:
-            return None
+            raise RuntimeError("BAML client not available")
 
         # Call BAML ValidateBuildResult function
         ctx = client.create_context_manager()
@@ -562,8 +582,9 @@ def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
         return internal_repr
 
     except Exception as e:
-        print(f"⚠️  BAML build result validation failed: {e}", file=sys.stderr)
-        return None
+        error_msg = f"BAML build result validation failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
 
 
 # Utility functions for backward compatibility
