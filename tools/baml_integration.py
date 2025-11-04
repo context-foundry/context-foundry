@@ -54,6 +54,29 @@ def get_baml_client_dir() -> Path:
     return Path(__file__).parent / "baml_client"
 
 
+def get_baml_env_vars() -> Dict[str, str]:
+    """
+    Get environment variables for BAML runtime.
+
+    Returns:
+        Dictionary of environment variables with API keys
+    """
+    env_vars = {}
+
+    # Add all current environment variables
+    for key, value in os.environ.items():
+        env_vars[key] = value
+
+    # Ensure API keys are explicitly present
+    if 'OPENAI_API_KEY' in os.environ:
+        env_vars['OPENAI_API_KEY'] = os.environ['OPENAI_API_KEY']
+
+    if 'ANTHROPIC_API_KEY' in os.environ:
+        env_vars['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
+
+    return env_vars
+
+
 def compile_baml_schemas(force: bool = False) -> tuple[bool, Optional[str]]:
     """
     Validate BAML schemas exist (compilation happens in BamlRuntime.from_directory).
@@ -136,16 +159,10 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
         for schema_file in schema_files:
             files_dict[schema_file.name] = schema_file.read_text()
 
-        # CRITICAL: Build env_vars with explicit debugging
-        env_vars_for_baml = {}
+        # Get environment variables for BAML
+        env_vars_for_baml = get_baml_env_vars()
 
-        # Add all current environment variables
-        for key, value in os.environ.items():
-            env_vars_for_baml[key] = value
-
-        # Ensure API keys are explicitly present
-        if 'OPENAI_API_KEY' in os.environ:
-            env_vars_for_baml['OPENAI_API_KEY'] = os.environ['OPENAI_API_KEY']
+        if 'OPENAI_API_KEY' in env_vars_for_baml:
             print(f"[BAML] Explicitly added OPENAI_API_KEY", file=sys.stderr)
 
         print(f"[BAML] Creating BamlRuntime with {len(env_vars_for_baml)} env vars", file=sys.stderr)
@@ -226,15 +243,25 @@ def update_phase_with_baml(
                 tb=None,
                 cb=None,
                 collectors=[],
-                env_vars={},  # No additional env vars needed at call time
+                env_vars=get_baml_env_vars(),
                 tags=None
             )
 
             print(f"[BAML DEBUG] Function call succeeded!", file=sys.stderr)
 
-            # BAML v0.211.2 API: unstable_internal_repr returns JSON string
-            # Format: {"Success":{"content":"...", ...}} or similar
+            # BAML v0.211.2 API: Try to parse the result directly first
             try:
+                # First, try to get typed result (modern BAML API)
+                try:
+                    # Attempt direct parsing as PhaseInfo object
+                    parsed_data = result.parsed()
+                    print(f"[BAML DEBUG] Successfully parsed BAML output using .parsed()", file=sys.stderr)
+                    return parsed_data
+                except AttributeError:
+                    # Fall back to unstable_internal_repr for older API
+                    pass
+
+                # Fallback: Parse via unstable_internal_repr
                 internal_repr_str = result.unstable_internal_repr()
                 internal_repr = json.loads(internal_repr_str)
 
@@ -251,8 +278,28 @@ def update_phase_with_baml(
                     if content.endswith("```"):
                         content = content[:-3]  # Remove \n```
 
-                    # Parse the actual JSON
-                    parsed_data = json.loads(content.strip())
+                    content = content.strip()
+
+                    # Extract just the JSON object (handle extra text after JSON)
+                    # Find the first { and the matching }
+                    start_idx = content.find('{')
+                    if start_idx != -1:
+                        # Count braces to find matching close brace
+                        depth = 0
+                        for i in range(start_idx, len(content)):
+                            if content[i] == '{':
+                                depth += 1
+                            elif content[i] == '}':
+                                depth -= 1
+                                if depth == 0:
+                                    # Found matching close brace
+                                    json_str = content[start_idx:i+1]
+                                    parsed_data = json.loads(json_str)
+                                    print(f"[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr)
+                                    return parsed_data
+
+                    # If we couldn't extract JSON, try parsing the whole thing
+                    parsed_data = json.loads(content)
                     print(f"[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr)
                     return parsed_data
                 else:
@@ -295,14 +342,45 @@ def validate_phase_info(phase_info_json: str) -> tuple[bool, Optional[Dict[str, 
     if is_baml_available():
         try:
             client = get_baml_client()
-            # validated = client.ValidatePhaseInfo(json_string=phase_info_json)
-            # return True, validated.dict(), None
+            if client is None:
+                raise Exception("BAML client not available")
 
-            # Placeholder: BAML not fully integrated yet
-            pass
+            # Call BAML ValidatePhaseInfo function
+            ctx = client.create_context_manager()
+            result = client.call_function_sync(
+                function_name="ValidatePhaseInfo",
+                args={
+                    "json_string": phase_info_json
+                },
+                ctx=ctx,
+                tb=None,
+                cb=None,
+                collectors=[],
+                env_vars=get_baml_env_vars(),
+                tags=None
+            )
+
+            # Parse the result using unstable_internal_repr
+            internal_repr_str = result.unstable_internal_repr()
+            internal_repr = json.loads(internal_repr_str)
+
+            if "Success" in internal_repr and "content" in internal_repr["Success"]:
+                content = internal_repr["Success"]["content"]
+                # Strip markdown code blocks
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.startswith("```"):
+                    content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                validated_data = json.loads(content.strip())
+                return True, validated_data, None
+
+            return True, internal_repr, None
+
         except Exception as e:
             # Fall through to JSON validation
-            pass
+            print(f"⚠️  BAML phase validation failed, using JSON fallback: {e}", file=sys.stderr)
 
     # JSON fallback validation
     try:
@@ -357,7 +435,7 @@ def generate_scout_report_baml(
             tb=None,
             cb=None,
             collectors=[],
-            env_vars={},
+            env_vars=get_baml_env_vars(),
             tags=None
         )
 
@@ -417,7 +495,7 @@ def generate_architecture_baml(
             tb=None,
             cb=None,
             collectors=[],
-            env_vars={},
+            env_vars=get_baml_env_vars(),
             tags=None
         )
 
@@ -472,7 +550,7 @@ def validate_build_result_baml(result_json: str) -> Optional[Dict[str, Any]]:
             tb=None,
             cb=None,
             collectors=[],
-            env_vars={},
+            env_vars=get_baml_env_vars(),
             tags=None
         )
 
