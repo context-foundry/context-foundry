@@ -97,18 +97,12 @@ class TestBAMLSchemas:
 
     def test_compile_baml_schemas(self):
         """Test BAML schema compilation"""
-        # Note: This may fail if baml-py is not installed, which is expected
+        # BAML is now required, so compilation should succeed
         success, error = compile_baml_schemas()
 
-        if success:
-            assert error is None
-            # Client directory should exist
-            client_dir = get_baml_client_dir()
-            assert client_dir.exists()
-        else:
-            # If compilation failed, error should be set
-            assert error is not None
-            assert "baml" in error.lower() or "not installed" in error.lower()
+        # Should succeed since BAML is a required dependency
+        assert success, f"BAML schema compilation should succeed: {error}"
+        assert error is None
 
 
 class TestBAMLClient:
@@ -225,20 +219,21 @@ class TestScoutReport:
 
     def test_generate_scout_report_baml(self):
         """Test generating Scout report with BAML"""
-        # This will likely return None if BAML not installed
+        # BAML is now required, so this should work (or fail gracefully)
+        # Note: This is a lightweight test - see test_baml_real_integration.py for comprehensive mocked tests
+        # This test may call actual OpenAI API if OPENAI_API_KEY is set
         report = generate_scout_report_baml(
             task_description="Build a web app",
             codebase_analysis="Python project",
             past_patterns="No patterns"
         )
 
-        # If BAML is available, report should be a dict
+        # BAML is required and should be available
+        assert is_baml_available(), "BAML should be available (required dependency)"
+
+        # Report might be None if API call fails, which is acceptable in tests
         if report is not None:
             assert isinstance(report, dict)
-            # Would check for ScoutReport fields here
-        else:
-            # BAML not available, which is acceptable
-            assert not is_baml_available()
 
 
 class TestArchitectureBlueprint:
@@ -249,15 +244,15 @@ class TestArchitectureBlueprint:
         scout_json = json.dumps({"summary": "Test scout report"})
         risks = ["Risk 1", "Risk 2"]
 
-        # This will likely return None if BAML not installed
+        # BAML is now required
         architecture = generate_architecture_baml(scout_json, risks)
 
-        # If BAML is available, architecture should be a dict
+        # BAML is required and should be available
+        assert is_baml_available(), "BAML should be available (required dependency)"
+
+        # Architecture might be None if API call fails, which is acceptable in tests
         if architecture is not None:
             assert isinstance(architecture, dict)
-        else:
-            # BAML not available, which is acceptable
-            assert not is_baml_available()
 
 
 class TestBuilderTaskResult:
@@ -271,15 +266,15 @@ class TestBuilderTaskResult:
             "files_created": ["file1.py"]
         })
 
-        # This will likely return None if BAML not installed
+        # BAML is now required
         validated = validate_build_result_baml(result_json)
 
-        # If BAML is available, validated should be a dict
+        # BAML is required and should be available
+        assert is_baml_available(), "BAML should be available (required dependency)"
+
+        # Validated might be None if API call fails, which is acceptable in tests
         if validated is not None:
             assert isinstance(validated, dict)
-        else:
-            # BAML not available, which is acceptable
-            assert not is_baml_available()
 
 
 class TestFallbackBehavior:
