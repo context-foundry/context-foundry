@@ -46,8 +46,9 @@ Files read automatically by Scout/Architect/Builder when `flowise_flow: True`:
 | [tool-configs/STANDARD_TOOLS.md](../tool-configs/STANDARD_TOOLS.md) | Scout | 1x | Required tools specification |
 | [prompts/FLOWISE-STRUCTURE-AUTHORITY.md](../prompts/FLOWISE-STRUCTURE-AUTHORITY.md) | Architect | 1x | Validation checklist |
 | [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Builder | 1x | Canonical agent node schema |
+| [prompts/LOOP-NODE-TEMPLATE.json](../prompts/LOOP-NODE-TEMPLATE.json) | Builder | 1x (when needed) | Loop node schema for retry logic |
 
-**Total**: 9 explicit Read commands in orchestrator_prompt.txt
+**Total**: 9 explicit Read commands in orchestrator_prompt.txt (10 when loop nodes requested)
 
 ### Referenced But Not Automatically Read
 
@@ -74,6 +75,7 @@ Files not currently used by orchestrator (see [prompts/archive/README.md](../pro
 |----------|---------|
 | [prompts/AGENT-NODE-TEMPLATE.json](../prompts/AGENT-NODE-TEMPLATE.json) | Agent node template (canonical structure) |
 | [prompts/START-NODE-TEMPLATE.json](../prompts/START-NODE-TEMPLATE.json) | Start node template (for reference) |
+| [prompts/LOOP-NODE-TEMPLATE.json](../prompts/LOOP-NODE-TEMPLATE.json) | Loop node template (retry logic, validation loops, approval-with-revision) |
 
 ### Pattern Library
 

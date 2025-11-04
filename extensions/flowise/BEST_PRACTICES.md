@@ -1850,6 +1850,405 @@ This demonstrates all 3 patterns:
 
 ---
 
+## Loop Node Best Practices
+
+The Loop Node enables iterative workflows with retry logic, validation loops, and approval-with-revision patterns. Follow these best practices for reliable loop control.
+
+### When to Use Loop Nodes
+
+✅ **USE when**:
+- Approvals that allow revision and resubmission (promotion nominations, document approvals)
+- Data validation requiring user correction (form validation, data quality checks)
+- Quality gates with retry logic (code quality, test execution, build validation)
+- Iterative refinement workflows (design review cycles, content approval)
+- Workflows where failure should trigger retry with improvement
+- Need to prevent infinite resubmission loops with max iteration limits
+
+❌ **DON'T use when**:
+- Simple binary decisions (use Condition or HIL node instead)
+- One-time operations (no iteration needed)
+- Loops would be infinite without clear exit conditions
+- State tracking overhead not justified by use case
+- Nested loops (causes complexity explosion - redesign workflow instead)
+
+---
+
+### Configuration Best Practices
+
+#### Max Iterations (loopMaxIterations)
+
+**✅ Recommended Values**:
+
+| Use Case | Max Iterations | Rationale |
+|----------|----------------|-----------|
+| Approval workflows | 3 | Reasonable revision attempts before escalation |
+| Document validation | 5 | More attempts for complex validation rules |
+| Quality gates | 3 | Balance between improvement cycles and efficiency |
+| Simple toggles | 1 | Binary decision, no retry needed |
+
+**❌ Bad**:
+```json
+{
+  "loopMaxIterations": ""  // ❌ Missing - risk of infinite loop
+}
+```
+
+**✅ Good**:
+```json
+{
+  "loopMaxIterations": 3  // ✅ Reasonable limit
+}
+```
+
+---
+
+#### Temperature Settings
+
+**Critical**: Loop decisions MUST be deterministic.
+
+**✅ Good**:
+```json
+{
+  "temperature": 0.1  // ✅ Deterministic routing
+}
+```
+
+**❌ Bad**:
+```json
+{
+  "temperature": 0.9  // ❌ Random routing decisions
+}
+```
+
+**Why**: High temperature causes non-deterministic routing, making loop behavior unpredictable. Use 0.1-0.2 for consistent decisions.
+
+---
+
+#### State Management
+
+**Required Pattern**: Agent BEFORE loop node must increment iteration count.
+
+**✅ Good** - Proper state tracking:
+```json
+{
+  "agentUpdateState": [
+    {
+      "key": "loop.iteration_count",
+      "value": "{{ $flow.state.loop.iteration_count + 1 }}"
+    },
+    {
+      "key": "loop_context",
+      "value": "{\"iteration_count\": {{ $flow.state.loop.iteration_count }}, \"max_iterations\": 3, \"approval_state\": \"{{ approval_state }}\", \"validation_errors\": {{ validation_errors }}}"
+    }
+  ]
+}
+```
+
+**❌ Bad** - No state tracking:
+```json
+{
+  "conditionAgentInput": "{{ question }}"  // ❌ Missing iteration count
+}
+```
+
+**Why**: Without iteration tracking, loop can't enforce max iterations and may run forever.
+
+---
+
+#### Exit Conditions (exitOnApprovalStates)
+
+**Critical**: Define clear success states.
+
+**✅ Good**:
+```json
+{
+  "exitOnApprovalStates": ["APPROVED", "VALIDATED", "PASSED", "COMPLETED"]
+}
+```
+
+**❌ Bad**:
+```json
+{
+  "exitOnApprovalStates": ["OK", "good", "yes"]  // ❌ Vague, inconsistent
+}
+```
+
+**Why**: Success states must be explicit, case-sensitive, and consistent across workflow.
+
+---
+
+### Wiring Patterns
+
+#### Pattern A: Approval with Revision Loop
+
+**Use Case**: Promotion nominations, document approvals
+
+```
+[Submission Agent] → [HIL Approval Gate]
+                         ↓ proceed → [Final Stage]
+                         ↓ reject  → [Loop Node]
+                                        ↓
+                                  0: Revise & Resubmit ↺
+                                  1: Approved (exit)
+                                  2: Max Iters (abandon)
+                                  3: Escalate (executive review)
+```
+
+**Key Wiring**:
+- HIL reject → Loop Node input
+- Loop output 0 → Revision agent (loops back)
+- Loop output 1 → Next stage (success exit)
+- Loop output 2 → Failure handler (max iters reached)
+- Loop output 3 → Human escalation (edge cases)
+
+**Example**:
+```json
+{
+  "source": "humanInputAgentflow_0",
+  "sourceHandle": "humanInputAgentflow_0-output-reject",
+  "target": "conditionAgentAgentflow_12",
+  "data": {
+    "edgeLabel": "Rejected",
+    "isHumanInput": true
+  }
+}
+```
+
+---
+
+#### Pattern B: Validation with Correction Loop
+
+**Use Case**: Form validation, data quality checks
+
+```
+[User Input] → [Validator Agent] → [Loop Node]
+                                        ↓
+                      0: Back to Input Form ↺
+                      1: Exit (Valid) → Processing Agent
+                      2: Exit (Max Iters) → Error Display
+                      3: Escalate → Manual Review
+```
+
+**State Requirements**:
+```json
+{
+  "validation_errors": ["Missing field: employee_id", "Invalid date format"],
+  "required_fields_missing": true,
+  "quality_score": 65
+}
+```
+
+---
+
+#### Pattern C: Quality Gate with Retry
+
+**Use Case**: Code quality, test execution, build validation
+
+```
+[Builder Agent] → [Quality Check Agent] → [Loop Node]
+                                              ↓
+                            0: Back to Builder Agent ↺
+                            1: Exit (Passed) → Deploy
+                            2: Exit (Max Iters) → Mark Failed
+                            3: Escalate → Manual QA Review
+```
+
+**Decision Logic**:
+- quality_score < 80 → Route 0 (continue)
+- quality_score >= 80 → Route 1 (exit approved)
+- iteration_count >= max_iterations → Route 2 (max iters)
+
+---
+
+### Integration with HIL Gates
+
+Loop Nodes complement HIL gates by handling rejection paths.
+
+**Combined Benefits**:
+- ✅ Enables iterative refinement after rejection
+- ✅ Prevents infinite resubmission loops (max iterations)
+- ✅ Provides escalation path for edge cases
+- ✅ Tracks attempt count for audit trail
+- ✅ Automated retry logic without manual intervention
+
+**Typical Flow**:
+```
+1. User submits → HIL approves → Proceed
+2. User submits → HIL rejects → Loop Node
+   ↓
+3. Loop checks iteration (1 of 3)
+   ↓
+4. Route 0: User revises → Resubmit → HIL reviews again
+   ↓
+5. Loop checks iteration (2 of 3)
+   ↓
+6. If still rejected after 3 attempts → Route 2 (abandon)
+   OR Route 3 (escalate to executive review)
+```
+
+---
+
+### Common Pitfalls
+
+#### ❌ Pitfall 1: No Max Iterations Limit
+
+**Problem**: Risk of infinite loop
+```json
+{
+  "loopMaxIterations": ""  // ❌ Missing
+}
+```
+
+**Solution**: Always set reasonable limit
+```json
+{
+  "loopMaxIterations": 3  // ✅ Safety limit
+}
+```
+
+---
+
+#### ❌ Pitfall 2: Non-Deterministic Routing
+
+**Problem**: High temperature causes unpredictable decisions
+```json
+{
+  "temperature": 0.9  // ❌ Random routing
+}
+```
+
+**Solution**: Use low temperature for consistency
+```json
+{
+  "temperature": 0.1  // ✅ Deterministic
+}
+```
+
+---
+
+#### ❌ Pitfall 3: Missing State Tracking
+
+**Problem**: Iteration count not tracked, loop can't exit
+```json
+{
+  "conditionAgentInput": "{{ question }}"  // ❌ No iteration count
+}
+```
+
+**Solution**: Track iteration_count in flow state
+```json
+{
+  "agentUpdateState": [
+    {"key": "loop.iteration_count", "value": "{{ $flow.state.loop.iteration_count + 1 }}"}
+  ],
+  "conditionAgentInput": "{{ loop_context }}"  // ✅ Includes iteration_count
+}
+```
+
+---
+
+#### ❌ Pitfall 4: Unwired Escalation Path
+
+**Problem**: No human escalation for edge cases
+```json
+// Only routes 0, 1, 2 wired, route 3 disconnected
+```
+
+**Solution**: Always wire all four routes
+```json
+// Route 0: Loop back ✅
+// Route 1: Exit approved ✅
+// Route 2: Exit max iters ✅
+// Route 3: Escalate to human ✅ Always wire this!
+```
+
+**Why**: Edge cases (policy conflicts, ambiguous situations) need human judgment.
+
+---
+
+#### ❌ Pitfall 5: Nested Loops
+
+**Problem**: Loop inside loop causes complexity explosion
+```
+[Loop A] → [Agent] → [Loop B] → [Agent] → [Loop C]
+```
+
+**Solution**: Redesign with single loop and multi-stage validation
+```
+[Multi-Stage Validator] → [Single Loop Node] → [0: Retry All Stages]
+```
+
+**Why**: Nested loops are hard to debug, track, and reason about. Use sequential stages instead.
+
+---
+
+### Validation Checklist
+
+Before deploying Loop Node workflows, verify:
+
+- [ ] **loopMaxIterations** set to reasonable limit (3-5)
+- [ ] **exitOnApprovalStates** defined with explicit success states
+- [ ] **Temperature** set to 0.1-0.2 for deterministic routing
+- [ ] **Agent before loop** populates loop_context with required fields
+- [ ] **Agent before loop** increments iteration_count in state
+- [ ] **Output 0 (Continue)** wired back to revision/correction agent
+- [ ] **Output 1 (Exit Approved)** wired to next stage
+- [ ] **Output 2 (Exit Max Iters)** wired to failure handler
+- [ ] **Output 3 (Escalate)** wired to human review node
+- [ ] **State reset** mechanism for successful completion (set iteration_count to 0)
+- [ ] **Audit logging** includes iteration count and routing decisions
+
+---
+
+### Real-World Example: Promotion Nomination Loop
+
+**Scenario**: Manager submits promotion → Local leadership rejects → Manager revises → Resubmit (max 3 times)
+
+**Flow**:
+```
+Manager Form → NominationIntake Agent → LocalLeadershipReview Agent → HIL Gate
+                                                                            ↓ proceed → FinalApprover
+                                                                            ↓ reject  → Loop Node
+                                                                                           ↓
+Loop Decision (iteration 1 of 3):
+  - approval_state = "REJECTED" → Route 0
+  ↓
+Back to Manager → Revision Form → Update justification → Resubmit
+  ↓
+LocalLeadershipReview Agent → HIL Gate → Still rejected → Loop Node
+  ↓
+Loop Decision (iteration 2 of 3):
+  - approval_state = "REJECTED", iteration_count < max_iterations → Route 0
+  ↓
+Back to Manager again → Final revision → Resubmit
+  ↓
+LocalLeadershipReview Agent → HIL Gate → Approved! → Route 1 (exit success)
+```
+
+**State Tracking**:
+```json
+{
+  "loop": {
+    "iteration_count": 2,
+    "max_iterations": 3
+  },
+  "nomination": {
+    "worker_id": "EMP12345",
+    "manager_id": "MGR98765",
+    "approval_state": "APPROVED",
+    "revision_history": [
+      "Initial submission - insufficient peer comparison",
+      "Revision 1 - added peer comparison but missing metrics",
+      "Revision 2 - complete with all required data - APPROVED"
+    ]
+  }
+}
+```
+
+**Result**: Manager successfully revised nomination twice before approval, demonstrating iterative refinement with loop safety (3-attempt limit).
+
+---
+
 ## Mermaid Diagram Generation
 
 Context Foundry automatically generates beautiful Mermaid diagrams for Flowise workflows with authentic styling, emoji icons, and intelligent layout.

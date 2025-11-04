@@ -622,6 +622,1058 @@ This output connects to the next node in the workflow (typically an agent or ano
 
 ---
 
+### 4. Human Input Node (humanInputAgentflow)
+
+Enables Human-in-the-Loop (HITL) checkpoints for approval workflows. Pauses execution and presents information to a human reviewer who can approve (proceed) or reject the proposed action.
+
+#### Complete Structure
+
+```json
+{
+  "id": "humanInputAgentflow_[NUMBER]",
+  "position": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "data": {
+    "id": "humanInputAgentflow_[NUMBER]",
+    "label": "[Descriptive Label]",  // e.g., "Conflict Approval", "Budget Review"
+    "version": 1.0,
+    "name": "humanInputAgentflow",
+    "type": "HumanInput",
+    "color": "#F06292",
+    "baseClasses": ["HumanInput"],
+    "category": "Agent Flows",
+    "description": "Request human input, approval or rejection during execution",
+    "inputParams": [
+      {
+        "label": "Description Type",
+        "name": "humanInputDescriptionType",
+        "type": "options",
+        "options": [
+          {"label": "Fixed", "name": "fixed", "description": "Specify a fixed description"},
+          {"label": "Dynamic", "name": "dynamic", "description": "Use LLM to generate a description"}
+        ],
+        "id": "humanInputAgentflow_[N]-input-humanInputDescriptionType-options",
+        "display": true
+      },
+      {
+        "label": "Description",
+        "name": "humanInputDescription",
+        "type": "string",
+        "placeholder": "Are you sure you want to proceed?",
+        "acceptVariable": true,
+        "rows": 8,
+        "show": {"humanInputDescriptionType": "fixed"},
+        "id": "humanInputAgentflow_[N]-input-humanInputDescription-string",
+        "display": true
+      },
+      {
+        "label": "Model",
+        "name": "humanInputModel",
+        "type": "asyncOptions",
+        "loadMethod": "listModels",
+        "loadConfig": true,
+        "show": {"humanInputDescriptionType": "dynamic"},
+        "id": "humanInputAgentflow_[N]-input-humanInputModel-asyncOptions",
+        "display": false
+      },
+      {
+        "label": "Prompt",
+        "name": "humanInputModelPrompt",
+        "type": "string",
+        "acceptVariable": true,
+        "generateInstruction": true,
+        "rows": 12,
+        "show": {"humanInputDescriptionType": "dynamic"},
+        "id": "humanInputAgentflow_[N]-input-humanInputModelPrompt-string",
+        "display": false
+      },
+      {
+        "label": "Enable Feedback",
+        "name": "humanInputEnableFeedback",
+        "type": "boolean",
+        "default": true,
+        "id": "humanInputAgentflow_[N]-input-humanInputEnableFeedback-boolean",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "humanInputDescriptionType": "fixed",
+      "humanInputDescription": "",
+      "humanInputEnableFeedback": true,
+      "humanInputModelConfig": {
+        "credential": "OpenAI API Key",
+        "modelName": "gpt-4o-mini",
+        "temperature": 0.0,
+        "streaming": true,
+        "humanInputModel": "chatOpenAI"
+      }
+    },
+    "outputAnchors": [
+      {
+        "id": "humanInputAgentflow_[N]-output-proceed",
+        "label": "Proceed",
+        "name": "proceed",
+        "description": "User approved"
+      },
+      {
+        "id": "humanInputAgentflow_[N]-output-reject",
+        "label": "Reject",
+        "name": "reject",
+        "description": "User rejected"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 221,
+  "height": 80,
+  "selected": false,
+  "positionAbsolute": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "dragging": false
+}
+```
+
+#### Key Attributes
+
+| Field | Value | Required | Notes |
+|-------|-------|----------|-------|
+| `name` | `"humanInputAgentflow"` | Yes | MUST be exactly this |
+| `type` | `"HumanInput"` | Yes | Identifies node type |
+| `color` | `"#F06292"` | No | Pink (approval workflow theme) |
+| `version` | `1.0` | Yes | Current stable version |
+| `humanInputDescriptionType` | `"fixed"` or `"dynamic"` | Yes | Approval message generation method |
+| `humanInputEnableFeedback` | `true` | Yes | Allow reviewer to provide feedback |
+
+---
+
+#### Variant A: Fixed Description with State Context
+
+**Use Case**: Predefined approval messages with dynamic data from flow state
+
+**Example - Conflict of Interest Approval**:
+
+```json
+{
+  "id": "humanInputAgentflow_0",
+  "data": {
+    "label": "Conflict of Interest Approval",
+    "name": "humanInputAgentflow",
+    "inputs": {
+      "humanInputDescriptionType": "fixed",
+      "humanInputDescription": "⚠️ CONFLICT OF INTEREST DETECTED\n\nAction: {{ $flow.state.hitl.pending.action }}\nSummary: {{ $flow.state.hitl.pending.summary }}\nRisk Score: {{ $flow.state.hitl.pending.risk_score }}/10\nCost Estimate: ${{ $flow.state.hitl.pending.cost_estimate }}\n\nRecommended Mitigations:\n{{ $flow.state.hitl.pending.mitigations }}\n\n🔵 PROCEED: Approve with conflict waiver\n🔴 REJECT: Escalate to compliance team",
+      "humanInputEnableFeedback": true
+    },
+    "outputAnchors": [
+      {"id": "humanInputAgentflow_0-output-proceed", "label": "Proceed", "name": "proceed", "description": "User approved"},
+      {"id": "humanInputAgentflow_0-output-reject", "label": "Reject", "name": "reject", "description": "User rejected"}
+    ]
+  }
+}
+```
+
+**Template Variables**:
+- `{{ $flow.state.* }}` - Access flow state data
+- `{{ question }}` - Current user input
+- `{{ $flow.state.hitl.pending.* }}` - Common HITL data structure
+
+**Common State Schema for HITL**:
+```json
+{
+  "hitl": {
+    "pending": {
+      "action": "string",              // Action requiring approval
+      "summary": "string",             // Brief summary
+      "risk_score": 1-10,              // Risk assessment
+      "cost_estimate": "number",       // Financial impact
+      "affected_parties": "string[]",  // Who is impacted
+      "mitigations": "string",         // Recommended safeguards
+      "timestamp": "ISO timestamp"
+    }
+  }
+}
+```
+
+---
+
+#### Variant B: Dynamic Description with LLM Generation
+
+**Use Case**: Context-aware approval messages generated by LLM based on conversation history
+
+**Example - Dynamic Approval with Conversation Summary**:
+
+```json
+{
+  "id": "humanInputAgentflow_1",
+  "data": {
+    "label": "Dynamic Approval Gate",
+    "name": "humanInputAgentflow",
+    "inputs": {
+      "humanInputDescriptionType": "dynamic",
+      "humanInputModel": "chatAnthropic",
+      "humanInputModelPrompt": "Summarize the conversation between the user and the assistant, reiterate the last message from the assistant, and ask if user would like to proceed or if they have any feedback.\n\nBegin by capturing the key points of the conversation, ensuring that you reflect the main ideas and themes discussed.\n\nThen, clearly reproduce the last message sent by the assistant to maintain continuity. Make sure the whole message is reproduced.\n\nFinally, ask the user if they would like to proceed, or provide any feedback on the last assistant message\n\nOutput Format The output should be structured in three parts in text:\n\nA summary of the conversation (1-3 sentences).\n\nThe last assistant message (exactly as it appeared).\n\nAsk the user if they would like to proceed, or provide any feedback on last assistant message. No other explanation and elaboration is needed.",
+      "humanInputEnableFeedback": true,
+      "humanInputModelConfig": {
+        "credential": "Anthropic API Key",
+        "modelName": "claude-sonnet-4-0",
+        "temperature": 0.0,
+        "streaming": true,
+        "humanInputModel": "chatAnthropic"
+      }
+    },
+    "outputAnchors": [
+      {"id": "humanInputAgentflow_1-output-proceed", "label": "Proceed", "name": "proceed", "description": "User approved"},
+      {"id": "humanInputAgentflow_1-output-reject", "label": "Reject", "name": "reject", "description": "User rejected"}
+    ]
+  }
+}
+```
+
+**Model Configuration for Dynamic Mode**:
+- **Temperature**: MUST be 0.0 for deterministic approval messages
+- **Model**: Fast models (gpt-4o-mini, claude-sonnet-4-0)
+- **Streaming**: true (standard for all agents)
+
+---
+
+#### Output Anchors (Critical Pattern)
+
+The Human Input node has TWO output anchors with semantic labels:
+
+```json
+{
+  "outputAnchors": [
+    {
+      "id": "humanInputAgentflow_[N]-output-proceed",
+      "label": "Proceed",
+      "name": "proceed",
+      "description": "User approved"
+    },
+    {
+      "id": "humanInputAgentflow_[N]-output-reject",
+      "label": "Reject",
+      "name": "reject",
+      "description": "User rejected"
+    }
+  ]
+}
+```
+
+**Rules**:
+- `id` format: `[nodeId]-output-proceed` and `[nodeId]-output-reject`
+- `label`: "Proceed" and "Reject" (user-visible labels)
+- `name`: `proceed` and `reject` (internal identifiers)
+- `description`: Explain what each path means
+
+**Wiring Pattern**:
+```
+[Previous Agent]
+       ↓
+[Human Input Node]
+   ↓proceed        ↓reject
+[Approval Agent]  [Remediation Agent]
+```
+
+---
+
+#### Wiring Examples
+
+**Example 1: Approval → Processing, Rejection → Escalation**
+
+```json
+// Edge 1: Connect proceed to approval agent
+{
+  "source": "humanInputAgentflow_0",
+  "sourceHandle": "humanInputAgentflow_0-output-proceed",
+  "target": "agentAgentflow_1",  // Approval agent
+  "targetHandle": "agentAgentflow_1",
+  "data": {
+    "sourceColor": "#F06292",
+    "targetColor": "#4DD0E1",
+    "edgeLabel": "Proceed",
+    "isHumanInput": true
+  }
+}
+
+// Edge 2: Connect reject to remediation agent
+{
+  "source": "humanInputAgentflow_0",
+  "sourceHandle": "humanInputAgentflow_0-output-reject",
+  "target": "agentAgentflow_2",  // Remediation agent
+  "targetHandle": "agentAgentflow_2",
+  "data": {
+    "sourceColor": "#F06292",
+    "targetColor": "#4DD0E1",
+    "edgeLabel": "Reject",
+    "isHumanInput": true
+  }
+}
+```
+
+**Note**: Set `isHumanInput: true` in edge data to indicate this edge originates from a HIL node.
+
+---
+
+**Example 2: Reject → Loop Back to Detection**
+
+```json
+// Reject path loops back to detector for modification
+{
+  "source": "humanInputAgentflow_0",
+  "sourceHandle": "humanInputAgentflow_0-output-reject",
+  "target": "agentAgentflow_0",  // Back to conflict detector
+  "targetHandle": "agentAgentflow_0",
+  "data": {
+    "edgeLabel": "Modify & Retry",
+    "isHumanInput": true
+  }
+}
+```
+
+---
+
+#### Usage Patterns
+
+**Pattern A: Single Approval Gate**
+```
+[Detection Agent] → [HIL Node] → [Proceed: Processing] | [Reject: Escalation]
+```
+Use for: Simple approve/reject decisions
+
+---
+
+**Pattern B: Multi-Stage Approval**
+```
+[Agent A] → [HIL 1] → [Agent B] → [HIL 2] → [Agent C]
+```
+Use for: Multi-level approval workflows (e.g., L1 approval → L2 approval)
+
+---
+
+**Pattern C: Conditional HIL (via Condition Node)**
+```
+[Condition] → [High Risk: HIL Node] | [Low Risk: Auto-Approve Agent]
+```
+Use for: Only pause for high-risk scenarios, auto-approve low-risk
+
+---
+
+**Pattern D: Rejection Loop**
+```
+[Detection] → [HIL] → [Proceed: Approve] | [Reject: Back to Detection]
+```
+Use for: Iterative refinement workflows
+
+---
+
+#### Common Use Cases
+
+**1. Conflict of Interest Approval**
+- Detection agent identifies conflict
+- HIL node presents conflict details and severity
+- Proceed → Generate waiver and approve
+- Reject → Escalate to compliance team
+
+**2. Budget Approval**
+- Cost estimation agent calculates expense
+- HIL node shows cost breakdown
+- Proceed → Execute purchase
+- Reject → Return to cost reduction agent
+
+**3. Email Sending Approval**
+- Email draft agent composes message
+- HIL node shows email preview
+- Proceed → Send email
+- Reject → Revise draft
+
+**4. Data Deletion Approval**
+- Deletion agent identifies records to remove
+- HIL node lists what will be deleted
+- Proceed → Execute deletion
+- Reject → Cancel operation
+
+---
+
+#### Best Practices
+
+**✅ DO**:
+- Use Fixed Description when approval context is known in advance
+- Use Dynamic Description when context varies significantly
+- Set temperature to 0.0 for deterministic approval messages
+- Populate flow state BEFORE the HIL node (in previous agent)
+- Use semantic labels ("Proceed"/"Reject", not "Output 0"/"Output 1")
+- Enable feedback to capture human reviewer notes
+- Wire both proceed AND reject paths (never leave reject path disconnected)
+
+**❌ DON'T**:
+- Use generic "Human Input" labels (use "Proceed"/"Reject")
+- Leave reject path unwired (always handle rejections)
+- Use high temperature for dynamic mode (causes inconsistent messages)
+- Put complex logic in the HIL node (handle in agents before/after)
+- Use HIL for simple informational messages (use regular agent responses)
+
+---
+
+#### Integration with Flow State
+
+**Populating State for HIL Node**:
+
+The agent BEFORE the HIL node should populate flow state:
+
+```json
+{
+  "label": "Agent.ConflictDetector",
+  "inputs": {
+    "agentUpdateState": [
+      {"key": "hitl.pending.action", "value": "{{ detected_action }}"},
+      {"key": "hitl.pending.summary", "value": "{{ conflict_summary }}"},
+      {"key": "hitl.pending.risk_score", "value": "{{ calculated_risk }}"},
+      {"key": "hitl.pending.mitigations", "value": "{{ suggested_mitigations }}"}
+    ]
+  }
+}
+```
+
+Then HIL node references these values in its description.
+
+---
+
+#### Common Pitfalls
+
+❌ **WRONG**: Generic output labels
+```json
+{
+  "outputAnchors": [
+    {"id": "...-output-0", "label": "Human Input", "name": "humanInputAgentflow"},
+    {"id": "...-output-1", "label": "Human Input", "name": "humanInputAgentflow"}
+  ]
+}
+```
+
+✅ **CORRECT**: Semantic labels
+```json
+{
+  "outputAnchors": [
+    {"id": "...-output-proceed", "label": "Proceed", "name": "proceed", "description": "User approved"},
+    {"id": "...-output-reject", "label": "Reject", "name": "reject", "description": "User rejected"}
+  ]
+}
+```
+
+---
+
+❌ **WRONG**: Disconnected reject path
+```
+[HIL Node] → proceed → [Agent]
+           → reject → [NOTHING]
+```
+
+✅ **CORRECT**: Both paths wired
+```
+[HIL Node] → proceed → [Approval Agent]
+           → reject → [Remediation Agent]
+```
+
+---
+
+❌ **WRONG**: Empty description
+```json
+{
+  "humanInputDescription": "Approve?"
+}
+```
+
+✅ **CORRECT**: Context-rich description
+```json
+{
+  "humanInputDescription": "⚠️ HIGH-RISK ACTION\n\nAction: {{ $flow.state.hitl.pending.action }}\nRisk: {{ $flow.state.hitl.pending.risk_score }}/10\n\nDetails:\n{{ $flow.state.hitl.pending.summary }}\n\nProceed?"
+}
+```
+
+---
+
+### 5. Loop Node (conditionAgentAgentflow)
+
+Enables iterative workflows with retry logic, validation loops, and approval-with-revision patterns. The Loop Node is a specialized ConditionAgent that controls workflow loops with four deterministic exit paths.
+
+#### Complete Structure
+
+```json
+{
+  "id": "conditionAgentAgentflow_12",
+  "position": { "x": 0, "y": 0 },
+  "data": {
+    "id": "conditionAgentAgentflow_12",
+    "label": "Loop Control",
+    "version": 1.1,
+    "name": "conditionAgentAgentflow",
+    "type": "ConditionAgent",
+    "color": "#ffcc80",
+    "baseClasses": ["ConditionAgent"],
+    "category": "Agent Flows",
+    "description": "Generic loop controller: Continue ↺, Exit (Approved/Validated), Exit (Max Iterations), or Escalate to Human.",
+    "inputParams": [
+      {
+        "label": "Model",
+        "name": "conditionAgentModel",
+        "type": "asyncOptions",
+        "loadMethod": "listModels",
+        "loadConfig": true
+      },
+      {
+        "label": "Instructions",
+        "name": "conditionAgentInstructions",
+        "type": "string",
+        "rows": 10
+      },
+      {
+        "label": "Input (Loop Context)",
+        "name": "conditionAgentInput",
+        "type": "string",
+        "acceptVariable": true
+      },
+      {
+        "label": "Scenarios",
+        "name": "conditionAgentScenarios",
+        "type": "array"
+      },
+      {
+        "label": "Max Iterations",
+        "name": "loopMaxIterations",
+        "type": "number",
+        "default": 3
+      },
+      {
+        "label": "Iteration Counter Key",
+        "name": "loopIterationKey",
+        "type": "string",
+        "default": ".context-foundry/loop-iteration-count.txt"
+      },
+      {
+        "label": "Delay Between Iterations (ms)",
+        "name": "loopDelayMs",
+        "type": "number",
+        "default": 0
+      },
+      {
+        "label": "Exit-On Approval States",
+        "name": "exitOnApprovalStates",
+        "type": "array"
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "conditionAgentModel": "chatAnthropic",
+      "conditionAgentInstructions": "You are the Loop Controller for enterprise workflows (promotion, validation, refinement). Decide ONE route:\n\nROUTES\n0 = CONTINUE (loop back for revision/correction)\n1 = EXIT: APPROVED/VALIDATED (success)\n2 = EXIT: MAX ITERATIONS (stop with failure)\n3 = ESCALATE TO HUMAN (handoff required)\n\nSIGNALS (from input JSON):\n- iteration_count (int)\n- max_iterations (int)\n- approval_state (e.g., PENDING, REJECTED, APPROVED)\n- validation_errors (array)\n- quality_score (0-100)\n- required_fields_missing (bool)\n- notes/comments (string)\n- exit_on_approval_states (array of strings)\n\nLOGIC (deterministic, then judgement):\n- If approval_state ∈ exit_on_approval_states → route 1\n- Else if iteration_count >= max_iterations → route 2\n- Else if validation_errors present OR required_fields_missing OR quality_score < 80 OR approval_state == \"REJECTED\" → route 0\n- Else if ambiguous/blocker needing human decision (e.g., policy conflict, missing policy mapping) → route 3\n- Otherwise → route 0\n\nReturn ONLY a compact JSON object: {\"route\": <0|1|2|3>, \"reason\": \"...\"}. No extra text.",
+      "conditionAgentInput": "{{ loop_context }}",
+      "conditionAgentScenarios": [
+        { "scenario": "Continue: rejection or failed validation → requestor/agent revises and resubmits" },
+        { "scenario": "Exit (Approved/Validated): passed gates/approvals" },
+        { "scenario": "Exit (Max Iterations): safety stop after too many retries" },
+        { "scenario": "Escalate to Human: ambiguous policy or high-risk decision" }
+      ],
+      "loopMaxIterations": 3,
+      "loopIterationKey": ".context-foundry/loop-iteration-count.txt",
+      "loopDelayMs": 0,
+      "exitOnApprovalStates": ["APPROVED", "VALIDATED"],
+      "conditionAgentModelConfig": {
+        "credential": "Anthropic API Key",
+        "modelName": "claude-sonnet-4-0",
+        "temperature": 0.1,
+        "streaming": true,
+        "conditionAgentModel": "chatAnthropic"
+      }
+    },
+    "outputAnchors": [
+      {
+        "id": "conditionAgentAgentflow_12-output-0",
+        "label": 0,
+        "name": 0,
+        "description": "Continue (Loop Back)"
+      },
+      {
+        "id": "conditionAgentAgentflow_12-output-1",
+        "label": 1,
+        "name": 1,
+        "description": "Exit: Approved/Validated"
+      },
+      {
+        "id": "conditionAgentAgentflow_12-output-2",
+        "label": 2,
+        "name": 2,
+        "description": "Exit: Max Iterations"
+      },
+      {
+        "id": "conditionAgentAgentflow_12-output-3",
+        "label": 3,
+        "name": 3,
+        "description": "Exit: Escalate to Human"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 240,
+  "height": 120
+}
+```
+
+#### Key Attributes
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| `name` | `"conditionAgentAgentflow"` | Same as Condition node (specialized usage) |
+| `type` | `"ConditionAgent"` | Uses ConditionAgent for routing |
+| `color` | `"#ffcc80"` | Orange (distinguishes from standard routing) |
+| `version` | `1.1` | Current stable version |
+
+#### Input Parameters Explained
+
+**loopMaxIterations** (Required)
+- Maximum number of loop iterations before forced exit
+- Prevents infinite loops
+- Recommended: 3-5 for production workflows
+- Example: `3` (approval workflows), `5` (validation loops)
+
+**loopIterationKey** (Required)
+- Flow state key for tracking iteration count
+- Default: `.context-foundry/loop-iteration-count.txt`
+- Must be incremented by agent BEFORE loop node
+- Used to enforce max iterations limit
+
+**loopDelayMs** (Optional)
+- Milliseconds to wait between iterations
+- Default: `0` (no delay)
+- Use when rate-limiting external API calls
+- Example: `1000` (1 second delay)
+
+**exitOnApprovalStates** (Required)
+- Array of approval states that trigger successful exit (route 1)
+- Common values: `["APPROVED", "VALIDATED", "PASSED", "COMPLETED"]`
+- Checked first in routing logic
+- Case-sensitive string matching
+
+**conditionAgentInput** (Required)
+- Variable containing loop context (JSON string)
+- Must include: `iteration_count`, `max_iterations`, `approval_state`
+- Optional: `validation_errors`, `quality_score`, `notes`
+- Example: `"{{ loop_context }}"` from flow state
+
+**conditionAgentInstructions** (Required)
+- Routing logic for loop decisions
+- Must be deterministic (use low temperature 0.1-0.2)
+- Should include all 4 routes explicitly
+- Template provided in LOOP-NODE-TEMPLATE.json
+
+#### Output Anchors (Four Routes)
+
+The Loop Node has FOUR output anchors with semantic labels:
+
+```json
+{
+  "outputAnchors": [
+    {
+      "id": "conditionAgentAgentflow_12-output-0",
+      "label": 0,
+      "name": 0,
+      "description": "Continue (Loop Back)"
+    },
+    {
+      "id": "conditionAgentAgentflow_12-output-1",
+      "label": 1,
+      "name": 1,
+      "description": "Exit: Approved/Validated"
+    },
+    {
+      "id": "conditionAgentAgentflow_12-output-2",
+      "label": 2,
+      "name": 2,
+      "description": "Exit: Max Iterations"
+    },
+    {
+      "id": "conditionAgentAgentflow_12-output-3",
+      "label": 3,
+      "name": 3,
+      "description": "Exit: Escalate to Human"
+    }
+  ]
+}
+```
+
+**Routes**:
+- **Route 0 (Continue)**: Loop back to revision/correction agent for another iteration
+- **Route 1 (Exit Approved)**: Success exit, proceed to next workflow stage
+- **Route 2 (Exit Max Iters)**: Failure exit, max iterations reached, stop with error
+- **Route 3 (Escalate)**: Edge case exit, send to human review for decision
+
+#### Routing Logic (Deterministic)
+
+The Loop Node uses **deterministic logic** with this precedence:
+
+1. **Check approval_state ∈ exitOnApprovalStates** → Route 1 (Exit Approved)
+2. **Check iteration_count >= max_iterations** → Route 2 (Exit Max Iterations)
+3. **Check validation_errors OR required_fields_missing OR quality_score < 80 OR approval_state == "REJECTED"** → Route 0 (Continue)
+4. **Check ambiguous/blocker conditions** → Route 3 (Escalate to Human)
+5. **Default** → Route 0 (Continue)
+
+**Critical**: Use temperature 0.1-0.2 for consistent routing decisions.
+
+---
+
+#### Usage Patterns
+
+**Pattern A: Approval with Revision Loop**
+
+```
+[Submission Agent] → [HIL Approval Gate] → [Reject Path] → [Loop Node]
+                                                                  ↓
+                                    0: Loop Back to Revision Agent ↺
+                                    1: Exit (Approved) → Next Stage
+                                    2: Exit (Max Iters) → Failure Handler
+                                    3: Escalate → Executive Review
+```
+
+**Use When**: Approvals that allow revision and resubmission (promotion nominations, document approvals)
+
+**Example - Promotion Nomination**:
+```
+Manager submits → Local Leadership HIL → Rejected
+  ↓
+Loop Node checks iteration (1 of 3)
+  ↓
+Route 0: Back to Manager → Revise justification → Resubmit
+  ↓
+Loop Node checks iteration (2 of 3)
+  ↓
+Approved → Route 1: Continue to Final Approval
+```
+
+---
+
+**Pattern B: Validation with Correction Loop**
+
+```
+[User Input] → [Validator Agent] → [Loop Node]
+                                        ↓
+                      0: Back to Input Form ↺
+                      1: Exit (Valid) → Processing Agent
+                      2: Exit (Max Iters) → Error Display
+                      3: Escalate → Manual Review
+```
+
+**Use When**: Data validation that requires user correction (form validation, data quality checks)
+
+**Example - Document Validation**:
+```
+User uploads document → Validator finds errors
+  ↓
+Loop Node (iteration 1 of 5)
+  ↓
+Route 0: Back to User → Display errors → User corrects → Resubmit
+  ↓
+Still has errors → Loop Node (iteration 2 of 5)
+  ↓
+Route 0: Back to User again
+  ↓
+No errors → Route 1: Continue to Processing
+```
+
+---
+
+**Pattern C: Quality Gate with Retry**
+
+```
+[Builder Agent] → [Quality Check Agent] → [Loop Node]
+                                              ↓
+                            0: Back to Builder Agent ↺
+                            1: Exit (Passed) → Deploy
+                            2: Exit (Max Iters) → Mark Failed
+                            3: Escalate → Manual QA Review
+```
+
+**Use When**: Automated quality checks with retry logic (code quality, test execution, build validation)
+
+**Example - Code Quality Loop**:
+```
+Builder generates code → Quality checker scores 65/100
+  ↓
+Loop Node (iteration 1 of 3, score < 80)
+  ↓
+Route 0: Back to Builder → Improve code → Re-check
+  ↓
+Quality checker scores 85/100
+  ↓
+Route 1: Quality passed → Continue to Deploy
+```
+
+---
+
+#### Wiring Examples
+
+**Example 1: Approval Loop with All Four Paths**
+
+```json
+// Edge 1: Validator to Loop Control
+{
+  "source": "agentAgentflow_1",
+  "sourceHandle": "agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor",
+  "target": "conditionAgentAgentflow_12",
+  "targetHandle": "conditionAgentAgentflow_12",
+  "type": "agentFlow"
+}
+
+// Edge 2: Loop Back to Revision Agent (Route 0)
+{
+  "source": "conditionAgentAgentflow_12",
+  "sourceHandle": "conditionAgentAgentflow_12-output-0",
+  "target": "agentAgentflow_2",
+  "targetHandle": "agentAgentflow_2",
+  "data": {
+    "edgeLabel": "Continue (Retry)",
+    "sourceColor": "#ffcc80",
+    "targetColor": "#4DD0E1"
+  },
+  "type": "agentFlow"
+}
+
+// Edge 3: Exit Approved to Next Stage (Route 1)
+{
+  "source": "conditionAgentAgentflow_12",
+  "sourceHandle": "conditionAgentAgentflow_12-output-1",
+  "target": "agentAgentflow_3",
+  "targetHandle": "agentAgentflow_3",
+  "data": {
+    "edgeLabel": "Approved",
+    "sourceColor": "#ffcc80",
+    "targetColor": "#4DD0E1"
+  },
+  "type": "agentFlow"
+}
+
+// Edge 4: Exit Max Iterations to Failure Handler (Route 2)
+{
+  "source": "conditionAgentAgentflow_12",
+  "sourceHandle": "conditionAgentAgentflow_12-output-2",
+  "target": "agentAgentflow_4",
+  "targetHandle": "agentAgentflow_4",
+  "data": {
+    "edgeLabel": "Max Iterations",
+    "sourceColor": "#ffcc80",
+    "targetColor": "#4DD0E1"
+  },
+  "type": "agentFlow"
+}
+
+// Edge 5: Escalate to Human Review (Route 3)
+{
+  "source": "conditionAgentAgentflow_12",
+  "sourceHandle": "conditionAgentAgentflow_12-output-3",
+  "target": "humanInputAgentflow_0",
+  "targetHandle": "humanInputAgentflow_0",
+  "data": {
+    "edgeLabel": "Escalate",
+    "sourceColor": "#ffcc80",
+    "targetColor": "#F06292"
+  },
+  "type": "agentFlow"
+}
+```
+
+---
+
+**Example 2: HIL Rejection → Loop Node**
+
+```json
+// HIL Reject Path to Loop Control
+{
+  "source": "humanInputAgentflow_0",
+  "sourceHandle": "humanInputAgentflow_0-output-reject",
+  "target": "conditionAgentAgentflow_12",
+  "targetHandle": "conditionAgentAgentflow_12",
+  "data": {
+    "edgeLabel": "Rejected",
+    "isHumanInput": true,
+    "sourceColor": "#F06292",
+    "targetColor": "#ffcc80"
+  },
+  "type": "agentFlow"
+}
+
+// Loop Back to Revision
+{
+  "source": "conditionAgentAgentflow_12",
+  "sourceHandle": "conditionAgentAgentflow_12-output-0",
+  "target": "agentAgentflow_1",
+  "targetHandle": "agentAgentflow_1",
+  "data": {
+    "edgeLabel": "Revise & Resubmit"
+  },
+  "type": "agentFlow"
+}
+```
+
+---
+
+#### State Management
+
+**Loop Context Structure**:
+
+The agent BEFORE the Loop Node must populate flow state with loop context:
+
+```json
+{
+  "agentUpdateState": [
+    {"key": "loop.iteration_count", "value": "{{ $flow.state.loop.iteration_count + 1 }}"},
+    {"key": "loop_context", "value": "{\"iteration_count\": {{ $flow.state.loop.iteration_count }}, \"max_iterations\": 3, \"approval_state\": \"{{ approval_state }}\", \"validation_errors\": {{ validation_errors }}, \"notes\": \"{{ notes }}\"}"}
+  ]
+}
+```
+
+**Required Fields in loop_context**:
+- `iteration_count` (integer) - Current iteration number
+- `max_iterations` (integer) - Maximum allowed iterations
+- `approval_state` (string) - Current state (PENDING/REJECTED/APPROVED/VALIDATED)
+
+**Optional Fields**:
+- `validation_errors` (array) - List of validation errors
+- `quality_score` (integer 0-100) - Quality metric
+- `required_fields_missing` (boolean) - Validation flag
+- `notes` (string) - Human-readable context
+
+**State Reset**:
+
+When loop exits successfully (route 1), reset the iteration counter:
+
+```json
+{
+  "agentUpdateState": [
+    {"key": "loop.iteration_count", "value": "0"}
+  ]
+}
+```
+
+---
+
+#### Integration with HIL Gates
+
+Loop Nodes complement HIL gates by handling rejection paths:
+
+**Combined Pattern**:
+```
+[Submission Agent] → [HIL Approval Gate]
+                         ↓ proceed → [Final Stage]
+                         ↓ reject  → [Loop Node]
+                                        ↓
+                                  0: Revise & Resubmit ↺
+                                  1: Approved (no loop needed)
+                                  2: Max Iters → Abandon
+                                  3: Escalate → Executive Review
+```
+
+**Benefits**:
+- ✅ Enables iterative refinement after rejection
+- ✅ Prevents infinite resubmission loops
+- ✅ Provides escalation path for edge cases
+- ✅ Tracks attempt count for audit trail
+
+---
+
+#### Common Pitfalls
+
+❌ **WRONG**: No max iterations limit
+```json
+{
+  "loopMaxIterations": ""  // ❌ Missing limit, risk of infinite loop
+}
+```
+
+✅ **CORRECT**: Set reasonable limit
+```json
+{
+  "loopMaxIterations": 3  // ✅ Prevents infinite loops
+}
+```
+
+---
+
+❌ **WRONG**: High temperature causes non-deterministic routing
+```json
+{
+  "temperature": 0.9  // ❌ Random routing decisions
+}
+```
+
+✅ **CORRECT**: Low temperature for deterministic logic
+```json
+{
+  "temperature": 0.1  // ✅ Consistent routing
+}
+```
+
+---
+
+❌ **WRONG**: Missing iteration count tracking
+```json
+{
+  "conditionAgentInput": "{{ question }}"  // ❌ No iteration count
+}
+```
+
+✅ **CORRECT**: Include iteration count in context
+```json
+{
+  "conditionAgentInput": "{{ loop_context }}",  // ✅ Contains iteration_count
+  "agentUpdateState": [
+    {"key": "loop.iteration_count", "value": "{{ $flow.state.loop.iteration_count + 1 }}"}
+  ]
+}
+```
+
+---
+
+❌ **WRONG**: Unwired escalation path
+```json
+// Only routes 0, 1, 2 wired, route 3 disconnected
+```
+
+✅ **CORRECT**: Wire all four routes
+```json
+// Route 0: Loop back
+// Route 1: Exit approved
+// Route 2: Exit max iters
+// Route 3: Escalate to human  // ✅ Always wire this path
+```
+
+---
+
+#### Best Practices
+
+**✅ DO**:
+- Set loopMaxIterations to 3-5 for production
+- Use temperature 0.1-0.2 for deterministic routing
+- Track iteration_count in flow state
+- Define clear exitOnApprovalStates
+- Wire all four output paths
+- Reset iteration counter on successful exit
+- Include loop context in audit trail
+
+**❌ DON'T**:
+- Allow unlimited iterations (always set max)
+- Use high temperature (causes random routing)
+- Skip state tracking (loop can't enforce limits)
+- Leave escalation path unwired (edge cases need handling)
+- Use vague approval states (be explicit: "APPROVED" not "OK")
+- Nest loops inside loops (causes complexity explosion)
+
+---
+
 ## Agent Input Parameters
 
 The `inputParams` array defines what configuration options the agent supports. This is the **schema** - actual values go in the `inputs` object.

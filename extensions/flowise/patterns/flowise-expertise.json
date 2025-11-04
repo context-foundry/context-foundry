@@ -1,14 +1,17 @@
 {
   "success": true,
-  "total_files": 13,
-  "analyzed_successfully": 13,
+  "total_files": 14,
+  "analyzed_successfully": 14,
   "node_type_frequency": {
     "agentFlow": 92,
     "stickyNote": 17,
-    "iteration": 1
+    "iteration": 1,
+    "humanInputAgentflow": 2
   },
   "connection_frequency": {
-    "generic-connection": 113
+    "generic-connection": 113,
+    "hil-proceed-path": 1,
+    "hil-reject-path": 1
   },
   "individual_analyses": [
     {
@@ -1263,7 +1266,7 @@
                 ],
                 "default": [
                   {
-                    "scenario": "Navigation — Basics"
+                    "scenario": "Navigation \u2014 Basics"
                   },
                   {
                     "scenario": "Fallback / Ambiguous"
@@ -1300,7 +1303,7 @@
             "inputAnchors": [],
             "inputs": {
               "conditionAgentModel": "chatAnthropic",
-              "conditionAgentInstructions": "<h2>Agent Persona &amp; Core Directive</h2><p>You are the <strong>Workday PMO Support Router</strong>—the central dispatcher for a corporate PMO ecosystem. Your job is to <strong>identify the user’s intent from their first message</strong> and <strong>silently</strong> hand the conversation to the <strong>single best specialized agent</strong>. Be concise, professional, and helpful. <strong>Never reveal internal routing or agent names.</strong> Use the authenticated user context; <strong>don’t ask for their name.</strong></p><h3>Primary Flow</h3><ol><li><p><strong>Greet briefly</strong> and invite the request: “Hi—how can I help with your project or staffing needs?”</p></li><li><p><strong>Detect the primary intent</strong> from the message.</p></li><li><p><strong>Clarify only if ambiguous</strong> with one focused question (e.g., specific project or date range). Avoid loops.</p></li><li><p><strong>Silent handoff</strong> to the mapped agent, passing extracted entities/slots.</p></li></ol><h3>Critical Guardrails</h3><ul><li><p><strong>No PII collection</strong> beyond what’s required; rely on authenticated identity when possible.</p></li><li><p><strong>No legal/tax advice.</strong> Route such topics to the appropriate agent.<br><br>Project Financials — Forecasts</p><p><strong>Detect:</strong> forecasted hours by period; variance vs forecast.<br><strong>Keywords:</strong> forecast, forecasted hours, next week/month, variance vs forecast.<br><strong>Handoff:</strong> <code>Agent.Forecast</code></p><h3>SOW &amp; Change Requests</h3><p><strong>Detect:</strong> bill rates, Original SOW+CR amount, contracted hours, total project value, baseline/authorized budget.</p><p>Any Change Requests (CR) that may have been added to the SOW.<br><br><strong>Handoff:</strong> <code>Agent.SOW+CR</code></p><h3>Project Status</h3><p><strong>Detect:</strong> status/health/RYG, on track/blocked, risks/issues, portfolio status.<br><strong>Keywords:</strong> status, health, RYG, red/yellow/green, sentiment, progress, portfolio.<br><strong>Handoff:</strong> <code>Agent.ProjectStatus</code><br><strong>Note:</strong> Router may also pass helpful financial context (Actuals/Forecast/SOW) for that project if trivially available.</p><h3>Actuals (Worked Time)</h3><p><strong>Detect:</strong> actual hours, utilization, burn-to-date, missing/late/unapproved time, variance vs SOW/forecast.<br><strong>Handoff:</strong> <code>Agent.Actuals</code></p><h3>Forecast Within Budget (Bridge)</h3><p><strong>Detect:</strong> user wants to adjust forecast but keep within SOW/authorized budget.<br><strong>Handoff:</strong> <code>Agent.ForecastBudget</code></p><h3>Fallback</h3><p><strong>Detect:</strong> small talk, off-topic, or unrecognizable requests.<br><strong>Handoff:</strong> <code>Agent.Fallback</code></p><hr><h2>Cross-Topic Routing Rules (Primary Intent First)</h2><ul><li><p>“What’s our current project budget?” or “What are the bill rates?” → <strong>SOW &amp; CR</strong></p></li><li><p>“How many hours did we actually work last week?” → <strong>Actuals</strong></p></li><li><p>“Are we over/under forecast?” → <strong>Forecasts</strong></p></li><li><p>“Help me adjust my forecast to stay within the SOW budget.” → <strong>Forecast Within Budget</strong></p></li><li><p>“Who can cover me in November?” → <strong>Availability &amp; Coverage Planning</strong></p></li></ul><hr><h2>Implementation Notes (practical &amp; terse)</h2><ul><li><p><strong>Never ask for the user’s name.</strong> Use authenticated identity for employee context.</p></li><li><p><strong>Normalize dates</strong> (e.g., “3 weeks in November” → exact start/end once clarified).</p></li><li><p><strong>Pass only one clarifying question</strong> if the routing would otherwise be wrong; otherwise, hand off and let the target agent collect details.</p></li><li><p><strong>Do not echo internal terms</strong> like agent names to the user; target agent opens with a confident, action-oriented first line.</p></li></ul><hr><h2>Quick Test Cases</h2><ol><li><p>“Out first two weeks of Nov—who can sub for me on the banking project?” → <strong>Availability &amp; Coverage</strong> (match role, dates present, project hint included)</p></li><li><p>“What are my forecasted hours next month?” → <strong>Forecasts</strong></p></li><li><p>“What’s the SOW budget and bill rates for Phoenix Revamp?” → <strong>SOW &amp; CR</strong></p></li><li><p>“Status on Apollo and top 3 risks?” → <strong>Project Status</strong></p></li><li><p>“We burned 320h—how does that compare to forecast?” → <strong>Actuals</strong> (variance context; can enrich downstream)</p></li><li><p>\"Which developers are most busy in (Month), (Day), (Year)?\" → <strong>Forecasts</strong></p></li><li><p><strong>\"What is the financial health of my _____ project\" </strong>→ <strong>Actuals + </strong>→ <strong>Forecasts - </strong>→ <strong>SOW &amp; CR = Variance</strong></p></li></ol></li></ul>",
+              "conditionAgentInstructions": "<h2>Agent Persona &amp; Core Directive</h2><p>You are the <strong>Workday PMO Support Router</strong>\u2014the central dispatcher for a corporate PMO ecosystem. Your job is to <strong>identify the user\u2019s intent from their first message</strong> and <strong>silently</strong> hand the conversation to the <strong>single best specialized agent</strong>. Be concise, professional, and helpful. <strong>Never reveal internal routing or agent names.</strong> Use the authenticated user context; <strong>don\u2019t ask for their name.</strong></p><h3>Primary Flow</h3><ol><li><p><strong>Greet briefly</strong> and invite the request: \u201cHi\u2014how can I help with your project or staffing needs?\u201d</p></li><li><p><strong>Detect the primary intent</strong> from the message.</p></li><li><p><strong>Clarify only if ambiguous</strong> with one focused question (e.g., specific project or date range). Avoid loops.</p></li><li><p><strong>Silent handoff</strong> to the mapped agent, passing extracted entities/slots.</p></li></ol><h3>Critical Guardrails</h3><ul><li><p><strong>No PII collection</strong> beyond what\u2019s required; rely on authenticated identity when possible.</p></li><li><p><strong>No legal/tax advice.</strong> Route such topics to the appropriate agent.<br><br>Project Financials \u2014 Forecasts</p><p><strong>Detect:</strong> forecasted hours by period; variance vs forecast.<br><strong>Keywords:</strong> forecast, forecasted hours, next week/month, variance vs forecast.<br><strong>Handoff:</strong> <code>Agent.Forecast</code></p><h3>SOW &amp; Change Requests</h3><p><strong>Detect:</strong> bill rates, Original SOW+CR amount, contracted hours, total project value, baseline/authorized budget.</p><p>Any Change Requests (CR) that may have been added to the SOW.<br><br><strong>Handoff:</strong> <code>Agent.SOW+CR</code></p><h3>Project Status</h3><p><strong>Detect:</strong> status/health/RYG, on track/blocked, risks/issues, portfolio status.<br><strong>Keywords:</strong> status, health, RYG, red/yellow/green, sentiment, progress, portfolio.<br><strong>Handoff:</strong> <code>Agent.ProjectStatus</code><br><strong>Note:</strong> Router may also pass helpful financial context (Actuals/Forecast/SOW) for that project if trivially available.</p><h3>Actuals (Worked Time)</h3><p><strong>Detect:</strong> actual hours, utilization, burn-to-date, missing/late/unapproved time, variance vs SOW/forecast.<br><strong>Handoff:</strong> <code>Agent.Actuals</code></p><h3>Forecast Within Budget (Bridge)</h3><p><strong>Detect:</strong> user wants to adjust forecast but keep within SOW/authorized budget.<br><strong>Handoff:</strong> <code>Agent.ForecastBudget</code></p><h3>Fallback</h3><p><strong>Detect:</strong> small talk, off-topic, or unrecognizable requests.<br><strong>Handoff:</strong> <code>Agent.Fallback</code></p><hr><h2>Cross-Topic Routing Rules (Primary Intent First)</h2><ul><li><p>\u201cWhat\u2019s our current project budget?\u201d or \u201cWhat are the bill rates?\u201d \u2192 <strong>SOW &amp; CR</strong></p></li><li><p>\u201cHow many hours did we actually work last week?\u201d \u2192 <strong>Actuals</strong></p></li><li><p>\u201cAre we over/under forecast?\u201d \u2192 <strong>Forecasts</strong></p></li><li><p>\u201cHelp me adjust my forecast to stay within the SOW budget.\u201d \u2192 <strong>Forecast Within Budget</strong></p></li><li><p>\u201cWho can cover me in November?\u201d \u2192 <strong>Availability &amp; Coverage Planning</strong></p></li></ul><hr><h2>Implementation Notes (practical &amp; terse)</h2><ul><li><p><strong>Never ask for the user\u2019s name.</strong> Use authenticated identity for employee context.</p></li><li><p><strong>Normalize dates</strong> (e.g., \u201c3 weeks in November\u201d \u2192 exact start/end once clarified).</p></li><li><p><strong>Pass only one clarifying question</strong> if the routing would otherwise be wrong; otherwise, hand off and let the target agent collect details.</p></li><li><p><strong>Do not echo internal terms</strong> like agent names to the user; target agent opens with a confident, action-oriented first line.</p></li></ul><hr><h2>Quick Test Cases</h2><ol><li><p>\u201cOut first two weeks of Nov\u2014who can sub for me on the banking project?\u201d \u2192 <strong>Availability &amp; Coverage</strong> (match role, dates present, project hint included)</p></li><li><p>\u201cWhat are my forecasted hours next month?\u201d \u2192 <strong>Forecasts</strong></p></li><li><p>\u201cWhat\u2019s the SOW budget and bill rates for Phoenix Revamp?\u201d \u2192 <strong>SOW &amp; CR</strong></p></li><li><p>\u201cStatus on Apollo and top 3 risks?\u201d \u2192 <strong>Project Status</strong></p></li><li><p>\u201cWe burned 320h\u2014how does that compare to forecast?\u201d \u2192 <strong>Actuals</strong> (variance context; can enrich downstream)</p></li><li><p>\"Which developers are most busy in (Month), (Day), (Year)?\" \u2192 <strong>Forecasts</strong></p></li><li><p><strong>\"What is the financial health of my _____ project\" </strong>\u2192 <strong>Actuals + </strong>\u2192 <strong>Forecasts - </strong>\u2192 <strong>SOW &amp; CR = Variance</strong></p></li></ol></li></ul>",
               "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
               "conditionAgentScenarios": [
                 {
@@ -3491,7 +3494,7 @@
               "agentMessages": [
                 {
                   "role": "system",
-                  "content": "<p><em>You are an expert Navigation Basics agent.</em> Provide the shortest click-path (2–5 steps) to reach the task (worklets, landing pages, Related Actions, Guide Me, filters, alerts, To-Dos), include one quick tip, and avoid policy/security changes or PII.</p>"
+                  "content": "<p><em>You are an expert Navigation Basics agent.</em> Provide the shortest click-path (2\u20135 steps) to reach the task (worklets, landing pages, Related Actions, Guide Me, filters, alerts, To-Dos), include one quick tip, and avoid policy/security changes or PII.</p>"
                 }
               ],
               "agentToolsBuiltInOpenAI": "",
@@ -4115,12 +4118,370 @@
         "has_proper_memory": true,
         "node_to_edge_ratio": 1.0
       }
+    },
+    {
+      "success": true,
+      "file": "templates/HIL-PATTERN-REFERENCE.json",
+      "node_count": 2,
+      "edge_count": 4,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 2,
+          "example_config": {
+            "id": "humanInputAgentflow_0",
+            "label": "Human Input - Fixed Description",
+            "version": 1.0,
+            "name": "humanInputAgentflow",
+            "type": "HumanInput",
+            "color": "#F06292",
+            "baseClasses": [
+              "HumanInput"
+            ],
+            "category": "Agent Flows",
+            "description": "Request human input, approval or rejection during execution",
+            "inputParams": [
+              {
+                "label": "Description Type",
+                "name": "humanInputDescriptionType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Fixed",
+                    "name": "fixed",
+                    "description": "Specify a fixed description"
+                  },
+                  {
+                    "label": "Dynamic",
+                    "name": "dynamic",
+                    "description": "Use LLM to generate a description"
+                  }
+                ]
+              },
+              {
+                "label": "Description",
+                "name": "humanInputDescription",
+                "type": "string",
+                "rows": 8,
+                "acceptVariable": true
+              },
+              {
+                "label": "Enable Feedback",
+                "name": "humanInputEnableFeedback",
+                "type": "boolean",
+                "default": true
+              }
+            ],
+            "inputs": {
+              "humanInputDescriptionType": "fixed",
+              "humanInputDescription": "\u26a0\ufe0f CONFLICT OF INTEREST DETECTED\\n\\nAction: {{ $flow.state.hitl.pending.action }}\\nSummary: {{ $flow.state.hitl.pending.summary }}\\nRisk: {{ $flow.state.hitl.pending.risk_score }}/10\\nCost: ${{ $flow.state.hitl.pending.cost_estimate }}\\n\\n\ud83d\udd35 PROCEED: Approve with waiver\\n\ud83d\udd34 REJECT: Escalate to compliance",
+              "humanInputEnableFeedback": true
+            },
+            "outputAnchors": [
+              {
+                "id": "humanInputAgentflow_0-output-proceed",
+                "label": "Proceed",
+                "name": "proceed",
+                "description": "User approved"
+              },
+              {
+                "id": "humanInputAgentflow_0-output-reject",
+                "label": "Reject",
+                "name": "reject",
+                "description": "User rejected"
+              }
+            ]
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "human-input-approval-flow",
+          "source": "agentAgentflow_0",
+          "target": "humanInputAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Detection agent to HIL approval gate"
+        },
+        {
+          "pattern": "hil-proceed-path",
+          "source": "humanInputAgentflow_0",
+          "sourceHandle": "humanInputAgentflow_0-output-proceed",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Proceed path to approval agent"
+        },
+        {
+          "pattern": "hil-reject-path",
+          "source": "humanInputAgentflow_0",
+          "sourceHandle": "humanInputAgentflow_0-output-reject",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Reject path to remediation agent"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "humanInputDescriptionType": 1,
+          "humanInputDescription": 1,
+          "humanInputEnableFeedback": 1,
+          "humanInputModel": 1,
+          "humanInputModelPrompt": 1,
+          "humanInputModelConfig": 1
+        },
+        "semantic_output_anchors": {
+          "proceed": "User approved - continue with action",
+          "reject": "User rejected - cancel or escalate"
+        },
+        "flow_state_integration": {
+          "pattern": "template_variables",
+          "variables": [
+            "$flow.state.hitl.pending.action",
+            "$flow.state.hitl.pending.summary",
+            "$flow.state.hitl.pending.risk_score",
+            "$flow.state.hitl.pending.cost_estimate",
+            "$flow.state.hitl.pending.mitigations"
+          ]
+        }
+      },
+      "quality_markers": {
+        "has_semantic_labels": true,
+        "has_both_paths_wired": true,
+        "uses_state_context": true,
+        "approval_workflow_ready": true
+      }
     }
   ],
   "common_patterns": {
     "average_nodes": 8.461538461538462,
     "average_edges": 8.692307692307692,
     "files_with_error_handling": 7,
-    "files_with_retry_logic": 1
+    "files_with_retry_logic": 1,
+    "human_in_the_loop": {
+      "description": "Human-in-the-Loop approval gates with semantic Proceed/Reject outputs",
+      "variants": {
+        "fixed_description": {
+          "use_case": "Predefined approval messages with dynamic flow state data",
+          "template_variables": true,
+          "temperature": 0.0,
+          "example_use_cases": [
+            "Conflict of Interest",
+            "Budget Approval",
+            "Email Sending",
+            "Data Deletion"
+          ]
+        },
+        "dynamic_description": {
+          "use_case": "LLM-generated approval messages based on conversation context",
+          "requires_model": true,
+          "temperature": 0.0,
+          "generates_summary": true
+        }
+      },
+      "critical_features": {
+        "semantic_output_labels": [
+          "Proceed",
+          "Reject"
+        ],
+        "enable_feedback": true,
+        "both_paths_must_be_wired": true,
+        "flow_state_population": "required_before_hil_node",
+        "color": "#F06292"
+      },
+      "integration_pattern": "[Detection Agent] \u2192 [HIL Node] \u2192 [Proceed: Approval] | [Reject: Remediation]"
+    },
+    "loop_node_retry_logic": {
+      "description": "Loop Node for iterative workflows with retry logic, validation loops, and approval-with-revision patterns",
+      "node_type": "conditionAgentAgentflow",
+      "color": "#ffcc80",
+      "output_routes": {
+        "0": {
+          "label": "Continue (Loop Back)",
+          "description": "Loop back to revision/correction agent for another iteration",
+          "typical_target": "revision_agent",
+          "use_cases": [
+            "Rejection with revision opportunity",
+            "Validation errors requiring correction",
+            "Quality score below threshold"
+          ]
+        },
+        "1": {
+          "label": "Exit: Approved/Validated",
+          "description": "Success exit, proceed to next workflow stage",
+          "typical_target": "next_stage_agent",
+          "use_cases": [
+            "Approval state reached",
+            "Validation passed",
+            "Quality threshold met"
+          ]
+        },
+        "2": {
+          "label": "Exit: Max Iterations",
+          "description": "Failure exit, max iterations reached, stop with error",
+          "typical_target": "failure_handler_agent",
+          "use_cases": [
+            "Too many retry attempts",
+            "Unable to meet requirements",
+            "Safety stop triggered"
+          ]
+        },
+        "3": {
+          "label": "Escalate to Human",
+          "description": "Edge case exit, send to human review for decision",
+          "typical_target": "human_input_node",
+          "use_cases": [
+            "Ambiguous policy situation",
+            "Conflict requiring judgment",
+            "High-risk decision point"
+          ]
+        }
+      },
+      "key_parameters": {
+        "loopMaxIterations": {
+          "type": "number",
+          "default": 3,
+          "recommended_values": {
+            "approval_workflows": 3,
+            "validation_loops": 5,
+            "quality_gates": 3
+          },
+          "rationale": "Prevents infinite loops while allowing reasonable retry attempts"
+        },
+        "loopIterationKey": {
+          "type": "string",
+          "default": ".context-foundry/loop-iteration-count.txt",
+          "purpose": "Track iteration count in flow state"
+        },
+        "loopDelayMs": {
+          "type": "number",
+          "default": 0,
+          "use_when": "Rate-limiting external API calls"
+        },
+        "exitOnApprovalStates": {
+          "type": "array",
+          "examples": [
+            "APPROVED",
+            "VALIDATED",
+            "PASSED",
+            "COMPLETED"
+          ],
+          "purpose": "Define success states that trigger route 1 exit"
+        },
+        "temperature": {
+          "recommended": 0.1,
+          "rationale": "Loop decisions must be deterministic and consistent"
+        }
+      },
+      "routing_logic": {
+        "precedence": [
+          "1. Check approval_state in exitOnApprovalStates → Route 1",
+          "2. Check iteration_count >= max_iterations → Route 2",
+          "3. Check validation_errors/quality_score/rejection → Route 0",
+          "4. Check ambiguous/blocker conditions → Route 3",
+          "5. Default → Route 0"
+        ],
+        "deterministic": true
+      },
+      "usage_patterns": {
+        "approval_with_revision": {
+          "pattern": "[Submission] → [HIL Gate] → [Reject] → [Loop Node] → [0: Revision] → [Resubmit]",
+          "use_case": "Promotion nominations, document approvals",
+          "max_iterations": 3
+        },
+        "validation_with_correction": {
+          "pattern": "[User Input] → [Validator] → [Loop Node] → [0: Correction Form] → [Revalidate]",
+          "use_case": "Form validation, data quality checks",
+          "max_iterations": 5
+        },
+        "quality_gate_with_retry": {
+          "pattern": "[Builder] → [Quality Check] → [Loop Node] → [0: Improve] → [Re-check]",
+          "use_case": "Code quality, test execution, build validation",
+          "max_iterations": 3
+        }
+      },
+      "state_management": {
+        "required_fields": [
+          "iteration_count",
+          "max_iterations",
+          "approval_state"
+        ],
+        "optional_fields": [
+          "validation_errors",
+          "quality_score",
+          "required_fields_missing",
+          "notes"
+        ],
+        "increment_pattern": "Agent before loop node must increment loop.iteration_count in state",
+        "reset_pattern": "Reset iteration_count to 0 on successful exit (route 1)"
+      },
+      "integration_with_hil": {
+        "pattern": "[HIL Gate] → [Reject Path] → [Loop Node] → [Routes]",
+        "benefits": [
+          "Enables iterative refinement after rejection",
+          "Prevents infinite resubmission loops",
+          "Provides escalation path for edge cases",
+          "Tracks attempt count for audit trail"
+        ],
+        "typical_wiring": {
+          "hil_reject_to_loop": "humanInputAgentflow_0-output-reject → conditionAgentAgentflow_12",
+          "loop_continue_to_revision": "conditionAgentAgentflow_12-output-0 → revision_agent",
+          "loop_escalate_to_hil": "conditionAgentAgentflow_12-output-3 → humanInputAgentflow_1"
+        }
+      },
+      "best_practices": {
+        "do": [
+          "Set loopMaxIterations to 3-5 for production",
+          "Use temperature 0.1-0.2 for deterministic routing",
+          "Track iteration_count in flow state",
+          "Define clear exitOnApprovalStates",
+          "Wire all four output paths",
+          "Reset iteration counter on successful exit",
+          "Include loop context in audit trail"
+        ],
+        "dont": [
+          "Allow unlimited iterations (always set max)",
+          "Use high temperature (causes random routing)",
+          "Skip state tracking (loop can't enforce limits)",
+          "Leave escalation path unwired (edge cases need handling)",
+          "Use vague approval states (be explicit)",
+          "Nest loops inside loops (causes complexity explosion)"
+        ]
+      },
+      "anti_patterns": {
+        "infinite_loops": {
+          "problem": "No max iterations limit",
+          "solution": "Always set loopMaxIterations (default: 3)"
+        },
+        "non_deterministic_routing": {
+          "problem": "High temperature causes random decisions",
+          "solution": "Use temperature 0.1-0.2"
+        },
+        "missing_state_tracking": {
+          "problem": "Iteration count not tracked, can't exit",
+          "solution": "Track loop.iteration_count in flow state"
+        },
+        "unwired_escalation": {
+          "problem": "No human escalation path for edge cases",
+          "solution": "Always wire output-3 to human review node"
+        }
+      },
+      "validation_checklist": [
+        "Agent before loop node populates loop_context with required fields",
+        "Agent before loop node increments iteration_count in state",
+        "loopMaxIterations set to reasonable limit (3-5)",
+        "exitOnApprovalStates defined with success states",
+        "conditionAgentInstructions includes deterministic logic",
+        "Temperature set to 0.1-0.2",
+        "Output 0 (Continue) wired back to revision/correction agent",
+        "Output 1 (Exit Approved) wired to next stage",
+        "Output 2 (Exit Max Iters) wired to failure handler",
+        "Output 3 (Escalate) wired to human review node",
+        "State reset mechanism for successful completion"
+      ],
+      "template_reference": "prompts/LOOP-NODE-TEMPLATE.json",
+      "documentation_reference": "AGENT_PATTERN_REFERENCE.md#5-loop-node-conditionagentAgentflow"
+    }
   }
 }
