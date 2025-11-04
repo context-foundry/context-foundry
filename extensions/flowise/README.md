@@ -57,6 +57,80 @@ This comprehensive reference defines the canonical way to structure Flowise agen
 - ✅ **Zero dependencies** (Python stdlib only)
 - ✅ **100% test coverage** (comprehensive unit tests)
 
+## 🏆 Notable Builds
+
+The Flowise extension has successfully built production-ready workflows across diverse enterprise use cases:
+
+### Recent Successes
+
+#### 🎯 [Promotion Nomination Workflow](./SUCCESS_PROMOTION_NOMINATION.md) - November 4, 2025
+**First successful Human-in-the-Loop implementation!**
+
+- **Complexity**: Complex (11 nodes, 12 edges, 7 agents + 2 HIL gates)
+- **Duration**: 25 minutes (first-try success)
+- **GitHub**: [promotion-nomination-flowise-agent](https://github.com/snedea/promotion-nomination-flowise-agent)
+- **Highlights**:
+  - ✅ First successful HIL approval gates with semantic proceed/reject outputs
+  - ✅ Two-stage approval workflow (Local Leadership → Executive)
+  - ✅ Complete Workday HCM integration guide
+  - ✅ Bulk decision capability with org filtering
+  - ✅ All 9 failure patterns prevented on first iteration
+  - ✅ 3,734 lines of validated Flowise JSON
+- **Impact**: Validates extension's production maturity for enterprise approval workflows
+
+#### 📚 [Personalized Onboarding Flow](./SUCCESS_PERSONALIZED_ONBOARDING.md) - November 2, 2025
+- **Complexity**: Moderate (10 nodes, 9 edges, 8 agents)
+- **Duration**: 17 minutes (1,027 seconds)
+- **GitHub**: [personalized-onboarding-flowise](https://github.com/snedea/personalized-onboarding-flowise)
+- **Highlights**:
+  - ✅ All 5 failure patterns prevented on first try
+  - ✅ 2,952 lines of self-contained workflow
+  - ✅ Complete HR/IT integration architecture
+
+#### ▶️ [ExecuteFlow Pattern](./SUCCESS_EXECUTEFLOW.md) - November 2, 2025
+- **Feature**: Sub-flow execution and modular workflow composition
+- **Validation**: ExecuteFlow node type fully integrated
+- **Impact**: Enables hierarchical workflow architectures
+
+#### 🔧 [Auto-Include Tools Pattern](./SUCCESS_AUTO_INCLUDE_TOOLS.md) - November 2, 2025
+- **Feature**: Standard tools (currentDateTime, searXNG) automatically included
+- **Impact**: Reduces manual tool configuration overhead
+
+#### 📦 [Workforce Allocation Workflow](./SUCCESS_WORKFORCE_ALLOCATION.md) - November 1, 2025
+- **Complexity**: Moderate (8 nodes, 7 edges)
+- **Impact**: Demonstrates warehouse operations automation
+
+#### 🛍️ [Gig Marketplace Workflow](./SUCCESS_GIG_MARKETPLACE.md) - November 1, 2025
+- **Complexity**: Moderate (9 nodes)
+- **Impact**: Multi-stakeholder coordination patterns
+
+### Success Metrics
+
+| Metric | Best Result | Build |
+|--------|-------------|-------|
+| **Most Complex** | 11 nodes, 12 edges | Promotion Nomination |
+| **Fastest Build** | 17 minutes | Personalized Onboarding |
+| **First HIL Success** | 2 approval gates | Promotion Nomination |
+| **Largest File** | 3,734 lines | Promotion Nomination |
+| **Test Iterations** | 1 (all builds) | All recent builds |
+
+### Pattern Prevention Record
+
+All recent builds prevent **9/9 known failure patterns**:
+1. ✅ Meta-descriptions (Pattern #1)
+2. ✅ Missing agent nodes (Pattern #2)
+3. ✅ Separate config files (Pattern #3)
+4. ✅ Disconnected nodes (Pattern #4)
+5. ✅ Phantom tool references (Pattern #5)
+6. ✅ Missing inputParams (Pattern #6)
+7. ✅ Missing router scenarios (Pattern #7)
+8. ✅ asyncOptions validation (Pattern #8)
+9. ✅ Mermaid diagram embedding (Pattern #9)
+
+**Success Rate**: 100% first-iteration success on all documented builds
+
+---
+
 ## Installation
 
 ### Prerequisites

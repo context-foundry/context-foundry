@@ -249,6 +249,17 @@ Build a comprehensive Flowise warehouse operations workflow with Workday integra
 inventory tracking, order fulfillment, and equipment maintenance
 ```
 
+### 🏆 Production Success Story
+
+**Want to see a real enterprise build?** Check out the [Promotion Nomination Workflow](./SUCCESS_PROMOTION_NOMINATION.md):
+- ✅ 11 nodes (7 agents + 2 HIL approval gates)
+- ✅ 25 minutes build time
+- ✅ Two-stage approval workflow (Local → Executive)
+- ✅ Complete Workday HCM integration
+- ✅ All 9 failure patterns prevented on first try
+
+This was the **first successful Human-in-the-Loop implementation** and demonstrates the extension's production maturity for complex enterprise workflows.
+
 ### Get Help
 
 - **Issues?** See [Troubleshooting Guide](TROUBLESHOOTING.md)

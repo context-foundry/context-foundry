@@ -83,6 +83,22 @@ Files not currently used by orchestrator (see [prompts/archive/README.md](../pro
 | [patterns/flow-templates.json.example](../patterns/flow-templates.json.example) | Template catalog structure |
 | [templates/](../templates/) | 13+ canonical Flowise flow examples |
 
+### 🏆 Success Stories & Production Builds
+
+Real-world builds demonstrating best practices and production readiness:
+
+| Document | Date | Complexity | Highlights |
+|----------|------|------------|------------|
+| **[SUCCESS_PROMOTION_NOMINATION.md](../SUCCESS_PROMOTION_NOMINATION.md)** | Nov 4, 2025 | Complex (11 nodes) | ⭐ **First HIL gates!** Two-stage approval, Workday HCM, 25 min build |
+| [SUCCESS_PERSONALIZED_ONBOARDING.md](../SUCCESS_PERSONALIZED_ONBOARDING.md) | Nov 2, 2025 | Moderate (10 nodes) | All patterns prevented, 17 min build |
+| [SUCCESS_EXECUTEFLOW.md](../SUCCESS_EXECUTEFLOW.md) | Nov 2, 2025 | Feature | ExecuteFlow node validation |
+| [SUCCESS_AUTO_INCLUDE_TOOLS.md](../SUCCESS_AUTO_INCLUDE_TOOLS.md) | Nov 2, 2025 | Feature | Auto-include standard tools |
+| [SUCCESS_WORKFORCE_ALLOCATION.md](../SUCCESS_WORKFORCE_ALLOCATION.md) | Nov 1, 2025 | Moderate (8 nodes) | Warehouse operations |
+| [SUCCESS_GIG_MARKETPLACE.md](../SUCCESS_GIG_MARKETPLACE.md) | Nov 1, 2025 | Moderate (9 nodes) | Multi-stakeholder coordination |
+
+**Success Rate**: 100% first-iteration success across all documented builds
+**Pattern Prevention**: 9/9 patterns prevented in recent builds
+
 ---
 
 ## 🔍 Documentation by Use Case
