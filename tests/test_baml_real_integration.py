@@ -64,7 +64,6 @@ class TestBAMLEnvVars:
             assert env_vars['TEST_VAR'] == 'test-value'
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLRuntimeInitialization:
     """Test BAML runtime initialization with real library"""
 
@@ -102,7 +101,6 @@ class TestBAMLRuntimeInitialization:
             assert client1 is not client2
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLFunctionCalls:
     """Test actual BAML function calls with mocked LLM responses"""
 
@@ -205,7 +203,6 @@ class TestBAMLFunctionCalls:
                 assert call_args[1]['args']['json_string'] == test_json
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLJSONParsing:
     """Test JSON parsing with various LLM response formats"""
 
@@ -300,7 +297,6 @@ class TestBAMLJSONParsing:
                 assert result['current_phase'] == 'Scout'
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLScoutReportGeneration:
     """Test Scout report generation with BAML"""
 
@@ -358,7 +354,6 @@ class TestBAMLScoutReportGeneration:
                 assert result['executive_summary'] == 'Test summary'
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLArchitectureGeneration:
     """Test architecture generation with BAML"""
 
@@ -413,7 +408,6 @@ class TestBAMLArchitectureGeneration:
                 assert result['system_overview'] == 'Test architecture'
 
 
-@pytest.mark.skipif(not BAML_AVAILABLE, reason="BAML library not installed")
 class TestBAMLFallbackBehavior:
     """Test that BAML gracefully falls back to JSON when errors occur"""
 

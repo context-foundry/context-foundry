@@ -61,55 +61,66 @@ gh pr create --base main --title "{mode}: {description}" --body "
 ═══════════════════════════════════════════════════════════
 PHASE TRACKING TEMPLATE
 
-**Standard Format** (use for ALL phase updates):
+**REQUIRED**: Use BAML for ALL phase updates (type-safe, validated output):
 
 ```bash
-cat > .context-foundry/current-phase.json << 'EOF'
-{
-  "session_id": "{project_directory_name}",
-  "current_phase": "{Phase Name}",
-  "phase_number": "{X/7}",
-  "status": "{starting|in_progress|completed|failed}",
-  "progress_detail": "{What's happening now}",
-  "test_iteration": {number},
-  "phases_completed": ["{list}"],
-  "started_at": "{ISO timestamp}",
-  "last_updated": "{ISO timestamp}"
-}
-EOF
+# Phase tracking with BAML (REQUIRED)
+python3 tools/use_baml.py update-phase \
+  "{Phase}" \
+  "{status}" \
+  "{progress_detail}" \
+  --session-id "{project_directory_name}" \
+  --iteration {test_iteration_number} \
+  > .context-foundry/current-phase.json
 ```
 
+**Phase Names**: Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy, Feedback, GitHub
+**Status Values**: analyzing, researching, designing, building, testing, self-healing, capturing, documenting, deploying, completed, failed
+
 **When to Update:**
-- Phase start: Set status to phase-specific starting state
-- Phase end: Set status to "completed", add phase to phases_completed
-- Test iterations: Update test_iteration counter
+- Phase start: Set status to phase-specific starting state (researching, designing, building, etc.)
+- Phase end: Set status to "completed"
+- Test iterations: Update --iteration counter
+- Self-healing: Set status to "self-healing"
+
+**Example:**
+```bash
+# Scout phase start
+python3 tools/use_baml.py update-phase \
+  "Scout" \
+  "researching" \
+  "Analyzing requirements and researching best practices" \
+  --session-id "my-project" \
+  --iteration 0 \
+  > .context-foundry/current-phase.json
+```
 
 ═══════════════════════════════════════════════════════════
-🎯 BAML INTEGRATION (OPTIONAL)
+🎯 BAML INTEGRATION (REQUIRED)
 
-**Type-Safe LLM Outputs**: Use BAML for structured, validated responses.
+**Type-Safe LLM Outputs**: Context Foundry uses BAML for structured, validated responses.
 
-**Check Availability:**
+**IMPORTANT**: BAML is now a required dependency. It must be installed and configured:
+
 ```bash
+# Verify BAML is available
 python3 tools/use_baml.py status
 ```
 
-**If Available** (API keys configured):
-- Use `python3 tools/use_baml.py update-phase` for phase tracking
-- Use `python3 tools/use_baml.py scout-report` for Scout reports
-- Use `python3 tools/use_baml.py architecture` for architecture blueprints
-- All commands output JSON that can be used directly
+**If status check fails**: Ensure OPENAI_API_KEY is set in environment (BAML uses GPT-4o-mini for validation).
 
-**If Unavailable** (no API keys or BAML not installed):
-- Use standard JSON phase tracking (cat > .context-foundry/current-phase.json)
-- Write markdown files for Scout/Architect outputs as usual
-- Everything works exactly as before
+**Required Usage:**
+- **ALWAYS** use `python3 tools/use_baml.py update-phase` for phase tracking
+- **RECOMMENDED** use `python3 tools/use_baml.py scout-report` for Scout reports (optional but encouraged)
+- **RECOMMENDED** use `python3 tools/use_baml.py architecture` for architecture blueprints (optional but encouraged)
 
-**Benefits when enabled:**
-- ✅ Type-safe structured outputs (reduce errors by ~95%)
-- ✅ Compile-time validation
+**Benefits:**
+- ✅ Type-safe structured outputs (reduce parsing errors by 95%)
+- ✅ Compile-time schema validation
 - ✅ Better observability and debugging
-- ⚠️  Requires ANTHROPIC_API_KEY or OPENAI_API_KEY in environment
+- ✅ Consistent data format across all phases
+
+**Cost**: ~$0.20/build for GPT-4o-mini validation calls
 
 **See docs/BAML_INTEGRATION.md for full details**
 
@@ -1121,21 +1132,15 @@ These are NOT phantom references (Pattern #5) and NOT incorrect structure (Patte
 They are real, working tools with correct Flowise UI JSON structure.
 
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
-Update .context-foundry/current-phase.json:
+Use BAML for type-safe phase tracking (see template above):
 ```bash
-cat > .context-foundry/current-phase.json << 'EOF'
-{
-  "session_id": "{project_directory_name}",
-  "current_phase": "Builder",
-  "phase_number": "3/7",
-  "status": "planning",
-  "progress_detail": "Planning parallel build tasks",
-  "test_iteration": 0,
-  "phases_completed": ["Scout", "Architect"],
-  "started_at": "{current ISO timestamp}",
-  "last_updated": "{current ISO timestamp}"
-}
-EOF
+python3 tools/use_baml.py update-phase \
+  "Builder" \
+  "planning" \
+  "Planning parallel build tasks" \
+  --session-id "$(basename $(pwd))" \
+  --iteration 0 \
+  > .context-foundry/current-phase.json
 ```
 
 0. **CHECK CONTEXT BUDGET (CRITICAL FOR BUILDER):**
