@@ -1887,7 +1887,18 @@ HIL nodes should have **ONLY 3 inputParams**:
 
 ### Detection
 
-**Validation Command**:
+**Automated Validation** (Recommended):
+```bash
+# Run comprehensive validator (checks Pattern #10 + all other patterns)
+python3 /Users/name/homelab/context-foundry/extensions/flowise/validate_workflow.py workflow.json
+
+# Exit codes:
+#   0 = All validations passed
+#   1 = Critical failures (Pattern #10 detected, build blocked)
+#   2 = Warnings (manual review recommended)
+```
+
+**Manual Validation Commands**:
 ```bash
 # Check for invalid humanInputOutputAnchors inputParam
 jq '.nodes[] | select(.data.name == "humanInputAgentflow") | .data.inputParams[] | select(.name == "humanInputOutputAnchors")' flow.json
@@ -1955,6 +1966,16 @@ jq '.nodes[] | select(.data.name == "humanInputAgentflow") | .data.inputs | has(
 ```
 
 ### Prevention
+
+**Automated Enforcement** (Test Phase):
+
+The Context Foundry orchestrator automatically runs `validate_workflow.py` in the Test phase, which:
+- ✅ Checks HIL gates have exactly 3 inputParams
+- ✅ Detects invalid `humanInputOutputAnchors` in inputParams or inputs
+- ✅ Validates outputAnchors are hardcoded (not user-configurable)
+- ✅ **BLOCKS deployment** if Pattern #10 detected (exit code 1)
+
+See: `tools/orchestrator_prompt.txt` lines 1877-1918 (Phase 4: Test)
 
 **Builder Phase Instructions**:
 

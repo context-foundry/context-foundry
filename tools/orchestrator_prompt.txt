@@ -1872,8 +1872,48 @@ VALIDATION_SCRIPT
 
    **IF validation PASSES (exit code 0)**:
    - ✅ Log: "Standard tools validation passed"
-   - ✅ Proceed to other Flowise-specific tests
+   - ✅ Proceed to comprehensive pattern-based validation
+
+   🚨 **FLOWISE PROJECTS: Comprehensive Pattern-Based Validation** 🚨
+
+   **Run comprehensive validator (validates ALL 10 patterns)**:
+
+   ```bash
+   python3 /Users/name/homelab/context-foundry/extensions/flowise/validate_workflow.py *.json
+
+   VALIDATION_EXIT_CODE=$?
+   ```
+
+   **IF validation FAILS (exit code 1)**:
+   - ❌ **CRITICAL FAILURES DETECTED** - Build BLOCKED
+   - Review validation output for specific issues
+   - Common failures:
+     * Pattern #10: HIL gate with humanInputOutputAnchors inputParam (blank screen in Flowise)
+     * Pattern #6: Incorrect tool structure (missing agentSelectedToolConfig)
+     * Pattern #4: Disconnected nodes (scenario count ≠ edge count)
+     * STRUCTURE: Invalid outputAnchor IDs (extra suffixes like -StartFlow, -Agent|AgentExecutor)
+     * STRUCTURE: agentMessages as array (should be empty string)
+   - Return to Builder phase with specific fix instructions
+   - Do NOT proceed until validation passes
+
+   **IF validation has WARNINGS (exit code 2)**:
+   - ⚠️  Manual review recommended
+   - Log warnings for user review
+   - Proceed with remaining tests (warnings don't block)
+
+   **IF validation PASSES (exit code 0)**:
+   - ✅ Log: "Comprehensive pattern validation passed (10 patterns checked)"
    - ✅ Continue with remaining test suite
+
+   **Patterns Validated**:
+   - Pattern #1: Meta-description detection
+   - Pattern #4: Disconnected agent nodes
+   - Pattern #5: Phantom tool references
+   - Pattern #6: Incorrect tool JSON structure
+   - Pattern #8: Missing inputParams arrays
+   - Pattern #10: HIL gate invalid inputParams (NEW!)
+   - STRUCTURE: OutputAnchor ID format
+   - STRUCTURE: agentMessages type
 
    **End of Flowise-specific validation**
 
