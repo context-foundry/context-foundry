@@ -1,0 +1,287 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Chat Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point for Context Foundry chat interface",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput",
+            "id": "startAgentflow_0-input-startInputType-options"
+          },
+          {
+            "label": "Ephemeral Memory",
+            "name": "startEphemeralMemory",
+            "type": "boolean",
+            "description": "Start fresh for every execution without past chat history",
+            "optional": true,
+            "id": "startAgentflow_0-input-startEphemeralMemory-boolean"
+          },
+          {
+            "label": "Persist State",
+            "name": "startPersistState",
+            "type": "boolean",
+            "description": "Persist the state in the same session",
+            "optional": true,
+            "id": "startAgentflow_0-input-startPersistState-boolean"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput",
+          "startEphemeralMemory": false,
+          "startPersistState": true
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 116,
+      "height": 68,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 100,
+        "y": 200
+      },
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_0",
+      "position": {
+        "x": 400,
+        "y": 150
+      },
+      "data": {
+        "id": "agentAgentflow_0",
+        "label": "Context Foundry Assistant",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "AI assistant with access to Context Foundry MCP tools for autonomous app development",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_0-input-agentModel-asyncOptions"
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 10
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentMessages-array"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ],
+            "id": "agentAgentflow_0-input-agentTools-array"
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "description": "Enable memory for the conversation thread",
+            "default": true,
+            "optional": true,
+            "id": "agentAgentflow_0-input-agentEnableMemory-boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "agentMemoryType",
+            "type": "options",
+            "options": [
+              {
+                "label": "All Messages",
+                "name": "allMessages",
+                "description": "Retrieve all messages from the conversation"
+              },
+              {
+                "label": "Window Size",
+                "name": "windowSize",
+                "description": "Uses a fixed window size to surface the last N messages"
+              },
+              {
+                "label": "Conversation Summary",
+                "name": "conversationSummary",
+                "description": "Summarizes the whole conversation"
+              }
+            ],
+            "optional": true,
+            "default": "allMessages",
+            "show": {
+              "agentEnableMemory": true
+            },
+            "id": "agentAgentflow_0-input-agentMemoryType-options"
+          },
+          {
+            "label": "Return Response As",
+            "name": "agentReturnResponseAs",
+            "type": "options",
+            "options": [
+              {
+                "label": "User Message",
+                "name": "userMessage"
+              },
+              {
+                "label": "Assistant Message",
+                "name": "assistantMessage"
+              }
+            ],
+            "default": "userMessage",
+            "id": "agentAgentflow_0-input-agentReturnResponseAs-options"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Context Foundry Assistant, an AI-powered interface to the Context Foundry autonomous development platform. Your role is to help users create, manage, and deploy applications through natural conversation.\n\n## Your Capabilities\n\nThrough the Context Foundry MCP (Model Context Protocol) server, you can:\n\n- Build new applications from scratch and deploy to GitHub\n- Manage running builds and monitor progress\n- Enhance existing projects with new features\n- Create and manage Flowise flows\n- Check build status and stream real-time output\n\n## Available MCP Tools\n\nYou have access to these Context Foundry MCP tools:\n\n**autonomous_build_and_deploy** - Create complete applications autonomously\n**delegate_to_claude_code_async** - For general coding tasks\n**list_delegations** - Show all builds (running and completed)\n**get_delegation_result** - Get results from a specific build\n**stream_delegation_output** - Real-time output from running builds\n**cancel_delegation** - Stop a running build\n**read_global_patterns** - Read learned patterns from past builds\n**context_foundry_status** - Get system status\n\n## How to Help Users\n\n### When building new apps:\n1. Ask clarifying questions about requirements\n2. Suggest appropriate tech stack\n3. Use relative paths for working directory (e.g., \"weather-app\")\n4. Start build with autonomous_build_and_deploy\n5. Provide task_id and offer to monitor progress\n\n### When checking status:\n1. Use list_delegations for overview\n2. Use stream_delegation_output for real-time updates\n3. Use get_delegation_result for completed builds\n4. Explain what's happening in plain language\n\n### When creating Flowise flows:\n1. Understand the flow purpose and requirements\n2. Design architecture with appropriate nodes\n3. Use delegate_to_claude_code_async to generate flow JSON\n\n## Communication Style\n\n- Be conversational and friendly\n- Explain technical concepts clearly\n- Always provide task_id when starting builds\n- Proactively offer status updates\n- Show real-time progress for long-running builds\n- Explain errors and suggest fixes\n\n## Example Interaction\n\nUser: \"Build me a weather app\"\n\nYou should:\n1. Ask about weather API preference, features needed, tech stack\n2. Confirm requirements\n3. Start build with autonomous_build_and_deploy\n4. Provide task_id and explain it's running in background\n5. Offer to show real-time progress\n6. Update when complete with GitHub URL\n\nRemember: You're making autonomous development accessible and delightful. Be helpful, transparent, and proactive!"
+            }
+          ],
+          "agentToolsBuiltInOpenAI": "",
+          "agentToolsBuiltInGemini": "",
+          "agentToolsBuiltInAnthropic": "",
+          "agentTools": [],
+          "agentKnowledgeDocumentStores": "",
+          "agentKnowledgeVSEmbeddings": "",
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentUserMessage": "",
+          "agentReturnResponseAs": "userMessage",
+          "agentUpdateState": "",
+          "agentModelConfig": {
+            "credential": "",
+            "cache": "",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.7,
+            "streaming": true,
+            "maxTokens": 4096,
+            "topP": "",
+            "timeout": "",
+            "stopSequence": "",
+            "basepath": "",
+            "baseOptions": "",
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_0-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "type": "agentFlow",
+      "width": 300,
+      "height": 120,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 400,
+        "y": 150
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agentAgentflow_0",
+      "targetHandle": "agentAgentflow_0-input-agentAgentflow",
+      "type": "buttonedge",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-agentAgentflow_0-agentAgentflow_0-input-agentAgentflow"
+    }
+  ]
+}

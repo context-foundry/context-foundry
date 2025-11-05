@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "context-foundry": {
+      "url": "http://localhost:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer {{$vars.contextFoundryToken}}"
+      }
+    }
+  }
+}

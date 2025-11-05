@@ -505,6 +505,33 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    - Use `read_global_patterns("scout-learnings")` to get learnings from ALL past projects
    - Use `read_global_patterns("common-issues")` to get issues from ALL past builds
 
+   **SPECIAL CASE - MCP SERVER DETECTION:**
+
+   If the task mentions ANY of these keywords:
+   - "MCP server", "Model Context Protocol"
+   - "tools for Claude", "Claude Desktop tools"
+   - "FastMCP", "@mcp.tool", "MCP SDK"
+   - "expose functions to Claude"
+
+   This is an **MCP SERVER PROJECT**. Additionally read:
+   - Use `read_global_patterns("mcp-server-patterns")` to get detailed MCP implementation patterns
+   - Use `read_global_patterns("architecture-patterns")` for project structure guidance
+
+   The MCP patterns contain:
+   - Complete implementation templates (Python FastMCP, Node.js MCP SDK)
+   - Tool definition patterns with @mcp.tool() decorators
+   - Best practices for async operations, error handling, type safety
+   - Working examples (calculator, web search, file manager servers)
+   - Claude Desktop configuration requirements
+   - Testing approaches
+
+   When MCP server is detected, Scout should:
+   1. Identify which tools/functions should be exposed
+   2. Determine if Python (FastMCP) or Node.js (MCP SDK) is more appropriate
+   3. Note any external APIs or services to integrate
+   4. Flag that template exists at `templates/mcp-server-template/`
+   5. Include MCP-specific requirements in analysis
+
    The global patterns are stored at ~/.context-foundry/patterns/ and shared across all projects.
 
    If patterns exist:

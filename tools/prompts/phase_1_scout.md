@@ -76,6 +76,54 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    "⚠️ CORS Risk: ES6 modules fail from file:// - Include dev server in architecture"
    (This learning comes from ANY past browser app build, not just this project)
 
+**MCP SERVER PROJECT CHECK:**
+
+   If the task mentions ANY of these keywords:
+   - "MCP server", "Model Context Protocol"
+   - "tools for Claude", "Claude Desktop tools", "expose tools to Claude"
+   - "FastMCP", "@mcp.tool", "MCP SDK"
+   - "Claude Desktop integration"
+
+   🚨 **MCP SERVER PROJECT DETECTED** 🚨
+
+   **Additionally read MCP patterns:**
+   - `read_global_patterns("mcp-server-patterns")` - Complete MCP implementation patterns
+   - `read_global_patterns("architecture-patterns")` - Project structure guidance
+
+   **MANDATORY Reading:**
+   1. **Read MCP server template**:
+      ```
+      Read /Users/name/homelab/context-foundry/templates/mcp-server-template/mcp_server.py
+      Read /Users/name/homelab/context-foundry/templates/mcp-server-template/README.md
+      ```
+      This shows a complete working MCP server with 4 example tools
+
+   **Scout Focus Areas (MCP Server Projects):**
+   - Which tools/functions should be exposed to Claude?
+   - Python (FastMCP) or Node.js (MCP SDK)?
+   - External APIs or services to integrate?
+   - Async operations needed (I/O, network calls)?
+   - Data sources or resources to expose?
+   - State management requirements?
+   - Authentication/security needs?
+
+   **MCP-Specific Requirements:**
+   - Python 3.10+ for FastMCP OR Node.js 18+ for MCP SDK
+   - Tool functions with clear docstrings (become LLM descriptions)
+   - Type hints for automatic parameter validation
+   - Error handling (return errors, don't crash)
+   - stdio transport for Claude Desktop
+   - Tests for each tool function
+
+   **Scout Output (MCP Projects):**
+   Create scout-report.md focusing on MCP server design:
+   - List of tools to expose (with descriptions)
+   - Language choice (Python recommended for simplicity)
+   - External dependencies (httpx for HTTP, etc.)
+   - Tool categories (data access, API wrappers, transformations, etc.)
+   - Testing approach (unit tests for tool functions)
+   - Claude Desktop configuration requirements
+
 **FLOWISE EXTENSION CHECK** (if Flowise flow detected in codebase):
 
    If CONFIGURATION shows flowise_flow: True:
