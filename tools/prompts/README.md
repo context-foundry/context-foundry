@@ -2,19 +2,69 @@
 
 This directory manages versioned prompts for Context Foundry's autonomous agents.
 
-## Directory Structure
+## 🆕 Modular Prompt Architecture
+
+The orchestrator prompt now uses a **modular architecture** for easier maintenance:
 
 ```
 prompts/
-├── README.md                      # This file
-├── VERSIONS.md                    # Version history and changelog
-├── OPTIMIZATION_ANALYSIS.md       # Optimization opportunities and analysis
-├── switch_version.sh              # Script to switch between versions
-└── archive/                       # All archived prompt versions
+├── README.md                          # This file
+├── VERSIONS.md                        # Version history and changelog
+├── build_orchestrator_prompt.py       # Builder script (combines modules)
+├── phase_loader.py                    # Runtime phase loader
+├── orchestrator_header.txt            # Common sections (git, BAML, etc.)
+├── orchestrator_footer.txt            # Final output, rules, error handling
+├── phase_0_codebase_analysis.md       # Phase 0: Codebase Analysis
+├── phase_1_scout.md                   # Phase 1: Scout
+├── phase_2_architect.md               # Phase 2: Architect
+├── phase_2_5_parallel_build.md        # Phase 2.5: Parallel Build
+├── phase_3_5_integration_precheck.md  # Phase 3.5: Integration Pre-check
+├── phase_4_test.md                    # Phase 4: Test
+├── phase_4_5_screenshot.md            # Phase 4.5: Screenshot
+├── phase_5_documentation.md           # Phase 5: Documentation
+├── phase_6_deployment.md              # Phase 6: Deployment
+├── phase_7_feedback.md                # Phase 7: Feedback
+├── phase_7_5_github.md                # Phase 7.5: GitHub Integration
+└── archive/                           # All archived prompt versions
     ├── orchestrator_prompt_v1.0.0_baseline.txt
-    ├── github_agent_prompt_v1.0.0_baseline.txt
     └── ...
 ```
+
+### Benefits of Modular Structure
+
+1. **Easier Editing**: Edit individual phases without scrolling through 3,000+ lines
+2. **Reduced Conflicts**: Multiple people can edit different phases simultaneously
+3. **Better Organization**: Clear separation between phases and common sections
+4. **Maintainability**: Changes to one phase don't affect others
+5. **Smaller Base Size**: Core prompt is smaller, phases loaded on demand
+6. **Flowise Integration**: Seamlessly adds Flowise enhancements per phase
+
+### Building the Orchestrator Prompt
+
+The modular files are combined into `tools/orchestrator_prompt.txt` using:
+
+```bash
+# Build with all enhancements (default)
+python3 tools/prompts/build_orchestrator_prompt.py
+
+# Build without Flowise enhancements
+python3 tools/prompts/build_orchestrator_prompt.py --no-flowise
+
+# Dry run (test without writing)
+python3 tools/prompts/build_orchestrator_prompt.py --dry-run
+
+# Build to custom location
+python3 tools/prompts/build_orchestrator_prompt.py -o /path/to/output.txt
+```
+
+### Editing Workflow
+
+1. **Edit a phase**: Modify the appropriate `phase_*.md` file
+2. **Edit common sections**: Modify `orchestrator_header.txt` or `orchestrator_footer.txt`
+3. **Rebuild**: Run `python3 tools/prompts/build_orchestrator_prompt.py`
+4. **Test**: Run Flowise detection tests or full build tests
+
+**IMPORTANT**: Always rebuild after editing modular files! The runtime uses `tools/orchestrator_prompt.txt`.
 
 ## Quick Start
 

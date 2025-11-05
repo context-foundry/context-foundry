@@ -1983,7 +1983,8 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
     Read global patterns from ~/.context-foundry/patterns/
 
     Args:
-        pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics")
+        pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics",
+                     "architecture-patterns", "test-patterns", "mcp-server-patterns")
 
     Returns:
         JSON string with patterns or error message
@@ -1994,6 +1995,9 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
 
         # Read scout learnings
         learnings = read_global_patterns("scout-learnings")
+
+        # Read MCP server patterns
+        mcp_patterns = read_global_patterns("mcp-server-patterns")
     """
     try:
         # Global pattern directory
@@ -2003,7 +2007,10 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
         pattern_files = {
             "common-issues": "common-issues.json",
             "scout-learnings": "scout-learnings.json",
-            "build-metrics": "build-metrics.json"
+            "build-metrics": "build-metrics.json",
+            "architecture-patterns": "architecture-patterns.json",
+            "test-patterns": "test-patterns.json",
+            "mcp-server-patterns": "mcp-server-patterns.json"
         }
 
         if pattern_type not in pattern_files:
