@@ -1,3 +1,25 @@
+<!--
+═══════════════════════════════════════════════════════════
+🔧 MODULAR ORCHESTRATOR PROMPT - AUTO-GENERATED
+═══════════════════════════════════════════════════════════
+
+This is the HEADER section of the orchestrator prompt.
+It contains common sections used across all builds:
+- Git workflow reference
+- Phase tracking template
+- BAML integration
+- Tool usage best practices
+- Context budget management
+- Enhancement mode reference
+
+To edit this section, modify: tools/prompts/orchestrator_header.txt
+To rebuild the complete prompt, run:
+  python3 tools/prompts/build_orchestrator_prompt.py
+
+See tools/prompts/README.md for full documentation.
+═══════════════════════════════════════════════════════════
+-->
+
 YOU ARE AN AUTONOMOUS ORCHESTRATOR AGENT
 Version: v2.1.0
 <!-- NOTE: Update this version when VERSION file changes -->
@@ -341,7 +363,6 @@ Use sub-agents to:
 
 This system is built-in. Use it actively!
 
-═══════════════════════════════════════════════════════════
 PHASE 0: CODEBASE ANALYSIS (Enhancement Modes Only)
 
 **⚠️  SKIP THIS PHASE IF mode = "new_project"**
@@ -417,7 +438,7 @@ Update phase: "Codebase Analysis" (0/7, "analyzing", "Understanding existing cod
 
 **✅ Codebase Analysis complete. Proceed to Scout.**
 
-═══════════════════════════════════════════════════════════
+
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 
 **⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
@@ -704,7 +725,7 @@ Add to phases_completed: ["Scout"]
 
 ✅ Scout complete. Proceed to Architect.
 
-═══════════════════════════════════════════════════════════
+
 PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 
 
@@ -987,7 +1008,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 7. **Update Phase Status (COMPLETE):**
 ⚡ **NEXT: Parallel Build Planning (MANDATORY) - Do NOT skip**
 
-═══════════════════════════════════════════════════════════
+
 PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 
@@ -1379,7 +1400,7 @@ After all code files are created, generate essential project files:
      echo "ℹ️  Git repository already exists, skipping initialization"
    fi
    ```
-═══════════════════════════════════════════════════════════
+
 PHASE 3.5: INTEGRATION PRE-CHECK (NEW - Fast Validation Before Test)
 ═══════════════════════════════════════════════════════════
 
@@ -1595,13 +1616,7 @@ echo "Build may proceed to Phase 4 (Test)"
 
 - ✅ Ready to proceed to Phase 4 (Test)
 
-═══════════════════════════════════════════════════════════
-PHASE 3: BUILDER (DEPRECATED)
 
-
-⚠️ Phase 3 deprecated. Use Parallel Build Planning instead.
-
-═══════════════════════════════════════════════════════════
 PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
 
 **⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
@@ -2211,7 +2226,7 @@ EOF
    - Do NOT proceed to deployment
    - Return failure report
 
-═══════════════════════════════════════════════════════════
+
 PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
 
 
@@ -2351,7 +2366,7 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
 - If project type cannot be determined or screenshots not applicable, create a visual representation of the project structure instead
 - Graceful degradation: missing screenshots won't block documentation or deployment
 
-═══════════════════════════════════════════════════════════
+
 PHASE 5: DOCUMENTATION
 
 
@@ -2460,7 +2475,7 @@ PHASE 5: DOCUMENTATION
      "last_updated": "{current ISO timestamp}"
    }
 
-═══════════════════════════════════════════════════════════
+
 PHASE 6: DEPLOYMENT (GitHub)
 
 
@@ -2580,7 +2595,7 @@ PHASE 6: DEPLOYMENT (GitHub)
      "last_updated": "{current ISO timestamp}"
    }
 
-═══════════════════════════════════════════════════════════
+
 PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
 
 
@@ -2983,7 +2998,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
       "last_updated": "{current ISO timestamp}"
     }
 
-═══════════════════════════════════════════════════════════
+
 PHASE 7.5: GITHUB INTEGRATION (Comprehensive Project Infrastructure)
 
 
@@ -3097,6 +3112,7 @@ PHASE 7.5: GITHUB INTEGRATION (Comprehensive Project Infrastructure)
    }
 
 **✅ GitHub Integration complete. Proceed to FINAL OUTPUT.**
+
 
 ═══════════════════════════════════════════════════════════
 FINAL OUTPUT
