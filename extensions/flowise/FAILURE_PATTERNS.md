@@ -1,7 +1,7 @@
 # Flowise Extension - Failure Patterns
 
-**Version**: 1.0
-**Last Updated**: 2025-11-01
+**Version**: 1.7
+**Last Updated**: 2025-11-04
 **Purpose**: Document common failure patterns and how to prevent them
 
 ---
@@ -17,7 +17,8 @@
 7. [ConditionAgent Incomplete Scenarios (Pattern #7)](#conditionagent-incomplete-scenarios-pattern-7)
 8. [Agent Nodes Missing inputParams (Pattern #8)](#agent-nodes-missing-inputparams-pattern-8)
 9. [Missing Mermaid Diagram (Pattern #9)](#missing-mermaid-diagram-pattern-9)
-10. [Prevention Checklist](#prevention-checklist)
+10. [HIL Gate Invalid inputParams Configuration (Pattern #10)](#hil-gate-invalid-inputparams-configuration-pattern-10)
+11. [Prevention Checklist](#prevention-checklist)
 
 ---
 
@@ -1018,6 +1019,9 @@ This pattern has been added to:
 - [ ] No `"customNode"` types
 - [ ] No external file references
 - [ ] Structure matches warehouse-operations-flow.json
+- [ ] HIL gates have exactly 3 inputParams (no humanInputOutputAnchors)
+- [ ] HIL gates have no humanInputOutputAnchors in inputs object
+- [ ] HIL gates have hardcoded outputAnchors (proceed/reject)
 - [ ] WORKFLOW-DIAGRAM.md exists (BLOCKING)
 - [ ] README.md contains ```mermaid block (BLOCKING)
 - [ ] README.md contains diagram badges (BLOCKING)
@@ -1717,6 +1721,278 @@ Both cause similar symptoms (500 errors, UI crashes) but different root causes:
 
 ---
 
+## HIL Gate Invalid inputParams Configuration (Pattern #10)
+
+### Symptom
+
+When double-clicking a Human Input (HIL) node in Flowise, the UI shows a **blank screen** instead of the configuration panel. The node appears on the canvas but is not editable.
+
+**Console Error** (if visible):
+```
+TypeError: Cannot read properties of undefined
+Failed to render node configuration panel
+```
+
+### Root Cause
+
+**HIL Gate node includes "Output Anchors" as an editable inputParam**
+
+The generated HIL node incorrectly includes `humanInputOutputAnchors` as a user-configurable field in the `inputParams` array:
+
+```json
+{
+  "data": {
+    "name": "humanInputAgentflow",
+    "inputParams": [
+      {
+        "label": "Description Type",
+        "name": "humanInputDescriptionType",
+        ...
+      },
+      {
+        "label": "Description",
+        "name": "humanInputDescription",
+        ...
+      },
+      {
+        "label": "Enable Feedback",
+        "name": "humanInputEnableFeedback",
+        ...
+      },
+      {
+        "label": "Output Anchors",  // ❌ THIS SHOULD NOT EXIST
+        "name": "humanInputOutputAnchors",
+        "type": "array",
+        "array": [
+          {
+            "label": "Anchor Name",
+            "name": "anchorName",
+            "type": "string"
+          },
+          {
+            "label": "Anchor Label",
+            "name": "anchorLabel",
+            "type": "string"
+          }
+        ]
+      }
+    ],
+    "inputs": {
+      "humanInputDescriptionType": "fixed",
+      "humanInputDescription": "...",
+      "humanInputEnableFeedback": true,
+      "humanInputOutputAnchors": [  // ❌ THIS SHOULD NOT EXIST
+        {
+          "anchorName": "proceed",
+          "anchorLabel": "Approve"
+        },
+        {
+          "anchorName": "reject",
+          "anchorLabel": "Reject"
+        }
+      ]
+    },
+    "outputAnchors": [  // ✅ This is correct (hardcoded)
+      {
+        "id": "humanInputAgentflow_0-output-proceed",
+        "label": "Proceed",
+        "name": "proceed"
+      },
+      {
+        "id": "humanInputAgentflow_0-output-reject",
+        "label": "Reject",
+        "name": "reject"
+      }
+    ]
+  }
+}
+```
+
+**Why This Causes Blank Screen**:
+- Flowise UI expects HIL nodes to have only 3 configurable fields
+- Adding `humanInputOutputAnchors` as inputParam confuses the rendering engine
+- The UI attempts to render an array field that shouldn't exist
+- Results in rendering failure → blank screen
+
+### Impact
+
+- **Severity**: HIGH - Node completely unusable in Flowise UI
+- **Frequency**: Occurred in expense-approval-loop build (2025-11-04)
+- **User Experience**: Confusing - node appears on canvas but can't be configured
+- **Detectability**: Only discovered when user attempts to edit the node
+
+### Expected Structure (Correct)
+
+HIL nodes should have **ONLY 3 inputParams**:
+
+```json
+{
+  "data": {
+    "name": "humanInputAgentflow",
+    "version": 1.0,
+    "type": "HumanInput",
+    "color": "#F06292",
+    "inputParams": [
+      {
+        "label": "Description Type",
+        "name": "humanInputDescriptionType",
+        "type": "options",
+        "options": [
+          {"label": "Fixed", "name": "fixed"},
+          {"label": "Dynamic", "name": "dynamic"}
+        ],
+        "display": true
+      },
+      {
+        "label": "Description",
+        "name": "humanInputDescription",
+        "type": "string",
+        "acceptVariable": true,
+        "rows": 8,
+        "show": {"humanInputDescriptionType": "fixed"},
+        "display": true
+      },
+      {
+        "label": "Enable Feedback",
+        "name": "humanInputEnableFeedback",
+        "type": "boolean",
+        "default": true,
+        "display": true
+      }
+    ],
+    "inputs": {
+      "humanInputDescriptionType": "fixed",
+      "humanInputDescription": "...",
+      "humanInputEnableFeedback": true
+      // NO humanInputOutputAnchors!
+    },
+    "outputAnchors": [
+      // Hardcoded, NOT user-configurable
+      {
+        "id": "humanInputAgentflow_0-output-proceed",
+        "label": "Proceed",
+        "name": "proceed",
+        "description": "User approved"
+      },
+      {
+        "id": "humanInputAgentflow_0-output-reject",
+        "label": "Reject",
+        "name": "reject",
+        "description": "User rejected"
+      }
+    ]
+  }
+}
+```
+
+### Detection
+
+**Validation Command**:
+```bash
+# Check for invalid humanInputOutputAnchors inputParam
+jq '.nodes[] | select(.data.name == "humanInputAgentflow") | .data.inputParams[] | select(.name == "humanInputOutputAnchors")' flow.json
+
+# If this returns results, the HIL node is INVALID
+# Expected: No output (empty)
+```
+
+**Count InputParams** (should be exactly 3):
+```bash
+jq '.nodes[] | select(.data.name == "humanInputAgentflow") | {label: .data.label, inputParams_count: (.data.inputParams | length)}' flow.json
+
+# Expected output:
+# {
+#   "label": "Manager Approval",
+#   "inputParams_count": 3
+# }
+```
+
+**Check for humanInputOutputAnchors in inputs**:
+```bash
+jq '.nodes[] | select(.data.name == "humanInputAgentflow") | .data.inputs | has("humanInputOutputAnchors")' flow.json
+
+# Expected: false
+```
+
+### Fix Applied
+
+**Removal of invalid configuration**:
+
+1. Removed `humanInputOutputAnchors` from `inputParams` array
+2. Removed `humanInputOutputAnchors` from `inputs` object
+3. Kept `outputAnchors` hardcoded in node structure
+4. Updated to canonical HIL-NODE-TEMPLATE.json structure
+
+**Diff**:
+```diff
+  "inputParams": [
+    {
+      "label": "Description Type",
+      ...
+    },
+    {
+      "label": "Description",
+      ...
+    },
+    {
+      "label": "Enable Feedback",
+      ...
+-   },
+-   {
+-     "label": "Output Anchors",
+-     "name": "humanInputOutputAnchors",
+-     "type": "array",
+-     ...
+    }
+  ],
+  "inputs": {
+    "humanInputDescriptionType": "fixed",
+    "humanInputDescription": "...",
+-   "humanInputEnableFeedback": true,
+-   "humanInputOutputAnchors": [...]
++   "humanInputEnableFeedback": true
+  }
+```
+
+### Prevention
+
+**Builder Phase Instructions**:
+
+When generating HIL (humanInputAgentflow) nodes:
+
+1. ✅ **DO**: Use exactly 3 inputParams (Description Type, Description, Enable Feedback)
+2. ✅ **DO**: Hardcode outputAnchors with "proceed" and "reject" routes
+3. ✅ **DO**: Reference HIL-NODE-TEMPLATE.json for canonical structure
+4. ❌ **DON'T**: Add "Output Anchors" or `humanInputOutputAnchors` as inputParam
+5. ❌ **DON'T**: Include `humanInputOutputAnchors` in inputs object
+6. ❌ **DON'T**: Make outputAnchors user-configurable
+
+**Checklist for HIL Nodes**:
+- [ ] inputParams array has exactly 3 elements
+- [ ] No `humanInputOutputAnchors` in inputParams
+- [ ] No `humanInputOutputAnchors` in inputs
+- [ ] outputAnchors hardcoded with proceed/reject
+- [ ] version = 1.0
+- [ ] type = "HumanInput" (not "Human Input")
+- [ ] color = "#F06292"
+
+**Reference**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/HIL-NODE-TEMPLATE.json`
+
+### Related Issues
+
+- Similar to incorrect tool structure (Pattern #6) - wrong field configuration
+- Different from phantom tools (Pattern #5) - fields exist but shouldn't be editable
+- Affects UI rendering rather than runtime execution
+
+### First Occurrence
+
+- **Build**: expense-approval-loop (2025-11-04)
+- **Detected By**: User attempting to configure node in Flowise UI
+- **Fixed**: Manual removal of invalid inputParam + inputs field
+- **Documentation**: Added to FAILURE_PATTERNS.md as Pattern #10
+
+---
+
 ## Example Negative Pattern
 
 **File**: `patterns/failures/enterprise-ops-center-meta-description.json`
@@ -1739,6 +2015,7 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.7 | 2025-11-04 | Added "HIL Gate Invalid inputParams Configuration" (Pattern #10) - humanInputOutputAnchors as editable field causes blank screen in Flowise UI. From expense-approval-loop build |
 | 1.6 | 2025-11-02 | Added "Missing Mermaid Diagram" (Pattern #9) - BLOCKING requirement for visual documentation from personalized-training-recommendations build |
 | 1.5 | 2025-11-01 | CORRECTED Pattern #6 root cause: "Incorrect Tool JSON Structure" - discovered true issue was wrong field names/types, not missing tools |
 | 1.4 | 2025-11-01 | Added "Tool References Before Tool Creation" (Pattern #6) - initial diagnosis (later corrected) |
