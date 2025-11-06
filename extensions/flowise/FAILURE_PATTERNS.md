@@ -1,7 +1,7 @@
 # Flowise Extension - Failure Patterns
 
-**Version**: 1.7
-**Last Updated**: 2025-11-04
+**Version**: 2.0
+**Last Updated**: 2025-11-05
 **Purpose**: Document common failure patterns and how to prevent them
 
 ---
@@ -18,7 +18,11 @@
 8. [Agent Nodes Missing inputParams (Pattern #8)](#agent-nodes-missing-inputparams-pattern-8)
 9. [Missing Mermaid Diagram (Pattern #9)](#missing-mermaid-diagram-pattern-9)
 10. [HIL Gate Invalid inputParams Configuration (Pattern #10)](#hil-gate-invalid-inputparams-configuration-pattern-10)
-11. [Prevention Checklist](#prevention-checklist)
+11. [HIL Node Missing Required inputParams Fields (Pattern #11)](#hil-node-missing-required-inputparams-fields-pattern-11)
+12. [Modular Prompt Refactor Breaking Tool Inclusion (Pattern #12)](#modular-prompt-refactor-breaking-tool-inclusion-pattern-12)
+13. [ConditionAgent Variable Format (Pattern #13)](#conditionagent-variable-format-pattern-13)
+14. [Node Type Mismatch (Pattern #14)](#node-type-mismatch-pattern-14)
+15. [Prevention Checklist](#prevention-checklist)
 
 ---
 
@@ -969,6 +973,1099 @@ This pattern has been added to:
 - Severity: HIGH
 - First seen: 2025-11-02 (personalized-training-recommendations build)
 - Total patterns: 11 (was 10)
+
+---
+
+## HIL Node Missing Required inputParams Fields (Pattern #11)
+
+### Symptom
+
+Human-in-the-Loop (HIL) approval node causes **blank screen** when clicked in Flowise UI.
+
+**User Experience**:
+- Workflow imports successfully ✓
+- All nodes display correctly on canvas ✓
+- Double-clicking HIL node → **blank screen/white screen** ❌
+- No error messages in browser console
+- Node configuration completely inaccessible
+- Other nodes work fine
+
+**Occurred in**: Travel Booking & Expense Flow (2025-11-05)
+
+### Root Cause
+
+**HIL node missing required `inputParams` fields that Flowise UI expects to exist in the schema.**
+
+The generated HIL node only included **3 inputParams**:
+1. `humanInputDescriptionType` ✓
+2. `humanInputDescription` ✓
+3. `humanInputEnableFeedback` ✓
+
+But Flowise requires **5 inputParams** to be present:
+1. `humanInputDescriptionType` ✓
+2. `humanInputDescription` ✓
+3. **`humanInputModel`** ❌ MISSING
+4. **`humanInputModelPrompt`** ❌ MISSING
+5. `humanInputEnableFeedback` ✓
+
+**Why this breaks Flowise:**
+- Even though `humanInputModel` and `humanInputModelPrompt` are conditionally hidden via `"show": {"humanInputDescriptionType": "dynamic"}`, **Flowise still requires them to exist in the schema**
+- When the UI tries to render the node, it looks for these fields in `inputParams`
+- If they don't exist, the rendering engine fails silently → blank screen
+- No error is thrown because it's a schema validation issue, not a runtime error
+
+**Additionally:**
+- Missing `humanInputModelConfig` object in the `inputs` field
+- Incorrect dimensions: `width: 300, height: 400` instead of `width: 221, height: 80`
+
+### Impact
+
+**Severity**: CRITICAL - HIL node completely unusable
+**Frequency**: 100% when HIL node is missing required inputParams
+**User Experience**: Confusing - workflow imports successfully but one node is broken
+**Debugging Difficulty**: HIGH - No error messages, silent failure
+
+**Why This Is Critical:**
+- HIL gates are essential for approval workflows
+- Without working HIL gates, workflows cannot pause for human input
+- User cannot configure approval messages or routing
+- Forces manual recreation of the entire node in Flowise UI
+
+### Correct Structure
+
+**HIL node MUST include all 5 inputParams** (from AGENT_PATTERN_REFERENCE.md):
+
+```json
+{
+  "data": {
+    "inputParams": [
+      {
+        "label": "Description Type",
+        "name": "humanInputDescriptionType",
+        "type": "options",
+        "options": [
+          {"label": "Fixed", "name": "fixed"},
+          {"label": "Dynamic", "name": "dynamic"}
+        ],
+        "id": "humanInputAgentflow_0-input-humanInputDescriptionType-options",
+        "display": true
+      },
+      {
+        "label": "Description",
+        "name": "humanInputDescription",
+        "type": "string",
+        "placeholder": "Are you sure you want to proceed?",
+        "acceptVariable": true,
+        "rows": 8,
+        "show": {"humanInputDescriptionType": "fixed"},
+        "id": "humanInputAgentflow_0-input-humanInputDescription-string",
+        "display": true
+      },
+      {
+        "label": "Model",
+        "name": "humanInputModel",
+        "type": "asyncOptions",
+        "loadMethod": "listModels",
+        "loadConfig": true,
+        "show": {"humanInputDescriptionType": "dynamic"},
+        "id": "humanInputAgentflow_0-input-humanInputModel-asyncOptions",
+        "display": false
+      },
+      {
+        "label": "Prompt",
+        "name": "humanInputModelPrompt",
+        "type": "string",
+        "acceptVariable": true,
+        "generateInstruction": true,
+        "rows": 12,
+        "show": {"humanInputDescriptionType": "dynamic"},
+        "id": "humanInputAgentflow_0-input-humanInputModelPrompt-string",
+        "display": false
+      },
+      {
+        "label": "Enable Feedback",
+        "name": "humanInputEnableFeedback",
+        "type": "boolean",
+        "default": true,
+        "id": "humanInputAgentflow_0-input-humanInputEnableFeedback-boolean",
+        "display": true
+      }
+    ],
+    "inputs": {
+      "humanInputDescriptionType": "fixed",
+      "humanInputDescription": "Approval message here",
+      "humanInputEnableFeedback": true,
+      "humanInputModelConfig": {
+        "credential": "OpenAI API Key",
+        "modelName": "gpt-4o-mini",
+        "temperature": 0.0,
+        "streaming": true,
+        "humanInputModel": "chatOpenAI"
+      }
+    }
+  },
+  "width": 221,
+  "height": 80
+}
+```
+
+**Key Points:**
+- All 5 inputParams MUST be present in the array
+- Fields 3-4 are hidden via `"show"` condition but still required
+- `humanInputModelConfig` MUST be present in `inputs` even when using "fixed" description type
+- Correct dimensions: 221 x 80 (not 300 x 400)
+
+### Fix Applied
+
+**Updated on**: 2025-11-05
+
+1. **Fixed HIL-NODE-TEMPLATE.json** (`prompts/HIL-NODE-TEMPLATE.json`)
+   - Added `humanInputModel` inputParam (asyncOptions)
+   - Added `humanInputModelPrompt` inputParam (string)
+   - Added `humanInputModelConfig` to inputs object
+   - Verified dimensions are 221 x 80
+
+2. **Fixed travel-booking-expense-flow.json**
+   - Added missing inputParams to HIL node
+   - Added humanInputModelConfig to inputs
+   - Corrected dimensions from 300x400 to 221x80
+   - Validated JSON structure
+
+3. **Updated AGENT_PATTERN_REFERENCE.md**
+   - Already had correct 5-parameter structure documented
+   - Verified all examples include full schema
+
+### Prevention
+
+**CRITICAL RULES for HIL Nodes:**
+
+1. **Always include ALL 5 inputParams** - even if conditionally hidden
+   - humanInputDescriptionType
+   - humanInputDescription
+   - **humanInputModel** (required even if hidden)
+   - **humanInputModelPrompt** (required even if hidden)
+   - humanInputEnableFeedback
+
+2. **Always include humanInputModelConfig in inputs** - even when using "fixed" description type
+
+3. **Use correct dimensions**: width: 221, height: 80
+
+4. **Validate against AGENT_PATTERN_REFERENCE.md** - Section 4: "Human-in-the-Loop (HIL) Node"
+
+5. **Copy from working templates**:
+   - Use `prompts/HIL-NODE-TEMPLATE.json` (now fixed)
+   - Reference AGENT_PATTERN_REFERENCE.md for complete structure
+   - Never simplify or optimize by removing "unused" fields
+
+**Builder Phase Validation:**
+```
+HIL Node Checklist:
+✓ inputParams has exactly 5 fields
+✓ humanInputModel present (even if hidden)
+✓ humanInputModelPrompt present (even if hidden)
+✓ inputs.humanInputModelConfig exists
+✓ width: 221, height: 80
+✓ outputAnchors has "proceed" and "reject"
+```
+
+**Why Hidden Fields Are Required:**
+- Flowise UI schema validation requires all fields to exist
+- Conditional visibility (`show`) only affects UI display, not schema
+- Missing hidden fields cause silent rendering failures
+- Schema must be complete even if user never sees certain fields
+
+### Lesson Learned
+
+**Never assume hidden fields can be omitted.**
+
+Just because a field is conditionally hidden via `"show"` does not mean it can be removed from the schema. Flowise expects the **complete schema** to be present at all times. The `show` condition only controls **visibility**, not **existence**.
+
+**Template Simplification = Broken Nodes**
+
+The original HIL-NODE-TEMPLATE.json was "simplified" to only include the fields commonly used (fixed description type). This optimization broke the node because Flowise still expected the full schema.
+
+**Always copy complete, working structures** - never simplify based on assumptions about what's "needed".
+
+---
+
+## Modular Prompt Refactor Breaking Tool Inclusion (Pattern #12)
+
+### Symptom
+
+Generated Flowise agents are **missing standard tools** (currentDateTime, searXNG) that should be automatically included in every agent.
+
+**User Experience**:
+- Workflow imports successfully ✓
+- All nodes display correctly on canvas ✓
+- Double-clicking agent nodes works ✓
+- BUT agents missing tools dropdown shows no tools selected ❌
+- Model configuration missing "Connect Credential" ❌
+- DateTime tool missing ❌
+- SearXNG tool missing ❌
+
+**Occurred in**: Travel Booking & Expense Flow (2025-11-05) - After modular prompt refactor on 2025-11-04
+
+### Root Cause
+
+**Modular prompt refactor changed how orchestrator instructions are loaded, but Builder phase didn't execute the tool inclusion instructions.**
+
+**Timeline of Events:**
+1. **2025-11-04**: Commit c009c06 "Merge feature/modular-prompt-refactor"
+   - Split orchestrator_prompt.txt into modular files
+   - orchestrator_header.txt, orchestrator_footer.txt, phase_*.md modules
+   - Build process: `build_orchestrator_prompt.py` combines modules into final prompt
+
+2. **Before refactor**: Tool inclusion instructions were in main orchestrator_prompt.txt
+   - Builder read AGENT-NODE-TEMPLATE.json
+   - Copied lines 341-367 (agentTools array)
+   - All agents had currentDateTime + searXNG
+
+3. **After refactor**: Instructions exist in `phase_2_5_parallel_build.md` (lines 82-99)
+   - But Builder phase didn't execute the Read commands
+   - Builder didn't copy the template structure
+   - Agents generated WITHOUT agentTools array
+
+**The Instructions ARE Present:**
+```markdown
+🚨🚨🚨 **MANDATORY BUILDER REQUIREMENT: Read Files BEFORE Generating Agents** 🚨🚨🚨
+
+**BEFORE generating ANY agent node, Builder MUST execute these Read commands**:
+
+1. **READ the AGENT-NODE-TEMPLATE.json** (get the correct structure):
+   Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+
+2. **LOCATE lines 341-367** in the template (agentTools array structure)
+
+3. **COPY the agentTools structure EXACTLY** into every agent node
+```
+
+But the Builder didn't follow them.
+
+### Impact
+
+**Severity**: CRITICAL - Agents completely non-functional for real-world use
+**Frequency**: 100% after modular prompt refactor (2025-11-04+)
+**User Experience**: Workflow appears complete but lacks essential functionality
+**Debugging Difficulty**: MEDIUM - Tools are missing but no errors shown
+
+**Why This Is Critical:**
+- DateTime tool provides temporal context (essential for time-sensitive queries)
+- SearXNG enables real-time web search (essential for current information)
+- Without these tools, agents can't:
+  - Determine if information is current or outdated
+  - Search for fresh facts or verify information
+  - Access real-time data (prices, news, availability)
+- Model credential missing prevents agents from executing at all in Flowise
+
+**Business Impact:**
+- Travel booking agents can't search for current flight prices
+- Expense tracking can't determine current dates
+- Any time-sensitive or research-based workflow is broken
+
+### What Was Missing
+
+**1. agentTools Array** (completely absent):
+```json
+// ❌ WRONG (what was generated):
+{
+  "inputs": {
+    "agentModel": "chatOpenAI",
+    "agentMessages": [...],
+    // NO agentTools field at all!
+    "agentEnableMemory": true
+  }
+}
+
+// ✅ CORRECT (what should be generated):
+{
+  "inputs": {
+    "agentModel": "chatOpenAI",
+    "agentMessages": [...],
+    "agentTools": [
+      {
+        "agentSelectedTool": "currentDateTime",
+        "agentSelectedToolRequiresHumanInput": "",
+        "agentSelectedToolConfig": {
+          "agentSelectedTool": "currentDateTime"
+        }
+      },
+      {
+        "agentSelectedTool": "searXNG",
+        "agentSelectedToolRequiresHumanInput": "",
+        "agentSelectedToolConfig": {
+          "apiBase": "https://s.llam.ai",
+          "toolName": "searxng-search",
+          "toolDescription": "...",
+          // ... full config
+          "agentSelectedTool": "searXNG"
+        }
+      }
+    ],
+    "agentEnableMemory": true
+  }
+}
+```
+
+**2. Model Configuration** (credential field missing in some cases):
+```json
+// ❌ INCOMPLETE:
+"agentModelConfig": {
+  "modelName": "gpt-4o-mini",
+  "temperature": 0.7,
+  "streaming": true,
+  "agentModel": "chatOpenAI"
+  // Missing: "credential": "OpenAI API Key"
+}
+
+// ✅ COMPLETE:
+"agentModelConfig": {
+  "credential": "OpenAI API Key",  // ← REQUIRED
+  "modelName": "gpt-4o-mini",
+  "temperature": 0.7,
+  "streaming": true,
+  "agentModel": "chatOpenAI"
+}
+```
+
+### Fix Applied
+
+**Updated on**: 2025-11-05
+
+1. **Identified the regression**:
+   - Compared generated flow against template
+   - Confirmed agentTools array completely missing
+   - Traced to modular prompt refactor commit (c009c06)
+
+2. **Regenerated with explicit instructions**:
+   - Created task with CRITICAL FIX prefix
+   - Explicitly instructed to READ AGENT-NODE-TEMPLATE.json
+   - Explicitly instructed to COPY lines 341-367
+   - Emphasized this was a regression from working functionality
+
+3. **Validated the fix**:
+   ```bash
+   ✓ All 4 agents have 2 tools (currentDateTime + searXNG)
+   ✓ All agents have credential: "OpenAI API Key"
+   ✓ All agents have correct model configuration
+   ✓ JSON structure valid (12 nodes, 9 edges)
+   ```
+
+4. **Restored functionality**:
+   - Agent.TravelSearch: Has tools ✓
+   - Agent.Recommendations: Has tools ✓
+   - Agent.ExpenseTracker: Has tools ✓
+   - Agent.GeneralHelp: Has tools ✓
+
+### Prevention
+
+**CRITICAL RULES for Tool Inclusion:**
+
+1. **ALWAYS include agentTools in EVERY agent** - Never generate agents without it
+   - currentDateTime (temporal context)
+   - searXNG (web search)
+
+2. **Template is the source of truth** - Copy EXACT structure from lines 341-367
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   ```
+
+3. **Validate after generation**:
+   ```python
+   agents = [n for n in flow['nodes'] if n['data'].get('type') == 'Agent']
+   for agent in agents:
+       tools = agent['data']['inputs'].get('agentTools', [])
+       assert len(tools) >= 2, f"{agent['data']['label']} missing tools!"
+   ```
+
+4. **ALWAYS include credential field in agentModelConfig**:
+   ```json
+   "agentModelConfig": {
+     "credential": "OpenAI API Key",  // ← MANDATORY
+     // ... other config
+   }
+   ```
+
+**Builder Phase Validation Checklist:**
+```
+✓ Read AGENT-NODE-TEMPLATE.json before generating agents
+✓ Locate lines 341-367 (agentTools array)
+✓ Copy agentTools structure EXACTLY into every agent
+✓ Verify 2 tools present: currentDateTime + searXNG
+✓ Verify agentModelConfig.credential exists
+✓ Verify agentModel field matches modelConfig.agentModel
+```
+
+**Test Phase Validation:**
+```python
+# BEFORE running any other tests, validate tools:
+for agent_node in [n for n in flow['nodes'] if n['data']['type'] == 'Agent']:
+    tools = agent_node['data']['inputs'].get('agentTools', [])
+    if len(tools) < 2:
+        print(f"❌ ERROR: {agent_node['data']['label']} missing standard tools!")
+        print(f"   Has {len(tools)} tools, needs 2 (currentDateTime + searXNG)")
+        print(f"   Fix: Copy lines 341-367 from AGENT-NODE-TEMPLATE.json")
+        exit(1)
+```
+
+### Lesson Learned
+
+**Modular prompt refactors require validation that all instructions are still executed.**
+
+When refactoring the orchestrator prompt into modules:
+1. ✅ Instructions were successfully moved to modules
+2. ❌ Builder didn't execute the instructions in practice
+3. ❌ No validation caught the regression
+
+**The Problem:**
+- Instructions exist in `phase_2_5_parallel_build.md`
+- But runtime execution didn't follow them
+- Gap between "prompt contains instructions" and "agent executes instructions"
+
+**The Solution:**
+- Add validation in Test phase to catch missing tools
+- Make tool inclusion BLOCKING (exit code 1 if missing)
+- Test both "instructions exist" AND "agents follow them"
+
+**Never assume instructions are being followed - validate the output.**
+
+### Related Issues
+
+- Similar to HIL missing inputParams (Pattern #11) - incomplete node structure
+- Similar to incorrect tool structure (Pattern #6) - but this is completely absent, not just wrong
+- Different from phantom tools (Pattern #5) - these are REAL required tools, not invented ones
+- Caused by system-level changes (modular prompt refactor), not individual build errors
+
+### First Occurrence
+
+- **Build**: Travel Booking & Expense Flow (2025-11-05)
+- **Detected By**: User manual testing in Flowise UI
+- **Trigger**: Modular prompt refactor commit c009c06 (2025-11-04)
+- **Fixed**: Explicit tool inclusion instructions in regeneration task
+- **Documentation**: Added to FAILURE_PATTERNS.md as Pattern #12
+
+### Recommended System Fix
+
+**Short-term** (DONE):
+- Use explicit instructions when delegating to claude-code
+- Include validation scripts in task description
+- Regenerate with CRITICAL FIX prefix to emphasize importance
+
+**Long-term** (TODO):
+- Add automated test in Test phase that validates tool inclusion
+- Make test BLOCKING (exit code 1 if tools missing)
+- Add to `tools/orchestrator_prompt.txt` validation section
+- Consider adding tools directly to Flowise UI rather than JSON generation
+- Review all modular prompt modules for instruction execution gaps
+
+**Validation Code to Add to Test Phase:**
+```python
+# Add to tools/prompts/phase_4_test.md around line 150
+
+print("\n🔍 VALIDATING STANDARD TOOL INCLUSION...")
+agents = [n for n in flow['nodes'] if n['data'].get('type') == 'Agent']
+failed = False
+
+for agent in agents:
+    label = agent['data']['label']
+    tools = agent['data']['inputs'].get('agentTools', [])
+
+    if not tools or len(tools) < 2:
+        print(f"❌ CRITICAL: {label} missing standard tools!")
+        print(f"   Expected: currentDateTime + searXNG")
+        print(f"   Found: {len(tools)} tools")
+        failed = True
+        continue
+
+    tool_names = [t.get('agentSelectedTool') for t in tools]
+    if 'currentDateTime' not in tool_names:
+        print(f"❌ CRITICAL: {label} missing currentDateTime tool!")
+        failed = True
+    if 'searXNG' not in tool_names:
+        print(f"❌ CRITICAL: {label} missing searXNG tool!")
+        failed = True
+
+if failed:
+    print("\n🚨 DEPLOYMENT BLOCKED: Standard tools missing from agents")
+    print("   Fix: Read AGENT-NODE-TEMPLATE.json lines 341-367 and copy agentTools structure")
+    exit(1)
+
+print("✅ All agents have required standard tools")
+```
+
+---
+
+## ConditionAgent Variable Format (Pattern #13)
+
+### Symptom
+
+ConditionAgent node executes but produces **no output** and **doesn't route** to any path. The node completes execution (shows elapsed time) but the workflow stops.
+
+**User-visible symptoms:**
+- Condition node shows successful execution (e.g., "1.52 seconds")
+- No output appears in logs after "Output" header
+- Message doesn't route to any connected agents
+- Flow execution stops after condition node
+
+**Log examination reveals:**
+```
+user
+{"input": can I book a trip to india, "scenarios": [...], "instruction": ...}
+
+Output
+(empty)
+```
+
+The user input value is **not quoted** in the JSON - this is malformed JSON that the LLM cannot parse.
+
+### Root Cause
+
+The `conditionAgentInput` field is using **plain text format** instead of Flowise's **rich text HTML format** for variables.
+
+**❌ INCORRECT (Plain Text Format):**
+```json
+{
+  "inputs": {
+    "conditionAgentInput": "{{ question }}"
+  }
+}
+```
+
+**✅ CORRECT (Rich Text HTML Format):**
+```json
+{
+  "inputs": {
+    "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>"
+  }
+}
+```
+
+**Why this happens:**
+
+When you use Flowise's UI to add a variable:
+1. UI creates rich text HTML markup with special `<span>` tags
+2. These tags tell Flowise: "This is a variable that needs JSON escaping"
+3. During execution, Flowise recognizes the markup and properly escapes the value
+
+When you use plain text format:
+1. Flowise sees it as literal text, not a variable
+2. No JSON escaping is applied
+3. Result: `{"input": can I book a trip, ...}` instead of `{"input": "can I book a trip", ...}`
+4. LLM receives malformed JSON and cannot parse it
+5. No output is produced, no routing occurs
+
+### Impact
+
+- **Severity**: CRITICAL - Condition node completely non-functional
+- **User Experience**: Confusing - node appears to execute successfully but workflow stops
+- **Detection**: Only visible in logs (malformed JSON) or by testing in Flowise
+- **Frequency**: 100% if plain text format is used
+
+### Fix Applied
+
+**Updated travel-booking-expense-flow.json** (Line 168):
+
+Before:
+```json
+"conditionAgentInput": "{{ question }}"
+```
+
+After:
+```json
+"conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>"
+```
+
+**Updated AGENT_PATTERN_REFERENCE.md** (Line 167 + added comprehensive explanation section):
+- Changed canonical example to use rich text format
+- Added "CRITICAL: Variable Format in conditionAgentInput" section
+- Documented symptoms, common variables, and proper format
+
+### Prevention
+
+**When creating ConditionAgent nodes:**
+
+1. ✅ **ALWAYS** use rich text HTML format for `conditionAgentInput`
+2. ✅ Include proper `<span class="variable" ...>` markup
+3. ✅ Set `data-id` to the variable name (e.g., "question", "$form.query", "$flow.state.key")
+4. ✅ Set `data-label` to match `data-id`
+5. ✅ Include both `<p>` wrapper and `<span>` for variable
+
+**Template for common variables:**
+
+```json
+// User input from chat
+"conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>"
+
+// Form field
+"conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$form.fieldName\" data-label=\"$form.fieldName\">{{ $form.fieldName }}</span> </p>"
+
+// Flow state
+"conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.key\" data-label=\"$flow.state.key\">{{ $flow.state.key }}</span> </p>"
+```
+
+**Builder Phase Validation:**
+```python
+# Add to phase_2_5_parallel_build.md validation:
+condition_nodes = [n for n in flow['nodes'] if n['data']['type'] == 'ConditionAgent']
+for node in condition_nodes:
+    input_field = node['data']['inputs'].get('conditionAgentInput', '')
+
+    # Check if using plain text format (wrong)
+    if input_field.startswith('{{') and input_field.endswith('}}'):
+        print(f"❌ ERROR: {node['data']['label']} uses plain text variable format!")
+        print(f"   Found: {input_field}")
+        print(f"   Fix: Use rich text HTML format with <span> tags")
+        exit(1)
+
+    # Check for proper HTML format (correct)
+    if '<span class="variable"' not in input_field:
+        print(f"⚠️  WARNING: {node['data']['label']} may have improper variable format")
+        print(f"   Expected: HTML <span> tags for variables")
+
+print("✅ All condition nodes use proper rich text variable format")
+```
+
+### Technical Details
+
+**Rich Text HTML Format Structure:**
+
+```html
+<p>
+  <span
+    class="variable"
+    data-type="mention"
+    data-id="question"        <!-- Variable name -->
+    data-label="question"      <!-- Display label -->
+  >
+    {{ question }}             <!-- Template syntax -->
+  </span>
+</p>
+```
+
+**Required attributes:**
+- `class="variable"` - Identifies this as a variable
+- `data-type="mention"` - Indicates variable reference type
+- `data-id` - The actual variable name used by Flowise
+- `data-label` - UI display label (usually matches data-id)
+
+**During execution, Flowise:**
+1. Parses the HTML to find `<span class="variable">` tags
+2. Extracts `data-id` to know which variable to use
+3. Retrieves the variable value from flow context
+4. **JSON-escapes the value** (adds quotes, escapes special chars)
+5. Constructs valid JSON message to send to LLM
+
+### Lesson Learned
+
+**Flowise uses rich text HTML markup internally for variable handling.**
+
+When generating Flowise JSON programmatically:
+1. ❌ Don't use plain `"{{ variable }}"` syntax
+2. ✅ Always wrap variables in proper HTML markup
+3. ✅ Include all required attributes (class, data-type, data-id, data-label)
+4. ✅ Test in Flowise UI to verify proper execution
+
+**The plain text format looks correct but is non-functional** - Flowise doesn't recognize it as a variable reference.
+
+### Related Issues
+
+- Different from Pattern #7 (incomplete scenarios) - this is about variable format
+- Different from missing inputParams (Pattern #11) - schema is complete, format is wrong
+- Similar to malformed JSON issues but at the configuration level
+- Only affects fields that accept variables (conditionAgentInput, agent messages, etc.)
+
+### First Occurrence
+
+- **Build**: Travel Booking & Expense Flow (2025-11-05)
+- **Detected By**: User testing in Flowise - condition node didn't route
+- **Symptom**: Node executed but produced no output, workflow stopped
+- **Investigation**: Compared with working examples, found format difference
+- **Fixed**: Updated to use rich text HTML format for variables
+- **Documentation**: Added to FAILURE_PATTERNS.md as Pattern #13
+
+### Related Documentation
+
+- AGENT_PATTERN_REFERENCE.md: Section "CRITICAL: Variable Format in conditionAgentInput"
+- Working examples: Check Agentic RAG Agents.json, Change and Adoption Agent Agents.json
+- Flowise documentation: Variable references in rich text fields
+
+---
+
+## Node Type Mismatch (Pattern #14)
+
+### Symptom
+
+Builder generated nodes with incorrect `type` and `name` fields, causing nodes to not render properly in Flowise UI (missing icons, sync errors).
+
+**User Report** (2025-11-05):
+> "The Compliance Threshold Check is malformed (has no icon) and Compliant Output and Non-Compliant Output both don't have icons. I think this is the reason my BCM Assessment Input has a sync problem that won't go away."
+
+**Visual Symptoms in Flowise**:
+- Node appears without icon (blank/generic icon)
+- Node shows "sync problem" that won't clear
+- Node missing from palette or can't be configured
+
+**Structural Symptoms in JSON**:
+- `type` field doesn't match Flowise node type registry
+- `name` field doesn't match expected naming convention
+- Missing required `inputParams` for specific node types
+
+**Severity**: CRITICAL - Workflow completely unusable
+
+### Root Cause
+
+Builder used generic or incorrect node type names instead of consulting canonical node templates:
+
+| Incorrect Type | Correct Type | Node Purpose |
+|----------------|--------------|--------------|
+| `"StartFlow"` | `"Start"` | Start node |
+| `"ConditionNode"` | `"ConditionAgent"` | Conditional routing |
+| Empty `inputParams` | Required params | DirectReply message |
+
+### Examples
+
+**Example 1: Start Node with Wrong Type**
+
+❌ **INCORRECT:**
+```json
+{
+  "data": {
+    "name": "startAgentflow",
+    "type": "StartFlow",  // ❌ Wrong type
+    "color": "#81c784"
+  }
+}
+```
+
+✅ **CORRECT:**
+```json
+{
+  "data": {
+    "name": "startAgentflow",
+    "type": "Start",  // ✅ Correct type
+    "color": "#7EE787",
+    "hideInput": true
+  }
+}
+```
+
+**Example 2: ConditionAgent with Wrong Type/Name**
+
+❌ **INCORRECT:**
+```json
+{
+  "data": {
+    "name": "conditionNode",  // ❌ Wrong name
+    "type": "ConditionNode",  // ❌ Wrong type
+    "color": "#ff9800"
+  }
+}
+```
+
+✅ **CORRECT:**
+```json
+{
+  "data": {
+    "name": "conditionAgentAgentflow",  // ✅ Correct name
+    "type": "ConditionAgent",  // ✅ Correct type
+    "color": "#ff8fab",
+    "inputParams": [
+      {
+        "label": "Model",
+        "name": "conditionAgentModel",
+        "type": "asyncOptions",
+        "loadMethod": "listModels",
+        "loadConfig": true
+      },
+      {
+        "label": "Instructions",
+        "name": "conditionAgentInstructions",
+        "type": "string",
+        "rows": 4
+      },
+      {
+        "label": "Input",
+        "name": "conditionAgentInput",
+        "type": "string",
+        "acceptVariable": true
+      },
+      {
+        "label": "Scenarios",
+        "name": "conditionAgentScenarios",
+        "type": "array"
+      }
+    ]
+  }
+}
+```
+
+**Example 3: DirectReply Missing Required Fields**
+
+❌ **INCORRECT:**
+```json
+{
+  "data": {
+    "name": "directReply",
+    "type": "DirectReply",
+    "color": "#9c27b0",
+    "inputParams": [],  // ❌ Empty
+    "inputs": {}  // ❌ No directReplyMessage
+  }
+}
+```
+
+✅ **CORRECT:**
+```json
+{
+  "data": {
+    "name": "directReplyAgentflow",
+    "type": "DirectReply",
+    "color": "#4DDBBB",
+    "hideOutput": true,  // ✅ Required for terminal node
+    "inputParams": [
+      {
+        "label": "Message",
+        "name": "directReplyMessage",  // ✅ Required field
+        "type": "string",
+        "rows": 4,
+        "acceptVariable": true,
+        "id": "directReplyAgentflow_0-input-directReplyMessage-string",
+        "display": true
+      }
+    ],
+    "inputs": {
+      "directReplyMessage": "Workflow complete!"
+    }
+  }
+}
+```
+
+### Detection Strategy
+
+**Automated Validation**:
+
+```python
+def validate_node_types(workflow):
+    """
+    Validate node types match Flowise registry
+    """
+    issues = []
+
+    for node in workflow["nodes"]:
+        node_type = node["data"]["type"]
+        node_name = node["data"]["name"]
+
+        # Check Start node
+        if "start" in node_name.lower():
+            if node_type != "Start":
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": f"Start node has wrong type: {node_type} (should be 'Start')",
+                    "severity": "CRITICAL"
+                })
+            if "hideInput" not in node["data"]:
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": "Start node missing 'hideInput: true'",
+                    "severity": "HIGH"
+                })
+
+        # Check ConditionAgent node
+        if "condition" in node_name.lower() and "agent" in node_name.lower():
+            if node_type != "ConditionAgent":
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": f"ConditionAgent has wrong type: {node_type} (should be 'ConditionAgent')",
+                    "severity": "CRITICAL"
+                })
+            if node_name != "conditionAgentAgentflow":
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": f"ConditionAgent has wrong name: {node_name} (should be 'conditionAgentAgentflow')",
+                    "severity": "HIGH"
+                })
+
+            # Check required inputParams
+            required_params = ["conditionAgentModel", "conditionAgentInstructions",
+                             "conditionAgentInput", "conditionAgentScenarios"]
+            input_param_names = [p["name"] for p in node["data"].get("inputParams", [])]
+            for req in required_params:
+                if req not in input_param_names:
+                    issues.append({
+                        "pattern": "#14",
+                        "node": node["id"],
+                        "issue": f"ConditionAgent missing required inputParam: {req}",
+                        "severity": "CRITICAL"
+                    })
+
+        # Check DirectReply node
+        if node_type == "DirectReply":
+            if "hideOutput" not in node["data"] or not node["data"]["hideOutput"]:
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": "DirectReply node missing 'hideOutput: true'",
+                    "severity": "HIGH"
+                })
+
+            input_params = node["data"].get("inputParams", [])
+            has_message_param = any(p["name"] == "directReplyMessage" for p in input_params)
+            if not has_message_param:
+                issues.append({
+                    "pattern": "#14",
+                    "node": node["id"],
+                    "issue": "DirectReply node missing 'directReplyMessage' inputParam",
+                    "severity": "CRITICAL"
+                })
+
+    return issues
+```
+
+### Prevention Strategy
+
+**1. Use Canonical Node Templates**
+
+Builder MUST reference these template files:
+- `/extensions/flowise/prompts/START-NODE-TEMPLATE.json`
+- `/extensions/flowise/prompts/CONDITION-AGENT-TEMPLATE.json`
+- `/extensions/flowise/prompts/DIRECT-REPLY-NODE-TEMPLATE.json`
+
+**2. Node Type Registry**
+
+Create authoritative mapping:
+
+```python
+NODE_TYPE_REGISTRY = {
+    "Start": {
+        "name": "startAgentflow",
+        "type": "Start",
+        "required_fields": ["hideInput"],
+        "template_file": "START-NODE-TEMPLATE.json"
+    },
+    "ConditionAgent": {
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "required_params": [
+            "conditionAgentModel",
+            "conditionAgentInstructions",
+            "conditionAgentInput",
+            "conditionAgentScenarios"
+        ],
+        "template_file": "CONDITION-AGENT-TEMPLATE.json"
+    },
+    "DirectReply": {
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "required_fields": ["hideOutput"],
+        "required_params": ["directReplyMessage"],
+        "template_file": "DIRECT-REPLY-NODE-TEMPLATE.json"
+    }
+}
+```
+
+**3. Update Builder Instructions**
+
+Add to `phase_2_5_parallel_build.md`:
+
+```markdown
+## CRITICAL: Node Type Accuracy
+
+**ALWAYS** use correct node types from templates:
+
+| Node Purpose | Correct Type | Template File |
+|--------------|--------------|---------------|
+| Workflow start | `"type": "Start"` | START-NODE-TEMPLATE.json |
+| Conditional routing | `"type": "ConditionAgent"` | CONDITION-AGENT-TEMPLATE.json |
+| Terminal output | `"type": "DirectReply"` | DIRECT-REPLY-NODE-TEMPLATE.json |
+
+**NEVER** use:
+- ❌ `"type": "StartFlow"`
+- ❌ `"type": "ConditionNode"`
+- ❌ `"type": "directReply"` (lowercase)
+
+**DirectReply MUST have**:
+- `hideOutput: true`
+- `inputParams` with `directReplyMessage` field
+- `inputs.directReplyMessage` with actual message content
+```
+
+### Fix Procedure
+
+**1. Fix Start Node**
+
+```bash
+jq '(.nodes[] | select(.data.type == "StartFlow")) |= (
+  .data.type = "Start" |
+  .data.color = "#7EE787" |
+  .data.hideInput = true
+)' workflow.json > workflow.fixed.json
+```
+
+**2. Fix ConditionAgent Node**
+
+```bash
+jq '(.nodes[] | select(.data.type == "ConditionNode")) |= (
+  .data.type = "ConditionAgent" |
+  .data.name = "conditionAgentAgentflow" |
+  .data.color = "#ff8fab"
+)' workflow.json > workflow.fixed.json
+```
+
+**3. Fix DirectReply Nodes**
+
+```bash
+jq '(.nodes[] | select(.data.type == "DirectReply" and (.data.inputParams | length == 0))) |= (
+  .data.hideOutput = true |
+  .data.inputParams = [{
+    "label": "Message",
+    "name": "directReplyMessage",
+    "type": "string",
+    "rows": 4,
+    "acceptVariable": true,
+    "display": true
+  }] |
+  .data.inputs.directReplyMessage = "Workflow complete!"
+)' workflow.json > workflow.fixed.json
+```
+
+### Impact
+
+**When This Pattern Occurs:**
+- ❌ Nodes don't render in Flowise UI (missing icons)
+- ❌ Workflow shows "sync problem" errors
+- ❌ Cannot configure or execute workflow
+- ❌ Workflow import fails silently
+
+**Severity**: CRITICAL - Workflow completely unusable
+
+### Related Patterns
+
+- **Pattern #8**: Missing inputParams (similar root cause)
+- **Pattern #6**: Incorrect tool JSON structure (similar validation issue)
+
+### Resolution Status
+
+- ✅ Pattern documented: 2025-11-05
+- ✅ BCM workflow fixed and validated: 2025-11-05
+- ⏳ Validator updated: Pending
+- ⏳ Builder instructions updated: Pending
+- ⏳ Node type registry created: Pending
+
+### Example Workflows Affected
+
+- `bcm-compliance-assessment.json` (2025-11-05) - All 3 issues present (FIXED)
+
+### Added to Global Pattern Library
+
+This pattern has been added to:
+- `/Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md`
+- Pattern ID: `node-type-mismatch`
+- Severity: CRITICAL
+- First seen: 2025-11-05 (bcm-compliance-assessment build)
+- Total patterns: 14
 
 ---
 
@@ -1981,21 +3078,29 @@ See: `tools/orchestrator_prompt.txt` lines 1877-1918 (Phase 4: Test)
 
 When generating HIL (humanInputAgentflow) nodes:
 
-1. ✅ **DO**: Use exactly 3 inputParams (Description Type, Description, Enable Feedback)
-2. ✅ **DO**: Hardcode outputAnchors with "proceed" and "reject" routes
-3. ✅ **DO**: Reference HIL-NODE-TEMPLATE.json for canonical structure
-4. ❌ **DON'T**: Add "Output Anchors" or `humanInputOutputAnchors` as inputParam
-5. ❌ **DON'T**: Include `humanInputOutputAnchors` in inputs object
-6. ❌ **DON'T**: Make outputAnchors user-configurable
+1. ✅ **DO**: Use exactly **5 inputParams** (Description Type, Description, Model, Prompt, Enable Feedback)
+2. ✅ **DO**: Include humanInputModel and humanInputModelPrompt even if hidden
+3. ✅ **DO**: Include humanInputModelConfig in inputs object
+4. ✅ **DO**: Hardcode outputAnchors with "proceed" and "reject" routes
+5. ✅ **DO**: Reference HIL-NODE-TEMPLATE.json for canonical structure
+6. ✅ **DO**: Use correct dimensions: width 221, height 80
+7. ❌ **DON'T**: Add "Output Anchors" or `humanInputOutputAnchors` as inputParam
+8. ❌ **DON'T**: Include `humanInputOutputAnchors` in inputs object
+9. ❌ **DON'T**: Make outputAnchors user-configurable
+10. ❌ **DON'T**: Omit hidden fields from schema (Pattern #11)
 
 **Checklist for HIL Nodes**:
-- [ ] inputParams array has exactly 3 elements
+- [ ] inputParams array has exactly **5 elements** (not 3!)
+- [ ] humanInputModel present (even if hidden via "show")
+- [ ] humanInputModelPrompt present (even if hidden via "show")
+- [ ] humanInputModelConfig in inputs object
 - [ ] No `humanInputOutputAnchors` in inputParams
 - [ ] No `humanInputOutputAnchors` in inputs
 - [ ] outputAnchors hardcoded with proceed/reject
 - [ ] version = 1.0
 - [ ] type = "HumanInput" (not "Human Input")
 - [ ] color = "#F06292"
+- [ ] width = 221, height = 80
 
 **Reference**: `/Users/name/homelab/context-foundry/extensions/flowise/prompts/HIL-NODE-TEMPLATE.json`
 
@@ -2036,6 +3141,9 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0 | 2025-11-05 | Added "Node Type Mismatch" (Pattern #14) - CRITICAL node type errors causing missing icons and sync problems in Flowise UI. Start node used "StartFlow" instead of "Start", ConditionAgent used "ConditionNode", DirectReply missing inputParams. From bcm-compliance-assessment build |
+| 1.9 | 2025-11-05 | Added "Modular Prompt Refactor Breaking Tool Inclusion" (Pattern #12) - CRITICAL REGRESSION after modular prompt refactor. Agents missing currentDateTime + searXNG tools and credential configuration. From travel-booking-expense-flow build |
+| 1.8 | 2025-11-05 | Added "HIL Node Missing Required inputParams Fields" (Pattern #11) - Missing humanInputModel and humanInputModelPrompt causes blank screen when node is clicked. From travel-booking-expense-flow build |
 | 1.7 | 2025-11-04 | Added "HIL Gate Invalid inputParams Configuration" (Pattern #10) - humanInputOutputAnchors as editable field causes blank screen in Flowise UI. From expense-approval-loop build |
 | 1.6 | 2025-11-02 | Added "Missing Mermaid Diagram" (Pattern #9) - BLOCKING requirement for visual documentation from personalized-training-recommendations build |
 | 1.5 | 2025-11-01 | CORRECTED Pattern #6 root cause: "Incorrect Tool JSON Structure" - discovered true issue was wrong field names/types, not missing tools |
