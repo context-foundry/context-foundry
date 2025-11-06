@@ -255,9 +255,15 @@ def validate_node_types(workflow):
 ### 1. **Use Canonical Node Templates**
 
 Builder MUST reference these template files:
-- `/extensions/flowise/prompts/START-NODE-TEMPLATE.json`
-- `/extensions/flowise/prompts/CONDITION-AGENT-TEMPLATE.json`
-- `/extensions/flowise/prompts/DIRECT-REPLY-NODE-TEMPLATE.json`
+- `/extensions/flowise/prompts/START-NODE-TEMPLATE.json` (type: "Start")
+- `/extensions/flowise/prompts/CONDITION-NODE-TEMPLATE.json` (type: "Condition" - deterministic)
+- `/extensions/flowise/prompts/DIRECT-REPLY-NODE-TEMPLATE.json` (type: "DirectReply")
+
+For **ConditionAgent** (AI routing), reference pattern files:
+- `/extensions/flowise/templates/afv2-patterns/03-routing.json`
+- `/extensions/flowise/templates/afv2-patterns/04-iteration.json`
+- `/extensions/flowise/templates/afv2-patterns/05-looping.json`
+- `/extensions/flowise/templates/afv2-patterns/06-hierarchy.json`
 
 ### 2. **Node Type Registry**
 
@@ -280,7 +286,10 @@ NODE_TYPE_REGISTRY = {
             "conditionAgentInput",
             "conditionAgentScenarios"
         ],
-        "template_file": "CONDITION-AGENT-TEMPLATE.json"
+        "reference_files": [
+            "templates/afv2-patterns/03-routing.json",
+            "templates/afv2-patterns/04-iteration.json"
+        ]
     },
     "DirectReply": {
         "name": "directReplyAgentflow",
@@ -301,10 +310,11 @@ Add to `phase_2_5_parallel_build.md`:
 
 **ALWAYS** use correct node types from templates:
 
-| Node Purpose | Correct Type | Template File |
-|--------------|--------------|---------------|
+| Node Purpose | Correct Type | Template/Reference |
+|--------------|--------------|-------------------|
 | Workflow start | `"type": "Start"` | START-NODE-TEMPLATE.json |
-| Conditional routing | `"type": "ConditionAgent"` | CONDITION-AGENT-TEMPLATE.json |
+| AI routing | `"type": "ConditionAgent"` | 03-routing.json (pattern) |
+| Deterministic logic | `"type": "Condition"` | CONDITION-NODE-TEMPLATE.json |
 | Terminal output | `"type": "DirectReply"` | DIRECT-REPLY-NODE-TEMPLATE.json |
 
 **NEVER** use:

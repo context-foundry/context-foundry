@@ -44,7 +44,8 @@ class FlowiseValidator:
         self.validate_pattern_05_phantom_tools()
         self.validate_pattern_06_tool_structure()
         self.validate_pattern_08_missing_inputparams()
-        self.validate_pattern_10_hil_gate_inputparams()  # NEW!
+        self.validate_pattern_10_hil_gate_inputparams()
+        self.validate_pattern_14_node_type_mismatch()  # NEW! CRITICAL
         self.validate_structure_authority()
 
         # Report results
@@ -72,10 +73,10 @@ class FlowiseValidator:
             input_params = hil_node.get('data', {}).get('inputParams', [])
             inputs = hil_node.get('data', {}).get('inputs', {})
 
-            # Check 1: inputParams should have exactly 3 elements
-            if len(input_params) != 3:
+            # Check 1: inputParams should have exactly 5 elements (updated per Pattern #11)
+            if len(input_params) != 5:
                 self.errors.append(
-                    f"  ❌ HIL node '{node_label}' ({node_id}) has {len(input_params)} inputParams (expected 3)"
+                    f"  ❌ HIL node '{node_label}' ({node_id}) has {len(input_params)} inputParams (expected 5)"
                 )
 
             # Check 2: No humanInputOutputAnchors in inputParams
@@ -103,8 +104,14 @@ class FlowiseValidator:
                     f"  ⚠️  HIL node '{node_label}' ({node_id}) has {len(output_anchors)} outputAnchors (expected 2: proceed/reject)"
                 )
 
-            # Check 5: Validate required inputParams exist
-            required_params = {'humanInputDescriptionType', 'humanInputDescription', 'humanInputEnableFeedback'}
+            # Check 5: Validate required inputParams exist (all 5 per Pattern #11)
+            required_params = {
+                'humanInputDescriptionType',
+                'humanInputDescription',
+                'humanInputModel',
+                'humanInputModelPrompt',
+                'humanInputEnableFeedback'
+            }
             actual_params = {p.get('name') for p in input_params}
             missing = required_params - actual_params
             if missing:
@@ -270,6 +277,166 @@ class FlowiseValidator:
 
         if not self.errors:
             print("  ✅ All agents have inputParams arrays\n")
+        else:
+            print()
+
+    def validate_pattern_14_node_type_mismatch(self):
+        """Pattern #14: Node Type Mismatch (CRITICAL)"""
+        print("[Pattern #14] Node Type Mismatch Validation (CRITICAL)")
+
+        # Check 1: Start node type validation
+        start_nodes = [n for n in self.nodes if n.get('id', '').startswith('start_')]
+        for start_node in start_nodes:
+            node_id = start_node.get('id', 'unknown')
+            node_name = start_node.get('data', {}).get('name', '')
+            node_type = start_node.get('data', {}).get('type', '')
+
+            # Check for correct node name
+            if node_name != 'startAgentflow':
+                self.errors.append(
+                    f"  ❌ Start node '{node_id}' has wrong name: '{node_name}' (expected 'startAgentflow')\n"
+                    f"     This causes sync problems in Flowise UI - MUST be 'startAgentflow'"
+                )
+
+            # Check for correct node type (CRITICAL)
+            if node_type != 'Start':
+                self.errors.append(
+                    f"  ❌ Start node '{node_id}' has WRONG TYPE: '{node_type}' (expected 'Start')\n"
+                    f"     Common mistake: using 'StartFlow' instead of 'Start'\n"
+                    f"     This causes sync problems and missing icons in Flowise UI"
+                )
+
+            # Check for hideInput
+            hide_input = start_node.get('data', {}).get('hideInput')
+            if hide_input != True:
+                self.errors.append(
+                    f"  ❌ Start node '{node_id}' missing 'hideInput: true'"
+                )
+
+        # Check 2: ConditionAgent vs Condition node type validation
+        condition_nodes = [n for n in self.nodes if 'condition' in n.get('id', '').lower()]
+        for node in condition_nodes:
+            node_id = node.get('id', 'unknown')
+            node_name = node.get('data', {}).get('name', '')
+            node_type = node.get('data', {}).get('type', '')
+
+            # AI-driven routing should use ConditionAgent
+            if node_name == 'conditionAgentAgentflow':
+                if node_type != 'ConditionAgent':
+                    self.errors.append(
+                        f"  ❌ Condition node '{node_id}' has WRONG TYPE: '{node_type}' (expected 'ConditionAgent')\n"
+                        f"     Common mistake: using 'ConditionNode' or 'Condition' for AI routing\n"
+                        f"     AI-driven routing MUST use type 'ConditionAgent'"
+                    )
+
+            # Deterministic logic should use Condition
+            elif node_name == 'conditionAgentflow':
+                if node_type != 'Condition':
+                    self.errors.append(
+                        f"  ❌ Condition node '{node_id}' has WRONG TYPE: '{node_type}' (expected 'Condition')\n"
+                        f"     Deterministic if/else logic MUST use type 'Condition'"
+                    )
+
+            # Unknown condition node name
+            elif node_type in ['ConditionNode', 'conditionNode']:
+                self.errors.append(
+                    f"  ❌ Node '{node_id}' uses invalid type '{node_type}'\n"
+                    f"     Use 'ConditionAgent' for AI routing or 'Condition' for deterministic logic\n"
+                    f"     'ConditionNode' is NOT a valid Flowise type"
+                )
+
+        # Check 3: DirectReply node validation
+        reply_nodes = [n for n in self.nodes if 'reply' in n.get('id', '').lower() or
+                       n.get('data', {}).get('name') == 'directReplyAgentflow']
+        for node in reply_nodes:
+            node_id = node.get('id', 'unknown')
+            node_label = node.get('data', {}).get('label', 'Unknown')
+            node_name = node.get('data', {}).get('name', '')
+            node_type = node.get('data', {}).get('type', '')
+
+            # Check for correct node name
+            if node_name and node_name != 'directReplyAgentflow':
+                self.warnings.append(
+                    f"  ⚠️  DirectReply node '{node_id}' has unexpected name: '{node_name}' (expected 'directReplyAgentflow')"
+                )
+
+            # Check for correct node type (CRITICAL)
+            if node_type != 'DirectReply':
+                self.errors.append(
+                    f"  ❌ DirectReply node '{node_label}' ({node_id}) has WRONG TYPE: '{node_type}' (expected 'DirectReply')\n"
+                    f"     Common mistake: using 'directReply' (lowercase) or 'Reply'\n"
+                    f"     This causes missing icons in Flowise UI"
+                )
+
+            # Check for hideOutput
+            hide_output = node.get('data', {}).get('hideOutput')
+            if hide_output != True:
+                self.errors.append(
+                    f"  ❌ DirectReply node '{node_label}' ({node_id}) missing 'hideOutput: true'\n"
+                    f"     Terminal nodes MUST have hideOutput set to true"
+                )
+
+            # Check for directReplyMessage in inputParams
+            input_params = node.get('data', {}).get('inputParams', [])
+            has_message_param = any(p.get('name') == 'directReplyMessage' for p in input_params)
+            if not has_message_param:
+                self.errors.append(
+                    f"  ❌ DirectReply node '{node_label}' ({node_id}) missing 'directReplyMessage' in inputParams\n"
+                    f"     DirectReply nodes MUST have directReplyMessage parameter"
+                )
+
+            # Check for directReplyMessage in inputs
+            inputs = node.get('data', {}).get('inputs', {})
+            if 'directReplyMessage' not in inputs:
+                self.errors.append(
+                    f"  ❌ DirectReply node '{node_label}' ({node_id}) missing 'directReplyMessage' in inputs\n"
+                    f"     MUST include message content"
+                )
+
+        # Check 4: Agent node type validation
+        agent_nodes = [n for n in self.nodes if n.get('data', {}).get('name') == 'agentAgentflow']
+        for node in agent_nodes:
+            node_id = node.get('id', 'unknown')
+            node_label = node.get('data', {}).get('label', 'Unknown')
+            node_type = node.get('data', {}).get('type', '')
+
+            if node_type != 'Agent':
+                self.errors.append(
+                    f"  ❌ Agent node '{node_label}' ({node_id}) has WRONG TYPE: '{node_type}' (expected 'Agent')\n"
+                    f"     Common mistake: using 'agent' (lowercase) or 'AgentNode'\n"
+                    f"     This causes missing icons and execution failures"
+                )
+
+        # Check 5: Iteration node type validation
+        iteration_nodes = [n for n in self.nodes if 'iteration' in n.get('id', '').lower() or
+                          n.get('data', {}).get('name') == 'iterationAgentflow']
+        for node in iteration_nodes:
+            node_id = node.get('id', 'unknown')
+            node_type = node.get('data', {}).get('type', '')
+
+            if node_type and node_type != 'Iteration':
+                self.errors.append(
+                    f"  ❌ Iteration node '{node_id}' has WRONG TYPE: '{node_type}' (expected 'Iteration')\n"
+                    f"     Common mistake: using 'IterationNode' or 'Loop'\n"
+                    f"     This causes missing icons and loop failures"
+                )
+
+        # Check 6: StickyNote type validation
+        sticky_nodes = [n for n in self.nodes if n.get('type') == 'stickyNote' or
+                       n.get('data', {}).get('type') == 'stickyNote']
+        for node in sticky_nodes:
+            node_id = node.get('id', 'unknown')
+            # Type is at top level for sticky notes, not in data.type
+            node_type = node.get('type', '')
+
+            if node_type != 'stickyNote':
+                self.warnings.append(
+                    f"  ⚠️  Sticky note '{node_id}' has wrong type: '{node_type}' (expected 'stickyNote' lowercase)\n"
+                    f"     Common mistake: using 'StickyNote' (capital S)"
+                )
+
+        if not self.errors and not self.warnings:
+            print("  ✅ All node types are correct (Pattern #14 passed)\n")
         else:
             print()
 

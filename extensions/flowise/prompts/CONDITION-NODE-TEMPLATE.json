@@ -1,0 +1,306 @@
+{
+  "id": "conditionAgentflow_0",
+  "position": {
+    "x": 900,
+    "y": 300
+  },
+  "data": {
+    "id": "conditionAgentflow_0",
+    "label": "If/Else Condition",
+    "version": 1,
+    "name": "conditionAgentflow",
+    "type": "Condition",
+    "color": "#FFB938",
+    "baseClasses": [
+      "Condition"
+    ],
+    "category": "Agent Flows",
+    "description": "Split flows based on deterministic If/Else conditions (no LLM required)",
+    "inputParams": [
+      {
+        "label": "Conditions",
+        "name": "conditions",
+        "type": "array",
+        "description": "Values to compare. Each condition creates an output path. Else path is automatically added.",
+        "acceptVariable": true,
+        "default": [
+          {
+            "type": "string",
+            "value1": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.status\" data-label=\"$flow.state.status\">{{ $flow.state.status }}</span> </p>",
+            "operation": "equal",
+            "value2": "<p>success</p>"
+          }
+        ],
+        "array": [
+          {
+            "label": "Type",
+            "name": "type",
+            "type": "options",
+            "options": [
+              {
+                "label": "String",
+                "name": "string"
+              },
+              {
+                "label": "Number",
+                "name": "number"
+              },
+              {
+                "label": "Boolean",
+                "name": "boolean"
+              }
+            ],
+            "default": "string"
+          },
+          {
+            "label": "Value 1",
+            "name": "value1",
+            "type": "string",
+            "default": "",
+            "description": "First value to be compared with (supports variables)",
+            "acceptVariable": true,
+            "show": {
+              "conditions[$index].type": "string"
+            }
+          },
+          {
+            "label": "Operation",
+            "name": "operation",
+            "type": "options",
+            "options": [
+              {
+                "label": "Contains",
+                "name": "contains",
+                "description": "Value1 contains Value2"
+              },
+              {
+                "label": "Ends With",
+                "name": "endsWith",
+                "description": "Value1 ends with Value2"
+              },
+              {
+                "label": "Equal",
+                "name": "equal",
+                "description": "Value1 equals Value2"
+              },
+              {
+                "label": "Not Contains",
+                "name": "notContains",
+                "description": "Value1 does not contain Value2"
+              },
+              {
+                "label": "Not Equal",
+                "name": "notEqual",
+                "description": "Value1 does not equal Value2"
+              },
+              {
+                "label": "Regex",
+                "name": "regex",
+                "description": "Value1 matches regex pattern in Value2"
+              },
+              {
+                "label": "Starts With",
+                "name": "startsWith",
+                "description": "Value1 starts with Value2"
+              },
+              {
+                "label": "Is Empty",
+                "name": "isEmpty",
+                "description": "Value1 is empty or undefined"
+              },
+              {
+                "label": "Not Empty",
+                "name": "notEmpty",
+                "description": "Value1 is not empty"
+              }
+            ],
+            "default": "equal",
+            "description": "Type of operation",
+            "show": {
+              "conditions[$index].type": "string"
+            }
+          },
+          {
+            "label": "Value 2",
+            "name": "value2",
+            "type": "string",
+            "default": "",
+            "description": "Second value to be compared with (supports variables)",
+            "acceptVariable": true,
+            "show": {
+              "conditions[$index].type": "string"
+            },
+            "hide": {
+              "conditions[$index].operation": [
+                "isEmpty",
+                "notEmpty"
+              ]
+            }
+          },
+          {
+            "label": "Value 1",
+            "name": "value1",
+            "type": "number",
+            "default": "",
+            "description": "First value to be compared with (supports variables)",
+            "acceptVariable": true,
+            "show": {
+              "conditions[$index].type": "number"
+            }
+          },
+          {
+            "label": "Operation",
+            "name": "operation",
+            "type": "options",
+            "options": [
+              {
+                "label": "Smaller",
+                "name": "smaller",
+                "description": "Value1 < Value2"
+              },
+              {
+                "label": "Smaller Equal",
+                "name": "smallerEqual",
+                "description": "Value1 <= Value2"
+              },
+              {
+                "label": "Equal",
+                "name": "equal",
+                "description": "Value1 == Value2"
+              },
+              {
+                "label": "Not Equal",
+                "name": "notEqual",
+                "description": "Value1 != Value2"
+              },
+              {
+                "label": "Larger",
+                "name": "larger",
+                "description": "Value1 > Value2"
+              },
+              {
+                "label": "Larger Equal",
+                "name": "largerEqual",
+                "description": "Value1 >= Value2"
+              },
+              {
+                "label": "Is Empty",
+                "name": "isEmpty",
+                "description": "Value1 is empty or undefined"
+              },
+              {
+                "label": "Not Empty",
+                "name": "notEmpty",
+                "description": "Value1 is not empty"
+              }
+            ],
+            "default": "equal",
+            "description": "Type of operation",
+            "show": {
+              "conditions[$index].type": "number"
+            }
+          },
+          {
+            "label": "Value 2",
+            "name": "value2",
+            "type": "number",
+            "default": 0,
+            "description": "Second value to be compared with (supports variables)",
+            "acceptVariable": true,
+            "show": {
+              "conditions[$index].type": "number"
+            },
+            "hide": {
+              "conditions[$index].operation": [
+                "isEmpty",
+                "notEmpty"
+              ]
+            }
+          },
+          {
+            "label": "Value 1",
+            "name": "value1",
+            "type": "boolean",
+            "default": false,
+            "description": "First value to be compared with",
+            "show": {
+              "conditions[$index].type": "boolean"
+            }
+          },
+          {
+            "label": "Operation",
+            "name": "operation",
+            "type": "options",
+            "options": [
+              {
+                "label": "Equal",
+                "name": "equal",
+                "description": "Value1 == Value2"
+              },
+              {
+                "label": "Not Equal",
+                "name": "notEqual",
+                "description": "Value1 != Value2"
+              }
+            ],
+            "default": "equal",
+            "description": "Type of operation",
+            "show": {
+              "conditions[$index].type": "boolean"
+            }
+          },
+          {
+            "label": "Value 2",
+            "name": "value2",
+            "type": "boolean",
+            "default": false,
+            "description": "Second value to be compared with",
+            "show": {
+              "conditions[$index].type": "boolean"
+            }
+          }
+        ],
+        "id": "conditionAgentflow_0-input-conditions-array",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "conditions": [
+        {
+          "type": "string",
+          "value1": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.status\" data-label=\"$flow.state.status\">{{ $flow.state.status }}</span> </p>",
+          "operation": "equal",
+          "value2": "<p>success</p>"
+        }
+      ]
+    },
+    "outputAnchors": [
+      {
+        "id": "conditionAgentflow_0-output-0",
+        "label": 0,
+        "name": 0,
+        "description": "Condition 0"
+      },
+      {
+        "id": "conditionAgentflow_0-output-1",
+        "label": 1,
+        "name": 1,
+        "description": "Else"
+      }
+    ],
+    "outputs": {
+      "conditionAgentflow": ""
+    },
+    "selected": false
+  },
+  "type": "agentFlow",
+  "width": 195,
+  "height": 100,
+  "selected": false,
+  "positionAbsolute": {
+    "x": 900,
+    "y": 300
+  },
+  "dragging": false
+}

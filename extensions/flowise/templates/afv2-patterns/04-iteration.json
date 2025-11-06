@@ -1,0 +1,760 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -600,
+        "y": 150
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": -600,
+        "y": 0
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nIterative quality improvement loop. Planner defines rubric and target score (default 0.85). Research agent refines artifact iteratively. Gate checks score after each iteration. Continues until score ≥ target OR max iterations (default 3) reached. Tracks convergence and iteration history."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_planner",
+      "type": "agentFlow",
+      "position": {
+        "x": -300,
+        "y": 150
+      },
+      "data": {
+        "id": "agent_planner",
+        "label": "Agent.Planner",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Draft plan, acceptance criteria, scoring rubric",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "iteration.max",
+              "value": "3"
+            },
+            {
+              "key": "iteration.target_score",
+              "value": "0.85"
+            },
+            {
+              "key": "iteration.current",
+              "value": "0"
+            },
+            {
+              "key": "iteration.rubric",
+              "value": "{{ rubric }}"
+            },
+            {
+              "key": "iteration.plan",
+              "value": "{{ plan }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_planner-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "gate_iteration",
+      "type": "agentFlow",
+      "position": {
+        "x": 0,
+        "y": 150
+      },
+      "data": {
+        "id": "gate_iteration",
+        "label": "Iteration Controller",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Continue vs Done decision based on score/iterations",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent..."
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatAnthropic",
+          "conditionAgentInstructions": "Check iteration status:\n\nState variables:\n- iteration.current (current iteration number)\n- iteration.max (max iterations, default 3)\n- iteration.score (latest quality score 0.0-1.0)\n- iteration.target_score (target score, default 0.85)\n\nDecision logic:\nIF score >= target_score → DONE (target achieved)\nELSE IF current >= max → DONE (max iterations)\nELSE → CONTINUE (refine further)\n\nOutput which scenario to choose: CONTINUE (0) or DONE (1)",
+          "conditionAgentInput": "{{ iteration }}",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "CONTINUE - score below target and iterations remaining"
+            },
+            {
+              "scenario": "DONE - target achieved OR max iterations reached"
+            }
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.1,
+            "streaming": true,
+            "conditionAgentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "gate_iteration-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "CONTINUE"
+          },
+          {
+            "id": "gate_iteration-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "DONE"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 100
+    },
+    {
+      "id": "stickyNote_iteration",
+      "type": "stickyNote",
+      "position": {
+        "x": 0,
+        "y": 300
+      },
+      "data": {
+        "id": "stickyNote_iteration",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "ITERATION LOGIC:\nGate evaluates: (score < target AND current < max) → CONTINUE to Research. Otherwise → DONE to Report. Research increments iteration.current and updates score. Loop continues until target reached or max iterations exhausted."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_iteration-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_research",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 50
+      },
+      "data": {
+        "id": "agent_research",
+        "label": "Agent.Research",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#9575CD",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Refine artifact, update score and iteration counter",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "iteration.current",
+              "value": "{{ iteration.current + 1 }}"
+            },
+            {
+              "key": "iteration.score",
+              "value": "{{ calculated_score }}"
+            },
+            {
+              "key": "iteration.artifact",
+              "value": "{{ improved_artifact }}"
+            },
+            {
+              "key": "iteration.delta",
+              "value": "{{ what_changed }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_research-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_scoring",
+      "type": "stickyNote",
+      "position": {
+        "x": 300,
+        "y": -100
+      },
+      "data": {
+        "id": "stickyNote_scoring",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "SCORING:\nResearch agent evaluates quality using rubric from Planner (state.iteration.rubric). Calculates score 0.0-1.0 based on completeness, accuracy, clarity. Updates iteration.score. Tracks deltas (what_changed) between iterations for convergence detection."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_scoring-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_report",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 250
+      },
+      "data": {
+        "id": "agent_report",
+        "label": "Agent.Report",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#66BB6A",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Emit final artifact and iteration history",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "output",
+              "value": "{{ final_artifact }}"
+            },
+            {
+              "key": "report.iterations",
+              "value": "{{ iteration.current }}"
+            },
+            {
+              "key": "report.final_score",
+              "value": "{{ iteration.score }}"
+            },
+            {
+              "key": "report.stop_reason",
+              "value": "{{ stop_reason }}"
+            },
+            {
+              "key": "report.generated",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_report-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_output",
+      "type": "stickyNote",
+      "position": {
+        "x": 300,
+        "y": 400
+      },
+      "data": {
+        "id": "stickyNote_output",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "OUTPUT FORMAT:\nReport includes: 1) Final artifact (state.output), 2) Iteration count (report.iterations), 3) Final quality score (report.final_score), 4) Stop reason (target_achieved|max_iterations|converged), 5) Iteration history with deltas."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_output-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "directReply_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "data": {
+        "id": "directReply_final",
+        "label": "Direct Reply",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Directly reply to the user with a message and terminate the workflow",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReply_final-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p>✅ <strong>Iteration Complete</strong></p><p></p><p>Quality-driven refinement loop successfully converged to target score threshold.</p><p></p><p>📊 <strong>Execution Summary:</strong></p><p>• Planner → initial strategy</p><p>• Research iterations → progressive improvement</p><p>• Quality gate → scoring and convergence check</p><p>• Report → iteration history</p><p></p><p>Final artifact achieved target quality score. Iteration history and metrics available.</p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 205,
+      "height": 67
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_planner",
+      "targetHandle": "agent_planner-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_planner",
+      "label": "input"
+    },
+    {
+      "source": "agent_planner",
+      "sourceHandle": "agent_planner-output-agentAgentflow",
+      "target": "gate_iteration",
+      "targetHandle": "gate_iteration-input",
+      "type": "buttonedge",
+      "id": "edge_planner_to_gate",
+      "label": "plan"
+    },
+    {
+      "source": "gate_iteration",
+      "sourceHandle": "gate_iteration-output-0",
+      "target": "agent_research",
+      "targetHandle": "agent_research-input",
+      "type": "buttonedge",
+      "id": "edge_gate_continue",
+      "label": "CONTINUE"
+    },
+    {
+      "source": "agent_research",
+      "sourceHandle": "agent_research-output-agentAgentflow",
+      "target": "gate_iteration",
+      "targetHandle": "gate_iteration-input",
+      "type": "buttonedge",
+      "id": "edge_research_loop_back",
+      "label": "iteration_update",
+      "animated": true
+    },
+    {
+      "source": "gate_iteration",
+      "sourceHandle": "gate_iteration-output-1",
+      "target": "agent_report",
+      "targetHandle": "agent_report-input",
+      "type": "buttonedge",
+      "id": "edge_gate_done",
+      "label": "DONE"
+    },
+    {
+      "source": "agent_report",
+      "sourceHandle": "agent_report-output-agentAgentflow",
+      "target": "directReply_final",
+      "targetHandle": "directReply_final-input",
+      "type": "buttonedge",
+      "id": "edge_final_to_reply",
+      "label": "complete"
+    }
+  ]
+}

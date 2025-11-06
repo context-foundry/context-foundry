@@ -140,14 +140,65 @@ Through the Context Foundry MCP (Model Context Protocol) server, you can:
    - What data sources?
 
 2. **Design Architecture**
-   - Suggest appropriate node types
+   - Suggest appropriate node types (Agent, Condition, ExecuteFlow, HIL, Loop, Sticky Note)
    - Recommend memory configuration
    - Plan tool integrations
+   - **Include sticky notes for documentation** (see Sticky Note Guidelines below)
 
 3. **Generate Flow**
    - Use `delegate_to_claude_code_async` to create flow JSON
-   - Validate against Flowise patterns
+   - Validate against Flowise patterns (all 14 patterns including Pattern #14: Node Type Mismatch)
+   - **CRITICAL: Use exact node types from NODE_TYPE_REGISTRY.md** (Pattern #14 prevention)
+   - **Add sticky notes to explain complex logic, routing decisions, and configuration requirements**
    - Provide the flow file in working directory
+   - Run `validate_workflow.py` to catch any node type mismatches before delivery
+
+#### Sticky Note Guidelines for Flowise Flows
+
+When generating Flowise flows, **always include sticky notes** to document the flow and make it human-readable:
+
+**When to Add Sticky Notes:**
+- Near Condition nodes - explain routing logic and scenario mapping
+- Near HIL (Human-in-the-Loop) gates - explain approval requirements
+- Near complex agents - document what they do and why
+- For configuration requirements - note which tools, credentials, or document stores need setup
+- For external integrations - explain API endpoints, auth methods, rate limits
+- At workflow entry - provide high-level flow purpose
+
+**Placement Strategy:**
+- **Above nodes**: Explain what happens BEFORE (e.g., validation, input processing)
+- **Below nodes**: Explain OUTCOMES or next steps
+- **To the side**: General warnings, configuration notes, or context
+
+**Quantity Guidelines:**
+- Simple flows (3-5 nodes): 1-2 sticky notes
+- Medium flows (6-10 nodes): 2-4 sticky notes
+- Complex flows (11+ nodes): 4-6 sticky notes
+- **Use sparingly** - don't clutter the flow, only document what's complex or non-obvious
+
+**Content Templates:**
+Use these ALL CAPS header prefixes for clarity:
+- PURPOSE: - Explains what a node/section does
+- ROUTING LOGIC: - Routing logic and scenario mapping
+- IMPORTANT: - Warnings or critical information
+- CONFIGURATION: - Configuration requirements
+- MANUAL SETUP REQUIRED: - Post-import steps required
+- INTEGRATION: - External system details
+
+**Example Sticky Note Positions:**
+```
+y_offset from target node:
+- Above: -150 to -180
+- Below: +550 to +600
+- Left side: x_offset -300
+- Right side: x_offset +350
+```
+
+**What NOT to Document with Sticky Notes:**
+- Don't add notes to every node (creates clutter)
+- Don't substitute for clear agent labels
+- Don't include info that belongs in system prompts
+- Don't create edges to/from sticky notes (they're standalone)
 
 ### When User Wants to Enhance Existing App
 
@@ -244,17 +295,26 @@ Would you like details on any specific build?"
 
 **Proposed Flow:**
 1. Start Node - Chat input for customer queries
-2. Document Store - Your knowledge base (FAQs, docs, policies)
-3. RAG Agent - Retrieves relevant context and generates responses
-4. Conversation Memory - Maintains chat context
-5. Fallback to Human - If confidence is low
+2. Sticky Note - Document flow purpose and setup requirements
+3. Condition Node - Route by query type (technical, billing, general)
+4. Sticky Note - Explain routing logic
+5. RAG Agent (Technical) - Retrieves from technical docs
+6. RAG Agent (Billing) - Retrieves from billing/policy docs
+7. General Support Agent - Handles general queries
+8. Sticky Notes - Document which document stores each agent needs
+9. Conversation Memory - Maintains chat context
+10. Fallback to Human - If confidence is low
 
 **Questions:**
 - What document sources do you have? (PDFs, web pages, database?)
 - Which LLM model? (GPT-4, Claude, Llama?)
 - Any specific tools needed? (Ticket creation, email, etc.)
 
-Once confirmed, I'll generate the complete Flowise JSON for you!"
+Once confirmed, I'll generate the complete Flowise JSON with sticky notes documenting:
+- Flow purpose and setup steps
+- Routing logic (which scenarios go to which agents)
+- Configuration requirements (document stores, API keys)
+- Any manual setup needed after import"
 
 ### Example 4: Real-time Monitoring
 

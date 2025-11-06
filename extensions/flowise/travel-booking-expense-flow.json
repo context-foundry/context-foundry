@@ -1,0 +1,1047 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 100,
+        "y": 400
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": ["Start"],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput",
+            "id": "startAgentflow_0-input-startInputType-options",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 116,
+      "height": 68,
+      "positionAbsolute": {
+        "x": 100,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_0",
+      "type": "stickyNote",
+      "position": {
+        "x": 100,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_0",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_0-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nComplete travel planning system with flight/hotel/transport search, top 3 recommendations, approval workflow, and automated expense tracking."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 122,
+      "positionAbsolute": {
+        "x": 100,
+        "y": 250
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 400,
+        "y": 400
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Detect User Intent",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": ["ConditionAgent"],
+        "category": "Agent Flows",
+        "description": "Route user to appropriate agent based on detected intention",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent..."
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatOpenAI",
+          "conditionAgentInstructions": "Analyze user intent using Scout Mode pattern. Check for keywords and context:\n- Search keywords: 'search', 'find', 'look for', 'flights', 'hotels', 'transportation' → Route 0\n- Booking keywords: 'book', 'reserve', 'confirm', 'choose', 'select' → Route 1\n- Expense keywords: 'expense', 'cost', 'track', 'report', 'spending' → Route 2\n- Help keywords: 'help', 'how', 'what', 'explain', 'question' → Route 3\nRoute to most appropriate agent based on primary intent.",
+          "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
+          "conditionAgentScenarios": [
+            {"scenario": "User wants to search for travel options (flights, hotels, transportation)"},
+            {"scenario": "User wants to review and book recommended options"},
+            {"scenario": "User wants to track expenses or view expense report"},
+            {"scenario": "User needs general help or has questions"}
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.2,
+            "streaming": true,
+            "maxTokens": "",
+            "topP": "",
+            "frequencyPenalty": "",
+            "presencePenalty": "",
+            "timeout": "",
+            "strictToolCalling": "",
+            "stopSequence": "",
+            "basepath": "",
+            "proxyUrl": "",
+            "baseOptions": "",
+            "allowImageUploads": "",
+            "imageResolution": "low",
+            "reasoning": "",
+            "reasoningEffort": "",
+            "reasoningSummary": "",
+            "conditionAgentModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "Travel Search"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "Booking & Recommendations"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "Expense Tracking"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-3",
+            "label": 3,
+            "name": 3,
+            "description": "General Help"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "positionAbsolute": {
+        "x": 400,
+        "y": 400
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_1",
+      "type": "stickyNote",
+      "position": {
+        "x": 750,
+        "y": 350
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_1",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_1-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "ROUTING LOGIC:\n\n0 = Travel Search\n1 = Booking & Approval  \n2 = Expense Tracking\n3 = General Help\n\nCONFIGURATION: Temperature 0.2 for consistent routing"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_1-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 150,
+      "positionAbsolute": {
+        "x": 750,
+        "y": 350
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 800,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_0",
+        "label": "Agent.TravelSearch",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Travel search and comparison agent",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o",
+            "temperature": 0.5,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an expert Travel Search agent.</em> Search for and compare flights, hotels, and transportation options. Provide detailed information including prices, schedules, ratings, and amenities. Always present TOP 3 OPTIONS for each category with clear comparisons.</p><p>Store search results in flow state using these keys:</p><ul><li>travel.destination</li><li>travel.dates</li><li>travel.search_results</li></ul><p>Provide comprehensive comparisons highlighting pros/cons, total costs, and value propositions for each option.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentBuiltInTools": ["web_search_preview"],
+          "agentStateUpdates": [
+            {"key": "travel.destination", "value": "{{ destination }}"},
+            {"key": "travel.dates", "value": "{{ dates }}"},
+            {"key": "travel.search_results", "value": "{{ search_results }}"}
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_0-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "positionAbsolute": {
+        "x": 800,
+        "y": 200
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_2",
+      "type": "stickyNote",
+      "position": {
+        "x": 1150,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_2",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_2-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "CONFIGURATION:\n\n- GPT-4o for complex reasoning\n- Web search enabled\n- Stores results in flow state\n\nINTEGRATION:\nRequired APIs:\n- Flight APIs (Skyscanner/Kayak)\n- Hotel APIs (Booking.com)\n- Transport APIs (Uber/Lyft)"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_2-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 150,
+      "positionAbsolute": {
+        "x": 1150,
+        "y": 250
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_1",
+      "type": "agentFlow",
+      "position": {
+        "x": 1200,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "Agent.Recommendations",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Travel package recommendation agent",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are a Travel Recommendation specialist.</em> Analyze search results and present the TOP 3 COMPLETE PACKAGES (flight + hotel + transport). Compare total costs, convenience, ratings, and value. Provide clear recommendations with pros/cons for each option.</p><p>Store recommendations in flow state:</p><ul><li>travel.top3_packages</li><li>travel.total_costs</li><li>travel.selected_package (after user selection)</li></ul><p>Help users make informed decisions by highlighting the best value, most convenient, and premium options.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentStateUpdates": [
+            {"key": "travel.top3_packages", "value": "{{ packages }}"},
+            {"key": "travel.total_costs", "value": "{{ costs }}"},
+            {"key": "travel.selected_package", "value": "{{ selected }}"}
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "positionAbsolute": {
+        "x": 1200,
+        "y": 200
+      },
+      "dragging": false
+    },
+    {
+      "id": "humanInputAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 1600,
+        "y": 200
+      },
+      "data": {
+        "id": "humanInputAgentflow_0",
+        "label": "Travel Approval",
+        "version": 1.0,
+        "name": "humanInputAgentflow",
+        "type": "HumanInput",
+        "color": "#F06292",
+        "baseClasses": ["HumanInput"],
+        "category": "Agent Flows",
+        "description": "Request human input, approval or rejection during execution",
+        "inputParams": [
+          {
+            "label": "Description Type",
+            "name": "humanInputDescriptionType",
+            "type": "options",
+            "options": [
+              {"label": "Fixed", "name": "fixed", "description": "Specify a fixed description"},
+              {"label": "Dynamic", "name": "dynamic", "description": "Use LLM to generate a description"}
+            ],
+            "id": "humanInputAgentflow_0-input-humanInputDescriptionType-options",
+            "display": true
+          },
+          {
+            "label": "Description",
+            "name": "humanInputDescription",
+            "type": "string",
+            "placeholder": "Are you sure you want to proceed?",
+            "acceptVariable": true,
+            "rows": 8,
+            "show": {"humanInputDescriptionType": "fixed"},
+            "id": "humanInputAgentflow_0-input-humanInputDescription-string",
+            "display": true
+          },
+          {
+            "label": "Model",
+            "name": "humanInputModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "show": {"humanInputDescriptionType": "dynamic"},
+            "id": "humanInputAgentflow_0-input-humanInputModel-asyncOptions",
+            "display": false
+          },
+          {
+            "label": "Prompt",
+            "name": "humanInputModelPrompt",
+            "type": "string",
+            "acceptVariable": true,
+            "generateInstruction": true,
+            "rows": 12,
+            "show": {"humanInputDescriptionType": "dynamic"},
+            "id": "humanInputAgentflow_0-input-humanInputModelPrompt-string",
+            "display": false
+          },
+          {
+            "label": "Enable Feedback",
+            "name": "humanInputEnableFeedback",
+            "type": "boolean",
+            "default": true,
+            "id": "humanInputAgentflow_0-input-humanInputEnableFeedback-boolean",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "humanInputDescriptionType": "fixed",
+          "humanInputDescription": "TRAVEL BOOKING APPROVAL\n\nDestination: {{ $flow.state.travel.destination }}\nDates: {{ $flow.state.travel.dates }}\nSelected Package: {{ $flow.state.travel.selected_package }}\nTotal Cost: ${{ $flow.state.travel.total_cost }}\n\nPROCEED: Approve and begin expense tracking\nREJECT: Cancel booking",
+          "humanInputEnableFeedback": true,
+          "humanInputModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.0,
+            "streaming": true,
+            "humanInputModel": "chatOpenAI"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "humanInputAgentflow_0-output-proceed",
+            "label": "Proceed",
+            "name": "proceed",
+            "description": "User approved"
+          },
+          {
+            "id": "humanInputAgentflow_0-output-reject",
+            "label": "Reject",
+            "name": "reject",
+            "description": "User rejected"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 221,
+      "height": 80,
+      "positionAbsolute": {
+        "x": 1600,
+        "y": 200
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_3",
+      "type": "stickyNote",
+      "position": {
+        "x": 1600,
+        "y": 650
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_3",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_3-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "HUMAN APPROVAL REQUIRED:\nPauses workflow for travel package review.\n\nProceed = Approve and begin expense tracking\nReject = Return to search"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_3-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 150,
+      "positionAbsolute": {
+        "x": 1600,
+        "y": 650
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_2",
+      "type": "agentFlow",
+      "position": {
+        "x": 2000,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Agent.ExpenseTracker",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Expense tracking and reporting agent",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.1,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are an Expense Tracking specialist.</em> Create and maintain expense reports for approved travel. Start tracking expenses IMMEDIATELY after approval. Create expense entries for: flight booking, hotel reservation, transportation deposits, and any incurred costs. Maintain running totals and categorize expenses properly.</p><p>Store expense data in flow state:</p><ul><li>expense.report_id</li><li>expense.entries</li><li>expense.total</li><li>expense.categories</li></ul><p>Provide clear expense summaries, categorization (flights, lodging, transport, meals, misc), and export options.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages",
+          "agentStateUpdates": [
+            {"key": "expense.report_id", "value": "{{ report_id }}"},
+            {"key": "expense.entries", "value": "{{ entries }}"},
+            {"key": "expense.total", "value": "{{ total }}"},
+            {"key": "expense.categories", "value": "{{ categories }}"}
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "positionAbsolute": {
+        "x": 2000,
+        "y": 200
+      },
+      "dragging": false
+    },
+    {
+      "id": "stickyNoteAgentflow_4",
+      "type": "stickyNote",
+      "position": {
+        "x": 2350,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNoteAgentflow_4",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true,
+            "id": "stickyNoteAgentflow_4-input-note-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "CONFIGURATION:\n\n- Auto-creates report on approval\n- Tracks expenses in real-time\n- Categorizes by type\n\nMANUAL SETUP REQUIRED:\n- Configure expense system API\n- Set up accounting integration\n- Define expense categories"
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNoteAgentflow_4-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 215,
+      "height": 150,
+      "positionAbsolute": {
+        "x": 2350,
+        "y": 250
+      },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "agentAgentflow_3",
+      "type": "agentFlow",
+      "position": {
+        "x": 800,
+        "y": 1500
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Agent.GeneralHelp",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "General help and guidance agent",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatOpenAI",
+          "agentModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.7,
+            "streaming": true,
+            "agentModel": "chatOpenAI"
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "<p><em>You are a helpful Travel Assistant.</em> Answer general questions about the travel booking process, expense reporting, and system usage. Guide users on how to search for travel, understand recommendations, and track expenses.</p><p>Provide friendly, clear explanations and help users navigate the travel booking and expense tracking workflow.</p>"
+            }
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentMemoryType": "allMessages"
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow-Agent|AgentExecutor",
+            "name": "agentAgentflow",
+            "label": "Agent",
+            "type": "Agent | AgentExecutor"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 300,
+      "height": 500,
+      "positionAbsolute": {
+        "x": 800,
+        "y": 1500
+      },
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0",
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-conditionAgentAgentflow_0-conditionAgentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-0",
+      "target": "agentAgentflow_0",
+      "targetHandle": "agentAgentflow_0",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Search"
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-0-agentAgentflow_0-agentAgentflow_0"
+    },
+    {
+      "source": "agentAgentflow_0",
+      "sourceHandle": "agentAgentflow_0-output-agentAgentflow-Agent|AgentExecutor",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1",
+      "data": {
+        "sourceColor": "#4DD0E1",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Results"
+      },
+      "type": "agentFlow",
+      "id": "agentAgentflow_0-agentAgentflow_0-output-agentAgentflow-Agent|AgentExecutor-agentAgentflow_1-agentAgentflow_1"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-1",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Book"
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-1-agentAgentflow_1-agentAgentflow_1"
+    },
+    {
+      "source": "agentAgentflow_1",
+      "sourceHandle": "agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor",
+      "target": "humanInputAgentflow_0",
+      "targetHandle": "humanInputAgentflow_0",
+      "data": {
+        "sourceColor": "#4DD0E1",
+        "targetColor": "#F06292",
+        "edgeLabel": "Review"
+      },
+      "type": "agentFlow",
+      "id": "agentAgentflow_1-agentAgentflow_1-output-agentAgentflow-Agent|AgentExecutor-humanInputAgentflow_0-humanInputAgentflow_0"
+    },
+    {
+      "source": "humanInputAgentflow_0",
+      "sourceHandle": "humanInputAgentflow_0-output-proceed",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#F06292",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Approved"
+      },
+      "type": "agentFlow",
+      "id": "humanInputAgentflow_0-humanInputAgentflow_0-output-proceed-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "humanInputAgentflow_0",
+      "sourceHandle": "humanInputAgentflow_0-output-reject",
+      "target": "agentAgentflow_0",
+      "targetHandle": "agentAgentflow_0",
+      "data": {
+        "sourceColor": "#F06292",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Rejected"
+      },
+      "type": "agentFlow",
+      "id": "humanInputAgentflow_0-humanInputAgentflow_0-output-reject-agentAgentflow_0-agentAgentflow_0"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-2",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Expense"
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-2-agentAgentflow_2-agentAgentflow_2"
+    },
+    {
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-3",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#4DD0E1",
+        "edgeLabel": "Help"
+      },
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_0-conditionAgentAgentflow_0-output-3-agentAgentflow_3-agentAgentflow_3"
+    }
+  ]
+}

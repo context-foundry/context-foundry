@@ -1,0 +1,1058 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -600,
+        "y": 100
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": -600,
+        "y": -50
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nThree-stage sequential processing chain. Each agent consumes the previous agent's artifact and produces the next version. Demonstrates strict dependency handling and artifact versioning."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_chain_1",
+      "type": "agentFlow",
+      "position": {
+        "x": -300,
+        "y": 100
+      },
+      "data": {
+        "id": "agent_chain_1",
+        "label": "Agent.Chain1",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Step 1 of sequential chain; produces artifact_1",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ]
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ]
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "e.g., user.name"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "placeholder": "e.g., {{ userName }}"
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "artifacts.artifact_1",
+              "value": "{{ artifact_1 }}"
+            },
+            {
+              "key": "chain.step",
+              "value": "1"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_chain_1-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "humanInput_hil_gate",
+      "type": "agentFlow",
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "data": {
+        "id": "humanInput_hil_gate",
+        "label": "HIL Approval Gate",
+        "version": 1.0,
+        "name": "humanInputAgentflow",
+        "type": "HumanInput",
+        "color": "#FF6B6B",
+        "baseClasses": [
+          "HumanInput"
+        ],
+        "category": "Agent Flows",
+        "description": "Human-in-the-loop approval before write-capable agent",
+        "inputParams": [
+          {
+            "label": "Description Type",
+            "name": "humanInputDescriptionType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Fixed",
+                "name": "fixed",
+                "description": "Specify a fixed description"
+              },
+              {
+                "label": "Dynamic",
+                "name": "dynamic",
+                "description": "Use LLM to generate a description"
+              }
+            ],
+            "id": "humanInput_hil_gate-input-humanInputDescriptionType-options",
+            "display": true
+          },
+          {
+            "label": "Description",
+            "name": "humanInputDescription",
+            "type": "string",
+            "placeholder": "Are you sure you want to proceed?",
+            "acceptVariable": true,
+            "rows": 8,
+            "show": {
+              "humanInputDescriptionType": "fixed"
+            },
+            "id": "humanInput_hil_gate-input-humanInputDescription-string",
+            "display": true
+          },
+          {
+            "label": "Model",
+            "name": "humanInputModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "show": {
+              "humanInputDescriptionType": "dynamic"
+            },
+            "id": "humanInput_hil_gate-input-humanInputModel-asyncOptions",
+            "display": false
+          },
+          {
+            "label": "Prompt",
+            "name": "humanInputModelPrompt",
+            "type": "string",
+            "acceptVariable": true,
+            "generateInstruction": true,
+            "rows": 12,
+            "show": {
+              "humanInputDescriptionType": "dynamic"
+            },
+            "id": "humanInput_hil_gate-input-humanInputModelPrompt-string",
+            "display": false
+          },
+          {
+            "label": "Enable Feedback",
+            "name": "humanInputEnableFeedback",
+            "type": "boolean",
+            "default": true,
+            "id": "humanInput_hil_gate-input-humanInputEnableFeedback-boolean",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "humanInputDescriptionType": "fixed",
+          "humanInputDescription": "Agent Chain 2 requires approval to proceed. This agent will use write and edit tools to modify artifacts.\n\nArtifact 1 summary: {{ artifacts.artifact_1 }}\n\nApprove continuation to Chain 2?",
+          "humanInputEnableFeedback": true,
+          "humanInputModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.0,
+            "streaming": true,
+            "humanInputModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "humanInput_hil_gate-output-proceed",
+            "label": "Proceed",
+            "name": "proceed"
+          },
+          {
+            "id": "humanInput_hil_gate-output-reject",
+            "label": "Reject",
+            "name": "reject"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 100
+    },
+    {
+      "id": "agent_chain_2",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "data": {
+        "id": "agent_chain_2",
+        "label": "Agent.Chain2",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Consumes artifact_1; produces artifact_2",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ]
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ]
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "e.g., user.name"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "placeholder": "e.g., {{ userName }}"
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "artifacts.artifact_2",
+              "value": "{{ artifact_2 }}"
+            },
+            {
+              "key": "chain.step",
+              "value": "2"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_chain_2-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_chain_3",
+      "type": "agentFlow",
+      "position": {
+        "x": 600,
+        "y": 100
+      },
+      "data": {
+        "id": "agent_chain_3",
+        "label": "Agent.Chain3",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Consumes artifact_2; produces final_draft",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ]
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ]
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "e.g., user.name"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "placeholder": "e.g., {{ userName }}"
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "artifacts.final_draft",
+              "value": "{{ final_draft }}"
+            },
+            {
+              "key": "chain.step",
+              "value": "3"
+            },
+            {
+              "key": "output",
+              "value": "{{ final_draft }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_chain_3-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_chain_logic",
+      "type": "stickyNote",
+      "position": {
+        "x": 0,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNote_chain_logic",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "CHAIN LOGIC:\nStrict sequential execution: Chain1 → HIL Gate → Chain2 → Chain3 → Report. Each agent validates its required input artifact before proceeding. HIL gate enforces human approval before Chain2's write operations."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_chain_logic-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_report",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 100
+      },
+      "data": {
+        "id": "agent_report",
+        "label": "Agent.Report",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#66BB6A",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Generate execution report with metrics",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "System",
+                    "name": "system"
+                  },
+                  {
+                    "label": "Assistant",
+                    "name": "assistant"
+                  },
+                  {
+                    "label": "Developer",
+                    "name": "developer"
+                  },
+                  {
+                    "label": "User",
+                    "name": "user"
+                  }
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "generateInstruction": true,
+                "rows": 4
+              }
+            ]
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Tool",
+                "name": "agentSelectedTool",
+                "type": "asyncOptions",
+                "loadMethod": "listTools",
+                "loadConfig": true
+              },
+              {
+                "label": "Require Human Input",
+                "name": "agentSelectedToolRequiresHumanInput",
+                "type": "boolean",
+                "optional": true
+              }
+            ]
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "e.g., user.name"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "acceptVariable": true,
+                "placeholder": "e.g., {{ userName }}"
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "report.generated",
+              "value": "true"
+            },
+            {
+              "key": "report.timestamp",
+              "value": "{{ currentDateTime }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_report-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_output",
+      "type": "stickyNote",
+      "position": {
+        "x": 900,
+        "y": 250
+      },
+      "data": {
+        "id": "stickyNote_output",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "OUTPUT FORMAT:\nStructured report includes: 1) Final artifact (state.output), 2) Execution metrics (steps completed, timestamps), 3) Artifact lineage (artifact_1 → artifact_2 → final_draft), 4) HIL approval records."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_output-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "directReply_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 1100,
+        "y": 100
+      },
+      "data": {
+        "id": "directReply_final",
+        "label": "Direct Reply",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Directly reply to the user with a message and terminate the workflow",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReply_final-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p>✅ <strong>Chain Processing Complete</strong></p><p></p><p>Final artifact generated successfully through 3-stage sequential pipeline with HIL approval.</p><p></p><p>📊 <strong>Execution Summary:</strong></p><p>• Chain1 → artifact_1 (initial draft)</p><p>• HIL Gate → approval checkpoint</p><p>• Chain2 → artifact_2 (refined version)</p><p>• Chain3 → final_draft (complete)</p><p>• Report → structured documentation</p><p></p><p>The complete processing report has been generated and is ready for review.</p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 205,
+      "height": 67
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_chain_1",
+      "targetHandle": "agent_chain_1-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_chain1",
+      "label": "input"
+    },
+    {
+      "source": "agent_chain_1",
+      "sourceHandle": "agent_chain_1-output-agentAgentflow",
+      "target": "humanInput_hil_gate",
+      "targetHandle": "humanInput_hil_gate-input",
+      "type": "buttonedge",
+      "id": "edge_chain1_to_hil",
+      "label": "artifact_1"
+    },
+    {
+      "source": "humanInput_hil_gate",
+      "sourceHandle": "humanInput_hil_gate-output-proceed",
+      "target": "agent_chain_2",
+      "targetHandle": "agent_chain_2-input",
+      "type": "buttonedge",
+      "id": "edge_hil_to_chain2",
+      "label": "approved"
+    },
+    {
+      "source": "agent_chain_2",
+      "sourceHandle": "agent_chain_2-output-agentAgentflow",
+      "target": "agent_chain_3",
+      "targetHandle": "agent_chain_3-input",
+      "type": "buttonedge",
+      "id": "edge_chain2_to_chain3",
+      "label": "artifact_2"
+    },
+    {
+      "source": "agent_chain_3",
+      "sourceHandle": "agent_chain_3-output-agentAgentflow",
+      "target": "agent_report",
+      "targetHandle": "agent_report-input",
+      "type": "buttonedge",
+      "id": "edge_chain3_to_report",
+      "label": "final_draft"
+    },
+    {
+      "source": "agent_report",
+      "sourceHandle": "agent_report-output-agentAgentflow",
+      "target": "directReply_final",
+      "targetHandle": "directReply_final-input",
+      "type": "buttonedge",
+      "id": "edge_report_to_final",
+      "label": "complete"
+    }
+  ]
+}

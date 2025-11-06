@@ -42,6 +42,27 @@
             "display": true
           },
           {
+            "label": "Model",
+            "name": "humanInputModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "show": {"humanInputDescriptionType": "dynamic"},
+            "id": "humanInputAgentflow_0-input-humanInputModel-asyncOptions",
+            "display": false
+          },
+          {
+            "label": "Prompt",
+            "name": "humanInputModelPrompt",
+            "type": "string",
+            "acceptVariable": true,
+            "generateInstruction": true,
+            "rows": 12,
+            "show": {"humanInputDescriptionType": "dynamic"},
+            "id": "humanInputAgentflow_0-input-humanInputModelPrompt-string",
+            "display": false
+          },
+          {
             "label": "Enable Feedback",
             "name": "humanInputEnableFeedback",
             "type": "boolean",
@@ -54,7 +75,14 @@
         "inputs": {
           "humanInputDescriptionType": "fixed",
           "humanInputDescription": "{{DESCRIPTION}}",
-          "humanInputEnableFeedback": true
+          "humanInputEnableFeedback": true,
+          "humanInputModelConfig": {
+            "credential": "OpenAI API Key",
+            "modelName": "gpt-4o-mini",
+            "temperature": 0.0,
+            "streaming": true,
+            "humanInputModel": "chatOpenAI"
+          }
         },
         "outputAnchors": [
           {

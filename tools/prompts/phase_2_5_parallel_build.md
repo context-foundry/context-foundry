@@ -104,6 +104,113 @@ PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
 5. **VERIFY after generation** that both tools are present in EVERY agent
 
+🚨🚨🚨 **CRITICAL: Node Type Accuracy (PATTERN #14 PREVENTION)** 🚨🚨🚨
+
+**BEFORE creating ANY node, Builder MUST use CORRECT node types from templates.**
+
+Flowise UI is EXTREMELY sensitive to exact node type names. Using wrong types causes:
+- ❌ Missing icons in UI
+- ❌ Sync problems on workflow import
+- ❌ Workflow completely broken/non-functional
+- ❌ User frustration and deployment failures
+
+**NODE TYPE REGISTRY - ALWAYS USE THESE EXACT VALUES:**
+
+| Node Purpose | Correct Type | Template File | NEVER Use |
+|--------------|--------------|---------------|-----------|
+| **Workflow Start** | `"type": "Start"` | START-NODE-TEMPLATE.json | ❌ "StartFlow", "start" |
+| **Agent Execution** | `"type": "Agent"` | AGENT-NODE-TEMPLATE.json | ❌ "agent", "AgentNode" |
+| **AI Routing** | `"type": "ConditionAgent"` | 03-routing.json (pattern) | ❌ "ConditionNode", "Condition" |
+| **Deterministic Logic** | `"type": "Condition"` | CONDITION-NODE-TEMPLATE.json | ❌ "ConditionNode", "If" |
+| **Terminal Output** | `"type": "DirectReply"` | DIRECT-REPLY-NODE-TEMPLATE.json | ❌ "directReply", "Reply" |
+| **Array Iteration** | `"type": "Iteration"` | ITERATION-NODE-TEMPLATE.json | ❌ "IterationNode", "Loop" |
+| **Human Approval** | `"type": "HumanInput"` | HIL-NODE-TEMPLATE.json | ❌ "HIL", "HumanInLoop" |
+| **Sticky Note** | `"type": "stickyNote"` | STICKY-NOTE-TEMPLATE.json | ❌ "StickyNote", "Note" |
+
+**MANDATORY VALIDATION STEPS:**
+
+After generating ANY node, Builder MUST verify:
+
+1. **Start Node Check:**
+   ```python
+   start_node = [n for n in nodes if n['id'].startswith('start_')][0]
+   assert start_node['data']['name'] == "startAgentflow", "Wrong Start node name"
+   assert start_node['data']['type'] == "Start", "Wrong Start node type (Pattern #14)"
+   assert start_node['data']['hideInput'] == True, "Start node missing hideInput"
+   ```
+
+2. **ConditionAgent Node Check:**
+   ```python
+   condition_nodes = [n for n in nodes if 'condition' in n['id'].lower()]
+   for node in condition_nodes:
+       if node['data']['name'] == "conditionAgentAgentflow":  # AI routing
+           assert node['data']['type'] == "ConditionAgent", f"{node['id']} has wrong type (Pattern #14)"
+       elif node['data']['name'] == "conditionAgentflow":  # Deterministic
+           assert node['data']['type'] == "Condition", f"{node['id']} has wrong type (Pattern #14)"
+   ```
+
+3. **DirectReply Node Check:**
+   ```python
+   reply_nodes = [n for n in nodes if 'reply' in n['id'].lower()]
+   for node in reply_nodes:
+       assert node['data']['name'] == "directReplyAgentflow", f"{node['id']} wrong name"
+       assert node['data']['type'] == "DirectReply", f"{node['id']} wrong type (Pattern #14)"
+       assert node['data']['hideOutput'] == True, f"{node['id']} missing hideOutput"
+       assert 'directReplyMessage' in node['data']['inputs'], f"{node['id']} missing message param"
+   ```
+
+**WHY THIS IS CRITICAL:**
+
+Pattern #14 failures account for 30%+ of workflow import failures. Common mistakes:
+- Using generic names like "ConditionNode" instead of specific "ConditionAgent" or "Condition"
+- Copying from old/wrong examples instead of official templates
+- Manual typing instead of copying from templates
+- Case sensitivity errors ("start" vs "Start")
+
+**PREVENTION STRATEGY:**
+
+✅ **DO THIS:**
+1. Read the appropriate template file FIRST
+2. Copy the entire node structure from template
+3. Customize ONLY the content fields (instructions, messages, etc.)
+4. NEVER modify "type" or "name" fields
+5. Run validation checks after generation
+
+❌ **NEVER DO THIS:**
+1. Guess the node type name
+2. Use lowercase versions of types
+3. Create new type names
+4. Copy from unvalidated examples
+5. Skip template reference
+
+**REFERENCE FILES:**
+
+All node templates are located at:
+```
+/Users/name/homelab/context-foundry/extensions/flowise/prompts/
+├── START-NODE-TEMPLATE.json           # type: "Start"
+├── AGENT-NODE-TEMPLATE.json           # type: "Agent"
+├── CONDITION-NODE-TEMPLATE.json       # type: "Condition" (deterministic)
+├── DIRECT-REPLY-NODE-TEMPLATE.json    # type: "DirectReply"
+├── ITERATION-NODE-TEMPLATE.json       # type: "Iteration"
+├── HIL-NODE-TEMPLATE.json             # type: "HumanInput"
+└── STICKY-NOTE-TEMPLATE.json          # type: "stickyNote"
+```
+
+For ConditionAgent (AI routing), reference pattern files:
+```
+/Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/
+├── 03-routing.json                    # type: "ConditionAgent" example
+├── 04-iteration.json                  # type: "ConditionAgent" example
+├── 05-looping.json                    # type: "ConditionAgent" example
+└── 06-hierarchy.json                  # type: "ConditionAgent" example
+```
+
+**See Also:**
+- FAILURE_PATTERNS.md - Pattern #14 for complete documentation
+- NODE_TYPE_REGISTRY.md - Authoritative node type reference
+- validate_workflow.py - Automated Pattern #14 detection (line 282)
+
 **Standard Agent Tools (REQUIRED for ALL agents)**:
 Every Flowise agent MUST include these 2 tools in agentTools array with EXACT Flowise UI structure:
 

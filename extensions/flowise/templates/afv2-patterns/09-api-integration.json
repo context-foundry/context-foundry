@@ -1,0 +1,933 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 100,
+        "y": 200
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": ["Start"],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": 100,
+        "y": 50
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": ["StickyNote"],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE: External API integration with conditional retry logic. Parameter Extractor → HTTP Request → Status Check → [SUCCESS → Format | ERROR → Retry → loop back | FATAL → Error Handler]. Demonstrates deterministic routing, loop-back edges, and exponential backoff strategy."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agentAgentflow_1",
+      "type": "agentFlow",
+      "position": {
+        "x": 400,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "Agent.ParameterExtractor",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Extract API parameters from user request",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "api.url",
+              "value": "{{ api_url }}"
+            },
+            {
+              "key": "api.method",
+              "value": "{{ api_method }}"
+            },
+            {
+              "key": "api.headers",
+              "value": "{{ api_headers }}"
+            },
+            {
+              "key": "api.body",
+              "value": "{{ api_body }}"
+            },
+            {
+              "key": "api.retry_count",
+              "value": "0"
+            },
+            {
+              "key": "api.max_retries",
+              "value": "3"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 500
+    },
+    {
+      "id": "httpRequest_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 700,
+        "y": 200
+      },
+      "data": {
+        "id": "httpRequest_0",
+        "label": "HTTP Request",
+        "version": 1.0,
+        "name": "httpRequestAgentflow",
+        "type": "HTTPRequest",
+        "color": "#9E9E9E",
+        "baseClasses": ["HTTPRequest"],
+        "category": "Utilities",
+        "description": "Make external API call",
+        "inputParams": [
+          {
+            "label": "Method",
+            "name": "method",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "URL",
+            "name": "url",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "Headers",
+            "name": "headers",
+            "type": "json",
+            "acceptVariable": true,
+            "optional": true
+          },
+          {
+            "label": "Body",
+            "name": "body",
+            "type": "string",
+            "acceptVariable": true,
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "method": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.method\" data-label=\"$flow.state.api.method\">{{ $flow.state.api.method }}</span></p>",
+          "url": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.url\" data-label=\"$flow.state.api.url\">{{ $flow.state.api.url }}</span></p>",
+          "headers": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.headers\" data-label=\"$flow.state.api.headers\">{{ $flow.state.api.headers }}</span></p>",
+          "body": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.body\" data-label=\"$flow.state.api.body\">{{ $flow.state.api.body }}</span></p>"
+        },
+        "outputAnchors": [
+          {
+            "id": "httpRequest_0-output-httpRequestAgentflow",
+            "label": "HTTP Response",
+            "name": "httpRequestAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "conditionAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 1000,
+        "y": 200
+      },
+      "data": {
+        "id": "conditionAgentflow_0",
+        "label": "Status Check",
+        "version": 1,
+        "name": "conditionAgentflow",
+        "type": "Condition",
+        "color": "#FFB938",
+        "baseClasses": ["Condition"],
+        "category": "Agent Flows",
+        "description": "Route based on HTTP status code",
+        "inputParams": [
+          {
+            "label": "Conditions",
+            "name": "conditions",
+            "type": "array",
+            "description": "Values to compare. Each condition creates an output path. Else path is automatically added.",
+            "acceptVariable": true,
+            "default": [],
+            "array": [
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "String",
+                    "name": "string"
+                  },
+                  {
+                    "label": "Number",
+                    "name": "number"
+                  },
+                  {
+                    "label": "Boolean",
+                    "name": "boolean"
+                  }
+                ],
+                "default": "string"
+              },
+              {
+                "label": "Value 1",
+                "name": "value1",
+                "type": "number",
+                "default": "",
+                "description": "First value to be compared with (supports variables)",
+                "acceptVariable": true,
+                "show": {
+                  "conditions[$index].type": "number"
+                }
+              },
+              {
+                "label": "Operation",
+                "name": "operation",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Smaller",
+                    "name": "smaller",
+                    "description": "Value1 < Value2"
+                  },
+                  {
+                    "label": "Smaller Equal",
+                    "name": "smallerEqual",
+                    "description": "Value1 <= Value2"
+                  },
+                  {
+                    "label": "Equal",
+                    "name": "equal",
+                    "description": "Value1 == Value2"
+                  },
+                  {
+                    "label": "Not Equal",
+                    "name": "notEqual",
+                    "description": "Value1 != Value2"
+                  },
+                  {
+                    "label": "Larger",
+                    "name": "larger",
+                    "description": "Value1 > Value2"
+                  },
+                  {
+                    "label": "Larger Equal",
+                    "name": "largerEqual",
+                    "description": "Value1 >= Value2"
+                  }
+                ],
+                "default": "equal",
+                "description": "Type of operation",
+                "show": {
+                  "conditions[$index].type": "number"
+                }
+              },
+              {
+                "label": "Value 2",
+                "name": "value2",
+                "type": "number",
+                "default": 0,
+                "description": "Second value to be compared with (supports variables)",
+                "acceptVariable": true,
+                "show": {
+                  "conditions[$index].type": "number"
+                }
+              }
+            ],
+            "id": "conditionAgentflow_0-input-conditions-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditions": [
+            {
+              "type": "number",
+              "value1": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.response_status\" data-label=\"$flow.state.api.response_status\">{{ $flow.state.api.response_status }}</span></p>",
+              "operation": "equal",
+              "value2": "<p>200</p>"
+            },
+            {
+              "type": "number",
+              "value1": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.api.response_status\" data-label=\"$flow.state.api.response_status\">{{ $flow.state.api.response_status }}</span></p>",
+              "operation": "largerEqual",
+              "value2": "<p>500</p>"
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "conditionAgentflow_0-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "SUCCESS (status 200)"
+          },
+          {
+            "id": "conditionAgentflow_0-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "ERROR (status 5xx, retry)"
+          },
+          {
+            "id": "conditionAgentflow_0-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "FATAL (4xx or max retries)"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 195,
+      "height": 100
+    },
+    {
+      "id": "agentAgentflow_2",
+      "type": "agentFlow",
+      "position": {
+        "x": 1300,
+        "y": 100
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Agent.Format",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Format successful API response",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "result.formatted",
+              "value": "{{ formatted_response }}"
+            },
+            {
+              "key": "result.status",
+              "value": "success"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 500
+    },
+    {
+      "id": "agentAgentflow_3",
+      "type": "agentFlow",
+      "position": {
+        "x": 1300,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Agent.Retry",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Implement retry logic with exponential backoff",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "api.retry_count",
+              "value": "{{ $flow.state.api.retry_count + 1 }}"
+            },
+            {
+              "key": "api.backoff_delay",
+              "value": "{{ Math.pow(2, $flow.state.api.retry_count + 1) }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 500
+    },
+    {
+      "id": "agentAgentflow_4",
+      "type": "agentFlow",
+      "position": {
+        "x": 1300,
+        "y": 300
+      },
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Agent.ErrorHandler",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handle errors and max retries",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search",
+                "toolDescription": "Federated web/meta search. Use when you need fresh facts or sources. Provide a natural-language query; returns a ranked, de-duplicated JSON list of result metadata for follow-up browsing and citation.",
+                "headers": "",
+                "format": "json",
+                "categories": "",
+                "engines": "",
+                "language": "",
+                "pageno": "",
+                "time_range": "",
+                "safesearch": "",
+                "agentSelectedTool": "searXNG"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "result.error",
+              "value": "{{ error_message }}"
+            },
+            {
+              "key": "result.status",
+              "value": "error"
+            },
+            {
+              "key": "result.error_code",
+              "value": "{{ $flow.state.api.response_status }}"
+            },
+            {
+              "key": "result.retry_attempts",
+              "value": "{{ $flow.state.api.retry_count }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 500
+    },
+    {
+      "id": "directReplyAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 1600,
+        "y": 100
+      },
+      "data": {
+        "id": "directReplyAgentflow_0",
+        "label": "Success Reply",
+        "version": 1.0,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#7EE787",
+        "baseClasses": ["DirectReply"],
+        "category": "Agent Flows",
+        "description": "Terminal reply for successful responses",
+        "inputParams": [
+          {
+            "label": "Reply",
+            "name": "reply",
+            "type": "string",
+            "acceptVariable": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "reply": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.result.formatted\" data-label=\"$flow.state.result.formatted\">{{ $flow.state.result.formatted }}</span></p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 150,
+      "height": 80
+    },
+    {
+      "id": "directReplyAgentflow_1",
+      "type": "agentFlow",
+      "position": {
+        "x": 1600,
+        "y": 300
+      },
+      "data": {
+        "id": "directReplyAgentflow_1",
+        "label": "Error Reply",
+        "version": 1.0,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#F85149",
+        "baseClasses": ["DirectReply"],
+        "category": "Agent Flows",
+        "description": "Terminal reply for error responses",
+        "inputParams": [
+          {
+            "label": "Reply",
+            "name": "reply",
+            "type": "string",
+            "acceptVariable": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "reply": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.result.error\" data-label=\"$flow.state.result.error\">{{ $flow.state.result.error }}</span></p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 150,
+      "height": 80
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge_start_to_extractor",
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agentAgentflow_1",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_extractor_to_http",
+      "source": "agentAgentflow_1",
+      "sourceHandle": "agentAgentflow_1-output-agentAgentflow",
+      "target": "httpRequest_0",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_http_to_condition",
+      "source": "httpRequest_0",
+      "sourceHandle": "httpRequest_0-output-httpRequestAgentflow",
+      "target": "conditionAgentflow_0",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_condition_success_to_format",
+      "source": "conditionAgentflow_0",
+      "sourceHandle": "conditionAgentflow_0-output-0",
+      "target": "agentAgentflow_2",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_condition_error_to_retry",
+      "source": "conditionAgentflow_0",
+      "sourceHandle": "conditionAgentflow_0-output-1",
+      "target": "agentAgentflow_3",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_retry_to_http_loopback",
+      "source": "agentAgentflow_3",
+      "sourceHandle": "agentAgentflow_3-output-agentAgentflow",
+      "target": "httpRequest_0",
+      "type": "buttonedge",
+      "animated": true
+    },
+    {
+      "id": "edge_condition_fatal_to_errorhandler",
+      "source": "conditionAgentflow_0",
+      "sourceHandle": "conditionAgentflow_0-output-2",
+      "target": "agentAgentflow_4",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_format_to_success_reply",
+      "source": "agentAgentflow_2",
+      "sourceHandle": "agentAgentflow_2-output-agentAgentflow",
+      "target": "directReplyAgentflow_0",
+      "type": "buttonedge"
+    },
+    {
+      "id": "edge_errorhandler_to_error_reply",
+      "source": "agentAgentflow_4",
+      "sourceHandle": "agentAgentflow_4-output-agentAgentflow",
+      "target": "directReplyAgentflow_1",
+      "type": "buttonedge"
+    }
+  ]
+}

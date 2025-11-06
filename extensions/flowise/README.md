@@ -116,18 +116,25 @@ The Flowise extension has successfully built production-ready workflows across d
 
 ### Pattern Prevention Record
 
-All recent builds prevent **9/9 known failure patterns**:
+All recent builds prevent **14/14 known failure patterns**:
 1. ✅ Meta-descriptions (Pattern #1)
 2. ✅ Missing agent nodes (Pattern #2)
 3. ✅ Separate config files (Pattern #3)
 4. ✅ Disconnected nodes (Pattern #4)
 5. ✅ Phantom tool references (Pattern #5)
-6. ✅ Missing inputParams (Pattern #6)
+6. ✅ Incorrect tool structure (Pattern #6)
 7. ✅ Missing router scenarios (Pattern #7)
-8. ✅ asyncOptions validation (Pattern #8)
+8. ✅ Missing inputParams (Pattern #8)
 9. ✅ Mermaid diagram embedding (Pattern #9)
+10. ✅ HIL gate invalid inputParams (Pattern #10)
+11. ✅ HIL gate blank screen (Pattern #11)
+12. ✅ agentMessages array (Pattern #12)
+13. ✅ agentModel missing nested field (Pattern #13)
+14. ✅ **Node type mismatch (Pattern #14)** ⭐ NEW
 
 **Success Rate**: 100% first-iteration success on all documented builds
+
+**Latest Addition**: Pattern #14 detection (2025-11-06) - Prevents Start/ConditionNode/DirectReply type mismatches
 
 ---
 

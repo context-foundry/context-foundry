@@ -1,0 +1,877 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -700,
+        "y": 200
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": -700,
+        "y": 50
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nHierarchical task orchestration. Supervisor decomposes work into steps, assigns to specialist roles (Software Engineer, Code Reviewer). Checker iterates through steps. Worker executes, Reviewer validates. Loop continues until all steps complete. Tracks task graph, role assignments, work products."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_supervisor",
+      "type": "agentFlow",
+      "position": {
+        "x": -400,
+        "y": 200
+      },
+      "data": {
+        "id": "agent_supervisor",
+        "label": "Agent.Supervisor",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Decompose work into steps; assign to roles",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "plan.steps",
+              "value": "{{ task_steps }}"
+            },
+            {
+              "key": "plan.total_steps",
+              "value": "{{ total_steps }}"
+            },
+            {
+              "key": "hierarchy.current_step",
+              "value": "0"
+            },
+            {
+              "key": "hierarchy.roles",
+              "value": "[{\"name\":\"Software Engineer\",\"tools\":[\"currentDateTime\",\"calculator\"]},{\"name\":\"Code Reviewer\",\"tools\":[\"currentDateTime\"]}]"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_supervisor-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_delegation",
+      "type": "stickyNote",
+      "position": {
+        "x": -400,
+        "y": 350
+      },
+      "data": {
+        "id": "stickyNote_delegation",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "DELEGATION:\nSupervisor creates task graph: plan.steps[i] = {goal, owner_role, inputs, expected_outputs}. Defines role ACLs (which tools each role can use). Checker iterates through steps using hierarchy.current_step pointer."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_delegation-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "gate_step_checker",
+      "type": "agentFlow",
+      "position": {
+        "x": -50,
+        "y": 200
+      },
+      "data": {
+        "id": "gate_step_checker",
+        "label": "Step Checker",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Select worker role for current step OR finalize",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent..."
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatAnthropic",
+          "conditionAgentInstructions": "Check current step and route to appropriate role:\n\nState variables:\n- hierarchy.current_step (index into plan.steps)\n- plan.total_steps (total number of steps)\n- plan.steps[current_step].owner_role (which role handles this step)\n\nDecision logic:\nIF current_step >= total_steps → FINALIZE (all steps complete)\nELSE check owner_role:\n  - \"Software Engineer\" → WORKER (scenario 0)\n  - \"Code Reviewer\" → REVIEWER (scenario 1)\n\nOutput scenario number.",
+          "conditionAgentInput": "{{ hierarchy }}",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "WORKER - Software Engineer executes implementation step"
+            },
+            {
+              "scenario": "REVIEWER - Code Reviewer validates work product"
+            },
+            {
+              "scenario": "FINALIZE - All steps complete, generate final output"
+            }
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.1,
+            "streaming": true,
+            "conditionAgentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "gate_step_checker-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "WORKER"
+          },
+          {
+            "id": "gate_step_checker-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "REVIEWER"
+          },
+          {
+            "id": "gate_step_checker-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "FINALIZE"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 100
+    },
+    {
+      "id": "agent_worker",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 50
+      },
+      "data": {
+        "id": "agent_worker",
+        "label": "Agent.Worker",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#9575CD",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Software Engineer role - implement step",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "worker_outputs",
+              "value": "{{ work_product }}"
+            },
+            {
+              "key": "hierarchy.last_role",
+              "value": "Software Engineer"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.4,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_worker-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_reviewer",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 200
+      },
+      "data": {
+        "id": "agent_reviewer",
+        "label": "Agent.Reviewer",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#9575CD",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Code Reviewer role - QA gate with go/no-go",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "review.decision",
+              "value": "{{ go_no_go }}"
+            },
+            {
+              "key": "review.issues",
+              "value": "{{ issues_found }}"
+            },
+            {
+              "key": "hierarchy.current_step",
+              "value": "{{ hierarchy.current_step + 1 }}"
+            },
+            {
+              "key": "hierarchy.last_role",
+              "value": "Code Reviewer"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_reviewer-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_review",
+      "type": "stickyNote",
+      "position": {
+        "x": 300,
+        "y": -100
+      },
+      "data": {
+        "id": "stickyNote_review",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "REVIEW GATES:\nReviewer validates Worker output using rubric (completeness, correctness, risk). Outputs go/no-go decision. On GO: increments current_step, loops back to Checker. On NO-GO: could retry step (not shown) or escalate to Supervisor."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_review-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 300,
+        "y": 350
+      },
+      "data": {
+        "id": "agent_final",
+        "label": "Agent.Final",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#66BB6A",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Supervisor synthesis + finalize",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "output",
+              "value": "{{ composed_output }}"
+            },
+            {
+              "key": "report.steps_completed",
+              "value": "{{ hierarchy.current_step }}"
+            },
+            {
+              "key": "report.role_metrics",
+              "value": "{{ role_stats }}"
+            },
+            {
+              "key": "report.generated",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_final-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_output",
+      "type": "stickyNote",
+      "position": {
+        "x": 300,
+        "y": 500
+      },
+      "data": {
+        "id": "stickyNote_output",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "OUTPUT FORMAT:\nFinal synthesis includes: 1) Composed output from all worker outputs, 2) Task graph execution summary (steps_completed), 3) Per-role metrics (tasks/role, avg review score), 4) Review decisions log, 5) Execution timeline."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_output-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "directReply_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "data": {
+        "id": "directReply_final",
+        "label": "Direct Reply",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Directly reply to the user with a message and terminate the workflow",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReply_final-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p>✅ <strong>Hierarchical Orchestration Complete</strong></p><p></p><p>Supervisor-directed task delegation to specialist roles finished successfully.</p><p></p><p>📊 <strong>Execution Summary:</strong></p><p>• Supervisor → task decomposition</p><p>• Worker agents → specialized execution</p><p>• Reviewer → quality validation per step</p><p>• Step checker → iteration control</p><p>• Final → composed output</p><p></p><p>All delegated tasks completed with review approval. Per-role metrics available.</p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 205,
+      "height": 67
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "agent_supervisor",
+      "targetHandle": "agent_supervisor-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_super",
+      "label": "input"
+    },
+    {
+      "source": "agent_supervisor",
+      "sourceHandle": "agent_supervisor-output-agentAgentflow",
+      "target": "gate_step_checker",
+      "targetHandle": "gate_step_checker-input",
+      "type": "buttonedge",
+      "id": "edge_super_to_checker",
+      "label": "plan"
+    },
+    {
+      "source": "gate_step_checker",
+      "sourceHandle": "gate_step_checker-output-0",
+      "target": "agent_worker",
+      "targetHandle": "agent_worker-input",
+      "type": "buttonedge",
+      "id": "edge_checker_to_worker",
+      "label": "WORKER"
+    },
+    {
+      "source": "gate_step_checker",
+      "sourceHandle": "gate_step_checker-output-1",
+      "target": "agent_reviewer",
+      "targetHandle": "agent_reviewer-input",
+      "type": "buttonedge",
+      "id": "edge_checker_to_reviewer",
+      "label": "REVIEWER"
+    },
+    {
+      "source": "agent_worker",
+      "sourceHandle": "agent_worker-output-agentAgentflow",
+      "target": "agent_reviewer",
+      "targetHandle": "agent_reviewer-input",
+      "type": "buttonedge",
+      "id": "edge_worker_to_reviewer",
+      "label": "work_product"
+    },
+    {
+      "source": "agent_reviewer",
+      "sourceHandle": "agent_reviewer-output-agentAgentflow",
+      "target": "gate_step_checker",
+      "targetHandle": "gate_step_checker-input",
+      "type": "buttonedge",
+      "id": "edge_reviewer_loop_back",
+      "label": "next_step",
+      "animated": true
+    },
+    {
+      "source": "gate_step_checker",
+      "sourceHandle": "gate_step_checker-output-2",
+      "target": "agent_final",
+      "targetHandle": "agent_final-input",
+      "type": "buttonedge",
+      "id": "edge_checker_to_final",
+      "label": "FINALIZE"
+    },
+    {
+      "source": "agent_final",
+      "sourceHandle": "agent_final-output-agentAgentflow",
+      "target": "directReply_final",
+      "targetHandle": "directReply_final-input",
+      "type": "buttonedge",
+      "id": "edge_final_to_reply",
+      "label": "complete"
+    }
+  ]
+}

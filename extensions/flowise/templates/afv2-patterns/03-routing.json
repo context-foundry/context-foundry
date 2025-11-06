@@ -1,0 +1,944 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": -500,
+        "y": 200
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              }
+            ],
+            "default": "chatInput"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput"
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 116,
+      "height": 68
+    },
+    {
+      "id": "stickyNote_purpose",
+      "type": "stickyNote",
+      "position": {
+        "x": -500,
+        "y": 50
+      },
+      "data": {
+        "id": "stickyNote_purpose",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "PURPOSE:\nIntent-based routing to domain-specific agents. Router classifies input into Billing, Technical, General, or FAIL (unroutable). Each domain has specialized tools and expertise. Includes confidence scoring and alternate route tracking."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_purpose-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "router_condition",
+      "type": "agentFlow",
+      "position": {
+        "x": -150,
+        "y": 200
+      },
+      "data": {
+        "id": "router_condition",
+        "label": "Intent Router",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "description": "Classify input into domain (Billing/Technical/General/FAIL)",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "rows": 4,
+            "placeholder": "Analyze the user input and route to the appropriate agent..."
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "acceptVariable": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "rows": 2
+              }
+            ]
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatAnthropic",
+          "conditionAgentInstructions": "Classify user question into ONE domain with confidence score (0.0-1.0).\n\nOutput JSON: {\"route\": \"Billing|Technical|General|FAIL\", \"confidence\": 0.85, \"rationale\": \"...\", \"alternates\": [{\"route\": \"Technical\", \"confidence\": 0.12}]}\n\nThreshold: confidence >= 0.6 required for Billing/Technical routing. Below 0.6 → General. If cannot classify → FAIL.\n\nBilling keywords: invoice, payment, subscription, billing, charge, refund\nTechnical keywords: error, bug, API, integration, code, configuration\nGeneral: all other queries\nFAIL: gibberish, empty, off-topic",
+          "conditionAgentInput": "{{ question }}",
+          "conditionAgentScenarios": [
+            {
+              "scenario": "Billing domain - invoice/payment/subscription queries"
+            },
+            {
+              "scenario": "Technical domain - errors/bugs/integration issues"
+            },
+            {
+              "scenario": "General domain - questions/help/information requests"
+            },
+            {
+              "scenario": "FAIL - unroutable/invalid/off-topic input"
+            }
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.1,
+            "streaming": true,
+            "conditionAgentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "router_condition-output-0",
+            "label": 0,
+            "name": 0,
+            "description": "Billing"
+          },
+          {
+            "id": "router_condition-output-1",
+            "label": 1,
+            "name": 1,
+            "description": "Technical"
+          },
+          {
+            "id": "router_condition-output-2",
+            "label": 2,
+            "name": 2,
+            "description": "General"
+          },
+          {
+            "id": "router_condition-output-3",
+            "label": 3,
+            "name": 3,
+            "description": "FAIL"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 100
+    },
+    {
+      "id": "stickyNote_routing",
+      "type": "stickyNote",
+      "position": {
+        "x": -150,
+        "y": 350
+      },
+      "data": {
+        "id": "stickyNote_routing",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "ROUTING LOGIC:\nRouter uses 0.6 confidence threshold. High confidence (≥0.6) → domain agent. Low confidence (<0.6) → General fallback. Tracks alternate routes with scores for transparency. FAIL route handles invalid/gibberish input."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_routing-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "agent_billing",
+      "type": "agentFlow",
+      "position": {
+        "x": 200,
+        "y": 0
+      },
+      "data": {
+        "id": "agent_billing",
+        "label": "Agent.Billing",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handles billing domain tasks",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "calculator",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "calculator"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "domain.response",
+              "value": "{{ billing_response }}"
+            },
+            {
+              "key": "domain.name",
+              "value": "Billing"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_billing-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_technical",
+      "type": "agentFlow",
+      "position": {
+        "x": 200,
+        "y": 150
+      },
+      "data": {
+        "id": "agent_technical",
+        "label": "Agent.Technical",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handles technical domain tasks",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "domain.response",
+              "value": "{{ technical_response }}"
+            },
+            {
+              "key": "domain.name",
+              "value": "Technical"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_technical-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_general",
+      "type": "agentFlow",
+      "position": {
+        "x": 200,
+        "y": 300
+      },
+      "data": {
+        "id": "agent_general",
+        "label": "Agent.General",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Default/general handler for all other queries",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "domain.response",
+              "value": "{{ general_response }}"
+            },
+            {
+              "key": "domain.name",
+              "value": "General"
+            },
+            {
+              "key": "domain.fallback",
+              "value": "true"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.3,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_general-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_fail",
+      "type": "agentFlow",
+      "position": {
+        "x": 200,
+        "y": 450
+      },
+      "data": {
+        "id": "agent_fail",
+        "label": "Agent.ErrorHandler",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#FF6B6B",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Handles unroutable/invalid input",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "domain.response",
+              "value": "{{ error_message }}"
+            },
+            {
+              "key": "domain.name",
+              "value": "FAIL"
+            },
+            {
+              "key": "domain.error",
+              "value": "unroutable_input"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_fail-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "agent_synthesize",
+      "type": "agentFlow",
+      "position": {
+        "x": 550,
+        "y": 225
+      },
+      "data": {
+        "id": "agent_synthesize",
+        "label": "Agent.Synthesize",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#66BB6A",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "description": "Return final answer with routing metadata",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "array",
+            "optional": true
+          },
+          {
+            "label": "Enable Memory",
+            "name": "agentEnableMemory",
+            "type": "boolean",
+            "default": false,
+            "optional": true
+          },
+          {
+            "label": "Update State",
+            "name": "agentStateUpdates",
+            "type": "array",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": "",
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            }
+          ],
+          "agentEnableMemory": true,
+          "agentStateUpdates": [
+            {
+              "key": "output",
+              "value": "{{ final_response }}"
+            },
+            {
+              "key": "report.generated",
+              "value": "true"
+            },
+            {
+              "key": "report.timestamp",
+              "value": "{{ currentDateTime }}"
+            }
+          ],
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5-20250929",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agent_synthesize-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 221,
+      "height": 80
+    },
+    {
+      "id": "stickyNote_output",
+      "type": "stickyNote",
+      "position": {
+        "x": 550,
+        "y": 375
+      },
+      "data": {
+        "id": "stickyNote_output",
+        "label": "Sticky Note",
+        "version": 1,
+        "name": "stickyNoteAgentflow",
+        "type": "StickyNote",
+        "color": "#fee440",
+        "baseClasses": [
+          "StickyNote"
+        ],
+        "category": "Agent Flows",
+        "description": "Add notes to the agent flow",
+        "inputParams": [
+          {
+            "label": "",
+            "name": "note",
+            "type": "string",
+            "rows": 1,
+            "placeholder": "Type something here",
+            "optional": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "note": "OUTPUT FORMAT:\nSynthesized response includes: 1) Domain agent answer (state.domain.response), 2) Routing metadata (state.route.chosen, confidence, alternates), 3) Domain name (state.domain.name), 4) Fallback indicator if General route used."
+        },
+        "outputAnchors": [
+          {
+            "id": "stickyNote_output-output-stickyNoteAgentflow",
+            "label": "Sticky Note",
+            "name": "stickyNoteAgentflow"
+          }
+        ],
+        "outputs": {}
+      },
+      "width": 300,
+      "height": 122
+    },
+    {
+      "id": "directReply_final",
+      "type": "agentFlow",
+      "position": {
+        "x": 750,
+        "y": 100
+      },
+      "data": {
+        "id": "directReply_final",
+        "label": "Direct Reply",
+        "version": 1,
+        "name": "directReplyAgentflow",
+        "type": "DirectReply",
+        "color": "#4DDBBB",
+        "hideOutput": true,
+        "baseClasses": [
+          "DirectReply"
+        ],
+        "category": "Agent Flows",
+        "description": "Directly reply to the user with a message and terminate the workflow",
+        "inputParams": [
+          {
+            "label": "Message",
+            "name": "directReplyMessage",
+            "type": "string",
+            "rows": 4,
+            "acceptVariable": true,
+            "id": "directReply_final-input-directReplyMessage-string",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "directReplyMessage": "<p>✅ <strong>Routing Complete</strong></p><p></p><p>Intent-based routing successfully directed query to appropriate domain-specific agent.</p><p></p><p>📊 <strong>Execution Summary:</strong></p><p>• Router analyzed intent with confidence scoring</p><p>• Domain agent provided specialized response</p><p>• Synthesizer compiled final output with metadata</p><p></p><p>Response includes routing confidence, alternate paths, and domain-specific expertise.</p>"
+        },
+        "outputAnchors": [],
+        "outputs": {}
+      },
+      "width": 205,
+      "height": 67
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "router_condition",
+      "targetHandle": "router_condition-input",
+      "type": "buttonedge",
+      "id": "edge_start_to_router",
+      "label": "question"
+    },
+    {
+      "source": "router_condition",
+      "sourceHandle": "router_condition-output-0",
+      "target": "agent_billing",
+      "targetHandle": "agent_billing-input",
+      "type": "buttonedge",
+      "id": "edge_route_billing",
+      "label": "Billing"
+    },
+    {
+      "source": "router_condition",
+      "sourceHandle": "router_condition-output-1",
+      "target": "agent_technical",
+      "targetHandle": "agent_technical-input",
+      "type": "buttonedge",
+      "id": "edge_route_technical",
+      "label": "Technical"
+    },
+    {
+      "source": "router_condition",
+      "sourceHandle": "router_condition-output-2",
+      "target": "agent_general",
+      "targetHandle": "agent_general-input",
+      "type": "buttonedge",
+      "id": "edge_route_general",
+      "label": "General"
+    },
+    {
+      "source": "router_condition",
+      "sourceHandle": "router_condition-output-3",
+      "target": "agent_fail",
+      "targetHandle": "agent_fail-input",
+      "type": "buttonedge",
+      "id": "edge_route_fail",
+      "label": "FAIL"
+    },
+    {
+      "source": "agent_billing",
+      "sourceHandle": "agent_billing-output-agentAgentflow",
+      "target": "agent_synthesize",
+      "targetHandle": "agent_synthesize-input",
+      "type": "buttonedge",
+      "id": "edge_billing_to_synth",
+      "label": "response"
+    },
+    {
+      "source": "agent_technical",
+      "sourceHandle": "agent_technical-output-agentAgentflow",
+      "target": "agent_synthesize",
+      "targetHandle": "agent_synthesize-input",
+      "type": "buttonedge",
+      "id": "edge_tech_to_synth",
+      "label": "response"
+    },
+    {
+      "source": "agent_general",
+      "sourceHandle": "agent_general-output-agentAgentflow",
+      "target": "agent_synthesize",
+      "targetHandle": "agent_synthesize-input",
+      "type": "buttonedge",
+      "id": "edge_gen_to_synth",
+      "label": "response"
+    },
+    {
+      "source": "agent_fail",
+      "sourceHandle": "agent_fail-output-agentAgentflow",
+      "target": "agent_synthesize",
+      "targetHandle": "agent_synthesize-input",
+      "type": "buttonedge",
+      "id": "edge_fail_to_synth",
+      "label": "error"
+    },
+    {
+      "source": "agent_synthesize",
+      "sourceHandle": "agent_synthesize-output-agentAgentflow",
+      "target": "directReply_final",
+      "targetHandle": "directReply_final-input",
+      "type": "buttonedge",
+      "id": "edge_final_to_reply",
+      "label": "complete"
+    }
+  ]
+}
