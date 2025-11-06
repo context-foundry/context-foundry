@@ -45,7 +45,8 @@ class FlowiseValidator:
         self.validate_pattern_06_tool_structure()
         self.validate_pattern_08_missing_inputparams()
         self.validate_pattern_10_hil_gate_inputparams()
-        self.validate_pattern_14_node_type_mismatch()  # NEW! CRITICAL
+        self.validate_pattern_14_node_type_mismatch()  # CRITICAL
+        self.validate_pattern_15_missing_agent_state_updates()  # NEW! CRITICAL
         self.validate_structure_authority()
 
         # Report results
@@ -440,6 +441,62 @@ class FlowiseValidator:
         else:
             print()
 
+    def validate_pattern_15_missing_agent_state_updates(self):
+        """Pattern #15: Missing Agent State Updates (CRITICAL)"""
+        print("[Pattern #15] Agent State Updates Validation (CRITICAL)")
+
+        # Only validate if there are multiple agents (chaining pattern)
+        agent_nodes = [n for n in self.nodes if n.get('data', {}).get('type') == 'Agent']
+
+        if len(agent_nodes) < 2:
+            print("  ℹ️  Single agent or no agents - state updates not required\n")
+            return
+
+        # Validate each agent node
+        for node in agent_nodes:
+            node_id = node.get('id', 'unknown')
+            node_label = node.get('data', {}).get('label', 'Unknown')
+
+            # Check 1: agentStateUpdates exists in inputParams
+            input_params = node.get('data', {}).get('inputParams', [])
+            has_state_updates_param = any(
+                p.get('name') == 'agentStateUpdates' for p in input_params
+            )
+
+            if not has_state_updates_param:
+                self.errors.append(
+                    f"  ❌ Agent '{node_label}' (id: {node_id}) missing 'agentStateUpdates' in inputParams\n"
+                    f"     Without this, workflow will stop after this agent\n"
+                    f"     Add inputParam: {{\"name\": \"agentStateUpdates\", \"type\": \"array\", ...}}"
+                )
+                continue  # Skip inputs check if inputParams is missing
+
+            # Check 2: agentStateUpdates configuration in inputs
+            inputs = node.get('data', {}).get('inputs', {})
+            state_updates = inputs.get('agentStateUpdates', [])
+
+            if not state_updates or len(state_updates) == 0:
+                self.errors.append(
+                    f"  ❌ Agent '{node_label}' (id: {node_id}) has no agentStateUpdates configuration\n"
+                    f"     Agent cannot update Flow State - workflow will not progress\n"
+                    f"     Add inputs.agentStateUpdates: [{{\"key\": \"variable_name\", \"value\": \"{{ artifact_id }}\"}}]"
+                )
+
+            # Check 3: System message uses artifact output pattern
+            system_message = inputs.get('agentSystemMessage', '')
+            has_artifact = 'antArtifact identifier=' in system_message
+
+            if not has_artifact:
+                self.warnings.append(
+                    f"  ⚠️  Agent '{node_label}' (id: {node_id}) prompt doesn't use artifact output\n"
+                    f"     Recommended: Use <antArtifact identifier='variable_name'>...</antArtifact>\n"
+                    f"     This ensures reliable Flow State updates"
+                )
+
+        if not self.errors and not self.warnings:
+            print("  ✅ All agents have proper state management configured (Pattern #15 passed)\n")
+        else:
+            print()
     def validate_structure_authority(self):
         """FLOWISE-STRUCTURE-AUTHORITY.md validation"""
         print("[STRUCTURE] FLOWISE-STRUCTURE-AUTHORITY Compliance")

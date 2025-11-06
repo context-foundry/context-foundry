@@ -208,6 +208,74 @@ For ConditionAgent (AI routing), reference pattern files:
 
 **See Also:**
 - FAILURE_PATTERNS.md - Pattern #14 for complete documentation
+
+   🚨🚨🚨 **CRITICAL: Agent State Management (Pattern #15)** 🚨🚨🚨
+
+   For **EVERY** Agent node in multi-agent workflows (2+ agents):
+
+   **MUST ADD: agentStateUpdates Configuration**
+
+   1. **Add to inputParams**:
+      ```json
+      {
+        "label": "Update State",
+        "name": "agentStateUpdates",
+        "type": "array",
+        "optional": true,
+        "array": [
+          {
+            "label": "Key",
+            "name": "key",
+            "type": "string",
+            "placeholder": "e.g., extracted_data"
+          },
+          {
+            "label": "Value",
+            "name": "value",
+            "type": "string",
+            "acceptVariable": true,
+            "placeholder": "e.g., {{ extracted_data }}"
+          }
+        ],
+        "id": "{nodeId}-input-agentStateUpdates-array"
+      }
+      ```
+
+   2. **Add to inputs** (state update mappings):
+      ```json
+      {
+        "inputs": {
+          "agentStateUpdates": [
+            {"key": "output_variable", "value": "{{ artifact_identifier }}"}
+          ]
+        }
+      }
+      ```
+
+   3. **Agent Prompt Pattern** (artifact-based output):
+      ```
+      OUTPUT: Create an artifact called "{identifier}":
+
+      <antArtifact identifier="{identifier}" type="application/json">
+      {structured output}
+      </antArtifact>
+
+      DO NOT respond conversationally. Only output the artifact.
+      ```
+
+   **Common State Mappings**:
+   - DataExtractor: `{"key": "extracted_data", "value": "{{ extracted_data }}"}`
+   - Validator: `{"key": "validation_result", "value": "{{ validation_result }}"}`
+   - Enricher: `{"key": "enriched_data", "value": "{{ enriched_data }}"}`
+   - Report: `{"key": "final_report", "value": "{{ final_report }}"}`
+
+   **WHY THIS MATTERS**:
+   ❌ WITHOUT agentStateUpdates: Workflow stops after first agent, agents respond conversationally
+   ✅ WITH agentStateUpdates: Workflow progresses automatically through entire agent chain
+
+   **Reference**: Pattern #1 (Chaining) - /Users/name/homelab/afv2-pattern-01-chaining/01-chaining.json
+   **Failure Pattern**: FAILURE_PATTERN_15_MISSING_AGENT_STATE_UPDATES.md
+
 - NODE_TYPE_REGISTRY.md - Authoritative node type reference
 - validate_workflow.py - Automated Pattern #14 detection (line 282)
 
