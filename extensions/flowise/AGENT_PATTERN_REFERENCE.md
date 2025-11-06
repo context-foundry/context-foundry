@@ -10,13 +10,271 @@ This document defines the authoritative pattern for creating Flowise multi-agent
 
 ## Table of Contents
 
-1. [Core Architecture](#core-architecture)
-2. [Node Types](#node-types)
-3. [Agent Input Parameters](#agent-input-parameters)
-4. [Actual Configured Values](#actual-configured-values)
-5. [Edges Structure](#edges-structure)
-6. [Critical Design Patterns](#critical-design-patterns)
-7. [Implementation Checklist](#implementation-checklist)
+1. [Production-Ready Pattern Templates](#production-ready-pattern-templates) ⭐ NEW
+2. [Core Architecture](#core-architecture)
+3. [Node Types](#node-types)
+4. [Agent Input Parameters](#agent-input-parameters)
+5. [Actual Configured Values](#actual-configured-values)
+6. [Edges Structure](#edges-structure)
+7. [Critical Design Patterns](#critical-design-patterns)
+8. [Implementation Checklist](#implementation-checklist)
+
+---
+
+## Production-Ready Pattern Templates
+
+**🎯 Start Here: 9 Validated AFv2 Templates**
+
+Context Foundry provides **9 production-ready AgentFlow v2 pattern templates** that demonstrate fundamental multi-agent orchestration patterns. All templates are validator-passing, FLOWISE-STRUCTURE-AUTHORITY compliant, and production-tested.
+
+### Quick Reference
+
+| # | Pattern | Complexity | Use Case | File |
+|---|---------|------------|----------|------|
+| 1 | **Chaining** | Low | Fixed sequential pipeline | `01-chaining.json` |
+| 2 | **Parallel** | Medium | Multi-source research | `02-parallel.json` |
+| 3 | **Routing** | Medium | Intent classification | `03-routing.json` |
+| 4 | **Iteration** | High | Quality refinement loop | `04-iteration.json` |
+| 5 | **Looping** | High | Validation retry logic | `05-looping.json` |
+| 6 | **Hierarchy** | Very High | Task delegation | `06-hierarchy.json` |
+| 7 | **Batch Processing** | Medium | Array/list processing | `07-batch-processing.json` |
+| 8 | **Conditional Retry** | High | Score-based validation | `08-conditional-retry.json` |
+| 9 | **API Integration** | Medium | External HTTP API calls | `09-api-integration.json` |
+
+### Pattern Descriptions
+
+#### 1️⃣ Chaining Pattern
+**Flow:** Start → Chain1 → HIL Gate → Chain2 → Chain3 → Report
+
+Linear 3-step sequential processing pipeline with human-in-the-loop approval gate. Demonstrates artifact handoffs between agents via state updates.
+
+**Use Cases:**
+- Document processing pipelines (OCR → Extract → Transform → Format)
+- Data transformation workflows (Raw → Clean → Enrich → Publish)
+- Sequential approval workflows
+
+**Key Features:**
+- 4 agents with clear specialization
+- HIL gate with exactly 5 inputParams (Pattern #11 compliant)
+- State updates tracking artifacts through pipeline (`artifacts.artifact_1/2/final_draft`)
+
+#### 2️⃣ Parallel Pattern
+**Flow:** Start → [Web Search || KB || Analyzer] → Aggregator → Report
+
+Multi-source information gathering with concurrent execution and conflict resolution. Demonstrates fan-out/fan-in architecture.
+
+**Use Cases:**
+- Research synthesis from multiple sources
+- Competitive analysis (web + internal data)
+- Risk assessment with parallel checks
+
+**Key Features:**
+- 3 concurrent branches executing in parallel
+- Built-in Anthropic tools (`web_search_20250305`)
+- Aggregator with deduplication logic
+
+#### 3️⃣ Routing Pattern
+**Flow:** Start → Router → [Billing | Technical | General | FAIL] → Synthesize
+
+Intent-based routing to domain-specific agents with confidence threshold validation.
+
+**Use Cases:**
+- Customer support routing
+- Ticketing systems
+- Multi-domain chatbots
+
+**Key Features:**
+- 4-path routing (including FAIL path for invalid input)
+- Confidence threshold (0.6, configurable)
+- Metadata tracking (confidence scores, alternate routes)
+
+#### 4️⃣ Iteration Pattern
+**Flow:** Start → Planner → Gate → Research → [loop back to Gate] → Report
+
+Iterative quality improvement loop toward target score with convergence detection.
+
+**Use Cases:**
+- Content refinement until quality threshold met
+- Code optimization to performance target
+- Data quality improvement cycles
+
+**Key Features:**
+- Loop-back edge (Research → Gate, marked `animated: true`)
+- Scoring system (0.0-1.0 scale, target 0.85)
+- Max iterations limit (default 3)
+- Early exit on convergence
+
+#### 5️⃣ Looping Pattern
+**Flow:** Start → Generate → Validate → Gate → [PASS → Return | FIX → Fix Plan → loop back | FAIL → Return]
+
+Validation-driven retry loop with automated testing and fix generation.
+
+**Use Cases:**
+- Test-driven development (generate → test → fix loop)
+- Policy compliance checking
+- Automated code review with fixes
+
+**Key Features:**
+- 3-path gate (PASS, FIX, FAIL - not just binary)
+- Loop-back edge (Fix Plan → Generate, marked `animated: true`)
+- FAIL path prevents returning broken code after max retries
+- Max retries limit (default 3)
+
+#### 6️⃣ Hierarchy Pattern
+**Flow:** Start → Supervisor → Checker → [Worker → Reviewer → loop back to Checker] → Final
+
+Supervisor-orchestrated task delegation to specialist roles with review gates.
+
+**Use Cases:**
+- Software development workflows (planning → coding → review)
+- Content creation (research → write → edit)
+- Project management (delegate → execute → validate)
+
+**Key Features:**
+- Role-based architecture (Supervisor, Software Engineer, Code Reviewer)
+- Step iterator (`hierarchy.current_step` incremented by Reviewer)
+- Loop-back edge (Reviewer → Checker, marked `animated: true`)
+- Role-specific tool ACLs
+
+#### 7️⃣ Batch Processing Pattern
+**Flow:** Start → Planner → Iteration Node → [Processor Agent (N times)] → Aggregator → Direct Reply
+
+For-each iteration over arrays with sequential processing and result aggregation.
+
+**Use Cases:**
+- Sentiment analysis on multiple reviews/documents
+- Batch document processing (OCR, extraction, classification)
+- Multi-item quality checks (validate N files)
+- Parallel data transformation pipelines
+
+**Key Features:**
+- **Iteration Node** for-each loops over input arrays
+- Processor agent executes once per item (N iterations)
+- Aggregator combines results from all iterations
+- Handles empty arrays gracefully (0 iterations, no errors)
+- State tracking: `batch.items[]`, `batch.results[]`
+
+#### 8️⃣ Conditional Retry Pattern
+**Flow:** Start → Generator → Validator → Condition Node (score check) → [PASS → Success Agent → Direct Reply | RETRY → Retry Controller → loop back to Generator | FAIL → Fail Agent → Direct Reply]
+
+Score-based validation with deterministic threshold check and intelligent retry loop.
+
+**Use Cases:**
+- Content quality validation with iterative improvement
+- Code generation with automated testing
+- Data validation with auto-correction
+- Compliance checking with remediation
+
+**Key Features:**
+- **Condition Node** deterministic threshold check (score ≥ 0.85, no LLM cost)
+- **Retry Controller (Condition Agent)** uses Haiku model (90% cost savings)
+- Loop-back edge with max 3 retries (prevents infinite loops)
+- Dual terminal paths (Success/Fail Direct Reply nodes)
+- State tracking: `retry.count`, `validation.score`, `retry.history[]`
+
+#### 9️⃣ API Integration Pattern
+**Flow:** Start → Parameter Extractor → HTTP Request Node → Condition Node (status check) → [SUCCESS (200) → Format Agent → Direct Reply | ERROR (5xx) → Retry Agent → loop back to HTTP | FATAL (4xx) → Error Handler → Direct Reply]
+
+External HTTP API integration with intelligent error handling and retry logic.
+
+**Use Cases:**
+- Third-party API integration (payment, weather, geocoding)
+- Webhook processing with retry logic
+- Data enrichment from external sources
+- Service composition (orchestrating multiple APIs)
+
+**Key Features:**
+- **HTTP Request Node** makes external API calls (GET/POST/PUT/DELETE)
+- **Condition Node** routes by HTTP status code (200/4xx/5xx)
+- Smart error handling: 5xx = retryable, 4xx = fatal (no retry)
+- Exponential backoff on retries (2s, 4s, 8s)
+- Max 3 retries for server errors
+- State tracking: `api.request`, `api.response`, `api.status_code`, `api.retry_count`
+
+### Template Location
+
+All templates are located in:
+```
+/Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/
+```
+
+**📖 Full Documentation:** See `templates/afv2-patterns/README.md` for:
+- Detailed pattern descriptions
+- Configuration standards
+- State schema conventions
+- Validation checklist
+- Customization guide
+- Troubleshooting tips
+
+### Template Standards
+
+All 9 templates follow these standards:
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| **Model** | `claude-sonnet-4-5-20250929` | Latest Claude Sonnet |
+| **Credential** | `"Anthropic API Key"` | Flowise credential label |
+| **agentMessages** | `""` (empty string) | REQUIRED per FLOWISE-STRUCTURE-AUTHORITY |
+| **Tools** | Nested `agentSelectedToolConfig` | Pattern #6 compliant |
+| **HIL Gates** | Exactly 5 inputParams | Pattern #11 compliant |
+| **Memory** | `agentEnableMemory: true` | All agents have memory |
+| **Validation** | 100% pass rate | All pass `validate_workflow.py` |
+
+### When to Use Each Pattern
+
+**Choose Chaining when:**
+- You have a fixed, linear sequence of operations
+- Each step depends on the previous step's output
+- You need human approval at key decision points
+
+**Choose Parallel when:**
+- You need information from multiple independent sources
+- Operations can run concurrently without dependencies
+- You need to aggregate/deduplicate results
+
+**Choose Routing when:**
+- Input can fall into distinct categories
+- Each category requires specialized handling
+- You want confidence-based routing logic
+
+**Choose Iteration when:**
+- You're improving a single artifact over time
+- Quality can be measured on a numeric scale
+- You want to stop when quality threshold is reached
+
+**Choose Looping when:**
+- You have explicit validation criteria (tests, policy checks)
+- Failures can be automatically fixed and retried
+- You need distinct PASS/FIX/FAIL outcomes
+
+**Choose Hierarchy when:**
+- You have distinct roles (supervisor, worker, reviewer)
+- Tasks are delegated to specialists
+- Work products need review before proceeding
+
+**Choose Batch Processing when:**
+- You need to process an array or list of items
+- Each item requires the same processing logic
+- Results should be aggregated at the end
+- Items can be processed sequentially (not concurrently)
+
+**Choose Conditional Retry when:**
+- Output quality can be measured with a score (0.0-1.0)
+- You want deterministic threshold checks (no LLM cost)
+- Failed attempts can be improved with specific feedback
+- You need to prevent infinite loops (max retries)
+
+**Choose API Integration when:**
+- You need to call external HTTP APIs
+- You must handle different HTTP status codes (200/4xx/5xx)
+- Server errors (5xx) should retry, client errors (4xx) should fail immediately
+- You want exponential backoff on retries
+
+### Integration with Orchestrator
+
+**Architect Phase:** Reads `afv2-patterns/README.md` and selects appropriate pattern based on workflow requirements documented in `architecture.md`.
+
+**Builder Phase:** Reads selected pattern JSON and uses it as structural reference, customizing agent personas, state keys, and thresholds for the specific use case.
 
 ---
 
@@ -164,7 +422,7 @@ Central routing node that detects user intent and directs to appropriate special
     "inputs": {
       "conditionAgentModel": "[MODEL_TYPE]",
       "conditionAgentInstructions": "[ROUTING_INSTRUCTIONS]",
-      "conditionAgentInput": "{{ question }}",
+      "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
       "conditionAgentScenarios": [
         {"scenario": "User is asking about Navigation"},
         {"scenario": "User is asking about HCM Core"},
@@ -261,6 +519,37 @@ ConditionAgent routing decisions MUST be deterministic and consistent. High temp
 - ❌ Poor user experience
 
 **Always use temperature 0.1-0.3 for ConditionAgent nodes.**
+
+#### CRITICAL: Variable Format in conditionAgentInput
+
+The `conditionAgentInput` field MUST use Flowise's **rich text HTML format** for variables, not plain text. This is required for proper JSON escaping during execution.
+
+**❌ WRONG - Plain text format (causes malformed JSON):**
+```json
+"conditionAgentInput": "{{ question }}"
+```
+
+**✅ CORRECT - Rich text HTML format:**
+```json
+"conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>"
+```
+
+**Why this matters:**
+- Plain text format: Flowise doesn't recognize it as a variable → no JSON escaping → malformed JSON sent to LLM
+- Rich text format: Flowise recognizes the variable → proper JSON escaping → valid JSON sent to LLM
+
+**Common variables:**
+- User input: `data-id="question"` → `{{ question }}`
+- Form data: `data-id="$form.fieldName"` → `{{ $form.fieldName }}`
+- Flow state: `data-id="$flow.state.key"` → `{{ $flow.state.key }}`
+
+**Symptoms of using plain text format:**
+- Condition node executes but produces no output
+- LLM receives malformed JSON (missing quotes around input value)
+- Node doesn't route to any output path
+- Logs show: `{"input": can I book a trip, ...}` instead of `{"input": "can I book a trip", ...}`
+
+**See also:** [Pattern #13: ConditionAgent Variable Format](#conditionagent-variable-format-pattern-13) in FAILURE_PATTERNS.md
 
 #### Critical: Output Anchors
 
@@ -1671,6 +1960,378 @@ Loop Nodes complement HIL gates by handling rejection paths:
 - Leave escalation path unwired (edge cases need handling)
 - Use vague approval states (be explicit: "APPROVED" not "OK")
 - Nest loops inside loops (causes complexity explosion)
+
+---
+
+### 6. Sticky Note Node (stickyNoteAgentflow)
+
+A documentation and annotation node that helps explain and document parts of the agent flow. Sticky notes are purely informational - they don't execute logic or connect to other nodes via edges. They're used to make flows more readable and maintainable for humans.
+
+#### Complete Structure
+
+```json
+{
+  "id": "stickyNoteAgentflow_[NUMBER]",
+  "position": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "data": {
+    "id": "stickyNoteAgentflow_[NUMBER]",
+    "label": "Sticky Note",
+    "version": 1,
+    "name": "stickyNoteAgentflow",
+    "type": "StickyNote",
+    "color": "#fee440",
+    "baseClasses": ["StickyNote"],
+    "category": "Agent Flows",
+    "description": "Add notes to the agent flow",
+    "inputParams": [
+      {
+        "label": "",
+        "name": "note",
+        "type": "string",
+        "rows": 1,
+        "placeholder": "Type something here",
+        "optional": true,
+        "id": "stickyNoteAgentflow_[N]-input-note-string",
+        "display": true
+      }
+    ],
+    "inputAnchors": [],
+    "inputs": {
+      "note": "Your documentation text here"
+    },
+    "outputAnchors": [
+      {
+        "id": "stickyNoteAgentflow_[N]-output-stickyNoteAgentflow",
+        "label": "Sticky Note",
+        "name": "stickyNoteAgentflow"
+      }
+    ],
+    "outputs": {},
+    "selected": false
+  },
+  "type": "stickyNote",
+  "width": 215,
+  "height": 122,
+  "positionAbsolute": {
+    "x": [FLOAT],
+    "y": [FLOAT]
+  },
+  "selected": false,
+  "dragging": false
+}
+```
+
+#### Key Attributes
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| `name` | `"stickyNoteAgentflow"` | MUST be exactly this |
+| `type` | `"StickyNote"` | Identifies as sticky note node |
+| `color` | `"#fee440"` | Yellow (standard sticky note color) |
+| `version` | `1` | Current stable version |
+| `width` | `215` | Standard width |
+| `height` | `122` | Standard height (can vary based on content) |
+
+#### Input Parameters
+
+**note** (Optional)
+- The text content of the sticky note
+- Can be multi-line (use `\n` for line breaks)
+- Supports markdown-style formatting in some Flowise versions
+- Maximum recommended length: 200-300 characters for readability
+
+#### Usage Guidelines
+
+**When to Use Sticky Notes:**
+- ✅ Explaining complex routing logic in Condition nodes
+- ✅ Documenting why a specific agent configuration was chosen
+- ✅ Providing context about external system integrations
+- ✅ Noting important considerations for human reviewers
+- ✅ Marking areas that need future enhancement
+- ✅ Explaining non-obvious workflow decisions
+
+**When NOT to Use Sticky Notes:**
+- ❌ As a substitute for clear agent labels
+- ❌ To document every single node (creates visual clutter)
+- ❌ For information that should be in system prompts
+- ❌ As TODO markers (use proper project management tools)
+
+#### Placement Best Practices
+
+**Positioning Relative to Nodes:**
+
+1. **Above Node**: Use when explaining what happens BEFORE execution
+   ```
+   [Sticky Note: "User input validated here"]
+          ↓
+   [Validation Agent]
+   ```
+
+2. **Below Node**: Use when explaining OUTCOMES or results
+   ```
+   [Decision Node]
+          ↓
+   [Sticky Note: "Routes to 3 possible agents based on intent"]
+   ```
+
+3. **To the Side**: Use for general context or warnings
+   ```
+   [Agent Node] ← [Sticky Note: "⚠️ Requires API key in config"]
+   ```
+
+**Position Offsets:**
+- Above: Typically `y_offset = -150` to `-180` from target node
+- Below: Typically `y_offset = +550` to `+600` from target node
+- Left side: Typically `x_offset = -300` from target node
+- Right side: Typically `x_offset = +350` from target node
+
+#### Content Templates
+
+**Template 1: Explaining Node Purpose**
+```json
+{
+  "inputs": {
+    "note": "PURPOSE:\nThis agent handles all payroll-related inquiries including:\n- Direct deposit setup\n- Pay stub access\n- Tax withholding questions"
+  }
+}
+```
+
+**Template 2: Warning/Caution**
+```json
+{
+  "inputs": {
+    "note": "IMPORTANT:\nThis node requires the 'payroll_api' tool to be configured in Flowise.\nSee INTEGRATION_GUIDE.md for setup instructions."
+  }
+}
+```
+
+**Template 3: Routing Logic Explanation**
+```json
+{
+  "inputs": {
+    "note": "ROUTING LOGIC:\nCondition outputs:\n0 = Navigation questions\n1 = Payroll questions\n2 = Benefits questions\n3 = General help (fallback)"
+  }
+}
+```
+
+**Template 4: Configuration Note**
+```json
+{
+  "inputs": {
+    "note": "CONFIGURATION:\nTemperature set to 0.1 for deterministic routing.\nDO NOT increase above 0.3 or routing becomes inconsistent."
+  }
+}
+```
+
+**Template 5: Human Action Required**
+```json
+{
+  "inputs": {
+    "note": "MANUAL SETUP REQUIRED:\nAfter importing:\n1. Select the 'employee-data' document store\n2. Configure OpenAI API credential\n3. Test with sample query"
+  }
+}
+```
+
+#### Integration with Agent Flows
+
+**Pattern A: Documenting Complex Flows**
+```
+[Start] → [Sticky: "Main entry point"]
+   ↓
+[Condition] → [Sticky: "Routes based on user intent - see routing table below"]
+   ↓
+[Agent A] → [Sticky: "Handles technical support - requires tech_support_tools"]
+```
+
+**Pattern B: Explaining Approval Workflows**
+```
+[Detection Agent]
+   ↓
+[Sticky: "If conflict detected, pauses here for human review"]
+   ↓
+[HIL Approval Gate]
+   ↓proceed / ↓reject
+```
+
+**Pattern C: Warning About External Dependencies**
+```
+[API Integration Agent] ← [Sticky: "WARNING: Requires external API\nEndpoint: https://api.example.com\nAuth: Bearer token in config"]
+```
+
+#### Visual Layout Recommendations
+
+**Spacing:**
+- Minimum 50px between sticky note and target node (prevents overlap)
+- Align sticky notes horizontally when possible (cleaner look)
+- Group related sticky notes together
+
+**Quantity Guidelines:**
+- Simple flow (3-5 nodes): 1-2 sticky notes maximum
+- Medium flow (6-10 nodes): 2-4 sticky notes
+- Complex flow (11+ nodes): 4-6 sticky notes maximum
+
+**Priority Levels:**
+- Critical (warnings, required actions): Use ALL CAPS headers
+- Important (configuration notes): Clear headers with colons
+- Informational (explanations): Concise descriptions
+
+#### Common Use Cases
+
+**1. Explaining Condition Node Routing**
+```json
+{
+  "id": "stickyNoteAgentflow_0",
+  "position": {"x": 800, "y": 50},
+  "data": {
+    "inputs": {
+      "note": "INTENT ROUTING:\nScenario 0 → Navigation Agent\nScenario 1 → Payroll Agent\nScenario 2 → Benefits Agent\nScenario 3 → General Help\n\nSee AGENT_PATTERN_REFERENCE.md for routing logic details."
+    }
+  }
+}
+```
+
+**2. Documenting HIL Gates**
+```json
+{
+  "id": "stickyNoteAgentflow_1",
+  "position": {"x": 500, "y": 600},
+  "data": {
+    "inputs": {
+      "note": "HUMAN APPROVAL REQUIRED:\nPauses workflow for conflict of interest review.\n\nProceed = Continue with waiver\nReject = Escalate to compliance team"
+    }
+  }
+}
+```
+
+**3. Configuration Requirements**
+```json
+{
+  "id": "stickyNoteAgentflow_2",
+  "position": {"x": 200, "y": -100},
+  "data": {
+    "inputs": {
+      "note": "SETUP CHECKLIST:\n- Configure OpenAI API key\n- Select 'workday_docs' document store\n- Enable web_search_preview tool\n- Set memory to 'allMessages'"
+    }
+  }
+}
+```
+
+**4. External System Integration**
+```json
+{
+  "id": "stickyNoteAgentflow_3",
+  "position": {"x": 1000, "y": 300},
+  "data": {
+    "inputs": {
+      "note": "EXTERNAL API INTEGRATION:\nConnects to: Workday HCM API\nAuth: OAuth 2.0 (configured in Tools)\nRate limit: 100 requests/minute\nTimeout: 30 seconds"
+    }
+  }
+}
+```
+
+#### Technical Details
+
+**No Edge Connections:**
+Sticky notes do NOT connect to other nodes via edges. They are standalone annotation elements.
+
+❌ **WRONG**: Creating edges from/to sticky notes
+```json
+{
+  "edges": [
+    {
+      "source": "stickyNoteAgentflow_0",
+      "target": "agentAgentflow_1"  // ❌ Invalid - sticky notes don't connect
+    }
+  ]
+}
+```
+
+✅ **CORRECT**: Sticky notes are independent
+```json
+{
+  "nodes": [
+    {"id": "stickyNoteAgentflow_0", ...},  // ✅ Standalone documentation
+    {"id": "agentAgentflow_1", ...}
+  ],
+  "edges": []  // No edges to/from sticky note
+}
+```
+
+**Output Anchors:**
+While sticky notes have an `outputAnchors` array (for internal Flowise compatibility), these anchors are never used in practice. The output anchor exists for UI rendering purposes only.
+
+#### Best Practices Summary
+
+**✅ DO:**
+- Use sticky notes sparingly (quality over quantity)
+- Place notes strategically near complex logic
+- Keep text concise (under 300 characters)
+- Use clear ALL CAPS headers for categorization (PURPOSE, ROUTING LOGIC, CONFIGURATION, etc.)
+- Explain WHY, not just WHAT
+- Document manual setup steps required after import
+- Warn about external dependencies
+
+**❌ DON'T:**
+- Add sticky notes to every node (creates clutter)
+- Use as a substitute for clear agent labels
+- Include implementation details that belong in code
+- Create edges to/from sticky notes
+- Overlap sticky notes with functional nodes
+- Use excessive formatting or very long text
+
+#### Example: Well-Documented Flow
+
+```json
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "data": {"label": "Start", ...}
+    },
+    {
+      "id": "stickyNoteAgentflow_0",
+      "position": {"x": -164, "y": -50},
+      "data": {
+        "inputs": {
+          "note": "WORKFLOW PURPOSE:\nMulti-agent HCM support system.\nRoutes user queries to specialized agents based on intent detection."
+        }
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "data": {"label": "Detect User Intention", ...}
+    },
+    {
+      "id": "stickyNoteAgentflow_1",
+      "position": {"x": 500, "y": 50},
+      "data": {
+        "inputs": {
+          "note": "ROUTING LOGIC:\n0=Navigation | 1=Payroll | 2=Benefits\nTemp=0.2 for consistent routing"
+        }
+      }
+    },
+    {
+      "id": "agentAgentflow_0",
+      "data": {"label": "Agent.Navigation", ...}
+    },
+    {
+      "id": "stickyNoteAgentflow_2",
+      "position": {"x": 800, "y": 350},
+      "data": {
+        "inputs": {
+          "note": "POST-IMPORT SETUP:\nConfigure 'workday_nav_docs' document store for this agent."
+        }
+      }
+    }
+  ],
+  "edges": [
+    // Edge connections between functional nodes only, no edges to sticky notes
+  ]
+}
+```
 
 ---
 

@@ -152,6 +152,64 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    /Users/name/homelab/context-foundry/extensions/flowise/templates/
    (15 real Flowise exports for comparison and validation)
 
+   **🎯 PRODUCTION-READY PATTERN TEMPLATES (NEW - USE THESE FIRST):**
+
+   **MANDATORY FIRST STEP - Read Pattern Catalog**:
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/README.md
+   ```
+
+   This directory contains 9 **validated, production-ready** AFv2 pattern templates:
+
+   | Pattern | Use When | Template File |
+   |---------|----------|---------------|
+   | **Chaining** | Sequential pipeline with artifact handoffs | `01-chaining.json` |
+   | **Parallel** | Multi-source research/analysis (concurrent) | `02-parallel.json` |
+   | **Routing** | Intent classification to domain agents | `03-routing.json` |
+   | **Iteration** | Quality-driven refinement loop | `04-iteration.json` |
+   | **Looping** | Test-driven validation retry | `05-looping.json` |
+   | **Hierarchy** | Supervisor → Worker → Reviewer orchestration | `06-hierarchy.json` |
+   | **Batch Processing** | Process arrays/lists of items | `07-batch-processing.json` |
+   | **Conditional Retry** | Score-based validation with retry | `08-conditional-retry.json` |
+   | **API Integration** | External HTTP API calls with error handling | `09-api-integration.json` |
+
+   **Pattern Selection Guidance**:
+   - **Chaining**: Linear workflows (e.g., OCR → Extract → Transform → Format)
+   - **Parallel**: Need multiple sources (e.g., web + KB + analysis)
+   - **Routing**: Support tickets, multi-domain chatbots
+   - **Iteration**: Improve artifact quality until target score reached
+   - **Looping**: Generate → Test → Fix cycle (code, policy compliance)
+   - **Hierarchy**: Task delegation to specialist roles
+   - **Batch Processing**: Process multiple items in arrays (e.g., sentiment analysis on 10 reviews)
+   - **Conditional Retry**: Quality validation with automatic retry and improvement
+   - **API Integration**: External API calls with smart retry (5xx) vs fail (4xx) logic
+
+   **Architect Action Required**:
+   1. Read afv2-patterns/README.md to understand all 9 patterns
+   2. Select the pattern that best matches the workflow type from Scout report
+   3. Reference the selected pattern JSON as structural baseline in architecture.md
+   4. Document pattern choice and customizations needed
+
+   **Why Use These Templates**:
+   - ✅ All templates pass validate_workflow.py (100% pass rate)
+   - ✅ FLOWISE-STRUCTURE-AUTHORITY compliant
+   - ✅ Pattern #1-13 compliant (no known failure patterns)
+   - ✅ Self-contained agents (inline model/memory config)
+   - ✅ Fully documented (sticky notes with ALL CAPS prefixes)
+   - ✅ Production-tested structure
+
+   **Example Architecture Documentation**:
+   ```markdown
+   ## Selected Pattern Template
+   Pattern: Chaining (01-chaining.json)
+   Rationale: User needs sequential document processing (OCR → Extract → Format)
+
+   Customizations Required:
+   - Agent 1: OCR extraction instead of generic Chain1
+   - Agent 2: Data extraction (keep HIL gate before this step)
+   - Agent 3: Format output as JSON
+   ```
+
    Architecture Requirements:
    - Node-level error handling (try/catch, fallbacks)
    - Retry logic for LLM/API calls (exponential backoff)

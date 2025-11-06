@@ -141,6 +141,70 @@ print("✅ All agents have required standard tools")
 These are NOT phantom references (Pattern #5) and NOT incorrect structure (Pattern #6).
 They are real, working tools with correct Flowise UI JSON structure.
 
+🎯 **PRODUCTION-READY PATTERN TEMPLATES (READ BEFORE GENERATING):**
+
+**MANDATORY: Read Selected Pattern Template**
+
+If Architect selected an AFv2 pattern template in architecture.md, Builder MUST:
+
+1. **Read the Pattern README** to understand the template structure:
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/README.md
+   ```
+
+2. **Read the Selected Pattern JSON** (e.g., if Architect selected "Chaining"):
+   ```
+   Read /Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/01-chaining.json
+   ```
+
+3. **Use Pattern as Structural Reference**:
+   - Copy node structure (agentAgentflow, conditionAgentAgentflow)
+   - Preserve edge patterns (source/target handle format)
+   - Keep sticky note documentation style (ALL CAPS prefixes)
+   - Maintain state update patterns (agentStateUpdates)
+   - Follow loop-back edge structure (if pattern has loops)
+
+**Available Patterns**:
+- `01-chaining.json` - Sequential 3-agent chain with HIL gate
+- `02-parallel.json` - 3-branch parallel + aggregation
+- `03-routing.json` - 4-path intent router (Billing/Tech/General/FAIL)
+- `04-iteration.json` - Quality loop with scoring (max 3 iterations)
+- `05-looping.json` - Validation retry loop (max 3 retries)
+- `06-hierarchy.json` - Supervisor → Worker → Reviewer orchestration
+- `07-batch-processing.json` - Iteration Node for-each array processing
+- `08-conditional-retry.json` - Condition Node + score-based retry loop
+- `09-api-integration.json` - HTTP Request Node + status code routing
+
+**Pattern Customization Workflow**:
+1. Read selected pattern JSON to understand structure
+2. Copy node skeleton (id, type, data, position)
+3. Customize agent personas/instructions for user's use case
+4. Update state keys to match Architect's schema
+5. Adjust thresholds/limits (iteration max, confidence threshold)
+6. Add/remove agents as needed (keep edge connectivity valid)
+7. Update sticky notes to reflect customizations
+
+**Example (Customizing Chaining Pattern)**:
+```
+Architect selected: Chaining (01-chaining.json)
+User's use case: OCR → Extract → Format pipeline
+
+Customizations:
+1. Agent 1 ("Chain1" → "OCR Agent"): OCR extraction persona
+2. Agent 2 ("Chain2" → "Extract Agent"): Data extraction persona
+3. Agent 3 ("Chain3" → "Format Agent"): JSON formatting persona
+4. State keys: artifacts.artifact_1/2/final_draft → artifacts.ocr_text/extracted_data/final_json
+5. HIL gate: Keep as-is (approval before Extract step)
+```
+
+**Why Use Pattern Templates**:
+- ✅ Guaranteed validator-passing structure (100% pass rate)
+- ✅ Correct tool structure (no Pattern #6 violations)
+- ✅ Proper edge connectivity (no Pattern #4 disconnections)
+- ✅ Self-contained agents (no Pattern #3 splitting)
+- ✅ Complete sticky note documentation
+- ✅ Production-tested node IDs and anchors
+
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Use BAML for type-safe phase tracking (see template above):
 ```bash
