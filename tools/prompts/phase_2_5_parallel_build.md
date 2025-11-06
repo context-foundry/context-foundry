@@ -271,7 +271,7 @@ If Architect selected an AFv2 pattern template in architecture.md, Builder MUST:
    - Maintain state update patterns (agentStateUpdates)
    - Follow loop-back edge structure (if pattern has loops)
 
-**Available Patterns**:
+**Available Patterns (1-9 in afv2-patterns/, 10-13 in separate repos)**:
 - `01-chaining.json` - Sequential 3-agent chain with HIL gate
 - `02-parallel.json` - 3-branch parallel + aggregation
 - `03-routing.json` - 4-path intent router (Billing/Tech/General/FAIL)
@@ -281,6 +281,10 @@ If Architect selected an AFv2 pattern template in architecture.md, Builder MUST:
 - `07-batch-processing.json` - Iteration Node for-each array processing
 - `08-conditional-retry.json` - Condition Node + score-based retry loop
 - `09-api-integration.json` - HTTP Request Node + status code routing
+- **Pattern #10** (`afv2-pattern-10-rag`) - RAG with Retriever + LLM nodes, citations, confidence scoring
+- **Pattern #11** (`afv2-pattern-11-calculator`) - Smart cost optimization: Tool vs LLM conditional routing
+- **Pattern #12** (`afv2-pattern-12-doc-qa`) - Document Q&A with confidence threshold (≥0.7) and graceful fallback
+- **Pattern #13** (`afv2-pattern-13-pipeline`) - ETL data pipeline with validation and dual success/error paths
 
 **Pattern Customization Workflow**:
 1. Read selected pattern JSON to understand structure

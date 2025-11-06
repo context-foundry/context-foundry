@@ -23,14 +23,17 @@ This document defines the authoritative pattern for creating Flowise multi-agent
 
 ## Production-Ready Pattern Templates
 
-**🎯 Start Here: 9 Validated AFv2 Templates**
+**🎯 Start Here: 13 Validated AFv2 Templates**
 
-Context Foundry provides **9 production-ready AgentFlow v2 pattern templates** that demonstrate fundamental multi-agent orchestration patterns. All templates are validator-passing, FLOWISE-STRUCTURE-AUTHORITY compliant, and production-tested.
+Context Foundry provides **13 production-ready AgentFlow v2 pattern templates** that demonstrate fundamental multi-agent orchestration patterns. All templates are validator-passing, FLOWISE-STRUCTURE-AUTHORITY compliant, and production-tested.
+
+**Patterns 1-9** are in `/extensions/flowise/templates/afv2-patterns/`
+**Patterns 10-13** are in separate GitHub repos: `/homelab/afv2-pattern-*/`
 
 ### Quick Reference
 
-| # | Pattern | Complexity | Use Case | File |
-|---|---------|------------|----------|------|
+| # | Pattern | Complexity | Use Case | File/Location |
+|---|---------|------------|----------|---------------|
 | 1 | **Chaining** | Low | Fixed sequential pipeline | `01-chaining.json` |
 | 2 | **Parallel** | Medium | Multi-source research | `02-parallel.json` |
 | 3 | **Routing** | Medium | Intent classification | `03-routing.json` |
@@ -40,6 +43,10 @@ Context Foundry provides **9 production-ready AgentFlow v2 pattern templates** t
 | 7 | **Batch Processing** | Medium | Array/list processing | `07-batch-processing.json` |
 | 8 | **Conditional Retry** | High | Score-based validation | `08-conditional-retry.json` |
 | 9 | **API Integration** | Medium | External HTTP API calls | `09-api-integration.json` |
+| 10 | **RAG** | Medium | Document Q&A with citations | `afv2-pattern-10-rag/` |
+| 11 | **Smart Calculator** | Medium | Cost optimization (tool vs LLM) | `afv2-pattern-11-calculator/` |
+| 12 | **Document Q&A** | Medium | RAG with confidence routing | `afv2-pattern-12-doc-qa/` |
+| 13 | **Data Pipeline** | Medium | ETL with validation | `afv2-pattern-13-pipeline/` |
 
 ### Pattern Descriptions
 
@@ -191,14 +198,102 @@ External HTTP API integration with intelligent error handling and retry logic.
 - Max 3 retries for server errors
 - State tracking: `api.request`, `api.response`, `api.status_code`, `api.retry_count`
 
+#### 🔟 RAG Pattern
+**Flow:** Start → Query Analyzer → Retriever → Generator LLM → Formatter → Direct Reply
+
+Retrieval-Augmented Generation combining semantic document search with LLM-powered generation for accurate, cited answers grounded in a knowledge base.
+
+**Use Cases:**
+- Document-based Q&A systems
+- Knowledge base search with citations
+- Technical documentation assistants
+- Internal wiki/policy query systems
+
+**Key Features:**
+- **Retriever Node** (`retrieverAgentflow`) - Semantic search over Document Stores
+- **LLM Node** (`llmAgentflow`) - 50-70% cheaper than agents (no tool overhead)
+- **Citation Tracking** - Source metadata preserved through pipeline
+- **Confidence Scoring** - 0.0-1.0 scale based on document relevance
+- JSON structured output for consistent response format
+- State tracking: `query`, `retrieved_docs`, `answer`, `sources_used`, `confidence`
+
+#### 1️⃣1️⃣ Smart Calculator Pattern
+**Flow:** Start → Input Parser → Condition Node → [SIMPLE → Calculator Tool | COMPLEX → Math Solver LLM] → Result Formatter → Direct Reply
+
+Cost optimization through conditional routing: cheap deterministic tools for simple operations, expensive LLM reasoning only when necessary.
+
+**Use Cases:**
+- Math tutoring systems (validate arithmetic before complex reasoning)
+- Finance calculators (simple computations vs financial modeling)
+- Data transformation (deterministic operations vs interpretive analysis)
+- Cost-sensitive applications (maximize tool usage, minimize LLM costs)
+
+**Key Features:**
+- **Tool Node** - Deterministic JavaScript calculator (zero LLM cost)
+- **Custom Function Node** - Custom logic execution
+- Intelligent classification (Haiku model analyzes input complexity)
+- **16x cost savings** for simple operations ($0.0002 vs $0.0032)
+- Dual routing paths with clear cost optimization
+- State tracking: `input_type`, `calculation_method`, `result`, `cost`
+
+#### 1️⃣2️⃣ Document Q&A Pattern
+**Flow:** Start → Retriever → Relevance Checker LLM → Condition Node (threshold check) → [HIGH confidence → Success Reply | LOW confidence → Failure Reply]
+
+RAG with confidence-based routing providing graceful "cannot answer" fallback when document relevance is low.
+
+**Use Cases:**
+- Technical documentation Q&A
+- Corporate knowledge base search
+- Educational content query
+- Policy and compliance documents
+
+**Key Features:**
+- **Retriever Node** - Semantic search in vector store (top 5 chunks)
+- **LLM Node** - Relevance scoring (0.0-1.0 scale)
+- **Condition Node** - Deterministic threshold check (≥ 0.7)
+- Dual terminal paths (success and failure Direct Reply nodes)
+- Graceful fallback for out-of-scope queries
+- State tracking: `question`, `retrieved_docs`, `relevance_score`, `answer`, `sources`
+
+#### 1️⃣3️⃣ Data Pipeline Pattern
+**Flow:** Start → Extractor → Validator → Condition Router → [VALID → Transformer → Loader → Success Reply | INVALID → Error Handler → Error Reply]
+
+Complete ETL (Extract-Transform-Load) pipeline with schema validation and conditional success/error routing.
+
+**Use Cases:**
+- Data validation and transformation
+- CSV/JSON import with validation
+- Data quality checks before loading
+- ETL workflows with error handling
+
+**Key Features:**
+- **LLM Nodes** for stateless data transformations (not agent nodes)
+- **Custom Function Nodes** for data parsing/transformation
+- Schema validation with structured error messages
+- Dual terminal paths for clean success/error separation
+- State management: `raw_data`, `extracted_data`, `validation_result`, `transformed_data`
+- Example schema: name (string), email (string), age (number)
+
 ### Template Location
 
-All templates are located in:
+**Patterns 1-9** are located in:
 ```
 /Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/
 ```
 
-**📖 Full Documentation:** See `templates/afv2-patterns/README.md` for:
+**Patterns 10-13** are in separate GitHub repositories:
+```
+/Users/name/homelab/afv2-pattern-10-rag/
+/Users/name/homelab/afv2-pattern-11-calculator/
+/Users/name/homelab/afv2-pattern-12-doc-qa/
+/Users/name/homelab/afv2-pattern-13-pipeline/
+```
+
+**📖 Full Documentation:**
+- **Patterns 1-9**: See `templates/afv2-patterns/README.md`
+- **Patterns 10-13**: See individual `README.md` and `INTEGRATION_GUIDE.md` in each repo
+
+Documentation includes:
 - Detailed pattern descriptions
 - Configuration standards
 - State schema conventions
@@ -208,7 +303,7 @@ All templates are located in:
 
 ### Template Standards
 
-All 9 templates follow these standards:
+All 13 patterns follow these standards:
 
 | Setting | Value | Notes |
 |---------|-------|-------|

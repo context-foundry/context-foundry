@@ -159,7 +159,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    Read /Users/name/homelab/context-foundry/extensions/flowise/templates/afv2-patterns/README.md
    ```
 
-   This directory contains 9 **validated, production-ready** AFv2 pattern templates:
+   This directory contains 13 **validated, production-ready** AFv2 pattern templates:
 
    | Pattern | Use When | Template File |
    |---------|----------|---------------|
@@ -172,6 +172,10 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    | **Batch Processing** | Process arrays/lists of items | `07-batch-processing.json` |
    | **Conditional Retry** | Score-based validation with retry | `08-conditional-retry.json` |
    | **API Integration** | External HTTP API calls with error handling | `09-api-integration.json` |
+   | **RAG** | Retrieval-augmented Q&A with citations | GitHub: `afv2-pattern-10-rag` |
+   | **Smart Calculator** | Cost optimization: deterministic tools vs LLM | GitHub: `afv2-pattern-11-calculator` |
+   | **Document Q&A** | RAG with confidence routing and fallback | GitHub: `afv2-pattern-12-doc-qa` |
+   | **Data Pipeline** | ETL with validation and error handling | GitHub: `afv2-pattern-13-pipeline` |
 
    **Pattern Selection Guidance**:
    - **Chaining**: Linear workflows (e.g., OCR → Extract → Transform → Format)
@@ -183,12 +187,24 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - **Batch Processing**: Process multiple items in arrays (e.g., sentiment analysis on 10 reviews)
    - **Conditional Retry**: Quality validation with automatic retry and improvement
    - **API Integration**: External API calls with smart retry (5xx) vs fail (4xx) logic
+   - **RAG**: Document-based Q&A with semantic search and citations (Retriever + LLM nodes)
+   - **Smart Calculator**: Optimize costs by routing simple operations to tools, complex to LLM
+   - **Document Q&A**: RAG with confidence scoring (≥0.7) and graceful "cannot answer" fallback
+   - **Data Pipeline**: ETL workflows with schema validation and conditional success/error paths
 
    **Architect Action Required**:
-   1. Read afv2-patterns/README.md to understand all 9 patterns
-   2. Select the pattern that best matches the workflow type from Scout report
-   3. Reference the selected pattern JSON as structural baseline in architecture.md
-   4. Document pattern choice and customizations needed
+   1. Read afv2-patterns/README.md to understand patterns 1-9 (local templates)
+   2. Review patterns 10-13 documentation in `/Users/name/homelab/afv2-pattern-*/README.md` if needed
+   3. Select the pattern that best matches the workflow type from Scout report
+   4. Reference the selected pattern JSON as structural baseline in architecture.md
+   5. Document pattern choice and customizations needed
+
+   **Note on Patterns 10-13**:
+   - Patterns 10-13 are in separate GitHub repositories (not in afv2-patterns/)
+   - Pattern #10 (RAG): Use for semantic document search with LLM generation
+   - Pattern #11 (Calculator): Use when cost optimization is critical (tool vs LLM routing)
+   - Pattern #12 (Doc Q&A): Use for RAG with confidence thresholds and graceful fallbacks
+   - Pattern #13 (Pipeline): Use for ETL/data transformation workflows with validation
 
    **Why Use These Templates**:
    - ✅ All templates pass validate_workflow.py (100% pass rate)
