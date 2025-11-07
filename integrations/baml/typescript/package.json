@@ -1,0 +1,50 @@
+{
+  "name": "baml-anthropic-integration",
+  "version": "1.0.0",
+  "description": "BAML + Anthropic Agent Skills integration examples",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "example:document": "tsx src/examples/documentProcessing.ts",
+    "example:data": "tsx src/examples/dataAnalysis.ts",
+    "example:skill": "tsx src/examples/customSkill.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "RUN_INTEGRATION_TESTS=true vitest run tests/integration.test.ts",
+    "lint": "eslint src/ --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "baml",
+    "anthropic",
+    "agent",
+    "skills",
+    "llm",
+    "type-safe",
+    "typescript"
+  ],
+  "author": "Context Foundry <noreply@contextfoundry.dev>",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@boundaryml/baml": "^0.75.0",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
