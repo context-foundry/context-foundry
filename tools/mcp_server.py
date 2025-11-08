@@ -13,7 +13,7 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # Add parent directory to path for imports (must be before local imports!)
 sys.path.insert(0, str(Path(__file__).parent.parent))
