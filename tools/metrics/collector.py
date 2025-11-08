@@ -37,6 +37,7 @@ class MetricsCollector:
 
         self._usage_queue = queue.Queue()
         self._shutdown = threading.Event()
+        self._last_timestamp = None  # Track previous timestamp for latency calculation
 
     def collect_from_subprocess(self,
                                 process: subprocess.Popen,
@@ -133,6 +134,18 @@ class MetricsCollector:
         for usage in usages:
             cost = self.calculator.calculate_cost(usage, model)
 
+            # Calculate latency from timestamps if available
+            latency_ms = None
+            if usage.timestamp and self._last_timestamp:
+                latency_ms = self.parser.calculate_latency(
+                    self._last_timestamp,
+                    usage.timestamp
+                )
+
+            # Update last timestamp for next calculation
+            if usage.timestamp:
+                self._last_timestamp = usage.timestamp
+
             self.db.record_api_call(
                 phase_id=phase_id,
                 model=model,
@@ -140,7 +153,7 @@ class MetricsCollector:
                 tokens_output=usage.output_tokens,
                 tokens_cached=usage.cache_read_tokens,
                 cost=cost,
-                latency_ms=None,  # TODO: Calculate from timestamps
+                latency_ms=latency_ms,
                 request_id=usage.request_id
             )
 
@@ -233,9 +246,22 @@ class MetricsCollector:
         total_input = 0
         total_output = 0
         total_cached = 0
+        last_timestamp = None
 
         for usage in self.parser.parse_log_file(str(log_file)):
             cost = self.calculator.calculate_cost(usage, model)
+
+            # Calculate latency from timestamps if available
+            latency_ms = None
+            if usage.timestamp and last_timestamp:
+                latency_ms = self.parser.calculate_latency(
+                    last_timestamp,
+                    usage.timestamp
+                )
+
+            # Update last timestamp for next calculation
+            if usage.timestamp:
+                last_timestamp = usage.timestamp
 
             self.db.record_api_call(
                 phase_id=phase_id,
@@ -244,6 +270,7 @@ class MetricsCollector:
                 tokens_output=usage.output_tokens,
                 tokens_cached=usage.cache_read_tokens,
                 cost=cost,
+                latency_ms=latency_ms,
                 request_id=usage.request_id
             )
 

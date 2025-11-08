@@ -97,6 +97,53 @@ class TestE2EMetrics:
         # Cleanup
         Path(log_file.name).unlink()
 
+    def test_latency_calculation_from_timestamps(self):
+        """Test that latency is calculated from timestamps when available"""
+        # Create log file with timestamps
+        log_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.log')
+        log_file.write('2025-01-15 10:00:00 {"id": "msg_1", "usage": {"input_tokens": 1000, "output_tokens": 500}}\n')
+        log_file.write('2025-01-15 10:00:03 {"id": "msg_2", "usage": {"input_tokens": 2000, "output_tokens": 800}}\n')
+        log_file.write('2025-01-15 10:00:07 {"id": "msg_3", "usage": {"input_tokens": 1500, "output_tokens": 600}}\n')
+        log_file.close()
+
+        # Collect metrics
+        self.collector.collect_from_log_file(
+            Path(log_file.name),
+            session_id="latency-test",
+            phase_name="Scout",
+            model="claude-sonnet-4"
+        )
+
+        # Get the build to access phase_id
+        build = self.db.get_build("latency-test")
+        conn = self.db._get_connection()
+        cursor = conn.cursor()
+
+        # Get API calls for this build
+        cursor.execute("""
+            SELECT ac.latency_ms
+            FROM api_calls ac
+            JOIN phases p ON ac.phase_id = p.id
+            WHERE p.build_id = ?
+            ORDER BY ac.id
+        """, (build['id'],))
+
+        latencies = [row[0] for row in cursor.fetchall()]
+
+        # First call should have no latency (no previous timestamp)
+        assert latencies[0] is None
+
+        # Second call should have ~3000ms latency (3 seconds)
+        assert latencies[1] is not None
+        assert latencies[1] == pytest.approx(3000, abs=100)
+
+        # Third call should have ~4000ms latency (4 seconds)
+        assert latencies[2] is not None
+        assert latencies[2] == pytest.approx(4000, abs=100)
+
+        # Cleanup
+        Path(log_file.name).unlink()
+
     def test_finalize_build(self):
         """Test build finalization"""
         # Create build with metrics
