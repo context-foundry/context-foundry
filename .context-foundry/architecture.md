@@ -1,245 +1,516 @@
-# Test Architecture: Evolution Communication Module Coverage
+# Test Coverage Architecture: Context Foundry Tools
 
-## System Overview
+## Overview
 
-We're adding comprehensive tests for the Evolution System's communication layer, which currently has 0-56% test coverage. These modules provide critical functionality for daemon monitoring, REST API access, and real-time WebSocket updates.
+This architecture defines a comprehensive test suite for Context Foundry's critical path modules, focusing on Phase 1 (Context Budget System) as the highest priority deliverable.
 
-## File Structure
+## System Architecture
 
 ```
-tests/evolution/
-├── __init__.py (exists)
-├── test_web_dashboard_server.py (NEW - ~200 lines)
-├── test_rest_api_endpoints.py (NEW - ~150 lines)
-└── test_websocket_streaming.py (NEW - ~100 lines)
+Context Foundry Test Suite
+├── Unit Tests (Isolated module testing)
+│   ├── test_check_context_budget_cli.py (NEW)
+│   ├── test_context_budget.py (ENHANCE)
+│   ├── test_config_manager.py (ENHANCE)
+│   └── test_cache_*.py (ENHANCE)
+├── Integration Tests (Module interactions)
+│   ├── test_budget_integration.py (NEW)
+│   └── test_evolution_e2e.py (EXISTS)
+└── Mocks & Fixtures
+    ├── conftest.py (shared fixtures)
+    └── test_helpers/ (reusable mocks)
 ```
 
-## Module 1: test_web_dashboard_server.py
+## Phase 1: Context Budget System Tests
 
-**Target**: `tools/evolution/communication/web_dashboard_server.py` (657 lines, 0% covered)
+### Module: check_context_budget.py (Priority 1)
 
-### Architecture
+**Current Coverage**: 0% (227 statements)
+**Target Coverage**: 80%+
+
+#### Test File: tests/test_check_context_budget_cli.py
+
+**Test Structure**:
 ```python
-# Test Class Structure:
-class TestGitHubIntegration:
-    """Tests for GitHub API functions"""
-    - test_get_github_owner_from_https_url()
-    - test_get_github_owner_from_ssh_url()
-    - test_get_github_owner_no_git_remote()
-    - test_get_open_prs_success()
-    - test_get_open_prs_api_failure()
-    - test_get_open_prs_no_token()
-    - test_check_pr_merged_true()
-    - test_check_pr_merged_false()
+import pytest
+import sys
+import json
+from pathlib import Path
+from unittest.mock import patch, mock_open, MagicMock
 
-class TestDatabaseQueries:
-    """Tests for SQLite database queries"""
-    - test_get_daemon_status_running()
-    - test_get_daemon_status_no_db()
-    - test_get_task_stats()
-    - test_get_recent_tasks()
-
-class TestFlaskRoutes:
-    """Tests for Flask endpoints"""
-    - test_dashboard_route_renders()
-    - test_api_status_route()
-    - test_api_pr_check_route()
+# Test Classes:
+# 1. TestCLIArgumentParsing
+# 2. TestBuildContextExtraction  
+# 3. TestBudgetPreCheck
+# 4. TestTokenRecording
+# 5. TestReportGeneration
+# 6. TestExitCodes
+# 7. TestIntegration
 ```
 
-### Dependencies & Mocking
-- **Mock**: `subprocess.run` (for git commands)
-- **Mock**: `requests.get` (for GitHub API)
-- **Mock**: `sqlite3.connect` (for database)
-- **Fixture**: Flask test_client for route testing
-- **Fixture**: Temporary directories for database files
+#### Detailed Test Specifications
 
-### Critical Paths
-1. GitHub API error handling (rate limits, network failures)
-2. Database connection failures
-3. PR detection logic for self-improvement branches
-4. JSON response formatting
-
-## Module 2: test_rest_api_endpoints.py
-
-**Target**: `tools/evolution/communication/rest_api.py` (missing endpoint coverage)
-
-### Architecture
+**Class 1: TestCLIArgumentParsing**
 ```python
-# Test Class Structure:
-class TestCreateTask:
-    """Tests for POST /tasks"""
-    - test_create_task_valid_payload()
-    - test_create_task_missing_fields()
-    - test_create_task_invalid_type()
-    - test_create_task_database_error()
+def test_parse_args_check_before()
+    # Test: --phase scout --check-before
+    # Expected: args.phase='scout', args.check_before=True
 
-class TestListTasks:
-    """Tests for GET /tasks"""
-    - test_list_tasks_empty()
-    - test_list_tasks_with_filters()
-    - test_list_tasks_pagination()
+def test_parse_args_tokens()
+    # Test: --phase builder --tokens 45000
+    # Expected: args.phase='builder', args.tokens=45000
 
-class TestGetTask:
-    """Tests for GET /tasks/{id}"""
-    - test_get_task_exists()
-    - test_get_task_not_found()
+def test_parse_args_report()
+    # Test: --report
+    # Expected: args.report=True
 
-class TestHealthCheck:
-    """Tests for GET /health"""
-    - test_health_check_healthy()
-    - test_health_check_degraded()
+def test_parse_args_invalid_phase()
+    # Test: --phase invalid
+    # Expected: ArgumentError or validation error
+
+def test_parse_args_missing_required()
+    # Test: No arguments
+    # Expected: Shows usage, exit code 1
 ```
 
-### Dependencies & Mocking
-- **Framework**: FastAPI TestClient
-- **Mock**: TaskQueueManager database operations
-- **Fixture**: Test FastAPI app instance
-
-### Critical Paths
-1. Request validation
-2. Database transaction handling
-3. Error response formatting
-4. Authentication/authorization (if implemented)
-
-## Module 3: test_websocket_streaming.py
-
-**Target**: `tools/evolution/communication/websocket_stream.py` (2 lines, 0% covered)
-
-### Architecture
+**Class 2: TestBuildContextExtraction**
 ```python
-# Test Class Structure:
-class TestWebSocketStreaming:
-    """Tests for WebSocket handler"""
-    - test_stream_handler_accepts_connection()
-    - test_stream_handler_sends_messages()
-    - test_stream_handler_handles_disconnection()
-    - test_stream_handler_error_recovery()
+def test_get_build_context_with_session_file(tmp_path)
+    # Setup: Create .context-foundry/session-summary.json
+    # Test: Extract session_id, task, mode, timestamps
+    # Expected: Returns dict with correct values
+
+def test_get_build_context_missing_session_file(tmp_path)
+    # Setup: No session file
+    # Test: get_build_context()
+    # Expected: Returns empty dict or defaults
+
+def test_get_build_context_invalid_json(tmp_path)
+    # Setup: Malformed JSON in session file
+    # Test: get_build_context()
+    # Expected: Handles error gracefully, returns partial data
+
+def test_get_build_context_with_github_pr(tmp_path)
+    # Setup: session-summary.json with github.pr_url
+    # Test: Extract PR metadata
+    # Expected: Returns github_pr_url in context
 ```
 
-### Dependencies & Mocking
-- **Framework**: pytest-asyncio
-- **Mock**: WebSocket connection object
-- **Mock**: Message queue/stream source
+**Class 3: TestBudgetPreCheck**
+```python
+def test_pre_check_smart_zone(tmp_path, capsys)
+    # Setup: Phase with low token count
+    # Test: --phase scout --check-before
+    # Expected: Exit code 0, "SMART" zone message
 
-### Critical Paths
-1. Connection establishment
-2. Message serialization
-3. Connection cleanup on error
-4. Async error handling
+def test_pre_check_dumb_zone(tmp_path, capsys)
+    # Setup: Phase approaching budget limit
+    # Test: --phase architect --check-before
+    # Expected: Exit code 1, warning message
 
-## Testing Strategy
+def test_pre_check_critical_zone(tmp_path, capsys)
+    # Setup: Phase exceeding budget
+    # Test: --phase builder --check-before
+    # Expected: Exit code 2, critical warning
 
-### Setup & Fixtures
+def test_pre_check_no_session_data(tmp_path, capsys)
+    # Setup: Fresh directory, no session
+    # Test: --phase scout --check-before
+    # Expected: Exit code 0, estimates only
+```
 
-**conftest.py additions** (if needed):
+**Class 4: TestTokenRecording**
+```python
+def test_record_tokens_updates_session(tmp_path)
+    # Setup: Existing session-summary.json
+    # Test: --phase scout --tokens 12000
+    # Expected: session-summary.json updated with scout: 12000
+
+def test_record_tokens_creates_session(tmp_path)
+    # Setup: No session file
+    # Test: --phase scout --tokens 12000
+    # Expected: Creates session-summary.json
+
+def test_record_tokens_multiple_phases(tmp_path)
+    # Setup: Record scout, then architect, then builder
+    # Test: Sequential --tokens calls
+    # Expected: All phases recorded, no overwrites
+
+def test_record_tokens_invalid_value(tmp_path)
+    # Test: --phase scout --tokens invalid
+    # Expected: Error message, exit code 1
+```
+
+**Class 5: TestReportGeneration**
+```python
+def test_generate_full_report(tmp_path, capsys)
+    # Setup: Complete session with all phases
+    # Test: --report
+    # Expected: Markdown report with all sections
+
+def test_generate_report_partial_session(tmp_path, capsys)
+    # Setup: Session with only 3 phases completed
+    # Test: --report
+    # Expected: Report shows completed phases only
+
+def test_generate_report_with_warnings(tmp_path, capsys)
+    # Setup: Some phases exceeded budget
+    # Test: --report
+    # Expected: Report includes warnings section
+
+def test_generate_report_with_github_pr(tmp_path, capsys)
+    # Setup: Session with GitHub PR URL
+    # Test: --report
+    # Expected: Report includes PR link
+
+def test_report_ascii_visualization(tmp_path, capsys)
+    # Setup: Session with varied token usage
+    # Test: --report
+    # Expected: ASCII bar chart present and formatted
+
+def test_report_performance_zones(tmp_path, capsys)
+    # Setup: Session with mixed zones
+    # Test: --report
+    # Expected: Zone analysis (% in SMART/DUMB/CRITICAL)
+```
+
+**Class 6: TestExitCodes**
+```python
+def test_exit_code_success()
+    # Test: Valid operation
+    # Expected: sys.exit(0)
+
+def test_exit_code_dumb_zone_warning()
+    # Test: Budget warning (40-80%)
+    # Expected: sys.exit(1)
+
+def test_exit_code_critical_zone()
+    # Test: Budget critical (80%+)
+    # Expected: sys.exit(2)
+
+def test_exit_code_error()
+    # Test: Invalid arguments or file errors
+    # Expected: sys.exit(1)
+```
+
+**Class 7: TestIntegration**
+```python
+def test_full_workflow_check_then_record(tmp_path)
+    # Test: Complete workflow
+    # 1. --phase scout --check-before → exit 0
+    # 2. (simulate scout work)
+    # 3. --phase scout --tokens 12000 → updates session
+    # 4. --phase architect --check-before → exit 0
+    # Expected: All steps succeed, session updated
+
+def test_workflow_with_budget_exceeded(tmp_path)
+    # Test: Workflow where phase exceeds budget
+    # 1. --phase scout --tokens 50000 (exceeds 14K budget)
+    # 2. --phase architect --check-before → warns
+    # Expected: Warning generated, recommendation shown
+```
+
+### Module: context_budget/*.py (Priority 1)
+
+**Enhancement to tests/test_context_budget.py**
+
+#### Additional Test Classes
+
+**Class: TestTokenCounterEdgeCases**
+```python
+def test_count_file_tokens_unicode()
+    # Test: File with Unicode characters (émojis, 中文)
+    # Expected: Correct token count
+
+def test_count_file_tokens_very_large()
+    # Test: File > 1MB
+    # Expected: Handles without memory issues
+
+def test_count_file_tokens_empty()
+    # Test: Empty file
+    # Expected: Returns 0
+
+def test_count_file_tokens_binary()
+    # Test: Binary file (image, PDF)
+    # Expected: Handles gracefully or errors appropriately
+
+def test_count_tokens_with_code_blocks()
+    # Test: Markdown with code blocks
+    # Expected: Accurate token count for code
+
+def test_count_directory_tokens_recursive(tmp_path)
+    # Test: Directory with nested structure
+    # Expected: Counts all files recursively
+```
+
+**Class: TestContextBudgetMonitorPhaseTracking**
+```python
+def test_monitor_record_phase_usage()
+    # Test: Record usage for multiple phases
+    # Expected: Each phase tracked separately
+
+def test_monitor_detect_budget_overrun()
+    # Test: Phase exceeds allocated budget
+    # Expected: Warning generated
+
+def test_monitor_calculate_remaining_budget()
+    # Test: After 3 phases, check remaining
+    # Expected: Correct calculation
+
+def test_monitor_get_performance_zone()
+    # Test: Given usage %, determine zone
+    # Expected: SMART (0-40%), DUMB (40-80%), CRITICAL (80-100%)
+```
+
+**Class: TestContextBudgetReporterFormatting**
+```python
+def test_reporter_generate_markdown()
+    # Test: Generate full markdown report
+    # Expected: Valid markdown with all sections
+
+def test_reporter_ascii_bar_chart()
+    # Test: Generate ASCII visualization
+    # Expected: Correctly scaled bars
+
+def test_reporter_calculate_statistics()
+    # Test: Peak usage, average, zone percentages
+    # Expected: Correct calculations
+
+def test_reporter_format_recommendations()
+    # Test: Generate optimization suggestions
+    # Expected: Actionable recommendations when budget exceeded
+```
+
+## Mock Strategy
+
+### External Dependencies to Mock
+
+1. **File System Operations**
+   - `Path.exists()`, `Path.read_text()`, `Path.write_text()`
+   - Use `tmp_path` fixture for actual file tests
+   - Mock for error conditions
+
+2. **subprocess.run()**
+   - Mock for git commands
+   - Mock for gh CLI commands
+   - Return controlled output
+
+3. **sys.exit()**
+   - Mock to capture exit codes
+   - Use `pytest.raises(SystemExit)` pattern
+
+4. **Environment Variables**
+   - Mock `os.environ` for API keys
+   - Mock for configuration paths
+
+### Fixture Strategy
+
+**conftest.py additions**:
 ```python
 @pytest.fixture
-def temp_db():
-    """Temporary SQLite database for testing"""
-    db_path = tempfile.mktemp(suffix='.db')
-    yield db_path
-    if Path(db_path).exists():
-        Path(db_path).unlink()
+def mock_session_summary(tmp_path):
+    """Create a realistic session-summary.json"""
+    session = {
+        "session_id": "test-session",
+        "task": "Test task",
+        "mode": "new_project",
+        "started_at": "2025-01-13T10:00:00Z",
+        "context_budget": {
+            "scout": 12000,
+            "architect": 13500
+        }
+    }
+    session_file = tmp_path / ".context-foundry" / "session-summary.json"
+    session_file.parent.mkdir(parents=True, exist_ok=True)
+    session_file.write_text(json.dumps(session, indent=2))
+    return session_file
 
 @pytest.fixture
-def flask_test_client():
-    """Flask test client with app context"""
-    from tools.evolution.communication.web_dashboard_server import app
-    with app.test_client() as client:
-        yield client
+def mock_context_dir(tmp_path):
+    """Create a .context-foundry directory with standard structure"""
+    context_dir = tmp_path / ".context-foundry"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    return context_dir
 
 @pytest.fixture
-def mock_github_api():
-    """Mock GitHub API responses"""
-    with patch('requests.get') as mock:
-        yield mock
+def capture_exit_code(monkeypatch):
+    """Capture sys.exit() calls without actually exiting"""
+    exit_code = []
+    def mock_exit(code):
+        exit_code.append(code)
+    monkeypatch.setattr(sys, 'exit', mock_exit)
+    return exit_code
 ```
 
-### Mocking Strategy
+## Test Execution Strategy
 
-**Level 1 - External Dependencies:**
-- GitHub API calls → Mock with sample PR data
-- Git commands → Mock subprocess with fake remotes
-- Database connections → Use temporary SQLite files or mock entirely
+### Run Configuration
 
-**Level 2 - Internal Dependencies:**
-- TaskQueueManager → Mock database queries
-- Evolution daemon → Mock PID files and status
+**pytest.ini additions**:
+```ini
+[pytest]
+markers =
+    unit: Unit tests (isolated module tests)
+    integration: Integration tests (module interactions)
+    slow: Slow tests (> 1 second)
+    coverage: Coverage-focused tests
 
-**Level 3 - Network:**
-- HTTP requests → Use requests_mock library
-- WebSocket connections → Mock socket objects
+addopts =
+    --cov=tools
+    --cov-report=term-missing
+    --cov-report=html
+    --cov-report=json
+    -v
+    --strict-markers
+```
 
-### Coverage Measurement
+### Test Execution Commands
 
-Run tests with coverage:
 ```bash
-pytest tests/evolution/test_web_dashboard_server.py -v --cov=tools/evolution/communication/web_dashboard_server --cov-report=term-missing
-pytest tests/evolution/test_rest_api_endpoints.py -v --cov=tools/evolution/communication/rest_api --cov-report=term-missing
-pytest tests/evolution/test_websocket_streaming.py -v --cov=tools/evolution/communication/websocket_stream --cov-report=term-missing
+# Run all new tests
+pytest tests/test_check_context_budget_cli.py -v
+
+# Run with coverage
+pytest tests/test_check_context_budget_cli.py --cov=tools/check_context_budget
+
+# Run only unit tests
+pytest -m unit
+
+# Run fast tests only (exclude slow)
+pytest -m "not slow"
+
+# Generate coverage report
+pytest --cov=tools --cov-report=html
+open htmlcov/index.html
 ```
-
-Target: >80% line coverage for each module
-
-## Implementation Steps
-
-### Step 1: Create test files
-1. Create `tests/evolution/test_web_dashboard_server.py`
-2. Create `tests/evolution/test_rest_api_endpoints.py`
-3. Create `tests/evolution/test_websocket_streaming.py`
-
-### Step 2: Write tests (priority order)
-1. **Priority 1**: Web dashboard (most complex, 657 lines)
-2. **Priority 2**: REST API (critical infrastructure)
-3. **Priority 3**: WebSocket (smallest, 2 lines)
-
-### Step 3: Validate
-- Run each test file independently
-- Measure coverage for each target module
-- Fix any failing tests
-- Ensure all existing tests still pass
-
-### Step 4: Integration
-- Run full test suite
-- Verify no regressions
-- Check total coverage improvement
 
 ## Success Criteria
 
-✅ Web dashboard server: >80% coverage (currently 0%)
-✅ REST API endpoints: >80% coverage (currently 56%)
-✅ WebSocket handler: >80% coverage (currently 0%)
-✅ All 3 new test files pass
-✅ All existing tests still pass
-✅ No code changes to source files (only tests)
-✅ PR ready for review
+### Coverage Targets
 
-## Risk Mitigation
+- **check_context_budget.py**: 0% → 80%+ (180+ statements covered)
+- **context_budget/report.py**: 11.5% → 70%+ (80+ statements covered)
+- **context_budget/token_counter.py**: 22.2% → 70%+ (55+ statements covered)
+- **context_budget/monitor.py**: 30.8% → 70%+ (75+ statements covered)
 
-**Risk 1**: Flask app may require complex setup
-- **Mitigation**: Use app.test_client() which handles context automatically
+### Quality Metrics
 
-**Risk 2**: GitHub API mocking may be incomplete
-- **Mitigation**: Start with simple mock, add edge cases incrementally
+- All tests pass (100% pass rate)
+- No test flakiness (run 10 times, all pass)
+- Fast execution (< 10 seconds for all Phase 1 tests)
+- Clear, descriptive test names
+- Good assertions (test one thing per test)
+- Mock external dependencies (no real file writes outside tmp_path)
 
-**Risk 3**: WebSocket testing may require async complexity
-- **Mitigation**: Keep tests focused on handler logic, mock connection layer
+## Implementation Steps (Ordered)
 
-**Risk 4**: Database tests may have isolation issues
-- **Mitigation**: Use unique temporary databases per test, cleanup in fixtures
+### Step 1: Create Base Test File
+```bash
+touch tests/test_check_context_budget_cli.py
+# Add imports, fixtures, first test class
+```
 
-## Timeline
+### Step 2: Implement TestCLIArgumentParsing
+- Write all 5 test methods
+- Run tests, ensure they pass
+- Check coverage for argument parsing code
 
-- Web dashboard tests: 30-40 minutes
-- REST API tests: 20-30 minutes
-- WebSocket tests: 15-20 minutes
-- Debug/fixes: 15-20 minutes
-- **Total**: ~90 minutes
+### Step 3: Implement TestBuildContextExtraction
+- Write all 4 test methods
+- Use tmp_path for file creation
+- Verify JSON parsing edge cases
 
-## Documentation
+### Step 4: Implement TestBudgetPreCheck
+- Write all 4 test methods
+- Mock ContextBudgetMonitor calls
+- Test exit code paths
 
-Each test file will include:
-- Module docstring explaining purpose
-- Test class docstrings explaining what's being tested
-- Individual test docstrings with expected behavior
-- Comments explaining complex mocking scenarios
+### Step 5: Implement TestTokenRecording
+- Write all 4 test methods
+- Test session file creation/update
+- Verify JSON integrity
+
+### Step 6: Implement TestReportGeneration
+- Write all 6 test methods
+- Test markdown formatting
+- Verify ASCII visualization
+
+### Step 7: Implement TestExitCodes
+- Write all 4 test methods
+- Use pytest.raises(SystemExit)
+- Verify correct codes for each scenario
+
+### Step 8: Implement TestIntegration
+- Write 2 comprehensive workflow tests
+- Test realistic multi-step scenarios
+- Verify end-to-end behavior
+
+### Step 9: Enhance test_context_budget.py
+- Add 3 new test classes
+- Write 15+ new test methods
+- Focus on edge cases and error paths
+
+### Step 10: Run Full Test Suite
+```bash
+pytest tests/test_check_context_budget_cli.py tests/test_context_budget.py \
+  --cov=tools/check_context_budget \
+  --cov=tools/context_budget \
+  --cov-report=term-missing
+```
+
+### Step 11: Verify Coverage Targets
+- Check coverage report
+- Identify any remaining uncovered lines
+- Add targeted tests for gaps
+
+### Step 12: Documentation
+- Add docstrings to all test methods
+- Update TESTING.md if exists
+- Document how to run tests in README
+
+## Files to Create/Modify
+
+### New Files
+- `tests/test_check_context_budget_cli.py` (~500 lines)
+
+### Modified Files  
+- `tests/test_context_budget.py` (+300 lines)
+- `tests/conftest.py` (+50 lines for fixtures)
+- `pytest.ini` (+10 lines for markers)
+
+### Total Additions
+- ~860 lines of test code
+- ~75 new test methods
+- 3 new test files
+
+## Testing the Tests
+
+### Pre-commit Checklist
+- [ ] All tests pass locally
+- [ ] Coverage meets targets (80%+ for check_context_budget.py)
+- [ ] No test flakiness (run 10 times)
+- [ ] Tests run fast (< 10 seconds total)
+- [ ] Mocks used appropriately (no real git/gh calls)
+- [ ] Fixtures used for common setup
+- [ ] Test names are descriptive
+- [ ] Docstrings added to test classes/methods
+
+### CI/CD Integration
+- Tests will run on every commit (existing CI)
+- Coverage report generated automatically
+- Fail build if coverage decreases
+
+## Rollout Plan
+
+1. **Develop locally**: Implement all tests, verify coverage
+2. **Create PR**: Branch `self-improvement/task-ef38e92d`
+3. **Run CI**: Ensure all tests pass in CI environment
+4. **Review**: Self-review for quality and completeness
+5. **Merge**: Merge to main after validation
+6. **Monitor**: Track coverage improvements in subsequent builds
+
+---
+
+**Architecture Document Version**: 1.0  
+**Created**: 2025-01-13  
+**Target Delivery**: Phase 1 tests within this build cycle  
