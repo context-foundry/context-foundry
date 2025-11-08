@@ -66,9 +66,9 @@ class EvolutionDaemon:
             check_interval_seconds=30
         )
 
-        # Initialize evolution modes (pass watchdog for process registration)
+        # Initialize evolution modes
         self.modes = {
-            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(watchdog=self.watchdog),
+            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
             TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
             TaskType.RESEARCH.value: ResearchDiscoveryMode()
         }
