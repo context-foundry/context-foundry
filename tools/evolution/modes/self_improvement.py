@@ -375,26 +375,10 @@ This is an autonomous self-improvement task from the Evolution System."""
             task_id = str(uuid.uuid4())[:8]
             log_file = logs_dir / f'claude-{task_id}.log'
 
-            # Create the prompt for Claude that tells it to use MCP
-            claude_prompt = f"""Execute the following self-improvement task for Context Foundry using the MCP autonomous build system:
-
-TASK:
-{prompt}
-
-INSTRUCTIONS:
-1. Use the MCP tool: mcp__context-foundry__autonomous_build_and_deploy
-2. Parameters:
-   - task: (the task description above)
-   - working_directory: {cf_root}
-   - github_repo_name: context-foundry
-   - enable_test_loop: True
-   - max_test_iterations: 2
-
-3. The build will run through all phases (Scout, Architect, Builder, Test, Deploy)
-4. A PR will be created automatically
-5. DO NOT wait for the build to complete - return immediately after spawning it
-
-This is an autonomous self-improvement task. The system will handle PR detection and continuation."""
+            # Create a simple, natural command for Claude Code
+            # Claude Code recognizes commands like "build", "fix", "upgrade feature X"
+            # and automatically fires up the MCP autonomous build system
+            claude_prompt = f"""fix {prompt}"""
 
             # Write prompt to file for debugging
             prompt_file = logs_dir / f'prompt-{task_id}.txt'
