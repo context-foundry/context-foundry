@@ -20,6 +20,11 @@ class SelfImprovementMode(BaseEvolutionMode):
         'tools/evolution/resource_manager.py',
     ]
 
+    def __init__(self, config: Dict = None, watchdog=None):
+        """Initialize with optional watchdog for process monitoring"""
+        super().__init__(config)
+        self.watchdog = watchdog
+
     def _is_protected_file(self, file_path: str) -> bool:
         """
         Check if a file is protected from autonomous modification
