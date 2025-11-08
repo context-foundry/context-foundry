@@ -186,13 +186,13 @@ class SelfImprovementMode(BaseEvolutionMode):
         if any(keyword in text_lower for keyword in test_keywords):
             priority += 1
             if category == 'general':
-                category = 'test'
+                category = 'testing'
 
         # Documentation
         doc_keywords = ['document', 'docs', 'comment', 'docstring']
         if any(keyword in text_lower for keyword in doc_keywords):
             if category == 'general':
-                category = 'docs'
+                category = 'documentation'
             # Documentation is lower priority unless marked urgent
             if 'urgent' not in text_lower:
                 priority = max(3, priority - 1)
@@ -210,7 +210,7 @@ class SelfImprovementMode(BaseEvolutionMode):
         # File path context - core files get higher priority
         if '/core/' in file_path or '/engine/' in file_path:
             priority += 1
-        elif '/tests/' in file_path and category != 'test':
+        elif '/tests/' in file_path and category != 'testing':
             priority -= 1
 
         # Cap priority at 10

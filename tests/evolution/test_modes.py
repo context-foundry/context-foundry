@@ -90,16 +90,16 @@ def test_prioritize_todo():
 
     # Testing-related
     test_priority, test_category = mode._prioritize_todo("# TODO: add test coverage", "/test/file.py")
-    assert test_category == 'testing'
+    assert test_category == 'test'
 
     # Documentation should have lower priority
     doc_priority, doc_category = mode._prioritize_todo("# TODO: document this function", "/test/file.py")
-    assert doc_category == 'documentation'
+    assert doc_category == 'docs'
     assert doc_priority <= 5
 
     # Refactoring
     refactor_priority, refactor_category = mode._prioritize_todo("# TODO: refactor this code", "/test/file.py")
-    assert refactor_category == 'refactoring'
+    assert refactor_category == 'refactor'
 
     # Core files should get priority boost
     core_priority, _ = mode._prioritize_todo("# TODO: fix this", "/core/engine.py")
