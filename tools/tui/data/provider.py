@@ -430,13 +430,52 @@ class TUIDataProvider:
         if cached is not None:
             return cached
 
-        # TODO: Read from actual log files
-        logs = [
-            f"[INFO] Build started: {session_id}",
-            "[INFO] Scout phase: Analyzing requirements...",
-            "[INFO] Architect phase: Designing system...",
-            "[INFO] Builder phase: Implementing code...",
-        ]
+        logs = []
+
+        # Try to find and read the actual log file
+        # Log files are created as .launch-{session_id}.log in the working directory
+        found_log = False
+
+        # Search in all tracked build directories
+        for build_dir in self._tracked_builds:
+            log_file = Path(build_dir) / f".launch-{session_id}.log"
+            if log_file.exists():
+                try:
+                    with open(log_file, 'r') as f:
+                        # Read all lines and strip trailing whitespace
+                        logs = [line.rstrip() for line in f.readlines()]
+                    found_log = True
+                    break
+                except (OSError, IOError) as e:
+                    # If we can't read the file, log the error and continue
+                    logs.append(f"[ERROR] Failed to read log file {log_file}: {e}")
+                    break
+
+        # Also check global evolution daemon logs
+        if not found_log:
+            global_log = Path.home() / '.context-foundry' / 'evolution' / 'logs' / 'daemon.log'
+            if global_log.exists():
+                try:
+                    with open(global_log, 'r') as f:
+                        # Filter for lines related to this session_id
+                        all_lines = f.readlines()
+                        session_logs = [
+                            line.rstrip() for line in all_lines
+                            if session_id in line
+                        ]
+                        if session_logs:
+                            logs = session_logs
+                            found_log = True
+                except (OSError, IOError) as e:
+                    logs.append(f"[ERROR] Failed to read daemon log: {e}")
+
+        # If no logs found, return a helpful message
+        if not found_log or not logs:
+            logs = [
+                f"[INFO] No logs found for session: {session_id}",
+                "[INFO] Logs may not be available yet, or session may be running in a different directory",
+                f"[INFO] Searched tracked directories: {', '.join(self._tracked_builds) if self._tracked_builds else 'none'}"
+            ]
 
         self._set_cache(cache_key, logs)
         return logs
