@@ -13,8 +13,11 @@ import time
 from pathlib import Path
 from typing import Dict, Optional
 
-from .task_queue import TaskQueueManager, Task, TaskStatus
+from .task_queue import TaskQueueManager, Task, TaskStatus, TaskType
 from .resource_manager import ResourceManager
+from .modes.self_improvement import SelfImprovementMode
+from .modes.chaos_creative import ChaosCreativeMode
+from .modes.research_discovery import ResearchDiscoveryMode
 
 
 # Setup logging
@@ -55,13 +58,21 @@ class EvolutionDaemon:
         # Initialize components
         self.task_queue = TaskQueueManager()
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
-        
+
+        # Initialize evolution modes
+        self.modes = {
+            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
+            TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
+            TaskType.RESEARCH.value: ResearchDiscoveryMode()
+        }
+
         # State
         self.running = False
         self.stop_requested = False
         self.active_tasks = {}
+        self.poll_count = 0  # Track polling iterations for periodic logging
         self.pid = None
-        
+
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
     
@@ -184,7 +195,10 @@ class EvolutionDaemon:
         """Main daemon loop - polls queue every 60 seconds"""
         poll_interval = self.config.get('daemon', {}).get('poll_interval_seconds', 60)
         max_concurrent = self.config.get('daemon', {}).get('max_concurrent_tasks', 3)
-        
+
+        # Log polling loop initialization
+        self.logger.info(f"Entering main polling loop (interval: {poll_interval}s, max_concurrent: {max_concurrent})")
+
         while not self.stop_requested:
             try:
                 # Check resources
@@ -200,7 +214,11 @@ class EvolutionDaemon:
                     self.logger.debug(f"Max concurrent tasks reached ({max_concurrent})")
                     time.sleep(poll_interval)
                     continue
-                
+
+                # Log queue status before checking for tasks
+                pending_count = self.task_queue.count_pending()
+                self.logger.info(f"Queue status: {pending_count} pending, {len(self.active_tasks)}/{max_concurrent} active")
+
                 # Get next task
                 task = self.task_queue.get_next_task()
                 
@@ -208,47 +226,70 @@ class EvolutionDaemon:
                     self.logger.info(f"Picked up task: {task.id} (type: {task.type})")
                     self._execute_task(task)
                 else:
-                    self.logger.debug("No pending tasks")
+                    self.logger.info("No pending tasks in queue")
                 
                 # Sleep before next poll
                 time.sleep(poll_interval)
-                
+
+                # Periodic resource usage logging (every 10 iterations)
+                self.poll_count += 1
+                if self.poll_count % 10 == 0:
+                    usage = self.resource_manager.get_resource_usage()
+                    self.logger.info(
+                        f"Resource usage [poll #{self.poll_count}] - "
+                        f"CPU: {usage['cpu_percent']:.1f}%, "
+                        f"Memory: {usage['memory_gb']:.1f}GB ({usage['memory_percent']:.1f}%), "
+                        f"Disk: {usage['disk_percent']:.1f}%"
+                    )
+
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}", exc_info=True)
                 time.sleep(poll_interval)
     
     def _execute_task(self, task: Task):
         """
-        Execute task (simplified - would normally delegate to modes)
-        
+        Execute task by delegating to appropriate mode
+
         Args:
             task: Task to execute
         """
         try:
             self.logger.info(f"Executing task {task.id} of type {task.type}")
-            
+
             # Track active task
             self.active_tasks[task.id] = task
-            
-            # Simulate task execution (in real implementation, delegate to mode)
-            result = {
-                'status': 'success',
-                'message': f'Task {task.type} executed',
-                'output': task.params
-            }
-            
-            # Update task status
-            self.task_queue.update_task_status(
-                task.id,
-                TaskStatus.COMPLETED.value,
-                result=result
-            )
-            
-            self.logger.info(f"Task {task.id} completed successfully")
-            
+
+            # Get the appropriate mode for this task type
+            mode = self.modes.get(task.type)
+            if not mode:
+                raise ValueError(f"Unknown task type: {task.type}")
+
+            # Execute task via mode
+            self.logger.info(f"Delegating to {task.type} mode")
+            task_result = mode.execute_task(task)
+
+            # Validate result
+            if mode.validate_result(task_result):
+                result = {
+                    'status': 'success',
+                    'message': f'Task {task.type} executed successfully',
+                    'output': task_result.output
+                }
+
+                # Update task status
+                self.task_queue.update_task_status(
+                    task.id,
+                    TaskStatus.COMPLETED.value,
+                    result=result
+                )
+
+                self.logger.info(f"Task {task.id} completed successfully")
+            else:
+                raise ValueError(f"Task validation failed: {task_result.error}")
+
         except Exception as e:
             self.logger.error(f"Task {task.id} failed: {e}", exc_info=True)
-            
+
             # Check if should retry
             if self.task_queue.should_retry(task):
                 self.task_queue.retry_task(task.id)
@@ -259,7 +300,7 @@ class EvolutionDaemon:
                     TaskStatus.FAILED.value,
                     error=str(e)
                 )
-        
+
         finally:
             # Remove from active tasks
             if task.id in self.active_tasks:
