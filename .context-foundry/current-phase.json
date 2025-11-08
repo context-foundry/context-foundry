@@ -1,11 +1,30 @@
-{
-  "session_id": "context-foundry",
-  "current_phase": "Feedback",
-  "phase_number": "7/7",
-  "status": "completed",
-  "progress_detail": "Build analysis complete, ready for final output",
-  "test_iteration": 1,
-  "phases_completed": ["Codebase Analysis", "Scout", "Architect", "Build Planning", "Test", "Deploy", "Feedback"],
-  "started_at": "2025-01-13T00:07:00Z",
-  "last_updated": "2025-01-13T00:08:00Z"
-}
+[BAML] Explicitly added OPENAI_API_KEY
+[BAML] Creating BamlRuntime with 44 env vars
+[BAML] env_vars_for_baml keys: ['HOME', 'LOGNAME', 'PATH', 'SHELL', 'TERM', 'USER', 'MANPATH', 'GHOSTTY_RESOURCES_DIR', 'TERM_PROGRAM', 'TMPDIR']...
+[BAML] BamlRuntime created successfully
+[BAML] Runtime type: <class 'baml_py.baml_py.BamlRuntime'>
+[BAML] Explicitly added OPENAI_API_KEY
+[BAML] Creating BamlRuntime with 44 env vars
+[BAML] env_vars_for_baml keys: ['HOME', 'LOGNAME', 'PATH', 'SHELL', 'TERM', 'USER', 'MANPATH', 'GHOSTTY_RESOURCES_DIR', 'TERM_PROGRAM', 'TMPDIR']...
+[BAML] BamlRuntime created successfully
+[BAML] Runtime type: <class 'baml_py.baml_py.BamlRuntime'>
+[BAML DEBUG] Calling CreatePhaseInfo with session_id=context-foundry, phase=Codebase Analysis, status=Analyzing
+❌ BAML phase tracking failed: Invalid argument:   Error: phase: Invalid enum PhaseType: expected one of (CodebaseAnalysis | Scout | Architect | Builder | Test | Screenshot | Documentation | Deploy | Feedback | GitHub), got `Codebase Analysis`
+
+Traceback (most recent call last):
+  File "/Users/name/homelab/context-foundry/tools/baml_integration.py", line 233, in update_phase_with_baml
+    result = client.call_function_sync(
+baml_py.BamlInvalidArgumentError: Invalid argument:   Error: phase: Invalid enum PhaseType: expected one of (CodebaseAnalysis | Scout | Architect | Builder | Test | Screenshot | Documentation | Deploy | Feedback | GitHub), got `Codebase Analysis`
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/name/homelab/context-foundry/tools/use_baml.py", line 168, in <module>
+    sys.exit(main())
+  File "/Users/name/homelab/context-foundry/tools/use_baml.py", line 114, in main
+    result = update_phase_with_baml(
+  File "/Users/name/homelab/context-foundry/tools/baml_integration.py", line 317, in update_phase_with_baml
+    raise RuntimeError(error_msg) from e
+RuntimeError: BAML phase tracking failed: Invalid argument:   Error: phase: Invalid enum PhaseType: expected one of (CodebaseAnalysis | Scout | Architect | Builder | Test | Screenshot | Documentation | Deploy | Feedback | GitHub), got `Codebase Analysis`
+

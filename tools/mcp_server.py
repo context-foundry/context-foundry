@@ -2673,6 +2673,85 @@ def get_latest_logs() -> str:
     return f"Log directory exists but no session.jsonl found: {latest}"
 
 
+# ═══════════════════════════════════════════════════════════
+# EVOLUTION SYSTEM TOOLS (CFES)
+# ═══════════════════════════════════════════════════════════
+
+# Import evolution tool implementations
+from tools.evolution_mcp_tools import (
+    create_evolution_task_impl,
+    get_evolution_tasks_impl,
+    start_evolution_daemon_impl,
+    stop_evolution_daemon_impl,
+    get_daemon_status_impl,
+    register_project_impl,
+    apply_pattern_to_project_impl,
+    validate_project_health_impl,
+    register_agent_impl,
+    send_agent_message_impl
+)
+
+
+@mcp.tool()
+def create_evolution_task(task_type: str, target_project: Optional[str] = None, pattern_id: Optional[str] = None, priority: int = 5, params: Optional[Dict] = None) -> str:
+    """Create new evolution task and add to queue. Types: self_improvement, chaos_creative, research, apply_pattern, validate."""
+    return create_evolution_task_impl(task_type, target_project, pattern_id, priority, params)
+
+
+@mcp.tool()
+def get_evolution_tasks(status: str = "pending", limit: int = 50) -> str:
+    """List evolution tasks with optional filters. Status: pending, running, completed, failed, all."""
+    return get_evolution_tasks_impl(status, limit)
+
+
+@mcp.tool()
+def start_evolution_daemon(config_path: Optional[str] = None) -> str:
+    """Start the evolution daemon service."""
+    return start_evolution_daemon_impl(config_path)
+
+
+@mcp.tool()
+def stop_evolution_daemon(graceful: bool = True) -> str:
+    """Stop the evolution daemon (gracefully waits for tasks if True)."""
+    return stop_evolution_daemon_impl(graceful)
+
+
+@mcp.tool()
+def get_daemon_status() -> str:
+    """Get daemon health, queue size, active tasks, and resource usage."""
+    return get_daemon_status_impl()
+
+
+@mcp.tool()
+def register_project(project_path: str, project_type: str, metadata: Optional[Dict] = None) -> str:
+    """Register a project in the global registry."""
+    return register_project_impl(project_path, project_type, metadata)
+
+
+@mcp.tool()
+def apply_pattern_to_project(project_path: str, pattern_id: str) -> str:
+    """Apply a specific pattern to an existing project (creates task)."""
+    return apply_pattern_to_project_impl(project_path, pattern_id)
+
+
+@mcp.tool()
+def validate_project_health(project_path: str) -> str:
+    """Run tests and validate project health (creates validation task)."""
+    return validate_project_health_impl(project_path)
+
+
+@mcp.tool()
+def register_agent(agent_name: str, agent_url: Optional[str] = None, capabilities: Optional[List[str]] = None) -> str:
+    """Register an agent in the network."""
+    return register_agent_impl(agent_name, agent_url, capabilities)
+
+
+@mcp.tool()
+def send_agent_message(target_agent: str, message_type: str, payload: Dict) -> str:
+    """Send message to another agent. Types: task_delegation, learning_share, health_check."""
+    return send_agent_message_impl(target_agent, message_type, payload)
+
+
 if __name__ == "__main__":
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
@@ -2692,6 +2771,18 @@ if __name__ == "__main__":
     print("   - merge_project_patterns: Merge project patterns into global storage", file=sys.stderr)
     print("   - migrate_all_project_patterns: Migrate all project patterns to global storage", file=sys.stderr)
     print("   - share_patterns_to_community: Automatically share patterns to community (creates PR)", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("🔄 Evolution System Tools (CFES):", file=sys.stderr)
+    print("   - create_evolution_task: Create new evolution task", file=sys.stderr)
+    print("   - get_evolution_tasks: List tasks with filters", file=sys.stderr)
+    print("   - start_evolution_daemon: Start evolution daemon", file=sys.stderr)
+    print("   - stop_evolution_daemon: Stop evolution daemon", file=sys.stderr)
+    print("   - get_daemon_status: Get daemon status and metrics", file=sys.stderr)
+    print("   - register_project: Register project in registry", file=sys.stderr)
+    print("   - apply_pattern_to_project: Apply pattern to project", file=sys.stderr)
+    print("   - validate_project_health: Validate project health", file=sys.stderr)
+    print("   - register_agent: Register agent in network", file=sys.stderr)
+    print("   - send_agent_message: Send inter-agent message", file=sys.stderr)
     print("💡 Configure in Claude Desktop or Claude Code CLI to use this server!", file=sys.stderr)
 
     mcp.run()
