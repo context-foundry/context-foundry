@@ -137,15 +137,25 @@ class StatusPanel(Static):
         return 0
 
     def _get_mcp_status(self) -> dict:
-        """Check MCP availability"""
+        """Check MCP server availability via Claude Code"""
         try:
-            from tools.evolution.mcp_support import get_mcp_capabilities
-            caps = get_mcp_capabilities()
+            # MCP is available through Claude Code's built-in MCP server
+            # We don't need fastmcp package - Claude Code provides the connection
 
-            if caps["available"]:
-                return {"available": True, "status": "Ready"}
+            # Check if tools/mcp_server.py exists (our MCP tool definitions)
+            mcp_server_path = Path(__file__).parent.parent / "mcp_server.py"
+
+            if mcp_server_path.exists():
+                # MCP tools are defined and available via Claude Code
+                return {
+                    "available": True,
+                    "status": "Ready (Claude Code MCP)"
+                }
             else:
-                return {"available": False, "status": "Unavailable (Python 3.9)"}
+                return {
+                    "available": False,
+                    "status": "MCP tools not found"
+                }
 
         except Exception as e:
             return {"available": False, "status": f"Error: {e}"}

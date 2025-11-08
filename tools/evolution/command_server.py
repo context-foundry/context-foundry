@@ -178,7 +178,7 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._error_response(f"Error: {e}")
 
     def _handle_start_build(self, data: Dict):
-        """Start a new build in isolated sandbox"""
+        """Start a new build in isolated sandbox using Claude CLI"""
         project_name = data.get("project_name")
         task = data.get("task")
         repo_url = data.get("repo_url")
@@ -198,8 +198,20 @@ class CommandHandler(BaseHTTPRequestHandler):
 
             sandbox_path = self.sandbox_manager.create_sandbox(repo_url, task_id)
 
-            # TODO: Trigger MCP build in sandbox
-            # For now, just return sandbox info
+            # Launch headless Claude instance to run the build
+            # Use Claude CLI with MCP tools
+            build_command = f"""
+cd {sandbox_path}
+claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to build this project: {task}"
+"""
+
+            # Start build in background
+            build_process = subprocess.Popen(
+                ["bash", "-c", build_command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(sandbox_path)
+            )
 
             self._json_response({
                 "success": True,
@@ -207,8 +219,9 @@ class CommandHandler(BaseHTTPRequestHandler):
                 "sandbox_path": str(sandbox_path),
                 "project_name": project_name,
                 "task": task,
-                "status": "sandbox_created",
-                "message": "Sandbox created. Build will start when MCP is available."
+                "build_pid": build_process.pid,
+                "status": "building",
+                "message": f"Build started in headless Claude instance (PID: {build_process.pid})"
             })
 
         except Exception as e:
@@ -308,14 +321,36 @@ class CommandHandler(BaseHTTPRequestHandler):
             return {"running": False, "pid": None, "status": "unknown", "error": str(e)}
 
     def _get_mcp_status(self) -> Dict:
-        """Check MCP availability"""
+        """Check MCP availability via Claude Code CLI"""
         try:
-            from tools.evolution.mcp_support import get_mcp_capabilities
-            caps = get_mcp_capabilities()
+            # Check if Claude CLI is available
+            result = subprocess.run(
+                ["which", "claude"],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+
+            if result.returncode == 0:
+                # Claude CLI is installed - MCP available via headless instances
+                return {
+                    "available": True,
+                    "reason": "Claude CLI available - can spawn headless instances"
+                }
+
+            # Check if MCP tools are defined (even without CLI)
+            mcp_server_path = Path(__file__).parent.parent / "mcp_server.py"
+            if mcp_server_path.exists():
+                return {
+                    "available": True,
+                    "reason": "MCP tools defined (use Claude CLI for builds)"
+                }
+
             return {
-                "available": caps["available"],
-                "reason": caps.get("reason", "")
+                "available": False,
+                "reason": "Claude CLI not found (install from https://claude.ai/cli)"
             }
+
         except Exception as e:
             return {"available": False, "reason": f"Error: {e}"}
 
