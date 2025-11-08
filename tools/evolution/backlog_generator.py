@@ -25,12 +25,37 @@ class BacklogGenerator:
         self.project_root = project_root
         self.target_backlog_size = target_backlog_size
         self.template_path = project_root / "tools/evolution/templates/github_issue_template.md"
+        self.valid_labels = None  # Cache for valid labels
 
         # Load template
         if self.template_path.exists():
             self.template = self.template_path.read_text()
         else:
             raise FileNotFoundError(f"Template not found: {self.template_path}")
+
+    def get_valid_labels(self) -> List[str]:
+        """Get list of valid GitHub labels (cached)"""
+        if self.valid_labels is not None:
+            return self.valid_labels
+
+        try:
+            result = subprocess.run(
+                ['gh', 'label', 'list', '--json', 'name'],
+                capture_output=True,
+                text=True,
+                cwd=self.project_root
+            )
+
+            if result.returncode == 0:
+                labels_data = json.loads(result.stdout)
+                self.valid_labels = [label['name'] for label in labels_data]
+                return self.valid_labels
+            else:
+                print(f"  ⚠️  Failed to get label list: {result.stderr}")
+                return []
+        except Exception as e:
+            print(f"  ⚠️  Error getting labels: {e}")
+            return []
 
     def get_current_issue_count(self) -> int:
         """Get count of current open issues"""
@@ -145,6 +170,14 @@ class BacklogGenerator:
                 if label not in labels:
                     labels.append(label)
 
+        # Filter to only valid labels
+        valid_labels = self.get_valid_labels()
+        filtered_labels = [label for label in labels if label in valid_labels]
+
+        if len(filtered_labels) < len(labels):
+            invalid = [label for label in labels if label not in valid_labels]
+            print(f"  ⚠️  Skipping invalid labels: {', '.join(invalid)}")
+
         print(f"📝 Creating issue: {title[:70]}")
 
         try:
@@ -152,8 +185,8 @@ class BacklogGenerator:
             cmd = ['gh', 'issue', 'create', '--title', title, '--body', body]
 
             # Add labels if we have them
-            if labels:
-                for label in labels:
+            if filtered_labels:
+                for label in filtered_labels:
                     cmd.extend(['--label', label])
 
             result = subprocess.run(
