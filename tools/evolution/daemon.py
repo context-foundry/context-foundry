@@ -16,6 +16,7 @@ from typing import Dict, Optional
 
 from .task_queue import TaskQueueManager, Task, TaskStatus, TaskType
 from .resource_manager import ResourceManager
+from .process_watchdog import ProcessWatchdog
 from .modes.self_improvement import SelfImprovementMode
 from .modes.chaos_creative import ChaosCreativeMode
 from .modes.research_discovery import ResearchDiscoveryMode
