@@ -415,14 +415,14 @@ This is an autonomous self-improvement task from the Evolution System."""
 
     def _delegate_to_context_foundry(self, prompt: str, branch_name: str) -> Dict:
         """
-        Delegate task to Context Foundry via Claude CLI with MCP
+        Delegate task to Context Foundry MCP server directly
 
         FULLY AUTONOMOUS WORKFLOW:
-        1. Daemon spawns claude CLI
-        2. Prompts Claude to use MCP autonomous_build_and_deploy
-        3. Agents (Scout → Architect → Builder → Test → Deploy) run
-        4. PR is created automatically
-        5. Dashboard detects PR and pauses daemon
+        1. Daemon calls MCP autonomous_build_and_deploy() directly
+        2. MCP spawns Scout → Architect → Builder → Test → Deploy agents
+        3. PR is created automatically
+        4. Daemon monitors MCP progress via get_delegation_result()
+        5. Dashboard shows MCP status in real-time
         6. Human reviews and merges PR (HUMAN-IN-THE-LOOP)
         7. Daemon detects PR merge and queues next task
         8. PERPETUAL LOOP continues ♾️
@@ -430,79 +430,55 @@ This is an autonomous self-improvement task from the Evolution System."""
         NOTE: Only 1 task executes at a time to prevent PR flooding
         """
         try:
-            import uuid
-            import os
+            import json
+
+            # Import MCP server function directly
+            from tools.mcp_server import autonomous_build_and_deploy
 
             cf_root = Path(__file__).parent.parent.parent.parent
-            logs_dir = Path.home() / ".context-foundry" / "evolution" / "delegation-logs"
-            logs_dir.mkdir(parents=True, exist_ok=True)
 
-            task_id = str(uuid.uuid4())[:8]
-            log_file = logs_dir / f'claude-{task_id}.log'
+            print(f"🤖 Calling Context Foundry MCP autonomous_build_and_deploy()...")
+            print(f"   Task: {prompt[:100]}...")
+            print(f"   Branch: {branch_name}")
 
-            # Explicitly invoke MCP autonomous_build_and_deploy tool
-            # This ensures the full Scout→Architect→Builder→Test→Deploy workflow runs
-            claude_prompt = f"""AUTONOMOUS WORKFLOW - Use MCP tool to implement this task:
+            # Call MCP function directly (non-blocking, returns task_id immediately)
+            result_json = autonomous_build_and_deploy(
+                task=prompt,
+                working_directory=str(cf_root),
+                github_repo_name="context-foundry/context-foundry",
+                existing_repo=str(cf_root),
+                mode="existing_repo",
+                enable_test_loop=True,
+                max_test_iterations=3,
+                timeout_minutes=90.0,
+                use_parallel=True
+            )
 
-**STEP 1: Call the autonomous_build_and_deploy MCP tool**
-Use these exact parameters:
-- task: "{prompt}"
-- working_directory: "/Users/name/homelab/context-foundry"
-- mode: "existing_repo"
-- github_repo_name: "context-foundry/context-foundry"
-- existing_repo: "/Users/name/homelab/context-foundry"
+            # Parse MCP result
+            result = json.loads(result_json)
+            mcp_task_id = result.get('task_id')
 
-This will automatically run:
-  Scout → Architect → Builder → Test → Deploy (creates PR on branch {branch_name})
-
-**STEP 2: After PR is created, ensure it's conflict-free**
-Run this command to rebase and update the PR:
-  bash tools/evolution/scripts/rebase_and_pr.sh {branch_name}
-
-This rebases the branch onto latest main and force-pushes, updating the PR to be conflict-free.
-
-**IMPORTANT**:
-- The MCP tool handles everything autonomously (no human intervention needed)
-- The rebase script runs AFTER the PR is created to ensure it's up-to-date
-- This is a fully automated workflow from issue → PR ready for review"""
-
-            # Write prompt to file for debugging
-            prompt_file = logs_dir / f'prompt-{task_id}.txt'
-            with open(prompt_file, 'w') as f:
-                f.write(claude_prompt)
-
-            # Spawn claude CLI in background
-            print(f"📝 Spawning Claude CLI (log: {log_file})")
-            with open(prompt_file, 'r') as prompt_f:
-                process = subprocess.Popen(
-                    [
-                        '/opt/homebrew/bin/claude',
-                        '--print',  # Non-interactive mode
-                        '--dangerously-skip-permissions',  # Skip permission dialogs
-                    ],
-                    stdin=prompt_f,
-                    stdout=open(log_file, 'w'),
-                    stderr=subprocess.STDOUT,
-                    cwd=str(cf_root)
-                )
-
-            print(f"✅ Claude CLI spawned (PID: {process.pid})")
+            print(f"✅ MCP task started!")
+            print(f"   MCP Task ID: {mcp_task_id}")
+            print(f"   Status: {result.get('status')}")
+            print(f"   Monitor progress: get_delegation_result('{mcp_task_id}')")
 
             return {
                 'success': True,
                 'output': {
-                    'task_id': task_id,
+                    'mcp_task_id': mcp_task_id,
                     'branch': branch_name,
-                    'status': 'claude_spawned',
-                    'pid': process.pid,
-                    'log_file': str(log_file),
-                    'message': f'Claude CLI spawned! (PID: {process.pid})'
+                    'status': 'mcp_running',
+                    'message': result.get('message', 'MCP autonomous build started'),
+                    'working_directory': str(cf_root)
                 }
             }
 
         except Exception as e:
-            print(f"❌ Failed to spawn Claude CLI: {e}")
+            print(f"❌ Failed to call MCP autonomous_build_and_deploy: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'success': False,
-                'error': f'Failed to spawn Claude CLI: {e}'
+                'error': f'Failed to call MCP: {e}'
             }

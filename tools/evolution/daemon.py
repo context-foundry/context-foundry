@@ -336,6 +336,9 @@ class EvolutionDaemon:
                     self._interruptible_sleep(poll_interval)
                     continue
 
+                # MCP STATUS MONITORING: Check progress of MCP delegations
+                self._check_mcp_status()
+
                 # RACE CONDITION FIX: Detect PRs created by Claude and mark tasks as COMPLETED
                 # This allows daemon to pick up next task after PR is created
                 self._detect_prs_and_complete_tasks()
@@ -412,13 +415,26 @@ class EvolutionDaemon:
                     'output': task_result.output
                 }
 
-                # RACE CONDITION FIX: For self_improvement tasks that spawn Claude,
+                # RACE CONDITION FIX: For self_improvement tasks that spawn Claude or MCP,
                 # keep them in RUNNING state until PR is created (don't mark COMPLETED)
                 # This prevents daemon from picking up another task before PR is created
-                if task.type == 'self_improvement' and result.get('output', {}).get('status') == 'claude_spawned':
-                    self.logger.info(f"✅ Task {task.id} delegated to Claude CLI - keeping in RUNNING state until PR detected")
-                    self.logger.info(f"   PID: {result['output'].get('pid')}")
-                    self.logger.info(f"   Log: {result['output'].get('log_file')}")
+                task_status = result.get('output', {}).get('status')
+                if task.type == 'self_improvement' and task_status in ['claude_spawned', 'mcp_running']:
+                    if task_status == 'mcp_running':
+                        mcp_task_id = result['output'].get('mcp_task_id')
+                        self.logger.info(f"✅ Task {task.id} delegated to Context Foundry MCP - keeping in RUNNING state until PR detected")
+                        self.logger.info(f"   MCP Task ID: {mcp_task_id}")
+                        self.logger.info(f"   Monitor: get_delegation_result('{mcp_task_id}')")
+                        # Store MCP task_id in task result for monitoring
+                        self.task_queue.update_task_status(
+                            task.id,
+                            TaskStatus.RUNNING.value,
+                            result={'mcp_task_id': mcp_task_id, 'branch': result['output'].get('branch')}
+                        )
+                    else:
+                        self.logger.info(f"✅ Task {task.id} delegated to Claude CLI - keeping in RUNNING state until PR detected")
+                        self.logger.info(f"   PID: {result['output'].get('pid')}")
+                        self.logger.info(f"   Log: {result['output'].get('log_file')}")
                     # Task stays in RUNNING state - will be marked COMPLETED when PR is detected
                 else:
                     # For non-delegated tasks, mark as completed immediately
@@ -701,6 +717,53 @@ class EvolutionDaemon:
         except Exception as e:
             self.logger.error(f"Error checking recently closed PRs: {e}", exc_info=True)
             return []
+
+    def _check_mcp_status(self):
+        """
+        Check MCP delegation status for running tasks and log progress
+
+        Monitors MCP tasks via get_delegation_result() and logs phase/status updates
+        """
+        try:
+            from tools.mcp_server import get_delegation_result
+            import json
+
+            running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+
+            for task in running_tasks:
+                if not task.result:
+                    continue
+
+                mcp_task_id = task.result.get('mcp_task_id')
+                if not mcp_task_id:
+                    continue
+
+                # Get MCP status
+                try:
+                    status_json = get_delegation_result(mcp_task_id, include_full_output=False)
+                    status = json.loads(status_json)
+
+                    task_status = status.get('status', 'unknown')
+                    current_phase = status.get('current_phase', 'N/A')
+                    progress = status.get('progress', 'N/A')
+
+                    # Log MCP progress (only if changed)
+                    status_key = f"mcp_{mcp_task_id}_status"
+                    last_status = getattr(self, status_key, None)
+                    current_status_str = f"{task_status}:{current_phase}"
+
+                    if last_status != current_status_str:
+                        self.logger.info(f"🔍 MCP Task {mcp_task_id[:8]} ({task.id[:8]}):")
+                        self.logger.info(f"   Status: {task_status}")
+                        self.logger.info(f"   Phase: {current_phase}")
+                        self.logger.info(f"   Progress: {progress}")
+                        setattr(self, status_key, current_status_str)
+
+                except Exception as e:
+                    self.logger.debug(f"Could not get MCP status for {mcp_task_id}: {e}")
+
+        except Exception as e:
+            self.logger.error(f"Error checking MCP status: {e}", exc_info=True)
 
     def _detect_prs_and_complete_tasks(self):
         """
