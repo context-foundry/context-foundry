@@ -535,6 +535,83 @@ class EvolutionDaemon:
             self.logger.error(f"Error checking open PRs: {e}", exc_info=True)
             return []
 
+    def _check_recently_closed_prs(self):
+        """
+        Check for recently closed/merged Evolution PRs (last 2 hours)
+
+        This prevents stuck RUNNING tasks when a PR is merged between poll cycles.
+        Returns list of closed Evolution PRs.
+        """
+        try:
+            import subprocess
+            import json
+            from datetime import datetime, timedelta
+
+            # Use gh CLI to get recently closed PRs
+            # gh pr list --state closed --limit 20 gives us recent closed PRs
+            result = subprocess.run(
+                ['gh', 'pr', 'list', '--state', 'closed', '--limit', '20', '--json',
+                 'number,headRefName,closedAt,mergedAt,title,url'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(Path(__file__).parent.parent.parent)
+            )
+
+            if result.returncode != 0:
+                return []
+
+            prs = json.loads(result.stdout)
+            evolution_prs = []
+
+            # Filter for Evolution PRs closed in last 2 hours
+            cutoff_time = datetime.now() - timedelta(hours=2)
+
+            evolution_branch_patterns = ['self-improvement/', 'enhancement/', 'fix/']
+
+            for pr in prs:
+                branch = pr.get('headRefName', '')
+                closed_at = pr.get('closedAt', '')
+
+                # Check if Evolution PR
+                is_evolution_pr = any(
+                    pattern in branch
+                    for pattern in evolution_branch_patterns
+                )
+
+                if not is_evolution_pr:
+                    continue
+
+                # Check if closed recently (last 2 hours)
+                if closed_at:
+                    try:
+                        # Parse ISO timestamp
+                        closed_time = datetime.fromisoformat(closed_at.replace('Z', '+00:00'))
+                        if closed_time.replace(tzinfo=None) < cutoff_time:
+                            continue  # Too old, skip
+                    except:
+                        pass  # If parsing fails, include it anyway
+
+                # Add to list (will be used to mark RUNNING tasks as COMPLETED)
+                pr_dict = {
+                    'number': pr.get('number'),
+                    'head': {'ref': branch},
+                    'html_url': pr.get('url'),
+                    'state': 'closed',
+                    'merged': pr.get('mergedAt') is not None
+                }
+                evolution_prs.append(pr_dict)
+
+                self.logger.debug(
+                    f"Found recently closed Evolution PR #{pr_dict['number']}: {branch}"
+                )
+
+            return evolution_prs
+
+        except Exception as e:
+            self.logger.error(f"Error checking recently closed PRs: {e}", exc_info=True)
+            return []
+
     def _detect_prs_and_complete_tasks(self):
         """
         Detect PRs created by Claude and mark corresponding tasks as COMPLETED
@@ -545,23 +622,34 @@ class EvolutionDaemon:
         3. Only then can daemon pick up next task
 
         Branch naming pattern: self-improvement/task-{task_id[:8]}
+
+        BUG FIX: Also checks recently CLOSED/MERGED PRs to handle the case where
+        a PR was merged between poll cycles, preventing stuck RUNNING tasks.
         """
         try:
-            # Get all open Evolution PRs
-            open_prs = self._check_open_prs()
-            if not open_prs:
-                return
-
-            # Get all RUNNING tasks
+            # Get all RUNNING tasks first
             running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
             if not running_tasks:
                 return
 
+            # Get all open Evolution PRs
+            open_prs = self._check_open_prs()
+
+            # ALSO get recently closed PRs (last 2 hours) to catch merged PRs
+            closed_prs = self._check_recently_closed_prs()
+
+            # Combine both lists
+            all_prs = open_prs + closed_prs
+
+            if not all_prs:
+                return
+
             # Match PRs to tasks by extracting task ID from branch name
-            for pr in open_prs:
+            for pr in all_prs:
                 branch = pr.get('head', {}).get('ref', '')
                 pr_number = pr.get('number', '?')
                 pr_url = pr.get('html_url', '')
+                pr_state = pr.get('state', 'unknown')
 
                 # Extract task ID from branch name (e.g., "self-improvement/task-af23b3bd")
                 # Branch pattern: {prefix}/task-{task_id[:8]}
@@ -569,13 +657,18 @@ class EvolutionDaemon:
                     task_id_short = task.id[:8]
                     if f"task-{task_id_short}" in branch:
                         # Found matching PR for this task!
-                        self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
-                        self.logger.info(f"   Branch: {branch}")
-                        self.logger.info(f"   URL: {pr_url}")
+                        if pr_state == 'closed':
+                            self.logger.info(f"✅ Detected MERGED PR #{pr_number} for task {task.id}")
+                            self.logger.info(f"   Branch: {branch}")
+                            self.logger.info(f"   Status: Merged (cleaning up stuck RUNNING task)")
+                        else:
+                            self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
+                            self.logger.info(f"   Branch: {branch}")
+                            self.logger.info(f"   URL: {pr_url}")
 
                         # Mark task as COMPLETED
                         result = {
-                            'status': 'pr_created',
+                            'status': 'pr_merged' if pr_state == 'closed' else 'pr_created',
                             'pr_number': pr_number,
                             'pr_url': pr_url,
                             'branch': branch
