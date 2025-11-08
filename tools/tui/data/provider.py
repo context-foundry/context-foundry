@@ -430,13 +430,100 @@ class TUIDataProvider:
         if cached is not None:
             return cached
 
-        # TODO: Read from actual log files
-        logs = [
-            f"[INFO] Build started: {session_id}",
-            "[INFO] Scout phase: Analyzing requirements...",
-            "[INFO] Architect phase: Designing system...",
-            "[INFO] Builder phase: Implementing code...",
-        ]
+        # Read from actual log files
+        logs = []
+
+        # Try to find the build directory for this session
+        build_dir = None
+        for tracked_dir in self._tracked_builds:
+            # Check if this directory has a build with matching session_id
+            phase_file = Path(tracked_dir) / '.context-foundry' / 'current-phase.json'
+            if phase_file.exists():
+                try:
+                    with open(phase_file, 'r') as f:
+                        phase_data = json.load(f)
+                        if phase_data.get('session_id') == session_id:
+                            build_dir = Path(tracked_dir)
+                            break
+                except (json.JSONDecodeError, OSError):
+                    continue
+
+        # If no tracked directory found, fall back to searching for log files
+        if not build_dir:
+            # Check if session_id is a task_id (UUID format)
+            # Look for .launch-{session_id}.log in common locations
+            search_paths = [
+                Path.cwd(),
+                Path.home() / 'homelab',
+            ]
+
+            for search_path in search_paths:
+                log_file = search_path / f'.launch-{session_id}.log'
+                if log_file.exists():
+                    build_dir = search_path
+                    break
+
+        # Read from various log sources
+        log_sources_found = False
+
+        if build_dir:
+            # 1. Try .launch-{session_id}.log (for launched builds)
+            launch_log = build_dir / f'.launch-{session_id}.log'
+            if launch_log.exists():
+                try:
+                    with open(launch_log, 'r') as f:
+                        content = f.read()
+                        # Split into lines and add to logs
+                        for line in content.splitlines():
+                            if line.strip():
+                                logs.append(line.rstrip())
+                        log_sources_found = True
+                except OSError:
+                    pass
+
+            # 2. Try build-output-{session_id}.txt (for completed builds)
+            cf_dir = build_dir / '.context-foundry'
+            if cf_dir.exists():
+                build_output = cf_dir / f'build-output-{session_id}.txt'
+                if build_output.exists():
+                    try:
+                        with open(build_output, 'r') as f:
+                            content = f.read()
+                            if logs:
+                                logs.append("=" * 80)
+                                logs.append("BUILD OUTPUT")
+                                logs.append("=" * 80)
+                            for line in content.splitlines():
+                                if line.strip():
+                                    logs.append(line.rstrip())
+                            log_sources_found = True
+                    except OSError:
+                        pass
+
+                # 3. Try build-log.md (current build log)
+                build_log_md = cf_dir / 'build-log.md'
+                if build_log_md.exists():
+                    try:
+                        with open(build_log_md, 'r') as f:
+                            content = f.read()
+                            if logs:
+                                logs.append("=" * 80)
+                                logs.append("BUILD LOG (build-log.md)")
+                                logs.append("=" * 80)
+                            for line in content.splitlines():
+                                if line.strip():
+                                    logs.append(line.rstrip())
+                            log_sources_found = True
+                    except OSError:
+                        pass
+
+        # If no logs found, provide helpful message
+        if not log_sources_found:
+            logs = [
+                f"[INFO] No log files found for session: {session_id}",
+                f"[INFO] Searched in: {build_dir or 'tracked build directories'}",
+                "[INFO] Log files may not exist yet or session may be inactive.",
+            ]
 
         self._set_cache(cache_key, logs)
         return logs

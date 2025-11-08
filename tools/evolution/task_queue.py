@@ -366,7 +366,11 @@ class TaskQueueManager:
     def count_failed(self) -> int:
         """Count failed tasks"""
         return self.conn.execute("SELECT COUNT(*) FROM tasks WHERE status = ?", (TaskStatus.FAILED.value,)).fetchone()[0]
-    
+
+    def count_running(self) -> int:
+        """Count running tasks"""
+        return self.conn.execute("SELECT COUNT(*) FROM tasks WHERE status = ?", (TaskStatus.RUNNING.value,)).fetchone()[0]
+
     def cancel_task(self, task_id: str) -> bool:
         """Cancel pending task"""
         cursor = self.conn.execute("""

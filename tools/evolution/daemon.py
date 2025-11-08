@@ -246,9 +246,22 @@ class EvolutionDaemon:
                     time.sleep(poll_interval)
                     continue
 
+                # RACE CONDITION FIX: Detect PRs created by Claude and mark tasks as COMPLETED
+                # This allows daemon to pick up next task after PR is created
+                self._detect_prs_and_complete_tasks()
+
                 # Log queue status before checking for tasks
                 pending_count = self.task_queue.count_pending()
-                self.logger.info(f"Queue status: {pending_count} pending, {len(self.active_tasks)}/{max_concurrent} active")
+                running_count = self.task_queue.count_running()
+                self.logger.info(f"Queue status: {pending_count} pending, {running_count} running, {len(self.active_tasks)}/{max_concurrent} active")
+
+                # RACE CONDITION FIX: Don't pick up new tasks if there are RUNNING tasks
+                # Running tasks are being executed by background Claude processes
+                # We must wait for them to complete (PR created) before starting new ones
+                if running_count > 0:
+                    self.logger.info(f"⏸️  Waiting for {running_count} running task(s) to complete before picking up new work")
+                    self._interruptible_sleep(poll_interval)
+                    continue
 
                 # Get next task
                 task = self.task_queue.get_next_task()
@@ -309,14 +322,22 @@ class EvolutionDaemon:
                     'output': task_result.output
                 }
 
-                # Update task status
-                self.task_queue.update_task_status(
-                    task.id,
-                    TaskStatus.COMPLETED.value,
-                    result=result
-                )
-
-                self.logger.info(f"Task {task.id} completed successfully")
+                # RACE CONDITION FIX: For self_improvement tasks that spawn Claude,
+                # keep them in RUNNING state until PR is created (don't mark COMPLETED)
+                # This prevents daemon from picking up another task before PR is created
+                if task.type == 'self_improvement' and result.get('output', {}).get('status') == 'claude_spawned':
+                    self.logger.info(f"✅ Task {task.id} delegated to Claude CLI - keeping in RUNNING state until PR detected")
+                    self.logger.info(f"   PID: {result['output'].get('pid')}")
+                    self.logger.info(f"   Log: {result['output'].get('log_file')}")
+                    # Task stays in RUNNING state - will be marked COMPLETED when PR is detected
+                else:
+                    # For non-delegated tasks, mark as completed immediately
+                    self.task_queue.update_task_status(
+                        task.id,
+                        TaskStatus.COMPLETED.value,
+                        result=result
+                    )
+                    self.logger.info(f"Task {task.id} completed successfully")
             else:
                 raise ValueError(f"Task validation failed: {task_result.error}")
 
@@ -513,6 +534,64 @@ class EvolutionDaemon:
         except Exception as e:
             self.logger.error(f"Error checking open PRs: {e}", exc_info=True)
             return []
+
+    def _detect_prs_and_complete_tasks(self):
+        """
+        Detect PRs created by Claude and mark corresponding tasks as COMPLETED
+
+        This is the second half of the race condition fix:
+        1. Tasks are kept in RUNNING state when Claude is spawned
+        2. This method detects when PRs are created and marks tasks COMPLETED
+        3. Only then can daemon pick up next task
+
+        Branch naming pattern: self-improvement/task-{task_id[:8]}
+        """
+        try:
+            # Get all open Evolution PRs
+            open_prs = self._check_open_prs()
+            if not open_prs:
+                return
+
+            # Get all RUNNING tasks
+            running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+            if not running_tasks:
+                return
+
+            # Match PRs to tasks by extracting task ID from branch name
+            for pr in open_prs:
+                branch = pr.get('head', {}).get('ref', '')
+                pr_number = pr.get('number', '?')
+                pr_url = pr.get('html_url', '')
+
+                # Extract task ID from branch name (e.g., "self-improvement/task-af23b3bd")
+                # Branch pattern: {prefix}/task-{task_id[:8]}
+                for task in running_tasks:
+                    task_id_short = task.id[:8]
+                    if f"task-{task_id_short}" in branch:
+                        # Found matching PR for this task!
+                        self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
+                        self.logger.info(f"   Branch: {branch}")
+                        self.logger.info(f"   URL: {pr_url}")
+
+                        # Mark task as COMPLETED
+                        result = {
+                            'status': 'pr_created',
+                            'pr_number': pr_number,
+                            'pr_url': pr_url,
+                            'branch': branch
+                        }
+                        self.task_queue.update_task_status(
+                            task.id,
+                            TaskStatus.COMPLETED.value,
+                            result=result
+                        )
+
+                        self.logger.info(f"🎉 Task {task.id} marked COMPLETED - PR #{pr_number} created!")
+                        self.logger.info(f"   Daemon can now pick up next task after PR merge")
+                        break
+
+        except Exception as e:
+            self.logger.error(f"Error detecting PRs and completing tasks: {e}", exc_info=True)
 
     def _queue_next_improvement_task(self):
         """
