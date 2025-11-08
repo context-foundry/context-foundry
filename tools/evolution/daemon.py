@@ -6,6 +6,7 @@ Main service orchestrator running continuously
 
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import os
 import signal
 import subprocess
@@ -27,16 +28,29 @@ def setup_logging(log_dir: Path):
     """Setup rotating file logging"""
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "daemon.log"
-    
+
+    # Set up rotating file handler (10MB per file, keep 5 backups)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
+
+    # Console handler for stdout/stderr
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(
+        logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    )
+
+    # Configure root logger
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
+        handlers=[file_handler, console_handler]
     )
-    
+
     return logging.getLogger(__name__)
 
 
