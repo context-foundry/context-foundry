@@ -22,6 +22,7 @@ from .modes.self_improvement import SelfImprovementMode
 from .modes.chaos_creative import ChaosCreativeMode
 from .modes.research_discovery import ResearchDiscoveryMode
 from .backlog_generator import BacklogGenerator
+from .mcp_support import get_mcp_capabilities
 
 
 # Setup logging
@@ -71,6 +72,18 @@ class EvolutionDaemon:
         # Setup logging
         log_dir = Path.home() / ".context-foundry" / "evolution" / "logs"
         self.logger = setup_logging(log_dir)
+
+        # Detect MCP capability (FastMCP + Python 3.10)
+        mcp_status = get_mcp_capabilities()
+        self.mcp_available = mcp_status["available"]
+        self.mcp_unavailable_reason = mcp_status.get("reason", "")
+        self.last_mcp_warning = 0.0
+        if not self.mcp_available:
+            self.logger.warning(
+                "MCP-dependent tasks disabled: %s",
+                self.mcp_unavailable_reason or "dependency check failed"
+            )
+            self.logger.info("Upgrade to Python 3.10+ and run `pip install -r requirements-mcp.txt` to re-enable MCP tasks.")
         
         # Initialize components
         self.task_queue = TaskQueueManager()
@@ -196,6 +209,33 @@ class EvolutionDaemon:
         self.logger.info("Received SIGHUP, reloading configuration...")
         self.config = self._load_config(None)
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
+        status = get_mcp_capabilities(force_refresh=True)
+        self.mcp_available = status["available"]
+        self.mcp_unavailable_reason = status.get("reason", "")
+        if self.mcp_available:
+            self.logger.info("MCP dependencies detected; self-improvement tasks are enabled.")
+        else:
+            self.logger.warning(
+                "MCP dependencies still unavailable after reload: %s",
+                self.mcp_unavailable_reason or "unknown reason"
+            )
+    
+    def _maybe_log_mcp_disabled(self, context: str):
+        """
+        Throttled warning helper so we don't spam logs when MCP is unavailable.
+        """
+        if self.mcp_available:
+            return
+
+        now = time.time()
+        if now - self.last_mcp_warning < 300:
+            return
+
+        self.last_mcp_warning = now
+        prefix = f"{context.strip()} - " if context else ""
+        reason = self.mcp_unavailable_reason or "see install docs"
+        self.logger.warning("%sMCP features unavailable: %s", prefix, reason)
+        self.logger.info("Install MCP deps with Python 3.10+ and `pip install -r requirements-mcp.txt`, or keep backlog-only mode.")
     
     
     def _cleanup_stuck_tasks(self):
@@ -436,6 +476,20 @@ class EvolutionDaemon:
             mode = self.modes.get(task.type)
             if not mode:
                 raise ValueError(f"Unknown task type: {task.type}")
+
+            if task.type == TaskType.SELF_IMPROVEMENT.value and not self.mcp_available:
+                message = (
+                    f"Skipping self-improvement task {task.id}: "
+                    f"MCP unavailable ({self.mcp_unavailable_reason or 'missing dependencies'})"
+                )
+                self._maybe_log_mcp_disabled("Self-improvement task skipped")
+                self.logger.warning(message)
+                self.task_queue.update_task_status(
+                    task.id,
+                    TaskStatus.CANCELLED.value,
+                    error=message
+                )
+                return
 
             # Execute task via mode
             self.logger.info(f"Delegating to {task.type} mode")
@@ -919,6 +973,10 @@ class EvolutionDaemon:
 
         Monitors MCP tasks via get_delegation_result() and logs phase/status updates
         """
+        if not self.mcp_available:
+            self._maybe_log_mcp_disabled("Skipping MCP status check")
+            return
+
         try:
             from tools.mcp_server import get_delegation_result
             import json
@@ -1152,6 +1210,10 @@ class EvolutionDaemon:
         Called when PRs are merged to continue the perpetual loop
         """
         try:
+            if not self.mcp_available:
+                self._maybe_log_mcp_disabled("Skipping self-improvement task generation")
+                return
+
             self.logger.info("Generating next improvement task...")
 
             # PRIORITY 1: Check GitHub for approved issues FIRST

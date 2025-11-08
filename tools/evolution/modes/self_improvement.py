@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple
 
 from .base_mode import BaseEvolutionMode, TaskResult
+from ..mcp_support import get_mcp_capabilities
 
 
 class SelfImprovementMode(BaseEvolutionMode):
@@ -19,6 +20,11 @@ class SelfImprovementMode(BaseEvolutionMode):
         'tools/evolution/task_queue.py',
         'tools/evolution/resource_manager.py',
     ]
+
+    def _mcp_status(self) -> Tuple[bool, str]:
+        """Return (available, reason) for MCP dependencies."""
+        status = get_mcp_capabilities()
+        return status["available"], status.get("reason", "")
 
     def _is_protected_file(self, file_path: str) -> bool:
         """
@@ -74,6 +80,14 @@ class SelfImprovementMode(BaseEvolutionMode):
         try:
             params = task.params
             action = params.get('action', '')
+
+            available, reason = self._mcp_status()
+            if not available:
+                return TaskResult(
+                    success=False,
+                    output=None,
+                    error=f"MCP unavailable: {reason or 'missing dependencies'}"
+                )
 
             # Create feature branch
             branch_name = f"self-improvement/task-{task.id[:8]}"
@@ -448,6 +462,13 @@ This is an autonomous self-improvement task from the Evolution System."""
         NOTE: Only 1 task executes at a time to prevent PR flooding
         """
         try:
+            available, reason = self._mcp_status()
+            if not available:
+                return {
+                    'success': False,
+                    'error': f'MCP unavailable: {reason or "missing dependencies"}'
+                }
+
             import json
 
             # Import MCP server implementation function (not the decorated tool)
