@@ -316,6 +316,61 @@ security_patterns = [
         findings_with_eval = [f for f in agent.findings if "eval" in f.description.lower()]
         # May still find some depending on filtering logic, but should minimize false positives
 
+    def test_scan_security_skips_os_system_in_patterns(self, temp_project):
+        """Test that scan skips os.system() when it appears in pattern definitions."""
+        test_file = temp_project / "scanner.py"
+        test_file.write_text("""
+security_patterns = [
+    (r'os\\.system\\s*\\(', 'Command injection risk with os.system()'),
+    (r'subprocess\\.(call|run|Popen).*shell\\s*=\\s*True', 'Shell injection risk'),
+]
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_security_patterns()
+
+        # Should not flag os.system when it's in a pattern definition
+        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
+        assert len(os_system_findings) == 0, "Should not flag os.system() in pattern definitions"
+
+    def test_scan_security_skips_unsafe_doc_examples(self, temp_project):
+        """Test that scan skips documentation examples marked as UNSAFE."""
+        test_file = temp_project / "docs.py"
+        test_file.write_text("""
+# Example of unsafe pattern:
+# os.system(f'claude --prompt "{task}"')  # ❌ UNSAFE!
+
+# Safe alternative:
+subprocess.run(['claude', '--prompt', task], check=True)
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_security_patterns()
+
+        # Should not flag the documented unsafe example
+        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
+        assert len(os_system_findings) == 0, "Should not flag documentation examples marked as UNSAFE"
+
+    def test_scan_security_finds_actual_os_system_usage(self, temp_project):
+        """Test that scan DOES find actual unsafe os.system() usage."""
+        test_file = temp_project / "vulnerable.py"
+        test_file.write_text("""
+import os
+
+def run_command(user_input):
+    # This is actually dangerous and should be flagged
+    os.system(user_input)
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_security_patterns()
+
+        # Should find the actual dangerous usage
+        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
+        assert len(os_system_findings) >= 1, "Should flag actual os.system() usage"
+        assert os_system_findings[0].finding_type == "security"
+        assert os_system_findings[0].priority == "P0"
+
 
 class TestScanPerformanceIssues:
     """Test _scan_performance_issues method."""
