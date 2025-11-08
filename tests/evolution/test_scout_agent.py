@@ -725,3 +725,494 @@ class TestEdgeCases:
 
             # Should not crash on Unicode
             assert isinstance(agent.findings, list)
+
+
+# ==================== NEW SCANNER TESTS ====================
+
+
+class TestScanFeatureOpportunities:
+    """Test _scan_feature_opportunities method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_todos(self, temp_project):
+        """Test detection of TODO markers."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "example.py"
+        test_file.write_text("""
+def process_data():
+    # TODO: Add validation
+    # FIXME: Handle edge cases
+    # XXX: Optimize this
+    pass
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_feature_opportunities()
+
+        assert len(agent.findings) >= 1
+        assert any("TODO" in f.title for f in agent.findings)
+        assert any("feature" in f.category for f in agent.findings)
+
+    def test_scan_finds_stub_methods(self, temp_project):
+        """Test detection of stub methods."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "stubs.py"
+        test_file.write_text("""
+def feature_one():
+    pass
+
+def feature_two():
+    pass
+
+def feature_three():
+    pass
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_feature_opportunities()
+
+        assert any("stub" in f.title.lower() for f in agent.findings)
+
+
+class TestScanDeveloperExperience:
+    """Test _scan_developer_experience method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_missing_type_hints(self, temp_project):
+        """Test detection of functions without return type hints."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "no_types.py"
+        test_file.write_text("""
+def func1(x, y):
+    return x + y
+
+def func2(a):
+    return a * 2
+
+def func3():
+    return "hello"
+
+def func4(b, c):
+    return b - c
+
+def func5(d):
+    return d / 2
+
+def func6():
+    return 42
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_developer_experience()
+
+        assert any("type hint" in f.title.lower() for f in agent.findings)
+        assert any("developer-experience" in f.category for f in agent.findings)
+
+
+class TestScanModernLanguageFeatures:
+    """Test _scan_modern_language_features method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_old_format_strings(self, temp_project):
+        """Test detection of old-style % formatting."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "old_style.py"
+        test_file.write_text("""
+name = "Alice"
+age = 30
+msg1 = "Hello %s" % name
+msg2 = "Age: %d" % age
+msg3 = "%s is %d years old" % (name, age)
+msg4 = "Another %s example" % "string"
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_modern_language_features()
+
+        assert any("format" in f.title.lower() for f in agent.findings)
+        assert any("modernization" in f.category for f in agent.findings)
+
+    def test_scan_finds_ospath_usage(self, temp_project):
+        """Test detection of os.path without pathlib."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "old_paths.py"
+        test_file.write_text("""
+import os
+
+path1 = os.path.join("a", "b", "c")
+exists = os.path.exists(path1)
+dirname = os.path.dirname(path1)
+basename = os.path.basename(path1)
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_modern_language_features()
+
+        assert any("pathlib" in f.title.lower() for f in agent.findings)
+
+
+class TestScanAPIEnhancements:
+    """Test _scan_api_enhancements method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield Path(tmpdir)
+
+    def test_scan_finds_incomplete_crud(self, temp_project):
+        """Test detection of incomplete CRUD operations."""
+        api_file = temp_project / "api.py"
+        api_file.write_text("""
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/items")
+def get_items():
+    return []
+
+@app.post("/items")
+def create_item():
+    return {}
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_api_enhancements()
+
+        assert any("CRUD" in f.title for f in agent.findings)
+        assert any("PUT" in f.description or "DELETE" in f.description for f in agent.findings)
+
+    def test_scan_finds_missing_pagination(self, temp_project):
+        """Test detection of missing pagination."""
+        api_file = temp_project / "api.py"
+        api_file.write_text("""
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/items")
+def get_items():
+    return get_all_items()
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_api_enhancements()
+
+        assert any("pagination" in f.title.lower() for f in agent.findings)
+
+    def test_scan_finds_missing_rate_limiting(self, temp_project):
+        """Test detection of missing rate limiting."""
+        api_file = temp_project / "api.py"
+        api_file.write_text("""
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/items")
+def get_items():
+    return []
+
+@app.post("/items")
+def create_item():
+    return {}
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_api_enhancements()
+
+        assert any("rate limit" in f.title.lower() for f in agent.findings)
+
+
+class TestScanObservability:
+    """Test _scan_observability method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_missing_logging(self, temp_project):
+        """Test detection of missing logging."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "processor.py"
+        test_file.write_text("""
+def func1():
+    pass
+
+def func2():
+    pass
+
+def func3():
+    pass
+
+def func4():
+    pass
+
+def func5():
+    pass
+
+def func6():
+    pass
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_observability()
+
+        assert any("logging" in f.title.lower() for f in agent.findings)
+        assert any("observability" in f.category for f in agent.findings)
+
+    def test_scan_finds_missing_health_check(self, temp_project):
+        """Test detection of missing health check endpoint."""
+        api_file = temp_project / "main.py"
+        api_file.write_text("""
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/items")
+def get_items():
+    return []
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_observability()
+
+        assert any("health" in f.title.lower() for f in agent.findings)
+
+
+class TestScanUserExperience:
+    """Test _scan_user_experience method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_missing_help_text(self, temp_project):
+        """Test detection of CLI args without help text."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "cli.py"
+        test_file.write_text("""
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--input')
+parser.add_argument('--output')
+parser.add_argument('--verbose')
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_user_experience()
+
+        assert any("help text" in f.title.lower() for f in agent.findings)
+        assert any("user-experience" in f.category for f in agent.findings)
+
+    def test_scan_finds_bare_excepts(self, temp_project):
+        """Test detection of bare except blocks."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "errors.py"
+        test_file.write_text("""
+def process():
+    try:
+        do_something()
+    except:
+        pass
+
+def another():
+    try:
+        do_other()
+    except:
+        pass
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_user_experience()
+
+        assert any("error message" in f.title.lower() for f in agent.findings)
+        assert any("bare except" in f.description.lower() for f in agent.findings)
+
+
+class TestScanConfigurationIssues:
+    """Test _scan_configuration_issues method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_hardcoded_urls(self, temp_project):
+        """Test detection of hardcoded URLs."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "api.py"
+        test_file.write_text("""
+API_URL = "https://api.example.com/v1"
+BASE_URL = "https://example.com"
+WEBHOOK = "https://webhook.site/abc123"
+ENDPOINT = "https://api.github.com/repos"
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_configuration_issues()
+
+        assert any("hardcoded" in f.title.lower() for f in agent.findings)
+        assert any("configuration" in f.category for f in agent.findings)
+
+    def test_scan_finds_environ_without_defaults(self, temp_project):
+        """Test detection of os.environ[] without defaults."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "config.py"
+        test_file.write_text("""
+import os
+
+API_KEY = os.environ['API_KEY']
+DB_URL = os.environ['DATABASE_URL']
+SECRET = os.environ['SECRET_KEY']
+TOKEN = os.environ['AUTH_TOKEN']
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_configuration_issues()
+
+        assert any("default" in f.title.lower() for f in agent.findings)
+        assert any("environment variable" in f.description.lower() for f in agent.findings)
+
+    def test_scan_finds_missing_env_example(self, temp_project):
+        """Test detection of missing .env.example."""
+        env_file = temp_project / ".env"
+        env_file.write_text("API_KEY=secret123")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_configuration_issues()
+
+        assert any(".env.example" in f.title for f in agent.findings)
+
+
+class TestScanExtensibility:
+    """Test _scan_extensibility method."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+            yield project_root
+
+    def test_scan_finds_tight_coupling(self, temp_project):
+        """Test detection of tight coupling."""
+        tools_dir = temp_project / "tools"
+        test_file = tools_dir / "coupled.py"
+        imports = "\n".join([f"from module{i} import Class{i}" for i in range(12)])
+        test_file.write_text(f"""
+{imports}
+
+class Service1:
+    pass
+
+class Service2:
+    pass
+
+class Service3:
+    pass
+
+class Service4:
+    pass
+""")
+
+        agent = ScoutAgent(temp_project)
+        agent._scan_extensibility()
+
+        assert any("coupling" in f.title.lower() for f in agent.findings)
+        assert any("extensibility" in f.category for f in agent.findings)
+
+
+class TestFullScanWithNewScanners:
+    """Test full scan() includes new scanners."""
+
+    @pytest.fixture
+    def temp_project(self):
+        """Create temporary project structure."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            tools_dir = project_root / "tools"
+            tools_dir.mkdir()
+
+            # Create file with various issues
+            test_file = tools_dir / "example.py"
+            test_file.write_text("""
+# TODO: Add feature X
+# FIXME: Fix bug Y
+
+def func1():
+    pass
+
+def func2():
+    pass
+
+def func3():
+    pass
+
+import os
+API_URL = "https://api.example.com"
+DB_URL = os.environ['DATABASE_URL']
+""")
+
+            yield project_root
+
+    def test_scan_runs_all_new_scanners(self, temp_project, capsys):
+        """Test that scan() runs all new scanners."""
+        agent = ScoutAgent(temp_project)
+        findings = agent.scan()
+
+        captured = capsys.readouterr()
+
+        # Verify new scanners ran
+        assert "feature opportunities" in captured.out.lower()
+        assert "developer experience" in captured.out.lower()
+        assert "modern" in captured.out.lower()
+        assert "api enhancement" in captured.out.lower()
+        assert "observability" in captured.out.lower()
+        assert "user experience" in captured.out.lower()
+        assert "configuration" in captured.out.lower()
+        assert "extensibility" in captured.out.lower()
+
+        # Should return findings
+        assert isinstance(findings, list)
