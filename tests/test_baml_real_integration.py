@@ -416,7 +416,7 @@ class TestBAMLFallbackBehavior:
         clear_baml_cache()
 
     def test_fallback_when_baml_call_fails(self):
-        """Test fallback to JSON when BAML call fails"""
+        """Test that BAML API call failures raise RuntimeError (no fallback)"""
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
             clear_baml_cache()
 
@@ -428,24 +428,22 @@ class TestBAMLFallbackBehavior:
                 mock_runtime.call_function_sync.side_effect = Exception("API Error")
                 mock_runtime.create_context_manager.return_value = MagicMock()
 
-                # Should fall back to JSON mode
-                result = update_phase_with_baml(
-                    phase="Scout",
-                    status="Researching",
-                    detail="Test",
-                    session_id="test",
-                    iteration=0
-                )
+                # Should raise RuntimeError (no fallback to JSON)
+                with pytest.raises(RuntimeError) as exc_info:
+                    update_phase_with_baml(
+                        phase="Scout",
+                        status="Researching",
+                        detail="Test",
+                        session_id="test",
+                        iteration=0
+                    )
 
-                # Should return valid JSON fallback result
-                assert result is not None
-                assert result['session_id'] == 'test'
-                assert result['current_phase'] == 'Scout'
-                assert 'started_at' in result
-                assert 'last_updated' in result
+                # Verify error message
+                assert "BAML phase tracking failed" in str(exc_info.value)
+                assert "API Error" in str(exc_info.value)
 
     def test_fallback_when_json_parsing_fails(self):
-        """Test fallback when JSON parsing completely fails"""
+        """Test that JSON parsing failures raise RuntimeError (no fallback)"""
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}):
             clear_baml_cache()
 
@@ -460,52 +458,48 @@ class TestBAMLFallbackBehavior:
                 mock_runtime.call_function_sync.return_value = mock_result
                 mock_runtime.create_context_manager.return_value = MagicMock()
 
-                # Should fall back to JSON mode
-                result = update_phase_with_baml(
-                    phase="Scout",
-                    status="Researching",
-                    detail="Test",
-                    session_id="test",
-                    iteration=0
-                )
+                # Should raise RuntimeError (no fallback to JSON)
+                with pytest.raises(RuntimeError) as exc_info:
+                    update_phase_with_baml(
+                        phase="Scout",
+                        status="Researching",
+                        detail="Test",
+                        session_id="test",
+                        iteration=0
+                    )
 
-                # Should return valid JSON fallback result
-                assert result is not None
-                assert result['session_id'] == 'test'
+                # Verify error message
+                assert "BAML phase tracking failed" in str(exc_info.value)
 
 
 class TestWithoutBAML:
     """Test that everything works without BAML installed"""
 
     def test_functions_work_without_baml(self):
-        """Test that all functions gracefully handle BAML being unavailable"""
+        """Test that functions raise RuntimeError when BAML is unavailable"""
         # Even if BAML is installed, simulate it being unavailable
         with patch('tools.baml_integration.BAML_AVAILABLE', False):
             with patch('tools.baml_integration.is_baml_available', return_value=False):
-                # update_phase_with_baml should work
-                result = update_phase_with_baml(
-                    phase="Scout",
-                    status="researching",
-                    detail="Test",
-                    session_id="test",
-                    iteration=0
-                )
-                assert result is not None
-                assert 'session_id' in result
+                # update_phase_with_baml should raise RuntimeError
+                with pytest.raises(RuntimeError) as exc_info:
+                    update_phase_with_baml(
+                        phase="Scout",
+                        status="Researching",
+                        detail="Test",
+                        session_id="test",
+                        iteration=0
+                    )
+                assert "BAML is required but not available" in str(exc_info.value)
 
-                # validate_phase_info should work
-                valid_json = json.dumps({
-                    "session_id": "test",
-                    "current_phase": "Scout",
-                    "status": "researching"
-                })
-                valid, info, error = validate_phase_info(valid_json)
-                assert valid is True
+                # Scout/Architect/Builder functions should also raise RuntimeError
+                with pytest.raises(RuntimeError):
+                    generate_scout_report_baml("task", "codebase")
 
-                # Scout/Architect/Builder functions should return None gracefully
-                assert generate_scout_report_baml("task", "codebase") is None
-                assert generate_architecture_baml("{}", []) is None
-                assert validate_build_result_baml("{}") is None
+                with pytest.raises(RuntimeError):
+                    generate_architecture_baml("{}", [])
+
+                with pytest.raises(RuntimeError):
+                    validate_build_result_baml("{}")
 
 
 if __name__ == "__main__":
