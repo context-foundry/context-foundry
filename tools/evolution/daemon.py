@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -72,6 +73,7 @@ class EvolutionDaemon:
         self.active_tasks = {}
         self.poll_count = 0  # Track polling iterations for periodic logging
         self.pid = None
+        self.was_paused_for_pr = False  # Track if we were paused for PR review
 
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
@@ -89,7 +91,7 @@ class EvolutionDaemon:
                 "daemon": {
                     "enabled": True,
                     "poll_interval_seconds": 60,
-                    "max_concurrent_tasks": 3,
+                    "max_concurrent_tasks": 1,
                     "log_level": "INFO"
                 },
                 "modes": {
@@ -201,14 +203,33 @@ class EvolutionDaemon:
 
         while not self.stop_requested:
             try:
+                # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
+                open_prs = self._check_open_prs()
+
+                if open_prs:
+                    pr_numbers = [pr['number'] for pr in open_prs]
+                    self.logger.info(
+                        f"⏸️  PAUSED: Waiting for PR(s) {pr_numbers} to be merged. "
+                        f"System will resume when PRs are closed."
+                    )
+                    self.was_paused_for_pr = True
+                    time.sleep(poll_interval)
+                    continue  # Skip everything - don't pick up tasks!
+
+                # PRs are now closed! Queue next task if we were paused
+                if self.was_paused_for_pr:
+                    self.logger.info("✅ PRs merged! Queuing next improvement task...")
+                    self._queue_next_improvement_task()
+                    self.was_paused_for_pr = False
+
                 # Check resources
                 can_accept, resource_status = self.resource_manager.can_accept_task()
-                
+
                 if not can_accept:
                     self.logger.debug(f"Cannot accept tasks: {resource_status}")
                     time.sleep(poll_interval)
                     continue
-                
+
                 # Check if we can accept more tasks
                 if len(self.active_tasks) >= max_concurrent:
                     self.logger.debug(f"Max concurrent tasks reached ({max_concurrent})")
@@ -221,13 +242,13 @@ class EvolutionDaemon:
 
                 # Get next task
                 task = self.task_queue.get_next_task()
-                
+
                 if task:
                     self.logger.info(f"Picked up task: {task.id} (type: {task.type})")
                     self._execute_task(task)
                 else:
                     self.logger.info("No pending tasks in queue")
-                
+
                 # Sleep before next poll
                 time.sleep(poll_interval)
 
@@ -340,6 +361,191 @@ class EvolutionDaemon:
         """Get daemon uptime in seconds"""
         # Simplified - would track start time
         return 0.0
+
+    def _check_open_prs(self):
+        """
+        Check for open PRs in the context-foundry repo
+
+        Returns list of open PRs created by the Evolution System
+        """
+        try:
+            # Get git remote to determine GitHub repo
+            cf_root = Path(__file__).parent.parent.parent
+            result = subprocess.run(
+                ['git', 'remote', 'get-url', 'origin'],
+                capture_output=True,
+                text=True,
+                cwd=str(cf_root),
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                self.logger.warning("Could not get git remote URL")
+                return []
+
+            remote_url = result.stdout.strip()
+
+            # Parse GitHub owner/repo from remote URL
+            # Handle both HTTPS and SSH formats
+            if 'github.com' in remote_url:
+                if remote_url.startswith('git@github.com:'):
+                    # SSH format: git@github.com:owner/repo.git
+                    repo_path = remote_url.replace('git@github.com:', '').replace('.git', '')
+                elif 'https://github.com/' in remote_url:
+                    # HTTPS format: https://github.com/owner/repo.git
+                    repo_path = remote_url.replace('https://github.com/', '').replace('.git', '')
+                else:
+                    self.logger.warning(f"Unrecognized GitHub URL format: {remote_url}")
+                    return []
+
+                owner, repo = repo_path.split('/')
+            else:
+                self.logger.warning("Not a GitHub repository")
+                return []
+
+            # Call GitHub API to get open PRs
+            api_url = f'https://api.github.com/repos/{owner}/{repo}/pulls'
+            params = {'state': 'open'}
+
+            try:
+                import requests
+
+                # Try to get GitHub token for authentication (avoids rate limiting)
+                # Priority: environment variable > gh CLI > config file
+                github_token = os.environ.get('GITHUB_TOKEN')
+
+                if not github_token:
+                    # Try to get token from gh CLI (likely already authenticated)
+                    try:
+                        result = subprocess.run(
+                            ['gh', 'auth', 'token'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            github_token = result.stdout.strip()
+                            self.logger.debug("Using GitHub token from gh CLI")
+                    except (FileNotFoundError, subprocess.TimeoutExpired):
+                        pass
+
+                if not github_token:
+                    github_token = self.config.get('github', {}).get('token')
+
+                headers = {}
+                if github_token:
+                    headers['Authorization'] = f'token {github_token}'
+                else:
+                    self.logger.warning(
+                        "No GitHub authentication found. Rate limited to 60 requests/hour. "
+                        "Run 'gh auth login' to authenticate."
+                    )
+
+                response = requests.get(api_url, params=params, headers=headers, timeout=10)
+
+                # Check for rate limiting
+                if response.status_code == 403 and 'rate limit' in response.text.lower():
+                    self.logger.warning(
+                        "GitHub API rate limit exceeded. "
+                        "Set GITHUB_TOKEN environment variable to increase limit to 5000/hour. "
+                        "Skipping PR check for this poll cycle."
+                    )
+                    return []
+
+                response.raise_for_status()
+                prs = response.json()
+
+                # Filter for Evolution System PRs
+                # Match branches created by Evolution System:
+                # - self-improvement/* (primary pattern)
+                # - enhancement/* (legacy pattern)
+                # - fix/* when created by automation
+                evolution_branch_patterns = ['self-improvement/', 'enhancement/', 'fix/']
+
+                evolution_prs = []
+                for pr in prs:
+                    branch = pr.get('head', {}).get('ref', '')
+                    pr_number = pr.get('number', '?')
+                    pr_title = pr.get('title', '')[:50]
+
+                    # Check if branch matches any Evolution System pattern
+                    is_evolution_pr = any(
+                        pattern in branch
+                        for pattern in evolution_branch_patterns
+                    )
+
+                    if is_evolution_pr:
+                        evolution_prs.append(pr)
+                        self.logger.debug(
+                            f"Found Evolution PR #{pr_number}: {pr_title} (branch: {branch})"
+                        )
+                    else:
+                        self.logger.debug(
+                            f"Ignoring non-Evolution PR #{pr_number}: {pr_title} (branch: {branch})"
+                        )
+
+                if evolution_prs:
+                    self.logger.info(
+                        f"Found {len(evolution_prs)} Evolution System PR(s) to wait for"
+                    )
+
+                return evolution_prs
+
+            except ImportError:
+                self.logger.warning("requests library not available - cannot check PRs")
+                return []
+            except Exception as e:
+                self.logger.warning(f"Error calling GitHub API: {e}")
+                return []
+
+        except Exception as e:
+            self.logger.error(f"Error checking open PRs: {e}", exc_info=True)
+            return []
+
+    def _queue_next_improvement_task(self):
+        """
+        Queue the next self-improvement task
+
+        Called when PRs are merged to continue the perpetual loop
+        """
+        try:
+            self.logger.info("Generating next improvement task...")
+
+            # Use self-improvement mode to find next task
+            mode = self.modes.get(TaskType.SELF_IMPROVEMENT.value)
+            if not mode:
+                self.logger.error("Self-improvement mode not found!")
+                return
+
+            # Find next TODO or generate improvement task
+            todos = mode._find_todos()
+
+            if todos:
+                next_todo = todos[0]  # Get highest priority TODO
+
+                task_id = self.task_queue.create_task(
+                    task_type=TaskType.SELF_IMPROVEMENT.value,
+                    params={
+                        'action': next_todo.get('action', 'implement_todo'),
+                        'file': next_todo.get('file'),
+                        'line': next_todo.get('line'),
+                        'description': next_todo.get('text'),
+                        'priority': next_todo.get('priority', 7),
+                        'category': next_todo.get('category', 'general')
+                    },
+                    priority=next_todo.get('priority', 7)
+                )
+
+                self.logger.info(f"✅ PERPETUAL LOOP: Queued task {task_id}")
+                self.logger.info(f"   📋 Next: {next_todo.get('text', 'Unknown')[:80]}...")
+                self.logger.info(f"   🏷️  Category: {next_todo.get('category')} | Priority: {next_todo.get('priority')}")
+
+            else:
+                self.logger.warning("⚠️  No more tasks found - perpetual loop paused")
+                self.logger.info("   Add TODOs/FIXMEs to Context Foundry code to resume")
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to queue next task: {e}", exc_info=True)
 
 
 def main():
