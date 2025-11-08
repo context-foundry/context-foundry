@@ -152,26 +152,38 @@ class TaskQueueManager:
         
         self.conn.commit()
     
-    def create_task(self, task_type: str, params: Dict[str, Any], priority: int = 5) -> str:
+    def create_task(self, task_type: str, params: Dict[str, Any], priority: int = 5, allow_legacy: bool = False) -> str:
         """
         Create new task
-        
+
         Args:
             task_type: Type of task
-            params: Task parameters
-            priority: Priority 1-10 (default 5)
-        
+            params: Task parameters (MUST include github_issue for non-legacy tasks)
+            priority: Task priority
+            allow_legacy: If True, allow tasks without github_issue (for backward compatibility)
+
+        Raises:
+            ValueError: If github_issue is missing and allow_legacy=False
+
         Returns:
             Task ID
         """
+        # Validate github_issue requirement (prevents orphaned tasks)
+        if not allow_legacy and 'github_issue' not in params:
+            raise ValueError(
+                f"Task creation requires 'github_issue' in params. "
+                f"This ensures tasks are linked to approved GitHub issues. "
+                f"Got params: {list(params.keys())}"
+            )
+
         task_id = str(uuid.uuid4())
         created_at = datetime.utcnow().isoformat()
-        
+
         self.conn.execute("""
             INSERT INTO tasks (id, type, status, priority, params_json, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (task_id, task_type, TaskStatus.PENDING.value, priority, json.dumps(params), created_at))
-        
+
         self.conn.commit()
         return task_id
     

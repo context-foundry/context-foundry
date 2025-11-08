@@ -340,6 +340,9 @@ class EvolutionDaemon:
                 # This allows daemon to pick up next task after PR is created
                 self._detect_prs_and_complete_tasks()
 
+                # STUCK TASK PROTECTION: Mark tasks as FAILED if running > 2 hours with no PR
+                self._check_stuck_running_tasks()
+
                 # Log queue status before checking for tasks
                 pending_count = self.task_queue.count_pending()
                 running_count = self.task_queue.count_running()
@@ -745,41 +748,105 @@ class EvolutionDaemon:
                 # Branch pattern: {prefix}/task-{task_id[:8]}
                 for task in running_tasks:
                     task_id_short = task.id[:8]
-                    if f"task-{task_id_short}" in branch:
-                        # Found matching PR for this task!
-                        if pr_state == 'closed':
-                            self.logger.info(f"✅ Detected MERGED PR #{pr_number} for task {task.id}")
-                            self.logger.info(f"   Branch: {branch}")
-                            self.logger.info(f"   Status: Merged (cleaning up stuck RUNNING task)")
+                    expected_branch = task.params.get('expected_branch', f"self-improvement/task-{task_id_short}")
 
-                            # Auto-close the GitHub issue if it exists
-                            github_issue = task.params.get('github_issue')
-                            if github_issue:
-                                self._close_github_issue(github_issue, pr_number)
-                        else:
-                            self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
-                            self.logger.info(f"   Branch: {branch}")
-                            self.logger.info(f"   URL: {pr_url}")
+                    # EXACT branch match (not substring!) to prevent mismatches
+                    if branch != expected_branch:
+                        # Log mismatch if task ID appears in branch but doesn't match exactly
+                        if f"task-{task_id_short}" in branch:
+                            self.logger.warning(f"⚠️  Branch mismatch for task {task.id}:")
+                            self.logger.warning(f"   Expected: {expected_branch}")
+                            self.logger.warning(f"   Got: {branch}")
+                            self.logger.warning(f"   Skipping task completion - wrong branch!")
+                        continue
 
-                        # Mark task as COMPLETED
-                        result = {
-                            'status': 'pr_merged' if pr_state == 'closed' else 'pr_created',
-                            'pr_number': pr_number,
-                            'pr_url': pr_url,
-                            'branch': branch
-                        }
-                        self.task_queue.update_task_status(
-                            task.id,
-                            TaskStatus.COMPLETED.value,
-                            result=result
-                        )
+                    # Found matching PR for this task!
+                    if pr_state == 'closed':
+                        self.logger.info(f"✅ Detected MERGED PR #{pr_number} for task {task.id}")
+                        self.logger.info(f"   Branch: {branch}")
+                        self.logger.info(f"   Status: Merged (cleaning up stuck RUNNING task)")
 
-                        self.logger.info(f"🎉 Task {task.id} marked COMPLETED - PR #{pr_number} created!")
-                        self.logger.info(f"   Daemon can now pick up next task after PR merge")
-                        break
+                        # Auto-close the GitHub issue if it exists
+                        github_issue = task.params.get('github_issue')
+                        if github_issue:
+                            self._close_github_issue(github_issue, pr_number)
+                    else:
+                        self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
+                        self.logger.info(f"   Branch: {branch}")
+                        self.logger.info(f"   URL: {pr_url}")
+
+                    # Mark task as COMPLETED (for both merged and open PRs)
+                    result = {
+                        'status': 'pr_merged' if pr_state == 'closed' else 'pr_created',
+                        'pr_number': pr_number,
+                        'pr_url': pr_url,
+                        'branch': branch
+                    }
+                    self.task_queue.update_task_status(
+                        task.id,
+                        TaskStatus.COMPLETED.value,
+                        result=result
+                    )
+
+                    self.logger.info(f"🎉 Task {task.id} marked COMPLETED - PR #{pr_number} created!")
+                    self.logger.info(f"   Daemon can now pick up next task after PR merge")
+                    break
 
         except Exception as e:
             self.logger.error(f"Error detecting PRs and completing tasks: {e}", exc_info=True)
+
+    def _check_stuck_running_tasks(self):
+        """
+        Check for tasks stuck in RUNNING state for > 2 hours
+
+        Tasks can get stuck if:
+        - Claude crashes without creating PR
+        - PR is created on wrong branch
+        - Daemon misses PR detection
+
+        Mark stuck tasks as FAILED to unblock the queue
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+            if not running_tasks:
+                return
+
+            timeout_hours = 2
+            cutoff_time = datetime.now() - timedelta(hours=timeout_hours)
+
+            for task in running_tasks:
+                # Parse task started_at timestamp
+                if not task.started_at:
+                    continue
+
+                try:
+                    started_time = datetime.fromisoformat(task.started_at)
+
+                    if started_time < cutoff_time:
+                        # Task has been RUNNING for > 2 hours
+                        duration_hours = (datetime.now() - started_time).total_seconds() / 3600
+
+                        self.logger.error(f"⚠️  STUCK TASK: {task.id} has been RUNNING for {duration_hours:.1f} hours")
+                        self.logger.error(f"   Expected branch: {task.params.get('expected_branch', 'unknown')}")
+                        self.logger.error(f"   No matching PR detected - marking as FAILED")
+
+                        # Mark as FAILED
+                        self.task_queue.update_task_status(
+                            task.id,
+                            TaskStatus.FAILED.value,
+                            error=f"Task stuck in RUNNING state for {duration_hours:.1f} hours with no matching PR"
+                        )
+
+                        self.logger.info(f"✅ Marked stuck task {task.id} as FAILED - queue unblocked")
+
+                except Exception as e:
+                    self.logger.warning(f"Error parsing started_at for task {task.id}: {e}")
+                    continue
+
+        except Exception as e:
+            self.logger.error(f"Error checking stuck running tasks: {e}", exc_info=True)
 
     def _close_github_issue(self, issue_number: int, pr_number: int) -> bool:
         """

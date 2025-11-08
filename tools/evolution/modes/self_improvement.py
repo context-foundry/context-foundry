@@ -83,6 +83,9 @@ class SelfImprovementMode(BaseEvolutionMode):
             # Create feature branch
             branch_name = f"self-improvement/task-{task.id[:8]}"
 
+            # Store expected branch in task params for validation later
+            params['expected_branch'] = branch_name
+
             # Check if task is linked to a GitHub issue
             github_issue = params.get('github_issue')
             issue_link = f"\n\n**GitHub Issue**: Fixes #{github_issue}" if github_issue else ""
@@ -523,6 +526,7 @@ Co-Authored-By: CFE System <noreply@context-foundry.dev>
                 'output': {
                     'task_id': task_id,
                     'branch': branch_name,
+                    'expected_branch': branch_name,  # Store for PR validation
                     'status': 'claude_spawned',
                     'pid': process.pid,
                     'log_file': str(log_file),
