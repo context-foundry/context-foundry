@@ -16,6 +16,7 @@ from typing import Dict, Optional
 
 from .task_queue import TaskQueueManager, Task, TaskStatus, TaskType
 from .resource_manager import ResourceManager
+from .process_watchdog import ProcessWatchdog
 from .modes.self_improvement import SelfImprovementMode
 from .modes.chaos_creative import ChaosCreativeMode
 from .modes.research_discovery import ResearchDiscoveryMode
@@ -59,10 +60,15 @@ class EvolutionDaemon:
         # Initialize components
         self.task_queue = TaskQueueManager()
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
+        self.watchdog = ProcessWatchdog(
+            max_duration_minutes=60,
+            max_tokens_per_task=100_000,
+            check_interval_seconds=30
+        )
 
-        # Initialize evolution modes
+        # Initialize evolution modes (pass watchdog for process registration)
         self.modes = {
-            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
+            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(watchdog=self.watchdog),
             TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
             TaskType.RESEARCH.value: ResearchDiscoveryMode()
         }
@@ -74,6 +80,7 @@ class EvolutionDaemon:
         self.poll_count = 0  # Track polling iterations for periodic logging
         self.pid = None
         self.was_paused_for_pr = False  # Track if we were paused for PR review
+        self.last_watchdog_check = time.time()  # Track last watchdog check time
 
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
@@ -167,6 +174,32 @@ class EvolutionDaemon:
         self.config = self._load_config(None)
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
     
+    
+    def _cleanup_stuck_tasks(self):
+        """
+        Cleanup any tasks stuck in RUNNING state from previous daemon crash
+
+        This is called on daemon startup to ensure no stuck tasks block the queue.
+        Tasks can get stuck in RUNNING state if:
+        - Daemon crashed while task was executing
+        - Process was killed without cleanup
+        - System reboot
+        """
+        running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value, limit=100)
+
+        if running_tasks:
+            self.logger.warning(f"Found {len(running_tasks)} stuck RUNNING tasks from previous session - cancelling them")
+
+            for task in running_tasks:
+                self.logger.info(f"  Cancelling stuck task: {task.id[:8]} ({task.type}) - started {task.started_at}")
+                self.task_queue.update_task_status(
+                    task.id,
+                    TaskStatus.CANCELLED.value,
+                    error="Task was stuck in RUNNING state when daemon restarted"
+                )
+        else:
+            self.logger.debug("No stuck RUNNING tasks found")
+
     def start(self, daemonize: bool = False):
         """
         Start daemon
@@ -181,6 +214,9 @@ class EvolutionDaemon:
         self._write_pid()
         self.setup_signal_handlers()
         
+        # Clean up any stuck tasks from previous crashes
+        self._cleanup_stuck_tasks()
+        
         self.logger.info(f"Starting Evolution Daemon (PID: {self.pid})")
         self.running = True
         
@@ -193,6 +229,54 @@ class EvolutionDaemon:
         
         return True
     
+    def _check_watchdog(self):
+        """
+        Check watchdog for stuck/timeout processes and handle actions
+
+        Actions can include:
+        - killed_timeout: Process exceeded max duration (60 min)
+        - killed_stuck: Process has no log activity (10+ min)
+        - process_died: Process terminated unexpectedly
+        - warning_tokens: Process exceeding token budget
+        """
+        actions = self.watchdog.check_processes()
+
+        for action in actions:
+            action_type = action.get('action')
+            task_id = action.get('task_id')
+            pid = action.get('pid')
+
+            if action_type in ['killed_timeout', 'killed_stuck']:
+                # Process was killed by watchdog - mark task as failed
+                reason = 'timeout' if action_type == 'killed_timeout' else 'stuck (no log activity)'
+                duration = action.get('duration_minutes', 0)
+
+                self.logger.error(
+                    f"⚠️  Watchdog killed process {pid} (task {task_id[:8]}) - {reason} after {duration:.1f} min"
+                )
+
+                # Update task status to FAILED
+                self.task_queue.update_task_status(
+                    task_id,
+                    TaskStatus.FAILED.value,
+                    error=f"Process killed by watchdog: {reason} ({duration:.1f} min)"
+                )
+
+            elif action_type == 'process_died':
+                # Process terminated unexpectedly
+                duration = action.get('duration_minutes', 0)
+                self.logger.warning(
+                    f"Process {pid} (task {task_id[:8]}) died unexpectedly after {duration:.1f} min"
+                )
+                # Don't update task status - let PR detection handle it (might have succeeded)
+
+            elif action_type == 'warning_tokens':
+                # Process using lots of tokens
+                estimated = action.get('estimated_tokens', 0)
+                self.logger.warning(
+                    f"⚠️  Process {pid} (task {task_id[:8]}) estimated {estimated} tokens (high usage)"
+                )
+
     def _interruptible_sleep(self, seconds: int):
         """
         Sleep for specified seconds, but check stop_requested every second
@@ -213,6 +297,12 @@ class EvolutionDaemon:
 
         while not self.stop_requested:
             try:
+                # Check watchdog for stuck/timeout processes (every 30 seconds)
+                current_time = time.time()
+                if current_time - self.last_watchdog_check >= 30:
+                    self._check_watchdog()
+                    self.last_watchdog_check = current_time
+
                 # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
                 open_prs = self._check_open_prs()
 

@@ -178,18 +178,23 @@ class TaskQueueManager:
     def get_next_task(self) -> Optional[Task]:
         """
         Get next pending task with locking
-        
+
+        Only returns tasks with github_issue (approved GitHub issues)
+        to prevent old/non-approved tasks from being picked up.
+
         Returns:
             Task object or None if no pending tasks
         """
         # Use transaction for atomic read-and-update
         cursor = self.conn.execute("BEGIN IMMEDIATE")
-        
+
         try:
+            # ONLY pick up tasks with github_issue (GitHub-approved workflow)
             row = self.conn.execute("""
-                SELECT * FROM tasks 
-                WHERE status = ? 
-                ORDER BY priority DESC, created_at 
+                SELECT * FROM tasks
+                WHERE status = ?
+                AND params_json LIKE '%"github_issue":%'
+                ORDER BY priority DESC, created_at
                 LIMIT 1
             """, (TaskStatus.PENDING.value,)).fetchone()
             

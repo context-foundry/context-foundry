@@ -155,19 +155,38 @@ class ScoutAgent:
                     for match in matches:
                         line_num = content[:match.start()].count('\n') + 1
 
+                        # Skip false positives
+                        should_skip = False
+
                         # Get the full line for context checking
                         if 0 < line_num <= len(lines):
                             full_line = lines[line_num - 1].strip()
 
                             # Skip false positives: comments and string literals in pattern definitions
                             if full_line.startswith('#'):
-                                continue
-                            if full_line.startswith('"""') or full_line.startswith("'''"):
-                                continue
+                                should_skip = True
+                            elif full_line.startswith('"""') or full_line.startswith("'''"):
+                                should_skip = True
                             # Skip if it's in a regex pattern string (common in security scanners)
                             # Check for raw strings containing escaped regex patterns
-                            if ("r'" in full_line or 'r"' in full_line) and '\\s*\\(' in full_line:
-                                continue
+                            elif ("r'" in full_line or 'r"' in full_line) and '\\s*\\(' in full_line:
+                                should_skip = True
+                            # Skip if it's part of a security_patterns definition (pattern tuples)
+                            elif 'security_patterns' in content[:match.start()]:
+                                # Check if we're within the security_patterns list definition
+                                lines_before = content[:match.start()].splitlines()
+                                # Look for security_patterns definition in recent lines
+                                for prev_line in lines_before[-20:]:
+                                    if 'security_patterns' in prev_line and '=' in prev_line:
+                                        # Check if we're still in that list (no other assignment after it)
+                                        after_patterns = content[match.start():]
+                                        next_assignment = re.search(r'\n\s*\w+\s*=', after_patterns[:500])
+                                        if not next_assignment or next_assignment.start() > 100:
+                                            should_skip = True
+                                            break
+
+                        if should_skip:
+                            continue
 
                         self.findings.append(Finding(
                             title=f"Security: {warning} in {py_file.name}",
