@@ -257,7 +257,9 @@ class EvolutionDaemon:
                     self.logger.info(f"Picked up task: {task.id} (type: {task.type})")
                     self._execute_task(task)
                 else:
-                    self.logger.info("No pending tasks in queue")
+                    # Queue is empty - generate a new improvement task to keep the loop going
+                    self.logger.info("No pending tasks in queue - generating new improvement task...")
+                    self._queue_next_improvement_task()
 
                 # Sleep before next poll (interruptible for responsive shutdown)
                 self._interruptible_sleep(poll_interval)
