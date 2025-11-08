@@ -127,6 +127,27 @@ This is an autonomous self-improvement task from the Evolution System."""
         """Validate improvement result"""
         return result.success and result.output is not None
 
+    def _load_search_config(self) -> List[str]:
+        """
+        Load search directories from config file
+
+        Config file: ~/.context-foundry/evolution/todo_search.json
+        Format: {"search_dirs": ["tools/cache", "tools/metrics"]}
+
+        Returns:
+            List of directory paths (relative to project root), or empty list for defaults
+        """
+        try:
+            config_path = Path.home() / ".context-foundry" / "evolution" / "todo_search.json"
+            if config_path.exists():
+                import json
+                with open(config_path) as f:
+                    config = json.load(f)
+                    return config.get('search_dirs', [])
+        except Exception:
+            pass
+        return []
+
     def _find_todos(self) -> List[Dict]:
         """
         Find TODO/FIXME comments in codebase with intelligent prioritization
@@ -138,11 +159,20 @@ This is an autonomous self-improvement task from the Evolution System."""
         cf_root = Path(__file__).parent.parent.parent.parent
 
         # Directories to search (in priority order)
-        search_dirs = [
-            cf_root / "tools",
-            cf_root / "src",
-            cf_root / "tests",
-        ]
+        # Load from config or use defaults
+        config_dirs = self._load_search_config()
+
+        if config_dirs:
+            # Use configured directories
+            search_dirs = [cf_root / Path(d) for d in config_dirs]
+        else:
+            # Default: only search specific subdirectories for focused improvements
+            search_dirs = [
+                cf_root / "tools" / "cache",      # Cache system TODOs
+                cf_root / "tools" / "metrics",    # Metrics TODOs
+                cf_root / "tools" / "incremental", # Incremental build TODOs
+                # Add more specific directories as needed
+            ]
 
         for search_dir in search_dirs:
             if not search_dir.exists():
