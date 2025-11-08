@@ -432,8 +432,8 @@ This is an autonomous self-improvement task from the Evolution System."""
         try:
             import json
 
-            # Import MCP server function directly
-            from tools.mcp_server import autonomous_build_and_deploy
+            # Import MCP server implementation function (not the decorated tool)
+            from tools.mcp_server import _autonomous_build_and_deploy_impl
 
             cf_root = Path(__file__).parent.parent.parent.parent
 
@@ -441,8 +441,8 @@ This is an autonomous self-improvement task from the Evolution System."""
             print(f"   Task: {prompt[:100]}...")
             print(f"   Branch: {branch_name}")
 
-            # Call MCP function directly (non-blocking, returns task_id immediately)
-            result_json = autonomous_build_and_deploy(
+            # Call MCP implementation function directly (non-blocking, returns task_id immediately)
+            result_json = _autonomous_build_and_deploy_impl(
                 task=prompt,
                 working_directory=str(cf_root),
                 github_repo_name="context-foundry/context-foundry",

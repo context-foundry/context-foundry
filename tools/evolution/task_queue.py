@@ -179,8 +179,9 @@ class TaskQueueManager:
         """
         Get next pending task with locking
 
-        Only returns tasks with github_issue (approved GitHub issues)
-        to prevent old/non-approved tasks from being picked up.
+        Priority order:
+        1. Tasks with github_issue (approved GitHub issues) - highest priority
+        2. Self-generated improvement tasks (autonomous mode) - fallback
 
         Returns:
             Task object or None if no pending tasks
@@ -189,7 +190,7 @@ class TaskQueueManager:
         cursor = self.conn.execute("BEGIN IMMEDIATE")
 
         try:
-            # ONLY pick up tasks with github_issue (GitHub-approved workflow)
+            # First, try to get GitHub-approved tasks (highest priority)
             row = self.conn.execute("""
                 SELECT * FROM tasks
                 WHERE status = ?
@@ -197,7 +198,16 @@ class TaskQueueManager:
                 ORDER BY priority DESC, created_at
                 LIMIT 1
             """, (TaskStatus.PENDING.value,)).fetchone()
-            
+
+            # If no GitHub-approved tasks, fall back to self-generated tasks
+            if not row:
+                row = self.conn.execute("""
+                    SELECT * FROM tasks
+                    WHERE status = ?
+                    ORDER BY priority DESC, created_at
+                    LIMIT 1
+                """, (TaskStatus.PENDING.value,)).fetchone()
+
             if not row:
                 self.conn.rollback()
                 return None
