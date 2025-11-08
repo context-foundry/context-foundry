@@ -21,6 +21,7 @@ from .process_watchdog import ProcessWatchdog
 from .modes.self_improvement import SelfImprovementMode
 from .modes.chaos_creative import ChaosCreativeMode
 from .modes.research_discovery import ResearchDiscoveryMode
+from .backlog_generator import BacklogGenerator
 
 
 # Setup logging
@@ -80,6 +81,13 @@ class EvolutionDaemon:
             check_interval_seconds=30
         )
 
+        # Initialize backlog generator
+        cf_root = Path(__file__).parent.parent.parent
+        self.backlog_generator = BacklogGenerator(
+            project_root=cf_root,
+            target_backlog_size=20
+        )
+
         # Initialize evolution modes
         self.modes = {
             TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
@@ -95,6 +103,7 @@ class EvolutionDaemon:
         self.pid = None
         self.was_paused_for_pr = False  # Track if we were paused for PR review
         self.last_watchdog_check = time.time()  # Track last watchdog check time
+        self.last_backlog_check = 0  # Track last backlog maintenance time
 
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
@@ -316,6 +325,10 @@ class EvolutionDaemon:
                 if current_time - self.last_watchdog_check >= 30:
                     self._check_watchdog()
                     self.last_watchdog_check = current_time
+
+                # BACKLOG MAINTENANCE: Run Scout and create GitHub issues (every 5 minutes)
+                # Uses lightweight Scout + Claude CLI (no MCP needed)
+                self._maintain_backlog()
 
                 # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
                 open_prs = self._check_open_prs()
@@ -795,6 +808,33 @@ class EvolutionDaemon:
         except Exception as e:
             self.logger.debug(f"Error polling GitHub issues: {e}")
             return 0
+
+    def _maintain_backlog(self):
+        """
+        Maintain GitHub issue backlog at target size using Scout + Backlog Generator
+
+        This runs periodically (every 5 minutes) to ensure there's always a healthy
+        backlog of issues for humans to review and approve.
+
+        Uses lightweight Scout agent + Claude CLI (no MCP needed).
+        """
+        try:
+            current_time = time.time()
+            # Check backlog every 5 minutes (300 seconds)
+            if current_time - self.last_backlog_check < 300:
+                return
+
+            self.last_backlog_check = current_time
+
+            self.logger.info("🔍 GitHub backlog maintenance starting...")
+
+            # Run backlog maintenance (Scout + issue creation)
+            self.backlog_generator.maintain_backlog()
+
+            self.logger.info("✅ GitHub backlog maintenance complete")
+
+        except Exception as e:
+            self.logger.warning(f"Error maintaining backlog: {e}", exc_info=True)
 
     def _check_recently_closed_prs(self):
         """
