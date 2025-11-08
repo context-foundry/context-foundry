@@ -193,6 +193,16 @@ class EvolutionDaemon:
         
         return True
     
+    def _interruptible_sleep(self, seconds: int):
+        """
+        Sleep for specified seconds, but check stop_requested every second
+        This makes Ctrl+C responsive instead of blocking for full duration
+        """
+        for _ in range(seconds):
+            if self.stop_requested:
+                break
+            time.sleep(1)
+
     def main_loop(self):
         """Main daemon loop - polls queue every 60 seconds"""
         poll_interval = self.config.get('daemon', {}).get('poll_interval_seconds', 60)
@@ -213,7 +223,7 @@ class EvolutionDaemon:
                         f"System will resume when PRs are closed."
                     )
                     self.was_paused_for_pr = True
-                    time.sleep(poll_interval)
+                    self._interruptible_sleep(poll_interval)
                     continue  # Skip everything - don't pick up tasks!
 
                 # PRs are now closed! Queue next task if we were paused
@@ -227,7 +237,7 @@ class EvolutionDaemon:
 
                 if not can_accept:
                     self.logger.debug(f"Cannot accept tasks: {resource_status}")
-                    time.sleep(poll_interval)
+                    self._interruptible_sleep(poll_interval)
                     continue
 
                 # Check if we can accept more tasks
@@ -249,8 +259,8 @@ class EvolutionDaemon:
                 else:
                     self.logger.info("No pending tasks in queue")
 
-                # Sleep before next poll
-                time.sleep(poll_interval)
+                # Sleep before next poll (interruptible for responsive shutdown)
+                self._interruptible_sleep(poll_interval)
 
                 # Periodic resource usage logging (every 10 iterations)
                 self.poll_count += 1
@@ -265,7 +275,7 @@ class EvolutionDaemon:
 
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}", exc_info=True)
-                time.sleep(poll_interval)
+                self._interruptible_sleep(poll_interval)
     
     def _execute_task(self, task: Task):
         """
