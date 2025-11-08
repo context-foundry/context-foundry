@@ -199,13 +199,13 @@ class TestClientsSchema:
         assert schema.exists(), "clients.baml not found"
 
     def test_defines_claude_clients(self):
-        """Test that Claude clients are defined"""
+        """Test that Claude clients were removed (using OpenAI only)"""
         schema = get_baml_schemas_dir() / "clients.baml"
         content = schema.read_text()
 
-        assert "client<llm> Claude35Sonnet" in content
-        assert "client<llm> Claude35Haiku" in content
-        assert "provider anthropic" in content
+        # Claude clients removed to avoid Anthropic API charges
+        # BAML uses OpenAI GPT-4o-mini instead
+        assert "Claude clients removed" in content or "// Claude clients removed" in content
 
     def test_defines_openai_clients(self):
         """Test that OpenAI clients are defined"""
