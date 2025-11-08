@@ -214,6 +214,9 @@ class EvolutionDaemon:
         self._write_pid()
         self.setup_signal_handlers()
         
+        # Clean up any stuck tasks from previous crashes
+        self._cleanup_stuck_tasks()
+        
         self.logger.info(f"Starting Evolution Daemon (PID: {self.pid})")
         self.running = True
         
