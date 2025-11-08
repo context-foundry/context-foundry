@@ -128,7 +128,7 @@ echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # Query running tasks with MCP task IDs
-MCP_TASKS=$(python3 << 'PYTHON'
+MCP_TASKS=$($PYTHON_CMD << 'PYTHON'
 import sys
 sys.path.insert(0, '/Users/name/homelab/context-foundry')
 try:
