@@ -104,7 +104,11 @@ class ScoutAgent:
         self._deduplicate()
         self._sort_by_priority()
 
-        return self.findings
+        # AI-powered multi-perspective filtering
+        print("🤖 Analyzing findings through AI expert lenses...")
+        prioritized_findings = self._ai_analyze_findings(self.findings)
+
+        return prioritized_findings
 
     def _scan_missing_tests(self):
         """Find files without test coverage"""
@@ -963,6 +967,159 @@ class ScoutAgent:
             return True
         except:
             return False
+
+    def _ai_analyze_findings(self, findings: List[Finding]) -> List[Finding]:
+        """
+        Use Claude CLI to analyze findings through multiple expert perspectives
+
+        Returns filtered list of high-priority findings worthy of GitHub issues
+        """
+        if not findings:
+            return []
+
+        # Limit to top 30 findings to avoid overwhelming Claude
+        findings_to_analyze = findings[:30]
+
+        # Format findings as structured data for Claude
+        findings_json = []
+        for i, finding in enumerate(findings_to_analyze, 1):
+            findings_json.append({
+                'id': i,
+                'title': finding.title,
+                'type': finding.finding_type,
+                'priority': finding.priority,
+                'category': finding.category,
+                'description': finding.description,
+                'file': finding.file_path,
+                'line': finding.line_number,
+                'evidence': finding.evidence,
+                'effort': finding.effort
+            })
+
+        # Create the multi-perspective analysis prompt
+        prompt = f"""You are analyzing {len(findings_to_analyze)} code findings from a static analysis tool for the Context Foundry project.
+
+Your task: Evaluate each finding through 6 expert lenses and select the top 5-10 findings that should become GitHub issues.
+
+## Expert Perspectives:
+
+🔒 **Security Analyst**: Critical vulnerabilities, attack vectors, data exposure risks
+⚙️ **DevOps Engineer**: Deployment risks, operational concerns, reliability issues
+📊 **Functional Consultant**: User impact, business value, feature gaps
+💼 **Business SME**: ROI, strategic alignment, competitive advantage
+👨‍💻 **Developer**: Technical debt, maintainability, developer experience
+🏗️ **Architect**: System design, scalability, architectural coherence
+
+## Findings to Analyze:
+
+```json
+{json.dumps(findings_json, indent=2)}
+```
+
+## Instructions:
+
+1. Analyze each finding through ALL 6 perspectives
+2. Score each finding 0-10 for overall priority (considering all perspectives)
+3. Select the top 5-10 findings that should become GitHub issues
+4. For each selected finding, provide:
+   - Overall priority score (0-10)
+   - Which expert perspectives rated it highly (and why)
+   - Recommended GitHub labels
+   - Updated priority (P0-P4)
+
+## Output Format:
+
+Return ONLY valid JSON in this exact format:
+
+```json
+{{
+  "prioritized_findings": [
+    {{
+      "id": 1,
+      "score": 9,
+      "expert_perspectives": {{
+        "security": "Critical SQL injection risk - HIGH",
+        "devops": "Could cause production outages - HIGH",
+        "developer": "Easy fix, high impact - MEDIUM"
+      }},
+      "github_labels": ["security", "p0", "bug"],
+      "priority": "P0",
+      "reasoning": "Multi-perspective summary of why this is important"
+    }}
+  ]
+}}
+```
+
+Return ONLY the JSON, no other text."""
+
+        try:
+            # Call Claude CLI with prompt via stdin
+            result = subprocess.run(
+                ['claude', '--print', '--output-format', 'text'],
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if result.returncode != 0:
+                print(f"  ⚠️  Claude CLI failed: {result.stderr}")
+                print(f"  Falling back to original {len(findings)} findings")
+                return findings
+
+            # Parse Claude's response
+            response_text = result.stdout.strip()
+
+            # Extract JSON from response (Claude might wrap it in markdown)
+            if '```json' in response_text:
+                json_start = response_text.find('```json') + 7
+                json_end = response_text.find('```', json_start)
+                response_text = response_text[json_start:json_end].strip()
+            elif '```' in response_text:
+                json_start = response_text.find('```') + 3
+                json_end = response_text.find('```', json_start)
+                response_text = response_text[json_start:json_end].strip()
+
+            analysis = json.loads(response_text)
+
+            # Map AI-prioritized findings back to Finding objects
+            prioritized = []
+            for item in analysis.get('prioritized_findings', []):
+                finding_id = item['id'] - 1  # Convert 1-indexed to 0-indexed
+                if 0 <= finding_id < len(findings_to_analyze):
+                    original_finding = findings_to_analyze[finding_id]
+
+                    # Update finding with AI insights
+                    original_finding.priority = item.get('priority', original_finding.priority)
+                    original_finding.research = {
+                        'ai_score': item.get('score'),
+                        'expert_perspectives': item.get('expert_perspectives', {}),
+                        'reasoning': item.get('reasoning', ''),
+                        'github_labels': item.get('github_labels', [])
+                    }
+
+                    prioritized.append(original_finding)
+
+            print(f"  ✅ AI filtered {len(findings_to_analyze)} findings → {len(prioritized)} high-priority issues")
+            print(f"  📊 Top issues by expert consensus:")
+            for i, finding in enumerate(prioritized[:5], 1):
+                score = finding.research.get('ai_score', 0) if finding.research else 0
+                print(f"     {i}. [{finding.priority}] {finding.title[:60]} (score: {score}/10)")
+
+            return prioritized if prioritized else findings
+
+        except subprocess.TimeoutExpired:
+            print(f"  ⚠️  Claude CLI timed out")
+            print(f"  Falling back to original {len(findings)} findings")
+            return findings
+        except json.JSONDecodeError as e:
+            print(f"  ⚠️  Failed to parse Claude's JSON response: {e}")
+            print(f"  Falling back to original {len(findings)} findings")
+            return findings
+        except Exception as e:
+            print(f"  ⚠️  AI analysis failed: {e}")
+            print(f"  Falling back to original {len(findings)} findings")
+            return findings
 
     def _deduplicate(self):
         """Remove duplicate findings"""
