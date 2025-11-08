@@ -430,13 +430,57 @@ class TUIDataProvider:
         if cached is not None:
             return cached
 
-        # TODO: Read from actual log files
-        logs = [
-            f"[INFO] Build started: {session_id}",
-            "[INFO] Scout phase: Analyzing requirements...",
-            "[INFO] Architect phase: Designing system...",
-            "[INFO] Builder phase: Implementing code...",
-        ]
+        # Read from actual log files
+        logs = []
+
+        # Find the working directory for this session
+        working_dir = None
+        for build_dir in self._tracked_builds:
+            build_status = await self.get_current_build(Path(build_dir))
+            if build_status and build_status.session_id == session_id:
+                working_dir = Path(build_dir)
+                break
+
+        if working_dir is None:
+            # Session not found in tracked builds
+            return [f"[WARN] No logs found for session: {session_id}"]
+
+        # Collect logs from multiple sources
+        log_sources = []
+
+        # 1. Main launch log file
+        launch_log = working_dir / f".launch-{session_id}.log"
+        if launch_log.exists():
+            log_sources.append(launch_log)
+
+        # 2. Phase-specific logs in .context-foundry directory
+        cf_dir = working_dir / ".context-foundry"
+        if cf_dir.exists():
+            # Add all .log files in .context-foundry directory
+            for log_file in sorted(cf_dir.glob("*.log")):
+                log_sources.append(log_file)
+
+        # Read all log files and combine
+        for log_file in log_sources:
+            try:
+                with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+                    # Add header to separate different log files
+                    logs.append(f"=== {log_file.name} ===")
+                    # Read all lines
+                    for line in f:
+                        # Strip trailing whitespace but preserve indentation
+                        logs.append(line.rstrip())
+                    logs.append("")  # Add blank line between files
+            except (OSError, IOError) as e:
+                logs.append(f"[ERROR] Failed to read {log_file.name}: {e}")
+
+        # If no logs were found, provide a helpful message
+        if not logs:
+            logs = [
+                f"[INFO] No log files found for session: {session_id}",
+                f"[INFO] Working directory: {working_dir}",
+                "[INFO] Log files may not have been created yet"
+            ]
 
         self._set_cache(cache_key, logs)
         return logs
