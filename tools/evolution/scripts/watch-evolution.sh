@@ -2,6 +2,19 @@
 # Evolution System Monitor - "Simplicity is the ultimate sophistication"
 # Shows all Claude instances and their activity in one clean view
 
+# Detect Python (prefer Homebrew Python 3.10+ for MCP support)
+if [ -f "/opt/homebrew/bin/python3.13" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python3.13"
+elif [ -f "/opt/homebrew/bin/python3.12" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python3.12"
+elif [ -f "/opt/homebrew/bin/python3.11" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python3.11"
+elif [ -f "/opt/homebrew/bin/python3.10" ]; then
+    PYTHON_CMD="/opt/homebrew/bin/python3.10"
+else
+    PYTHON_CMD="python3"
+fi
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -128,7 +141,7 @@ echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
 # Query running tasks with MCP task IDs
-MCP_TASKS=$(python3 << 'PYTHON'
+MCP_TASKS=$($PYTHON_CMD << 'PYTHON'
 import sys
 sys.path.insert(0, '/Users/name/homelab/context-foundry')
 try:
