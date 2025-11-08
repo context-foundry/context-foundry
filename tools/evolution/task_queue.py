@@ -271,30 +271,36 @@ class TaskQueueManager:
         """Calculate exponential backoff in seconds"""
         return 2 ** retry_count
     
-    def archive_old_tasks(self, days: int = 30):
+    def archive_old_tasks(self, days: int = 30) -> int:
         """
         Move completed/failed tasks to history
-        
+
         Args:
             days: Archive tasks older than this many days
+
+        Returns:
+            Number of tasks archived
         """
         cutoff_date = (datetime.utcnow() - timedelta(days=days)).isoformat()
-        
+
         # Copy to history
         self.conn.execute("""
-            INSERT INTO task_history 
+            INSERT INTO task_history
             SELECT id, type, status, priority, params_json, created_at, started_at, completed_at, result_json, error_message, ?
             FROM tasks
             WHERE status IN (?, ?) AND completed_at < ?
         """, (datetime.utcnow().isoformat(), TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, cutoff_date))
-        
-        # Delete from tasks
-        self.conn.execute("""
+
+        # Delete from tasks and get count
+        cursor = self.conn.execute("""
             DELETE FROM tasks
             WHERE status IN (?, ?) AND completed_at < ?
         """, (TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, cutoff_date))
-        
+
+        archived_count = cursor.rowcount
         self.conn.commit()
+
+        return archived_count
     
     def get_task(self, task_id: str) -> Optional[Task]:
         """Get task by ID"""
