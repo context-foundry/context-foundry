@@ -1,136 +1,200 @@
-# Scout Report: GitHub Issue #71 Analysis
+# Scout Report: Add Missing Tests for Critical Paths
 
 ## Executive Summary
 
-**Issue Status**: ✅ **ALREADY IMPLEMENTED**
+Context Foundry is missing comprehensive test coverage for 8 critical modules totaling ~3000 lines of code. These modules handle core functionality including incremental builds, caching, path utilities, and back pressure validation. Adding thorough unit and integration tests will significantly improve code reliability and maintainability.
 
-GitHub issue #71 requests implementing 8 balanced opportunity scanners to make Scout a balanced opportunity finder instead of being purely reactive. After analyzing the codebase, **all requested features are already fully implemented**.
+**Critical Gaps Identified:**
+- Incremental build system (3 modules, 1255 lines) - NO TESTS
+- Cache system (2 modules) - NO TESTS (ironic for cache modules!)
+- Tool helpers (2 modules, 813 lines) - PARTIAL COVERAGE
+- Back pressure validation (369 lines) - NO TESTS
 
-**Timeline Evidence**:
-- Feature implementation: November 8, 2025 at 12:51-13:09 (commits fe79433, 4d47da8)
-- Issue creation: November 8, 2025 at 18:25 UTC
-- **Conclusion**: Issue was created ~5-6 hours AFTER the feature was already merged into main
+## Key Requirements
 
-## Requirements Analysis
+1. **Create comprehensive test suite** covering:
+   - Unit tests for all public functions
+   - Integration tests for module interactions
+   - Edge case and error handling validation
+   - Mock external dependencies appropriately
 
-Issue #71 requests 8 new scanner types:
+2. **Follow existing patterns**:
+   - Use pytest framework (already configured)
+   - Apply pytest markers: @pytest.mark.unit, @pytest.mark.integration, @pytest.mark.tier1
+   - Use tempfile.TemporaryDirectory() for file system tests
+   - Match naming: `test_{module_name}.py`
 
-### 1. Feature Opportunity Scanner ✅ IMPLEMENTED
-**Location**: `tools/evolution/agents/scout_agent.py` lines 378-450
-**Function**: `_scan_feature_opportunities()`
-**Coverage**:
-- ✅ TODO comments for features
-- ✅ Stub methods (`pass`, `NotImplementedError`)
-- ✅ Commented-out code blocks
-- ✅ Priority P3-P4 as requested
+3. **Test files to create**:
+   - `tests/test_incremental_builder.py`
+   - `tests/test_change_detector.py`
+   - `tests/test_global_scout_cache.py`
+   - `tests/test_integration_pre_check.py`
+   - `tests/test_truncation.py`
+   - `tests/test_path_utils.py`
+   - `tests/test_scout_cache_unit.py`
+   - `tests/test_test_cache_unit.py`
 
-### 2. API Enhancement Scanner ✅ IMPLEMENTED  
-**Location**: lines 452-512
-**Function**: `_scan_api_enhancements()`
-**Coverage**:
-- ✅ Missing pagination on list endpoints
-- ✅ Incomplete CRUD operations
-- ✅ Missing rate limiting
-- ✅ Priority P2-P3 as requested
+4. **Maintain 100% backward compatibility**:
+   - All existing 45+ test files must continue to pass
+   - No changes to production code (tests only)
+   - No breaking changes to public APIs
 
-### 3. Developer Experience Scanner ✅ IMPLEMENTED
-**Location**: lines 514-610
-**Function**: `_scan_developer_experience()`
-**Coverage**:
-- ✅ Magic numbers detection
-- ✅ Unclear variable names (x, tmp, data)
-- ✅ Complex functions (>50 lines)
-- ✅ Missing type hints
-- ✅ Priority P4 as requested
+## Technology Stack
 
-### 4. Modern Language Features Scanner ✅ IMPLEMENTED
-**Location**: lines 612-681
-**Function**: `_scan_modern_language_features()`
-**Coverage**:
-- ✅ Old-style string formatting (%s, .format())
-- ✅ Dict comprehension opportunities
-- ✅ Dataclass opportunities
-- ✅ Missing context managers (`with` statements)
-- ✅ Priority P3-P4 as requested
+- **Framework**: pytest 8.4.2
+- **Python**: 3.13+
+- **Test utilities**: 
+  - tempfile for filesystem isolation
+  - unittest.mock for mocking
+  - pytest markers for organization
+- **Coverage tool**: pytest-cov (configured but not required)
 
-### 5. Observability Scanner ✅ IMPLEMENTED
-**Location**: lines 683-741
-**Function**: `_scan_observability()`
-**Coverage**:
-- ✅ Error handlers without logging
-- ✅ Long-running operations without progress tracking
-- ✅ Critical paths with missing logging
-- ✅ Priority P3-P4 as requested
+## Critical Architecture Recommendations
 
-### 6. User Experience Scanner ✅ IMPLEMENTED
-**Location**: lines 743-806
-**Function**: `_scan_user_experience()`
-**Coverage**:
-- ✅ Missing --help text in CLI
-- ✅ Destructive operations without confirmation
-- ✅ Silent failures (except: pass)
-- ✅ Priority P2-P4 as requested
+### 1. Test Organization Pattern
 
-### 7. Configuration Scanner ✅ IMPLEMENTED
-**Location**: lines 808-872
-**Function**: `_scan_configuration()`
-**Coverage**:
-- ✅ Hardcoded values (URLs, secrets, paths, timeouts)
-- ✅ Missing config validation
-- ✅ Missing .env.example file
-- ✅ Priority P3 as requested
+Match existing test structure:
+```python
+"""
+Unit tests for {module_name}
 
-### 8. Extensibility Scanner ✅ IMPLEMENTED
-**Location**: lines 874-943
-**Function**: `_scan_extensibility()`
-**Coverage**:
-- ✅ Potential abstract base classes
-- ✅ Hardcoded logic that should be plugins
-- ✅ Tight coupling detection
-- ✅ Priority P3-P4 as requested
+Tests:
+- {functionality_1}
+- {functionality_2}
+- {edge_cases}
+"""
 
-## Integration Status
+import pytest
+import tempfile
+from pathlib import Path
 
-All scanners are properly integrated:
-- Called in `scan()` method (lines 90-98)
-- Runs after original scanners (lines 82-88)
-- Deduplicated and prioritized (lines 104-105)
+# Import the module under test
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from tools.{module_path} import {functions}
 
-## Test Coverage
+class Test{ModuleName}:
+    """Test {module} functionality."""
+    
+    @pytest.mark.unit
+    @pytest.mark.tier1
+    def test_basic_functionality(self):
+        """Test basic use case."""
+        # Arrange, Act, Assert pattern
+```
 
-Comprehensive test suite exists in `tests/evolution/test_scout_agent.py`:
-- 728 lines of tests
-- Coverage for all major scanner types
-- Edge case handling
-- False positive filtering tests
+### 2. Focus on Critical Paths
 
-## Recommended Action
+**Highest Priority (Tier 1 - MUST PASS):**
+1. `scout_cache.py`: Cache hit/miss logic, TTL validation
+2. `path_utils.py`: Absolute/relative conversion (token savings critical)
+3. `incremental_builder.py`: Build plan generation, dependency graphs
+4. `change_detector.py`: Change detection accuracy
 
-Since the feature is **already implemented and tested**, the appropriate action is:
+**Medium Priority (Tier 2):**
+5. `test_cache.py`: Test result caching
+6. `truncation.py`: Output truncation with recovery
+7. `integration_pre_check.py`: Pre-flight validation
 
-1. **Skip implementation phases** (Architect, Builder already done)
-2. **Run existing tests** to verify functionality
-3. **Create PR** with message: "Closes #71 - Feature already implemented in commits fe79433, 4d47da8"
-4. **Update issue** with evidence that all requirements are met
+**Lower Priority (Tier 3):**
+8. `global_scout_cache.py`: Global caching (advanced feature)
+
+### 3. Mocking Strategy
+
+- **File system operations**: Use `tempfile.TemporaryDirectory()`
+- **External APIs**: Use `unittest.mock.patch`
+- **Time-dependent tests**: Mock `datetime.now()`
+- **Environment variables**: Use `monkeypatch` fixture
+
+### 4. Coverage Goals
+
+- **Minimum**: 70% line coverage for each module
+- **Target**: 85% line coverage for tier 1 modules
+- **Focus**: Critical paths over 100% coverage
+
+## Main Challenges and Mitigations
+
+### Challenge 1: Large, Complex Modules
+- **Issue**: Some modules are 400+ lines with many functions
+- **Mitigation**: Break tests into multiple test classes by functionality area
+- **Example**: `TestIncrementalBuilderDependencyGraph`, `TestIncrementalBuilderBuildPlan`
+
+### Challenge 2: File System Dependencies
+- **Issue**: Many modules interact with file system
+- **Mitigation**: Use `tempfile.TemporaryDirectory()` for isolation (proven pattern in existing tests)
+- **Pattern**: Create temp dir → populate test files → run function → assert results → cleanup
+
+### Challenge 3: Cache TTL Testing
+- **Issue**: Time-dependent cache expiration logic
+- **Mitigation**: Mock `datetime.now()` to simulate time passage
+- **Example**: From `test_cache_system.py` - create file, mock time +25 hours, assert expired
+
+### Challenge 4: Integration Points
+- **Issue**: Modules depend on each other (e.g., incremental_builder imports change_detector)
+- **Mitigation**: Test in isolation first (mock dependencies), then add integration tests
+- **Markers**: Use `@pytest.mark.unit` and `@pytest.mark.integration` to separate
+
+### Challenge 5: No Breaking Changes Allowed
+- **Issue**: Cannot modify production code to make it more testable
+- **Mitigation**: Test public interfaces as-is, use mocking for hard-to-test areas
+- **Constraint**: Tests must work with existing code unchanged
+
+## Testing Approach
+
+### Phase 1: Unit Tests (Highest Priority)
+Create isolated unit tests for each module's public functions:
+- Test normal operation (happy path)
+- Test error conditions (exceptions, invalid inputs)
+- Test edge cases (empty inputs, None values, boundary conditions)
+- Test return types and data structures
+
+### Phase 2: Integration Tests
+Test module interactions:
+- `incremental_builder` + `change_detector` integration
+- Cache modules with file system
+- `path_utils` with real project structures
+
+### Phase 3: Validation
+- Run full pytest suite: `pytest tests/`
+- Verify all new tests pass
+- Verify all existing tests still pass
+- Check for test isolation (no interference between tests)
 
 ## Success Criteria
 
-All success criteria from issue #71 are already met:
-- ✅ Balanced backlog (not just security/bugs)
-- ✅ Proactive opportunity finding
-- ✅ Diverse work types (features, DX, API, UX, etc.)
-- ✅ Strategic improvements across multiple dimensions
-- ✅ Priority formula maintains security as P0
+✅ **Code Quality**:
+- 8 new test files created
+- Minimum 70% coverage for each tested module
+- All tests use appropriate pytest markers
 
-## Deployment Readiness
+✅ **Test Quality**:
+- Tests are deterministic (no flaky tests)
+- Tests are fast (< 1 second each for unit tests)
+- Tests are isolated (can run in any order)
+- Clear test names describe what is being tested
 
-Since no code changes are needed, deployment consists of:
-- Verifying tests pass
-- Creating PR to close issue
-- Updating documentation if needed
+✅ **Backward Compatibility**:
+- All existing tests pass: `pytest tests/`
+- No changes to production code
+- No new dependencies added
+
+✅ **Documentation**:
+- Each test file has module docstring describing what's tested
+- Complex tests have inline comments explaining logic
+- Test functions have descriptive docstrings
 
 ## Timeline Estimate
 
-- Test verification: 2 minutes
-- PR creation: 1 minute
-- Total: **3 minutes** (instead of hours for new implementation)
+- **Module analysis & test design**: 15 minutes
+- **Test implementation (8 modules)**: 45-60 minutes
+- **Validation & debugging**: 15-20 minutes
+- **Total**: 75-95 minutes
+
+## Key Learnings Applied
+
+- Follow existing test patterns (consistency is key)
+- Use pytest markers for organization and selective running
+- Isolate file system tests with tempfile
+- Mock time-dependent operations
+- Test public interfaces, not implementation details
+- Prioritize critical paths over exhaustive coverage

@@ -1,47 +1,58 @@
 # Codebase Analysis Report
 
 ## Project Overview
-- Type: python
-- Languages: Python
-- Architecture: Context Foundry autonomous build system with Evolution System for self-improvement
+- Type: Python development framework (Context Foundry)
+- Languages: Python 3.13+
+- Architecture: Multi-agent autonomous build system with MCP server integration
 
 ## Key Files
-- Entry point: tools/evolution/agents/scout_agent.py
-- Config: requirements.txt
-- Tests: tests/evolution/test_scout_agent.py
+- Entry point: `tools/mcp_server.py` (2823 lines - MCP server implementation)
+- Config: `tools/config_manager.py` (550 lines)
+- Tests: `tests/` directory with pytest framework
+- Test configuration: `pytest.ini`
 
 ## Dependencies
-- Python 3.x
 - pytest (testing framework)
-- Standard library modules (subprocess, re, pathlib, json)
+- BAML integration (LLM validation)
+- MCP protocol support
+- Multiple subsystems: incremental builds, caching, metrics, back pressure
 
 ## Code to Modify
-**Task**: Implement GitHub issue #71: Enhancement: Make Scout a balanced opportunity finder
-**Status**: ✅ **ALREADY IMPLEMENTED**
+**Task**: Analyze test coverage and add missing tests for critical paths
+**Files to analyze**:
+1. `tools/incremental/incremental_builder.py` (467 lines) - NO TESTS
+2. `tools/incremental/change_detector.py` (380 lines) - NO TESTS
+3. `tools/incremental/global_scout_cache.py` (408 lines) - NO TESTS
+4. `tools/back_pressure/integration_pre_check.py` (369 lines) - NO TESTS
+5. `tools/tool_helpers/truncation.py` (452 lines) - NO TESTS
+6. `tools/tool_helpers/path_utils.py` (361 lines) - NO TESTS
+7. `tools/cache/scout_cache.py` - NO TESTS
+8. `tools/cache/test_cache.py` - NO TESTS (ironic!)
 
-**Findings**:
-1. Issue #71 was created on 2025-11-08 at 18:25 UTC
-2. The feature was already implemented on 2025-11-08 at 12:51-13:09 (BEFORE issue creation)
-3. All 8 enhancement scanners requested in the issue are already present in `scout_agent.py`:
-   - `_scan_feature_opportunities()` (lines 378-450)
-   - `_scan_api_enhancements()` (lines 452-512)
-   - `_scan_developer_experience()` (lines 514-610)
-   - `_scan_modern_language_features()` (lines 612-681)
-   - `_scan_observability()` (lines 683-741)
-   - `_scan_user_experience()` (lines 743-806)
-   - `_scan_configuration()` (lines 808-872)
-   - `_scan_extensibility()` (lines 874-943)
+**Current test coverage**:
+- ✅ mcp_server.py - HAS TESTS
+- ✅ config_manager.py - HAS TESTS
+- ✅ baml_integration.py - HAS TESTS
+- ✅ check_context_budget.py - HAS TESTS
+- ✅ tool_helpers/semantic_tags.py - HAS TESTS
+- ✅ metrics/collector.py - HAS TESTS
+- ✅ metrics/metrics_db.py - HAS TESTS
 
-4. All scanners are called in the `scan()` method (lines 75-107)
-5. Tests exist in `tests/evolution/test_scout_agent.py` covering all functionality
-
-**Approach**:
-Since the feature is already implemented, the correct action is to:
-1. Verify the implementation matches requirements
-2. Run existing tests to confirm functionality
-3. Create a PR that simply closes the issue with evidence
-4. Update git commit message to reference "Fixes #71"
+**Approach**: Create comprehensive unit and integration tests for the 8 uncovered critical modules, focusing on:
+- Core functionality validation
+- Error handling paths
+- Edge cases
+- Integration points
 
 ## Risks
-- None. Feature already exists and is tested.
-- Issue was created after implementation (timing issue in evolution system)
+- Some modules are large and complex (400+ lines)
+- May need to understand MCP protocol integration
+- BAML integration may require API keys for integration tests
+- Need to avoid breaking existing tests (45+ test files exist)
+
+## Test Strategy
+- Create unit tests for each uncovered module
+- Use pytest markers (unit, integration, tier1)
+- Mock external dependencies where appropriate
+- Ensure tests are fast and reliable
+- Follow existing test patterns in the codebase

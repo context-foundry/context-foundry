@@ -1,76 +1,34 @@
 {
   "parallel_mode": true,
-  "total_tasks": 6,
+  "total_tasks": 4,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Create core daemon and task queue system",
-      "files": [
-        "tools/evolution/__init__.py",
-        "tools/evolution/daemon.py",
-        "tools/evolution/task_queue.py",
-        "tools/evolution/resource_manager.py"
-      ],
+      "description": "Create tier 1 tests (path_utils, scout_cache)",
+      "files": ["tests/test_path_utils.py", "tests/test_scout_cache_unit.py"],
+      "dependencies": [],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-2",
+      "description": "Create tier 1 tests (change_detector, incremental_builder)",
+      "files": ["tests/test_change_detector.py", "tests/test_incremental_builder.py"],
       "dependencies": [],
       "estimated_time": "20 minutes"
     },
     {
-      "id": "task-2",
-      "description": "Create evolution modes (plugin architecture)",
-      "files": [
-        "tools/evolution/modes/__init__.py",
-        "tools/evolution/modes/base_mode.py",
-        "tools/evolution/modes/self_improvement.py",
-        "tools/evolution/modes/chaos_creative.py",
-        "tools/evolution/modes/research_discovery.py"
-      ],
-      "dependencies": ["task-1"],
-      "estimated_time": "20 minutes"
-    },
-    {
       "id": "task-3",
-      "description": "Create communication layer (dashboard, API, WebSocket)",
-      "files": [
-        "tools/evolution/communication/__init__.py",
-        "tools/evolution/communication/rest_api.py",
-        "tools/evolution/communication/web_dashboard.py",
-        "tools/evolution/communication/websocket_stream.py",
-        "tools/evolution/communication/local_exchange.py",
-        "tools/evolution/templates/dashboard.html",
-        "tools/evolution/templates/tasks.html",
-        "tools/evolution/templates/projects.html"
-      ],
-      "dependencies": ["task-1"],
-      "estimated_time": "25 minutes"
-    },
-    {
-      "id": "task-4",
-      "description": "Create agent protocol for multi-agent network",
-      "files": [
-        "tools/evolution/agent_protocol.py"
-      ],
-      "dependencies": ["task-1"],
+      "description": "Create tier 2 tests (test_cache, truncation)",
+      "files": ["tests/test_test_cache_unit.py", "tests/test_truncation.py"],
+      "dependencies": [],
       "estimated_time": "15 minutes"
     },
     {
-      "id": "task-5",
-      "description": "Extend MCP server with 10 new evolution tools",
-      "files": [
-        "tools/mcp_server.py"
-      ],
-      "dependencies": ["task-1", "task-2", "task-4"],
-      "estimated_time": "10 minutes"
-    },
-    {
-      "id": "task-6",
-      "description": "Create management scripts and configuration",
-      "files": [
-        "scripts/start_evolution.sh",
-        "scripts/stop_evolution.sh",
-        "scripts/install_service.sh"
-      ],
-      "dependencies": ["task-1"],
-      "estimated_time": "10 minutes"
+      "id": "task-4",
+      "description": "Create tier 2/3 tests (integration_pre_check, global_scout_cache)",
+      "files": ["tests/test_integration_pre_check.py", "tests/test_global_scout_cache.py"],
+      "dependencies": [],
+      "estimated_time": "15 minutes"
     }
   ]
 }

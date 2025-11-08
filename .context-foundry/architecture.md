@@ -1,516 +1,400 @@
-# Test Coverage Architecture: Context Foundry Tools
+# Test Suite Architecture for Critical Paths
 
-## Overview
+## System Architecture Overview
 
-This architecture defines a comprehensive test suite for Context Foundry's critical path modules, focusing on Phase 1 (Context Budget System) as the highest priority deliverable.
+This test suite adds comprehensive coverage for 8 critical modules using pytest framework with proper isolation, mocking, and organization.
 
-## System Architecture
+**Architecture Pattern**: Follow existing test patterns
+- Use pytest with markers (@pytest.mark.unit, @pytest.mark.tier1)
+- Isolate file system tests with tempfile.TemporaryDirectory()
+- Mock time-dependent and external dependencies
+- Organize tests by module with multiple test classes per file
+
+## Complete File Structure
 
 ```
-Context Foundry Test Suite
-├── Unit Tests (Isolated module testing)
-│   ├── test_check_context_budget_cli.py (NEW)
-│   ├── test_context_budget.py (ENHANCE)
-│   ├── test_config_manager.py (ENHANCE)
-│   └── test_cache_*.py (ENHANCE)
-├── Integration Tests (Module interactions)
-│   ├── test_budget_integration.py (NEW)
-│   └── test_evolution_e2e.py (EXISTS)
-└── Mocks & Fixtures
-    ├── conftest.py (shared fixtures)
-    └── test_helpers/ (reusable mocks)
+tests/
+├── test_incremental_builder.py          # NEW - 200-250 lines
+├── test_change_detector.py              # NEW - 150-200 lines
+├── test_global_scout_cache.py           # NEW - 150-200 lines
+├── test_integration_pre_check.py        # NEW - 150-200 lines
+├── test_truncation.py                   # NEW - 150-200 lines
+├── test_path_utils.py                   # NEW - 120-150 lines
+├── test_scout_cache_unit.py             # NEW - 150-200 lines
+├── test_test_cache_unit.py              # NEW - 120-150 lines
+└── [existing 45+ test files unchanged]
 ```
 
-## Phase 1: Context Budget System Tests
+## Module Specifications
 
-### Module: check_context_budget.py (Priority 1)
+### 1. test_path_utils.py (Priority: TIER 1)
 
-**Current Coverage**: 0% (227 statements)
-**Target Coverage**: 80%+
+**Purpose**: Test path conversion utilities that save 5000+ tokens per build
 
-#### Test File: tests/test_check_context_budget_cli.py
+**Test Classes**:
+- `TestToRelativePath`: Test absolute → relative conversion
+- `TestToAbsolutePath`: Test relative → absolute conversion  
+- `TestIsWithinProject`: Test project boundary detection
+- `TestPathConversion`: Integration tests
 
-**Test Structure**:
+**Key Tests**:
 ```python
-import pytest
-import sys
-import json
-from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
-
-# Test Classes:
-# 1. TestCLIArgumentParsing
-# 2. TestBuildContextExtraction  
-# 3. TestBudgetPreCheck
-# 4. TestTokenRecording
-# 5. TestReportGeneration
-# 6. TestExitCodes
-# 7. TestIntegration
+def test_to_relative_path_basic():
+    # Test: /Users/name/project/tools/cache.py → tools/cache.py
+    
+def test_to_relative_path_already_relative():
+    # Test: tools/cache.py → tools/cache.py (unchanged)
+    
+def test_to_relative_path_outside_working_dir():
+    # Test: /tmp/other.py with strict=False → /tmp/other.py (absolute)
+    
+def test_to_relative_path_strict_raises():
+    # Test: /tmp/other.py with strict=True → raises ValueError
+    
+def test_to_absolute_path_basic():
+    # Test: tools/cache.py → /Users/name/project/tools/cache.py
 ```
 
-#### Detailed Test Specifications
+### 2. test_scout_cache_unit.py (Priority: TIER 1)
 
-**Class 1: TestCLIArgumentParsing**
+**Purpose**: Test Scout report caching (avoid redundant research)
+
+**Test Classes**:
+- `TestNormalizeTaskDescription`: Task normalization logic
+- `TestGenerateCacheKey`: Cache key generation consistency
+- `TestScoutCacheHitMiss`: Cache hit/miss scenarios
+- `TestScoutCacheTTL`: Cache expiration logic
+
+**Key Tests**:
 ```python
-def test_parse_args_check_before()
-    # Test: --phase scout --check-before
-    # Expected: args.phase='scout', args.check_before=True
-
-def test_parse_args_tokens()
-    # Test: --phase builder --tokens 45000
-    # Expected: args.phase='builder', args.tokens=45000
-
-def test_parse_args_report()
-    # Test: --report
-    # Expected: args.report=True
-
-def test_parse_args_invalid_phase()
-    # Test: --phase invalid
-    # Expected: ArgumentError or validation error
-
-def test_parse_args_missing_required()
-    # Test: No arguments
-    # Expected: Shows usage, exit code 1
+def test_normalize_task_preserves_meaning():
+    # Ensure "Build weather app" == "build   weather    app"
+    
+def test_cache_key_consistency():
+    # Same task → same key (deterministic)
+    
+def test_cache_hit_within_ttl():
+    # Saved report retrieved within 24h
+    
+def test_cache_miss_after_ttl():
+    # Report expired after TTL (mock time)
+    
+def test_cache_miss_different_task():
+    # Different task → different key → miss
 ```
 
-**Class 2: TestBuildContextExtraction**
+### 3. test_incremental_builder.py (Priority: TIER 1)
+
+**Purpose**: Test dependency graph and build plan generation
+
+**Test Classes**:
+- `TestDependencyGraph`: Graph structure and serialization
+- `TestExtractPythonImports`: Import extraction from code
+- `TestBuildPlanGeneration`: Build plan creation logic
+- `TestFilePreservation`: Preserve vs rebuild decisions
+
+**Key Tests**:
 ```python
-def test_get_build_context_with_session_file(tmp_path)
-    # Setup: Create .context-foundry/session-summary.json
-    # Test: Extract session_id, task, mode, timestamps
-    # Expected: Returns dict with correct values
-
-def test_get_build_context_missing_session_file(tmp_path)
-    # Setup: No session file
-    # Test: get_build_context()
-    # Expected: Returns empty dict or defaults
-
-def test_get_build_context_invalid_json(tmp_path)
-    # Setup: Malformed JSON in session file
-    # Test: get_build_context()
-    # Expected: Handles error gracefully, returns partial data
-
-def test_get_build_context_with_github_pr(tmp_path)
-    # Setup: session-summary.json with github.pr_url
-    # Test: Extract PR metadata
-    # Expected: Returns github_pr_url in context
+def test_extract_python_imports_simple():
+    # Extract "import os, json" → ["os", "json"]
+    
+def test_extract_python_imports_from():
+    # Extract "from pathlib import Path" → ["pathlib"]
+    
+def test_build_plan_preserve_unchanged():
+    # Unchanged files → files_to_preserve
+    
+def test_build_plan_rebuild_changed():
+    # Changed files → files_to_rebuild
+    
+def test_build_plan_rebuild_dependencies():
+    # Changed file → rebuild dependents (transitive)
 ```
 
-**Class 3: TestBudgetPreCheck**
+### 4. test_change_detector.py (Priority: TIER 1)
+
+**Purpose**: Test file change detection accuracy
+
+**Test Classes**:
+- `TestFileHashing`: File content hashing
+- `TestChangeDetection`: Detect modifications
+- `TestChangeReport`: Report generation
+
+**Key Tests**:
 ```python
-def test_pre_check_smart_zone(tmp_path, capsys)
-    # Setup: Phase with low token count
-    # Test: --phase scout --check-before
-    # Expected: Exit code 0, "SMART" zone message
-
-def test_pre_check_dumb_zone(tmp_path, capsys)
-    # Setup: Phase approaching budget limit
-    # Test: --phase architect --check-before
-    # Expected: Exit code 1, warning message
-
-def test_pre_check_critical_zone(tmp_path, capsys)
-    # Setup: Phase exceeding budget
-    # Test: --phase builder --check-before
-    # Expected: Exit code 2, critical warning
-
-def test_pre_check_no_session_data(tmp_path, capsys)
-    # Setup: Fresh directory, no session
-    # Test: --phase scout --check-before
-    # Expected: Exit code 0, estimates only
+def test_hash_file_consistency():
+    # Same file → same hash
+    
+def test_detect_new_file():
+    # New file not in previous build → detected
+    
+def test_detect_modified_file():
+    # Changed content → different hash → detected
+    
+def test_detect_deleted_file():
+    # File removed → detected
+    
+def test_no_changes_detected():
+    # Identical files → no changes
 ```
 
-**Class 4: TestTokenRecording**
+### 5. test_truncation.py (Priority: TIER 2)
+
+**Purpose**: Test output truncation with recovery instructions
+
+**Test Classes**:
+- `TestTruncateOutput`: Basic truncation logic
+- `TestRecoveryInstructions`: User guidance generation
+- `TestTokenCounting`: Accurate token/char limits
+
+**Key Tests**:
 ```python
-def test_record_tokens_updates_session(tmp_path)
-    # Setup: Existing session-summary.json
-    # Test: --phase scout --tokens 12000
-    # Expected: session-summary.json updated with scout: 12000
-
-def test_record_tokens_creates_session(tmp_path)
-    # Setup: No session file
-    # Test: --phase scout --tokens 12000
-    # Expected: Creates session-summary.json
-
-def test_record_tokens_multiple_phases(tmp_path)
-    # Setup: Record scout, then architect, then builder
-    # Test: Sequential --tokens calls
-    # Expected: All phases recorded, no overwrites
-
-def test_record_tokens_invalid_value(tmp_path)
-    # Test: --phase scout --tokens invalid
-    # Expected: Error message, exit code 1
+def test_truncate_at_limit():
+    # Output > limit → truncated
+    
+def test_truncate_includes_recovery():
+    # Truncated → contains "Use --offset" instructions
+    
+def test_no_truncation_under_limit():
+    # Output < limit → unchanged
+    
+def test_truncate_preserves_formatting():
+    # Truncation doesn't break JSON/markdown structure
 ```
 
-**Class 5: TestReportGeneration**
+### 6. test_integration_pre_check.py (Priority: TIER 2)
+
+**Purpose**: Test pre-flight validation before expensive tests
+
+**Test Classes**:
+- `TestSyntaxCheck`: Python syntax validation
+- `TestImportCheck`: Import resolution validation
+- `TestFileExistence`: Required files present
+- `TestIntegrationValidation`: Full pre-check workflow
+
+**Key Tests**:
 ```python
-def test_generate_full_report(tmp_path, capsys)
-    # Setup: Complete session with all phases
-    # Test: --report
-    # Expected: Markdown report with all sections
-
-def test_generate_report_partial_session(tmp_path, capsys)
-    # Setup: Session with only 3 phases completed
-    # Test: --report
-    # Expected: Report shows completed phases only
-
-def test_generate_report_with_warnings(tmp_path, capsys)
-    # Setup: Some phases exceeded budget
-    # Test: --report
-    # Expected: Report includes warnings section
-
-def test_generate_report_with_github_pr(tmp_path, capsys)
-    # Setup: Session with GitHub PR URL
-    # Test: --report
-    # Expected: Report includes PR link
-
-def test_report_ascii_visualization(tmp_path, capsys)
-    # Setup: Session with varied token usage
-    # Test: --report
-    # Expected: ASCII bar chart present and formatted
-
-def test_report_performance_zones(tmp_path, capsys)
-    # Setup: Session with mixed zones
-    # Test: --report
-    # Expected: Zone analysis (% in SMART/DUMB/CRITICAL)
+def test_syntax_check_valid_file():
+    # Valid Python → passes
+    
+def test_syntax_check_invalid_file():
+    # Syntax error → fails with line number
+    
+def test_import_check_all_present():
+    # All imports resolvable → passes
+    
+def test_import_check_missing_module():
+    # Missing import → fails with module name
 ```
 
-**Class 6: TestExitCodes**
+### 7. test_test_cache_unit.py (Priority: TIER 2)
+
+**Purpose**: Test result caching to skip unchanged tests
+
+**Test Classes**:
+- `TestFileHashing`: Hash calculation for test files
+- `TestCacheInvalidation`: When to invalidate cache
+- `TestTestResultStorage`: Storing/retrieving results
+
+**Key Tests**:
 ```python
-def test_exit_code_success()
-    # Test: Valid operation
-    # Expected: sys.exit(0)
-
-def test_exit_code_dumb_zone_warning()
-    # Test: Budget warning (40-80%)
-    # Expected: sys.exit(1)
-
-def test_exit_code_critical_zone()
-    # Test: Budget critical (80%+)
-    # Expected: sys.exit(2)
-
-def test_exit_code_error()
-    # Test: Invalid arguments or file errors
-    # Expected: sys.exit(1)
+def test_hash_file_changed():
+    # Modified file → different hash
+    
+def test_cache_hit_all_files_same():
+    # No changes → cache hit
+    
+def test_cache_miss_file_changed():
+    # Any file changed → cache miss
+    
+def test_cache_stores_test_results():
+    # Results persisted correctly
 ```
 
-**Class 7: TestIntegration**
+### 8. test_global_scout_cache.py (Priority: TIER 3)
+
+**Purpose**: Test global Scout cache (cross-project)
+
+**Test Classes**:
+- `TestGlobalCacheLocation`: ~/.context-foundry/patterns/
+- `TestCrossProjectCaching`: Cache shared across projects
+- `TestGlobalCacheStats`: Usage statistics
+
+**Key Tests**:
 ```python
-def test_full_workflow_check_then_record(tmp_path)
-    # Test: Complete workflow
-    # 1. --phase scout --check-before → exit 0
-    # 2. (simulate scout work)
-    # 3. --phase scout --tokens 12000 → updates session
-    # 4. --phase architect --check-before → exit 0
-    # Expected: All steps succeed, session updated
-
-def test_workflow_with_budget_exceeded(tmp_path)
-    # Test: Workflow where phase exceeds budget
-    # 1. --phase scout --tokens 50000 (exceeds 14K budget)
-    # 2. --phase architect --check-before → warns
-    # Expected: Warning generated, recommendation shown
+def test_global_cache_location():
+    # Cache stored in home directory
+    
+def test_cache_shared_across_projects():
+    # Project A saves → Project B reads
+    
+def test_global_cache_stats():
+    # Stats aggregated from all projects
 ```
 
-### Module: context_budget/*.py (Priority 1)
+## Implementation Steps (Ordered)
 
-**Enhancement to tests/test_context_budget.py**
+### Step 1: Setup and Path Utils (Foundation)
+1. Read `tools/tool_helpers/path_utils.py` fully
+2. Create `tests/test_path_utils.py`
+3. Implement all test classes and tests
+4. Run: `pytest tests/test_path_utils.py -v`
+5. Fix any failures
 
-#### Additional Test Classes
+### Step 2: Scout Cache (High Impact)
+1. Read `tools/cache/scout_cache.py` fully
+2. Create `tests/test_scout_cache_unit.py`
+3. Implement cache hit/miss, TTL, normalization tests
+4. Run: `pytest tests/test_scout_cache_unit.py -v`
+5. Fix any failures
 
-**Class: TestTokenCounterEdgeCases**
-```python
-def test_count_file_tokens_unicode()
-    # Test: File with Unicode characters (émojis, 中文)
-    # Expected: Correct token count
+### Step 3: Change Detector (Critical for Incremental)
+1. Read `tools/incremental/change_detector.py` fully
+2. Create `tests/test_change_detector.py`
+3. Implement file hashing, change detection tests
+4. Run: `pytest tests/test_change_detector.py -v`
+5. Fix any failures
 
-def test_count_file_tokens_very_large()
-    # Test: File > 1MB
-    # Expected: Handles without memory issues
+### Step 4: Incremental Builder (Complex)
+1. Read `tools/incremental/incremental_builder.py` fully
+2. Create `tests/test_incremental_builder.py`
+3. Implement dependency graph, build plan tests
+4. Run: `pytest tests/test_incremental_builder.py -v`
+5. Fix any failures
 
-def test_count_file_tokens_empty()
-    # Test: Empty file
-    # Expected: Returns 0
+### Step 5: Test Cache
+1. Read `tools/cache/test_cache.py` fully
+2. Create `tests/test_test_cache_unit.py`
+3. Implement test result caching tests
+4. Run: `pytest tests/test_test_cache_unit.py -v`
+5. Fix any failures
 
-def test_count_file_tokens_binary()
-    # Test: Binary file (image, PDF)
-    # Expected: Handles gracefully or errors appropriately
+### Step 6: Truncation Utilities
+1. Read `tools/tool_helpers/truncation.py` fully
+2. Create `tests/test_truncation.py`
+3. Implement truncation and recovery tests
+4. Run: `pytest tests/test_truncation.py -v`
+5. Fix any failures
 
-def test_count_tokens_with_code_blocks()
-    # Test: Markdown with code blocks
-    # Expected: Accurate token count for code
+### Step 7: Integration Pre-Check
+1. Read `tools/back_pressure/integration_pre_check.py` fully
+2. Create `tests/test_integration_pre_check.py`
+3. Implement syntax/import validation tests
+4. Run: `pytest tests/test_integration_pre_check.py -v`
+5. Fix any failures
 
-def test_count_directory_tokens_recursive(tmp_path)
-    # Test: Directory with nested structure
-    # Expected: Counts all files recursively
-```
+### Step 8: Global Scout Cache
+1. Read `tools/incremental/global_scout_cache.py` fully
+2. Create `tests/test_global_scout_cache.py`
+3. Implement global caching tests
+4. Run: `pytest tests/test_global_scout_cache.py -v`
+5. Fix any failures
 
-**Class: TestContextBudgetMonitorPhaseTracking**
-```python
-def test_monitor_record_phase_usage()
-    # Test: Record usage for multiple phases
-    # Expected: Each phase tracked separately
+## Testing Requirements and Procedures
 
-def test_monitor_detect_budget_overrun()
-    # Test: Phase exceeds allocated budget
-    # Expected: Warning generated
-
-def test_monitor_calculate_remaining_budget()
-    # Test: After 3 phases, check remaining
-    # Expected: Correct calculation
-
-def test_monitor_get_performance_zone()
-    # Test: Given usage %, determine zone
-    # Expected: SMART (0-40%), DUMB (40-80%), CRITICAL (80-100%)
-```
-
-**Class: TestContextBudgetReporterFormatting**
-```python
-def test_reporter_generate_markdown()
-    # Test: Generate full markdown report
-    # Expected: Valid markdown with all sections
-
-def test_reporter_ascii_bar_chart()
-    # Test: Generate ASCII visualization
-    # Expected: Correctly scaled bars
-
-def test_reporter_calculate_statistics()
-    # Test: Peak usage, average, zone percentages
-    # Expected: Correct calculations
-
-def test_reporter_format_recommendations()
-    # Test: Generate optimization suggestions
-    # Expected: Actionable recommendations when budget exceeded
-```
-
-## Mock Strategy
-
-### External Dependencies to Mock
-
-1. **File System Operations**
-   - `Path.exists()`, `Path.read_text()`, `Path.write_text()`
-   - Use `tmp_path` fixture for actual file tests
-   - Mock for error conditions
-
-2. **subprocess.run()**
-   - Mock for git commands
-   - Mock for gh CLI commands
-   - Return controlled output
-
-3. **sys.exit()**
-   - Mock to capture exit codes
-   - Use `pytest.raises(SystemExit)` pattern
-
-4. **Environment Variables**
-   - Mock `os.environ` for API keys
-   - Mock for configuration paths
-
-### Fixture Strategy
-
-**conftest.py additions**:
-```python
-@pytest.fixture
-def mock_session_summary(tmp_path):
-    """Create a realistic session-summary.json"""
-    session = {
-        "session_id": "test-session",
-        "task": "Test task",
-        "mode": "new_project",
-        "started_at": "2025-01-13T10:00:00Z",
-        "context_budget": {
-            "scout": 12000,
-            "architect": 13500
-        }
-    }
-    session_file = tmp_path / ".context-foundry" / "session-summary.json"
-    session_file.parent.mkdir(parents=True, exist_ok=True)
-    session_file.write_text(json.dumps(session, indent=2))
-    return session_file
-
-@pytest.fixture
-def mock_context_dir(tmp_path):
-    """Create a .context-foundry directory with standard structure"""
-    context_dir = tmp_path / ".context-foundry"
-    context_dir.mkdir(parents=True, exist_ok=True)
-    return context_dir
-
-@pytest.fixture
-def capture_exit_code(monkeypatch):
-    """Capture sys.exit() calls without actually exiting"""
-    exit_code = []
-    def mock_exit(code):
-        exit_code.append(code)
-    monkeypatch.setattr(sys, 'exit', mock_exit)
-    return exit_code
-```
-
-## Test Execution Strategy
-
-### Run Configuration
-
-**pytest.ini additions**:
-```ini
-[pytest]
-markers =
-    unit: Unit tests (isolated module tests)
-    integration: Integration tests (module interactions)
-    slow: Slow tests (> 1 second)
-    coverage: Coverage-focused tests
-
-addopts =
-    --cov=tools
-    --cov-report=term-missing
-    --cov-report=html
-    --cov-report=json
-    -v
-    --strict-markers
-```
-
-### Test Execution Commands
-
+### Running Individual Test Files
 ```bash
-# Run all new tests
-pytest tests/test_check_context_budget_cli.py -v
+# Run single test file
+pytest tests/test_path_utils.py -v
 
-# Run with coverage
-pytest tests/test_check_context_budget_cli.py --cov=tools/check_context_budget
+# Run specific test class
+pytest tests/test_path_utils.py::TestToRelativePath -v
+
+# Run specific test function
+pytest tests/test_path_utils.py::TestToRelativePath::test_basic -v
+```
+
+### Running All New Tests
+```bash
+# Run all new test files
+pytest tests/test_path_utils.py \
+       tests/test_scout_cache_unit.py \
+       tests/test_change_detector.py \
+       tests/test_incremental_builder.py \
+       tests/test_test_cache_unit.py \
+       tests/test_truncation.py \
+       tests/test_integration_pre_check.py \
+       tests/test_global_scout_cache.py \
+       -v
+```
+
+### Running Full Test Suite
+```bash
+# Ensure ALL existing tests still pass
+pytest tests/ -v --tb=short
+```
+
+### Test Quality Checks
+```bash
+# Run with coverage (optional)
+pytest tests/ --cov=tools --cov-report=term --cov-report=html
+
+# Run only tier 1 tests
+pytest tests/ -m tier1 -v
 
 # Run only unit tests
-pytest -m unit
-
-# Run fast tests only (exclude slow)
-pytest -m "not slow"
-
-# Generate coverage report
-pytest --cov=tools --cov-report=html
-open htmlcov/index.html
+pytest tests/ -m unit -v
 ```
 
 ## Success Criteria
 
-### Coverage Targets
+1. **All 8 new test files created** with proper structure
+2. **All new tests pass** individually and together
+3. **All existing tests pass** (no regressions)
+4. **Test coverage increases**:
+   - path_utils.py: 0% → 85%+
+   - scout_cache.py: 0% → 80%+
+   - incremental_builder.py: 0% → 75%+
+   - change_detector.py: 0% → 80%+
+   - truncation.py: 0% → 70%+
+   - integration_pre_check.py: 0% → 70%+
+   - test_cache.py: 0% → 75%+
+   - global_scout_cache.py: 0% → 70%+
+5. **Tests are fast**: < 5 seconds total for all new tests
+6. **Tests are isolated**: Can run in any order
+7. **No production code changes**: Tests only
 
-- **check_context_budget.py**: 0% → 80%+ (180+ statements covered)
-- **context_budget/report.py**: 11.5% → 70%+ (80+ statements covered)
-- **context_budget/token_counter.py**: 22.2% → 70%+ (55+ statements covered)
-- **context_budget/monitor.py**: 30.8% → 70%+ (75+ statements covered)
+## Applied Patterns and Preventive Measures
 
-### Quality Metrics
+### Pattern 1: File System Isolation
+All tests that create/modify files use `tempfile.TemporaryDirectory()` to avoid interfering with each other or leaving artifacts.
 
-- All tests pass (100% pass rate)
-- No test flakiness (run 10 times, all pass)
-- Fast execution (< 10 seconds for all Phase 1 tests)
-- Clear, descriptive test names
-- Good assertions (test one thing per test)
-- Mock external dependencies (no real file writes outside tmp_path)
+### Pattern 2: Time Mocking for TTL Tests
+Cache TTL tests use `unittest.mock.patch('module.datetime')` to simulate time passage without actual delays.
 
-## Implementation Steps (Ordered)
+### Pattern 3: Pytest Markers
+All tests marked with `@pytest.mark.unit` or `@pytest.mark.integration` and `@pytest.mark.tier1/tier2/tier3` for selective running.
 
-### Step 1: Create Base Test File
-```bash
-touch tests/test_check_context_budget_cli.py
-# Add imports, fixtures, first test class
-```
+### Pattern 4: Consistent Test Structure
+Every test file follows the pattern:
+1. Module docstring describing what's tested
+2. Imports (including sys.path setup)
+3. Test classes organized by functionality
+4. Descriptive test function names
+5. Arrange-Act-Assert pattern in each test
 
-### Step 2: Implement TestCLIArgumentParsing
-- Write all 5 test methods
-- Run tests, ensure they pass
-- Check coverage for argument parsing code
+### Pattern 5: No External Dependencies
+Tests mock any external dependencies (file system paths resolved via tempfile, no real API calls).
 
-### Step 3: Implement TestBuildContextExtraction
-- Write all 4 test methods
-- Use tmp_path for file creation
-- Verify JSON parsing edge cases
+## Risk Mitigation
 
-### Step 4: Implement TestBudgetPreCheck
-- Write all 4 test methods
-- Mock ContextBudgetMonitor calls
-- Test exit code paths
+### Risk: Breaking Existing Tests
+**Mitigation**: Run full test suite before committing, no changes to production code
 
-### Step 5: Implement TestTokenRecording
-- Write all 4 test methods
-- Test session file creation/update
-- Verify JSON integrity
+### Risk: Flaky Tests
+**Mitigation**: Use deterministic inputs, mock time/random, ensure complete cleanup
 
-### Step 6: Implement TestReportGeneration
-- Write all 6 test methods
-- Test markdown formatting
-- Verify ASCII visualization
+### Risk: Slow Tests
+**Mitigation**: Use in-memory operations where possible, minimize file I/O, no network calls
 
-### Step 7: Implement TestExitCodes
-- Write all 4 test methods
-- Use pytest.raises(SystemExit)
-- Verify correct codes for each scenario
+### Risk: Test Maintenance Burden
+**Mitigation**: Clear naming, good documentation, follow existing patterns
 
-### Step 8: Implement TestIntegration
-- Write 2 comprehensive workflow tests
-- Test realistic multi-step scenarios
-- Verify end-to-end behavior
+## Post-Implementation Validation
 
-### Step 9: Enhance test_context_budget.py
-- Add 3 new test classes
-- Write 15+ new test methods
-- Focus on edge cases and error paths
-
-### Step 10: Run Full Test Suite
-```bash
-pytest tests/test_check_context_budget_cli.py tests/test_context_budget.py \
-  --cov=tools/check_context_budget \
-  --cov=tools/context_budget \
-  --cov-report=term-missing
-```
-
-### Step 11: Verify Coverage Targets
-- Check coverage report
-- Identify any remaining uncovered lines
-- Add targeted tests for gaps
-
-### Step 12: Documentation
-- Add docstrings to all test methods
-- Update TESTING.md if exists
-- Document how to run tests in README
-
-## Files to Create/Modify
-
-### New Files
-- `tests/test_check_context_budget_cli.py` (~500 lines)
-
-### Modified Files  
-- `tests/test_context_budget.py` (+300 lines)
-- `tests/conftest.py` (+50 lines for fixtures)
-- `pytest.ini` (+10 lines for markers)
-
-### Total Additions
-- ~860 lines of test code
-- ~75 new test methods
-- 3 new test files
-
-## Testing the Tests
-
-### Pre-commit Checklist
-- [ ] All tests pass locally
-- [ ] Coverage meets targets (80%+ for check_context_budget.py)
-- [ ] No test flakiness (run 10 times)
-- [ ] Tests run fast (< 10 seconds total)
-- [ ] Mocks used appropriately (no real git/gh calls)
-- [ ] Fixtures used for common setup
-- [ ] Test names are descriptive
-- [ ] Docstrings added to test classes/methods
-
-### CI/CD Integration
-- Tests will run on every commit (existing CI)
-- Coverage report generated automatically
-- Fail build if coverage decreases
-
-## Rollout Plan
-
-1. **Develop locally**: Implement all tests, verify coverage
-2. **Create PR**: Branch `self-improvement/task-ef38e92d`
-3. **Run CI**: Ensure all tests pass in CI environment
-4. **Review**: Self-review for quality and completeness
-5. **Merge**: Merge to main after validation
-6. **Monitor**: Track coverage improvements in subsequent builds
-
----
-
-**Architecture Document Version**: 1.0  
-**Created**: 2025-01-13  
-**Target Delivery**: Phase 1 tests within this build cycle  
+After all tests implemented:
+1. Run `pytest tests/ -v` → Should show 8 new files, 80-120 new tests passing
+2. Run `pytest tests/ -m tier1` → All tier 1 tests pass
+3. Check for test isolation: Run tests in random order
+4. Verify no production code modified
+5. Confirm all existing tests still pass
