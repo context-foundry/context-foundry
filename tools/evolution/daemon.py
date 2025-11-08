@@ -297,6 +297,12 @@ class EvolutionDaemon:
 
         while not self.stop_requested:
             try:
+                # Check watchdog for stuck/timeout processes (every 30 seconds)
+                current_time = time.time()
+                if current_time - self.last_watchdog_check >= 30:
+                    self._check_watchdog()
+                    self.last_watchdog_check = current_time
+
                 # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
                 open_prs = self._check_open_prs()
 
