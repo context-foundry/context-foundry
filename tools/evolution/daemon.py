@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import signal
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -72,6 +73,7 @@ class EvolutionDaemon:
         self.active_tasks = {}
         self.poll_count = 0  # Track polling iterations for periodic logging
         self.pid = None
+        self.was_paused_for_pr = False  # Track if we were paused for PR review
 
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
@@ -89,7 +91,7 @@ class EvolutionDaemon:
                 "daemon": {
                     "enabled": True,
                     "poll_interval_seconds": 60,
-                    "max_concurrent_tasks": 3,
+                    "max_concurrent_tasks": 1,
                     "log_level": "INFO"
                 },
                 "modes": {
@@ -191,6 +193,16 @@ class EvolutionDaemon:
         
         return True
     
+    def _interruptible_sleep(self, seconds: int):
+        """
+        Sleep for specified seconds, but check stop_requested every second
+        This makes Ctrl+C responsive instead of blocking for full duration
+        """
+        for _ in range(seconds):
+            if self.stop_requested:
+                break
+            time.sleep(1)
+
     def main_loop(self):
         """Main daemon loop - polls queue every 60 seconds"""
         poll_interval = self.config.get('daemon', {}).get('poll_interval_seconds', 60)
@@ -201,35 +213,69 @@ class EvolutionDaemon:
 
         while not self.stop_requested:
             try:
+                # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
+                open_prs = self._check_open_prs()
+
+                if open_prs:
+                    pr_numbers = [pr['number'] for pr in open_prs]
+                    self.logger.info(
+                        f"⏸️  PAUSED: Waiting for PR(s) {pr_numbers} to be merged. "
+                        f"System will resume when PRs are closed."
+                    )
+                    self.was_paused_for_pr = True
+                    self._interruptible_sleep(poll_interval)
+                    continue  # Skip everything - don't pick up tasks!
+
+                # PRs are now closed! Queue next task if we were paused
+                if self.was_paused_for_pr:
+                    self.logger.info("✅ PRs merged! Queuing next improvement task...")
+                    self._queue_next_improvement_task()
+                    self.was_paused_for_pr = False
+
                 # Check resources
                 can_accept, resource_status = self.resource_manager.can_accept_task()
-                
+
                 if not can_accept:
                     self.logger.debug(f"Cannot accept tasks: {resource_status}")
-                    time.sleep(poll_interval)
+                    self._interruptible_sleep(poll_interval)
                     continue
-                
+
                 # Check if we can accept more tasks
                 if len(self.active_tasks) >= max_concurrent:
                     self.logger.debug(f"Max concurrent tasks reached ({max_concurrent})")
-                    time.sleep(poll_interval)
+                    self._interruptible_sleep(poll_interval)
                     continue
+
+                # RACE CONDITION FIX: Detect PRs created by Claude and mark tasks as COMPLETED
+                # This allows daemon to pick up next task after PR is created
+                self._detect_prs_and_complete_tasks()
 
                 # Log queue status before checking for tasks
                 pending_count = self.task_queue.count_pending()
-                self.logger.info(f"Queue status: {pending_count} pending, {len(self.active_tasks)}/{max_concurrent} active")
+                running_count = self.task_queue.count_running()
+                self.logger.info(f"Queue status: {pending_count} pending, {running_count} running, {len(self.active_tasks)}/{max_concurrent} active")
+
+                # RACE CONDITION FIX: Don't pick up new tasks if there are RUNNING tasks
+                # Running tasks are being executed by background Claude processes
+                # We must wait for them to complete (PR created) before starting new ones
+                if running_count > 0:
+                    self.logger.info(f"⏸️  Waiting for {running_count} running task(s) to complete before picking up new work")
+                    self._interruptible_sleep(poll_interval)
+                    continue
 
                 # Get next task
                 task = self.task_queue.get_next_task()
-                
+
                 if task:
                     self.logger.info(f"Picked up task: {task.id} (type: {task.type})")
                     self._execute_task(task)
                 else:
-                    self.logger.info("No pending tasks in queue")
-                
-                # Sleep before next poll
-                time.sleep(poll_interval)
+                    # Queue is empty - generate a new improvement task to keep the loop going
+                    self.logger.info("No pending tasks in queue - generating new improvement task...")
+                    self._queue_next_improvement_task()
+
+                # Sleep before next poll (interruptible for responsive shutdown)
+                self._interruptible_sleep(poll_interval)
 
                 # Periodic resource usage logging (every 10 iterations)
                 self.poll_count += 1
@@ -244,7 +290,7 @@ class EvolutionDaemon:
 
             except Exception as e:
                 self.logger.error(f"Error in main loop: {e}", exc_info=True)
-                time.sleep(poll_interval)
+                self._interruptible_sleep(poll_interval)
     
     def _execute_task(self, task: Task):
         """
@@ -276,14 +322,22 @@ class EvolutionDaemon:
                     'output': task_result.output
                 }
 
-                # Update task status
-                self.task_queue.update_task_status(
-                    task.id,
-                    TaskStatus.COMPLETED.value,
-                    result=result
-                )
-
-                self.logger.info(f"Task {task.id} completed successfully")
+                # RACE CONDITION FIX: For self_improvement tasks that spawn Claude,
+                # keep them in RUNNING state until PR is created (don't mark COMPLETED)
+                # This prevents daemon from picking up another task before PR is created
+                if task.type == 'self_improvement' and result.get('output', {}).get('status') == 'claude_spawned':
+                    self.logger.info(f"✅ Task {task.id} delegated to Claude CLI - keeping in RUNNING state until PR detected")
+                    self.logger.info(f"   PID: {result['output'].get('pid')}")
+                    self.logger.info(f"   Log: {result['output'].get('log_file')}")
+                    # Task stays in RUNNING state - will be marked COMPLETED when PR is detected
+                else:
+                    # For non-delegated tasks, mark as completed immediately
+                    self.task_queue.update_task_status(
+                        task.id,
+                        TaskStatus.COMPLETED.value,
+                        result=result
+                    )
+                    self.logger.info(f"Task {task.id} completed successfully")
             else:
                 raise ValueError(f"Task validation failed: {task_result.error}")
 
@@ -340,6 +394,249 @@ class EvolutionDaemon:
         """Get daemon uptime in seconds"""
         # Simplified - would track start time
         return 0.0
+
+    def _check_open_prs(self):
+        """
+        Check for open PRs in the context-foundry repo
+
+        Returns list of open PRs created by the Evolution System
+        """
+        try:
+            # Get git remote to determine GitHub repo
+            cf_root = Path(__file__).parent.parent.parent
+            result = subprocess.run(
+                ['git', 'remote', 'get-url', 'origin'],
+                capture_output=True,
+                text=True,
+                cwd=str(cf_root),
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                self.logger.warning("Could not get git remote URL")
+                return []
+
+            remote_url = result.stdout.strip()
+
+            # Parse GitHub owner/repo from remote URL
+            # Handle both HTTPS and SSH formats
+            if 'github.com' in remote_url:
+                if remote_url.startswith('git@github.com:'):
+                    # SSH format: git@github.com:owner/repo.git
+                    repo_path = remote_url.replace('git@github.com:', '').replace('.git', '')
+                elif 'https://github.com/' in remote_url:
+                    # HTTPS format: https://github.com/owner/repo.git
+                    repo_path = remote_url.replace('https://github.com/', '').replace('.git', '')
+                else:
+                    self.logger.warning(f"Unrecognized GitHub URL format: {remote_url}")
+                    return []
+
+                owner, repo = repo_path.split('/')
+            else:
+                self.logger.warning("Not a GitHub repository")
+                return []
+
+            # Call GitHub API to get open PRs
+            api_url = f'https://api.github.com/repos/{owner}/{repo}/pulls'
+            params = {'state': 'open'}
+
+            try:
+                import requests
+
+                # Try to get GitHub token for authentication (avoids rate limiting)
+                # Priority: environment variable > gh CLI > config file
+                github_token = os.environ.get('GITHUB_TOKEN')
+
+                if not github_token:
+                    # Try to get token from gh CLI (likely already authenticated)
+                    try:
+                        result = subprocess.run(
+                            ['gh', 'auth', 'token'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            github_token = result.stdout.strip()
+                            self.logger.debug("Using GitHub token from gh CLI")
+                    except (FileNotFoundError, subprocess.TimeoutExpired):
+                        pass
+
+                if not github_token:
+                    github_token = self.config.get('github', {}).get('token')
+
+                headers = {}
+                if github_token:
+                    headers['Authorization'] = f'token {github_token}'
+                else:
+                    self.logger.warning(
+                        "No GitHub authentication found. Rate limited to 60 requests/hour. "
+                        "Run 'gh auth login' to authenticate."
+                    )
+
+                response = requests.get(api_url, params=params, headers=headers, timeout=10)
+
+                # Check for rate limiting
+                if response.status_code == 403 and 'rate limit' in response.text.lower():
+                    self.logger.warning(
+                        "GitHub API rate limit exceeded. "
+                        "Set GITHUB_TOKEN environment variable to increase limit to 5000/hour. "
+                        "Skipping PR check for this poll cycle."
+                    )
+                    return []
+
+                response.raise_for_status()
+                prs = response.json()
+
+                # Filter for Evolution System PRs
+                # Match branches created by Evolution System:
+                # - self-improvement/* (primary pattern)
+                # - enhancement/* (legacy pattern)
+                # - fix/* when created by automation
+                evolution_branch_patterns = ['self-improvement/', 'enhancement/', 'fix/']
+
+                evolution_prs = []
+                for pr in prs:
+                    branch = pr.get('head', {}).get('ref', '')
+                    pr_number = pr.get('number', '?')
+                    pr_title = pr.get('title', '')[:50]
+
+                    # Check if branch matches any Evolution System pattern
+                    is_evolution_pr = any(
+                        pattern in branch
+                        for pattern in evolution_branch_patterns
+                    )
+
+                    if is_evolution_pr:
+                        evolution_prs.append(pr)
+                        self.logger.debug(
+                            f"Found Evolution PR #{pr_number}: {pr_title} (branch: {branch})"
+                        )
+                    else:
+                        self.logger.debug(
+                            f"Ignoring non-Evolution PR #{pr_number}: {pr_title} (branch: {branch})"
+                        )
+
+                if evolution_prs:
+                    self.logger.info(
+                        f"Found {len(evolution_prs)} Evolution System PR(s) to wait for"
+                    )
+
+                return evolution_prs
+
+            except ImportError:
+                self.logger.warning("requests library not available - cannot check PRs")
+                return []
+            except Exception as e:
+                self.logger.warning(f"Error calling GitHub API: {e}")
+                return []
+
+        except Exception as e:
+            self.logger.error(f"Error checking open PRs: {e}", exc_info=True)
+            return []
+
+    def _detect_prs_and_complete_tasks(self):
+        """
+        Detect PRs created by Claude and mark corresponding tasks as COMPLETED
+
+        This is the second half of the race condition fix:
+        1. Tasks are kept in RUNNING state when Claude is spawned
+        2. This method detects when PRs are created and marks tasks COMPLETED
+        3. Only then can daemon pick up next task
+
+        Branch naming pattern: self-improvement/task-{task_id[:8]}
+        """
+        try:
+            # Get all open Evolution PRs
+            open_prs = self._check_open_prs()
+            if not open_prs:
+                return
+
+            # Get all RUNNING tasks
+            running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+            if not running_tasks:
+                return
+
+            # Match PRs to tasks by extracting task ID from branch name
+            for pr in open_prs:
+                branch = pr.get('head', {}).get('ref', '')
+                pr_number = pr.get('number', '?')
+                pr_url = pr.get('html_url', '')
+
+                # Extract task ID from branch name (e.g., "self-improvement/task-af23b3bd")
+                # Branch pattern: {prefix}/task-{task_id[:8]}
+                for task in running_tasks:
+                    task_id_short = task.id[:8]
+                    if f"task-{task_id_short}" in branch:
+                        # Found matching PR for this task!
+                        self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
+                        self.logger.info(f"   Branch: {branch}")
+                        self.logger.info(f"   URL: {pr_url}")
+
+                        # Mark task as COMPLETED
+                        result = {
+                            'status': 'pr_created',
+                            'pr_number': pr_number,
+                            'pr_url': pr_url,
+                            'branch': branch
+                        }
+                        self.task_queue.update_task_status(
+                            task.id,
+                            TaskStatus.COMPLETED.value,
+                            result=result
+                        )
+
+                        self.logger.info(f"🎉 Task {task.id} marked COMPLETED - PR #{pr_number} created!")
+                        self.logger.info(f"   Daemon can now pick up next task after PR merge")
+                        break
+
+        except Exception as e:
+            self.logger.error(f"Error detecting PRs and completing tasks: {e}", exc_info=True)
+
+    def _queue_next_improvement_task(self):
+        """
+        Queue the next self-improvement task
+
+        Called when PRs are merged to continue the perpetual loop
+        """
+        try:
+            self.logger.info("Generating next improvement task...")
+
+            # Use self-improvement mode to find next task
+            mode = self.modes.get(TaskType.SELF_IMPROVEMENT.value)
+            if not mode:
+                self.logger.error("Self-improvement mode not found!")
+                return
+
+            # Find next TODO or generate improvement task
+            todos = mode._find_todos()
+
+            if todos:
+                next_todo = todos[0]  # Get highest priority TODO
+
+                task_id = self.task_queue.create_task(
+                    task_type=TaskType.SELF_IMPROVEMENT.value,
+                    params={
+                        'action': next_todo.get('action', 'implement_todo'),
+                        'file': next_todo.get('file'),
+                        'line': next_todo.get('line'),
+                        'description': next_todo.get('text'),
+                        'priority': next_todo.get('priority', 7),
+                        'category': next_todo.get('category', 'general')
+                    },
+                    priority=next_todo.get('priority', 7)
+                )
+
+                self.logger.info(f"✅ PERPETUAL LOOP: Queued task {task_id}")
+                self.logger.info(f"   📋 Next: {next_todo.get('text', 'Unknown')[:80]}...")
+                self.logger.info(f"   🏷️  Category: {next_todo.get('category')} | Priority: {next_todo.get('priority')}")
+
+            else:
+                self.logger.warning("⚠️  No more tasks found - perpetual loop paused")
+                self.logger.info("   Add TODOs/FIXMEs to Context Foundry code to resume")
+
+        except Exception as e:
+            self.logger.error(f"❌ Failed to queue next task: {e}", exc_info=True)
 
 
 def main():
