@@ -6,10 +6,34 @@ Manages settings, profiles, and environment configuration.
 
 import os
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Optional, Any
 from dataclasses import dataclass, asdict
 import yaml
+
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+class ConfigError(Exception):
+    """Base exception for configuration errors."""
+    pass
+
+
+class ConfigFileError(ConfigError):
+    """Exception raised for config file read/write errors."""
+    pass
+
+
+class ConfigValidationError(ConfigError):
+    """Exception raised for configuration validation errors."""
+    pass
+
+
+class ConfigParseError(ConfigError):
+    """Exception raised for YAML/JSON parsing errors."""
+    pass
 
 
 @dataclass
@@ -78,16 +102,30 @@ class ConfigManager:
         self._load_config()
 
     def _load_config(self):
-        """Load configuration from file and environment."""
+        """Load configuration from file and environment.
+
+        Raises:
+            ConfigFileError: If config file cannot be read
+            ConfigParseError: If config file is malformed
+        """
         # Load from file if exists
         if self.config_path.exists():
-            with open(self.config_path) as f:
-                data = yaml.safe_load(f) or {}
+            try:
+                with open(self.config_path) as f:
+                    data = yaml.safe_load(f) or {}
+            except OSError as e:
+                raise ConfigFileError(f"Failed to read config file {self.config_path}: {e}") from e
+            except yaml.YAMLError as e:
+                raise ConfigParseError(f"Failed to parse YAML in {self.config_path}: {e}") from e
 
             # Load profiles
             profiles_data = data.get("profiles", {})
             for profile_name, profile_data in profiles_data.items():
-                self.profiles[profile_name] = FoundryConfig(**profile_data)
+                try:
+                    self.profiles[profile_name] = FoundryConfig(**profile_data)
+                except TypeError as e:
+                    logger.warning(f"Invalid data for profile '{profile_name}': {e}. Using defaults.")
+                    self.profiles[profile_name] = FoundryConfig()
 
             # Set current profile
             self.current_profile = data.get("current_profile", "default")
@@ -100,10 +138,14 @@ class ConfigManager:
 
         # Ensure current profile exists
         if self.current_profile not in self.profiles:
+            logger.warning(f"Current profile '{self.current_profile}' not found. Creating with defaults.")
             self.profiles[self.current_profile] = FoundryConfig()
 
     def _apply_env_overrides(self):
-        """Apply environment variable overrides."""
+        """Apply environment variable overrides.
+
+        Logs warnings for invalid environment variable values but continues.
+        """
         for profile in self.profiles.values():
             # API settings
             if os.getenv("ANTHROPIC_API_KEY"):
@@ -111,7 +153,10 @@ class ConfigManager:
             if os.getenv("CLAUDE_MODEL"):
                 profile.model = os.getenv("CLAUDE_MODEL")
             if os.getenv("MAX_TOKENS"):
-                profile.max_tokens = int(os.getenv("MAX_TOKENS"))
+                try:
+                    profile.max_tokens = int(os.getenv("MAX_TOKENS"))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid MAX_TOKENS value: {os.getenv('MAX_TOKENS')}. Using default.")
 
             # Context settings
             if os.getenv("USE_CONTEXT_MANAGER"):
@@ -125,7 +170,10 @@ class ConfigManager:
             if os.getenv("SMTP_HOST"):
                 profile.smtp_host = os.getenv("SMTP_HOST")
             if os.getenv("SMTP_PORT"):
-                profile.smtp_port = int(os.getenv("SMTP_PORT"))
+                try:
+                    profile.smtp_port = int(os.getenv("SMTP_PORT"))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid SMTP_PORT value: {os.getenv('SMTP_PORT')}. Using default.")
             if os.getenv("SMTP_USER"):
                 profile.smtp_user = os.getenv("SMTP_USER")
             if os.getenv("SMTP_PASS"):
@@ -153,10 +201,14 @@ class ConfigManager:
         if "." in key:
             parts = key.split(".")
             value = config
-            for part in parts:
-                value = getattr(value, part, None)
-                if value is None:
-                    return default
+            try:
+                for part in parts:
+                    value = getattr(value, part, None)
+                    if value is None:
+                        return default
+            except AttributeError:
+                logger.warning(f"Invalid configuration key: {key}")
+                return default
             return value
 
         return getattr(config, key, default)
@@ -168,12 +220,22 @@ class ConfigManager:
             key: Configuration key
             value: Value to set
             profile: Profile name (uses current if not specified)
+
+        Raises:
+            ConfigValidationError: If key is invalid for FoundryConfig
         """
         profile_name = profile or self.current_profile
         if profile_name not in self.profiles:
             self.profiles[profile_name] = FoundryConfig()
 
-        setattr(self.profiles[profile_name], key, value)
+        # Validate that the key exists in FoundryConfig
+        if not hasattr(self.profiles[profile_name], key):
+            raise ConfigValidationError(f"Invalid configuration key: {key}")
+
+        try:
+            setattr(self.profiles[profile_name], key, value)
+        except (TypeError, ValueError) as e:
+            raise ConfigValidationError(f"Invalid value for {key}: {value}") from e
 
     def get_config(self, profile: Optional[str] = None) -> FoundryConfig:
         """Get full configuration for profile.
@@ -188,8 +250,15 @@ class ConfigManager:
         return self.profiles.get(profile_name, FoundryConfig())
 
     def save(self):
-        """Save configuration to file."""
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        """Save configuration to file.
+
+        Raises:
+            ConfigFileError: If config file cannot be written
+        """
+        try:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            raise ConfigFileError(f"Failed to create config directory {self.config_path.parent}: {e}") from e
 
         data = {
             "current_profile": self.current_profile,
@@ -199,8 +268,13 @@ class ConfigManager:
             }
         }
 
-        with open(self.config_path, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        try:
+            with open(self.config_path, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False)
+        except OSError as e:
+            raise ConfigFileError(f"Failed to write config file {self.config_path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise ConfigParseError(f"Failed to serialize config to YAML: {e}") from e
 
     def create_profile(self, name: str, from_profile: Optional[str] = None) -> FoundryConfig:
         """Create a new profile.
@@ -322,17 +396,25 @@ class ConfigManager:
 
         Returns:
             True if created/updated
+
+        Raises:
+            ConfigFileError: If .env file cannot be created
         """
         if self.ENV_FILE_PATH.exists() and not force:
             return False
 
         # Check for .env.example
         example_file = Path(".env.example")
-        if example_file.exists():
-            self.ENV_FILE_PATH.write_text(example_file.read_text())
-        else:
-            # Create minimal .env
-            template = """# Context Foundry Environment Variables
+        try:
+            if example_file.exists():
+                try:
+                    content = example_file.read_text()
+                    self.ENV_FILE_PATH.write_text(content)
+                except OSError as e:
+                    raise ConfigFileError(f"Failed to read {example_file}: {e}") from e
+            else:
+                # Create minimal .env
+                template = """# Context Foundry Environment Variables
 
 # Required for API and Autonomous modes
 ANTHROPIC_API_KEY=your_api_key_here
@@ -357,7 +439,9 @@ ANTHROPIC_API_KEY=your_api_key_here
 # NOTIFICATION_EMAIL=you@example.com
 # SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 """
-            self.ENV_FILE_PATH.write_text(template)
+                self.ENV_FILE_PATH.write_text(template)
+        except OSError as e:
+            raise ConfigFileError(f"Failed to write {self.ENV_FILE_PATH}: {e}") from e
 
         return True
 
