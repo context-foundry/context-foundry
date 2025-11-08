@@ -174,6 +174,32 @@ class EvolutionDaemon:
         self.config = self._load_config(None)
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
     
+    
+    def _cleanup_stuck_tasks(self):
+        """
+        Cleanup any tasks stuck in RUNNING state from previous daemon crash
+
+        This is called on daemon startup to ensure no stuck tasks block the queue.
+        Tasks can get stuck in RUNNING state if:
+        - Daemon crashed while task was executing
+        - Process was killed without cleanup
+        - System reboot
+        """
+        running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value, limit=100)
+
+        if running_tasks:
+            self.logger.warning(f"Found {len(running_tasks)} stuck RUNNING tasks from previous session - cancelling them")
+
+            for task in running_tasks:
+                self.logger.info(f"  Cancelling stuck task: {task.id[:8]} ({task.type}) - started {task.started_at}")
+                self.task_queue.update_task_status(
+                    task.id,
+                    TaskStatus.CANCELLED.value,
+                    error="Task was stuck in RUNNING state when daemon restarted"
+                )
+        else:
+            self.logger.debug("No stuck RUNNING tasks found")
+
     def start(self, daemonize: bool = False):
         """
         Start daemon
