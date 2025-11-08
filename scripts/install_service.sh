@@ -48,7 +48,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     <key>ProgramArguments</key>
     <array>
         <string>$PYTHON_PATH</string>
-        <string>$PROJECT_ROOT/tools/evolution/daemon.py</string>
+        <string>-m</string>
+        <string>tools.evolution.daemon</string>
         <string>start</string>
         <string>--foreground</string>
     </array>
@@ -62,6 +63,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>HOME</key>
         <string>$HOME</string>
+        <key>PYTHONPATH</key>
+        <string>$PROJECT_ROOT</string>
     </dict>
 
     <key>StandardOutPath</key>
