@@ -751,6 +751,11 @@ class EvolutionDaemon:
                             self.logger.info(f"✅ Detected MERGED PR #{pr_number} for task {task.id}")
                             self.logger.info(f"   Branch: {branch}")
                             self.logger.info(f"   Status: Merged (cleaning up stuck RUNNING task)")
+
+                            # Auto-close the GitHub issue if it exists
+                            github_issue = task.params.get('github_issue')
+                            if github_issue:
+                                self._close_github_issue(github_issue, pr_number)
                         else:
                             self.logger.info(f"✅ Detected PR #{pr_number} for task {task.id}")
                             self.logger.info(f"   Branch: {branch}")
@@ -775,6 +780,43 @@ class EvolutionDaemon:
 
         except Exception as e:
             self.logger.error(f"Error detecting PRs and completing tasks: {e}", exc_info=True)
+
+    def _close_github_issue(self, issue_number: int, pr_number: int) -> bool:
+        """
+        Close a GitHub issue when its PR is merged
+
+        Args:
+            issue_number: GitHub issue number to close
+            pr_number: PR number that fixed the issue
+
+        Returns:
+            True if issue was closed successfully, False otherwise
+        """
+        try:
+            import subprocess
+
+            self.logger.info(f"🔒 Closing GitHub issue #{issue_number} (fixed by PR #{pr_number})")
+
+            # Close the issue with a comment linking to the PR
+            result = subprocess.run(
+                ['gh', 'issue', 'close', str(issue_number),
+                 '--comment', f'Fixed by PR #{pr_number} 🤖'],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=str(Path(__file__).parent.parent.parent)
+            )
+
+            if result.returncode == 0:
+                self.logger.info(f"✅ Successfully closed issue #{issue_number}")
+                return True
+            else:
+                self.logger.warning(f"Failed to close issue #{issue_number}: {result.stderr}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error closing issue #{issue_number}: {e}")
+            return False
 
     def _queue_next_improvement_task(self):
         """
