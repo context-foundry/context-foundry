@@ -658,6 +658,140 @@ class EvolutionDaemon:
             self.logger.error(f"Error checking open PRs: {e}", exc_info=True)
             return []
 
+    def _poll_github_issues(self) -> int:
+        """
+        Poll GitHub for approved issues and create tasks for them
+
+        Returns:
+            Number of tasks created from approved issues
+        """
+        try:
+            # Get git remote to determine GitHub repo
+            cf_root = Path(__file__).parent.parent.parent
+            result = subprocess.run(
+                ['git', 'remote', 'get-url', 'origin'],
+                capture_output=True,
+                text=True,
+                cwd=str(cf_root),
+                timeout=5
+            )
+
+            if result.returncode != 0:
+                self.logger.debug("Could not get git remote URL")
+                return 0
+
+            remote_url = result.stdout.strip()
+
+            # Parse GitHub owner/repo from remote URL
+            if 'github.com' in remote_url:
+                if remote_url.startswith('git@github.com:'):
+                    repo_path = remote_url.replace('git@github.com:', '').replace('.git', '')
+                elif 'https://github.com/' in remote_url:
+                    repo_path = remote_url.replace('https://github.com/', '').replace('.git', '')
+                else:
+                    self.logger.debug(f"Unrecognized GitHub URL format: {remote_url}")
+                    return 0
+
+                owner, repo = repo_path.split('/')
+            else:
+                self.logger.debug("Not a GitHub repository")
+                return 0
+
+            # Call GitHub API to get issues with "approved" label
+            api_url = f'https://api.github.com/repos/{owner}/{repo}/issues'
+            params = {'state': 'open', 'labels': 'approved'}
+
+            try:
+                import requests
+
+                # Get GitHub token for authentication
+                github_token = os.environ.get('GITHUB_TOKEN')
+
+                if not github_token:
+                    try:
+                        result = subprocess.run(
+                            ['gh', 'auth', 'token'],
+                            capture_output=True,
+                            text=True,
+                            timeout=5
+                        )
+                        if result.returncode == 0:
+                            github_token = result.stdout.strip()
+                    except (FileNotFoundError, subprocess.TimeoutExpired):
+                        pass
+
+                if not github_token:
+                    github_token = self.config.get('github', {}).get('token')
+
+                headers = {}
+                if github_token:
+                    headers['Authorization'] = f'token {github_token}'
+
+                response = requests.get(api_url, params=params, headers=headers, timeout=10)
+
+                if response.status_code == 403 and 'rate limit' in response.text.lower():
+                    self.logger.warning("GitHub API rate limit exceeded. Skipping issue poll.")
+                    return 0
+
+                response.raise_for_status()
+                issues = response.json()
+
+                if not issues:
+                    return 0
+
+                # Check which issues already have tasks in the queue
+                existing_tasks = self.task_queue.list_tasks(status=TaskStatus.PENDING.value, limit=100)
+                existing_tasks.extend(self.task_queue.list_tasks(status=TaskStatus.RUNNING.value, limit=100))
+
+                existing_issue_nums = set()
+                for task in existing_tasks:
+                    if 'github_issue' in task.params:
+                        existing_issue_nums.add(task.params['github_issue'])
+
+                # Create tasks for new approved issues
+                tasks_created = 0
+                for issue in issues:
+                    issue_number = issue.get('number')
+                    issue_title = issue.get('title', 'N/A')
+                    issue_body = issue.get('body', '')
+
+                    # Skip if we already have a task for this issue
+                    if issue_number in existing_issue_nums:
+                        continue
+
+                    # Create task for this approved issue
+                    task_id = self.task_queue.create_task(
+                        task_type=TaskType.SELF_IMPROVEMENT.value,
+                        params={
+                            'action': 'implement_github_issue',
+                            'github_issue': issue_number,
+                            'description': issue_title,
+                            'details': issue_body,
+                            'priority': 10,  # GitHub-approved issues get highest priority
+                            'category': 'github_approved'
+                        },
+                        priority=10
+                    )
+
+                    self.logger.info(f"📋 Created task for approved GitHub issue #{issue_number}: {issue_title}")
+                    tasks_created += 1
+
+                if tasks_created > 0:
+                    self.logger.info(f"✅ Created {tasks_created} task(s) from approved GitHub issues")
+
+                return tasks_created
+
+            except ImportError:
+                self.logger.debug("requests library not available - cannot check issues")
+                return 0
+            except Exception as e:
+                self.logger.debug(f"Error calling GitHub API for issues: {e}")
+                return 0
+
+        except Exception as e:
+            self.logger.debug(f"Error polling GitHub issues: {e}")
+            return 0
+
     def _check_recently_closed_prs(self):
         """
         Check for recently closed/merged Evolution PRs (last 2 hours)
@@ -966,11 +1100,23 @@ class EvolutionDaemon:
         """
         Queue the next self-improvement task
 
+        Priority order:
+        1. Check GitHub for approved issues first (human-approved tasks)
+        2. Fall back to TODOs in codebase
+        3. Fall back to self-generated improvement tasks
+
         Called when PRs are merged to continue the perpetual loop
         """
         try:
             self.logger.info("Generating next improvement task...")
 
+            # PRIORITY 1: Check GitHub for approved issues FIRST
+            github_tasks_created = self._poll_github_issues()
+            if github_tasks_created > 0:
+                self.logger.info(f"✅ Queued {github_tasks_created} GitHub-approved issue(s)")
+                return  # GitHub tasks created, we're done
+
+            # PRIORITY 2 & 3: Fall back to TODO/self-generated tasks
             # Use self-improvement mode to find next task
             mode = self.modes.get(TaskType.SELF_IMPROVEMENT.value)
             if not mode:

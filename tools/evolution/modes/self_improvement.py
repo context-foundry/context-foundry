@@ -79,7 +79,25 @@ class SelfImprovementMode(BaseEvolutionMode):
             branch_name = f"self-improvement/task-{task.id[:8]}"
 
             # Build prompt for TODO implementation
-            if action == 'implement_todo':
+            if action == 'implement_github_issue':
+                issue_num = params.get('github_issue', 'N/A')
+                issue_title = params.get('description', 'N/A')
+                issue_details = params.get('details', '')
+
+                prompt = f"""Implement approved GitHub issue #{issue_num}: {issue_title}
+
+{issue_details}
+
+Please:
+1. Understand the requirements from the issue description
+2. Implement the feature/fix properly
+3. Add tests if needed
+4. Ensure all existing tests still pass
+5. Create a PR with branch: {branch_name}
+6. Link the PR to the issue using "Fixes #{issue_num}" in the PR description
+
+This is an autonomous task from the Evolution System implementing a human-approved GitHub issue."""
+            elif action == 'implement_todo':
                 prompt = f"""Implement TODO found in Context Foundry codebase:
 
 File: {params.get('file', 'N/A')}
