@@ -123,11 +123,62 @@ else
 fi
 echo ""
 
-# 3. ACTIVE NETWORK CONNECTIONS (for daemon-spawned Claude)
+# 3. MCP DELEGATION STATUS
+echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
+echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# Query running tasks with MCP task IDs
+MCP_TASKS=$(python3 << 'PYTHON'
+import sys
+sys.path.insert(0, '/Users/name/homelab/context-foundry')
+try:
+    from tools.evolution.task_queue import TaskQueueManager, TaskStatus
+    from tools.mcp_server import get_delegation_result
+    import json
+
+    tq = TaskQueueManager()
+    running = tq.list_tasks(status=TaskStatus.RUNNING.value)
+
+    for task in running:
+        if not task.result or 'mcp_task_id' not in task.result:
+            continue
+
+        mcp_id = task.result['mcp_task_id']
+        try:
+            status_json = get_delegation_result(mcp_id, include_full_output=False)
+            status = json.loads(status_json)
+            print(f"{task.id[:8]}|{mcp_id[:8]}|{status.get('status')}|{status.get('current_phase', 'N/A')}|{status.get('progress', 'N/A')}")
+        except:
+            print(f"{task.id[:8]}|{mcp_id[:8]}|checking|...|...")
+except Exception as e:
+    pass
+PYTHON
+)
+
+if [ -z "$MCP_TASKS" ]; then
+    echo -e "  ${GRAY}No active MCP delegations${NC}"
+else
+    echo -e "  ${GRAY}TASK     MCP-ID   STATUS      PHASE                PROGRESS${NC}"
+    echo -e "  ${GRAY}────────────────────────────────────────────────────────────────${NC}"
+    echo "$MCP_TASKS" | while IFS='|' read task_id mcp_id status phase progress; do
+        # Color code status
+        if [[ "$status" == "completed" ]]; then
+            STATUS_COLOR="${GREEN}"
+        elif [[ "$status" == "running" ]]; then
+            STATUS_COLOR="${YELLOW}"
+        else
+            STATUS_COLOR="${GRAY}"
+        fi
+        printf "  %-8s %-8s ${STATUS_COLOR}%-11s${NC} %-20s %s\n" "$task_id" "$mcp_id" "$status" "$phase" "$progress"
+    done
+fi
+echo ""
+
+# 4. ACTIVE NETWORK CONNECTIONS (for Claude processes)
 echo -e "${CYAN}NETWORK ACTIVITY${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-# Find all daemon-spawned Claude processes
+# Find all daemon-spawned Claude processes (legacy - will be removed once MCP is stable)
 DAEMON_CLAUDES=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
     STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
     if [[ "$STATE" =~ N ]]; then
