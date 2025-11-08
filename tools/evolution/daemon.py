@@ -322,7 +322,6 @@ class EvolutionDaemon:
                     'output': task_result.output
                 }
 
-<<<<<<< HEAD
                 # RACE CONDITION FIX: For self_improvement tasks that spawn Claude,
                 # keep them in RUNNING state until PR is created (don't mark COMPLETED)
                 # This prevents daemon from picking up another task before PR is created
@@ -339,16 +338,6 @@ class EvolutionDaemon:
                         result=result
                     )
                     self.logger.info(f"Task {task.id} completed successfully")
-=======
-                # Update task status
-                self.task_queue.update_task_status(
-                    task.id,
-                    TaskStatus.COMPLETED.value,
-                    result=result
-                )
-
-                self.logger.info(f"Task {task.id} completed successfully")
->>>>>>> origin/main
             else:
                 raise ValueError(f"Task validation failed: {task_result.error}")
 

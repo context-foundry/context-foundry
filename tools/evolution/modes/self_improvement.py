@@ -11,6 +11,35 @@ from .base_mode import BaseEvolutionMode, TaskResult
 class SelfImprovementMode(BaseEvolutionMode):
     """Mode for CF self-improvement through automated analysis"""
 
+    # Protected files that should NOT be auto-modified by the daemon
+    # These critical infrastructure files require manual review
+    PROTECTED_FILES = [
+        'tools/evolution/daemon.py',
+        'tools/evolution/modes/self_improvement.py',
+        'tools/evolution/task_queue.py',
+        'tools/evolution/resource_manager.py',
+    ]
+
+    def _is_protected_file(self, file_path: str) -> bool:
+        """
+        Check if a file is protected from autonomous modification
+
+        Args:
+            file_path: Path to the file to check
+
+        Returns:
+            True if file is protected, False otherwise
+        """
+        # Normalize path for comparison
+        normalized_path = str(Path(file_path))
+
+        # Check if file matches any protected file pattern
+        for protected in self.PROTECTED_FILES:
+            if normalized_path.endswith(protected) or protected in normalized_path:
+                return True
+
+        return False
+
     def generate_tasks(self) -> List[Dict]:
         """Analyze CF codebase for improvements"""
         tasks = []
@@ -168,6 +197,12 @@ This is an autonomous self-improvement task from the Evolution System."""
                         'or FIXME: with'
                     ]
                     if any(pattern in text for pattern in skip_patterns):
+                        continue
+
+                    # Skip protected files (critical infrastructure that requires manual review)
+                    if self._is_protected_file(file_path):
+                        print(f"⏭️  Skipping TODO in protected file: {file_path}")
+                        print(f"   Protected files require manual review for changes")
                         continue
 
                     # Calculate priority and category using intelligent analysis
@@ -378,7 +413,12 @@ This is an autonomous self-improvement task from the Evolution System."""
             # Create a simple, natural command for Claude Code
             # Claude Code recognizes commands like "build", "fix", "upgrade feature X"
             # and automatically fires up the MCP autonomous build system
-            claude_prompt = f"""fix {prompt}"""
+            claude_prompt = f"""fix {prompt}
+
+IMPORTANT: Before creating the PR, run this command to prevent merge conflicts:
+  bash tools/evolution/scripts/rebase_and_pr.sh {branch_name}
+
+This ensures your branch is up-to-date with main and creates a conflict-free PR."""
 
             # Write prompt to file for debugging
             prompt_file = logs_dir / f'prompt-{task_id}.txt'
