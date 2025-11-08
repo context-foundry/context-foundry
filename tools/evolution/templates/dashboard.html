@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Context Foundry Evolution System</title>
+    <style>
+        body { font-family: system-ui; margin: 20px; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .stat-card { border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <h1>Evolution System Dashboard</h1>
+    <div class="stats">
+        <div class="stat-card">
+            <h3>Queue Size</h3>
+            <p id="queue-size">{{ queue_size }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Active Tasks</h3>
+            <p id="active-tasks">{{ active_tasks | length }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Daemon Status</h3>
+            <p id="daemon-status">{{ daemon_status }}</p>
+        </div>
+    </div>
+    <h2>Active Tasks</h2>
+    <ul id="task-list">
+        {% for task in active_tasks %}
+        <li>{{ task.type }} - {{ task.id }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

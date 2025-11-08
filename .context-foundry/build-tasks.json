@@ -1,28 +1,76 @@
 {
-  "parallel_mode": false,
-  "total_tasks": 3,
+  "parallel_mode": true,
+  "total_tasks": 6,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Fix mermaid_generator.py critical bugs and enhance features",
-      "files": ["extensions/flowise/mermaid_generator.py"],
+      "description": "Create core daemon and task queue system",
+      "files": [
+        "tools/evolution/__init__.py",
+        "tools/evolution/daemon.py",
+        "tools/evolution/task_queue.py",
+        "tools/evolution/resource_manager.py"
+      ],
       "dependencies": [],
-      "estimated_time": "10 minutes"
+      "estimated_time": "20 minutes"
     },
     {
       "id": "task-2",
-      "description": "Update BEST_PRACTICES.md documentation",
-      "files": ["extensions/flowise/BEST_PRACTICES.md"],
+      "description": "Create evolution modes (plugin architecture)",
+      "files": [
+        "tools/evolution/modes/__init__.py",
+        "tools/evolution/modes/base_mode.py",
+        "tools/evolution/modes/self_improvement.py",
+        "tools/evolution/modes/chaos_creative.py",
+        "tools/evolution/modes/research_discovery.py"
+      ],
       "dependencies": ["task-1"],
-      "estimated_time": "5 minutes"
+      "estimated_time": "20 minutes"
     },
     {
       "id": "task-3",
-      "description": "Update orchestrator_prompt.txt CLI invocation",
-      "files": ["tools/orchestrator_prompt.txt"],
+      "description": "Create communication layer (dashboard, API, WebSocket)",
+      "files": [
+        "tools/evolution/communication/__init__.py",
+        "tools/evolution/communication/rest_api.py",
+        "tools/evolution/communication/web_dashboard.py",
+        "tools/evolution/communication/websocket_stream.py",
+        "tools/evolution/communication/local_exchange.py",
+        "tools/evolution/templates/dashboard.html",
+        "tools/evolution/templates/tasks.html",
+        "tools/evolution/templates/projects.html"
+      ],
       "dependencies": ["task-1"],
-      "estimated_time": "2 minutes"
+      "estimated_time": "25 minutes"
+    },
+    {
+      "id": "task-4",
+      "description": "Create agent protocol for multi-agent network",
+      "files": [
+        "tools/evolution/agent_protocol.py"
+      ],
+      "dependencies": ["task-1"],
+      "estimated_time": "15 minutes"
+    },
+    {
+      "id": "task-5",
+      "description": "Extend MCP server with 10 new evolution tools",
+      "files": [
+        "tools/mcp_server.py"
+      ],
+      "dependencies": ["task-1", "task-2", "task-4"],
+      "estimated_time": "10 minutes"
+    },
+    {
+      "id": "task-6",
+      "description": "Create management scripts and configuration",
+      "files": [
+        "scripts/start_evolution.sh",
+        "scripts/stop_evolution.sh",
+        "scripts/install_service.sh"
+      ],
+      "dependencies": ["task-1"],
+      "estimated_time": "10 minutes"
     }
-  ],
-  "rationale": "Sequential build - each task is small and modifications are straightforward. No need for parallel execution. Total estimated time: 17 minutes."
+  ]
 }

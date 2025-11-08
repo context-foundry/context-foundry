@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Tasks - CFES</title>
+    <style>body { font-family: system-ui; margin: 20px; }</style>
+</head>
+<body>
+    <h1>Tasks</h1>
+    <table>
+        <tr><th>ID</th><th>Type</th><th>Status</th><th>Created</th></tr>
+        {% for task in tasks %}
+        <tr>
+            <td>{{ task.id[:8] }}</td>
+            <td>{{ task.type }}</td>
+            <td>{{ task.status }}</td>
+            <td>{{ task.created_at }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
