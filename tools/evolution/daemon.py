@@ -60,10 +60,15 @@ class EvolutionDaemon:
         # Initialize components
         self.task_queue = TaskQueueManager()
         self.resource_manager = ResourceManager(self.config.get('resources', {}))
+        self.watchdog = ProcessWatchdog(
+            max_duration_minutes=60,
+            max_tokens_per_task=100_000,
+            check_interval_seconds=30
+        )
 
-        # Initialize evolution modes
+        # Initialize evolution modes (pass watchdog for process registration)
         self.modes = {
-            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
+            TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(watchdog=self.watchdog),
             TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
             TaskType.RESEARCH.value: ResearchDiscoveryMode()
         }
@@ -75,6 +80,7 @@ class EvolutionDaemon:
         self.poll_count = 0  # Track polling iterations for periodic logging
         self.pid = None
         self.was_paused_for_pr = False  # Track if we were paused for PR review
+        self.last_watchdog_check = time.time()  # Track last watchdog check time
 
         # PID file path
         self.pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
