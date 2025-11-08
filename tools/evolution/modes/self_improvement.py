@@ -83,13 +83,17 @@ class SelfImprovementMode(BaseEvolutionMode):
             # Create feature branch
             branch_name = f"self-improvement/task-{task.id[:8]}"
 
+            # Check if task is linked to a GitHub issue
+            github_issue = params.get('github_issue')
+            issue_link = f"\n\n**GitHub Issue**: Fixes #{github_issue}" if github_issue else ""
+
             # Build prompt for TODO implementation
             if action == 'implement_todo':
                 prompt = f"""Implement TODO found in Context Foundry codebase:
 
 File: {params.get('file', 'N/A')}
 Line: {params.get('line', 'N/A')}
-TODO: {params.get('description', 'N/A')}
+TODO: {params.get('description', 'N/A')}{issue_link}
 
 Please:
 1. Read the file and understand the context
@@ -97,12 +101,25 @@ Please:
 3. Add tests if needed
 4. Ensure all existing tests still pass
 5. Create a PR with branch: {branch_name}
+{"6. Include 'Fixes #" + str(github_issue) + "' in the PR description to auto-link and close the issue" if github_issue else ""}
 
 This is an autonomous self-improvement task from the Evolution System."""
             elif action == 'self_generated_improvement':
-                prompt = params.get('description', 'Improve Context Foundry')
+                base_prompt = params.get('description', 'Improve Context Foundry')
+                prompt = f"""{base_prompt}{issue_link}
+
+Please create a PR with branch: {branch_name}
+{"Include 'Fixes #" + str(github_issue) + "' in the PR description to auto-link and close the issue." if github_issue else ""}
+
+This is an autonomous self-improvement task from the Evolution System."""
             else:
-                prompt = params.get('description', 'Improve Context Foundry')
+                base_prompt = params.get('description', 'Improve Context Foundry')
+                prompt = f"""{base_prompt}{issue_link}
+
+Please create a PR with branch: {branch_name}
+{"Include 'Fixes #" + str(github_issue) + "' in the PR description to auto-link and close the issue." if github_issue else ""}
+
+This is an autonomous self-improvement task from the Evolution System."""
 
             # Delegate to Context Foundry via Claude CLI
             print(f"🤖 Delegating to Context Foundry via Claude CLI...")
