@@ -139,9 +139,18 @@ class CommandHandler(BaseHTTPRequestHandler):
     def _handle_list_sandboxes(self):
         """List active sandboxes"""
         sandboxes = self.sandbox_manager.list_sandboxes()
+
+        # Convert Path objects to strings for JSON serialization
+        sandboxes_serializable = {}
+        for task_id, info in sandboxes.items():
+            sandboxes_serializable[task_id] = {
+                **info,
+                "path": str(info["path"])
+            }
+
         self._json_response({
             "success": True,
-            "sandboxes": sandboxes,
+            "sandboxes": sandboxes_serializable,
             "stats": self.sandbox_manager.get_stats()
         })
 
