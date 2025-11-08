@@ -229,6 +229,54 @@ class EvolutionDaemon:
         
         return True
     
+    def _check_watchdog(self):
+        """
+        Check watchdog for stuck/timeout processes and handle actions
+
+        Actions can include:
+        - killed_timeout: Process exceeded max duration (60 min)
+        - killed_stuck: Process has no log activity (10+ min)
+        - process_died: Process terminated unexpectedly
+        - warning_tokens: Process exceeding token budget
+        """
+        actions = self.watchdog.check_processes()
+
+        for action in actions:
+            action_type = action.get('action')
+            task_id = action.get('task_id')
+            pid = action.get('pid')
+
+            if action_type in ['killed_timeout', 'killed_stuck']:
+                # Process was killed by watchdog - mark task as failed
+                reason = 'timeout' if action_type == 'killed_timeout' else 'stuck (no log activity)'
+                duration = action.get('duration_minutes', 0)
+
+                self.logger.error(
+                    f"⚠️  Watchdog killed process {pid} (task {task_id[:8]}) - {reason} after {duration:.1f} min"
+                )
+
+                # Update task status to FAILED
+                self.task_queue.update_task_status(
+                    task_id,
+                    TaskStatus.FAILED.value,
+                    error=f"Process killed by watchdog: {reason} ({duration:.1f} min)"
+                )
+
+            elif action_type == 'process_died':
+                # Process terminated unexpectedly
+                duration = action.get('duration_minutes', 0)
+                self.logger.warning(
+                    f"Process {pid} (task {task_id[:8]}) died unexpectedly after {duration:.1f} min"
+                )
+                # Don't update task status - let PR detection handle it (might have succeeded)
+
+            elif action_type == 'warning_tokens':
+                # Process using lots of tokens
+                estimated = action.get('estimated_tokens', 0)
+                self.logger.warning(
+                    f"⚠️  Process {pid} (task {task_id[:8]}) estimated {estimated} tokens (high usage)"
+                )
+
     def _interruptible_sleep(self, seconds: int):
         """
         Sleep for specified seconds, but check stop_requested every second
