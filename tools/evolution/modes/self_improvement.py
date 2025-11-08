@@ -440,15 +440,31 @@ This is an autonomous self-improvement task from the Evolution System."""
             task_id = str(uuid.uuid4())[:8]
             log_file = logs_dir / f'claude-{task_id}.log'
 
-            # Create a simple, natural command for Claude Code
-            # Claude Code recognizes commands like "build", "fix", "upgrade feature X"
-            # and automatically fires up the MCP autonomous build system
-            claude_prompt = f"""fix {prompt}
+            # Explicitly invoke MCP autonomous_build_and_deploy tool
+            # This ensures the full Scout→Architect→Builder→Test→Deploy workflow runs
+            claude_prompt = f"""AUTONOMOUS WORKFLOW - Use MCP tool to implement this task:
 
-IMPORTANT: Before creating the PR, run this command to prevent merge conflicts:
+**STEP 1: Call the autonomous_build_and_deploy MCP tool**
+Use these exact parameters:
+- task: "{prompt}"
+- working_directory: "/Users/name/homelab/context-foundry"
+- mode: "existing_repo"
+- github_repo_name: "context-foundry/context-foundry"
+- existing_repo: "/Users/name/homelab/context-foundry"
+
+This will automatically run:
+  Scout → Architect → Builder → Test → Deploy (creates PR on branch {branch_name})
+
+**STEP 2: After PR is created, ensure it's conflict-free**
+Run this command to rebase and update the PR:
   bash tools/evolution/scripts/rebase_and_pr.sh {branch_name}
 
-This ensures your branch is up-to-date with main and creates a conflict-free PR."""
+This rebases the branch onto latest main and force-pushes, updating the PR to be conflict-free.
+
+**IMPORTANT**:
+- The MCP tool handles everything autonomously (no human intervention needed)
+- The rebase script runs AFTER the PR is created to ensure it's up-to-date
+- This is a fully automated workflow from issue → PR ready for review"""
 
             # Write prompt to file for debugging
             prompt_file = logs_dir / f'prompt-{task_id}.txt'
