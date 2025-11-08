@@ -22,6 +22,12 @@ class SelfImprovementMode(BaseEvolutionMode):
 
     def _is_protected_file(self, file_path: str) -> bool:
         """
+
+    def __init__(self, config: Dict = None, watchdog=None):
+        """Initialize with optional watchdog for process monitoring"""
+        super().__init__(config)
+        self.watchdog = watchdog
+
         Check if a file is protected from autonomous modification
 
         Args:
