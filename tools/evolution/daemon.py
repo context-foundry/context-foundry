@@ -336,6 +336,10 @@ class EvolutionDaemon:
                     self._queue_next_improvement_task()
                     self.was_paused_for_pr = False
 
+                # GITHUB ISSUE POLLING: Check for new approved issues every cycle
+                # This ensures human-approved tasks get added to queue proactively
+                self._poll_github_issues()
+
                 # Check resources
                 can_accept, resource_status = self.resource_manager.can_accept_task()
 
