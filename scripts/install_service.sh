@@ -13,13 +13,24 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS - use launchd
     echo "🍎 Detected macOS - installing launchd service"
 
-    # Detect Python location (prefer Homebrew python3)
-    if [ -f "/opt/homebrew/bin/python3" ]; then
+    # Detect Python location (prefer Homebrew python3.13, 3.12, 3.11, 3.10)
+    # MCP requires Python 3.10+
+    if [ -f "/opt/homebrew/bin/python3.13" ]; then
+        PYTHON_PATH="/opt/homebrew/bin/python3.13"
+    elif [ -f "/opt/homebrew/bin/python3.12" ]; then
+        PYTHON_PATH="/opt/homebrew/bin/python3.12"
+    elif [ -f "/opt/homebrew/bin/python3.11" ]; then
+        PYTHON_PATH="/opt/homebrew/bin/python3.11"
+    elif [ -f "/opt/homebrew/bin/python3.10" ]; then
+        PYTHON_PATH="/opt/homebrew/bin/python3.10"
+    elif [ -f "/opt/homebrew/bin/python3" ]; then
         PYTHON_PATH="/opt/homebrew/bin/python3"
     elif [ -f "/usr/local/bin/python3" ]; then
         PYTHON_PATH="/usr/local/bin/python3"
     else
         PYTHON_PATH="/usr/bin/python3"
+        echo "⚠️  Warning: Using system Python 3.9. MCP requires Python 3.10+"
+        echo "   Install with: brew install python@3.13"
     fi
 
     echo "🐍 Using Python: $PYTHON_PATH ($(${PYTHON_PATH} --version))"
