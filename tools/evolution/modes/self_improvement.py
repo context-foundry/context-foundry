@@ -469,7 +469,15 @@ This rebases the branch onto latest main and force-pushes, updating the PR to be
 **IMPORTANT**:
 - The MCP tool handles everything autonomously (no human intervention needed)
 - The rebase script runs AFTER the PR is created to ensure it's up-to-date
-- This is a fully automated workflow from issue → PR ready for review"""
+- This is a fully automated workflow from issue → PR ready for review
+
+**COMMIT MESSAGE FOOTER**:
+When creating commits, use this footer instead of the default Claude Code footer:
+
+🤖 Generated autonomously by CFE (Context Foundry Evolution)
+
+Co-Authored-By: CFE System <noreply@context-foundry.dev>
+"""
 
             # Write prompt to file for debugging
             prompt_file = logs_dir / f'prompt-{task_id}.txt'
