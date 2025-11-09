@@ -303,40 +303,35 @@ def context_foundry_status() -> str:
     Returns:
         Status information including version and capabilities
     """
-    return f"""Context Foundry MCP Server - Status
+    return f"""Context Foundry - Status
 
-✅ Server: Running
+✅ Running
 ✅ Version: {get_version()}
 
-**Available Tools:**
+**Quick Commands - Just Say:**
 
-🚀 **Autonomous Build & Deploy:**
-- autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy workflow
-  Runs in background with self-healing test loop and GitHub deployment
+🚀 **Build & Deploy:**
+- "Build a [description] app"
+- "Create a [type] application"
+- "Deploy my app to GitHub"
+- "Start a new project for [purpose]"
 
-🔄 **Task Delegation:**
-- delegate_to_claude_code: Delegate tasks to fresh Claude Code instances (synchronous)
-- delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)
-- get_delegation_result: Check status and retrieve results of async tasks
-- list_delegations: List all active and completed async tasks
+🔧 **Fix & Enhance:**
+- "Fix the [issue] in my app"
+- "Add [feature] to my project"
+- "Extend my app with [functionality]"
+- "Improve [aspect] of my code"
+- "Debug the [problem]"
 
-🎛️ **Task Control:**
-- cancel_delegation: Manually cancel/kill a running task (graceful or forced termination)
-- stream_delegation_output: Stream raw real-time output from running tasks (diagnostic tool)
+📦 **Manage:**
+- "Show my active builds"
+- "Cancel this build"
+- "Check build status"
+- "List my projects"
 
-📊 **Pattern Management:**
-- read_global_patterns: Read patterns from global pattern storage
-- save_global_patterns: Save patterns to global pattern storage
-- merge_project_patterns: Merge project patterns into global storage
-- migrate_all_project_patterns: Migrate all project patterns to global storage
-- share_patterns_to_community: Automatically share patterns to community (creates PR)
-
-ℹ️  **Status:**
-- context_foundry_status: This status message
-
-**Usage:**
-All tools work with both Claude Desktop and Claude Code CLI without requiring API keys.
-The autonomous build system inherits your Claude authentication automatically.
+**How to Use:**
+Just describe what you want in plain English. Context Foundry handles the rest.
+No commands to memorize, no syntax to learn.
 """
 
 

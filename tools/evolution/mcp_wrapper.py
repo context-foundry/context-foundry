@@ -65,7 +65,7 @@ def call_autonomous_build(task: str, working_directory: str, github_repo_name: s
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e),
             "help": "This feature requires Python 3.10+ and FastMCP. Install with: pip install -r requirements-mcp.txt"
         }), file=sys.stderr)
@@ -95,9 +95,9 @@ def call_status():
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e),
-            "help": "MCP features require Python 3.10+ and FastMCP"
+            "help": "Context Foundry requires Python 3.10+ and FastMCP"
         }))
         return 1
     except Exception as e:
@@ -124,7 +124,7 @@ def call_list_delegations():
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e)
         }))
         return 1
@@ -158,7 +158,7 @@ def call_get_delegation_result(task_id: str) -> int:
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e)
         }), file=sys.stderr)
         return 1
@@ -192,7 +192,7 @@ def call_cancel_delegation(task_id: str, reason: str = "User requested cancellat
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e)
         }), file=sys.stderr)
         return 1
@@ -226,7 +226,7 @@ def call_read_patterns(pattern_type: str = "common-issues") -> int:
 
     except ImportError as e:
         print(json.dumps({
-            "error": "MCP dependencies not available",
+            "error": "Dependencies not available",
             "message": str(e)
         }), file=sys.stderr)
         return 1

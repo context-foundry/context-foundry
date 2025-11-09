@@ -40,69 +40,58 @@ class ViewMode(Enum):
     """View modes for single-focus interface"""
     CONVERSATION = "conversation"
     BUILDS = "builds"
-    STATUS = "status"
+    DIRECTORY = "directory"
 
 
-class TabBar(Static):
+class TabBar(Label):
     """Minimal tab bar showing current view"""
 
     current_view = reactive(ViewMode.CONVERSATION)
 
-    def render(self) -> Text:
-        """Render the tab bar text"""
-        tabs: list[Text] = []
+    TAB_SPACING = "    "
 
-        # Conversation tab
-        if self.current_view == ViewMode.CONVERSATION:
-            tabs.append(Text("Conversation", style="bold #8B5CF6"))
-        else:
-            tabs.append(Text("Conversation", style="dim"))
+    def __init__(self, **kwargs):
+        super().__init__("", **kwargs)
+        self._update_display()
 
-        tabs.append(Text("    "))
-
-        # Builds tab
-        if self.current_view == ViewMode.BUILDS:
-            tabs.append(Text("Builds", style="bold #3B82F6"))
-        else:
-            tabs.append(Text("Builds", style="dim"))
-
-        tabs.append(Text("    "))
-
-        # Status tab
-        if self.current_view == ViewMode.STATUS:
-            tabs.append(Text("Status", style="bold #A78BFA"))
-        else:
-            tabs.append(Text("Status", style="dim"))
-
+    def _build_tab_text(self) -> Text:
+        """Build the styled tab text"""
         result = Text()
-        for tab in tabs:
-            result.append(tab)
+
+        def append_tab(label: str, active: bool, color: str) -> None:
+            style = f"bold {color}" if active else "dim"
+            result.append(Text(label, style=style))
+
+        append_tab("Conversation", self.current_view == ViewMode.CONVERSATION, "#8B5CF6")
+        result.append(Text(self.TAB_SPACING))
+        append_tab("Builds", self.current_view == ViewMode.BUILDS, "#3B82F6")
+        result.append(Text(self.TAB_SPACING))
+        append_tab("Directory", self.current_view == ViewMode.DIRECTORY, "#A78BFA")
 
         return result
 
+    def _update_display(self) -> None:
+        """Update the rendered text"""
+        self.update(self._build_tab_text())
+
     def watch_current_view(self, new_value: ViewMode) -> None:
-        """Refresh display when current view changes"""
-        self.refresh()
+        """Refresh display when active view changes"""
+        self._update_display()
 
     def on_mount(self) -> None:
-        """Ensure initial render on mount"""
-        self.refresh()
+        """Ensure initial render"""
+        self._update_display()
 
     async def on_click(self, event) -> None:
-        """Handle tab clicks"""
-        # Get click position
+        """Handle tab clicks via simple hit regions"""
         x = event.x
-
-        # Simple position-based detection (each tab is ~12-15 chars wide)
+        # Each label ~12-15 chars including spacing
         if x < 15:
-            # Conversation tab
             await self.app.switch_to_view(ViewMode.CONVERSATION)
         elif x < 30:
-            # Builds tab
             await self.app.switch_to_view(ViewMode.BUILDS)
         else:
-            # Status tab
-            await self.app.switch_to_view(ViewMode.STATUS)
+            await self.app.switch_to_view(ViewMode.DIRECTORY)
 
 
 class StatusBar(Static):
@@ -183,7 +172,7 @@ class StatusBar(Static):
             return {"available": False, "status": f"Error: {e}"}
 
 
-class FileTreePanel(Static):
+class FileTreePanel(VerticalScroll):
     """Live file tree showing build directory contents"""
 
     def __init__(self, **kwargs):
@@ -236,60 +225,148 @@ class FileTreePanel(Static):
             if build_dir and build_dir.exists():
                 self.current_dir = build_dir
 
-                # Count files
-                file_count = 0
-                changed_count = 0
+                # Get status from selected delegation if available
+                build_status = "No build selected"
                 try:
-                    for item in build_dir.rglob("*"):
-                        if item.is_file() and not item.name.startswith('.'):
-                            file_count += 1
-                            # Simple heuristic: files modified in last hour are "changed"
-                            if (datetime.now().timestamp() - item.stat().st_mtime) < 3600:
-                                changed_count += 1
+                    delegations_panel = app.query_one("#delegations", DelegationsListPanel)
+                    selected = delegations_panel.get_selected_delegation()
+                    if selected:
+                        status = selected.get("status", "unknown")
+                        if status == "running":
+                            build_status = "Building..."
+                        elif status == "pending":
+                            build_status = "Pending"
+                        else:
+                            build_status = status.capitalize()
                 except:
                     pass
 
-                # Compact summary with colored header
+                # Count files and folders, find latest modification
+                file_count = 0
+                folder_count = 0
+                latest_mtime = 0
+                try:
+                    for item in build_dir.rglob("*"):
+                        if item.name.startswith('.'):
+                            continue
+                        if item.is_file():
+                            file_count += 1
+                            try:
+                                mtime = item.stat().st_mtime
+                                if mtime > latest_mtime:
+                                    latest_mtime = mtime
+                            except:
+                                pass
+                        elif item.is_dir():
+                            folder_count += 1
+                except:
+                    pass
+
+                # Format last updated time
+                if latest_mtime > 0:
+                    last_updated = datetime.fromtimestamp(latest_mtime)
+                    last_updated_str = last_updated.strftime("%I:%M %p")
+                else:
+                    last_updated_str = "Unknown"
+
+                # Build full file tree
                 result = Text()
 
-                # Colored header
-                result.append("Build Directory:\n\n", style="bold #A78BFA")
+                # Colored header - show which build this is
+                result.append("Selected Build - Files:\n\n", style="bold #A78BFA")
 
-                # Folder name (no emoji)
+                # Folder name and status
                 result.append(build_dir.name, style="bold #8B5CF6")
+                result.append("  •  ", style="dim")
+                if "building" in build_status.lower():
+                    result.append(build_status, style="green")
+                elif "pending" in build_status.lower():
+                    result.append(build_status, style="yellow")
+                else:
+                    result.append(build_status, style="dim")
                 result.append("\n")
-
-                # File counts with colors
-                result.append("   ", style="")
-                result.append(str(file_count), style="#3B82F6")
-                result.append(" files", style="dim")
-
-                if changed_count > 0:
-                    result.append(", ", style="dim")
-                    result.append(str(changed_count), style="green")
-                    result.append(" changed", style="dim")
-
-                result.append("\n")
-
-                # Path in dim color
-                result.append("   ", style="")
                 result.append(str(build_dir), style="dim")
+                result.append("\n")
+
+                # Metadata line
+                result.append(str(file_count), style="#3B82F6")
+                result.append(" files, ", style="dim")
+                result.append(str(folder_count), style="#8B5CF6")
+                result.append(" folders  •  Last updated: ", style="dim")
+                result.append(last_updated_str, style="#A78BFA")
                 result.append("\n\n")
 
-                # Ready status in green
-                result.append("   ", style="")
-                result.append("Ready to build", style="green")
+                # Recursive file listing
+                def add_tree_items(directory: Path, prefix: str = "", is_last: bool = True):
+                    """Recursively add directory contents to the tree"""
+                    try:
+                        # Get all items, sort directories first, then files
+                        items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
 
-                self.update(result)
+                        # Filter out hidden files/dirs
+                        items = [item for item in items if not item.name.startswith('.')]
+
+                        for i, item in enumerate(items):
+                            is_last_item = (i == len(items) - 1)
+
+                            # Tree structure characters
+                            if is_last_item:
+                                connector = "└── "
+                                extension = "    "
+                            else:
+                                connector = "├── "
+                                extension = "│   "
+
+                            # Add the item
+                            result.append(prefix + connector, style="dim")
+
+                            if item.is_dir():
+                                # Directory in purple
+                                result.append(item.name + "/", style="#8B5CF6")
+                                result.append("\n")
+
+                                # Recurse into subdirectory
+                                add_tree_items(item, prefix + extension, is_last_item)
+                            else:
+                                # File in blue
+                                result.append(item.name, style="#3B82F6")
+
+                                # File size
+                                try:
+                                    size = item.stat().st_size
+                                    if size < 1024:
+                                        size_str = f"{size}B"
+                                    elif size < 1024 * 1024:
+                                        size_str = f"{size / 1024:.1f}KB"
+                                    else:
+                                        size_str = f"{size / (1024 * 1024):.1f}MB"
+                                    result.append(f"  ({size_str})", style="dim")
+                                except:
+                                    pass
+
+                                result.append("\n")
+                    except Exception:
+                        pass
+
+                # Start the tree
+                add_tree_items(build_dir)
+
+                # Update scrollable content
+                await self.remove_children()
+                await self.mount(Static(result))
             else:
                 # No active build with colored header
                 result = Text()
-                result.append("Build Directory:\n\n", style="bold #A78BFA")
-                result.append("No active build\n\nStart a build to see it here", style="dim italic")
-                self.update(result)
+                result.append("Selected Build - Files:\n\n", style="bold #A78BFA")
+                result.append("No build selected\n\nSelect a build from the Builds tab", style="dim italic")
+
+                # Update scrollable content
+                await self.remove_children()
+                await self.mount(Static(result))
 
         except Exception as e:
-            self.update(Text(f"Error loading build directory", style="dim red"))
+            await self.remove_children()
+            await self.mount(Static(Text(f"Error loading build directory", style="dim red")))
 
 
 class DelegationsListPanel(Static, can_focus=True):
@@ -871,13 +948,14 @@ class MissionControlApp(App):
     }
 
     TabBar {
-        dock: top;
-        height: 1;
+        width: 100%;
         min-height: 1;
         background: $surface;
         padding: 0 2;
         border-bottom: tall $panel;
+        align: left middle;
     }
+
 
     StatusBar {
         dock: bottom;
@@ -1074,7 +1152,7 @@ class MissionControlApp(App):
                 chat.display = False
                 delegations.display = True
                 file_tree.display = False
-            elif self.current_view == ViewMode.STATUS:
+            elif self.current_view == ViewMode.DIRECTORY:
                 chat.add_class("hidden")
                 delegations.remove_class("visible")
                 file_tree.add_class("visible")
@@ -1155,7 +1233,7 @@ class MissionControlApp(App):
             if not Path(python_cmd).exists():
                 return (
                     "❌ Python 3.13 not found\n\n"
-                    "MCP features require Python 3.13+ with FastMCP installed.\n\n"
+                    "Context Foundry requires Python 3.13+.\n\n"
                     "Install: brew install python@3.13\n"
                     "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
                 )
@@ -1178,15 +1256,15 @@ class MissionControlApp(App):
                     import json
                     error_data = json.loads(stderr.decode())
                     return (
-                        f"❌ {error_data.get('error', 'MCP Error')}\n\n"
+                        f"❌ {error_data.get('error', 'Status Error')}\n\n"
                         f"{error_data.get('message', '')}\n\n"
                         f"{error_data.get('help', '')}"
                     )
                 except:
-                    return f"❌ MCP status error:\n{stderr.decode()}"
+                    return f"❌ Status check error:\n{stderr.decode()}"
 
         except Exception as e:
-            return f"❌ Error getting MCP status:\n{str(e)}"
+            return f"❌ Error checking status:\n{str(e)}"
 
     async def _process_command(self, message: str) -> str:
         """Process user command and return response"""
@@ -1215,19 +1293,23 @@ class MissionControlApp(App):
         # Help commands - check before greeting filter
         if any(word in message_lower for word in ["help", "what", "how", "?"]):
             return (
-                "Commands:\n"
-                "  Describe what you want to build in plain English\n"
-                "  status - Check system status\n"
-                "  help or ? - Show this message\n\n"
+                "Quick Commands - Just Say:\n\n"
+                "🚀 Build & Deploy:\n"
+                "  Build a [description] app\n"
+                "  Create a [type] application\n"
+                "  Deploy my app to GitHub\n\n"
+                "🔧 Fix & Enhance:\n"
+                "  Fix the [issue] in my app\n"
+                "  Add [feature] to my project\n"
+                "  Improve [aspect] of my code\n\n"
+                "📦 Manage:\n"
+                "  Show active builds\n"
+                "  Check status\n\n"
                 "Navigation:\n"
-                "  Click tabs at top to switch views\n"
-                "  Tab key - Cycle through views\n\n"
-                "Keyboard:\n"
-                "  d - View build details\n"
+                "  Tab - Cycle views\n"
                 "  ↑↓ - Navigate builds\n"
                 "  x - Cancel build\n"
-                "  Ctrl+M - Change model\n"
-                "  Ctrl+C - Quit"
+                "  d - Build details"
             )
 
         # Build commands - delegate to autonomous build
@@ -1292,7 +1374,7 @@ class MissionControlApp(App):
             if not Path(python_cmd).exists():
                 return (
                     "❌ Python 3.13 not found\n\n"
-                    "MCP features require Python 3.13+ with FastMCP installed.\n\n"
+                    "Context Foundry requires Python 3.13+.\n\n"
                     "Install: brew install python@3.13\n"
                     "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
                 )
@@ -1435,7 +1517,7 @@ class MissionControlApp(App):
         if self.current_view == ViewMode.CONVERSATION:
             self.current_view = ViewMode.BUILDS
         elif self.current_view == ViewMode.BUILDS:
-            self.current_view = ViewMode.STATUS
+            self.current_view = ViewMode.DIRECTORY
         else:
             self.current_view = ViewMode.CONVERSATION
 
