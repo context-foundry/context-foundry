@@ -18,12 +18,14 @@ from typing import Optional
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog
+from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree
+from textual.widgets.tree import TreeNode
 from textual.binding import Binding
 from textual.reactive import reactive
 from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
+from rich.tree import Tree as RichTree
 
 
 class StatusPanel(Static):
@@ -52,12 +54,13 @@ class StatusPanel(Static):
             # Get MCP status
             mcp_status = self._get_mcp_status()
 
-            # Get active builds
+            # Get active builds and delegation info
             build_info = await self._get_build_status()
+            delegation_info = await self._get_delegation_info()
 
             # Build status table
             table = Table(show_header=False, box=None, padding=(0, 1))
-            table.add_column("Key", style="cyan")
+            table.add_column("Key", style="cyan bold")
             table.add_column("Value", style="white")
 
             # Daemon
@@ -84,6 +87,35 @@ class StatusPanel(Static):
                 Text(f"{mcp_icon} {mcp_status['status']}", style=mcp_color)
             )
 
+            # Model (from app)
+            app = self.app
+            if hasattr(app, 'model'):
+                model_display = {
+                    "sonnet": "Sonnet 4.5",
+                    "opus": "Opus 4",
+                    "haiku": "Haiku 3.5"
+                }.get(app.model, app.model)
+                table.add_row(
+                    "Model",
+                    Text(f"🤖 {model_display}", style="magenta")
+                )
+
+            # Separator
+            table.add_row("", "")
+
+            # Claude Instances
+            instances_icon = "⚡" if delegation_info["running"] > 0 else "💤"
+            instances_color = "green bold" if delegation_info["running"] > 0 else "dim"
+            table.add_row(
+                "Claude Instances",
+                Text(f"{instances_icon} {delegation_info['running']} running", style=instances_color)
+            )
+
+            table.add_row(
+                "Total Delegations",
+                Text(f"📊 {delegation_info['total']} ({delegation_info['completed']} done)", style="white")
+            )
+
             # Active Builds
             build_count = build_info["active"]
             build_icon = "🚀" if build_count > 0 else "💤"
@@ -92,7 +124,7 @@ class StatusPanel(Static):
             if build_info["latest"]:
                 build_text += f" ({build_info['latest']})"
             table.add_row(
-                "Builds",
+                "Active Builds",
                 Text(f"{build_icon} {build_text}", style=build_color)
             )
 
@@ -209,6 +241,193 @@ class StatusPanel(Static):
 
         except Exception as e:
             return {"active": 0, "latest": None}
+
+    async def _get_delegation_info(self) -> dict:
+        """Get delegation/Claude instance information"""
+        try:
+            delegation_dir = Path.home() / ".context-foundry" / "delegations"
+
+            if not delegation_dir.exists():
+                return {"running": 0, "completed": 0, "total": 0}
+
+            running = 0
+            completed = 0
+
+            for task_file in delegation_dir.glob("task-*.json"):
+                try:
+                    task_data = json.loads(task_file.read_text())
+                    status = task_data.get("status", "")
+
+                    if status == "running":
+                        running += 1
+                    elif status == "completed":
+                        completed += 1
+
+                except Exception:
+                    continue
+
+            return {
+                "running": running,
+                "completed": completed,
+                "total": running + completed
+            }
+
+        except Exception:
+            return {"running": 0, "completed": 0, "total": 0}
+
+
+class FileTreePanel(Static):
+    """Live file tree showing build directory contents"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.border_title = "Build Directory"
+        self.current_dir = None
+
+    async def on_mount(self) -> None:
+        """Start file tree updates"""
+        self.set_interval(1.5, self.refresh_tree)
+        await self.refresh_tree()
+
+    async def refresh_tree(self) -> None:
+        """Refresh file tree from active build directory"""
+        try:
+            # Get active build directory from app
+            app = self.app
+            build_dir = None
+
+            if hasattr(app, 'active_builds') and app.active_builds:
+                # Get most recent active build
+                for build in app.active_builds:
+                    task_id = build.get("task_id")
+
+                    # Get working directory from delegation task
+                    delegation_dir = Path.home() / ".context-foundry" / "delegations"
+                    task_file = delegation_dir / f"task-{task_id}.json"
+
+                    if task_file.exists():
+                        try:
+                            task_data = json.loads(task_file.read_text())
+                            if task_data.get("status") == "running":
+                                working_dir = task_data.get("working_directory", "")
+                                if working_dir:
+                                    build_dir = Path(working_dir)
+                                    break
+                        except Exception:
+                            continue
+
+            if build_dir and build_dir.exists():
+                self.current_dir = build_dir
+                tree_text = self._build_tree(build_dir)
+
+                self.update(Panel(
+                    tree_text,
+                    border_style="magenta",
+                    title=f"[bold]📁 {build_dir.name}[/bold]",
+                    subtitle=f"[dim]{str(build_dir)}[/dim]"
+                ))
+            else:
+                # No active build
+                self.update(Panel(
+                    Text("No active build\n\nStart a build to see files appear here in real-time!", style="dim italic"),
+                    border_style="dim magenta",
+                    title="[bold]Build Directory[/bold]"
+                ))
+
+        except Exception as e:
+            self.update(Panel(
+                Text(f"Error: {e}", style="red"),
+                border_style="red",
+                title="[bold]Build Directory[/bold]"
+            ))
+
+    def _build_tree(self, directory: Path, max_depth: int = 4) -> RichTree:
+        """Build a rich tree structure from directory"""
+        try:
+            # Create root tree
+            tree = RichTree(
+                f"[bold cyan]📁 {directory.name}/[/bold cyan]",
+                guide_style="dim"
+            )
+
+            # Add directory contents
+            self._add_directory_to_tree(tree, directory, current_depth=0, max_depth=max_depth)
+
+            return tree
+
+        except Exception as e:
+            return Text(f"Error building tree: {e}", style="red")
+
+    def _add_directory_to_tree(self, tree: RichTree, directory: Path, current_depth: int, max_depth: int) -> None:
+        """Recursively add directory contents to tree"""
+        if current_depth >= max_depth:
+            tree.add(Text("... (max depth reached)", style="dim"))
+            return
+
+        try:
+            # Get all items, sorted (dirs first, then files)
+            items = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+
+            # Limit number of items to prevent huge trees
+            if len(items) > 50:
+                items = items[:50]
+                show_truncated = True
+            else:
+                show_truncated = False
+
+            for item in items:
+                # Skip hidden files and common ignore patterns
+                if item.name.startswith('.') or item.name in ['node_modules', '__pycache__', 'venv', '.git']:
+                    continue
+
+                if item.is_dir():
+                    # Add directory
+                    branch = tree.add(f"[cyan]📁 {item.name}/[/cyan]")
+                    self._add_directory_to_tree(branch, item, current_depth + 1, max_depth)
+                else:
+                    # Add file with icon based on extension
+                    icon = self._get_file_icon(item.suffix)
+                    size = self._format_size(item.stat().st_size)
+                    tree.add(f"{icon} {item.name} [dim]({size})[/dim]")
+
+            if show_truncated:
+                tree.add(Text("... (truncated)", style="dim"))
+
+        except PermissionError:
+            tree.add(Text("Permission denied", style="red"))
+        except Exception as e:
+            tree.add(Text(f"Error: {e}", style="red"))
+
+    def _get_file_icon(self, suffix: str) -> str:
+        """Get icon for file type"""
+        icons = {
+            '.py': '🐍',
+            '.js': '📜',
+            '.ts': '📘',
+            '.tsx': '⚛️',
+            '.jsx': '⚛️',
+            '.html': '🌐',
+            '.css': '🎨',
+            '.json': '📋',
+            '.md': '📝',
+            '.txt': '📄',
+            '.yml': '⚙️',
+            '.yaml': '⚙️',
+            '.toml': '⚙️',
+            '.sh': '🔧',
+            '.dockerfile': '🐳',
+            '.gitignore': '🚫',
+            '.env': '🔐',
+        }
+        return icons.get(suffix.lower(), '📄')
+
+    def _format_size(self, size: int) -> str:
+        """Format file size in human-readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f}{unit}"
+            size /= 1024.0
+        return f"{size:.1f}TB"
 
 
 class ChatMessage(Static):
@@ -377,7 +596,7 @@ class MissionControlApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 3;
+        grid-size: 3 3;
         grid-rows: 1fr 1fr auto;
         grid-gutter: 0;
         padding: 0;
@@ -398,6 +617,13 @@ class MissionControlApp(App):
         overflow-y: auto;
     }
 
+    FileTreePanel {
+        row-span: 2;
+        border: solid magenta;
+        max-height: 100%;
+        overflow-y: auto;
+    }
+
     ChatPanel {
         border: solid green;
         max-height: 100%;
@@ -411,7 +637,7 @@ class MissionControlApp(App):
     }
 
     ChatInput {
-        column-span: 2;
+        column-span: 3;
         border: solid blue;
         height: 3;
         min-height: 3;
@@ -443,6 +669,7 @@ class MissionControlApp(App):
         """Create child widgets"""
         yield Header(show_clock=True)
         yield StatusPanel()
+        yield FileTreePanel()
         yield ChatPanel(id="chat")
         yield ActivityLog()
         yield ChatInput(id="chat_input")
