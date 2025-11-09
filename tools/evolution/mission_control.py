@@ -377,19 +377,17 @@ class MissionControlApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 5;
-        grid-rows: auto 1fr 1fr auto auto;
+        grid-size: 2 3;
+        grid-rows: 1fr 1fr auto;
         grid-gutter: 0;
         padding: 0;
     }
 
     Header {
-        column-span: 2;
         dock: top;
     }
 
     Footer {
-        column-span: 2;
         dock: bottom;
     }
 
@@ -418,8 +416,6 @@ class MissionControlApp(App):
         height: 3;
         min-height: 3;
         max-height: 3;
-        display: block;
-        visibility: visible;
     }
 
     .user-message {
