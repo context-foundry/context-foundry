@@ -11,6 +11,7 @@ import asyncio
 import subprocess
 import time
 import uuid
+import psutil
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -981,17 +982,117 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
         result = cancel_delegation("abc-123-def-456")
     """
     try:
-        # Check if task exists
-        if task_id not in active_tasks:
+        # Check if task exists in active_tasks (same process)
+        if task_id in active_tasks:
+            # Task is in memory - use existing logic
+            task_info = active_tasks[task_id]
+            process = task_info["process"]
+        else:
+            # Task not in memory - check disk for metadata and try to find process
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            task_file = delegations_dir / f"task-{task_id}.json"
+
+            if not task_file.exists():
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Task ID '{task_id}' not found",
+                    "message": "Task metadata file does not exist",
+                    "cancelled": False
+                }, indent=2)
+
+            # Read metadata from disk
+            try:
+                metadata = json.loads(task_file.read_text())
+            except Exception as e:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Failed to read task metadata: {str(e)}",
+                    "cancelled": False
+                }, indent=2)
+
+            # Get PID from metadata
+            pid = metadata.get("pid")
+            if not pid:
+                return json.dumps({
+                    "status": "error",
+                    "error": "Task metadata does not contain PID",
+                    "message": "Cannot cancel task without process ID",
+                    "cancelled": False
+                }, indent=2)
+
+            # Check if process is still running using psutil
+            try:
+                proc = psutil.Process(pid)
+
+                # Verify it's actually a claude-code process (basic sanity check)
+                cmdline = " ".join(proc.cmdline())
+                if "claude" not in cmdline.lower() and "python" not in cmdline.lower():
+                    return json.dumps({
+                        "status": "error",
+                        "error": f"PID {pid} exists but doesn't appear to be a claude-code process",
+                        "message": f"Process command: {cmdline[:100]}",
+                        "cancelled": False
+                    }, indent=2)
+
+                # Kill the process
+                start_time = datetime.fromisoformat(metadata.get("start_time", datetime.now().isoformat()))
+                elapsed = (datetime.now() - start_time).total_seconds()
+
+                try:
+                    # Try graceful termination first
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    termination_method = "graceful (SIGTERM)"
+                except psutil.TimeoutExpired:
+                    # Force kill if graceful failed
+                    proc.kill()
+                    proc.wait()
+                    termination_method = "forced (SIGKILL)"
+
+                # Update metadata file
+                metadata["status"] = "cancelled"
+                metadata["cancelled_at"] = datetime.now().isoformat()
+                metadata["cancellation_reason"] = reason or "Manual cancellation by user"
+                metadata["duration_seconds"] = elapsed
+                metadata["termination_method"] = termination_method
+                task_file.write_text(json.dumps(metadata, indent=2))
+
+                return json.dumps({
+                    "status": "success",
+                    "message": f"Task cancelled successfully via {termination_method}",
+                    "task_id": task_id,
+                    "cancelled": True,
+                    "task_summary": metadata.get("task", "")[:100],
+                    "working_directory": metadata.get("working_directory", ""),
+                    "elapsed_seconds": round(elapsed, 2),
+                    "termination_method": termination_method,
+                    "reason": reason or "Manual cancellation by user",
+                    "timestamp": datetime.now().isoformat()
+                }, indent=2)
+
+            except psutil.NoSuchProcess:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Process with PID {pid} is not running",
+                    "message": "Task may have already completed or been killed",
+                    "cancelled": False
+                }, indent=2)
+            except Exception as e:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"Failed to kill process: {str(e)}",
+                    "task_id": task_id,
+                    "cancelled": False
+                }, indent=2)
+
+        # Continue with existing logic for in-memory tasks
+        process = task_info.get("process") if isinstance(task_info, dict) else None
+        if not process:
             return json.dumps({
                 "status": "error",
-                "error": f"Task ID '{task_id}' not found",
-                "message": "Use list_delegations() to see active tasks",
+                "error": "Task info corrupted - no process object",
                 "cancelled": False
             }, indent=2)
-
-        task_info = active_tasks[task_id]
-        process = task_info["process"]
 
         # Check if already completed
         poll_result = process.poll()

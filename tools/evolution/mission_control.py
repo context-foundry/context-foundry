@@ -11,11 +11,17 @@ Beautiful terminal UI for managing Evolution System:
 import asyncio
 import json
 import subprocess
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Add parent directory to path to import version
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from __version__ import __version__
+
+from enum import Enum
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll, ScrollableContainer
 from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree, ListView, ListItem
@@ -27,159 +33,130 @@ from textual.message import Message
 from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
-from rich.tree import Tree as RichTree
 from rich.syntax import Syntax
 
 
-class StatusPanel(Static):
-    """Live status panel showing backlog, daemon, MCP health"""
+class ViewMode(Enum):
+    """View modes for single-focus interface"""
+    CONVERSATION = "conversation"
+    BUILDS = "builds"
+    STATUS = "status"
 
-    status_text = reactive("")
+
+class TabBar(Static):
+    """Minimal tab bar showing current view"""
+
+    current_view = reactive(ViewMode.CONVERSATION)
+
+    def render(self) -> Text:
+        """Render the tab bar text"""
+        tabs: list[Text] = []
+
+        # Conversation tab
+        if self.current_view == ViewMode.CONVERSATION:
+            tabs.append(Text("Conversation", style="bold #8B5CF6"))
+        else:
+            tabs.append(Text("Conversation", style="dim"))
+
+        tabs.append(Text("    "))
+
+        # Builds tab
+        if self.current_view == ViewMode.BUILDS:
+            tabs.append(Text("Builds", style="bold #3B82F6"))
+        else:
+            tabs.append(Text("Builds", style="dim"))
+
+        tabs.append(Text("    "))
+
+        # Status tab
+        if self.current_view == ViewMode.STATUS:
+            tabs.append(Text("Status", style="bold #A78BFA"))
+        else:
+            tabs.append(Text("Status", style="dim"))
+
+        result = Text()
+        for tab in tabs:
+            result.append(tab)
+
+        return result
+
+    def watch_current_view(self, new_value: ViewMode) -> None:
+        """Refresh display when current view changes"""
+        self.refresh()
+
+    def on_mount(self) -> None:
+        """Ensure initial render on mount"""
+        self.refresh()
+
+    async def on_click(self, event) -> None:
+        """Handle tab clicks"""
+        # Get click position
+        x = event.x
+
+        # Simple position-based detection (each tab is ~12-15 chars wide)
+        if x < 15:
+            # Conversation tab
+            await self.app.switch_to_view(ViewMode.CONVERSATION)
+        elif x < 30:
+            # Builds tab
+            await self.app.switch_to_view(ViewMode.BUILDS)
+        else:
+            # Status tab
+            await self.app.switch_to_view(ViewMode.STATUS)
+
+
+class StatusBar(Static):
+    """Simple bottom status bar"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.border_title = "System Status"
 
     async def on_mount(self) -> None:
-        """Start status updates when mounted"""
+        """Start status updates"""
         self.set_interval(2.0, self.refresh_status)
         await self.refresh_status()
 
     async def refresh_status(self) -> None:
-        """Refresh status from daemon and MCP"""
+        """Update status bar"""
         try:
-            # Get daemon status
-            daemon_status = self._get_daemon_status()
+            app = self.app
 
-            # Get GitHub issue count
-            issue_count = self._get_issue_count()
+            # Get model name
+            model_display = {
+                "sonnet": "Sonnet 4.5",
+                "opus": "Opus 4",
+                "haiku": "Haiku 3.5"
+            }.get(app.model if hasattr(app, 'model') else "sonnet", "Sonnet 4.5")
+
+            # Count active builds
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            active_builds = 0
+            if delegations_dir.exists():
+                for task_file in delegations_dir.glob("task-*.json"):
+                    try:
+                        metadata = json.loads(task_file.read_text())
+                        if metadata.get("status") == "running":
+                            active_builds += 1
+                    except:
+                        continue
 
             # Get MCP status
             mcp_status = self._get_mcp_status()
+            status_text = "Ready" if mcp_status["available"] else "MCP Offline"
 
-            # Get active builds and delegation info
-            build_info = await self._get_build_status()
-            delegation_info = await self._get_delegation_info()
+            # Get current view mode
+            view_mode = "Conversation"
+            if hasattr(app, 'current_view'):
+                view_mode = app.current_view.value.capitalize()
 
-            # Build status table
-            table = Table(show_header=False, box=None, padding=(0, 1))
-            table.add_column("Key", style="cyan bold")
-            table.add_column("Value", style="white")
+            # Simple status line
+            builds_text = f"{active_builds} build{'s' if active_builds != 1 else ''}" if active_builds > 0 else "No builds"
+            status_line = f"Context Foundry v{__version__} | {status_text} | {builds_text} active | {model_display} | Press ? for help"
 
-            # Daemon
-            daemon_icon = "✓" if daemon_status["running"] else "✗"
-            daemon_color = "green" if daemon_status["running"] else "red"
-            table.add_row(
-                "Daemon",
-                Text(f"{daemon_icon} {daemon_status['status']}", style=daemon_color)
-            )
-
-            # Backlog
-            backlog_icon = "✓" if issue_count >= 18 else "⚠"
-            backlog_color = "green" if issue_count >= 18 else "yellow"
-            table.add_row(
-                "Backlog",
-                Text(f"{backlog_icon} {issue_count}/20 issues", style=backlog_color)
-            )
-
-            # MCP
-            mcp_icon = "✓" if mcp_status["available"] else "✗"
-            mcp_color = "green" if mcp_status["available"] else "yellow"
-            table.add_row(
-                "MCP",
-                Text(f"{mcp_icon} {mcp_status['status']}", style=mcp_color)
-            )
-
-            # Model (from app)
-            app = self.app
-            if hasattr(app, 'model'):
-                model_display = {
-                    "sonnet": "Sonnet 4.5",
-                    "opus": "Opus 4",
-                    "haiku": "Haiku 3.5"
-                }.get(app.model, app.model)
-                table.add_row(
-                    "Model",
-                    Text(f"🤖 {model_display}", style="magenta")
-                )
-
-            # Separator
-            table.add_row("", "")
-
-            # Claude Instances
-            instances_icon = "⚡" if delegation_info["running"] > 0 else "💤"
-            instances_color = "green bold" if delegation_info["running"] > 0 else "dim"
-            table.add_row(
-                "Claude Instances",
-                Text(f"{instances_icon} {delegation_info['running']} running", style=instances_color)
-            )
-
-            table.add_row(
-                "Total Delegations",
-                Text(f"📊 {delegation_info['total']} ({delegation_info['completed']} done)", style="white")
-            )
-
-            # Active Builds
-            build_count = build_info["active"]
-            build_icon = "🚀" if build_count > 0 else "💤"
-            build_color = "green bold" if build_count > 0 else "dim"
-            build_text = f"{build_count} active"
-            if build_info["latest"]:
-                build_text += f" ({build_info['latest']})"
-            table.add_row(
-                "Active Builds",
-                Text(f"{build_icon} {build_text}", style=build_color)
-            )
-
-            self.update(Panel(table, border_style="cyan", title="[bold]System Status[/bold]"))
+            self.update(Text(status_line, style="dim"))
 
         except Exception as e:
-            self.update(f"Error: {e}")
-
-    def _get_daemon_status(self) -> dict:
-        """Check if daemon is running"""
-        try:
-            result = subprocess.run(
-                ["python3", "-m", "tools.evolution.daemon", "status"],
-                capture_output=True,
-                text=True,
-                timeout=2,
-                cwd=str(Path(__file__).parent.parent.parent)
-            )
-
-            running = "running" in result.stdout.lower()
-
-            if running:
-                # Extract PID
-                for line in result.stdout.split("\n"):
-                    if "PID:" in line:
-                        pid = line.split("PID:")[1].strip().rstrip(")")
-                        return {"running": True, "status": f"Running (PID {pid})"}
-                return {"running": True, "status": "Running"}
-            else:
-                return {"running": False, "status": "Offline"}
-
-        except Exception:
-            return {"running": False, "status": "Unknown"}
-
-    def _get_issue_count(self) -> int:
-        """Get current GitHub issue count"""
-        try:
-            result = subprocess.run(
-                ["gh", "issue", "list", "--state", "open", "--json", "number"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-
-            if result.returncode == 0:
-                issues = json.loads(result.stdout)
-                return len(issues)
-
-        except Exception:
-            pass
-
-        return 0
+            self.update(Text(f"Status error", style="dim red"))
 
     def _get_mcp_status(self) -> dict:
         """Check MCP server availability via Claude Code"""
@@ -205,82 +182,12 @@ class StatusPanel(Static):
         except Exception as e:
             return {"available": False, "status": f"Error: {e}"}
 
-    async def _get_build_status(self) -> dict:
-        """Get active build count and latest build info from shared delegations"""
-        try:
-            # Read from shared delegations directory
-            delegations_dir = Path.home() / ".context-foundry" / "delegations"
-            if not delegations_dir.exists():
-                return {"active": 0, "latest": None}
-
-            running_builds = []
-            for task_file in delegations_dir.glob("task-*.json"):
-                try:
-                    metadata = json.loads(task_file.read_text())
-                    if metadata.get("status") == "running":
-                        # Extract project name from working directory
-                        working_dir = metadata.get("working_directory", "")
-                        project = Path(working_dir).name if working_dir else "build"
-                        running_builds.append({
-                            "project": project,
-                            "working_directory": working_dir
-                        })
-                except:
-                    continue
-
-            if running_builds:
-                # Get most recent (last in list)
-                latest = running_builds[-1]
-                return {
-                    "active": len(running_builds),
-                    "latest": latest.get("project", "build")
-                }
-
-            return {"active": 0, "latest": None}
-
-        except Exception as e:
-            return {"active": 0, "latest": None}
-
-    async def _get_delegation_info(self) -> dict:
-        """Get delegation/Claude instance information from shared delegations"""
-        try:
-            # Read from shared delegations directory
-            delegations_dir = Path.home() / ".context-foundry" / "delegations"
-            if not delegations_dir.exists():
-                return {"running": 0, "completed": 0, "total": 0}
-
-            running = 0
-            completed = 0
-
-            for task_file in delegations_dir.glob("task-*.json"):
-                try:
-                    metadata = json.loads(task_file.read_text())
-                    status = metadata.get("status", "")
-                    if status == "running":
-                        running += 1
-                    elif status == "completed":
-                        completed += 1
-                except:
-                    continue
-
-            total = running + completed
-
-            return {
-                "running": running,
-                "completed": completed,
-                "total": total
-            }
-
-        except Exception:
-            return {"running": 0, "completed": 0, "total": 0}
-
 
 class FileTreePanel(Static):
     """Live file tree showing build directory contents"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.border_title = "Build Directory"
         self.current_dir = None
 
     async def on_mount(self) -> None:
@@ -289,141 +196,100 @@ class FileTreePanel(Static):
         await self.refresh_tree()
 
     async def refresh_tree(self) -> None:
-        """Refresh file tree from active build directory"""
+        """Refresh file tree from selected build directory"""
         try:
-            # Read from shared delegations directory
+            # Get the selected build from the delegations panel
             build_dir = None
 
-            delegations_dir = Path.home() / ".context-foundry" / "delegations"
-            if delegations_dir.exists():
+            # Try to get the currently selected delegation
+            app = self.app
+            if hasattr(app, 'query_one'):
                 try:
-                    # Find first running delegation
-                    for task_file in delegations_dir.glob("task-*.json"):
-                        try:
-                            metadata = json.loads(task_file.read_text())
-                            if metadata.get("status") == "running":
-                                working_dir = metadata.get("working_directory", "")
-                                if working_dir and Path(working_dir).exists():
-                                    build_dir = Path(working_dir)
-                                    break
-                        except:
-                            continue
+                    delegations_panel = app.query_one("#delegations", DelegationsListPanel)
+                    selected = delegations_panel.get_selected_delegation()
 
-                except Exception:
+                    if selected:
+                        working_dir = selected.get("working_directory", "")
+                        if working_dir and Path(working_dir).exists():
+                            build_dir = Path(working_dir)
+                except:
                     pass
+
+            # Fallback: If no selection, find first running delegation
+            if not build_dir:
+                delegations_dir = Path.home() / ".context-foundry" / "delegations"
+                if delegations_dir.exists():
+                    try:
+                        for task_file in delegations_dir.glob("task-*.json"):
+                            try:
+                                metadata = json.loads(task_file.read_text())
+                                if metadata.get("status") == "running":
+                                    working_dir = metadata.get("working_directory", "")
+                                    if working_dir and Path(working_dir).exists():
+                                        build_dir = Path(working_dir)
+                                        break
+                            except:
+                                continue
+                    except Exception:
+                        pass
 
             if build_dir and build_dir.exists():
                 self.current_dir = build_dir
-                tree_text = self._build_tree(build_dir)
 
-                self.update(Panel(
-                    tree_text,
-                    border_style="magenta",
-                    title=f"[bold]📁 {build_dir.name}[/bold]",
-                    subtitle=f"[dim]{str(build_dir)}[/dim]"
-                ))
+                # Count files
+                file_count = 0
+                changed_count = 0
+                try:
+                    for item in build_dir.rglob("*"):
+                        if item.is_file() and not item.name.startswith('.'):
+                            file_count += 1
+                            # Simple heuristic: files modified in last hour are "changed"
+                            if (datetime.now().timestamp() - item.stat().st_mtime) < 3600:
+                                changed_count += 1
+                except:
+                    pass
+
+                # Compact summary with colored header
+                result = Text()
+
+                # Colored header
+                result.append("Build Directory:\n\n", style="bold #A78BFA")
+
+                # Folder name (no emoji)
+                result.append(build_dir.name, style="bold #8B5CF6")
+                result.append("\n")
+
+                # File counts with colors
+                result.append("   ", style="")
+                result.append(str(file_count), style="#3B82F6")
+                result.append(" files", style="dim")
+
+                if changed_count > 0:
+                    result.append(", ", style="dim")
+                    result.append(str(changed_count), style="green")
+                    result.append(" changed", style="dim")
+
+                result.append("\n")
+
+                # Path in dim color
+                result.append("   ", style="")
+                result.append(str(build_dir), style="dim")
+                result.append("\n\n")
+
+                # Ready status in green
+                result.append("   ", style="")
+                result.append("Ready to build", style="green")
+
+                self.update(result)
             else:
-                # No active build
-                self.update(Panel(
-                    Text("No active build\n\nStart a build to see files appear here in real-time!", style="dim italic"),
-                    border_style="dim magenta",
-                    title="[bold]Build Directory[/bold]"
-                ))
+                # No active build with colored header
+                result = Text()
+                result.append("Build Directory:\n\n", style="bold #A78BFA")
+                result.append("No active build\n\nStart a build to see it here", style="dim italic")
+                self.update(result)
 
         except Exception as e:
-            self.update(Panel(
-                Text(f"Error: {e}", style="red"),
-                border_style="red",
-                title="[bold]Build Directory[/bold]"
-            ))
-
-    def _build_tree(self, directory: Path, max_depth: int = 4) -> RichTree:
-        """Build a rich tree structure from directory"""
-        try:
-            # Create root tree
-            tree = RichTree(
-                f"[bold cyan]📁 {directory.name}/[/bold cyan]",
-                guide_style="dim"
-            )
-
-            # Add directory contents
-            self._add_directory_to_tree(tree, directory, current_depth=0, max_depth=max_depth)
-
-            return tree
-
-        except Exception as e:
-            return Text(f"Error building tree: {e}", style="red")
-
-    def _add_directory_to_tree(self, tree: RichTree, directory: Path, current_depth: int, max_depth: int) -> None:
-        """Recursively add directory contents to tree"""
-        if current_depth >= max_depth:
-            tree.add(Text("... (max depth reached)", style="dim"))
-            return
-
-        try:
-            # Get all items, sorted (dirs first, then files)
-            items = sorted(directory.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-
-            # Limit number of items to prevent huge trees
-            if len(items) > 50:
-                items = items[:50]
-                show_truncated = True
-            else:
-                show_truncated = False
-
-            for item in items:
-                # Skip hidden files and common ignore patterns
-                if item.name.startswith('.') or item.name in ['node_modules', '__pycache__', 'venv', '.git']:
-                    continue
-
-                if item.is_dir():
-                    # Add directory
-                    branch = tree.add(f"[cyan]📁 {item.name}/[/cyan]")
-                    self._add_directory_to_tree(branch, item, current_depth + 1, max_depth)
-                else:
-                    # Add file with icon based on extension
-                    icon = self._get_file_icon(item.suffix)
-                    size = self._format_size(item.stat().st_size)
-                    tree.add(f"{icon} {item.name} [dim]({size})[/dim]")
-
-            if show_truncated:
-                tree.add(Text("... (truncated)", style="dim"))
-
-        except PermissionError:
-            tree.add(Text("Permission denied", style="red"))
-        except Exception as e:
-            tree.add(Text(f"Error: {e}", style="red"))
-
-    def _get_file_icon(self, suffix: str) -> str:
-        """Get icon for file type"""
-        icons = {
-            '.py': '🐍',
-            '.js': '📜',
-            '.ts': '📘',
-            '.tsx': '⚛️',
-            '.jsx': '⚛️',
-            '.html': '🌐',
-            '.css': '🎨',
-            '.json': '📋',
-            '.md': '📝',
-            '.txt': '📄',
-            '.yml': '⚙️',
-            '.yaml': '⚙️',
-            '.toml': '⚙️',
-            '.sh': '🔧',
-            '.dockerfile': '🐳',
-            '.gitignore': '🚫',
-            '.env': '🔐',
-        }
-        return icons.get(suffix.lower(), '📄')
-
-    def _format_size(self, size: int) -> str:
-        """Format file size in human-readable format"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024.0:
-                return f"{size:.1f}{unit}"
-            size /= 1024.0
-        return f"{size:.1f}TB"
+            self.update(Text(f"Error loading build directory", style="dim red"))
 
 
 class DelegationsListPanel(Static, can_focus=True):
@@ -433,7 +299,6 @@ class DelegationsListPanel(Static, can_focus=True):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.border_title = "Active Builds"
         self.delegations = []
 
     async def on_mount(self) -> None:
@@ -456,28 +321,35 @@ class DelegationsListPanel(Static, can_focus=True):
                 try:
                     metadata = json.loads(task_file.read_text())
 
-                    # Calculate elapsed time
+                    # Get start time
                     start_time_str = metadata.get("start_time", "")
-                    elapsed_str = "unknown"
+                    start_display = "unknown"
                     if start_time_str:
                         try:
                             start_time = datetime.fromisoformat(start_time_str)
-                            elapsed = (datetime.now() - start_time).total_seconds()
-                            if elapsed < 60:
-                                elapsed_str = f"{int(elapsed)}s"
-                            elif elapsed < 3600:
-                                elapsed_str = f"{int(elapsed/60)}m"
-                            else:
-                                elapsed_str = f"{int(elapsed/3600)}h{int((elapsed%3600)/60)}m"
+                            start_display = start_time.strftime("%H:%M:%S")
                         except:
                             pass
 
+                    # Extract GitHub repo name from task or working directory
+                    github_repo = metadata.get("github_repo_name", "")
+                    if not github_repo:
+                        # Try to infer from working directory
+                        working_dir = metadata.get("working_directory", "")
+                        github_repo = Path(working_dir).name if working_dir else ""
+
+                    # Only show running or pending builds (filter out completed/cancelled/failed)
+                    status = metadata.get("status", "unknown")
+                    if status not in ["running", "pending"]:
+                        continue
+
                     delegations.append({
                         "task_id": metadata.get("task_id", "unknown"),
-                        "status": metadata.get("status", "unknown"),
+                        "status": status,
                         "task": metadata.get("task", "")[:40],
                         "working_directory": metadata.get("working_directory", ""),
-                        "elapsed": elapsed_str
+                        "start_time": start_display,
+                        "github_repo": github_repo
                     })
                 except:
                     continue
@@ -490,63 +362,73 @@ class DelegationsListPanel(Static, can_focus=True):
             self._render_list()
 
     def _render_list(self) -> None:
-        """Render the delegation list"""
+        """Render the delegation list with colored styling"""
         if not self.delegations:
-            self.update(Panel(
-                Text("No builds yet\n\nStart a build to see it here!", style="dim italic"),
-                border_style="yellow",
-                title="[bold]Active Builds[/bold]"
-            ))
+            self.update(Text("No active builds\n\nStart a build to see it here", style="dim italic"))
             return
 
-        # Build table
-        table = Table(show_header=True, box=None, padding=(0, 1))
-        table.add_column("", style="bold", width=2)
-        table.add_column("Project", style="cyan")
-        table.add_column("Status", justify="center")
-        table.add_column("Time", justify="right", style="dim")
+        # Build colored list with Rich Text
+        result = Text()
+
+        # Colored header
+        result.append("Active Builds (", style="bold #3B82F6")
+        result.append(str(len(self.delegations)), style="bold #3B82F6")
+        result.append("):\n", style="bold #3B82F6")
+
+        # Instructions at the TOP (not bottom)
+        result.append("Use ↑↓ arrow keys to navigate  •  x to cancel  •  d for details\n", style="dim italic")
+        result.append("(Keyboard only - clicking not supported)\n\n", style="dim italic")
 
         for i, delegation in enumerate(self.delegations):
-            # Status icon
+            # Status styling
             status = delegation["status"]
             if status == "running":
-                icon = "🚀"
-                status_display = Text("Running", style="green bold")
+                status_text = "Running"
+                status_style = "green"
             elif status == "completed":
-                icon = "✓"
-                status_display = Text("Done", style="blue")
+                status_text = "Done"
+                status_style = "blue"
             elif status == "cancelled":
-                icon = "⊗"
-                status_display = Text("Cancelled", style="yellow")
+                status_text = "Cancelled"
+                status_style = "yellow"
             else:
-                icon = "✗"
-                status_display = Text("Failed", style="red")
+                status_text = "Failed"
+                status_style = "red"
 
-            # Extract project name from working directory
+            # Extract project name
             working_dir = delegation.get("working_directory", "")
             project = Path(working_dir).name if working_dir else "build"
 
-            # Highlight selected row
-            if i == self.selected_index:
-                selector = "→"
-                style = "bold reverse"
-            else:
-                selector = ""
-                style = ""
+            # Build line with colors
+            is_selected = i == self.selected_index
+            selector = "▶ " if is_selected else "  "
+            github_repo = delegation.get("github_repo", "")[:30]
+            start_time = delegation.get("start_time", "")
 
-            table.add_row(
-                selector,
-                project,
-                status_display,
-                delegation["elapsed"]
-            )
+            # Selector and project name with list number
+            list_num = f"[{i+1}] "
+            result.append(list_num, style="dim")
+            result.append(selector, style="bold #8B5CF6" if is_selected else "")
+            result.append(project, style="bold #8B5CF6")
 
-        self.update(Panel(
-            table,
-            border_style="yellow",
-            title="[bold]Builds[/bold]",
-            subtitle=f"[dim]{len(self.delegations)} total | Use ↑↓ to select, d=details, x=cancel[/dim]"
-        ))
+            if is_selected:
+                result.append("  ← SELECTED", style="bold #8B5CF6")
+            result.append("\n")
+
+            # Status line with colors
+            result.append("   Status: ", style="dim")
+            result.append(status_text, style=status_style)
+            result.append("  Started: ", style="dim")
+            result.append(start_time, style="#3B82F6")
+            result.append("\n")
+
+            # GitHub repo if present
+            if github_repo:
+                result.append("   Repo: ", style="dim")
+                result.append(github_repo, style="#A78BFA")
+                result.append("\n")
+
+        self.update(result)
 
     def get_selected_delegation(self) -> Optional[dict]:
         """Get the currently selected delegation"""
@@ -568,7 +450,7 @@ class DelegationsListPanel(Static, can_focus=True):
 
 
 class ChatMessage(Static):
-    """Individual chat message bubble"""
+    """Individual chat message"""
 
     def __init__(self, role: str, content: str, **kwargs):
         super().__init__(**kwargs)
@@ -576,43 +458,43 @@ class ChatMessage(Static):
         self.content = content
 
     def compose(self) -> ComposeResult:
-        """Render chat message"""
+        """Render chat message with markup support"""
+        from rich.text import Text
+
         if self.role == "user":
-            yield Static(
-                f"[bold cyan]You:[/bold cyan] {self.content}",
-                classes="user-message"
-            )
+            # User messages with light blue styling
+            text = Text()
+            text.append("You: ", style="bold #3B82F6")
+            text.append(self.content)
+            yield Static(text, classes="user-message")
         else:
-            yield Static(
-                f"[bold green]Assistant:[/bold green] {self.content}",
-                classes="assistant-message"
-            )
+            # Assistant messages with markup support
+            from rich.markup import render
+            text = render(self.content)
+            yield Static(text, classes="assistant-message")
 
 
 class ChatPanel(VerticalScroll):
-    """AI Chat interface panel"""
+    """Context Chat interface panel"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.border_title = "AI Assistant"
 
     async def on_mount(self) -> None:
-        """Show welcome message"""
+        """Show welcome message with colored header"""
+        # Use markup for colored header
         await self.add_message(
             "assistant",
-            "Welcome to Context Foundry Mission Control! 🚀\n\n"
-            "**Just type what you want to build in natural language!**\n\n"
-            "Examples:\n"
-            "• 'build a gorilla tag fun math game web based'\n"
-            "• 'create a todo app with React'\n"
-            "• 'make a weather dashboard'\n\n"
-            "**Controls:**\n"
-            "• Enter or Ctrl+D to send\n"
-            "• Ctrl+M to cycle models (currently: Sonnet 4.5)\n"
-            "• Shift+Click to select and copy text\n"
-            "• Type 'help' for more options\n\n"
-            "I'll delegate your request to Claude and track the build!"
+            "[bold #8B5CF6]Home • Conversation[/bold #8B5CF6]\n\nReady to help. What are you building?"
         )
+
+    async def on_click(self) -> None:
+        """Focus input when chat panel is clicked"""
+        try:
+            chat_input = self.app.query_one("#chat_input", ChatInput)
+            chat_input.focus()
+        except:
+            pass
 
     async def add_message(self, role: str, content: str) -> None:
         """Add a message to the chat"""
@@ -620,11 +502,11 @@ class ChatPanel(VerticalScroll):
         self.scroll_end(animate=False)
 
 
-class ChatInput(Input):
+class ChatInput(Input, can_focus=True):
     """Chat input field"""
 
     def __init__(self, **kwargs):
-        super().__init__(placeholder="Type a message... (Enter or Ctrl+D to send)", **kwargs)
+        super().__init__(placeholder="Type a message... (Enter to send, Tab to switch views)", **kwargs)
 
     async def on_key(self, event) -> None:
         """Handle Enter key to submit message"""
@@ -953,6 +835,9 @@ class MissionControlApp(App):
     # Model selection (default to sonnet)
     model = reactive("sonnet")
 
+    # Current view mode
+    current_view = reactive(ViewMode.CONVERSATION)
+
     # Track active builds
     active_builds = []
 
@@ -962,57 +847,90 @@ class MissionControlApp(App):
 
     CSS = """
     Screen {
-        layout: grid;
-        grid-size: 2 4;
-        grid-rows: auto 1fr 1fr auto;
-        grid-gutter: 0;
+        layout: vertical;
         padding: 0;
     }
 
     Header {
-        dock: top;
+        display: none;
     }
 
     Footer {
         dock: bottom;
+        background: #16213e;
+        color: #e0e0e0;
     }
 
-    StatusPanel {
-        border: solid cyan;
-        max-height: 100%;
-        overflow-y: auto;
-        height: auto;
+    Footer > .footer--key {
+        background: #8B5CF6;
+        color: #ffffff;
     }
 
-    FileTreePanel {
-        border: solid magenta;
-        max-height: 100%;
-        overflow-y: auto;
+    Footer > .footer--description {
+        color: #A78BFA;
+    }
+
+    TabBar {
+        dock: top;
+        height: 1;
+        min-height: 1;
+        background: $surface;
+        padding: 0 2;
+        border-bottom: tall $panel;
+    }
+
+    StatusBar {
+        dock: bottom;
+        height: 1;
+        background: #1a1a2e;
+        color: #A78BFA;
+        padding: 0 1;
     }
 
     ChatPanel {
-        row-span: 2;
-        border: solid green;
-        max-height: 100%;
+        height: 1fr;
         overflow-y: auto;
+        padding: 1 2;
+        background: $background;
+        display: block;
+    }
+
+    ChatPanel.hidden {
+        display: none;
     }
 
     DelegationsListPanel {
-        border: solid yellow;
-        max-height: 100%;
+        height: 1fr;
         overflow-y: auto;
+        padding: 1 2;
+        background: $background;
+        display: none;
     }
 
-    DelegationsListPanel:focus {
-        border: thick yellow;
+    DelegationsListPanel.visible {
+        display: block;
+    }
+
+    FileTreePanel {
+        height: 1fr;
+        overflow-y: auto;
+        padding: 1 2;
+        background: $background;
+        display: none;
+    }
+
+    FileTreePanel.visible {
+        display: block;
     }
 
     ChatInput {
-        column-span: 2;
-        border: solid blue;
         height: 3;
         min-height: 3;
         max-height: 3;
+        padding: 0 1;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        border: solid #8B5CF6;
     }
 
     /* Modal styles */
@@ -1079,61 +997,106 @@ class MissionControlApp(App):
     }
 
     .user-message {
-        background: $boost;
-        padding: 1;
-        margin: 1;
+        padding: 1 2;
+        margin: 0 0 1 0;
+        color: $text;
+        background: #1e3a5f 15%;
     }
 
     .assistant-message {
-        background: $panel;
-        padding: 1;
-        margin: 1;
+        padding: 1 2;
+        margin: 0 0 2 0;
+        color: $text;
+        background: #4a1f6f 10%;
     }
     """
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", show=True),
-        Binding("ctrl+d", "send_message", "Send", show=True),
-        Binding("ctrl+b", "start_build", "Build", show=True),
-        Binding("ctrl+r", "refresh", "Refresh", show=True),
+        Binding("ctrl+d", "send_message", "Send", show=False),
         Binding("ctrl+m", "cycle_model", "Model", show=True),
+        Binding("tab", "toggle_view", "View", show=True, priority=True),
         Binding("up", "select_up", "Up", show=False),
         Binding("down", "select_down", "Down", show=False),
         Binding("d", "show_details", "Details", show=False),
         Binding("x", "cancel_build", "Cancel", show=False),
-        Binding("l", "show_learnings", "Learnings", show=False),
+        Binding("question_mark", "show_help", "Help", show=True),
     ]
 
     def compose(self) -> ComposeResult:
         """Create child widgets"""
-        yield Header(show_clock=True)
-        yield StatusPanel()
+        yield TabBar(id="tab_bar")
         yield ChatPanel(id="chat")
-        yield FileTreePanel()
+        yield FileTreePanel(id="file_tree")
         yield DelegationsListPanel(id="delegations")
         yield ChatInput(id="chat_input")
+        yield StatusBar(id="status_bar")
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Set app title and focus delegations panel"""
-        self.title = "Context Foundry Mission Control"
-        self.update_subtitle()
+        """Initialize app"""
+        self.title = ""  # No title, we have status bar
+        self.sub_title = ""
 
-        # Focus the delegations panel so user can select builds immediately
+        # Set initial view
+        await self._update_view()
+
+        # Focus chat input
         try:
-            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
-            delegations_panel.focus()
+            chat_input = self.query_one("#chat_input", ChatInput)
+            chat_input.focus()
         except:
             pass
 
-    def update_subtitle(self) -> None:
-        """Update subtitle with current model"""
-        model_display = {
-            "sonnet": "Sonnet 4.5",
-            "opus": "Opus 4",
-            "haiku": "Haiku 3.5"
-        }.get(self.model, self.model)
-        self.sub_title = f"Evolution System Dashboard | Model: {model_display}"
+    async def _update_view(self) -> None:
+        """Update visibility based on current view"""
+        try:
+            chat = self.query_one("#chat", ChatPanel)
+            delegations = self.query_one("#delegations", DelegationsListPanel)
+            file_tree = self.query_one("#file_tree", FileTreePanel)
+            tab_bar = self.query_one("#tab_bar", TabBar)
+
+            # Sync tab bar
+            tab_bar.current_view = self.current_view
+
+            # Show current view
+            if self.current_view == ViewMode.CONVERSATION:
+                chat.remove_class("hidden")
+                delegations.remove_class("visible")
+                file_tree.remove_class("visible")
+                delegations.display = False
+                file_tree.display = False
+                chat.display = True
+            elif self.current_view == ViewMode.BUILDS:
+                chat.add_class("hidden")
+                delegations.add_class("visible")
+                file_tree.remove_class("visible")
+                chat.display = False
+                delegations.display = True
+                file_tree.display = False
+            elif self.current_view == ViewMode.STATUS:
+                chat.add_class("hidden")
+                delegations.remove_class("visible")
+                file_tree.add_class("visible")
+                chat.display = False
+                delegations.display = False
+                file_tree.display = True
+
+        except Exception:
+            pass
+
+    async def switch_to_view(self, view_mode: ViewMode) -> None:
+        """Switch to a specific view"""
+        self.current_view = view_mode
+        await self._update_view()
+
+        # Auto-focus input when on conversation view
+        if self.current_view == ViewMode.CONVERSATION:
+            try:
+                chat_input = self.query_one("#chat_input", ChatInput)
+                chat_input.focus()
+            except:
+                pass
 
     async def action_send_message(self) -> None:
         """Send chat message"""
@@ -1227,57 +1190,68 @@ class MissionControlApp(App):
 
     async def _process_command(self, message: str) -> str:
         """Process user command and return response"""
-        message_lower = message.lower()
+        message_lower = message.lower().strip()
+
+        # Status commands - check first before greeting filter
+        if any(word in message_lower for word in ["status", "health", "check", "delegation"]):
+            # Check if they want details for a specific build
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            selected = delegations_panel.get_selected_delegation()
+
+            if selected and "selected" in message_lower:
+                project = selected.get("github_repo", "build")
+                status = selected.get("status", "unknown")
+                start_time = selected.get("start_time", "unknown")
+
+                return (
+                    f"{project}\n"
+                    f"Status: {status}\n"
+                    f"Started: {start_time}\n\n"
+                    f"Press d for full details"
+                )
+            else:
+                return await self._get_mcp_status()
+
+        # Help commands - check before greeting filter
+        if any(word in message_lower for word in ["help", "what", "how", "?"]):
+            return (
+                "Commands:\n"
+                "  Describe what you want to build in plain English\n"
+                "  status - Check system status\n"
+                "  help or ? - Show this message\n\n"
+                "Navigation:\n"
+                "  Click tabs at top to switch views\n"
+                "  Tab key - Cycle through views\n\n"
+                "Keyboard:\n"
+                "  d - View build details\n"
+                "  ↑↓ - Navigate builds\n"
+                "  x - Cancel build\n"
+                "  Ctrl+M - Change model\n"
+                "  Ctrl+C - Quit"
+            )
+
+        # Build commands - delegate to autonomous build
+        # Keywords: build, create, make, develop, implement, write, design, upgrade, fix, update
+        build_keywords = ["build", "create", "make", "develop", "implement", "write", "design", "upgrade", "fix", "update", "add", "modify"]
+        if any(word in message_lower for word in build_keywords):
+            return await self._start_autonomous_build(message)
 
         # Check for query/info commands that should NOT trigger builds
         query_keywords = ["get", "show", "list", "view", "display", "details", "result", "info"]
         if any(word in message_lower.split() for word in query_keywords):
-            # This looks like a query, not a build request
-            return (
-                "💡 **Tip:** Use keyboard shortcuts instead of typing commands!\n\n"
-                "**Available Actions:**\n"
-                "• Press **`d`** - View details for selected build\n"
-                "• Press **`↑/↓`** - Navigate build list\n"
-                "• Press **`x`** - Cancel selected build\n"
-                "• Press **`l`** - View global learnings\n\n"
-                "Or click the buttons on the right side of the screen.\n\n"
-                "**To start a new build:** Describe what you want in natural language\n"
-                "Example: 'build a calculator app'"
-            )
+            return "Use Tab to switch views, or type 'help' for commands"
 
-        # Build commands - delegate to autonomous build
-        if any(word in message_lower for word in ["build", "create", "make", "develop"]):
-            return await self._start_autonomous_build(message)
+        # Greetings and casual messages - don't start a build!
+        greeting_keywords = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo"]
+        if message_lower in greeting_keywords:
+            return "Hello! What would you like to build?"
 
-        # Status commands - call MCP status via wrapper
-        elif any(word in message_lower for word in ["status", "health", "check"]):
-            return await self._get_mcp_status()
+        # Very short messages (1-2 words) that aren't commands - ask for clarification
+        if len(message_lower.split()) <= 2:
+            return "Not sure what you mean. Try 'build a [description]' or type 'help'"
 
-        # Help commands
-        elif any(word in message_lower for word in ["help", "what", "how"]):
-            return (
-                "Available commands:\n\n"
-                "**Build Management:**\n"
-                "• Just describe what you want to build!\n"
-                "  Example: 'build a gorilla tag fun math game'\n"
-                "• Natural language - AI will understand\n\n"
-                "**Keyboard Shortcuts:**\n"
-                "• **`d`** - View details for selected build\n"
-                "• **`↑/↓`** - Navigate build list\n"
-                "• **`x`** - Cancel selected build (with confirmation)\n"
-                "• **`l`** - View global learnings & patterns\n"
-                "• Enter/Ctrl+D - Send message\n"
-                "• Ctrl+M - Cycle model (Sonnet/Opus/Haiku)\n"
-                "• Ctrl+R - Refresh panels\n"
-                "• Ctrl+C - Quit\n\n"
-                "**Copy Text:**\n"
-                "• Hold Shift + Click and drag to select text\n"
-                "• Then use your terminal's copy (Cmd+C / Ctrl+Shift+C)"
-            )
-
-        else:
-            # Default: treat as build request
-            return await self._start_autonomous_build(message)
+        # Unclear intent - ask for clarification
+        return "Not sure what you mean. Try 'build a [description]' or type 'help'"
 
     async def _start_autonomous_build(self, task_description: str) -> str:
         """Start an autonomous build via MCP wrapper"""
@@ -1385,16 +1359,11 @@ class MissionControlApp(App):
                     self.active_builds.append(build_info)
 
                     return (
-                        f"🚀 Build started successfully!\n\n"
-                        f"**Project:** {project_name}\n"
-                        f"**Task:** {task_description}\n"
-                        f"**Model:** Claude {self.model.capitalize()}\n"
-                        f"**Location:** {working_dir}\n"
-                        f"**Task ID:** {task_id[:8]}...\n\n"
-                        f"✅ Build is running in the background.\n"
-                        f"✅ It will continue even if you close this TUI.\n\n"
-                        f"Watch System Status panel for live progress!\n\n"
-                        f"💡 Tip: The build will auto-deploy to GitHub when complete!"
+                        f"Starting build: {project_name}\n\n"
+                        f"Task: {task_description}\n"
+                        f"Model: {self.model.capitalize()}\n"
+                        f"Location: {working_dir}\n\n"
+                        f"Running in background. Press Tab to view builds."
                     )
                 except json.JSONDecodeError as je:
                     return (
@@ -1453,22 +1422,52 @@ class MissionControlApp(App):
         except:
             return []
 
-    async def action_start_build(self) -> None:
-        """Quick build action"""
+    async def action_refresh(self) -> None:
+        """Refresh status bar"""
+        try:
+            status_bar = self.query_one("#status_bar", StatusBar)
+            await status_bar.refresh_status()
+        except:
+            pass
+
+    async def action_toggle_view(self) -> None:
+        """Toggle between views"""
+        if self.current_view == ViewMode.CONVERSATION:
+            self.current_view = ViewMode.BUILDS
+        elif self.current_view == ViewMode.BUILDS:
+            self.current_view = ViewMode.STATUS
+        else:
+            self.current_view = ViewMode.CONVERSATION
+
+        await self._update_view()
+
+        # Always refocus input when on conversation view
+        if self.current_view == ViewMode.CONVERSATION:
+            try:
+                chat_input = self.query_one("#chat_input", ChatInput)
+                chat_input.focus()
+            except:
+                pass
+
+    async def action_show_help(self) -> None:
+        """Show help message"""
         chat_panel = self.query_one("#chat", ChatPanel)
         await chat_panel.add_message(
             "assistant",
-            "🚀 Quick Build\n\n"
-            "Please provide:\n"
-            "1. Project name\n"
-            "2. Task description\n\n"
-            "Format: `build <name> <task>`"
+            "Commands:\n"
+            "  Describe what you want to build in plain English\n"
+            "  status - Check system status\n"
+            "  help or ? - Show this message\n\n"
+            "Navigation:\n"
+            "  Click tabs at top to switch views\n"
+            "  Tab key - Cycle through views\n\n"
+            "Keyboard:\n"
+            "  d - View build details\n"
+            "  ↑↓ - Navigate builds\n"
+            "  x - Cancel build\n"
+            "  Ctrl+M - Change model\n"
+            "  Ctrl+C - Quit"
         )
-
-    async def action_refresh(self) -> None:
-        """Refresh all panels"""
-        status_panel = self.query_one(StatusPanel)
-        await status_panel.refresh_status()
 
     async def action_cycle_model(self) -> None:
         """Cycle through available models"""
@@ -1476,18 +1475,17 @@ class MissionControlApp(App):
         current_index = models.index(self.model)
         next_index = (current_index + 1) % len(models)
         self.model = models[next_index]
-        self.update_subtitle()
 
         # Show notification
         chat_panel = self.query_one("#chat", ChatPanel)
         model_names = {
-            "sonnet": "Claude Sonnet 4.5",
-            "opus": "Claude Opus 4",
-            "haiku": "Claude Haiku 3.5"
+            "sonnet": "Sonnet 4.5",
+            "opus": "Opus 4",
+            "haiku": "Haiku 3.5"
         }
         await chat_panel.add_message(
             "assistant",
-            f"🔄 Model switched to: {model_names[self.model]}"
+            f"Model: {model_names[self.model]}"
         )
 
     async def action_select_up(self) -> None:
@@ -1576,13 +1574,33 @@ class MissionControlApp(App):
                     # Force immediate refresh of delegations list
                     await delegations_panel.refresh_delegations()
                 else:
+                    # Parse error message from stderr if possible
+                    error_msg = stderr.decode() if stderr else 'Unknown error'
+                    try:
+                        # Try to parse JSON error for better message
+                        error_json = json.loads(error_msg)
+                        error_detail = error_json.get("error", error_msg)
+                        error_detail += "\n" + error_json.get("message", "")
+                    except:
+                        error_detail = error_msg
+
                     chat_panel = self.query_one("#chat", ChatPanel)
                     await chat_panel.add_message(
                         "assistant",
-                        f"❌ Failed to cancel build: {stderr.decode() if stderr else 'Unknown error'}"
+                        f"Failed to cancel build: {error_detail}"
                     )
         except Exception as e:
-            pass
+            # Show actual errors instead of swallowing them
+            try:
+                chat_panel = self.query_one("#chat", ChatPanel)
+                await chat_panel.add_message(
+                    "assistant",
+                    f"Error cancelling build: {str(e)}"
+                )
+            except:
+                # If even showing the error fails, at least log it
+                import traceback
+                traceback.print_exc()
 
     async def action_show_learnings(self) -> None:
         """Show global patterns and learnings"""
