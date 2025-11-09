@@ -1235,6 +1235,22 @@ class MissionControlApp(App):
         """Process user command and return response"""
         message_lower = message.lower()
 
+        # Check for query/info commands that should NOT trigger builds
+        query_keywords = ["get", "show", "list", "view", "display", "details", "result", "info"]
+        if any(word in message_lower.split() for word in query_keywords):
+            # This looks like a query, not a build request
+            return (
+                "💡 **Tip:** Use keyboard shortcuts instead of typing commands!\n\n"
+                "**Available Actions:**\n"
+                "• Press **`d`** - View details for selected build\n"
+                "• Press **`↑/↓`** - Navigate build list\n"
+                "• Press **`x`** - Cancel selected build\n"
+                "• Press **`l`** - View global learnings\n\n"
+                "Or click the buttons on the right side of the screen.\n\n"
+                "**To start a new build:** Describe what you want in natural language\n"
+                "Example: 'build a calculator app'"
+            )
+
         # Build commands - delegate to autonomous build
         if any(word in message_lower for word in ["build", "create", "make", "develop"]):
             return await self._start_autonomous_build(message)
@@ -1251,10 +1267,11 @@ class MissionControlApp(App):
                 "• Just describe what you want to build!\n"
                 "  Example: 'build a gorilla tag fun math game'\n"
                 "• Natural language - AI will understand\n\n"
-                "**System Control:**\n"
-                "• `status` - Show system health\n"
-                "• `restart daemon` - Restart Evolution daemon\n\n"
                 "**Keyboard Shortcuts:**\n"
+                "• **`d`** - View details for selected build\n"
+                "• **`↑/↓`** - Navigate build list\n"
+                "• **`x`** - Cancel selected build (with confirmation)\n"
+                "• **`l`** - View global learnings & patterns\n"
                 "• Enter/Ctrl+D - Send message\n"
                 "• Ctrl+M - Cycle model (Sonnet/Opus/Haiku)\n"
                 "• Ctrl+R - Refresh panels\n"
