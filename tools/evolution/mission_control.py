@@ -426,7 +426,7 @@ class FileTreePanel(Static):
         return f"{size:.1f}TB"
 
 
-class DelegationsListPanel(Static):
+class DelegationsListPanel(Static, can_focus=True):
     """List of all delegations with status"""
 
     selected_index = reactive(0)
@@ -565,15 +565,6 @@ class DelegationsListPanel(Static):
         if self.selected_index < len(self.delegations) - 1:
             self.selected_index += 1
             self._render_list()
-
-
-class ActionButtonsPanel(Horizontal):
-    """Horizontal panel with action buttons"""
-
-    def compose(self) -> ComposeResult:
-        yield Button("View Details (d)", id="btn_details", variant="primary")
-        yield Button("Cancel Build (x)", id="btn_cancel", variant="error")
-        yield Button("Learnings (l)", id="btn_learnings", variant="success")
 
 
 class ChatMessage(Static):
@@ -940,8 +931,8 @@ class ConfirmCancelModal(ModalScreen):
                 id="confirm_message"
             )
             with Horizontal(id="confirm_buttons"):
-                yield Button("Cancel Build", id="btn_confirm_yes", variant="error")
-                yield Button("Keep Building", id="btn_confirm_no", variant="primary")
+                yield Button("OK, Cancel Build", id="btn_confirm_yes", variant="error")
+                yield Button("Nevermind", id="btn_confirm_no", variant="primary")
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press"""
@@ -972,8 +963,8 @@ class MissionControlApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 5;
-        grid-rows: auto 1fr 1fr auto auto;
+        grid-size: 2 4;
+        grid-rows: auto 1fr 1fr auto;
         grid-gutter: 0;
         padding: 0;
     }
@@ -1012,17 +1003,8 @@ class MissionControlApp(App):
         overflow-y: auto;
     }
 
-    ActionButtonsPanel {
-        border: solid blue;
-        height: 3;
-        min-height: 3;
-        max-height: 3;
-        align: center middle;
-    }
-
-    ActionButtonsPanel Button {
-        min-width: 20;
-        margin: 0 1;
+    DelegationsListPanel:focus {
+        border: thick yellow;
     }
 
     ChatInput {
@@ -1129,19 +1111,18 @@ class MissionControlApp(App):
         yield ChatPanel(id="chat")
         yield FileTreePanel()
         yield DelegationsListPanel(id="delegations")
-        yield ActionButtonsPanel(id="actions")
         yield ChatInput(id="chat_input")
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Set app title and focus input"""
+        """Set app title and focus delegations panel"""
         self.title = "Context Foundry Mission Control"
         self.update_subtitle()
 
-        # Focus the input box so user can start typing immediately
+        # Focus the delegations panel so user can select builds immediately
         try:
-            chat_input = self.query_one("#chat_input", ChatInput)
-            chat_input.focus()
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            delegations_panel.focus()
         except:
             pass
 
@@ -1610,15 +1591,6 @@ class MissionControlApp(App):
             await self.push_screen(PatternsModal())
         except Exception as e:
             pass
-
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses"""
-        if event.button.id == "btn_details":
-            await self.action_show_details()
-        elif event.button.id == "btn_cancel":
-            await self.action_cancel_build()
-        elif event.button.id == "btn_learnings":
-            await self.action_show_learnings()
 
 
 def main():
