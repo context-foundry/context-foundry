@@ -1052,11 +1052,15 @@ class EvolutionDaemon:
                 if not mcp_task_id:
                     continue
 
-                # Check if we already have a task for this delegation
-                existing_tasks = self.task_queue.list_tasks()
+                # Check if we already have a pending/running task for this delegation
+                # (Completed tasks should not prevent re-monitoring)
+                pending_tasks = self.task_queue.list_tasks(status=TaskStatus.PENDING.value)
+                running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+                active_tasks = pending_tasks + running_tasks
+
                 already_monitoring = any(
                     t.params.get('mcp_task_id') == mcp_task_id
-                    for t in existing_tasks
+                    for t in active_tasks
                 )
 
                 if not already_monitoring:

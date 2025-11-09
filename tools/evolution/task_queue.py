@@ -106,7 +106,20 @@ class TaskQueueManager:
                     # Need to migrate - recreate table with new constraint
                     print("Migrating task_queue schema to support delegation tasks...")
 
-                    self.conn.executescript("""
+                    # Get list of common columns between old and new schema
+                    cursor = self.conn.execute("PRAGMA table_info(tasks)")
+                    old_columns = [row[1] for row in cursor.fetchall()]
+
+                    new_columns = [
+                        'id', 'type', 'status', 'priority', 'params_json',
+                        'created_at', 'started_at', 'completed_at', 'result_json',
+                        'error_message', 'retry_count', 'max_retries'
+                    ]
+
+                    common_columns = [col for col in new_columns if col in old_columns]
+                    columns_str = ', '.join(common_columns)
+
+                    self.conn.executescript(f"""
                         -- Create new table with updated schema
                         CREATE TABLE tasks_new (
                             id TEXT PRIMARY KEY,
@@ -123,8 +136,9 @@ class TaskQueueManager:
                             max_retries INTEGER DEFAULT 3
                         );
 
-                        -- Copy existing data
-                        INSERT INTO tasks_new SELECT * FROM tasks;
+                        -- Copy existing data (only common columns)
+                        INSERT INTO tasks_new ({columns_str})
+                        SELECT {columns_str} FROM tasks;
 
                         -- Drop old table
                         DROP TABLE tasks;
