@@ -1665,8 +1665,23 @@ class MissionControlApp(App):
             task_id = build_info.get("task_id")
             task_file = delegations_dir / f"task-{task_id}.json"
 
-            # Write delegation metadata
-            task_file.write_text(json.dumps(build_info, indent=2))
+            # Check if MCP server already wrote metadata with PID
+            existing_metadata = {}
+            if task_file.exists():
+                try:
+                    existing_metadata = json.loads(task_file.read_text())
+                except:
+                    pass
+
+            # Merge with existing metadata, preserving critical fields like PID
+            merged_metadata = {**existing_metadata, **build_info}
+
+            # Preserve PID from MCP server if it exists
+            if "pid" in existing_metadata and "pid" not in build_info:
+                merged_metadata["pid"] = existing_metadata["pid"]
+
+            # Write merged delegation metadata
+            task_file.write_text(json.dumps(merged_metadata, indent=2))
 
         except Exception as e:
             pass  # Don't crash if saving fails
