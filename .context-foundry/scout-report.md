@@ -1,210 +1,170 @@
-# Scout Report: Test Coverage Improvement
+# Scout Report: Test Coverage Analysis for Context Foundry Tools
 
 ## Executive Summary
 
-This task addresses a critical gap in the Context Foundry codebase: **test coverage at 25.3%**, with several core modules having **0% coverage**. The most critical issue is the MCP server (`tools/mcp_server.py`) with 947 untested statements, representing the primary integration point for Claude Desktop users.
+Analysis of the `tools/` directory revealed significant gaps in test coverage for critical path modules, particularly in the **context budget monitoring system**. While the project has 52 test files covering many modules, several critical components lack comprehensive test coverage:
 
-**Target**: Improve coverage from 25.3% to minimum 60% for critical paths
-**Priority**: HIGH - Core functionality reliability
-**Estimated Timeline**: 6-8 hours of implementation
+### High Priority Gaps (Critical Paths):
+1. **context_budget/monitor.py** - Core monitoring logic (NO TESTS)
+2. **context_budget/report.py** - Report generation (NO TESTS) 
+3. **context_budget/token_counter.py** - Token counting utilities (NO TESTS)
+4. **cli.py** - Main CLI entry point (NO TESTS)
+5. **use_baml.py** - BAML integration CLI (NO TESTS)
+6. **tui_monitor.py** - TUI entry point (NO TESTS)
 
-## Key Requirements
-
-### Critical Paths Requiring Tests
-
-1. **MCP Server** (tools/mcp_server.py) - 0% → 70%
-   - 947 statements currently uncovered
-   - Core tools: `autonomous_build`, `delegate_to_agent`, `context_foundry_status`
-   - Pattern management functions
-   - Async streaming and delegation
-   
-2. **Prompt Building System** (tools/prompts/) - 0% → 60%
-   - `build_orchestrator_prompt.py` (82 statements)
-   - `phase_loader.py` (58 statements)
-   - `cache_analysis.py` (133 statements)
-   
-3. **CLI Entry Points** (tools/cli.py) - Low → 50%
-   - Command parsing and validation
-   - Argument handling
-   
-4. **Utilities**
-   - `banner.py` (11 statements) - 0% → 100%
-   - `test_parallel_runner.py` (39 statements) - 0% → 80%
-
-### Lower Priority (Time Permitting)
-
-5. **TUI Components** (tools/tui/) - 0% → 40%
-   - Requires Textual testing framework
-   - UI interactions are harder to test
-   
-6. **Livestream** (tools/livestream/) - 0% → 30%
-   - 604 statements
-   - Lower priority (experimental feature)
+### Coverage Status:
+- **Total Python modules in tools/**: ~80 modules
+- **Test files**: 52 test files
+- **Coverage estimate**: ~65% (missing critical path coverage)
+- **Risk**: HIGH - Core functionality lacks validation
 
 ## Technology Stack
+- **Testing Framework**: pytest (already in use)
+- **Mocking**: unittest.mock
+- **Temp directories**: tempfile, pytest fixtures
+- **Token counting**: tiktoken (with fallback)
+- **Coverage analysis**: pytest-cov (optional but recommended)
 
-**Testing Framework**: pytest (already in use)
-**Coverage Tool**: pytest-cov
-**Mocking**: unittest.mock (standard library)
-**Additional Dependencies Needed**:
-- pytest-asyncio (for async MCP server tests)
-- pytest-mock (enhanced mocking)
+## Critical Architecture Recommendations
 
-**Existing Test Patterns to Follow**:
-- Tier markers: `@pytest.mark.tier1` (critical), `tier2`, `tier3`
-- Mock FastMCP for MCP server tests (pattern in `test_mcp_server_critical_paths.py`)
-- Integration tests for end-to-end flows
-- Unit tests for individual functions
+### 1. Context Budget Module Tests (HIGHEST PRIORITY)
+The context budget system is a **critical performance feature** that monitors token usage and prevents degraded model performance. This needs comprehensive testing:
 
-## Architecture Recommendations
+**Required Test Coverage:**
+- `ContextBudgetMonitor` class:
+  - Budget allocation calculations
+  - Zone detection (SMART/DUMB/CRITICAL)
+  - Phase analysis and warnings
+  - Historical tracking
+  - Export to session summary format
+- `ContextBudgetReporter` class:
+  - Report generation (text, JSON, markdown)
+  - Phase table formatting
+  - ASCII visualization
+  - Optimization suggestions
+- `TokenCounter` class:
+  - Token estimation (with/without tiktoken)
+  - File token counting
+  - Directory token counting
+  - Message token counting
+  - Fallback heuristics
 
-### Test File Structure
+**Why Critical:**
+- Controls build quality and performance
+- Prevents "dumb zone" degradation (40-80% context)
+- Generates reports for user feedback
+- No existing tests = high regression risk
 
+### 2. CLI Entry Points Tests
+- `cli.py` - Main Context Foundry entry point
+- `use_baml.py` - BAML integration CLI
+- `tui_monitor.py` - TUI launcher
+
+**Testing Requirements:**
+- Argument parsing
+- Error handling (missing deps, wrong Python version)
+- Graceful degradation
+- Exit codes
+
+### 3. Testing Approach
+
+**Unit Tests (Isolated):**
+- Test each class method independently
+- Mock external dependencies (file I/O, tiktoken)
+- Verify calculation accuracy
+- Test edge cases and error handling
+
+**Integration Tests:**
+- Test full workflow (monitor → analyze → report)
+- Test with real session-summary.json data
+- Verify report formatting
+- Test CLI commands end-to-end
+
+**Test Data:**
+- Create fixtures with sample phase data
+- Mock session-summary.json structures
+- Test with/without tiktoken available
+- Test boundary conditions (0%, 40%, 80%, 100% usage)
+
+## Main Challenges and Mitigations
+
+### Challenge 1: Tiktoken Optional Dependency
+**Issue:** TokenCounter has fallback logic when tiktoken is unavailable  
+**Mitigation:**
+- Test both code paths (with and without tiktoken)
+- Mock tiktoken import failure scenarios
+- Verify fallback heuristic accuracy
+
+### Challenge 2: Session Summary Integration
+**Issue:** Monitor exports to session-summary.json format  
+**Mitigation:**
+- Create comprehensive fixtures
+- Validate JSON structure against actual outputs
+- Test deserialization and serialization
+
+### Challenge 3: CLI Testing
+**Issue:** CLI tools need argument parsing and error handling tests  
+**Mitigation:**
+- Use `subprocess` or mock `sys.argv`
+- Capture stdout/stderr
+- Test exit codes
+- Mock missing dependencies
+
+## Testing Plan
+
+### Phase 1: Context Budget Core (Priority 1)
+```python
+tests/test_context_budget_monitor_unit.py
+tests/test_context_budget_reporter_unit.py
+tests/test_context_budget_token_counter_unit.py
 ```
-tests/
-├── test_mcp_server_comprehensive.py      # NEW: 400+ lines, 70% MCP coverage
-├── test_prompt_building_system.py        # NEW: 250+ lines
-├── test_cli_entry_points.py              # NEW: 150+ lines  
-├── test_banner.py                        # NEW: 50 lines
-├── test_parallel_runner_unit.py          # NEW: 120 lines
-└── prompts/                              # NEW directory
-    ├── test_orchestrator_builder.py
-    ├── test_phase_loader.py
-    └── test_cache_analysis.py
+
+**Coverage Target:** 90%+ for critical logic
+
+**Test Count Estimate:** 60-80 tests
+- Monitor: 25-30 tests
+- Reporter: 20-25 tests  
+- TokenCounter: 15-20 tests
+
+### Phase 2: CLI Tools (Priority 2)
+```python
+tests/test_cli_unit.py
+tests/test_use_baml_unit.py
+tests/test_tui_monitor_unit.py
 ```
 
-### Testing Strategy
+**Coverage Target:** 80%+ (focus on error paths)
 
-**1. MCP Server Tests** (Highest Priority)
-- Mock FastMCP decorators (existing pattern works well)
-- Test each tool function independently
-- Integration tests for delegation workflow
-- Test error handling and edge cases
-- Coverage target: 70% (665 of 947 statements)
+**Test Count Estimate:** 20-25 tests
 
-**2. Prompt Building Tests**
-- Test modular prompt assembly
-- Validate phase file loading
-- Test Flowise integration toggle
-- Test cache analysis logic
-- Coverage target: 60%
+### Phase 3: Integration Tests
+```python
+tests/test_context_budget_integration.py
+```
 
-**3. CLI Tests**
-- Argument parsing validation
-- Command execution paths
-- Error message clarity
-- Coverage target: 50%
+**Coverage Target:** Full workflow validation
 
-**4. Utility Tests**
-- Banner display (simple, aim for 100%)
-- Parallel runner orchestration
-- Coverage target: 80%+
-
-## Critical Challenges
-
-### 1. MCP Server Complexity
-**Issue**: 947 statements is substantial
-**Mitigation**: 
-- Focus on critical paths first (autonomous_build, delegate_to_agent)
-- Use existing mock patterns from `test_mcp_server_critical_paths.py`
-- Break into multiple test classes by function group
-
-### 2. Async Testing
-**Issue**: MCP server uses async/await extensively
-**Mitigation**:
-- Install pytest-asyncio
-- Use `@pytest.mark.asyncio` decorator
-- Existing evolution tests show async patterns
-
-### 3. Integration Dependencies
-**Issue**: Some functions require external file system state
-**Mitigation**:
-- Use tempfile for isolated test directories
-- Mock file I/O where appropriate
-- Clean up in teardown
-
-### 4. Maintaining Test Quality
-**Issue**: Easy to write shallow tests that inflate coverage
-**Mitigation**:
-- Test actual logic paths, not just function calls
-- Include edge cases and error conditions
-- Validate outputs, not just execution
-
-## Success Criteria
-
-**Minimum Acceptable**:
-- Overall coverage: 25.3% → 45%
-- MCP server: 0% → 50%
-- Prompt building: 0% → 40%
-- All new tests pass
-- No existing tests broken
-
-**Target Goal**:
-- Overall coverage: 25.3% → 60%
-- MCP server: 0% → 70%
-- Prompt building: 0% → 60%
-- CLI: → 50%
-- Utilities: → 80%
-
-**Stretch Goal**:
-- Overall coverage: 60%+
-- MCP server: 80%+
-- Include TUI tests (40%+)
-
-## Test Plan Summary
-
-### Phase 1: Core MCP Server (Priority 1)
-- Test `autonomous_build()` function
-- Test `delegate_to_agent()` function
-- Test `context_foundry_status()` function
-- Test pattern management functions
-- Test streaming and cancellation
-
-### Phase 2: Prompt Building (Priority 2)
-- Test `build_orchestrator_prompt()` function
-- Test phase file loading
-- Test Flowise extension integration
-- Test cache analysis
-
-### Phase 3: CLI & Utilities (Priority 3)
-- Test CLI argument parsing
-- Test banner display
-- Test parallel runner
-
-### Phase 4: Coverage Validation
-- Run full test suite
-- Generate coverage report
-- Identify remaining gaps
-- Document results
+**Test Count Estimate:** 10-15 tests
 
 ## Timeline Estimate
+- **Phase 1 (Context Budget):** 90-120 minutes
+- **Phase 2 (CLI Tools):** 30-45 minutes
+- **Phase 3 (Integration):** 30 minutes
+- **Total:** ~3 hours
 
-- **MCP Server Tests**: 3-4 hours (comprehensive)
-- **Prompt Building Tests**: 1.5 hours
-- **CLI & Utility Tests**: 1 hour
-- **Coverage Analysis & Documentation**: 0.5 hours
-- **Buffer for debugging**: 1 hour
+## Success Criteria
+- [ ] All critical path modules have >85% test coverage
+- [ ] All tests pass (100% pass rate)
+- [ ] No regressions in existing tests
+- [ ] Tests run in < 30 seconds total
+- [ ] Clear, maintainable test code with good documentation
 
-**Total**: 6-8 hours
+## Risk Mitigation from Pattern Library
+N/A - This is internal testing infrastructure, no external dependencies or CORS/browser issues apply.
 
-## Risks & Mitigations
-
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| Tests reveal existing bugs | Medium | Medium | Document bugs, fix if critical |
-| Async testing complexity | Low | Medium | Use pytest-asyncio patterns |
-| Coverage tools inaccurate | Low | Low | Manual validation of critical paths |
-| Time overrun | Medium | Low | Prioritize MCP server first |
-
-## References
-
-**Existing Test Patterns**:
-- `tests/test_mcp_server_critical_paths.py` - MCP mocking patterns
-- `tests/evolution/test_daemon_comprehensive.py` - Async test patterns
-- `tests/test_baml_integration.py` - Integration test patterns
-
-**Coverage Data**:
-- Current report: `coverage.json` (25.3% overall)
-- 106 files tracked
-- 11,095 total statements
-- 8,288 missing lines
+## Known Issues to Watch For
+1. **Tiktoken availability:** Must test both import paths
+2. **File I/O:** Use temp directories for all file operations
+3. **JSON formatting:** Validate exact structure matches production
+4. **Timezone handling:** Ensure timestamps are consistent
+5. **Division by zero:** Test with 0 tokens edge cases
