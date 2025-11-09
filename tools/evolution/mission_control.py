@@ -596,8 +596,8 @@ class MissionControlApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 3 3;
-        grid-rows: 1fr 1fr auto;
+        grid-size: 2 4;
+        grid-rows: auto 1fr 1fr auto;
         grid-gutter: 0;
         padding: 0;
     }
@@ -611,33 +611,34 @@ class MissionControlApp(App):
     }
 
     StatusPanel {
-        row-span: 2;
         border: solid cyan;
         max-height: 100%;
         overflow-y: auto;
+        height: auto;
     }
 
     FileTreePanel {
-        row-span: 2;
         border: solid magenta;
         max-height: 100%;
         overflow-y: auto;
     }
 
     ChatPanel {
+        row-span: 2;
         border: solid green;
         max-height: 100%;
         overflow-y: auto;
     }
 
     ActivityLog {
+        column-span: 2;
         border: solid yellow;
         max-height: 100%;
         overflow-y: auto;
     }
 
     ChatInput {
-        column-span: 3;
+        column-span: 2;
         border: solid blue;
         height: 3;
         min-height: 3;
@@ -669,8 +670,8 @@ class MissionControlApp(App):
         """Create child widgets"""
         yield Header(show_clock=True)
         yield StatusPanel()
-        yield FileTreePanel()
         yield ChatPanel(id="chat")
+        yield FileTreePanel()
         yield ActivityLog()
         yield ChatInput(id="chat_input")
         yield Footer()
