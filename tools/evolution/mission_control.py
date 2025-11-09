@@ -370,27 +370,36 @@ class FileTreePanel(VerticalScroll):
 
 
 class DelegationsListPanel(Static, can_focus=True):
-    """List of all delegations with status"""
-
-    selected_index = reactive(0)
+    """List of all delegations with status in a table"""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.delegations = []
+        self.table = None
 
     async def on_mount(self) -> None:
-        """Start delegation list updates"""
-        self.set_interval(2.0, self.refresh_delegations)
+        """Create table and start delegation list updates"""
+        from textual.widgets import DataTable
+
+        # Create and configure DataTable
+        self.table = DataTable(show_header=True, show_cursor=True, zebra_stripes=True)
+        self.table.add_columns("Status", "Project", "Started", "Duration", "Phase", "Progress")
+        await self.mount(self.table)
+
+        # Start refresh interval
+        self.set_interval(1.5, self.refresh_delegations)
         await self.refresh_delegations()
 
     async def refresh_delegations(self) -> None:
         """Refresh delegation list"""
+        if not self.table:
+            return
+
         try:
             # Read from shared delegations directory
             delegations_dir = Path.home() / ".context-foundry" / "delegations"
             if not delegations_dir.exists():
-                self.delegations = []
-                self._render_list()
+                self.table.clear()
                 return
 
             delegations = []
@@ -400,6 +409,7 @@ class DelegationsListPanel(Static, can_focus=True):
 
                     # Get start time
                     start_time_str = metadata.get("start_time", "")
+                    start_time = None
                     start_display = "unknown"
                     if start_time_str:
                         try:
@@ -408,122 +418,116 @@ class DelegationsListPanel(Static, can_focus=True):
                         except:
                             pass
 
-                    # Extract GitHub repo name from task or working directory
+                    # Calculate duration
+                    duration_display = "-"
+                    if start_time:
+                        end_time_str = metadata.get("end_time")
+                        if end_time_str:
+                            # Build completed - use end_time
+                            try:
+                                end_time = datetime.fromisoformat(end_time_str)
+                                duration_secs = (end_time - start_time).total_seconds()
+                            except:
+                                duration_secs = metadata.get("duration", 0)
+                        else:
+                            # Still running - use current time
+                            duration_secs = (datetime.now() - start_time).total_seconds()
+
+                        # Format duration
+                        if duration_secs < 60:
+                            duration_display = f"{int(duration_secs)}s"
+                        elif duration_secs < 3600:
+                            minutes = int(duration_secs // 60)
+                            seconds = int(duration_secs % 60)
+                            duration_display = f"{minutes}m {seconds}s"
+                        else:
+                            hours = int(duration_secs // 3600)
+                            minutes = int((duration_secs % 3600) // 60)
+                            duration_display = f"{hours}h {minutes}m"
+
+                    # Extract project name
                     github_repo = metadata.get("github_repo_name", "")
                     if not github_repo:
-                        # Try to infer from working directory
                         working_dir = metadata.get("working_directory", "")
-                        github_repo = Path(working_dir).name if working_dir else ""
+                        github_repo = Path(working_dir).name if working_dir else "build"
 
-                    # Only show running or pending builds (filter out completed/cancelled/failed)
+                    # Get status and format with color
                     status = metadata.get("status", "unknown")
-                    if status not in ["running", "pending"]:
-                        continue
+                    status_display = status.capitalize()
+
+                    # Get phase information
+                    phase = metadata.get("current_phase", "-")
+                    phase_status = metadata.get("phase_status", "")
+                    progress = metadata.get("progress_detail", "")[:50] if metadata.get("progress_detail") else ""
 
                     delegations.append({
                         "task_id": metadata.get("task_id", "unknown"),
                         "status": status,
-                        "task": metadata.get("task", "")[:40],
-                        "working_directory": metadata.get("working_directory", ""),
+                        "status_display": status_display,
+                        "project": github_repo[:20],
                         "start_time": start_display,
-                        "github_repo": github_repo
+                        "duration": duration_display,
+                        "phase": phase,
+                        "progress": progress,
+                        "working_directory": metadata.get("working_directory", ""),
                     })
-                except:
+                except Exception:
                     continue
 
             self.delegations = delegations
-            self._render_list()
+            self._update_table()
 
-        except Exception as e:
-            self.delegations = []
-            self._render_list()
+        except Exception:
+            self.table.clear()
 
-    def _render_list(self) -> None:
-        """Render the delegation list with colored styling"""
-        if not self.delegations:
-            self.update(Text("No active builds\n\nStart a build to see it here", style="dim italic"))
+    def _update_table(self) -> None:
+        """Update the DataTable with delegation data"""
+        if not self.table:
             return
 
-        # Build colored list with Rich Text
-        result = Text()
+        # Clear existing rows
+        self.table.clear()
 
-        # Colored header
-        result.append("Active Builds (", style="bold #3B82F6")
-        result.append(str(len(self.delegations)), style="bold #3B82F6")
-        result.append("):\n", style="bold #3B82F6")
+        if not self.delegations:
+            # Add a single row indicating no builds
+            return
 
-        # Instructions at the TOP (not bottom)
-        result.append("Use ↑↓ arrow keys to navigate  •  x to cancel  •  d for details\n", style="dim italic")
-        result.append("(Keyboard only - clicking not supported)\n\n", style="dim italic")
-
-        for i, delegation in enumerate(self.delegations):
-            # Status styling
+        # Add rows to table with color styling
+        for delegation in self.delegations:
             status = delegation["status"]
+
+            # Color-code status
             if status == "running":
-                status_text = "Running"
-                status_style = "green"
+                status_text = Text("Running", style="green")
             elif status == "completed":
-                status_text = "Done"
-                status_style = "blue"
+                status_text = Text("Complete", style="blue")
             elif status == "cancelled":
-                status_text = "Cancelled"
-                status_style = "yellow"
+                status_text = Text("Cancelled", style="yellow")
+            elif status == "failed":
+                status_text = Text("Failed", style="red")
+            elif status == "timeout":
+                status_text = Text("Timeout", style="orange3")
             else:
-                status_text = "Failed"
-                status_style = "red"
+                status_text = Text(delegation["status_display"], style="dim")
 
-            # Extract project name
-            working_dir = delegation.get("working_directory", "")
-            project = Path(working_dir).name if working_dir else "build"
-
-            # Build line with colors
-            is_selected = i == self.selected_index
-            selector = "▶ " if is_selected else "  "
-            github_repo = delegation.get("github_repo", "")[:30]
-            start_time = delegation.get("start_time", "")
-
-            # Selector and project name with list number
-            list_num = f"[{i+1}] "
-            result.append(list_num, style="dim")
-            result.append(selector, style="bold #8B5CF6" if is_selected else "")
-            result.append(project, style="bold #8B5CF6")
-
-            if is_selected:
-                result.append("  ← SELECTED", style="bold #8B5CF6")
-            result.append("\n")
-
-            # Status line with colors
-            result.append("   Status: ", style="dim")
-            result.append(status_text, style=status_style)
-            result.append("  Started: ", style="dim")
-            result.append(start_time, style="#3B82F6")
-            result.append("\n")
-
-            # GitHub repo if present
-            if github_repo:
-                result.append("   Repo: ", style="dim")
-                result.append(github_repo, style="#A78BFA")
-                result.append("\n")
-
-        self.update(result)
+            # Add row with styled cells
+            self.table.add_row(
+                status_text,
+                Text(delegation["project"], style="#8B5CF6"),
+                Text(delegation["start_time"], style="#3B82F6"),
+                Text(delegation["duration"], style="white"),
+                Text(delegation["phase"], style="#A78BFA"),
+                Text(delegation["progress"], style="dim"),
+            )
 
     def get_selected_delegation(self) -> Optional[dict]:
         """Get the currently selected delegation"""
-        if 0 <= self.selected_index < len(self.delegations):
-            return self.delegations[self.selected_index]
+        if not self.table or not self.delegations:
+            return None
+        cursor_row = self.table.cursor_row
+        if 0 <= cursor_row < len(self.delegations):
+            return self.delegations[cursor_row]
         return None
-
-    def move_selection_up(self) -> None:
-        """Move selection up"""
-        if self.selected_index > 0:
-            self.selected_index -= 1
-            self._render_list()
-
-    def move_selection_down(self) -> None:
-        """Move selection down"""
-        if self.selected_index < len(self.delegations) - 1:
-            self.selected_index += 1
-            self._render_list()
 
 
 class ChatMessage(Static):
@@ -1571,20 +1575,12 @@ class MissionControlApp(App):
         )
 
     async def action_select_up(self) -> None:
-        """Move delegation selection up"""
-        try:
-            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
-            delegations_panel.move_selection_up()
-        except:
-            pass
+        """Move delegation selection up - DataTable handles this natively"""
+        pass
 
     async def action_select_down(self) -> None:
-        """Move delegation selection down"""
-        try:
-            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
-            delegations_panel.move_selection_down()
-        except:
-            pass
+        """Move delegation selection down - DataTable handles this natively"""
+        pass
 
     async def action_show_details(self) -> None:
         """Show detailed results for selected delegation"""

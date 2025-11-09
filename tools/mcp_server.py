@@ -616,6 +616,7 @@ def delegate_to_claude_code_async(
             "working_directory": cwd,
             "start_time": datetime.now().isoformat(),
             "timeout_minutes": timeout_minutes,
+            "pid": process.pid,
         })
 
         return json.dumps({
@@ -693,6 +694,19 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 task_info["status"] = "timeout"
                 task_info["duration"] = elapsed
 
+                # Update delegation metadata on disk
+                _write_delegation_metadata(task_id, {
+                    "task_id": task_id,
+                    "status": "timeout",
+                    "task": task_info["task"],
+                    "working_directory": task_info["cwd"],
+                    "start_time": task_info["start_time"].isoformat(),
+                    "end_time": datetime.now().isoformat(),
+                    "duration": round(elapsed, 2),
+                    "exit_code": -1,  # -1 indicates timeout/killed
+                    "timeout_minutes": task_info["timeout_minutes"],
+                })
+
                 timeout_result = {
                     "task_id": task_id,
                     "status": "timeout",
@@ -752,6 +766,32 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 task_id=task_id
             )
             task_info["output_file"] = output_file_path
+
+            # Update delegation metadata on disk with completion info
+            # Try to get phase information for enhanced metadata
+            phase_info = _read_phase_info(task_info["cwd"], task_info["start_time"])
+
+            updated_metadata = {
+                "task_id": task_id,
+                "status": task_info["status"],
+                "task": task_info["task"],
+                "working_directory": task_info["cwd"],
+                "start_time": task_info["start_time"].isoformat(),
+                "end_time": datetime.now().isoformat(),
+                "duration": round(elapsed, 2),
+                "exit_code": process.returncode,
+                "timeout_minutes": task_info["timeout_minutes"],
+                "output_file": output_file_path,
+            }
+
+            # Add phase information if available
+            if phase_info:
+                updated_metadata["current_phase"] = phase_info.get("current_phase", "Unknown")
+                updated_metadata["phase_status"] = phase_info.get("status", "unknown")
+                updated_metadata["completion_percentage"] = phase_info.get("completion_percentage", 0)
+                updated_metadata["test_iteration"] = phase_info.get("test_iteration", 0)
+
+            _write_delegation_metadata(task_id, updated_metadata)
 
             # ============================================================================
             # AUTOMATIC PATTERN MERGE FOR AUTONOMOUS BUILDS
@@ -1166,10 +1206,13 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
             if task_file.exists():
                 metadata = json.loads(task_file.read_text())
                 metadata["status"] = "cancelled"
+                metadata["end_time"] = datetime.now().isoformat()
                 metadata["cancelled_at"] = datetime.now().isoformat()
                 metadata["cancellation_reason"] = reason or "Manual cancellation by user"
-                metadata["duration_seconds"] = elapsed
+                metadata["duration"] = round(elapsed, 2)
+                metadata["exit_code"] = -15  # Standard SIGTERM exit code
                 metadata["termination_method"] = termination_method
+                metadata["output_file"] = output_file_path
                 task_file.write_text(json.dumps(metadata, indent=2))
         except Exception:
             # Don't fail the cancellation if metadata update fails
