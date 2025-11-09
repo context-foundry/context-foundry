@@ -62,6 +62,7 @@ temp/
 ace/pricing.db
 .coverage
 **/htmlcov/
+coverage.json
 
 # Internal Planning & Testing (private, not for public repo)
 NEXT_WEEK_PRIORITIES.md
