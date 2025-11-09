@@ -930,13 +930,13 @@ class ConfirmCancelModal(ModalScreen):
         self.confirmed = False
 
     def compose(self) -> ComposeResult:
-        with Container(id="confirm_modal"):
-            yield Static("⚠️  Confirm Cancel Build", id="modal_title")
+        with Vertical(id="confirm_modal"):
+            yield Static("⚠️  Confirm Cancel Build", id="confirm_title")
             yield Static(
-                f"\n\nAre you sure you want to cancel this build?\n\n"
-                f"Project: {self.project_name}\n"
-                f"Task ID: {self.task_id[:8]}...\n\n"
-                f"This action cannot be undone.",
+                f"\nAre you sure you want to cancel this build?\n\n"
+                f"[bold cyan]Project:[/bold cyan] {self.project_name}\n"
+                f"[bold cyan]Task ID:[/bold cyan] {self.task_id[:8]}...\n\n"
+                f"[yellow]This action cannot be undone.[/yellow]",
                 id="confirm_message"
             )
             with Horizontal(id="confirm_buttons"):
@@ -1047,21 +1047,34 @@ class MissionControlApp(App):
         align: center middle;
         background: $surface;
         border: thick $error;
-        width: 60%;
-        height: 50%;
-        padding: 2;
+        width: 60;
+        height: auto;
+        max-height: 20;
+        padding: 1;
+    }
+
+    #confirm_title {
+        text-align: center;
+        text-style: bold;
+        background: $error;
+        color: $text;
+        padding: 1;
+        width: 100%;
     }
 
     #confirm_message {
         text-align: center;
         padding: 2;
-        margin: 2;
+        margin: 1 0;
+        width: 100%;
     }
 
     #confirm_buttons {
         align: center middle;
+        width: 100%;
         height: auto;
         padding: 1;
+        margin-top: 1;
     }
 
     #confirm_buttons Button {
