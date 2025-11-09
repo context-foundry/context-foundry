@@ -6,6 +6,8 @@ from typing import List, Dict, Tuple
 
 from .base_mode import BaseEvolutionMode, TaskResult
 from ..mcp_support import get_mcp_capabilities
+from ..sandboxes import SandboxManager
+from ..safety import enforce_sandbox_mode, set_sandbox_mode
 
 
 class SelfImprovementMode(BaseEvolutionMode):
@@ -81,6 +83,9 @@ class SelfImprovementMode(BaseEvolutionMode):
         Creates feature branch and PR for human review
         """
         try:
+            # Store task ID for sandbox creation
+            self.current_task_id = task.id
+
             params = task.params
             action = params.get("action", "")
 
@@ -512,24 +517,44 @@ This is an autonomous self-improvement task from the Evolution System."""
             # Import MCP server implementation function (not the decorated tool)
             from tools.mcp_server import _autonomous_build_and_deploy_impl
 
-            cf_root = Path(__file__).parent.parent.parent.parent
+            # Get task ID for sandbox creation
+            task_id = getattr(self, "current_task_id", "unknown")
 
+            # 🏗️ CREATE ISOLATED SANDBOX (protects production!)
+            print("🏗️  Creating isolated sandbox for autonomous build...")
+            manager = SandboxManager()
+            sandbox_path = manager.create_sandbox(
+                repo_url="https://github.com/context-foundry/context-foundry.git",
+                task_id=task_id,
+            )
+
+            # Verify sandbox safety
+            enforce_sandbox_mode(sandbox_path, "autonomous build")
+            set_sandbox_mode(sandbox_path)
+
+            print(f"✅ Sandbox created: {sandbox_path}")
+            print("   Production directory protected: ✅")
             print("🤖 Calling Context Foundry MCP autonomous_build_and_deploy()...")
             print(f"   Task: {prompt[:100]}...")
             print(f"   Branch: {branch_name}")
 
-            # Call MCP implementation function directly (non-blocking, returns task_id immediately)
-            result_json = _autonomous_build_and_deploy_impl(
-                task=prompt,
-                working_directory=str(cf_root),
-                github_repo_name="context-foundry/context-foundry",
-                existing_repo=str(cf_root),
-                mode="existing_repo",
-                enable_test_loop=True,
-                max_test_iterations=3,
-                timeout_minutes=90.0,
-                use_parallel=True,
-            )
+            try:
+                # Call MCP implementation function directly (non-blocking, returns task_id immediately)
+                result_json = _autonomous_build_and_deploy_impl(
+                    task=prompt,
+                    working_directory=str(sandbox_path),  # ✅ SANDBOX (not production!)
+                    github_repo_name="context-foundry/context-foundry",
+                    existing_repo=str(sandbox_path),  # ✅ SANDBOX (not production!)
+                    mode="existing_repo",
+                    enable_test_loop=True,
+                    max_test_iterations=3,
+                    timeout_minutes=90.0,
+                    use_parallel=True,
+                )
+            finally:
+                # Always cleanup sandbox (success or failure)
+                print(f"🧹 Cleaning up sandbox: {sandbox_path}")
+                manager.cleanup_sandbox(task_id)
 
             # Parse MCP result
             result = json.loads(result_json)
@@ -547,7 +572,7 @@ This is an autonomous self-improvement task from the Evolution System."""
                     "branch": branch_name,
                     "status": "mcp_running",
                     "message": result.get("message", "MCP autonomous build started"),
-                    "working_directory": str(cf_root),
+                    "working_directory": str(sandbox_path),
                 },
             }
 
