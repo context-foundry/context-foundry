@@ -1,400 +1,449 @@
-# Test Suite Architecture for Critical Paths
+# Test Coverage Improvement - Architecture
 
 ## System Architecture Overview
 
-This test suite adds comprehensive coverage for 8 critical modules using pytest framework with proper isolation, mocking, and organization.
+This enhancement adds comprehensive test coverage for critical paths in Context Foundry, focusing on the MCP server, prompt building system, and utility modules. The architecture follows existing pytest patterns and extends them systematically.
 
-**Architecture Pattern**: Follow existing test patterns
-- Use pytest with markers (@pytest.mark.unit, @pytest.mark.tier1)
-- Isolate file system tests with tempfile.TemporaryDirectory()
-- Mock time-dependent and external dependencies
-- Organize tests by module with multiple test classes per file
-
-## Complete File Structure
+## File Structure
 
 ```
 tests/
-├── test_incremental_builder.py          # NEW - 200-250 lines
-├── test_change_detector.py              # NEW - 150-200 lines
-├── test_global_scout_cache.py           # NEW - 150-200 lines
-├── test_integration_pre_check.py        # NEW - 150-200 lines
-├── test_truncation.py                   # NEW - 150-200 lines
-├── test_path_utils.py                   # NEW - 120-150 lines
-├── test_scout_cache_unit.py             # NEW - 150-200 lines
-├── test_test_cache_unit.py              # NEW - 120-150 lines
-└── [existing 45+ test files unchanged]
+├── test_mcp_server_comprehensive.py     # NEW: 500+ lines
+├── test_banner.py                       # NEW: 60 lines
+├── test_parallel_runner_unit.py         # NEW: 140 lines
+└── prompts/                             # NEW directory
+    ├── __init__.py                      # NEW
+    ├── test_orchestrator_builder.py     # NEW: 280 lines
+    ├── test_phase_loader.py             # NEW: 200 lines
+    └── test_cache_analysis.py           # NEW: 220 lines
 ```
+
+**Total**: ~1,400 lines of new test code across 7 files
 
 ## Module Specifications
 
-### 1. test_path_utils.py (Priority: TIER 1)
+### 1. test_mcp_server_comprehensive.py (Priority 1 - CRITICAL)
 
-**Purpose**: Test path conversion utilities that save 5000+ tokens per build
+**Purpose**: Comprehensive testing of MCP server functions (947 statements → 70% coverage)
 
-**Test Classes**:
-- `TestToRelativePath`: Test absolute → relative conversion
-- `TestToAbsolutePath`: Test relative → absolute conversion  
-- `TestIsWithinProject`: Test project boundary detection
-- `TestPathConversion`: Integration tests
+**Structure**:
 
-**Key Tests**:
 ```python
-def test_to_relative_path_basic():
-    # Test: /Users/name/project/tools/cache.py → tools/cache.py
+"""
+Comprehensive tests for MCP Server critical paths.
+
+Coverage target: 70% (665 of 947 statements)
+Priority: 10/10 - Core MCP functionality
+"""
+
+import pytest
+import asyncio
+from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
+
+# Mock FastMCP (using existing pattern from test_mcp_server_critical_paths.py)
+
+@pytest.mark.tier1
+@pytest.mark.integration
+class TestMCPServerStatus:
+    """Test context_foundry_status() - lines 299-337"""
     
-def test_to_relative_path_already_relative():
-    # Test: tools/cache.py → tools/cache.py (unchanged)
+@pytest.mark.tier1
+@pytest.mark.integration  
+class TestDelegationSync:
+    """Test delegate_to_claude_code() - lines 339-524"""
     
-def test_to_relative_path_outside_working_dir():
-    # Test: /tmp/other.py with strict=False → /tmp/other.py (absolute)
+@pytest.mark.tier1
+@pytest.mark.integration
+class TestDelegationAsync:
+    """Test delegate_to_claude_code_async() - lines 526-640"""
     
-def test_to_relative_path_strict_raises():
-    # Test: /tmp/other.py with strict=True → raises ValueError
+@pytest.mark.tier1
+class TestDelegationResults:
+    """Test get_delegation_result() - lines 642-896"""
     
-def test_to_absolute_path_basic():
-    # Test: tools/cache.py → /Users/name/project/tools/cache.py
+@pytest.mark.tier2
+class TestDelegationList:
+    """Test list_delegations() - lines 898-995"""
+    
+@pytest.mark.tier2
+class TestDelegationCancel:
+    """Test cancel_delegation() - lines 997-1245"""
+    
+@pytest.mark.tier1
+@pytest.mark.slow
+class TestDelegationStreaming:
+    """Test stream_delegation_output() - lines 1247-1470"""
+    
+@pytest.mark.tier1
+class TestCodebaseDetection:
+    """Test _detect_existing_codebase() - lines 1472-1702"""
+    
+@pytest.mark.tier2
+class TestTaskIntent:
+    """Test _detect_task_intent() - lines 1704-1734"""
+    
+@pytest.mark.tier1
+@pytest.mark.integration
+class TestAutonomousBuild:
+    """Test autonomous_build_and_deploy() - lines 2202-2239"""
+    
+@pytest.mark.tier1
+class TestPatternManagement:
+    """Test pattern functions - lines 2241-2726"""
+    
+@pytest.mark.tier2
+class TestEvolutionIntegration:
+    """Test evolution system integration - lines 2914-3010"""
 ```
 
-### 2. test_scout_cache_unit.py (Priority: TIER 1)
+**Test Count**: ~40 test methods
+**Mocking Strategy**:
+- Mock FastMCP decorators (existing pattern)
+- Mock subprocess for delegation
+- Mock file I/O for metadata
+- Use tempfile for working directories
 
-**Purpose**: Test Scout report caching (avoid redundant research)
+**Key Test Cases**:
+1. **autonomous_build_and_deploy()**: 
+   - Test with valid task
+   - Test with invalid directory
+   - Test with existing codebase detection
+   - Test error handling
+   
+2. **delegate_to_claude_code()**: 
+   - Test successful delegation
+   - Test timeout handling
+   - Test process cleanup
+   - Test metadata creation
+   
+3. **Streaming functions**:
+   - Test async iteration
+   - Test cancellation
+   - Test error conditions
 
-**Test Classes**:
-- `TestNormalizeTaskDescription`: Task normalization logic
-- `TestGenerateCacheKey`: Cache key generation consistency
-- `TestScoutCacheHitMiss`: Cache hit/miss scenarios
-- `TestScoutCacheTTL`: Cache expiration logic
+4. **Pattern management**:
+   - Test read_global_patterns()
+   - Test save_global_patterns()
+   - Test merge_project_patterns()
+   - Test validation
 
-**Key Tests**:
+### 2. tests/prompts/ (Priority 2)
+
+#### test_orchestrator_builder.py
+
+**Purpose**: Test modular orchestrator prompt building
+
 ```python
-def test_normalize_task_preserves_meaning():
-    # Ensure "Build weather app" == "build   weather    app"
+"""
+Tests for orchestrator prompt builder.
+
+Coverage target: 60% of build_orchestrator_prompt.py
+Priority: 8/10 - Core prompt generation
+"""
+
+@pytest.mark.tier2
+class TestPromptBuilder:
+    """Test build_orchestrator_prompt()"""
     
-def test_cache_key_consistency():
-    # Same task → same key (deterministic)
+    def test_build_basic_prompt()
+    def test_build_with_flowise()
+    def test_build_without_flowise()
+    def test_missing_header_fallback()
+    def test_missing_phase_files()
+    def test_output_file_creation()
+    def test_version_injection()
     
-def test_cache_hit_within_ttl():
-    # Saved report retrieved within 24h
+@pytest.mark.tier2
+class TestPromptValidation:
+    """Test prompt content validation"""
     
-def test_cache_miss_after_ttl():
-    # Report expired after TTL (mock time)
-    
-def test_cache_miss_different_task():
-    # Different task → different key → miss
+    def test_all_phases_included()
+    def test_phase_order_correct()
+    def test_no_duplicate_sections()
 ```
 
-### 3. test_incremental_builder.py (Priority: TIER 1)
+**Test Count**: ~12 test methods
+**Coverage**: 60% of 82 statements (~50 statements)
 
-**Purpose**: Test dependency graph and build plan generation
+#### test_phase_loader.py
 
-**Test Classes**:
-- `TestDependencyGraph`: Graph structure and serialization
-- `TestExtractPythonImports`: Import extraction from code
-- `TestBuildPlanGeneration`: Build plan creation logic
-- `TestFilePreservation`: Preserve vs rebuild decisions
+**Purpose**: Test phase file loading and caching
 
-**Key Tests**:
 ```python
-def test_extract_python_imports_simple():
-    # Extract "import os, json" → ["os", "json"]
+"""
+Tests for phase loader module.
+
+Coverage target: 65% of phase_loader.py
+Priority: 7/10 - Prompt assembly
+"""
+
+@pytest.mark.tier2
+class TestPhaseLoading:
+    def test_load_single_phase()
+    def test_load_all_phases()
+    def test_missing_phase_file()
+    def test_malformed_phase_file()
+    def test_phase_ordering()
     
-def test_extract_python_imports_from():
-    # Extract "from pathlib import Path" → ["pathlib"]
-    
-def test_build_plan_preserve_unchanged():
-    # Unchanged files → files_to_preserve
-    
-def test_build_plan_rebuild_changed():
-    # Changed files → files_to_rebuild
-    
-def test_build_plan_rebuild_dependencies():
-    # Changed file → rebuild dependents (transitive)
+@pytest.mark.tier3
+class TestPhaseCaching:
+    def test_cache_hit()
+    def test_cache_invalidation()
 ```
 
-### 4. test_change_detector.py (Priority: TIER 1)
+**Test Count**: ~10 test methods
+**Coverage**: 65% of 58 statements (~38 statements)
 
-**Purpose**: Test file change detection accuracy
+#### test_cache_analysis.py
 
-**Test Classes**:
-- `TestFileHashing`: File content hashing
-- `TestChangeDetection`: Detect modifications
-- `TestChangeReport`: Report generation
+**Purpose**: Test coverage cache analysis
 
-**Key Tests**:
 ```python
-def test_hash_file_consistency():
-    # Same file → same hash
+"""
+Tests for cache analysis module.
+
+Coverage target: 55% of cache_analysis.py
+Priority: 6/10 - Analysis tooling
+"""
+
+@pytest.mark.tier2
+class TestCoverageAnalysis:
+    def test_parse_coverage_json()
+    def test_identify_gaps()
+    def test_prioritize_files()
+    def test_generate_report()
     
-def test_detect_new_file():
-    # New file not in previous build → detected
-    
-def test_detect_modified_file():
-    # Changed content → different hash → detected
-    
-def test_detect_deleted_file():
-    # File removed → detected
-    
-def test_no_changes_detected():
-    # Identical files → no changes
+@pytest.mark.tier3
+class TestCacheValidation:
+    def test_validate_cache_format()
+    def test_detect_stale_cache()
 ```
 
-### 5. test_truncation.py (Priority: TIER 2)
+**Test Count**: ~8 test methods
+**Coverage**: 55% of 133 statements (~73 statements)
 
-**Purpose**: Test output truncation with recovery instructions
+### 3. test_banner.py (Priority 3)
 
-**Test Classes**:
-- `TestTruncateOutput`: Basic truncation logic
-- `TestRecoveryInstructions`: User guidance generation
-- `TestTokenCounting`: Accurate token/char limits
+**Purpose**: Test banner display utility
 
-**Key Tests**:
 ```python
-def test_truncate_at_limit():
-    # Output > limit → truncated
-    
-def test_truncate_includes_recovery():
-    # Truncated → contains "Use --offset" instructions
-    
-def test_no_truncation_under_limit():
-    # Output < limit → unchanged
-    
-def test_truncate_preserves_formatting():
-    # Truncation doesn't break JSON/markdown structure
+"""
+Tests for banner display module.
+
+Coverage target: 100% of banner.py
+Priority: 5/10 - Simple utility
+"""
+
+@pytest.mark.unit
+@pytest.mark.tier3
+class TestBanner:
+    def test_print_banner_default()
+    def test_print_banner_custom_version()
+    def test_banner_width()
+    def test_banner_content()
+    def test_banner_no_errors()
 ```
 
-### 6. test_integration_pre_check.py (Priority: TIER 2)
+**Test Count**: ~5 test methods
+**Coverage**: 100% of 11 statements
 
-**Purpose**: Test pre-flight validation before expensive tests
+### 4. test_parallel_runner_unit.py (Priority 3)
 
-**Test Classes**:
-- `TestSyntaxCheck`: Python syntax validation
-- `TestImportCheck`: Import resolution validation
-- `TestFileExistence`: Required files present
-- `TestIntegrationValidation`: Full pre-check workflow
+**Purpose**: Test parallel test execution runner
 
-**Key Tests**:
 ```python
-def test_syntax_check_valid_file():
-    # Valid Python → passes
-    
-def test_syntax_check_invalid_file():
-    # Syntax error → fails with line number
-    
-def test_import_check_all_present():
-    # All imports resolvable → passes
-    
-def test_import_check_missing_module():
-    # Missing import → fails with module name
+"""
+Tests for parallel test runner.
+
+Coverage target: 80% of test_parallel_runner.py
+Priority: 6/10 - Testing infrastructure
+"""
+
+@pytest.mark.tier2
+@pytest.mark.integration
+class TestParallelRunner:
+    def test_runner_initialization()
+    def test_collect_tests()
+    def test_distribute_tests()
+    def test_parallel_execution()
+    def test_result_aggregation()
+    def test_failure_handling()
+    def test_timeout_handling()
 ```
 
-### 7. test_test_cache_unit.py (Priority: TIER 2)
+**Test Count**: ~7 test methods
+**Coverage**: 80% of 39 statements (~31 statements)
 
-**Purpose**: Test result caching to skip unchanged tests
+## Implementation Steps
 
-**Test Classes**:
-- `TestFileHashing`: Hash calculation for test files
-- `TestCacheInvalidation`: When to invalidate cache
-- `TestTestResultStorage`: Storing/retrieving results
+### Phase 1: Setup and Infrastructure (30 min)
+1. Create `tests/prompts/` directory
+2. Add `__init__.py` files
+3. Install pytest-asyncio if needed
+4. Verify existing pytest configuration
 
-**Key Tests**:
+### Phase 2: MCP Server Tests (3-4 hours)
+1. Create test file skeleton with all test classes
+2. Implement mock FastMCP pattern
+3. Write tier1 tests (autonomous_build, delegation)
+4. Write tier2 tests (listing, cancellation)
+5. Write integration tests
+6. Run coverage, iterate to 70%
+
+### Phase 3: Prompt Building Tests (1.5 hours)
+1. Create orchestrator_builder tests
+2. Create phase_loader tests
+3. Create cache_analysis tests
+4. Verify 60% coverage target
+
+### Phase 4: Utility Tests (1 hour)
+1. Implement banner tests (simple, 100%)
+2. Implement parallel_runner tests
+3. Verify coverage targets
+
+### Phase 5: Integration and Validation (1 hour)
+1. Run full test suite
+2. Generate coverage report
+3. Fix any failures
+4. Document results
+
+## Testing Requirements
+
+### Test Markers (Use Existing)
+- `@pytest.mark.tier1`: Critical paths (MUST PASS)
+- `@pytest.mark.tier2`: Important functionality
+- `@pytest.mark.tier3`: Nice-to-have coverage
+- `@pytest.mark.integration`: Cross-module tests
+- `@pytest.mark.unit`: Isolated function tests
+- `@pytest.mark.slow`: Tests > 1 second
+
+### Mocking Strategy
+
+**FastMCP Mocking** (from existing pattern):
 ```python
-def test_hash_file_changed():
-    # Modified file → different hash
-    
-def test_cache_hit_all_files_same():
-    # No changes → cache hit
-    
-def test_cache_miss_file_changed():
-    # Any file changed → cache miss
-    
-def test_cache_stores_test_results():
-    # Results persisted correctly
+class MockFastMCP:
+    def tool(self, *args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
 ```
 
-### 8. test_global_scout_cache.py (Priority: TIER 3)
-
-**Purpose**: Test global Scout cache (cross-project)
-
-**Test Classes**:
-- `TestGlobalCacheLocation`: ~/.context-foundry/patterns/
-- `TestCrossProjectCaching`: Cache shared across projects
-- `TestGlobalCacheStats`: Usage statistics
-
-**Key Tests**:
+**File System Mocking**:
 ```python
-def test_global_cache_location():
-    # Cache stored in home directory
-    
-def test_cache_shared_across_projects():
-    # Project A saves → Project B reads
-    
-def test_global_cache_stats():
-    # Stats aggregated from all projects
+@pytest.fixture
+def temp_working_dir():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
 ```
 
-## Implementation Steps (Ordered)
-
-### Step 1: Setup and Path Utils (Foundation)
-1. Read `tools/tool_helpers/path_utils.py` fully
-2. Create `tests/test_path_utils.py`
-3. Implement all test classes and tests
-4. Run: `pytest tests/test_path_utils.py -v`
-5. Fix any failures
-
-### Step 2: Scout Cache (High Impact)
-1. Read `tools/cache/scout_cache.py` fully
-2. Create `tests/test_scout_cache_unit.py`
-3. Implement cache hit/miss, TTL, normalization tests
-4. Run: `pytest tests/test_scout_cache_unit.py -v`
-5. Fix any failures
-
-### Step 3: Change Detector (Critical for Incremental)
-1. Read `tools/incremental/change_detector.py` fully
-2. Create `tests/test_change_detector.py`
-3. Implement file hashing, change detection tests
-4. Run: `pytest tests/test_change_detector.py -v`
-5. Fix any failures
-
-### Step 4: Incremental Builder (Complex)
-1. Read `tools/incremental/incremental_builder.py` fully
-2. Create `tests/test_incremental_builder.py`
-3. Implement dependency graph, build plan tests
-4. Run: `pytest tests/test_incremental_builder.py -v`
-5. Fix any failures
-
-### Step 5: Test Cache
-1. Read `tools/cache/test_cache.py` fully
-2. Create `tests/test_test_cache_unit.py`
-3. Implement test result caching tests
-4. Run: `pytest tests/test_test_cache_unit.py -v`
-5. Fix any failures
-
-### Step 6: Truncation Utilities
-1. Read `tools/tool_helpers/truncation.py` fully
-2. Create `tests/test_truncation.py`
-3. Implement truncation and recovery tests
-4. Run: `pytest tests/test_truncation.py -v`
-5. Fix any failures
-
-### Step 7: Integration Pre-Check
-1. Read `tools/back_pressure/integration_pre_check.py` fully
-2. Create `tests/test_integration_pre_check.py`
-3. Implement syntax/import validation tests
-4. Run: `pytest tests/test_integration_pre_check.py -v`
-5. Fix any failures
-
-### Step 8: Global Scout Cache
-1. Read `tools/incremental/global_scout_cache.py` fully
-2. Create `tests/test_global_scout_cache.py`
-3. Implement global caching tests
-4. Run: `pytest tests/test_global_scout_cache.py -v`
-5. Fix any failures
-
-## Testing Requirements and Procedures
-
-### Running Individual Test Files
-```bash
-# Run single test file
-pytest tests/test_path_utils.py -v
-
-# Run specific test class
-pytest tests/test_path_utils.py::TestToRelativePath -v
-
-# Run specific test function
-pytest tests/test_path_utils.py::TestToRelativePath::test_basic -v
-```
-
-### Running All New Tests
-```bash
-# Run all new test files
-pytest tests/test_path_utils.py \
-       tests/test_scout_cache_unit.py \
-       tests/test_change_detector.py \
-       tests/test_incremental_builder.py \
-       tests/test_test_cache_unit.py \
-       tests/test_truncation.py \
-       tests/test_integration_pre_check.py \
-       tests/test_global_scout_cache.py \
-       -v
-```
-
-### Running Full Test Suite
-```bash
-# Ensure ALL existing tests still pass
-pytest tests/ -v --tb=short
-```
-
-### Test Quality Checks
-```bash
-# Run with coverage (optional)
-pytest tests/ --cov=tools --cov-report=term --cov-report=html
-
-# Run only tier 1 tests
-pytest tests/ -m tier1 -v
-
-# Run only unit tests
-pytest tests/ -m unit -v
+**Subprocess Mocking**:
+```python
+@patch('subprocess.Popen')
+def test_delegation(mock_popen):
+    mock_process = Mock()
+    mock_process.poll.return_value = 0
+    mock_popen.return_value = mock_process
 ```
 
 ## Success Criteria
 
-1. **All 8 new test files created** with proper structure
-2. **All new tests pass** individually and together
-3. **All existing tests pass** (no regressions)
-4. **Test coverage increases**:
-   - path_utils.py: 0% → 85%+
-   - scout_cache.py: 0% → 80%+
-   - incremental_builder.py: 0% → 75%+
-   - change_detector.py: 0% → 80%+
-   - truncation.py: 0% → 70%+
-   - integration_pre_check.py: 0% → 70%+
-   - test_cache.py: 0% → 75%+
-   - global_scout_cache.py: 0% → 70%+
-5. **Tests are fast**: < 5 seconds total for all new tests
-6. **Tests are isolated**: Can run in any order
-7. **No production code changes**: Tests only
+### Minimum Acceptance Criteria
+- [ ] All 72+ new test methods pass
+- [ ] No existing tests broken
+- [ ] Overall coverage: 25.3% → 45%
+- [ ] MCP server: 0% → 50%
+- [ ] Prompt building: 0% → 40%
+- [ ] All tier1 tests pass
 
-## Applied Patterns and Preventive Measures
+### Target Criteria
+- [ ] Overall coverage: 25.3% → 60%
+- [ ] MCP server: 0% → 70%
+- [ ] Prompt building: 0% → 60%
+- [ ] Banner: 0% → 100%
+- [ ] Parallel runner: 0% → 80%
+- [ ] Test execution time < 30 seconds (excluding slow tests)
 
-### Pattern 1: File System Isolation
-All tests that create/modify files use `tempfile.TemporaryDirectory()` to avoid interfering with each other or leaving artifacts.
-
-### Pattern 2: Time Mocking for TTL Tests
-Cache TTL tests use `unittest.mock.patch('module.datetime')` to simulate time passage without actual delays.
-
-### Pattern 3: Pytest Markers
-All tests marked with `@pytest.mark.unit` or `@pytest.mark.integration` and `@pytest.mark.tier1/tier2/tier3` for selective running.
-
-### Pattern 4: Consistent Test Structure
-Every test file follows the pattern:
-1. Module docstring describing what's tested
-2. Imports (including sys.path setup)
-3. Test classes organized by functionality
-4. Descriptive test function names
-5. Arrange-Act-Assert pattern in each test
-
-### Pattern 5: No External Dependencies
-Tests mock any external dependencies (file system paths resolved via tempfile, no real API calls).
+### Documentation Deliverables
+- [ ] Coverage report: `.context-foundry/coverage-analysis-report.md`
+- [ ] Test results: `.context-foundry/test-final-report.md`
+- [ ] Architecture doc (this file)
+- [ ] Updated pytest.ini if needed
 
 ## Risk Mitigation
 
-### Risk: Breaking Existing Tests
-**Mitigation**: Run full test suite before committing, no changes to production code
+### Risk 1: Tests Reveal Bugs
+**Mitigation**: Document bugs in `.context-foundry/bugs-found.md`, fix critical ones only
 
-### Risk: Flaky Tests
-**Mitigation**: Use deterministic inputs, mock time/random, ensure complete cleanup
+### Risk 2: Async Test Complexity
+**Mitigation**: Use existing async patterns from evolution tests, install pytest-asyncio
 
-### Risk: Slow Tests
-**Mitigation**: Use in-memory operations where possible, minimize file I/O, no network calls
+### Risk 3: Mocking Challenges
+**Mitigation**: Follow existing mock patterns, use MagicMock for complex objects
 
-### Risk: Test Maintenance Burden
-**Mitigation**: Clear naming, good documentation, follow existing patterns
+### Risk 4: Time Overrun
+**Mitigation**: Prioritize MCP server (tier1), skip TUI/livestream if time constrained
 
-## Post-Implementation Validation
+## Dependencies
 
-After all tests implemented:
-1. Run `pytest tests/ -v` → Should show 8 new files, 80-120 new tests passing
-2. Run `pytest tests/ -m tier1` → All tier 1 tests pass
-3. Check for test isolation: Run tests in random order
-4. Verify no production code modified
-5. Confirm all existing tests still pass
+### Required Packages
+- pytest (already installed)
+- pytest-cov (already installed)
+- pytest-asyncio (check/install)
+- pytest-mock (check/install)
+
+### Installation Check
+```bash
+source .venv-test/bin/activate
+pip list | grep pytest
+# If missing: pip install pytest-asyncio pytest-mock
+```
+
+## Test Execution Plan
+
+### Run New Tests Only
+```bash
+pytest tests/test_mcp_server_comprehensive.py -v
+pytest tests/prompts/ -v
+pytest tests/test_banner.py -v
+pytest tests/test_parallel_runner_unit.py -v
+```
+
+### Run with Coverage
+```bash
+pytest tests/test_mcp_server_comprehensive.py \
+  --cov=tools/mcp_server \
+  --cov-report=term \
+  --cov-report=html
+```
+
+### Run All Tests
+```bash
+pytest tests/ -v --tb=short --maxfail=5
+```
+
+### Generate Final Coverage
+```bash
+pytest --cov=tools --cov-report=json --cov-report=html --cov-report=term
+```
+
+## Validation Checklist
+
+- [ ] All test files created
+- [ ] All tests pass locally
+- [ ] Coverage report generated
+- [ ] Coverage targets met
+- [ ] No existing tests broken
+- [ ] Test execution time acceptable
+- [ ] Documentation complete
+- [ ] Code follows existing patterns
+- [ ] Markers applied correctly
+- [ ] Async tests use pytest-asyncio
+
+## Next Steps After Implementation
+
+1. Create PR with branch: `self-improvement/task-a75b50cb`
+2. Include coverage before/after metrics
+3. Document any bugs found
+4. Update evolution system with learnings
+5. Celebrate improved test coverage! 🎉

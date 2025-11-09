@@ -1,34 +1,71 @@
 {
   "parallel_mode": true,
-  "total_tasks": 4,
+  "total_tasks": 5,
   "tasks": [
     {
       "id": "task-1",
-      "description": "Create tier 1 tests (path_utils, scout_cache)",
-      "files": ["tests/test_path_utils.py", "tests/test_scout_cache_unit.py"],
+      "description": "Create MCP server comprehensive tests (Priority 1 - CRITICAL)",
+      "files": ["tests/test_mcp_server_comprehensive.py"],
       "dependencies": [],
-      "estimated_time": "15 minutes"
+      "estimated_time": "3-4 hours",
+      "coverage_target": "70% of tools/mcp_server.py",
+      "test_count": "~40 test methods",
+      "priority": 1
     },
     {
       "id": "task-2",
-      "description": "Create tier 1 tests (change_detector, incremental_builder)",
-      "files": ["tests/test_change_detector.py", "tests/test_incremental_builder.py"],
+      "description": "Create prompt building tests (orchestrator_builder)",
+      "files": [
+        "tests/prompts/__init__.py",
+        "tests/prompts/test_orchestrator_builder.py"
+      ],
       "dependencies": [],
-      "estimated_time": "20 minutes"
+      "estimated_time": "45 minutes",
+      "coverage_target": "60% of tools/prompts/build_orchestrator_prompt.py",
+      "test_count": "~12 test methods",
+      "priority": 2
     },
     {
       "id": "task-3",
-      "description": "Create tier 2 tests (test_cache, truncation)",
-      "files": ["tests/test_test_cache_unit.py", "tests/test_truncation.py"],
-      "dependencies": [],
-      "estimated_time": "15 minutes"
+      "description": "Create prompt building tests (phase_loader and cache_analysis)",
+      "files": [
+        "tests/prompts/test_phase_loader.py",
+        "tests/prompts/test_cache_analysis.py"
+      ],
+      "dependencies": ["task-2"],
+      "estimated_time": "1 hour",
+      "coverage_target": "60% of phase_loader.py and cache_analysis.py",
+      "test_count": "~18 test methods",
+      "priority": 2
     },
     {
       "id": "task-4",
-      "description": "Create tier 2/3 tests (integration_pre_check, global_scout_cache)",
-      "files": ["tests/test_integration_pre_check.py", "tests/test_global_scout_cache.py"],
+      "description": "Create utility tests (banner and parallel_runner)",
+      "files": [
+        "tests/test_banner.py",
+        "tests/test_parallel_runner_unit.py"
+      ],
       "dependencies": [],
-      "estimated_time": "15 minutes"
+      "estimated_time": "1 hour",
+      "coverage_target": "100% banner, 80% parallel_runner",
+      "test_count": "~12 test methods",
+      "priority": 3
+    },
+    {
+      "id": "task-5",
+      "description": "Generate coverage analysis report",
+      "files": [".context-foundry/coverage-analysis-report.md"],
+      "dependencies": ["task-1", "task-2", "task-3", "task-4"],
+      "estimated_time": "30 minutes",
+      "coverage_target": "Overall 60%+",
+      "test_count": "N/A",
+      "priority": 4
     }
-  ]
+  ],
+  "parallel_execution_plan": {
+    "level_0": ["task-1", "task-2", "task-4"],
+    "level_1": ["task-3"],
+    "level_2": ["task-5"]
+  },
+  "notes": "task-1, task-2, and task-4 can run in parallel. task-3 depends on task-2 (prompts dir). task-5 runs last to analyze all coverage."
 }

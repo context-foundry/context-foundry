@@ -1,200 +1,210 @@
-# Scout Report: Add Missing Tests for Critical Paths
+# Scout Report: Test Coverage Improvement
 
 ## Executive Summary
 
-Context Foundry is missing comprehensive test coverage for 8 critical modules totaling ~3000 lines of code. These modules handle core functionality including incremental builds, caching, path utilities, and back pressure validation. Adding thorough unit and integration tests will significantly improve code reliability and maintainability.
+This task addresses a critical gap in the Context Foundry codebase: **test coverage at 25.3%**, with several core modules having **0% coverage**. The most critical issue is the MCP server (`tools/mcp_server.py`) with 947 untested statements, representing the primary integration point for Claude Desktop users.
 
-**Critical Gaps Identified:**
-- Incremental build system (3 modules, 1255 lines) - NO TESTS
-- Cache system (2 modules) - NO TESTS (ironic for cache modules!)
-- Tool helpers (2 modules, 813 lines) - PARTIAL COVERAGE
-- Back pressure validation (369 lines) - NO TESTS
+**Target**: Improve coverage from 25.3% to minimum 60% for critical paths
+**Priority**: HIGH - Core functionality reliability
+**Estimated Timeline**: 6-8 hours of implementation
 
 ## Key Requirements
 
-1. **Create comprehensive test suite** covering:
-   - Unit tests for all public functions
-   - Integration tests for module interactions
-   - Edge case and error handling validation
-   - Mock external dependencies appropriately
+### Critical Paths Requiring Tests
 
-2. **Follow existing patterns**:
-   - Use pytest framework (already configured)
-   - Apply pytest markers: @pytest.mark.unit, @pytest.mark.integration, @pytest.mark.tier1
-   - Use tempfile.TemporaryDirectory() for file system tests
-   - Match naming: `test_{module_name}.py`
+1. **MCP Server** (tools/mcp_server.py) - 0% → 70%
+   - 947 statements currently uncovered
+   - Core tools: `autonomous_build`, `delegate_to_agent`, `context_foundry_status`
+   - Pattern management functions
+   - Async streaming and delegation
+   
+2. **Prompt Building System** (tools/prompts/) - 0% → 60%
+   - `build_orchestrator_prompt.py` (82 statements)
+   - `phase_loader.py` (58 statements)
+   - `cache_analysis.py` (133 statements)
+   
+3. **CLI Entry Points** (tools/cli.py) - Low → 50%
+   - Command parsing and validation
+   - Argument handling
+   
+4. **Utilities**
+   - `banner.py` (11 statements) - 0% → 100%
+   - `test_parallel_runner.py` (39 statements) - 0% → 80%
 
-3. **Test files to create**:
-   - `tests/test_incremental_builder.py`
-   - `tests/test_change_detector.py`
-   - `tests/test_global_scout_cache.py`
-   - `tests/test_integration_pre_check.py`
-   - `tests/test_truncation.py`
-   - `tests/test_path_utils.py`
-   - `tests/test_scout_cache_unit.py`
-   - `tests/test_test_cache_unit.py`
+### Lower Priority (Time Permitting)
 
-4. **Maintain 100% backward compatibility**:
-   - All existing 45+ test files must continue to pass
-   - No changes to production code (tests only)
-   - No breaking changes to public APIs
+5. **TUI Components** (tools/tui/) - 0% → 40%
+   - Requires Textual testing framework
+   - UI interactions are harder to test
+   
+6. **Livestream** (tools/livestream/) - 0% → 30%
+   - 604 statements
+   - Lower priority (experimental feature)
 
 ## Technology Stack
 
-- **Framework**: pytest 8.4.2
-- **Python**: 3.13+
-- **Test utilities**: 
-  - tempfile for filesystem isolation
-  - unittest.mock for mocking
-  - pytest markers for organization
-- **Coverage tool**: pytest-cov (configured but not required)
+**Testing Framework**: pytest (already in use)
+**Coverage Tool**: pytest-cov
+**Mocking**: unittest.mock (standard library)
+**Additional Dependencies Needed**:
+- pytest-asyncio (for async MCP server tests)
+- pytest-mock (enhanced mocking)
 
-## Critical Architecture Recommendations
+**Existing Test Patterns to Follow**:
+- Tier markers: `@pytest.mark.tier1` (critical), `tier2`, `tier3`
+- Mock FastMCP for MCP server tests (pattern in `test_mcp_server_critical_paths.py`)
+- Integration tests for end-to-end flows
+- Unit tests for individual functions
 
-### 1. Test Organization Pattern
+## Architecture Recommendations
 
-Match existing test structure:
-```python
-"""
-Unit tests for {module_name}
+### Test File Structure
 
-Tests:
-- {functionality_1}
-- {functionality_2}
-- {edge_cases}
-"""
-
-import pytest
-import tempfile
-from pathlib import Path
-
-# Import the module under test
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from tools.{module_path} import {functions}
-
-class Test{ModuleName}:
-    """Test {module} functionality."""
-    
-    @pytest.mark.unit
-    @pytest.mark.tier1
-    def test_basic_functionality(self):
-        """Test basic use case."""
-        # Arrange, Act, Assert pattern
+```
+tests/
+├── test_mcp_server_comprehensive.py      # NEW: 400+ lines, 70% MCP coverage
+├── test_prompt_building_system.py        # NEW: 250+ lines
+├── test_cli_entry_points.py              # NEW: 150+ lines  
+├── test_banner.py                        # NEW: 50 lines
+├── test_parallel_runner_unit.py          # NEW: 120 lines
+└── prompts/                              # NEW directory
+    ├── test_orchestrator_builder.py
+    ├── test_phase_loader.py
+    └── test_cache_analysis.py
 ```
 
-### 2. Focus on Critical Paths
+### Testing Strategy
 
-**Highest Priority (Tier 1 - MUST PASS):**
-1. `scout_cache.py`: Cache hit/miss logic, TTL validation
-2. `path_utils.py`: Absolute/relative conversion (token savings critical)
-3. `incremental_builder.py`: Build plan generation, dependency graphs
-4. `change_detector.py`: Change detection accuracy
+**1. MCP Server Tests** (Highest Priority)
+- Mock FastMCP decorators (existing pattern works well)
+- Test each tool function independently
+- Integration tests for delegation workflow
+- Test error handling and edge cases
+- Coverage target: 70% (665 of 947 statements)
 
-**Medium Priority (Tier 2):**
-5. `test_cache.py`: Test result caching
-6. `truncation.py`: Output truncation with recovery
-7. `integration_pre_check.py`: Pre-flight validation
+**2. Prompt Building Tests**
+- Test modular prompt assembly
+- Validate phase file loading
+- Test Flowise integration toggle
+- Test cache analysis logic
+- Coverage target: 60%
 
-**Lower Priority (Tier 3):**
-8. `global_scout_cache.py`: Global caching (advanced feature)
+**3. CLI Tests**
+- Argument parsing validation
+- Command execution paths
+- Error message clarity
+- Coverage target: 50%
 
-### 3. Mocking Strategy
+**4. Utility Tests**
+- Banner display (simple, aim for 100%)
+- Parallel runner orchestration
+- Coverage target: 80%+
 
-- **File system operations**: Use `tempfile.TemporaryDirectory()`
-- **External APIs**: Use `unittest.mock.patch`
-- **Time-dependent tests**: Mock `datetime.now()`
-- **Environment variables**: Use `monkeypatch` fixture
+## Critical Challenges
 
-### 4. Coverage Goals
+### 1. MCP Server Complexity
+**Issue**: 947 statements is substantial
+**Mitigation**: 
+- Focus on critical paths first (autonomous_build, delegate_to_agent)
+- Use existing mock patterns from `test_mcp_server_critical_paths.py`
+- Break into multiple test classes by function group
 
-- **Minimum**: 70% line coverage for each module
-- **Target**: 85% line coverage for tier 1 modules
-- **Focus**: Critical paths over 100% coverage
+### 2. Async Testing
+**Issue**: MCP server uses async/await extensively
+**Mitigation**:
+- Install pytest-asyncio
+- Use `@pytest.mark.asyncio` decorator
+- Existing evolution tests show async patterns
 
-## Main Challenges and Mitigations
+### 3. Integration Dependencies
+**Issue**: Some functions require external file system state
+**Mitigation**:
+- Use tempfile for isolated test directories
+- Mock file I/O where appropriate
+- Clean up in teardown
 
-### Challenge 1: Large, Complex Modules
-- **Issue**: Some modules are 400+ lines with many functions
-- **Mitigation**: Break tests into multiple test classes by functionality area
-- **Example**: `TestIncrementalBuilderDependencyGraph`, `TestIncrementalBuilderBuildPlan`
-
-### Challenge 2: File System Dependencies
-- **Issue**: Many modules interact with file system
-- **Mitigation**: Use `tempfile.TemporaryDirectory()` for isolation (proven pattern in existing tests)
-- **Pattern**: Create temp dir → populate test files → run function → assert results → cleanup
-
-### Challenge 3: Cache TTL Testing
-- **Issue**: Time-dependent cache expiration logic
-- **Mitigation**: Mock `datetime.now()` to simulate time passage
-- **Example**: From `test_cache_system.py` - create file, mock time +25 hours, assert expired
-
-### Challenge 4: Integration Points
-- **Issue**: Modules depend on each other (e.g., incremental_builder imports change_detector)
-- **Mitigation**: Test in isolation first (mock dependencies), then add integration tests
-- **Markers**: Use `@pytest.mark.unit` and `@pytest.mark.integration` to separate
-
-### Challenge 5: No Breaking Changes Allowed
-- **Issue**: Cannot modify production code to make it more testable
-- **Mitigation**: Test public interfaces as-is, use mocking for hard-to-test areas
-- **Constraint**: Tests must work with existing code unchanged
-
-## Testing Approach
-
-### Phase 1: Unit Tests (Highest Priority)
-Create isolated unit tests for each module's public functions:
-- Test normal operation (happy path)
-- Test error conditions (exceptions, invalid inputs)
-- Test edge cases (empty inputs, None values, boundary conditions)
-- Test return types and data structures
-
-### Phase 2: Integration Tests
-Test module interactions:
-- `incremental_builder` + `change_detector` integration
-- Cache modules with file system
-- `path_utils` with real project structures
-
-### Phase 3: Validation
-- Run full pytest suite: `pytest tests/`
-- Verify all new tests pass
-- Verify all existing tests still pass
-- Check for test isolation (no interference between tests)
+### 4. Maintaining Test Quality
+**Issue**: Easy to write shallow tests that inflate coverage
+**Mitigation**:
+- Test actual logic paths, not just function calls
+- Include edge cases and error conditions
+- Validate outputs, not just execution
 
 ## Success Criteria
 
-✅ **Code Quality**:
-- 8 new test files created
-- Minimum 70% coverage for each tested module
-- All tests use appropriate pytest markers
+**Minimum Acceptable**:
+- Overall coverage: 25.3% → 45%
+- MCP server: 0% → 50%
+- Prompt building: 0% → 40%
+- All new tests pass
+- No existing tests broken
 
-✅ **Test Quality**:
-- Tests are deterministic (no flaky tests)
-- Tests are fast (< 1 second each for unit tests)
-- Tests are isolated (can run in any order)
-- Clear test names describe what is being tested
+**Target Goal**:
+- Overall coverage: 25.3% → 60%
+- MCP server: 0% → 70%
+- Prompt building: 0% → 60%
+- CLI: → 50%
+- Utilities: → 80%
 
-✅ **Backward Compatibility**:
-- All existing tests pass: `pytest tests/`
-- No changes to production code
-- No new dependencies added
+**Stretch Goal**:
+- Overall coverage: 60%+
+- MCP server: 80%+
+- Include TUI tests (40%+)
 
-✅ **Documentation**:
-- Each test file has module docstring describing what's tested
-- Complex tests have inline comments explaining logic
-- Test functions have descriptive docstrings
+## Test Plan Summary
+
+### Phase 1: Core MCP Server (Priority 1)
+- Test `autonomous_build()` function
+- Test `delegate_to_agent()` function
+- Test `context_foundry_status()` function
+- Test pattern management functions
+- Test streaming and cancellation
+
+### Phase 2: Prompt Building (Priority 2)
+- Test `build_orchestrator_prompt()` function
+- Test phase file loading
+- Test Flowise extension integration
+- Test cache analysis
+
+### Phase 3: CLI & Utilities (Priority 3)
+- Test CLI argument parsing
+- Test banner display
+- Test parallel runner
+
+### Phase 4: Coverage Validation
+- Run full test suite
+- Generate coverage report
+- Identify remaining gaps
+- Document results
 
 ## Timeline Estimate
 
-- **Module analysis & test design**: 15 minutes
-- **Test implementation (8 modules)**: 45-60 minutes
-- **Validation & debugging**: 15-20 minutes
-- **Total**: 75-95 minutes
+- **MCP Server Tests**: 3-4 hours (comprehensive)
+- **Prompt Building Tests**: 1.5 hours
+- **CLI & Utility Tests**: 1 hour
+- **Coverage Analysis & Documentation**: 0.5 hours
+- **Buffer for debugging**: 1 hour
 
-## Key Learnings Applied
+**Total**: 6-8 hours
 
-- Follow existing test patterns (consistency is key)
-- Use pytest markers for organization and selective running
-- Isolate file system tests with tempfile
-- Mock time-dependent operations
-- Test public interfaces, not implementation details
-- Prioritize critical paths over exhaustive coverage
+## Risks & Mitigations
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Tests reveal existing bugs | Medium | Medium | Document bugs, fix if critical |
+| Async testing complexity | Low | Medium | Use pytest-asyncio patterns |
+| Coverage tools inaccurate | Low | Low | Manual validation of critical paths |
+| Time overrun | Medium | Low | Prioritize MCP server first |
+
+## References
+
+**Existing Test Patterns**:
+- `tests/test_mcp_server_critical_paths.py` - MCP mocking patterns
+- `tests/evolution/test_daemon_comprehensive.py` - Async test patterns
+- `tests/test_baml_integration.py` - Integration test patterns
+
+**Coverage Data**:
+- Current report: `coverage.json` (25.3% overall)
+- 106 files tracked
+- 11,095 total statements
+- 8,288 missing lines

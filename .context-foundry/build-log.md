@@ -1,106 +1,126 @@
-# Build Log: Mermaid Generator Enhancement
+# Build Log - Test Coverage Improvement
 
-## Build Summary
+## Files Created
 
-**Mode**: Enhancement (fix_bugs)
-**Branch**: enhancement/mermaid-generator-completion
-**Files Modified**: 3
-**Build Time**: ~5 minutes
+### Test Files
 
-## Changes Made
+1. **tests/test_mcp_server_comprehensive.py** (475 lines)
+   - Comprehensive MCP server tests
+   - Coverage target: 70% of mcp_server.py
+   - Test classes: 11
+   - Test methods: ~40
+   - Focus areas:
+     * Pattern management (read_global_patterns, save_global_patterns, merge_project_patterns)
+     * Context status reporting
+     * Codebase detection
+     * Task intent detection
+     * Autonomous build wrapper
 
-### File 1: extensions/flowise/mermaid_generator.py
+2. **tests/prompts/test_orchestrator_builder.py** (235 lines)
+   - Orchestrator prompt builder tests
+   - Coverage target: 60% of build_orchestrator_prompt.py
+   - Test classes: 5
+   - Test methods: ~17
+   - Focus areas:
+     * Basic prompt building
+     * Flowise integration toggle
+     * Content validation
+     * Error handling
+     * Integration workflow
 
-**Critical Bug Fix - generate_mermaid() function**:
-- ✅ Fixed KeyError: Replaced `info["shape_color"]` with separate `info["shape"]`, `info["color"]`, `info["emoji"]`
-- ✅ Added emoji to node labels: `emoji + ' ' + label`
-- ✅ Implemented dynamic layout direction using `detect_layout_direction()`
-- ✅ Now generates `graph TD` for simple flows, `graph LR` for complex flows
+3. **tests/test_banner.py** (112 lines)
+   - Banner display tests
+   - Coverage target: 100% of banner.py
+   - Test classes: 2
+   - Test methods: 9
+   - Focus areas:
+     * Banner display with various versions
+     * Output validation
+     * Error handling
+     * Format validation
 
-**Enhanced generate_interactive_section() function**:
-- ✅ Added `include_badges` and `include_legend` parameters
-- ✅ Integrated `generate_badges()` for flow metadata badges
-- ✅ Integrated `generate_legend()` for complete node type reference
-- ✅ Added flow metadata summary (total nodes, agents, complexity)
-- ✅ Added emojis to agent details table using `get_node_emoji()`
+4. **tests/test_parallel_runner_unit.py** (280 lines)
+   - Parallel test runner tests
+   - Coverage target: 80% of test_parallel_runner.py
+   - Test classes: 8
+   - Test methods: ~18
+   - Focus areas:
+     * Runner initialization
+     * Test collection
+     * Test distribution
+     * Parallel execution
+     * Result aggregation
+     * Timeout handling
 
-**Updated main() CLI**:
-- ✅ Added `--badges` flag
-- ✅ Added `--legend` flag
-- ✅ Added `--no-interactive` flag
-- ✅ Made `--interactive` default behavior (backward compatible)
-- ✅ Updated help text with all new options
-- ✅ Fixed output_path parsing to handle flags correctly
+5. **tests/prompts/__init__.py**
+   - Package initialization file
 
-**Lines Modified**:
-- Lines 314-347: generate_mermaid() function
-- Lines 380-429: generate_interactive_section() function
-- Lines 432-492: main() function
+## Total Implementation
 
-### File 2: extensions/flowise/BEST_PRACTICES.md
+- **Files Created**: 5 test files + 1 __init__.py
+- **Total Lines of Code**: 1,102 lines
+- **Total Test Classes**: 26
+- **Total Test Methods**: ~84
+- **Estimated Coverage Improvement**: 25.3% → 50-60%
 
-**Added New Section** (lines 1019-1179):
-- ✅ Complete Mermaid Diagram Generation documentation
-- ✅ Features overview (styling, badges, interactivity)
-- ✅ Node Type Reference table (all 14 types)
-- ✅ CLI usage examples
-- ✅ Layout direction explanation
-- ✅ Generated output example
-- ✅ README embedding instructions
-- ✅ Tips for beautiful diagrams
+## Test Organization
 
-### File 3: tools/orchestrator_prompt.txt
+### By Priority Tier
 
-**Updated CLI Invocation** (lines 1430-1445):
-- ✅ Added `--badges` flag to mermaid_generator.py command
-- ✅ Added `--legend` flag to mermaid_generator.py command
-- ✅ Updated description of generated output
-- ✅ Now creates diagrams with all enhancements by default
+**Tier 1 (Critical - MUST PASS):**
+- MCP server pattern management
+- MCP server status reporting
+- MCP server autonomous build
+- Codebase detection
 
-## Technical Details
+**Tier 2 (Important):**
+- Prompt building and validation
+- Parallel runner execution
+- Task intent detection
 
-### Data Structure Change
-**Before** (broken):
-```python
-shape_color = info["shape_color"]  # Tuple (shape, color)
-```
+**Tier 3 (Nice-to-have):**
+- Banner display
+- Coverage documentation
+- Error edge cases
 
-**After** (working):
-```python
-shape = info["shape"]
-color = info["color"]
-emoji = info["emoji"]
-```
+### By Test Type
 
-### New Features Enabled
+**Unit Tests**: ~60 methods
+- Isolated function testing
+- Input/output validation
+- Error handling
 
-1. **Emoji Icons**: All 14 node types have visual emoji identifiers
-2. **Smart Layout**: Automatically chooses TD (vertical) or LR (horizontal) based on complexity
-3. **Metadata Badges**: Shows node count, agent count, complexity at a glance
-4. **Interactive Legend**: Complete reference of all node types with icons
-5. **Enhanced CLI**: Flexible flag system with sensible defaults
+**Integration Tests**: ~20 methods
+- Cross-module interactions
+- File I/O operations
+- Workflow validation
 
-## Testing Plan
+**Slow Tests**: ~4 methods
+- Timeout handling
+- Long-running operations
 
-Next phase will test with all 14 Flowise templates:
-- Simple Agent Agents.json (3-5 nodes → TD layout)
-- Warehouse Operations Agents.json (8+ nodes → LR layout)
-- All other templates for node type coverage
+## Coverage Targets
 
-## Success Metrics
-
-✅ Critical bug fixed (no more KeyError)
-✅ All helper functions now integrated
-✅ CLI enhanced with new flags
-✅ Documentation complete
-✅ Orchestrator updated to use new features
-✅ Backward compatible (existing calls work)
+| Module | Current | Target | Test File |
+|--------|---------|--------|-----------|
+| tools/mcp_server.py | 0% | 70% | test_mcp_server_comprehensive.py |
+| tools/prompts/build_orchestrator_prompt.py | 0% | 60% | test_orchestrator_builder.py |
+| tools/banner.py | 0% | 100% | test_banner.py |
+| tools/test_parallel_runner.py | 0% | 80% | test_parallel_runner_unit.py |
+| **Overall** | **25.3%** | **50-60%** | **All new tests** |
 
 ## Next Steps
 
-Phase 4: Test
-- Run generator on all 14 templates
-- Verify emojis render correctly
-- Check layout direction logic
-- Validate badges and legend output
-- Test all CLI flags
+1. Run new tests to verify they pass
+2. Generate coverage report
+3. Fix any test failures
+4. Analyze actual coverage achieved
+5. Add more tests if needed to reach 60% target
+
+## Notes
+
+- All tests follow existing pytest patterns
+- FastMCP mocking pattern reused from test_mcp_server_critical_paths.py
+- Tests are marked with appropriate tiers and types
+- Temporary directories used for file I/O tests
+- All tests designed to be independent and repeatable
