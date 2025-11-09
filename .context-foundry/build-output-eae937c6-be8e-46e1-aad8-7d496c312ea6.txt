@@ -96,7 +96,7 @@ Conflicts resolved: 0
 - `tools/mcp_server.py` - 95 insertions/deletions
   - Added 2 helper functions (_impl versions)
   - Updated 2 function calls in merge_project_patterns()
-  
+
 - `scripts/share-my-patterns.sh` - 53 insertions
   - Added jq validation check
   - Enhanced error handling throughout
@@ -112,7 +112,7 @@ Conflicts resolved: 0
 ## ✅ All Success Criteria Met
 
 - ✅ `merge_project_patterns()` can be called without TypeError
-- ✅ Pattern files successfully merge to global storage  
+- ✅ Pattern files successfully merge to global storage
 - ✅ Share script has comprehensive error handling
 - ✅ End-to-end pattern propagation works: project → global → share
 - ✅ Python syntax validated (no errors)

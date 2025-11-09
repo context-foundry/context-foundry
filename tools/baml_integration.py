@@ -25,10 +25,8 @@ Usage:
 import os
 import sys
 import json
-import subprocess
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime
 
 # BAML availability flag
 BAML_AVAILABLE = False
@@ -38,6 +36,7 @@ BAML_COMPILATION_ERROR = None
 try:
     # Try to import baml-py (v0.211+ uses BamlRuntime)
     from baml_py import BamlRuntime
+
     BAML_AVAILABLE = True
 except ImportError as e:
     BAML_AVAILABLE = False
@@ -68,11 +67,11 @@ def get_baml_env_vars() -> Dict[str, str]:
         env_vars[key] = value
 
     # Ensure API keys are explicitly present
-    if 'OPENAI_API_KEY' in os.environ:
-        env_vars['OPENAI_API_KEY'] = os.environ['OPENAI_API_KEY']
+    if "OPENAI_API_KEY" in os.environ:
+        env_vars["OPENAI_API_KEY"] = os.environ["OPENAI_API_KEY"]
 
-    if 'ANTHROPIC_API_KEY' in os.environ:
-        env_vars['ANTHROPIC_API_KEY'] = os.environ['ANTHROPIC_API_KEY']
+    if "ANTHROPIC_API_KEY" in os.environ:
+        env_vars["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
 
     return env_vars
 
@@ -128,11 +127,14 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
 
     # CRITICAL: Ensure API keys are in os.environ BEFORE creating client
     # BAML captures environment at client creation time
-    openai_key = os.getenv('OPENAI_API_KEY')
+    openai_key = os.getenv("OPENAI_API_KEY")
 
-    if openai_key and 'OPENAI_API_KEY' not in os.environ:
-        os.environ['OPENAI_API_KEY'] = openai_key
-        print(f"[BAML] Set OPENAI_API_KEY in os.environ before client creation", file=sys.stderr)
+    if openai_key and "OPENAI_API_KEY" not in os.environ:
+        os.environ["OPENAI_API_KEY"] = openai_key
+        print(
+            "[BAML] Set OPENAI_API_KEY in os.environ before client creation",
+            file=sys.stderr,
+        )
 
     # Return cached client (unless force reload requested)
     if BAML_CLIENT is not None and not force_recompile:
@@ -162,20 +164,24 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
         # Get environment variables for BAML
         env_vars_for_baml = get_baml_env_vars()
 
-        if 'OPENAI_API_KEY' in env_vars_for_baml:
-            print(f"[BAML] Explicitly added OPENAI_API_KEY", file=sys.stderr)
+        if "OPENAI_API_KEY" in env_vars_for_baml:
+            print("[BAML] Explicitly added OPENAI_API_KEY", file=sys.stderr)
 
-        print(f"[BAML] Creating BamlRuntime with {len(env_vars_for_baml)} env vars", file=sys.stderr)
-        print(f"[BAML] env_vars_for_baml keys: {list(env_vars_for_baml.keys())[:10]}...", file=sys.stderr)
+        print(
+            f"[BAML] Creating BamlRuntime with {len(env_vars_for_baml)} env vars",
+            file=sys.stderr,
+        )
+        print(
+            f"[BAML] env_vars_for_baml keys: {list(env_vars_for_baml.keys())[:10]}...",
+            file=sys.stderr,
+        )
 
         # Pass environment to BAML
         BAML_CLIENT = BamlRuntime.from_files(
-            root_path=str(schemas_dir),
-            files=files_dict,
-            env_vars=env_vars_for_baml
+            root_path=str(schemas_dir), files=files_dict, env_vars=env_vars_for_baml
         )
 
-        print(f"[BAML] BamlRuntime created successfully", file=sys.stderr)
+        print("[BAML] BamlRuntime created successfully", file=sys.stderr)
 
         # TEST: Try to inspect the runtime's environment
         print(f"[BAML] Runtime type: {type(BAML_CLIENT)}", file=sys.stderr)
@@ -202,7 +208,7 @@ def update_phase_with_baml(
     status: str,
     detail: str,
     session_id: str = "context-foundry",
-    iteration: int = 0
+    iteration: int = 0,
 ) -> Dict[str, Any]:
     """
     Update phase tracking using BAML type-safe schema.
@@ -228,7 +234,10 @@ def update_phase_with_baml(
             # Call BAML CreatePhaseInfo function
             ctx = client.create_context_manager()
 
-            print(f"[BAML DEBUG] Calling CreatePhaseInfo with session_id={session_id}, phase={phase}, status={status}", file=sys.stderr)
+            print(
+                f"[BAML DEBUG] Calling CreatePhaseInfo with session_id={session_id}, phase={phase}, status={status}",
+                file=sys.stderr,
+            )
 
             result = client.call_function_sync(
                 function_name="CreatePhaseInfo",
@@ -237,17 +246,15 @@ def update_phase_with_baml(
                     "phase": phase,
                     "status": status,
                     "detail": detail,
-                    "iteration": iteration
+                    "iteration": iteration,
                 },
                 ctx=ctx,
                 tb=None,
                 cb=None,
                 collectors=[],
                 env_vars=get_baml_env_vars(),
-                tags=None
+                tags=None,
             )
-
-            print(f"[BAML DEBUG] Function call succeeded!", file=sys.stderr)
 
             # BAML v0.211.2 API: Try to parse the result directly first
             try:
@@ -255,7 +262,10 @@ def update_phase_with_baml(
                 try:
                     # Attempt direct parsing as PhaseInfo object
                     parsed_data = result.parsed()
-                    print(f"[BAML DEBUG] Successfully parsed BAML output using .parsed()", file=sys.stderr)
+                    print(
+                        "[BAML DEBUG] Successfully parsed BAML output using .parsed()",
+                        file=sys.stderr,
+                    )
                     return parsed_data
                 except AttributeError:
                     # Fall back to unstable_internal_repr for older API
@@ -282,32 +292,41 @@ def update_phase_with_baml(
 
                     # Extract just the JSON object (handle extra text after JSON)
                     # Find the first { and the matching }
-                    start_idx = content.find('{')
+                    start_idx = content.find("{")
                     if start_idx != -1:
                         # Count braces to find matching close brace
                         depth = 0
                         for i in range(start_idx, len(content)):
-                            if content[i] == '{':
+                            if content[i] == "{":
                                 depth += 1
-                            elif content[i] == '}':
+                            elif content[i] == "}":
                                 depth -= 1
                                 if depth == 0:
                                     # Found matching close brace
-                                    json_str = content[start_idx:i+1]
+                                    json_str = content[start_idx : i + 1]
                                     parsed_data = json.loads(json_str)
-                                    print(f"[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr)
+                                    print(
+                                        "[BAML DEBUG] Successfully parsed BAML output",
+                                        file=sys.stderr,
+                                    )
                                     return parsed_data
 
                     # If we couldn't extract JSON, try parsing the whole thing
                     parsed_data = json.loads(content)
-                    print(f"[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr)
+                    print(
+                        "[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr
+                    )
                     return parsed_data
                 else:
-                    print(f"[BAML DEBUG] Unexpected internal_repr format", file=sys.stderr)
+                    print(
+                        "[BAML DEBUG] Unexpected internal_repr format", file=sys.stderr
+                    )
                     return internal_repr
 
             except Exception as e:
-                print(f"[BAML DEBUG] Failed to parse internal_repr: {e}", file=sys.stderr)
+                print(
+                    f"[BAML DEBUG] Failed to parse internal_repr: {e}", file=sys.stderr
+                )
                 raise
 
         except Exception as e:
@@ -355,15 +374,13 @@ def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
         ctx = client.create_context_manager()
         result = client.call_function_sync(
             function_name="ValidatePhaseInfo",
-            args={
-                "json_string": phase_info_json
-            },
+            args={"json_string": phase_info_json},
             ctx=ctx,
             tb=None,
             cb=None,
             collectors=[],
             env_vars=get_baml_env_vars(),
-            tags=None
+            tags=None,
         )
 
         # Parse the result using unstable_internal_repr
@@ -392,9 +409,7 @@ def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
 
 
 def generate_scout_report_baml(
-    task_description: str,
-    codebase_analysis: str,
-    past_patterns: str = ""
+    task_description: str, codebase_analysis: str, past_patterns: str = ""
 ) -> Dict[str, Any]:
     """
     Generate structured Scout report using BAML.
@@ -427,14 +442,14 @@ def generate_scout_report_baml(
             args={
                 "task_description": task_description,
                 "codebase_analysis": codebase_analysis,
-                "past_patterns": past_patterns
+                "past_patterns": past_patterns,
             },
             ctx=ctx,
             tb=None,
             cb=None,
             collectors=[],
             env_vars=get_baml_env_vars(),
-            tags=None
+            tags=None,
         )
 
         # Parse the result using unstable_internal_repr
@@ -461,8 +476,7 @@ def generate_scout_report_baml(
 
 
 def generate_architecture_baml(
-    scout_report_json: str,
-    flagged_risks: List[str]
+    scout_report_json: str, flagged_risks: List[str]
 ) -> Dict[str, Any]:
     """
     Generate structured architecture blueprint using BAML.
@@ -493,14 +507,14 @@ def generate_architecture_baml(
             function_name="GenerateArchitecture",
             args={
                 "scout_report_json": scout_report_json,
-                "flagged_risks": flagged_risks
+                "flagged_risks": flagged_risks,
             },
             ctx=ctx,
             tb=None,
             cb=None,
             collectors=[],
             env_vars=get_baml_env_vars(),
-            tags=None
+            tags=None,
         )
 
         # Parse the result using unstable_internal_repr
@@ -553,15 +567,13 @@ def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
         ctx = client.create_context_manager()
         result = client.call_function_sync(
             function_name="ValidateBuildResult",
-            args={
-                "result_json": result_json
-            },
+            args={"result_json": result_json},
             ctx=ctx,
             tb=None,
             cb=None,
             collectors=[],
             env_vars=get_baml_env_vars(),
-            tags=None
+            tags=None,
         )
 
         # Parse the result using unstable_internal_repr
@@ -589,6 +601,7 @@ def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
 
 # Utility functions for backward compatibility
 
+
 def fallback_to_json(operation: str, error: Exception) -> None:
     """
     Log graceful fallback to JSON mode.
@@ -614,7 +627,7 @@ def baml_status_summary() -> Dict[str, Any]:
         "schemas_dir": str(get_baml_schemas_dir()),
         "client_dir": str(get_baml_client_dir()),
         "schemas_exist": get_baml_schemas_dir().exists(),
-        "client_exists": get_baml_client_dir().exists()
+        "client_exists": get_baml_client_dir().exists(),
     }
 
 

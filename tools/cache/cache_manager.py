@@ -10,19 +10,18 @@ Features:
 - Cache configuration management
 """
 
-import json
-from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Any
+from datetime import datetime
 
 from . import (
     get_cache_dir,
     is_cache_valid,
     DEFAULT_CACHE_TTL_HOURS,
-    DEFAULT_MAX_CACHE_SIZE_MB
+    DEFAULT_MAX_CACHE_SIZE_MB,
 )
 from .scout_cache import clear_scout_cache, get_scout_cache_stats
 from .test_cache import clear_test_cache, get_test_cache_stats
+
 
 class CacheManager:
     """Manages all caching operations for Context Foundry."""
@@ -67,7 +66,7 @@ class CacheManager:
             "test_cache": test_stats,
             "total_size_mb": round(total_size / (1024 * 1024), 3),
             "total_files": total_files,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
     def clean_expired(self, ttl_hours: int = DEFAULT_CACHE_TTL_HOURS) -> Dict[str, int]:
@@ -85,15 +84,10 @@ class CacheManager:
         deleted_other = 0
 
         if not self.cache_dir.exists():
-            return {
-                "scout_cache": 0,
-                "test_cache": 0,
-                "other": 0,
-                "total": 0
-            }
+            return {"scout_cache": 0, "test_cache": 0, "other": 0, "total": 0}
 
         for file in self.cache_dir.rglob("*"):
-            if not file.is_file() or file.suffix == '.meta.json':
+            if not file.is_file() or file.suffix == ".meta.json":
                 continue
 
             if not is_cache_valid(file, ttl_hours):
@@ -102,14 +96,14 @@ class CacheManager:
                     file.unlink()
 
                     # Delete metadata
-                    meta_file = file.with_suffix('.meta.json')
+                    meta_file = file.with_suffix(".meta.json")
                     if meta_file.exists():
                         meta_file.unlink()
 
                     # Track deletion type
-                    if file.name.startswith('scout-'):
+                    if file.name.startswith("scout-"):
                         deleted_scout += 1
-                    elif file.name.startswith('test-'):
+                    elif file.name.startswith("test-"):
                         deleted_test += 1
                     else:
                         deleted_other += 1
@@ -123,7 +117,7 @@ class CacheManager:
             "scout_cache": deleted_scout,
             "test_cache": deleted_test,
             "other": deleted_other,
-            "total": total
+            "total": total,
         }
 
     def clear_all(self) -> Dict[str, int]:
@@ -139,7 +133,7 @@ class CacheManager:
         return {
             "scout_cache": deleted_scout,
             "test_cache": deleted_test,
-            "total": deleted_scout + deleted_test
+            "total": deleted_scout + deleted_test,
         }
 
     def clear_by_type(self, cache_type: str) -> int:
@@ -152,17 +146,19 @@ class CacheManager:
         Returns:
             Number of files deleted
         """
-        if cache_type == 'scout':
+        if cache_type == "scout":
             return clear_scout_cache(self.working_directory)
-        elif cache_type == 'test':
+        elif cache_type == "test":
             return clear_test_cache(self.working_directory)
-        elif cache_type == 'all':
+        elif cache_type == "all":
             result = self.clear_all()
-            return result['total']
+            return result["total"]
         else:
             raise ValueError(f"Unknown cache type: {cache_type}")
 
-    def enforce_size_limit(self, max_size_mb: int = DEFAULT_MAX_CACHE_SIZE_MB) -> Dict[str, Any]:
+    def enforce_size_limit(
+        self, max_size_mb: int = DEFAULT_MAX_CACHE_SIZE_MB
+    ) -> Dict[str, Any]:
         """
         Enforce maximum cache size by deleting oldest entries.
 
@@ -173,18 +169,14 @@ class CacheManager:
             Dict with deletion statistics
         """
         if not self.cache_dir.exists():
-            return {
-                "deleted_files": 0,
-                "freed_mb": 0,
-                "current_size_mb": 0
-            }
+            return {"deleted_files": 0, "freed_mb": 0, "current_size_mb": 0}
 
         # Get all cache files with sizes and timestamps
         cache_files = []
         total_size = 0
 
         for file in self.cache_dir.rglob("*"):
-            if file.is_file() and file.suffix != '.meta.json':
+            if file.is_file() and file.suffix != ".meta.json":
                 size = file.stat().st_size
                 mtime = file.stat().st_mtime
                 cache_files.append((file, size, mtime))
@@ -197,7 +189,7 @@ class CacheManager:
             return {
                 "deleted_files": 0,
                 "freed_mb": 0,
-                "current_size_mb": round(current_size_mb, 2)
+                "current_size_mb": round(current_size_mb, 2),
             }
 
         # Sort by modification time (oldest first)
@@ -215,7 +207,7 @@ class CacheManager:
                 file.unlink()
 
                 # Delete metadata
-                meta_file = file.with_suffix('.meta.json')
+                meta_file = file.with_suffix(".meta.json")
                 if meta_file.exists():
                     meta_file.unlink()
 
@@ -229,7 +221,7 @@ class CacheManager:
         return {
             "deleted_files": deleted_count,
             "freed_mb": round(freed_size / (1024 * 1024), 2),
-            "current_size_mb": round(current_size_mb, 2)
+            "current_size_mb": round(current_size_mb, 2),
         }
 
     def print_stats(self) -> None:
@@ -244,7 +236,7 @@ class CacheManager:
         print()
 
         print("Scout Cache:")
-        scout = stats['scout_cache']
+        scout = stats["scout_cache"]
         print(f"  Total entries: {scout['total_entries']}")
         print(f"  Valid entries: {scout['valid_entries']}")
         print(f"  Expired entries: {scout['expired_entries']}")
@@ -252,11 +244,14 @@ class CacheManager:
         print()
 
         print("Test Cache:")
-        test = stats['test_cache']
+        test = stats["test_cache"]
         print(f"  Has cached results: {test['has_cached_results']}")
         print(f"  Cache valid: {test['cache_valid']}")
         print(f"  Files tracked: {test['files_tracked']}")
-        if test['has_cached_results']:
-            print(f"  Last test: {test.get('last_test_passed', 0)}/{test.get('last_test_total', 0)} passed")
+        if test["has_cached_results"]:
+            print(
+                f"  Last test: {test.get('last_test_passed', 0)}/{test.get('last_test_total', 0)} passed"
+            )
 
-__all__ = ['CacheManager']
+
+__all__ = ["CacheManager"]

@@ -8,7 +8,7 @@ import json
 import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from .log_parser import TokenUsage
 
@@ -25,7 +25,7 @@ class CostCalculator:
         """
         if config_path is None:
             # Default to config in same directory
-            config_path = Path(__file__).parent / 'pricing_config.json'
+            config_path = Path(__file__).parent / "pricing_config.json"
 
         self.config_path = Path(config_path)
         self.config = self._load_config()
@@ -33,25 +33,25 @@ class CostCalculator:
     def _load_config(self) -> Dict[str, Any]:
         """Load pricing configuration from JSON file"""
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, "r") as f:
                 return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError) as e:
+        except (FileNotFoundError, json.JSONDecodeError):
             # Return default configuration
             return {
-                'models': {
-                    'default': {
-                        'input_per_mtok': 3.00,
-                        'output_per_mtok': 15.00,
-                        'cache_write_per_mtok': 3.75,
-                        'cache_read_per_mtok': 0.30
+                "models": {
+                    "default": {
+                        "input_per_mtok": 3.00,
+                        "output_per_mtok": 15.00,
+                        "cache_write_per_mtok": 3.75,
+                        "cache_read_per_mtok": 0.30,
                     }
                 },
-                'budget': {
-                    'daily_limit_usd': 50.0,
-                    'monthly_limit_usd': 500.0,
-                    'alert_threshold_pct': 80,
-                    'warning_threshold_pct': 90
-                }
+                "budget": {
+                    "daily_limit_usd": 50.0,
+                    "monthly_limit_usd": 500.0,
+                    "alert_threshold_pct": 80,
+                    "warning_threshold_pct": 90,
+                },
             }
 
     def get_model_pricing(self, model: str) -> Dict[str, float]:
@@ -64,7 +64,7 @@ class CostCalculator:
         Returns:
             Dict with pricing rates per million tokens
         """
-        models = self.config.get('models', {})
+        models = self.config.get("models", {})
 
         # Try exact match first
         if model in models:
@@ -76,12 +76,15 @@ class CostCalculator:
                 return pricing
 
         # Fallback to default
-        return models.get('default', {
-            'input_per_mtok': 3.00,
-            'output_per_mtok': 15.00,
-            'cache_write_per_mtok': 3.75,
-            'cache_read_per_mtok': 0.30
-        })
+        return models.get(
+            "default",
+            {
+                "input_per_mtok": 3.00,
+                "output_per_mtok": 15.00,
+                "cache_write_per_mtok": 3.75,
+                "cache_read_per_mtok": 0.30,
+            },
+        )
 
     def calculate_cost(self, usage: TokenUsage, model: Optional[str] = None) -> float:
         """
@@ -95,21 +98,29 @@ class CostCalculator:
             Total cost in USD
         """
         if model is None:
-            model = usage.model or 'default'
+            model = usage.model or "default"
 
         pricing = self.get_model_pricing(model)
 
         # Calculate costs per component (rates are per million tokens)
-        input_cost = (usage.input_tokens / 1_000_000) * pricing.get('input_per_mtok', 0)
-        output_cost = (usage.output_tokens / 1_000_000) * pricing.get('output_per_mtok', 0)
-        cache_write_cost = (usage.cache_write_tokens / 1_000_000) * pricing.get('cache_write_per_mtok', 0)
-        cache_read_cost = (usage.cache_read_tokens / 1_000_000) * pricing.get('cache_read_per_mtok', 0)
+        input_cost = (usage.input_tokens / 1_000_000) * pricing.get("input_per_mtok", 0)
+        output_cost = (usage.output_tokens / 1_000_000) * pricing.get(
+            "output_per_mtok", 0
+        )
+        cache_write_cost = (usage.cache_write_tokens / 1_000_000) * pricing.get(
+            "cache_write_per_mtok", 0
+        )
+        cache_read_cost = (usage.cache_read_tokens / 1_000_000) * pricing.get(
+            "cache_read_per_mtok", 0
+        )
 
         total_cost = input_cost + output_cost + cache_write_cost + cache_read_cost
 
         return round(total_cost, 6)  # Round to 6 decimal places ($0.000001)
 
-    def calculate_batch_cost(self, usages: list[TokenUsage], model: Optional[str] = None) -> Dict[str, Any]:
+    def calculate_batch_cost(
+        self, usages: list[TokenUsage], model: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Calculate total cost for multiple API calls.
 
@@ -127,7 +138,7 @@ class CostCalculator:
         total_cache_write = 0
 
         for usage in usages:
-            call_model = model or usage.model or 'default'
+            call_model = model or usage.model or "default"
             cost = self.calculate_cost(usage, call_model)
 
             total_cost += cost
@@ -137,16 +148,18 @@ class CostCalculator:
             total_cache_write += usage.cache_write_tokens
 
         return {
-            'total_cost': round(total_cost, 6),
-            'total_input_tokens': total_input,
-            'total_output_tokens': total_output,
-            'total_cache_read_tokens': total_cache_read,
-            'total_cache_write_tokens': total_cache_write,
-            'total_tokens': total_input + total_output,
-            'call_count': len(usages)
+            "total_cost": round(total_cost, 6),
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "total_cache_read_tokens": total_cache_read,
+            "total_cache_write_tokens": total_cache_write,
+            "total_tokens": total_input + total_output,
+            "call_count": len(usages),
         }
 
-    def estimate_remaining_budget(self, current_cost: float, period: str = "monthly") -> Dict[str, Any]:
+    def estimate_remaining_budget(
+        self, current_cost: float, period: str = "monthly"
+    ) -> Dict[str, Any]:
         """
         Calculate remaining budget for period.
 
@@ -157,35 +170,37 @@ class CostCalculator:
         Returns:
             Dict with budget info
         """
-        budget_config = self.config.get('budget', {})
+        budget_config = self.config.get("budget", {})
 
         if period == "daily":
-            limit = budget_config.get('daily_limit_usd', 50.0)
+            limit = budget_config.get("daily_limit_usd", 50.0)
         else:
-            limit = budget_config.get('monthly_limit_usd', 500.0)
+            limit = budget_config.get("monthly_limit_usd", 500.0)
 
         remaining = limit - current_cost
         percent_used = (current_cost / limit * 100) if limit > 0 else 0
 
-        alert_threshold = budget_config.get('alert_threshold_pct', 80)
-        warning_threshold = budget_config.get('warning_threshold_pct', 90)
+        alert_threshold = budget_config.get("alert_threshold_pct", 80)
+        warning_threshold = budget_config.get("warning_threshold_pct", 90)
 
-        status = 'ok'
+        status = "ok"
         if percent_used >= warning_threshold:
-            status = 'critical'
+            status = "critical"
         elif percent_used >= alert_threshold:
-            status = 'warning'
+            status = "warning"
 
         return {
-            'limit': limit,
-            'current': current_cost,
-            'remaining': remaining,
-            'percent_used': round(percent_used, 2),
-            'status': status,
-            'period': period
+            "limit": limit,
+            "current": current_cost,
+            "remaining": remaining,
+            "percent_used": round(percent_used, 2),
+            "status": status,
+            "period": period,
         }
 
-    def check_budget_alert(self, current_cost: float, period: str = "monthly") -> Optional[str]:
+    def check_budget_alert(
+        self, current_cost: float, period: str = "monthly"
+    ) -> Optional[str]:
         """
         Check if budget alert should be raised.
 
@@ -198,9 +213,9 @@ class CostCalculator:
         """
         budget_info = self.estimate_remaining_budget(current_cost, period)
 
-        if budget_info['status'] == 'critical':
+        if budget_info["status"] == "critical":
             return f"⚠️ CRITICAL: {period.capitalize()} budget {budget_info['percent_used']:.1f}% used (${current_cost:.2f} / ${budget_info['limit']:.2f})"
-        elif budget_info['status'] == 'warning':
+        elif budget_info["status"] == "warning":
             return f"⚠️ WARNING: {period.capitalize()} budget {budget_info['percent_used']:.1f}% used (${current_cost:.2f} / ${budget_info['limit']:.2f})"
 
         return None
@@ -221,34 +236,33 @@ class CostCalculator:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = now
         daily_summary = db.get_cost_summary(
-            today_start.isoformat(),
-            today_end.isoformat()
+            today_start.isoformat(), today_end.isoformat()
         )
-        daily_cost = daily_summary.get('total_cost', 0.0)
-        daily_budget = self.estimate_remaining_budget(daily_cost, 'daily')
+        daily_cost = daily_summary.get("total_cost", 0.0)
+        daily_budget = self.estimate_remaining_budget(daily_cost, "daily")
 
         # Monthly budget
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_summary = db.get_cost_summary(
-            month_start.isoformat(),
-            now.isoformat()
-        )
-        monthly_cost = monthly_summary.get('total_cost', 0.0)
-        monthly_budget = self.estimate_remaining_budget(monthly_cost, 'monthly')
+        monthly_summary = db.get_cost_summary(month_start.isoformat(), now.isoformat())
+        monthly_cost = monthly_summary.get("total_cost", 0.0)
+        monthly_budget = self.estimate_remaining_budget(monthly_cost, "monthly")
 
         return {
-            'daily': daily_budget,
-            'monthly': monthly_budget,
-            'alerts': [
-                alert for alert in [
-                    self.check_budget_alert(daily_cost, 'daily'),
-                    self.check_budget_alert(monthly_cost, 'monthly')
-                ] if alert is not None
-            ]
+            "daily": daily_budget,
+            "monthly": monthly_budget,
+            "alerts": [
+                alert
+                for alert in [
+                    self.check_budget_alert(daily_cost, "daily"),
+                    self.check_budget_alert(monthly_cost, "monthly"),
+                ]
+                if alert is not None
+            ],
         }
 
-    def estimate_cost_for_tokens(self, input_tokens: int, output_tokens: int,
-                                 model: str = 'default') -> float:
+    def estimate_cost_for_tokens(
+        self, input_tokens: int, output_tokens: int, model: str = "default"
+    ) -> float:
         """
         Estimate cost for given token counts.
 
@@ -264,12 +278,14 @@ class CostCalculator:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=0,
-            cache_write_tokens=0
+            cache_write_tokens=0,
         )
 
         return self.calculate_cost(usage, model)
 
-    def get_cost_breakdown(self, usage: TokenUsage, model: Optional[str] = None) -> Dict[str, Any]:
+    def get_cost_breakdown(
+        self, usage: TokenUsage, model: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get detailed cost breakdown.
 
@@ -281,30 +297,44 @@ class CostCalculator:
             Dict with itemized costs
         """
         if model is None:
-            model = usage.model or 'default'
+            model = usage.model or "default"
 
         pricing = self.get_model_pricing(model)
 
-        input_cost = (usage.input_tokens / 1_000_000) * pricing.get('input_per_mtok', 0)
-        output_cost = (usage.output_tokens / 1_000_000) * pricing.get('output_per_mtok', 0)
-        cache_write_cost = (usage.cache_write_tokens / 1_000_000) * pricing.get('cache_write_per_mtok', 0)
-        cache_read_cost = (usage.cache_read_tokens / 1_000_000) * pricing.get('cache_read_per_mtok', 0)
+        input_cost = (usage.input_tokens / 1_000_000) * pricing.get("input_per_mtok", 0)
+        output_cost = (usage.output_tokens / 1_000_000) * pricing.get(
+            "output_per_mtok", 0
+        )
+        cache_write_cost = (usage.cache_write_tokens / 1_000_000) * pricing.get(
+            "cache_write_per_mtok", 0
+        )
+        cache_read_cost = (usage.cache_read_tokens / 1_000_000) * pricing.get(
+            "cache_read_per_mtok", 0
+        )
 
         return {
-            'model': model,
-            'input_tokens': usage.input_tokens,
-            'input_cost': round(input_cost, 6),
-            'output_tokens': usage.output_tokens,
-            'output_cost': round(output_cost, 6),
-            'cache_write_tokens': usage.cache_write_tokens,
-            'cache_write_cost': round(cache_write_cost, 6),
-            'cache_read_tokens': usage.cache_read_tokens,
-            'cache_read_cost': round(cache_read_cost, 6),
-            'total_cost': round(input_cost + output_cost + cache_write_cost + cache_read_cost, 6),
-            'cache_savings': round(
-                (usage.cache_read_tokens / 1_000_000) * (pricing.get('input_per_mtok', 0) - pricing.get('cache_read_per_mtok', 0)),
-                6
-            ) if usage.cache_read_tokens > 0 else 0.0
+            "model": model,
+            "input_tokens": usage.input_tokens,
+            "input_cost": round(input_cost, 6),
+            "output_tokens": usage.output_tokens,
+            "output_cost": round(output_cost, 6),
+            "cache_write_tokens": usage.cache_write_tokens,
+            "cache_write_cost": round(cache_write_cost, 6),
+            "cache_read_tokens": usage.cache_read_tokens,
+            "cache_read_cost": round(cache_read_cost, 6),
+            "total_cost": round(
+                input_cost + output_cost + cache_write_cost + cache_read_cost, 6
+            ),
+            "cache_savings": round(
+                (usage.cache_read_tokens / 1_000_000)
+                * (
+                    pricing.get("input_per_mtok", 0)
+                    - pricing.get("cache_read_per_mtok", 0)
+                ),
+                6,
+            )
+            if usage.cache_read_tokens > 0
+            else 0.0,
         }
 
 

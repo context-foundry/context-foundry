@@ -70,7 +70,7 @@
 
 ## Implementation Details
 
-**API Client Features**: 
+**API Client Features**:
 - Automatic retry with exponential backoff (3 attempts max)
 - Request timeout (10 seconds)
 - Response transformation to consistent data structure

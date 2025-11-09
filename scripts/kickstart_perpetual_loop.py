@@ -5,8 +5,10 @@ Kickstart the Perpetual Self-Improvement Loop!
 This creates the FIRST task, which will automatically generate
 the NEXT task when it completes, creating an infinite loop!
 """
+
 import sys
 from tools.evolution.task_queue import TaskQueueManager, TaskType
+
 
 def main():
     queue = TaskQueueManager()
@@ -15,8 +17,8 @@ def main():
     task_id = queue.create_task(
         task_type=TaskType.SELF_IMPROVEMENT.value,
         params={
-            'action': 'implement_full_self_improvement',
-            'description': '''Kickstart Evolution System Perpetual Loop!
+            "action": "implement_full_self_improvement",
+            "description": """Kickstart Evolution System Perpetual Loop!
 
 This is the FIRST task in the perpetual self-improvement loop.
 
@@ -29,14 +31,14 @@ Find opportunities to improve Context Foundry:
 Create a PR with improvements.
 
 IMPORTANT: After this completes, the system will automatically
-queue the NEXT improvement task, creating a perpetual loop! 🔄'''
+queue the NEXT improvement task, creating a perpetual loop! 🔄""",
         },
-        priority=10  # Highest priority to get started
+        priority=10,  # Highest priority to get started
     )
 
     print("🚀 PERPETUAL LOOP KICKSTARTED!")
     print(f"📋 Initial Task ID: {task_id}")
-    print(f"⚡ Priority: 10 (MAX)")
+    print("⚡ Priority: 10 (MAX)")
     print()
     print("🔄 What happens next:")
     print("  1. Daemon picks up this task (60s)")
@@ -53,6 +55,7 @@ queue the NEXT improvement task, creating a perpetual loop! 🔄'''
     print("    kill $(cat ~/.context-foundry/evolution/daemon.pid)")
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

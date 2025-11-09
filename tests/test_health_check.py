@@ -24,7 +24,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 # Import health check
-sys.path.insert(0, str(Path(__file__).parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
 from tools.health_check import HealthCheck
 
@@ -59,7 +59,7 @@ class TestPythonVersionCheck:
             assert len(checker.passed) > 0
             assert any("Python version" in msg for msg in checker.passed)
 
-    @patch('sys.version_info', (3, 7))
+    @patch("sys.version_info", (3, 7))
     def test_python_version_check_fails_for_old_version(self):
         """Test Python version check fails for Python < 3.8"""
         checker = HealthCheck()
@@ -142,9 +142,10 @@ class TestDependencyCheck:
             critical_issues = [i for i in checker.issues if i[0] == "critical"]
             assert any("Dependencies" in i[1] for i in critical_issues)
 
-    @patch('builtins.__import__')
+    @patch("builtins.__import__")
     def test_dependency_check_detects_missing_packages(self, mock_import):
         """Test dependency check detects missing packages"""
+
         def import_side_effect(name, *args, **kwargs):
             if name == "anthropic":
                 raise ImportError(f"No module named '{name}'")
@@ -190,7 +191,7 @@ class TestDirectoryStructureCheck:
             "blueprints/plans",
             "blueprints/tasks",
             "workflows",
-            "tools"
+            "tools",
         ]
         for dir_path in required_dirs:
             (Path(self.temp_dir) / dir_path).mkdir(parents=True, exist_ok=True)
@@ -217,17 +218,19 @@ class TestDirectoryStructureCheck:
 class TestGitCheck:
     """Test git availability and repository validation"""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_git_check_passes_when_git_available(self, mock_run):
         """Test git check passes when git is installed"""
-        mock_run.return_value = Mock(returncode=0, stdout='git version 2.39.0', stderr='')
+        mock_run.return_value = Mock(
+            returncode=0, stdout="git version 2.39.0", stderr=""
+        )
 
         checker = HealthCheck()
         checker.check_git()
 
         assert any("Git available" in msg for msg in checker.passed)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_git_check_warns_when_git_missing(self, mock_run):
         """Test git check warns when git is not installed"""
         mock_run.side_effect = FileNotFoundError()
@@ -237,13 +240,14 @@ class TestGitCheck:
 
         assert any("Git" in w[0] for w in checker.warnings)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_git_check_detects_repository(self, mock_run):
         """Test git check detects if in git repository"""
+
         def run_side_effect(cmd, **kwargs):
             if "rev-parse" in cmd:
-                return Mock(returncode=0, stdout='.git', stderr='')
-            return Mock(returncode=0, stdout='git version 2.39.0', stderr='')
+                return Mock(returncode=0, stdout=".git", stderr="")
+            return Mock(returncode=0, stdout="git version 2.39.0", stderr="")
 
         mock_run.side_effect = run_side_effect
 
@@ -252,10 +256,10 @@ class TestGitCheck:
 
         assert any("Git repository initialized" in msg for msg in checker.passed)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_git_check_handles_timeout(self, mock_run):
         """Test git check handles subprocess timeout"""
-        mock_run.side_effect = subprocess.TimeoutExpired('git', 5)
+        mock_run.side_effect = subprocess.TimeoutExpired("git", 5)
 
         checker = HealthCheck()
         checker.check_git()
@@ -269,17 +273,17 @@ class TestGitCheck:
 class TestOptionalToolsCheck:
     """Test optional tools detection"""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_optional_tools_check_detects_gh_cli(self, mock_run):
         """Test check detects GitHub CLI when available"""
-        mock_run.return_value = Mock(returncode=0, stdout='gh version 2.0.0', stderr='')
+        mock_run.return_value = Mock(returncode=0, stdout="gh version 2.0.0", stderr="")
 
         checker = HealthCheck()
         checker.check_optional_tools()
 
         assert any("GitHub CLI" in msg for msg in checker.passed)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_optional_tools_check_warns_missing_gh_cli(self, mock_run):
         """Test check warns when GitHub CLI is missing"""
         mock_run.side_effect = FileNotFoundError()
@@ -313,7 +317,7 @@ class TestHealthCheckRun:
 
     def test_run_executes_all_checks(self):
         """Test run() executes all health checks"""
-        with patch('rich.console.Console.print'):  # Suppress output
+        with patch("rich.console.Console.print"):  # Suppress output
             checker = HealthCheck()
             result = checker.run()
 
@@ -325,7 +329,7 @@ class TestHealthCheckRun:
         # Set up minimal valid environment
         os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test-key-12345"
 
-        with patch('rich.console.Console.print'):  # Suppress output
+        with patch("rich.console.Console.print"):  # Suppress output
             checker = HealthCheck()
 
             # Manually run checks (without display)
@@ -347,7 +351,7 @@ class TestHealthCheckRun:
             original_key = None
 
         try:
-            with patch('rich.console.Console.print'):  # Suppress output
+            with patch("rich.console.Console.print"):  # Suppress output
                 checker = HealthCheck()
                 checker.check_api_key()
 
@@ -406,7 +410,7 @@ class TestHealthCheckResults:
 class TestHealthCheckDisplay:
     """Test health check display functionality"""
 
-    @patch('rich.console.Console.print')
+    @patch("rich.console.Console.print")
     def test_display_results_shows_passed_checks(self, mock_print):
         """Test display_results shows passed checks"""
         checker = HealthCheck()
@@ -416,7 +420,7 @@ class TestHealthCheckDisplay:
         # Should call print
         assert mock_print.called
 
-    @patch('rich.console.Console.print')
+    @patch("rich.console.Console.print")
     def test_display_results_shows_warnings(self, mock_print):
         """Test display_results shows warnings"""
         checker = HealthCheck()
@@ -425,7 +429,7 @@ class TestHealthCheckDisplay:
 
         assert mock_print.called
 
-    @patch('rich.console.Console.print')
+    @patch("rich.console.Console.print")
     def test_display_results_shows_critical_issues(self, mock_print):
         """Test display_results shows critical issues"""
         checker = HealthCheck()
@@ -435,5 +439,5 @@ class TestHealthCheckDisplay:
         assert mock_print.called
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

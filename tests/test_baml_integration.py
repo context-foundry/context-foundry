@@ -13,7 +13,6 @@ Tests cover:
 - Error handling
 """
 
-import os
 import sys
 import json
 import pytest
@@ -36,7 +35,7 @@ from tools.baml_integration import (
     generate_architecture_baml,
     validate_build_result_baml,
     baml_status_summary,
-    fallback_to_json
+    fallback_to_json,
 )
 
 
@@ -73,7 +72,7 @@ class TestBAMLSchemas:
             "scout.baml",
             "architect.baml",
             "builder.baml",
-            "clients.baml"
+            "clients.baml",
         ]
 
         for schema in required_schemas:
@@ -151,7 +150,7 @@ class TestPhaseTracking:
     def test_update_phase_with_baml(self):
         """Test updating phase with BAML (mocked)"""
         # Mock BAML client to avoid real API calls
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
 
@@ -165,18 +164,16 @@ class TestPhaseTracking:
                 "test_iteration": 0,
                 "phases_completed": [],
                 "started_at": "2025-01-13T00:00:00Z",
-                "last_updated": "2025-01-13T00:00:00Z"
+                "last_updated": "2025-01-13T00:00:00Z",
             }
 
             mock_result = MagicMock()
             # Mock .parsed() to return the dict directly (modern BAML API)
             mock_result.parsed.return_value = mock_response
             # Also mock unstable_internal_repr as fallback
-            mock_result.unstable_internal_repr.return_value = json.dumps({
-                "Success": {
-                    "content": json.dumps(mock_response)
-                }
-            })
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps(mock_response)}}
+            )
             mock_client.call_function_sync.return_value = mock_result
             mock_client.create_context_manager.return_value = MagicMock()
 
@@ -185,7 +182,7 @@ class TestPhaseTracking:
                 status="researching",
                 detail="Analyzing requirements",
                 session_id="test-session",
-                iteration=0
+                iteration=0,
             )
 
             # Should return a dict with expected fields
@@ -200,30 +197,30 @@ class TestPhaseTracking:
 
     def test_validate_phase_info_valid(self):
         """Test validating valid phase info JSON with BAML"""
-        valid_json = json.dumps({
-            "session_id": "test",
-            "current_phase": "Scout",
-            "phase_number": "1/7",
-            "status": "researching",
-            "progress_detail": "Test",
-            "test_iteration": 0,
-            "phases_completed": [],
-            "started_at": "2025-01-13T00:00:00Z",
-            "last_updated": "2025-01-13T00:00:00Z"
-        })
+        valid_json = json.dumps(
+            {
+                "session_id": "test",
+                "current_phase": "Scout",
+                "phase_number": "1/7",
+                "status": "researching",
+                "progress_detail": "Test",
+                "test_iteration": 0,
+                "phases_completed": [],
+                "started_at": "2025-01-13T00:00:00Z",
+                "last_updated": "2025-01-13T00:00:00Z",
+            }
+        )
 
         # Mock BAML client to avoid real API calls
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
 
             # Mock the BAML response
             mock_result = MagicMock()
-            mock_result.unstable_internal_repr.return_value = json.dumps({
-                "Success": {
-                    "content": valid_json
-                }
-            })
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": valid_json}}
+            )
             mock_client.call_function_sync.return_value = mock_result
             mock_client.create_context_manager.return_value = MagicMock()
 
@@ -238,7 +235,7 @@ class TestPhaseTracking:
         invalid_json = "{ invalid json }"
 
         # Mock BAML client
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
             mock_client.create_context_manager.return_value = MagicMock()
@@ -252,19 +249,23 @@ class TestPhaseTracking:
 
     def test_validate_phase_info_missing_fields(self):
         """Test validating JSON with missing required fields"""
-        incomplete_json = json.dumps({
-            "session_id": "test"
-            # Missing required fields
-        })
+        incomplete_json = json.dumps(
+            {
+                "session_id": "test"
+                # Missing required fields
+            }
+        )
 
         # Mock BAML client
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
             mock_client.create_context_manager.return_value = MagicMock()
 
             # Mock BAML to fail on missing fields
-            mock_client.call_function_sync.side_effect = Exception("Missing required fields")
+            mock_client.call_function_sync.side_effect = Exception(
+                "Missing required fields"
+            )
 
             # Should raise RuntimeError, not return tuple
             with pytest.raises(RuntimeError, match="BAML validation failed"):
@@ -277,17 +278,15 @@ class TestScoutReport:
     def test_generate_scout_report_baml(self):
         """Test generating Scout report with BAML (mocked)"""
         # Mock BAML client to avoid real API calls
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
 
             # Mock the BAML response
             mock_result = MagicMock()
-            mock_result.unstable_internal_repr.return_value = json.dumps({
-                "Success": {
-                    "content": json.dumps({"summary": "Test report"})
-                }
-            })
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps({"summary": "Test report"})}}
+            )
             mock_client.call_function_sync.return_value = mock_result
             mock_client.create_context_manager.return_value = MagicMock()
 
@@ -295,7 +294,7 @@ class TestScoutReport:
             report = generate_scout_report_baml(
                 task_description="Build a web app",
                 codebase_analysis="Python project",
-                past_patterns="No patterns"
+                past_patterns="No patterns",
             )
 
             assert isinstance(report, dict)
@@ -303,12 +302,15 @@ class TestScoutReport:
 
     def test_generate_scout_report_fails_without_baml(self):
         """Test Scout report fails when BAML unavailable"""
-        with patch('tools.baml_integration.is_baml_available', return_value=False):
-            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+        with patch("tools.baml_integration.is_baml_available", return_value=False):
+            with patch(
+                "tools.baml_integration.get_baml_error",
+                return_value="BAML not installed",
+            ):
                 with pytest.raises(RuntimeError, match="BAML is required"):
                     generate_scout_report_baml(
                         task_description="Build a web app",
-                        codebase_analysis="Python project"
+                        codebase_analysis="Python project",
                     )
 
 
@@ -321,17 +323,15 @@ class TestArchitectureBlueprint:
         risks = ["Risk 1", "Risk 2"]
 
         # Mock BAML client to avoid real API calls
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
 
             # Mock the BAML response
             mock_result = MagicMock()
-            mock_result.unstable_internal_repr.return_value = json.dumps({
-                "Success": {
-                    "content": json.dumps({"components": []})
-                }
-            })
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps({"components": []})}}
+            )
             mock_client.call_function_sync.return_value = mock_result
             mock_client.create_context_manager.return_value = MagicMock()
 
@@ -342,8 +342,11 @@ class TestArchitectureBlueprint:
 
     def test_generate_architecture_fails_without_baml(self):
         """Test architecture generation fails when BAML unavailable"""
-        with patch('tools.baml_integration.is_baml_available', return_value=False):
-            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+        with patch("tools.baml_integration.is_baml_available", return_value=False):
+            with patch(
+                "tools.baml_integration.get_baml_error",
+                return_value="BAML not installed",
+            ):
                 with pytest.raises(RuntimeError, match="BAML is required"):
                     generate_architecture_baml(json.dumps({"summary": "test"}), [])
 
@@ -353,24 +356,20 @@ class TestBuilderTaskResult:
 
     def test_validate_build_result_baml(self):
         """Test validating build result with BAML (mocked)"""
-        result_json = json.dumps({
-            "task_id": "task-1",
-            "status": "success",
-            "files_created": ["file1.py"]
-        })
+        result_json = json.dumps(
+            {"task_id": "task-1", "status": "success", "files_created": ["file1.py"]}
+        )
 
         # Mock BAML client to avoid real API calls
-        with patch('tools.baml_integration.get_baml_client') as mock_get_client:
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client
 
             # Mock the BAML response
             mock_result = MagicMock()
-            mock_result.unstable_internal_repr.return_value = json.dumps({
-                "Success": {
-                    "content": result_json
-                }
-            })
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": result_json}}
+            )
             mock_client.call_function_sync.return_value = mock_result
             mock_client.create_context_manager.return_value = MagicMock()
 
@@ -382,8 +381,11 @@ class TestBuilderTaskResult:
 
     def test_validate_build_result_fails_without_baml(self):
         """Test build validation fails when BAML unavailable"""
-        with patch('tools.baml_integration.is_baml_available', return_value=False):
-            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+        with patch("tools.baml_integration.is_baml_available", return_value=False):
+            with patch(
+                "tools.baml_integration.get_baml_error",
+                return_value="BAML not installed",
+            ):
                 with pytest.raises(RuntimeError, match="BAML is required"):
                     validate_build_result_baml(json.dumps({"task_id": "test"}))
 
@@ -415,27 +417,31 @@ class TestBAMLRequired:
     def test_update_phase_fails_without_baml(self):
         """Test that phase tracking fails hard without BAML"""
         # Mock BAML as unavailable
-        with patch('tools.baml_integration.is_baml_available', return_value=False):
-            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+        with patch("tools.baml_integration.is_baml_available", return_value=False):
+            with patch(
+                "tools.baml_integration.get_baml_error",
+                return_value="BAML not installed",
+            ):
                 # Should raise RuntimeError, not return JSON fallback
                 with pytest.raises(RuntimeError, match="BAML is required"):
                     update_phase_with_baml(
                         phase="Test",
                         status="testing",
-                        detail="Testing BAML requirement"
+                        detail="Testing BAML requirement",
                     )
 
     def test_validate_fails_without_baml(self):
         """Test that validation fails hard without BAML"""
-        valid_json = json.dumps({
-            "session_id": "test",
-            "current_phase": "Test",
-            "status": "testing"
-        })
+        valid_json = json.dumps(
+            {"session_id": "test", "current_phase": "Test", "status": "testing"}
+        )
 
         # Mock BAML as unavailable
-        with patch('tools.baml_integration.is_baml_available', return_value=False):
-            with patch('tools.baml_integration.get_baml_error', return_value="BAML not installed"):
+        with patch("tools.baml_integration.is_baml_available", return_value=False):
+            with patch(
+                "tools.baml_integration.get_baml_error",
+                return_value="BAML not installed",
+            ):
                 # Should raise RuntimeError, not return tuple
                 with pytest.raises(RuntimeError, match="BAML is required"):
                     validate_phase_info(valid_json)

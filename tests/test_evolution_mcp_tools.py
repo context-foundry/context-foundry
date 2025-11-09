@@ -14,7 +14,7 @@ from tools import evolution_mcp_tools
 def mock_task_queue():
     """Mock TaskQueueManager."""
     mock = MagicMock()
-    with patch('tools.evolution_mcp_tools.get_task_queue', return_value=mock):
+    with patch("tools.evolution_mcp_tools.get_task_queue", return_value=mock):
         yield mock
 
 
@@ -22,7 +22,7 @@ def mock_task_queue():
 def mock_daemon():
     """Mock EvolutionDaemon."""
     mock = MagicMock()
-    with patch('tools.evolution_mcp_tools.get_daemon', return_value=mock):
+    with patch("tools.evolution_mcp_tools.get_daemon", return_value=mock):
         yield mock
 
 
@@ -34,8 +34,7 @@ class TestCreateEvolutionTask:
         mock_task_queue.create_task.return_value = "task-123"
 
         result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="self_improvement",
-            priority=7
+            task_type="self_improvement", priority=7
         )
 
         # Parse JSON response
@@ -55,9 +54,7 @@ class TestCreateEvolutionTask:
         mock_task_queue.create_task.return_value = "task-456"
 
         result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="chaos_creative",
-            target_project="/path/to/project",
-            priority=5
+            task_type="chaos_creative", target_project="/path/to/project", priority=5
         )
 
         data = json.loads(result)
@@ -72,9 +69,7 @@ class TestCreateEvolutionTask:
         mock_task_queue.create_task.return_value = "task-789"
 
         result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="apply_pattern",
-            pattern_id="pattern-123",
-            priority=8
+            task_type="apply_pattern", pattern_id="pattern-123", priority=8
         )
 
         data = json.loads(result)
@@ -90,9 +85,7 @@ class TestCreateEvolutionTask:
 
         custom_params = {"key": "value", "number": 42}
         result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="research",
-            priority=6,
-            params=custom_params
+            task_type="research", priority=6, params=custom_params
         )
 
         data = json.loads(result)
@@ -108,8 +101,7 @@ class TestCreateEvolutionTask:
         mock_task_queue.create_task.side_effect = Exception("Database error")
 
         result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="self_improvement",
-            priority=5
+            task_type="self_improvement", priority=5
         )
 
         data = json.loads(result)
@@ -160,7 +152,9 @@ class TestGetEvolutionTasks:
         mock_task.to_dict.return_value = {"id": "completed-1", "status": "completed"}
         mock_task_queue.list_tasks.return_value = [mock_task]
 
-        result = evolution_mcp_tools.get_evolution_tasks_impl(status="completed", limit=25)
+        result = evolution_mcp_tools.get_evolution_tasks_impl(
+            status="completed", limit=25
+        )
 
         data = json.loads(result)
         assert data["success"] is True
@@ -245,7 +239,7 @@ class TestStopEvolutionDaemon:
         mock_daemon.is_running.return_value = True
         mock_daemon.get_pid.return_value = 12345
 
-        with patch('os.kill') as mock_kill:
+        with patch("os.kill") as mock_kill:
             result = evolution_mcp_tools.stop_evolution_daemon_impl()
 
             data = json.loads(result)
@@ -281,7 +275,7 @@ class TestStopEvolutionDaemon:
         mock_daemon.is_running.return_value = True
         mock_daemon.get_pid.return_value = 12345
 
-        with patch('os.kill'):
+        with patch("os.kill"):
             result = evolution_mcp_tools.stop_evolution_daemon_impl(graceful=False)
             data = json.loads(result)
             assert data["success"] is True
@@ -299,8 +293,8 @@ class TestGetDaemonStatus:
         mock_task_queue.count_completed.return_value = 10
         mock_task_queue.count_failed.return_value = 2
 
-        with patch('psutil.cpu_percent', return_value=45.2):
-            with patch('psutil.virtual_memory') as mock_mem:
+        with patch("psutil.cpu_percent", return_value=45.2):
+            with patch("psutil.virtual_memory") as mock_mem:
                 mock_mem.return_value.used = 8 * 1024**3  # 8 GB
 
                 result = evolution_mcp_tools.get_daemon_status_impl()
@@ -323,8 +317,8 @@ class TestGetDaemonStatus:
         mock_task_queue.count_completed.return_value = 0
         mock_task_queue.count_failed.return_value = 0
 
-        with patch('psutil.cpu_percent', return_value=10.0):
-            with patch('psutil.virtual_memory') as mock_mem:
+        with patch("psutil.cpu_percent", return_value=10.0):
+            with patch("psutil.virtual_memory") as mock_mem:
                 mock_mem.return_value.used = 4 * 1024**3  # 4 GB
 
                 result = evolution_mcp_tools.get_daemon_status_impl()
@@ -352,8 +346,7 @@ class TestRegisterProject:
     def test_register_project_success(self, mock_task_queue):
         """Test successful project registration."""
         result = evolution_mcp_tools.register_project_impl(
-            project_path="/path/to/project",
-            project_type="python"
+            project_path="/path/to/project", project_type="python"
         )
 
         data = json.loads(result)
@@ -362,9 +355,7 @@ class TestRegisterProject:
 
         # Verify register_project was called
         mock_task_queue.register_project.assert_called_once_with(
-            path="/path/to/project",
-            project_type="python",
-            metadata={}
+            path="/path/to/project", project_type="python", metadata={}
         )
 
     def test_register_project_with_metadata(self, mock_task_queue):
@@ -372,9 +363,7 @@ class TestRegisterProject:
         metadata = {"version": "1.0.0", "framework": "django"}
 
         result = evolution_mcp_tools.register_project_impl(
-            project_path="/path/to/project",
-            project_type="python",
-            metadata=metadata
+            project_path="/path/to/project", project_type="python", metadata=metadata
         )
 
         data = json.loads(result)
@@ -389,8 +378,7 @@ class TestRegisterProject:
         mock_task_queue.register_project.side_effect = Exception("Invalid path")
 
         result = evolution_mcp_tools.register_project_impl(
-            project_path="/invalid/path",
-            project_type="python"
+            project_path="/invalid/path", project_type="python"
         )
 
         data = json.loads(result)
@@ -406,8 +394,7 @@ class TestApplyPatternToProject:
         mock_task_queue.create_task.return_value = "task-pattern-123"
 
         result = evolution_mcp_tools.apply_pattern_to_project_impl(
-            project_path="/path/to/project",
-            pattern_id="pattern-456"
+            project_path="/path/to/project", pattern_id="pattern-456"
         )
 
         data = json.loads(result)
@@ -427,8 +414,7 @@ class TestApplyPatternToProject:
         mock_task_queue.create_task.side_effect = Exception("Pattern not found")
 
         result = evolution_mcp_tools.apply_pattern_to_project_impl(
-            project_path="/path/to/project",
-            pattern_id="invalid-pattern"
+            project_path="/path/to/project", pattern_id="invalid-pattern"
         )
 
         data = json.loads(result)
@@ -487,9 +473,7 @@ class TestRegisterAgent:
 
         # Verify register_agent was called
         mock_task_queue.register_agent.assert_called_once_with(
-            name="TestAgent",
-            url=None,
-            capabilities=[]
+            name="TestAgent", url=None, capabilities=[]
         )
 
     def test_register_agent_with_details(self, mock_task_queue):
@@ -500,7 +484,7 @@ class TestRegisterAgent:
         result = evolution_mcp_tools.register_agent_impl(
             agent_name="AdvancedAgent",
             agent_url="http://localhost:8080",
-            capabilities=capabilities
+            capabilities=capabilities,
         )
 
         data = json.loads(result)
@@ -536,8 +520,7 @@ class TestIntegration:
         # Create task
         mock_task_queue.create_task.return_value = "workflow-task-1"
         create_result = evolution_mcp_tools.create_evolution_task_impl(
-            task_type="self_improvement",
-            priority=8
+            task_type="self_improvement", priority=8
         )
         assert json.loads(create_result)["success"] is True
 
@@ -549,8 +532,8 @@ class TestIntegration:
         mock_task_queue.count_completed.return_value = 0
         mock_task_queue.count_failed.return_value = 0
 
-        with patch('psutil.cpu_percent', return_value=30.0):
-            with patch('psutil.virtual_memory') as mock_mem:
+        with patch("psutil.cpu_percent", return_value=30.0):
+            with patch("psutil.virtual_memory") as mock_mem:
                 mock_mem.return_value.used = 6 * 1024**3
                 status_result = evolution_mcp_tools.get_daemon_status_impl()
                 status_data = json.loads(status_result)

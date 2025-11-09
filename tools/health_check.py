@@ -12,7 +12,6 @@ from typing import List, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 console = Console()
 
@@ -27,11 +26,13 @@ class HealthCheck:
 
     def run(self) -> bool:
         """Run all health checks. Returns True if all critical checks pass."""
-        console.print(Panel.fit(
-            "[bold cyan]Context Foundry Health Check[/bold cyan]\n"
-            "Validating installation and configuration...",
-            border_style="cyan"
-        ))
+        console.print(
+            Panel.fit(
+                "[bold cyan]Context Foundry Health Check[/bold cyan]\n"
+                "Validating installation and configuration...",
+                border_style="cyan",
+            )
+        )
         console.print()
 
         # Run checks
@@ -55,11 +56,13 @@ class HealthCheck:
         if major >= 3 and minor >= 8:
             self.passed.append(f"Python version {major}.{minor}")
         else:
-            self.issues.append((
-                "critical",
-                "Python Version",
-                f"Python 3.8+ required, found {major}.{minor}"
-            ))
+            self.issues.append(
+                (
+                    "critical",
+                    "Python Version",
+                    f"Python 3.8+ required, found {major}.{minor}",
+                )
+            )
 
     def check_api_key(self):
         """Check if ANTHROPIC_API_KEY is configured."""
@@ -70,19 +73,23 @@ class HealthCheck:
             if api_key.startswith("sk-"):
                 self.passed.append("API key configured")
             else:
-                self.warnings.append((
-                    "API Key Format",
-                    "API key doesn't match expected format (should start with 'sk-')"
-                ))
+                self.warnings.append(
+                    (
+                        "API Key Format",
+                        "API key doesn't match expected format (should start with 'sk-')",
+                    )
+                )
         else:
-            self.issues.append((
-                "critical",
-                "API Key",
-                "ANTHROPIC_API_KEY not set or invalid\n"
-                "   → Get your key from: https://console.anthropic.com/\n"
-                "   → Set with: export ANTHROPIC_API_KEY=your_key\n"
-                "   → Or run: foundry config --init"
-            ))
+            self.issues.append(
+                (
+                    "critical",
+                    "API Key",
+                    "ANTHROPIC_API_KEY not set or invalid\n"
+                    "   → Get your key from: https://console.anthropic.com/\n"
+                    "   → Set with: export ANTHROPIC_API_KEY=your_key\n"
+                    "   → Or run: foundry config --init",
+                )
+            )
 
     def check_dependencies(self):
         """Check if required Python packages are installed."""
@@ -94,7 +101,7 @@ class HealthCheck:
             "dotenv",
             "sentence_transformers",
             "numpy",
-            "yaml"
+            "yaml",
         ]
 
         missing = []
@@ -117,12 +124,14 @@ class HealthCheck:
                     missing.append(package)
 
         if missing:
-            self.issues.append((
-                "critical",
-                "Dependencies",
-                f"Missing packages: {', '.join(missing)}\n"
-                f"   → Install with: pip install -r requirements.txt"
-            ))
+            self.issues.append(
+                (
+                    "critical",
+                    "Dependencies",
+                    f"Missing packages: {', '.join(missing)}\n"
+                    f"   → Install with: pip install -r requirements.txt",
+                )
+            )
         else:
             self.passed.append("All dependencies installed")
 
@@ -137,7 +146,7 @@ class HealthCheck:
             "blueprints/plans",
             "blueprints/tasks",
             "workflows",
-            "tools"
+            "tools",
         ]
 
         missing_dirs = []
@@ -147,11 +156,13 @@ class HealthCheck:
                 missing_dirs.append(dir_path)
 
         if missing_dirs:
-            self.warnings.append((
-                "Directory Structure",
-                f"Missing directories: {', '.join(missing_dirs)}\n"
-                f"   → These will be created automatically when needed"
-            ))
+            self.warnings.append(
+                (
+                    "Directory Structure",
+                    f"Missing directories: {', '.join(missing_dirs)}\n"
+                    f"   → These will be created automatically when needed",
+                )
+            )
         else:
             self.passed.append("Directory structure complete")
 
@@ -160,26 +171,27 @@ class HealthCheck:
         # Check git installed
         try:
             result = subprocess.run(
-                ["git", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["git", "--version"], capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 self.passed.append("Git available")
             else:
-                self.warnings.append((
-                    "Git",
-                    "Git not working properly\n"
-                    "   → Install from: https://git-scm.com/"
-                ))
+                self.warnings.append(
+                    (
+                        "Git",
+                        "Git not working properly\n"
+                        "   → Install from: https://git-scm.com/",
+                    )
+                )
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            self.warnings.append((
-                "Git",
-                "Git not found\n"
-                "   → Install from: https://git-scm.com/\n"
-                "   → Needed for checkpointing and PR creation"
-            ))
+            self.warnings.append(
+                (
+                    "Git",
+                    "Git not found\n"
+                    "   → Install from: https://git-scm.com/\n"
+                    "   → Needed for checkpointing and PR creation",
+                )
+            )
             return
 
         # Check if in a git repository
@@ -188,17 +200,19 @@ class HealthCheck:
                 ["git", "rev-parse", "--git-dir"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             if result.returncode == 0:
                 self.passed.append("Git repository initialized")
             else:
-                self.warnings.append((
-                    "Git Repository",
-                    "Not in a git repository\n"
-                    "   → Initialize with: git init\n"
-                    "   → Recommended for version control"
-                ))
+                self.warnings.append(
+                    (
+                        "Git Repository",
+                        "Not in a git repository\n"
+                        "   → Initialize with: git init\n"
+                        "   → Recommended for version control",
+                    )
+                )
         except subprocess.TimeoutExpired:
             pass
 
@@ -207,20 +221,19 @@ class HealthCheck:
         # Check for gh CLI (for PR creation)
         try:
             result = subprocess.run(
-                ["gh", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["gh", "--version"], capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 self.passed.append("GitHub CLI available (gh)")
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            self.warnings.append((
-                "GitHub CLI (Optional)",
-                "GitHub CLI not found\n"
-                "   → Install from: https://cli.github.com/\n"
-                "   → Enables automatic PR creation"
-            ))
+            self.warnings.append(
+                (
+                    "GitHub CLI (Optional)",
+                    "GitHub CLI not found\n"
+                    "   → Install from: https://cli.github.com/\n"
+                    "   → Enables automatic PR creation",
+                )
+            )
 
         # Check for SLACK_WEBHOOK
         if os.getenv("SLACK_WEBHOOK"):
@@ -255,22 +268,26 @@ class HealthCheck:
 
         # Summary
         if not self.issues:
-            console.print(Panel.fit(
-                "[bold green]✅ All critical checks passed![/bold green]\n"
-                "Context Foundry is ready to use.\n\n"
-                "[cyan]Quick start:[/cyan]\n"
-                "  foundry build my-app \"Your task description\"",
-                title="Health Check Complete",
-                border_style="green"
-            ))
+            console.print(
+                Panel.fit(
+                    "[bold green]✅ All critical checks passed![/bold green]\n"
+                    "Context Foundry is ready to use.\n\n"
+                    "[cyan]Quick start:[/cyan]\n"
+                    '  foundry build my-app "Your task description"',
+                    title="Health Check Complete",
+                    border_style="green",
+                )
+            )
         else:
             critical_count = len([i for i in self.issues if i[0] == "critical"])
-            console.print(Panel.fit(
-                f"[bold red]{critical_count} critical issue(s) found[/bold red]\n"
-                "Please resolve the issues above before using Context Foundry.",
-                title="Health Check Failed",
-                border_style="red"
-            ))
+            console.print(
+                Panel.fit(
+                    f"[bold red]{critical_count} critical issue(s) found[/bold red]\n"
+                    "Please resolve the issues above before using Context Foundry.",
+                    title="Health Check Failed",
+                    border_style="red",
+                )
+            )
 
 
 def main():

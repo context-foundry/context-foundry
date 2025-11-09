@@ -5,15 +5,12 @@ Tests for subprocess collection, batch writing, and phase monitoring
 """
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock, mock_open, call
+from unittest.mock import Mock, patch, mock_open
 from pathlib import Path
 import tempfile
-import json
 import subprocess
-import queue
 import threading
 import time
-from datetime import datetime
 
 from tools.metrics.collector import MetricsCollector
 from tools.metrics.log_parser import TokenUsage
@@ -28,8 +25,7 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
         self.mock_calculator = Mock()
         self.mock_calculator.calculate_cost.return_value = 0.01
         self.collector = MetricsCollector(
-            db=self.mock_db,
-            calculator=self.mock_calculator
+            db=self.mock_db, calculator=self.mock_calculator
         )
 
     def test_collect_from_subprocess_creates_build_if_not_exists(self):
@@ -43,15 +39,15 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
         self.mock_db.create_phase.return_value = 100
 
         # Mock parser to return no usages (empty iteration)
-        with patch.object(self.collector.parser, 'parse_subprocess_output', return_value=iter([])):
+        with patch.object(
+            self.collector.parser, "parse_subprocess_output", return_value=iter([])
+        ):
             self.collector.collect_from_subprocess(
-                mock_process,
-                'test-session',
-                'test-phase'
+                mock_process, "test-session", "test-phase"
             )
 
         # Verify build was created
-        self.mock_db.create_build.assert_called_once_with('test-session')
+        self.mock_db.create_build.assert_called_once_with("test-session")
         self.mock_db.create_phase.assert_called_once()
 
     def test_collect_from_subprocess_uses_existing_build(self):
@@ -59,14 +55,14 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
         mock_process = Mock(spec=subprocess.Popen)
 
         # Mock existing build
-        self.mock_db.get_build.return_value = {'id': 42, 'session_id': 'test-session'}
+        self.mock_db.get_build.return_value = {"id": 42, "session_id": "test-session"}
         self.mock_db.create_phase.return_value = 100
 
-        with patch.object(self.collector.parser, 'parse_subprocess_output', return_value=iter([])):
+        with patch.object(
+            self.collector.parser, "parse_subprocess_output", return_value=iter([])
+        ):
             self.collector.collect_from_subprocess(
-                mock_process,
-                'test-session',
-                'test-phase'
+                mock_process, "test-session", "test-phase"
             )
 
         # Verify build was not created, only phase
@@ -77,7 +73,7 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
         """Test that collect_from_subprocess handles parser exceptions gracefully"""
         mock_process = Mock(spec=subprocess.Popen)
 
-        self.mock_db.get_build.return_value = {'id': 1}
+        self.mock_db.get_build.return_value = {"id": 1}
         self.mock_db.create_phase.return_value = 100
 
         # Mock parser to raise exception
@@ -85,12 +81,14 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
             yield TokenUsage(100, 50, None)
             raise RuntimeError("Parser error")
 
-        with patch.object(self.collector.parser, 'parse_subprocess_output', return_value=failing_parser()):
+        with patch.object(
+            self.collector.parser,
+            "parse_subprocess_output",
+            return_value=failing_parser(),
+        ):
             # Should not raise exception
             self.collector.collect_from_subprocess(
-                mock_process,
-                'test-session',
-                'test-phase'
+                mock_process, "test-session", "test-phase"
             )
 
         # Phase should still be updated
@@ -100,27 +98,27 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
         """Test that phase is marked completed after collection"""
         mock_process = Mock(spec=subprocess.Popen)
 
-        self.mock_db.get_build.return_value = {'id': 1}
+        self.mock_db.get_build.return_value = {"id": 1}
         self.mock_db.create_phase.return_value = 100
 
-        with patch.object(self.collector.parser, 'parse_subprocess_output', return_value=iter([])):
+        with patch.object(
+            self.collector.parser, "parse_subprocess_output", return_value=iter([])
+        ):
             self.collector.collect_from_subprocess(
-                mock_process,
-                'test-session',
-                'test-phase'
+                mock_process, "test-session", "test-phase"
             )
 
         # Verify phase was updated with completion time
         self.mock_db.update_phase.assert_called_once()
         args = self.mock_db.update_phase.call_args
         self.assertEqual(args[0][0], 100)
-        self.assertIn('completed_at', args[1])
+        self.assertIn("completed_at", args[1])
 
     def test_collect_from_subprocess_queues_usages_for_batch_writing(self):
         """Test that usages are queued for batch writing"""
         mock_process = Mock(spec=subprocess.Popen)
 
-        self.mock_db.get_build.return_value = {'id': 1}
+        self.mock_db.get_build.return_value = {"id": 1}
         self.mock_db.create_phase.return_value = 100
 
         # Create test usages
@@ -129,15 +127,17 @@ class TestCollectorSubprocessCollection(unittest.TestCase):
             TokenUsage(150, 75, "2025-11-07T10:00:01"),
         ]
 
-        with patch.object(self.collector.parser, 'parse_subprocess_output', return_value=iter(usages)):
+        with patch.object(
+            self.collector.parser, "parse_subprocess_output", return_value=iter(usages)
+        ):
             # Mock _update_phase_totals to avoid side effects
-            with patch.object(self.collector, '_update_phase_totals'):
+            with patch.object(self.collector, "_update_phase_totals"):
                 self.collector.collect_from_subprocess(
                     mock_process,
-                    'test-session',
-                    'test-phase',
+                    "test-session",
+                    "test-phase",
                     batch_size=10,
-                    batch_timeout=1.0
+                    batch_timeout=1.0,
                 )
 
         # Give background thread time to process
@@ -156,8 +156,7 @@ class TestBatchWriter(unittest.TestCase):
         self.mock_calculator = Mock()
         self.mock_calculator.calculate_cost.return_value = 0.01
         self.collector = MetricsCollector(
-            db=self.mock_db,
-            calculator=self.mock_calculator
+            db=self.mock_db, calculator=self.mock_calculator
         )
 
     def test_batch_writer_flushes_on_batch_size(self):
@@ -171,8 +170,8 @@ class TestBatchWriter(unittest.TestCase):
         # Start batch writer thread
         thread = threading.Thread(
             target=self.collector._batch_writer,
-            args=(100, 'claude-sonnet-4', 3, 10.0),
-            daemon=True
+            args=(100, "claude-sonnet-4", 3, 10.0),
+            daemon=True,
         )
         thread.start()
 
@@ -189,15 +188,13 @@ class TestBatchWriter(unittest.TestCase):
     def test_batch_writer_flushes_on_timeout(self):
         """Test that batch writer flushes on timeout even with partial batch"""
         # Queue one usage
-        self.collector._usage_queue.put(
-            TokenUsage(100, 50, "2025-11-07T10:00:00")
-        )
+        self.collector._usage_queue.put(TokenUsage(100, 50, "2025-11-07T10:00:00"))
 
         # Start batch writer with short timeout
         thread = threading.Thread(
             target=self.collector._batch_writer,
-            args=(100, 'claude-sonnet-4', 10, 0.2),
-            daemon=True
+            args=(100, "claude-sonnet-4", 10, 0.2),
+            daemon=True,
         )
         thread.start()
 
@@ -222,8 +219,8 @@ class TestBatchWriter(unittest.TestCase):
         # Start and immediately stop
         thread = threading.Thread(
             target=self.collector._batch_writer,
-            args=(100, 'claude-sonnet-4', 10, 10.0),
-            daemon=True
+            args=(100, "claude-sonnet-4", 10, 10.0),
+            daemon=True,
         )
         thread.start()
 
@@ -247,23 +244,20 @@ class TestUpdatePhaseTotals(unittest.TestCase):
         self.mock_calculator = Mock()
         self.mock_calculator.calculate_cost.return_value = 0.015
         self.collector = MetricsCollector(
-            db=self.mock_db,
-            calculator=self.mock_calculator
+            db=self.mock_db, calculator=self.mock_calculator
         )
 
     def test_update_phase_totals_calculates_cost(self):
         """Test that phase totals include cost calculation"""
         usage = TokenUsage(
-            input_tokens=1000,
-            output_tokens=500,
-            timestamp="2025-11-07T10:00:00"
+            input_tokens=1000, output_tokens=500, timestamp="2025-11-07T10:00:00"
         )
 
-        self.collector._update_phase_totals(100, usage, 'claude-sonnet-4')
+        self.collector._update_phase_totals(100, usage, "claude-sonnet-4")
 
         # Verify cost was calculated with the usage object
         self.mock_calculator.calculate_cost.assert_called_once_with(
-            usage, 'claude-sonnet-4'
+            usage, "claude-sonnet-4"
         )
 
         # Note: _update_phase_totals actually does a pass (no-op) in the current implementation
@@ -279,67 +273,95 @@ class TestCollectFromPhaseFile(unittest.TestCase):
         self.mock_db = Mock()
         self.mock_calculator = Mock()
         self.collector = MetricsCollector(
-            db=self.mock_db,
-            calculator=self.mock_calculator
+            db=self.mock_db, calculator=self.mock_calculator
         )
 
-    @patch('builtins.open', new_callable=mock_open, read_data='{"current_phase": "scout", "phase_number": "1/7", "status": "running"}')
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data='{"current_phase": "scout", "phase_number": "1/7", "status": "running"}',
+    )
     def test_collect_from_phase_file_reads_phase_file(self, mock_file):
         """Test that collect_from_phase_file reads and parses phase file"""
         self.mock_db.get_build.return_value = None
         self.mock_db.create_build.return_value = 1
 
-        result = self.collector.collect_from_phase_file(Path('/fake/phase.json'), 'test-session')
+        result = self.collector.collect_from_phase_file(
+            Path("/fake/phase.json"), "test-session"
+        )
 
         # Verify file was opened
-        mock_file.assert_called_once_with(Path('/fake/phase.json'), 'r')
+        mock_file.assert_called_once_with(Path("/fake/phase.json"), "r")
 
         # Verify result contains phase data
-        self.assertEqual(result['phase_name'], 'scout')
-        self.assertEqual(result['phase_number'], '1/7')
-        self.assertEqual(result['status'], 'running')
+        self.assertEqual(result["phase_name"], "scout")
+        self.assertEqual(result["phase_number"], "1/7")
+        self.assertEqual(result["status"], "running")
 
-    @patch('builtins.open', side_effect=FileNotFoundError("File not found"))
+    @patch("builtins.open", side_effect=FileNotFoundError("File not found"))
     def test_collect_from_phase_file_handles_missing_file(self, mock_file):
         """Test that collect_from_phase_file handles missing phase file"""
-        result = self.collector.collect_from_phase_file(Path('/fake/missing.json'), 'test-session')
+        result = self.collector.collect_from_phase_file(
+            Path("/fake/missing.json"), "test-session"
+        )
 
         # Should return error info
-        self.assertIn('error', result)
-        self.assertEqual(result['session_id'], 'test-session')
+        self.assertIn("error", result)
+        self.assertEqual(result["session_id"], "test-session")
 
-    @patch('builtins.open', new_callable=mock_open, read_data='invalid json')
+    @patch("builtins.open", new_callable=mock_open, read_data="invalid json")
     def test_collect_from_phase_file_handles_invalid_json(self, mock_file):
         """Test that collect_from_phase_file handles invalid JSON"""
-        result = self.collector.collect_from_phase_file(Path('/fake/invalid.json'), 'test-session')
+        result = self.collector.collect_from_phase_file(
+            Path("/fake/invalid.json"), "test-session"
+        )
 
         # Should return error info
-        self.assertIn('error', result)
-        self.assertEqual(result['session_id'], 'test-session')
+        self.assertIn("error", result)
+        self.assertEqual(result["session_id"], "test-session")
 
-    @patch('builtins.open', new_callable=mock_open, read_data='{"current_phase": "test", "status": "completed"}')
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data='{"current_phase": "test", "status": "completed"}',
+    )
     def test_collect_from_phase_file_creates_build_if_not_exists(self, mock_file):
         """Test that collect_from_phase_file creates build if it doesn't exist"""
         self.mock_db.get_build.return_value = None
         self.mock_db.create_build.return_value = 42
 
-        result = self.collector.collect_from_phase_file(Path('/fake/phase.json'), 'new-session')
+        result = self.collector.collect_from_phase_file(
+            Path("/fake/phase.json"), "new-session"
+        )
 
         # Verify build was created
-        self.mock_db.create_build.assert_called_once_with('new-session', status='completed')
-        self.assertEqual(result['build_id'], 42)
+        self.mock_db.create_build.assert_called_once_with(
+            "new-session", status="completed"
+        )
+        self.assertEqual(result["build_id"], 42)
 
-    @patch('builtins.open', new_callable=mock_open, read_data='{"current_phase": "test", "status": "failed"}')
+    @patch(
+        "builtins.open",
+        new_callable=mock_open,
+        read_data='{"current_phase": "test", "status": "failed"}',
+    )
     def test_collect_from_phase_file_updates_existing_build_status(self, mock_file):
         """Test that collect_from_phase_file updates existing build status"""
-        self.mock_db.get_build.return_value = {'id': 10, 'session_id': 'existing-session'}
+        self.mock_db.get_build.return_value = {
+            "id": 10,
+            "session_id": "existing-session",
+        }
 
-        result = self.collector.collect_from_phase_file(Path('/fake/phase.json'), 'existing-session')
+        result = self.collector.collect_from_phase_file(
+            Path("/fake/phase.json"), "existing-session"
+        )
 
         # Verify build status was updated
-        self.mock_db.update_build.assert_called_once_with('existing-session', status='failed')
-        self.assertEqual(result['build_id'], 10)
-        self.assertEqual(result['status'], 'failed')
+        self.mock_db.update_build.assert_called_once_with(
+            "existing-session", status="failed"
+        )
+        self.assertEqual(result["build_id"], 10)
+        self.assertEqual(result["status"], "failed")
 
 
 class TestCollectFromLogFile(unittest.TestCase):
@@ -351,14 +373,13 @@ class TestCollectFromLogFile(unittest.TestCase):
         self.mock_calculator = Mock()
         self.mock_calculator.calculate_cost.return_value = 0.01
         self.collector = MetricsCollector(
-            db=self.mock_db,
-            calculator=self.mock_calculator
+            db=self.mock_db, calculator=self.mock_calculator
         )
 
     def test_collect_from_log_file_processes_all_entries(self):
         """Test that collect_from_log_file processes all log entries"""
         # Create temporary log file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
             log_file = Path(f.name)
             # Write valid log entries
             f.write('{"usage": {"input_tokens": 100, "output_tokens": 50}}\n')
@@ -370,7 +391,7 @@ class TestCollectFromLogFile(unittest.TestCase):
             self.mock_db.create_build.return_value = 1
             self.mock_db.create_phase.return_value = 100
 
-            self.collector.collect_from_log_file(log_file, 'test-session', 'test-phase')
+            self.collector.collect_from_log_file(log_file, "test-session", "test-phase")
 
             # Should have recorded 3 API calls
             self.assertEqual(self.mock_db.record_api_call.call_count, 3)
@@ -382,7 +403,7 @@ class TestCollectFromLogFile(unittest.TestCase):
 
     def test_collect_from_log_file_handles_empty_file(self):
         """Test that collect_from_log_file handles empty files"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as f:
             log_file = Path(f.name)
             # Leave file empty
 
@@ -392,7 +413,7 @@ class TestCollectFromLogFile(unittest.TestCase):
             self.mock_db.create_phase.return_value = 100
 
             # Should not raise exception
-            self.collector.collect_from_log_file(log_file, 'test-session', 'test-phase')
+            self.collector.collect_from_log_file(log_file, "test-session", "test-phase")
 
             # No API calls should be recorded
             self.mock_db.record_api_call.assert_not_called()
@@ -400,5 +421,5 @@ class TestCollectFromLogFile(unittest.TestCase):
             log_file.unlink()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

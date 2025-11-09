@@ -15,12 +15,12 @@ Priority: 8/10 - System reliability with <50% coverage
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from datetime import time, datetime
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
 
 
 @pytest.mark.unit
@@ -33,12 +33,11 @@ class TestActiveHoursBoundaryConditions:
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
-            active_hours_start=time(9, 0),
-            active_hours_end=time(17, 0)
+            active_hours_start=time(9, 0), active_hours_end=time(17, 0)
         )
 
         # Mock current time as 23:59
-        with patch('tools.evolution.resource_manager.datetime') as mock_dt:
+        with patch("tools.evolution.resource_manager.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2024, 1, 1, 23, 59, 0)
             mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
@@ -52,12 +51,11 @@ class TestActiveHoursBoundaryConditions:
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
-            active_hours_start=time(9, 0),
-            active_hours_end=time(17, 0)
+            active_hours_start=time(9, 0), active_hours_end=time(17, 0)
         )
 
         # Mock current time as 00:00
-        with patch('tools.evolution.resource_manager.datetime') as mock_dt:
+        with patch("tools.evolution.resource_manager.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2024, 1, 1, 0, 0, 0)
             mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
@@ -71,22 +69,21 @@ class TestActiveHoursBoundaryConditions:
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
-            active_hours_start=time(22, 0),
-            active_hours_end=time(2, 0)
+            active_hours_start=time(22, 0), active_hours_end=time(2, 0)
         )
 
         # Test times that should be active
         test_cases = [
-            (datetime(2024, 1, 1, 22, 0, 0), True),   # Start time
+            (datetime(2024, 1, 1, 22, 0, 0), True),  # Start time
             (datetime(2024, 1, 1, 23, 30, 0), True),  # During night
-            (datetime(2024, 1, 1, 0, 0, 0), True),    # Midnight
-            (datetime(2024, 1, 1, 1, 30, 0), True),   # Early morning
-            (datetime(2024, 1, 1, 2, 0, 0), False),   # End time (exclusive)
+            (datetime(2024, 1, 1, 0, 0, 0), True),  # Midnight
+            (datetime(2024, 1, 1, 1, 30, 0), True),  # Early morning
+            (datetime(2024, 1, 1, 2, 0, 0), False),  # End time (exclusive)
             (datetime(2024, 1, 1, 12, 0, 0), False),  # Outside hours
         ]
 
         for test_time, expected in test_cases:
-            with patch('tools.evolution.resource_manager.datetime') as mock_dt:
+            with patch("tools.evolution.resource_manager.datetime") as mock_dt:
                 mock_dt.now.return_value = test_time
                 mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
@@ -98,12 +95,11 @@ class TestActiveHoursBoundaryConditions:
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
-            active_hours_start=time(9, 0),
-            active_hours_end=time(17, 0)
+            active_hours_start=time(9, 0), active_hours_end=time(17, 0)
         )
 
         # Test start time (should be active)
-        with patch('tools.evolution.resource_manager.datetime') as mock_dt:
+        with patch("tools.evolution.resource_manager.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2024, 1, 1, 9, 0, 0)
             mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
@@ -111,7 +107,7 @@ class TestActiveHoursBoundaryConditions:
             assert is_active == True
 
         # Test end time (should be inactive - end is exclusive)
-        with patch('tools.evolution.resource_manager.datetime') as mock_dt:
+        with patch("tools.evolution.resource_manager.datetime") as mock_dt:
             mock_dt.now.return_value = datetime(2024, 1, 1, 17, 0, 0)
             mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
 
@@ -125,7 +121,7 @@ class TestActiveHoursBoundaryConditions:
 class TestPsutilErrors:
     """Test psutil error handling"""
 
-    @patch('psutil.cpu_percent')
+    @patch("psutil.cpu_percent")
     def test_cpu_percent_failure(self, mock_cpu):
         """Test handling psutil.cpu_percent() failure"""
         from tools.evolution.resource_manager import ResourceManager
@@ -143,7 +139,7 @@ class TestPsutilErrors:
         except Exception as e:
             assert False, f"Should handle CPU reading failure: {e}"
 
-    @patch('psutil.virtual_memory')
+    @patch("psutil.virtual_memory")
     def test_virtual_memory_unavailable(self, mock_memory):
         """Test handling psutil.virtual_memory() unavailable"""
         from tools.evolution.resource_manager import ResourceManager
@@ -160,7 +156,7 @@ class TestPsutilErrors:
         except Exception as e:
             assert False, f"Should handle memory reading failure: {e}"
 
-    @patch('psutil.disk_usage')
+    @patch("psutil.disk_usage")
     def test_disk_usage_permission_error(self, mock_disk):
         """Test handling psutil.disk_usage() permission errors"""
         from tools.evolution.resource_manager import ResourceManager
@@ -174,11 +170,11 @@ class TestPsutilErrors:
         try:
             has_resources = manager.has_available_resources()
             assert isinstance(has_resources, bool)
-        except Exception as e:
+        except Exception:
             # Permission errors are acceptable
             pass
 
-    @patch('psutil.cpu_percent')
+    @patch("psutil.cpu_percent")
     def test_negative_cpu_value(self, mock_cpu):
         """Test handling negative CPU values (psutil edge case)"""
         from tools.evolution.resource_manager import ResourceManager
@@ -192,7 +188,7 @@ class TestPsutilErrors:
         has_resources = manager.has_available_resources()
         assert isinstance(has_resources, bool)
 
-    @patch('psutil.virtual_memory')
+    @patch("psutil.virtual_memory")
     def test_negative_memory_value(self, mock_memory):
         """Test handling negative memory values"""
         from tools.evolution.resource_manager import ResourceManager
@@ -214,15 +210,15 @@ class TestPsutilErrors:
 class TestVeryLowResourceScenarios:
     """Test very low resource scenarios"""
 
-    @patch('psutil.cpu_percent')
-    @patch('psutil.virtual_memory')
+    @patch("psutil.cpu_percent")
+    @patch("psutil.virtual_memory")
     def test_cpu_at_100_percent(self, mock_memory, mock_cpu):
         """Test when CPU is at 100% usage"""
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
             min_cpu_available=10.0,  # Need 10% free
-            min_memory_available=10.0
+            min_memory_available=10.0,
         )
 
         # Mock 100% CPU usage
@@ -237,15 +233,15 @@ class TestVeryLowResourceScenarios:
         has_resources = manager.has_available_resources()
         assert has_resources == False
 
-    @patch('psutil.cpu_percent')
-    @patch('psutil.virtual_memory')
+    @patch("psutil.cpu_percent")
+    @patch("psutil.virtual_memory")
     def test_memory_at_99_percent(self, mock_memory, mock_cpu):
         """Test when memory is nearly full (99%)"""
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
             min_cpu_available=10.0,
-            min_memory_available=10.0  # Need 10% free
+            min_memory_available=10.0,  # Need 10% free
         )
 
         # Mock normal CPU
@@ -260,17 +256,14 @@ class TestVeryLowResourceScenarios:
         has_resources = manager.has_available_resources()
         assert has_resources == False
 
-    @patch('psutil.cpu_percent')
-    @patch('psutil.virtual_memory')
-    @patch('psutil.disk_usage')
+    @patch("psutil.cpu_percent")
+    @patch("psutil.virtual_memory")
+    @patch("psutil.disk_usage")
     def test_all_resources_low(self, mock_disk, mock_memory, mock_cpu):
         """Test when all resources (CPU, memory, disk) are low"""
         from tools.evolution.resource_manager import ResourceManager
 
-        manager = ResourceManager(
-            min_cpu_available=10.0,
-            min_memory_available=10.0
-        )
+        manager = ResourceManager(min_cpu_available=10.0, min_memory_available=10.0)
 
         # Mock all resources at critical levels
         mock_cpu.return_value = 95.0  # 95% used, only 5% free
@@ -287,15 +280,15 @@ class TestVeryLowResourceScenarios:
         has_resources = manager.has_available_resources()
         assert has_resources == False
 
-    @patch('psutil.cpu_percent')
-    @patch('psutil.virtual_memory')
+    @patch("psutil.cpu_percent")
+    @patch("psutil.virtual_memory")
     def test_exactly_at_threshold(self, mock_memory, mock_cpu):
         """Test when resources are exactly at threshold"""
         from tools.evolution.resource_manager import ResourceManager
 
         manager = ResourceManager(
             min_cpu_available=10.0,  # Need exactly 10% free
-            min_memory_available=10.0
+            min_memory_available=10.0,
         )
 
         # Mock CPU at exactly 90% (10% free - at threshold)
@@ -323,8 +316,7 @@ class TestResourceManagerConfiguration:
         # Same start and end time
         try:
             manager = ResourceManager(
-                active_hours_start=time(9, 0),
-                active_hours_end=time(9, 0)
+                active_hours_start=time(9, 0), active_hours_end=time(9, 0)
             )
             # Should handle or validate
             assert isinstance(manager, ResourceManager)
@@ -338,8 +330,7 @@ class TestResourceManagerConfiguration:
 
         try:
             manager = ResourceManager(
-                min_cpu_available=-10.0,
-                min_memory_available=-5.0
+                min_cpu_available=-10.0, min_memory_available=-5.0
             )
             # Should handle or validate
             has_resources = manager.has_available_resources()
@@ -354,8 +345,7 @@ class TestResourceManagerConfiguration:
 
         try:
             manager = ResourceManager(
-                min_cpu_available=150.0,
-                min_memory_available=200.0
+                min_cpu_available=150.0, min_memory_available=200.0
             )
             # Should handle or validate
             has_resources = manager.has_available_resources()
@@ -369,15 +359,12 @@ class TestResourceManagerConfiguration:
         """Test with zero threshold values"""
         from tools.evolution.resource_manager import ResourceManager
 
-        manager = ResourceManager(
-            min_cpu_available=0.0,
-            min_memory_available=0.0
-        )
+        manager = ResourceManager(min_cpu_available=0.0, min_memory_available=0.0)
 
         # With zero thresholds, should always have resources available
         # (unless psutil fails)
-        with patch('psutil.cpu_percent', return_value=100.0):
-            with patch('psutil.virtual_memory') as mock_mem:
+        with patch("psutil.cpu_percent", return_value=100.0):
+            with patch("psutil.virtual_memory") as mock_mem:
                 mock_mem_obj = Mock()
                 mock_mem_obj.percent = 100.0
                 mock_mem.return_value = mock_mem_obj
@@ -392,7 +379,7 @@ class TestResourceManagerConfiguration:
 class TestPsutilTimeouts:
     """Test psutil call timeouts and hanging"""
 
-    @patch('psutil.cpu_percent')
+    @patch("psutil.cpu_percent")
     def test_cpu_percent_hanging(self, mock_cpu):
         """Test handling when psutil.cpu_percent() hangs"""
         from tools.evolution.resource_manager import ResourceManager
@@ -401,6 +388,7 @@ class TestPsutilTimeouts:
 
         # Simulate hanging call with timeout
         import time
+
         def slow_cpu_read(*args, **kwargs):
             time.sleep(0.1)  # Simulate slow read
             return 50.0
@@ -411,7 +399,7 @@ class TestPsutilTimeouts:
         has_resources = manager.has_available_resources()
         assert isinstance(has_resources, bool)
 
-    @patch('psutil.virtual_memory')
+    @patch("psutil.virtual_memory")
     def test_memory_read_hanging(self, mock_memory):
         """Test handling when memory read hangs"""
         from tools.evolution.resource_manager import ResourceManager
@@ -420,6 +408,7 @@ class TestPsutilTimeouts:
 
         # Simulate slow memory read
         import time
+
         def slow_memory_read(*args, **kwargs):
             time.sleep(0.1)
             mock_mem = Mock()
@@ -433,5 +422,5 @@ class TestPsutilTimeouts:
         assert isinstance(has_resources, bool)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

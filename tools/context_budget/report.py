@@ -6,7 +6,6 @@ Generates human-readable reports and visualizations of context window usage.
 """
 
 from typing import Dict, Any, List, Optional
-from .monitor import ContextZone
 
 
 class ContextBudgetReporter:
@@ -29,10 +28,10 @@ class ContextBudgetReporter:
         if not context_metrics:
             return "No context metrics available."
 
-        max_window = context_metrics.get('max_context_window', 200000)
-        model = context_metrics.get('model', 'unknown')
-        by_phase = context_metrics.get('by_phase', {})
-        overall = context_metrics.get('overall', {})
+        max_window = context_metrics.get("max_context_window", 200000)
+        model = context_metrics.get("model", "unknown")
+        by_phase = context_metrics.get("by_phase", {})
+        overall = context_metrics.get("overall", {})
 
         # Build report
         lines = [
@@ -54,22 +53,24 @@ class ContextBudgetReporter:
 
         # Overall stats
         if overall:
-            peak_tokens = overall.get('peak_usage_tokens', 0)
-            peak_pct = overall.get('peak_usage_percentage', 0)
-            peak_phase = overall.get('peak_phase', 'unknown')
-            avg_pct = overall.get('avg_usage_percentage', 0)
-            smart_pct = overall.get('smart_zone_percentage', 0)
+            peak_tokens = overall.get("peak_usage_tokens", 0)
+            peak_pct = overall.get("peak_usage_percentage", 0)
+            peak_phase = overall.get("peak_phase", "unknown")
+            avg_pct = overall.get("avg_usage_percentage", 0)
+            smart_pct = overall.get("smart_zone_percentage", 0)
 
             zone_indicator = "⚠️" if peak_pct > 40 else "✅"
-            lines.extend([
-                f"Peak Usage: {peak_tokens:,} tokens ({peak_pct:.1f}%) during {peak_phase} phase {zone_indicator}",
-                f"Average Usage: {avg_pct:.1f}%",
-                f"Smart Zone: {smart_pct:.1f}% of phases",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"Peak Usage: {peak_tokens:,} tokens ({peak_pct:.1f}%) during {peak_phase} phase {zone_indicator}",
+                    f"Average Usage: {avg_pct:.1f}%",
+                    f"Smart Zone: {smart_pct:.1f}% of phases",
+                    "",
+                ]
+            )
 
         # Recommendations
-        recommendations = overall.get('recommendations', [])
+        recommendations = overall.get("recommendations", [])
         if recommendations:
             lines.append("Recommendations:")
             for rec in recommendations:
@@ -101,12 +102,12 @@ class ContextBudgetReporter:
 
         for phase_key, metrics in sorted_phases:
             # Extract phase name (remove 'phase_' prefix)
-            phase_name = metrics.get('phase_name', phase_key.replace('phase_', ''))
+            phase_name = metrics.get("phase_name", phase_key.replace("phase_", ""))
 
-            tokens_used = metrics.get('tokens_used', 0)
-            budget = metrics.get('budget_allocated', 0)
-            percentage = metrics.get('percentage', 0)
-            zone = metrics.get('zone', 'unknown')
+            tokens_used = metrics.get("tokens_used", 0)
+            budget = metrics.get("budget_allocated", 0)
+            percentage = metrics.get("percentage", 0)
+            zone = metrics.get("zone", "unknown")
 
             # Format values
             used_str = self._format_tokens(tokens_used)
@@ -135,7 +136,7 @@ class ContextBudgetReporter:
         Returns:
             Formatted visualization
         """
-        by_phase = context_metrics.get('by_phase', {})
+        by_phase = context_metrics.get("by_phase", {})
         if not by_phase:
             return "No data to visualize"
 
@@ -147,9 +148,9 @@ class ContextBudgetReporter:
         sorted_phases = sorted(by_phase.items())
 
         for phase_key, metrics in sorted_phases:
-            phase_name = metrics.get('phase_name', phase_key.replace('phase_', ''))
-            percentage = metrics.get('percentage', 0)
-            zone = metrics.get('zone', 'unknown')
+            phase_name = metrics.get("phase_name", phase_key.replace("phase_", ""))
+            percentage = metrics.get("percentage", 0)
+            zone = metrics.get("zone", "unknown")
 
             # Create bar
             filled = int(bar_width * min(percentage, max_percentage) / max_percentage)
@@ -176,21 +177,21 @@ class ContextBudgetReporter:
         """
         suggestions = []
 
-        by_phase = context_metrics.get('by_phase', {})
-        overall = context_metrics.get('overall', {})
+        by_phase = context_metrics.get("by_phase", {})
+        overall = context_metrics.get("overall", {})
 
         # Check for phases in dumb/critical zones
         for phase_key, metrics in by_phase.items():
-            zone = metrics.get('zone', 'smart')
-            phase_name = metrics.get('phase_name', phase_key)
-            tokens_used = metrics.get('tokens_used', 0)
-            budget = metrics.get('budget_allocated', 0)
+            zone = metrics.get("zone", "smart")
+            phase_name = metrics.get("phase_name", phase_key)
+            tokens_used = metrics.get("tokens_used", 0)
+            budget = metrics.get("budget_allocated", 0)
 
-            if zone == 'critical':
+            if zone == "critical":
                 suggestions.append(
                     f"🚨 {phase_name} in CRITICAL zone - immediately reduce context or use sub-agents"
                 )
-            elif zone == 'dumb':
+            elif zone == "dumb":
                 exceeded = tokens_used - budget
                 if exceeded > 0:
                     suggestions.append(
@@ -198,8 +199,8 @@ class ContextBudgetReporter:
                     )
 
         # Check overall stats
-        avg_usage = overall.get('avg_usage_percentage', 0)
-        smart_pct = overall.get('smart_zone_percentage', 0)
+        avg_usage = overall.get("avg_usage_percentage", 0)
+        smart_pct = overall.get("smart_zone_percentage", 0)
 
         if avg_usage > 30:
             suggestions.append(
@@ -228,20 +229,20 @@ class ContextBudgetReporter:
             Formatted zone string
         """
         indicators = {
-            'smart': '✅ Smart',
-            'dumb': '⚠️  Dumb',
-            'critical': '🚨 Critical',
+            "smart": "✅ Smart",
+            "dumb": "⚠️  Dumb",
+            "critical": "🚨 Critical",
         }
-        return indicators.get(zone, '❓ Unknown')
+        return indicators.get(zone, "❓ Unknown")
 
     def _get_zone_emoji(self, zone: str) -> str:
         """Get emoji for zone"""
         emojis = {
-            'smart': '✅',
-            'dumb': '⚠️',
-            'critical': '🚨',
+            "smart": "✅",
+            "dumb": "⚠️",
+            "critical": "🚨",
         }
-        return emojis.get(zone, '❓')
+        return emojis.get(zone, "❓")
 
     def _format_tokens(self, tokens: int) -> str:
         """Format token count (e.g., 12000 -> '12.0K')"""
@@ -259,17 +260,21 @@ class ContextBudgetReporter:
         Returns:
             Summary dictionary
         """
-        overall = context_metrics.get('overall', {})
+        overall = context_metrics.get("overall", {})
 
         return {
-            'status': 'optimal' if overall.get('smart_zone_percentage', 0) > 70 else 'needs_optimization',
-            'peak_usage_percentage': overall.get('peak_usage_percentage', 0),
-            'smart_zone_percentage': overall.get('smart_zone_percentage', 0),
-            'total_phases_analyzed': overall.get('total_phases', 0),
-            'recommendations': self.get_optimization_suggestions(context_metrics),
+            "status": "optimal"
+            if overall.get("smart_zone_percentage", 0) > 70
+            else "needs_optimization",
+            "peak_usage_percentage": overall.get("peak_usage_percentage", 0),
+            "smart_zone_percentage": overall.get("smart_zone_percentage", 0),
+            "total_phases_analyzed": overall.get("total_phases", 0),
+            "recommendations": self.get_optimization_suggestions(context_metrics),
         }
 
-    def export_markdown_report(self, context_metrics: Dict, output_path: Optional[str] = None) -> str:
+    def export_markdown_report(
+        self, context_metrics: Dict, output_path: Optional[str] = None
+    ) -> str:
         """
         Generate markdown-formatted report.
 
@@ -299,7 +304,7 @@ class ContextBudgetReporter:
             report += f"- {suggestion}\n"
 
         if output_path:
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 f.write(report)
 
         return report

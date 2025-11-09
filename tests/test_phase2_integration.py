@@ -10,47 +10,36 @@ Tests all Phase 2 components working together:
 """
 
 import pytest
-import json
 import tempfile
-import shutil
 from pathlib import Path
-from datetime import datetime
 
 # Import Phase 2 modules
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
 from incremental.global_scout_cache import (
-    get_global_cache_dir,
     generate_global_scout_key,
     save_scout_report_to_global_cache,
     get_cached_scout_report_global,
-    clear_global_scout_cache
+    clear_global_scout_cache,
 )
 
 from incremental.change_detector import (
     capture_build_snapshot,
     detect_changes,
-    compute_file_hashes
+    compute_file_hashes,
 )
 
 from incremental.incremental_builder import (
     build_dependency_graph,
     find_affected_files,
-    create_incremental_build_plan
+    create_incremental_build_plan,
 )
 
-from incremental.test_impact_analyzer import (
-    TestCoverageMap,
-    find_affected_tests,
-    create_test_plan
-)
+from incremental.test_impact_analyzer import TestCoverageMap, find_affected_tests
 
-from incremental.incremental_docs import (
-    build_docs_manifest,
-    find_affected_docs,
-    create_docs_plan
-)
+from incremental.incremental_docs import build_docs_manifest, find_affected_docs
 
 
 class TestGlobalScoutCache:
@@ -59,14 +48,12 @@ class TestGlobalScoutCache:
     def test_cache_key_generation(self):
         """Test cache key generation is consistent."""
         key1 = generate_global_scout_key(
-            "Build a weather app",
-            "web-app",
-            ["react", "javascript"]
+            "Build a weather app", "web-app", ["react", "javascript"]
         )
         key2 = generate_global_scout_key(
             "build a weather app",  # Different case
             "web-app",
-            ["javascript", "react"]  # Different order
+            ["javascript", "react"],  # Different order
         )
         # Keys should be identical (normalized)
         assert key1 == key2
@@ -81,7 +68,7 @@ class TestGlobalScoutCache:
             # Override get_global_cache_dir to return temp directory
             monkeypatch.setattr(
                 "incremental.global_scout_cache.get_global_cache_dir",
-                lambda: temp_cache_dir
+                lambda: temp_cache_dir,
             )
 
             # Clear cache first
@@ -210,10 +197,10 @@ class TestTestImpactAnalyzer:
             tests={
                 "tests/test_foo.py::test_bar": {
                     "covers": ["foo.py"],
-                    "duration_seconds": 0.5
+                    "duration_seconds": 0.5,
                 }
             },
-            total_duration_seconds=0.5
+            total_duration_seconds=0.5,
         )
 
         assert coverage_map.framework == "pytest"
@@ -226,14 +213,14 @@ class TestTestImpactAnalyzer:
             tests={
                 "tests/test_foo.py::test_bar": {
                     "covers": ["foo.py"],
-                    "duration_seconds": 0.5
+                    "duration_seconds": 0.5,
                 },
                 "tests/test_baz.py::test_qux": {
                     "covers": ["baz.py"],
-                    "duration_seconds": 0.3
-                }
+                    "duration_seconds": 0.3,
+                },
             },
-            total_duration_seconds=0.8
+            total_duration_seconds=0.8,
         )
 
         # Find tests affected by foo.py change

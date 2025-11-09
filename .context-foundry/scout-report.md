@@ -6,7 +6,7 @@ Analysis of the `tools/` directory revealed significant gaps in test coverage fo
 
 ### High Priority Gaps (Critical Paths):
 1. **context_budget/monitor.py** - Core monitoring logic (NO TESTS)
-2. **context_budget/report.py** - Report generation (NO TESTS) 
+2. **context_budget/report.py** - Report generation (NO TESTS)
 3. **context_budget/token_counter.py** - Token counting utilities (NO TESTS)
 4. **cli.py** - Main CLI entry point (NO TESTS)
 5. **use_baml.py** - BAML integration CLI (NO TESTS)
@@ -89,21 +89,21 @@ The context budget system is a **critical performance feature** that monitors to
 ## Main Challenges and Mitigations
 
 ### Challenge 1: Tiktoken Optional Dependency
-**Issue:** TokenCounter has fallback logic when tiktoken is unavailable  
+**Issue:** TokenCounter has fallback logic when tiktoken is unavailable
 **Mitigation:**
 - Test both code paths (with and without tiktoken)
 - Mock tiktoken import failure scenarios
 - Verify fallback heuristic accuracy
 
 ### Challenge 2: Session Summary Integration
-**Issue:** Monitor exports to session-summary.json format  
+**Issue:** Monitor exports to session-summary.json format
 **Mitigation:**
 - Create comprehensive fixtures
 - Validate JSON structure against actual outputs
 - Test deserialization and serialization
 
 ### Challenge 3: CLI Testing
-**Issue:** CLI tools need argument parsing and error handling tests  
+**Issue:** CLI tools need argument parsing and error handling tests
 **Mitigation:**
 - Use `subprocess` or mock `sys.argv`
 - Capture stdout/stderr
@@ -123,7 +123,7 @@ tests/test_context_budget_token_counter_unit.py
 
 **Test Count Estimate:** 60-80 tests
 - Monitor: 25-30 tests
-- Reporter: 20-25 tests  
+- Reporter: 20-25 tests
 - TokenCounter: 15-20 tests
 
 ### Phase 2: CLI Tools (Priority 2)

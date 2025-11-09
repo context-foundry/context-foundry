@@ -19,6 +19,7 @@ from pathlib import Path
 
 # Import path utils module
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.tool_helpers.path_utils import (
@@ -29,7 +30,7 @@ from tools.tool_helpers.path_utils import (
     format_file_path_for_display,
     normalize_path_separators,
     get_common_path_prefix,
-    relativize_paths_in_dict
+    relativize_paths_in_dict,
 )
 
 
@@ -213,9 +214,7 @@ class TestFormatToolOutputPaths:
             output = f"File: {path}"
             # Preserve paths containing 'special'
             result = format_tool_output_paths(
-                output,
-                tmpdir,
-                preserve_patterns=[r'.*special.*']
+                output, tmpdir, preserve_patterns=[r".*special.*"]
             )
             # Path should be preserved since it matches pattern
             assert "special" in result
@@ -313,7 +312,7 @@ class TestGetCommonPathPrefix:
             paths = [
                 os.path.join(tmpdir, "tools", "cache.py"),
                 os.path.join(tmpdir, "tools", "metrics.py"),
-                os.path.join(tmpdir, "tests", "test.py")
+                os.path.join(tmpdir, "tests", "test.py"),
             ]
             result = get_common_path_prefix(paths)
             # Common prefix should be tmpdir
@@ -327,7 +326,7 @@ class TestGetCommonPathPrefix:
             paths = [
                 os.path.join(tmpdir, "a", "b", "c.py"),
                 os.path.join(tmpdir, "a", "d.py"),
-                os.path.join(tmpdir, "e.py")
+                os.path.join(tmpdir, "e.py"),
             ]
             result = get_common_path_prefix(paths)
             assert Path(result).resolve() == Path(tmpdir).resolve()
@@ -369,11 +368,7 @@ class TestRelativizePathsInDict:
         """Test converting paths in nested dictionaries."""
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = os.path.join(tmpdir, "tools", "cache.py")
-            data = {
-                "outer": {
-                    "inner": {"file": abs_path}
-                }
-            }
+            data = {"outer": {"inner": {"file": abs_path}}}
             result = relativize_paths_in_dict(data, tmpdir)
             assert tmpdir not in str(result)
             inner_file = result["outer"]["inner"]["file"]
@@ -386,7 +381,7 @@ class TestRelativizePathsInDict:
         with tempfile.TemporaryDirectory() as tmpdir:
             paths = [
                 os.path.join(tmpdir, "tools", "a.py"),
-                os.path.join(tmpdir, "tools", "b.py")
+                os.path.join(tmpdir, "tools", "b.py"),
             ]
             data = {"files": paths}
             result = relativize_paths_in_dict(data, tmpdir)
@@ -399,11 +394,7 @@ class TestRelativizePathsInDict:
     def test_non_path_strings_unchanged(self):
         """Test that non-path strings are not modified."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            data = {
-                "name": "test",
-                "description": "A test description",
-                "count": 42
-            }
+            data = {"name": "test", "description": "A test description", "count": 42}
             result = relativize_paths_in_dict(data, tmpdir)
             assert result == data
 
@@ -413,10 +404,7 @@ class TestRelativizePathsInDict:
         """Test that path_keys parameter filters which keys to process."""
         with tempfile.TemporaryDirectory() as tmpdir:
             abs_path = os.path.join(tmpdir, "tools", "cache.py")
-            data = {
-                "file": abs_path,
-                "other_path": abs_path
-            }
+            data = {"file": abs_path, "other_path": abs_path}
             result = relativize_paths_in_dict(data, tmpdir, path_keys=["file"])
             # Only 'file' key should be converted
             assert tmpdir not in result["file"]
@@ -434,7 +422,7 @@ class TestPathUtilsIntegration:
             original_abs = os.path.join(tmpdir, "tools", "cache.py")
             relative = to_relative_path(original_abs, tmpdir)
             back_to_abs = to_absolute_path(relative, tmpdir)
-            
+
             # Should end up with same path (resolved)
             assert Path(back_to_abs).resolve() == Path(original_abs).resolve()
 
@@ -445,10 +433,10 @@ class TestPathUtilsIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             long_path = os.path.join(tmpdir, "very", "long", "path", "to", "file.py")
             output = f"Error in {long_path}:100"
-            
+
             # First format the output
             formatted = format_tool_output_paths(output, tmpdir)
-            
+
             # Result should not contain tmpdir
             assert tmpdir not in formatted
             assert "file.py" in formatted
@@ -460,12 +448,12 @@ class TestPathUtilsIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             path_inside = os.path.join(tmpdir, "tools", "cache.py")
             path_outside = "/tmp/other.py"
-            
+
             # Inside path should convert to relative
             assert is_within_project(path_inside, tmpdir)
             relative = to_relative_path(path_inside, tmpdir, strict=False)
             assert not os.path.isabs(relative)
-            
+
             # Outside path should remain absolute (strict=False)
             assert not is_within_project(path_outside, tmpdir)
             result = to_relative_path(path_outside, tmpdir, strict=False)

@@ -6,8 +6,7 @@ These tests ensure the AgentProtocol correctly manages agent registration
 and message passing in the multi-agent network.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from datetime import datetime
 from tools.evolution.agent_protocol import Agent, AgentProtocol
 
@@ -22,7 +21,7 @@ class TestAgentDataclass:
             name="TestAgent",
             url="http://localhost:8000",
             capabilities=["task1", "task2"],
-            weight=1.5
+            weight=1.5,
         )
 
         assert agent.id == "test-id"
@@ -33,12 +32,7 @@ class TestAgentDataclass:
 
     def test_agent_default_weight(self):
         """Test agent with default weight"""
-        agent = Agent(
-            id="test-id",
-            name="TestAgent",
-            url=None,
-            capabilities=[]
-        )
+        agent = Agent(id="test-id", name="TestAgent", url=None, capabilities=[])
 
         assert agent.weight == 1.0
 
@@ -49,17 +43,17 @@ class TestAgentDataclass:
             name="MyAgent",
             url="http://example.com",
             capabilities=["cap1", "cap2"],
-            weight=2.0
+            weight=2.0,
         )
 
         agent_dict = agent.to_dict()
 
         assert agent_dict == {
-            'id': 'agent-123',
-            'name': 'MyAgent',
-            'url': 'http://example.com',
-            'capabilities': ['cap1', 'cap2'],
-            'weight': 2.0
+            "id": "agent-123",
+            "name": "MyAgent",
+            "url": "http://example.com",
+            "capabilities": ["cap1", "cap2"],
+            "weight": 2.0,
         }
 
 
@@ -174,10 +168,7 @@ class TestFindAgent:
         agent_id1 = protocol.register_agent("FirstAgent")
         # Manually add second agent with specific ID
         protocol.network["FirstAgent"] = Agent(
-            id="FirstAgent",
-            name="SecondAgent",
-            url=None,
-            capabilities=[]
+            id="FirstAgent", name="SecondAgent", url=None, capabilities=[]
         )
 
         # Should find by ID first
@@ -188,7 +179,7 @@ class TestFindAgent:
 class TestSendMessage:
     """Tests for sending messages"""
 
-    @patch.object(AgentProtocol, '_write_local_message')
+    @patch.object(AgentProtocol, "_write_local_message")
     def test_send_message_to_local_agent(self, mock_write):
         """Test sending message to local agent"""
         protocol = AgentProtocol("SenderAgent")
@@ -209,14 +200,11 @@ class TestSendMessage:
         assert message["payload"] == payload
         assert "timestamp" in message
 
-    @patch.object(AgentProtocol, '_send_http_message')
+    @patch.object(AgentProtocol, "_send_http_message")
     def test_send_message_to_remote_agent(self, mock_http):
         """Test sending message to remote agent"""
         protocol = AgentProtocol("SenderAgent")
-        agent_id = protocol.register_agent(
-            "RemoteAgent",
-            url="http://remote:8000"
-        )
+        agent_id = protocol.register_agent("RemoteAgent", url="http://remote:8000")
 
         payload = {"data": "test"}
         protocol.send_message("RemoteAgent", "task", payload)
@@ -233,7 +221,7 @@ class TestSendMessage:
         protocol = AgentProtocol("SenderAgent")
         protocol.register_agent("ReceiverAgent")
 
-        with patch.object(protocol, '_write_local_message') as mock_write:
+        with patch.object(protocol, "_write_local_message") as mock_write:
             protocol.send_message("ReceiverAgent", "task", {})
 
             message = mock_write.call_args[0][1]
@@ -252,7 +240,7 @@ class TestSendMessage:
 class TestWriteLocalMessage:
     """Tests for local message writing"""
 
-    @patch('tools.evolution.communication.local_exchange.LocalExchange')
+    @patch("tools.evolution.communication.local_exchange.LocalExchange")
     def test_write_local_message(self, mock_exchange_class):
         """Test writing message to local exchange"""
         mock_exchange = MagicMock()
@@ -264,7 +252,7 @@ class TestWriteLocalMessage:
             "to": "ReceiverAgent",
             "type": "task",
             "payload": {"data": "test"},
-            "timestamp": "2025-11-07T10:00:00"
+            "timestamp": "2025-11-07T10:00:00",
         }
 
         protocol._write_local_message("ReceiverAgent", message)

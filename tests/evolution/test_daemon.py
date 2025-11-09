@@ -21,5 +21,5 @@ def test_daemon_status():
     assert daemon.get_pid() is None
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

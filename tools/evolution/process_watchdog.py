@@ -4,12 +4,10 @@ Process Watchdog for Evolution System
 Monitors spawned Claude processes for timeouts, hangs, and budget overruns
 """
 
-import os
 import psutil
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class ProcessInfo:
     """Track information about a spawned Claude process"""
+
     def __init__(self, pid: int, task_id: str, started_at: datetime, log_file: str):
         self.pid = pid
         self.task_id = task_id
@@ -48,10 +47,12 @@ class ProcessWatchdog:
     - Stuck process detection (no log activity)
     """
 
-    def __init__(self,
-                 max_duration_minutes: int = 60,
-                 max_tokens_per_task: int = 100_000,
-                 check_interval_seconds: int = 30):
+    def __init__(
+        self,
+        max_duration_minutes: int = 60,
+        max_tokens_per_task: int = 100_000,
+        check_interval_seconds: int = 30,
+    ):
         """
         Initialize watchdog
 
@@ -67,8 +68,10 @@ class ProcessWatchdog:
         # Track active processes
         self.processes: Dict[int, ProcessInfo] = {}
 
-        logger.info(f"Watchdog initialized (max_duration: {max_duration_minutes}min, "
-                   f"max_tokens: {max_tokens_per_task})")
+        logger.info(
+            f"Watchdog initialized (max_duration: {max_duration_minutes}min, "
+            f"max_tokens: {max_tokens_per_task})"
+        )
 
     def register_process(self, pid: int, task_id: str, log_file: str):
         """
@@ -80,10 +83,7 @@ class ProcessWatchdog:
             log_file: Path to Claude CLI log file
         """
         proc_info = ProcessInfo(
-            pid=pid,
-            task_id=task_id,
-            started_at=datetime.now(),
-            log_file=log_file
+            pid=pid, task_id=task_id, started_at=datetime.now(), log_file=log_file
         )
         self.processes[pid] = proc_info
         logger.info(f"Registered process {pid} for task {task_id[:8]}")
@@ -92,8 +92,10 @@ class ProcessWatchdog:
         """Remove process from monitoring (completed normally)"""
         if pid in self.processes:
             proc_info = self.processes[pid]
-            logger.info(f"Unregistered process {pid} for task {proc_info.task_id[:8]} "
-                       f"(duration: {proc_info.duration_minutes():.1f}min)")
+            logger.info(
+                f"Unregistered process {pid} for task {proc_info.task_id[:8]} "
+                f"(duration: {proc_info.duration_minutes():.1f}min)"
+            )
             del self.processes[pid]
 
     def check_processes(self) -> List[Dict]:
@@ -108,67 +110,88 @@ class ProcessWatchdog:
         for pid, proc_info in list(self.processes.items()):
             # Check if process still exists
             if not proc_info.is_alive():
-                logger.warning(f"Process {pid} (task {proc_info.task_id[:8]}) "
-                             f"no longer running (duration: {proc_info.duration_minutes():.1f}min)")
-                actions.append({
-                    'action': 'process_died',
-                    'pid': pid,
-                    'task_id': proc_info.task_id,
-                    'duration_minutes': proc_info.duration_minutes()
-                })
+                logger.warning(
+                    f"Process {pid} (task {proc_info.task_id[:8]}) "
+                    f"no longer running (duration: {proc_info.duration_minutes():.1f}min)"
+                )
+                actions.append(
+                    {
+                        "action": "process_died",
+                        "pid": pid,
+                        "task_id": proc_info.task_id,
+                        "duration_minutes": proc_info.duration_minutes(),
+                    }
+                )
                 self.unregister_process(pid)
                 continue
 
             # Check timeout
             if proc_info.duration_minutes() > self.max_duration_minutes:
-                logger.error(f"⚠️  TIMEOUT: Process {pid} (task {proc_info.task_id[:8]}) "
-                           f"exceeded max duration ({proc_info.duration_minutes():.1f} > "
-                           f"{self.max_duration_minutes} minutes)")
+                logger.error(
+                    f"⚠️  TIMEOUT: Process {pid} (task {proc_info.task_id[:8]}) "
+                    f"exceeded max duration ({proc_info.duration_minutes():.1f} > "
+                    f"{self.max_duration_minutes} minutes)"
+                )
 
                 killed = self._kill_process(pid)
-                actions.append({
-                    'action': 'killed_timeout',
-                    'pid': pid,
-                    'task_id': proc_info.task_id,
-                    'duration_minutes': proc_info.duration_minutes(),
-                    'killed': killed
-                })
+                actions.append(
+                    {
+                        "action": "killed_timeout",
+                        "pid": pid,
+                        "task_id": proc_info.task_id,
+                        "duration_minutes": proc_info.duration_minutes(),
+                        "killed": killed,
+                    }
+                )
                 self.unregister_process(pid)
                 continue
 
             # Check log file activity (detect stuck processes)
             stuck = self._check_if_stuck(proc_info)
             if stuck:
-                logger.warning(f"⚠️  STUCK: Process {pid} (task {proc_info.task_id[:8]}) "
-                             f"has no log activity for 10+ minutes")
+                logger.warning(
+                    f"⚠️  STUCK: Process {pid} (task {proc_info.task_id[:8]}) "
+                    f"has no log activity for 10+ minutes"
+                )
 
                 killed = self._kill_process(pid)
-                actions.append({
-                    'action': 'killed_stuck',
-                    'pid': pid,
-                    'task_id': proc_info.task_id,
-                    'reason': 'no log activity',
-                    'killed': killed
-                })
+                actions.append(
+                    {
+                        "action": "killed_stuck",
+                        "pid": pid,
+                        "task_id": proc_info.task_id,
+                        "reason": "no log activity",
+                        "killed": killed,
+                    }
+                )
                 self.unregister_process(pid)
                 continue
 
             # Estimate token usage from log file
             estimated_tokens = self._estimate_tokens(proc_info)
             if estimated_tokens > self.max_tokens_per_task:
-                logger.warning(f"⚠️  TOKEN BUDGET: Process {pid} (task {proc_info.task_id[:8]}) "
-                             f"estimated {estimated_tokens} tokens (>{self.max_tokens_per_task})")
-                actions.append({
-                    'action': 'warning_tokens',
-                    'pid': pid,
-                    'task_id': proc_info.task_id,
-                    'estimated_tokens': estimated_tokens
-                })
+                logger.warning(
+                    f"⚠️  TOKEN BUDGET: Process {pid} (task {proc_info.task_id[:8]}) "
+                    f"estimated {estimated_tokens} tokens (>{self.max_tokens_per_task})"
+                )
+                actions.append(
+                    {
+                        "action": "warning_tokens",
+                        "pid": pid,
+                        "task_id": proc_info.task_id,
+                        "estimated_tokens": estimated_tokens,
+                    }
+                )
 
             # Log periodic status
-            if proc_info.duration_minutes() > 0 and int(proc_info.duration_minutes()) % 5 == 0:
-                logger.info(f"Process {pid} (task {proc_info.task_id[:8]}) running for "
-                          f"{proc_info.duration_minutes():.1f} minutes")
+            if (
+                proc_info.duration_minutes() > 0
+                and int(proc_info.duration_minutes()) % 5 == 0
+            ):
+                logger.info(
+                    f"Process {pid} (task {proc_info.task_id[:8]}) running for "
+                    f"{proc_info.duration_minutes():.1f} minutes"
+                )
 
         return actions
 
@@ -278,19 +301,23 @@ class ProcessWatchdog:
         """
         result = []
         for pid, proc_info in self.processes.items():
-            result.append({
-                'pid': pid,
-                'task_id': proc_info.task_id,
-                'started_at': proc_info.started_at.isoformat(),
-                'duration_minutes': proc_info.duration_minutes(),
-                'is_alive': proc_info.is_alive(),
-                'log_file': proc_info.log_file
-            })
+            result.append(
+                {
+                    "pid": pid,
+                    "task_id": proc_info.task_id,
+                    "started_at": proc_info.started_at.isoformat(),
+                    "duration_minutes": proc_info.duration_minutes(),
+                    "is_alive": proc_info.is_alive(),
+                    "log_file": proc_info.log_file,
+                }
+            )
         return result
 
     def kill_all(self):
         """Emergency: kill all monitored processes"""
-        logger.warning(f"EMERGENCY: Killing all {len(self.processes)} monitored processes")
+        logger.warning(
+            f"EMERGENCY: Killing all {len(self.processes)} monitored processes"
+        )
         for pid in list(self.processes.keys()):
             self._kill_process(pid)
             self.unregister_process(pid)

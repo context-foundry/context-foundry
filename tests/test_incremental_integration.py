@@ -14,40 +14,34 @@ without running full 15-minute builds.
 import tempfile
 import time
 from pathlib import Path
-import json
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.cache.scout_cache import (
-    get_cached_scout_report,
-    save_scout_report_to_cache
-)
-from tools.cache.test_cache import (
-    get_cached_test_results,
-    save_test_results_to_cache
-)
+from tools.cache.scout_cache import get_cached_scout_report, save_scout_report_to_cache
+from tools.cache.test_cache import get_cached_test_results, save_test_results_to_cache
 from tools.cache.cache_manager import CacheManager
 
 
 class Color:
     """ANSI color codes for terminal output."""
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
+
+    HEADER = "\033[95m"
+    BLUE = "\033[94m"
+    CYAN = "\033[96m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BOLD = "\033[1m"
+    UNDERLINE = "\033[4m"
+    END = "\033[0m"
 
 
 def print_header(text):
     """Print a formatted header."""
-    print(f"\n{Color.BOLD}{Color.BLUE}{'='*70}{Color.END}")
+    print(f"\n{Color.BOLD}{Color.BLUE}{'=' * 70}{Color.END}")
     print(f"{Color.BOLD}{Color.BLUE}{text:^70}{Color.END}")
-    print(f"{Color.BOLD}{Color.BLUE}{'='*70}{Color.END}\n")
+    print(f"{Color.BOLD}{Color.BLUE}{'=' * 70}{Color.END}\n")
 
 
 def print_success(text):
@@ -71,7 +65,7 @@ def simulate_phase(phase_name, duration_seconds, skipped=False):
         print(f"{Color.YELLOW}  [{phase_name}] SKIPPED (cache hit){Color.END}")
         return 0
     else:
-        print(f"  [{phase_name}] Running... ", end='', flush=True)
+        print(f"  [{phase_name}] Running... ", end="", flush=True)
         time.sleep(duration_seconds)
         print(f"{Color.GREEN}Done ({duration_seconds}s){Color.END}")
         return duration_seconds
@@ -161,7 +155,7 @@ Building a weather application using React and TypeScript with OpenWeatherMap AP
         print(f"\n{Color.GREEN}{Color.BOLD}Results:{Color.END}")
         print(f"  Time saved: {time_saved:.2f}s")
         print(f"  Speed improvement: {percent_faster:.1f}% faster")
-        print(f"  Scout phase: SKIPPED ✓")
+        print("  Scout phase: SKIPPED ✓")
 
         # Validate Scout report content
         if cached == scout_report:
@@ -223,10 +217,10 @@ module.exports = { add };
             "passed": 25,
             "total": 25,
             "duration": 0.8,
-            "test_command": "npm test"
+            "test_command": "npm test",
         }
         save_test_results_to_cache(tmpdir, test_results)
-        print_success(f"Test results saved to cache (25/25 tests passed)")
+        print_success("Test results saved to cache (25/25 tests passed)")
 
         build1_time = time.time() - start
         print(f"\n{Color.BOLD}Build #1 Total: {build1_time:.2f}s{Color.END}\n")
@@ -234,7 +228,9 @@ module.exports = { add };
         time.sleep(0.1)
 
         # Build 2: No code changes, cache hit
-        print(f"{Color.BOLD}Build #2 (Documentation Update - No Code Changes):{Color.END}")
+        print(
+            f"{Color.BOLD}Build #2 (Documentation Update - No Code Changes):{Color.END}"
+        )
         start = time.time()
 
         # Simulate doc update (doesn't affect source files)
@@ -262,13 +258,17 @@ module.exports = { add };
         print(f"\n{Color.GREEN}{Color.BOLD}Results:{Color.END}")
         print(f"  Time saved: {time_saved:.2f}s")
         print(f"  Speed improvement: {percent_faster:.1f}% faster")
-        print(f"  Test phase: SKIPPED ✓")
-        print(f"  Tests reused: {cached_results['passed']}/{cached_results['total']} passed")
+        print("  Test phase: SKIPPED ✓")
+        print(
+            f"  Tests reused: {cached_results['passed']}/{cached_results['total']} passed"
+        )
 
         time.sleep(0.1)
 
         # Build 3: Code changes, cache miss
-        print(f"\n{Color.BOLD}Build #3 (Code Modified - Cache Invalidation):{Color.END}")
+        print(
+            f"\n{Color.BOLD}Build #3 (Code Modified - Cache Invalidation):{Color.END}"
+        )
         start = time.time()
 
         # Modify source code
@@ -318,10 +318,10 @@ def test_combined_scenario():
 
         # Simulate typical build phases with realistic timings
         phase_times = {
-            "Scout": 2.0,      # Normally 2 min, using 2s for test
+            "Scout": 2.0,  # Normally 2 min, using 2s for test
             "Architect": 2.0,  # Normally 2 min, using 2s for test
-            "Builder": 5.0,    # Normally 5 min, using 5s for test
-            "Test": 3.0        # Normally 3 min, using 3s for test
+            "Builder": 5.0,  # Normally 5 min, using 5s for test
+            "Test": 3.0,  # Normally 3 min, using 3s for test
         }
 
         # Build 1: Full build (no cache)
@@ -346,12 +346,12 @@ def test_combined_scenario():
         if not cached_test:
             print_info("Test cache MISS")
             total_time_1 += simulate_phase("Test", 0.4)
-            save_test_results_to_cache(tmpdir, {
-                "success": True, "passed": 15, "total": 15, "duration": 0.4
-            })
+            save_test_results_to_cache(
+                tmpdir, {"success": True, "passed": 15, "total": 15, "duration": 0.4}
+            )
 
         print(f"\n{Color.BOLD}Build #1 Total: {total_time_1:.2f}s{Color.END}")
-        print(f"  (Represents ~12 min build)\n")
+        print("  (Represents ~12 min build)\n")
 
         time.sleep(0.1)
 
@@ -382,19 +382,21 @@ def test_combined_scenario():
             total_time_2 += simulate_phase("Test", 0.4)
 
         print(f"\n{Color.BOLD}Build #2 Total: {total_time_2:.2f}s{Color.END}")
-        print(f"  (Represents ~7 min build)\n")
+        print("  (Represents ~7 min build)\n")
 
         # Calculate metrics
         time_saved = total_time_1 - total_time_2
         percent_faster = (time_saved / total_time_1) * 100
 
-        print(f"\n{Color.GREEN}{Color.BOLD}{'='*70}{Color.END}")
+        print(f"\n{Color.GREEN}{Color.BOLD}{'=' * 70}{Color.END}")
         print(f"{Color.GREEN}{Color.BOLD}PERFORMANCE RESULTS{Color.END}")
-        print(f"{Color.GREEN}{Color.BOLD}{'='*70}{Color.END}\n")
+        print(f"{Color.GREEN}{Color.BOLD}{'=' * 70}{Color.END}\n")
 
         print(f"  Build #1 (baseline):     {total_time_1:.2f}s  → Represents ~12 min")
         print(f"  Build #2 (incremental):  {total_time_2:.2f}s  → Represents ~7 min")
-        print(f"\n{Color.GREEN}  Time saved: {time_saved:.2f}s ({percent_faster:.1f}% faster){Color.END}")
+        print(
+            f"\n{Color.GREEN}  Time saved: {time_saved:.2f}s ({percent_faster:.1f}% faster){Color.END}"
+        )
 
         # Extrapolate to real build times
         real_baseline = 12 * 60  # 12 minutes in seconds
@@ -403,19 +405,27 @@ def test_combined_scenario():
         real_percent = (real_saved / real_baseline) * 100
 
         print(f"\n{Color.BOLD}Extrapolated to Real Build Times:{Color.END}")
-        print(f"  Baseline build:      {real_baseline/60:.1f} minutes")
-        print(f"  Incremental build:   {real_incremental/60:.1f} minutes")
-        print(f"{Color.GREEN}  Time saved:          {real_saved/60:.1f} minutes ({real_percent:.1f}% faster){Color.END}")
+        print(f"  Baseline build:      {real_baseline / 60:.1f} minutes")
+        print(f"  Incremental build:   {real_incremental / 60:.1f} minutes")
+        print(
+            f"{Color.GREEN}  Time saved:          {real_saved / 60:.1f} minutes ({real_percent:.1f}% faster){Color.END}"
+        )
 
         # Validate target range
         if 30 <= real_percent <= 50:
-            print(f"\n{Color.GREEN}{Color.BOLD}✓ VALIDATION: Within target range (30-50% speedup){Color.END}")
+            print(
+                f"\n{Color.GREEN}{Color.BOLD}✓ VALIDATION: Within target range (30-50% speedup){Color.END}"
+            )
             return True
         elif real_percent > 50:
-            print(f"\n{Color.GREEN}{Color.BOLD}✓ VALIDATION: Exceeds target (>{real_percent:.1f}% speedup){Color.END}")
+            print(
+                f"\n{Color.GREEN}{Color.BOLD}✓ VALIDATION: Exceeds target (>{real_percent:.1f}% speedup){Color.END}"
+            )
             return True
         else:
-            print(f"\n{Color.YELLOW}{Color.BOLD}⚠ VALIDATION: Below target ({real_percent:.1f}% < 30%){Color.END}")
+            print(
+                f"\n{Color.YELLOW}{Color.BOLD}⚠ VALIDATION: Below target ({real_percent:.1f}% < 30%){Color.END}"
+            )
             return False
 
 
@@ -434,7 +444,9 @@ def test_cache_manager_integration():
         # Populate caches
         save_scout_report_to_cache("Task 1", "new_project", tmpdir, "# Report 1")
         save_scout_report_to_cache("Task 2", "new_project", tmpdir, "# Report 2")
-        save_test_results_to_cache(tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0})
+        save_test_results_to_cache(
+            tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0}
+        )
 
         print(f"{Color.BOLD}Cache Manager Operations:{Color.END}\n")
 
@@ -452,10 +464,10 @@ def test_cache_manager_integration():
 
         # Verify
         stats_after = manager.get_stats()
-        if stats_after['scout_cache']['total_entries'] == 0:
+        if stats_after["scout_cache"]["total_entries"] == 0:
             print_success("Scout cache cleared successfully")
 
-        if stats_after['test_cache']['has_cached_results']:
+        if stats_after["test_cache"]["has_cached_results"]:
             print_success("Test cache preserved (not deleted)")
 
         return True
@@ -466,7 +478,9 @@ def run_all_tests():
     print(f"\n{Color.BOLD}{Color.HEADER}")
     print("╔" + "═" * 68 + "╗")
     print("║" + " " * 68 + "║")
-    print("║" + "  Smart Incremental Builds - Phase 1 Integration Test".center(68) + "║")
+    print(
+        "║" + "  Smart Incremental Builds - Phase 1 Integration Test".center(68) + "║"
+    )
     print("║" + " " * 68 + "║")
     print("╚" + "═" * 68 + "╝")
     print(f"{Color.END}\n")
@@ -475,7 +489,7 @@ def run_all_tests():
         ("Scout Cache Integration", test_scout_cache_integration),
         ("Test Cache Integration", test_test_cache_integration),
         ("Combined Scenario (Realistic)", test_combined_scenario),
-        ("Cache Manager Integration", test_cache_manager_integration)
+        ("Cache Manager Integration", test_cache_manager_integration),
     ]
 
     results = []
@@ -495,20 +509,24 @@ def run_all_tests():
     total = len(results)
 
     for test_name, result in results:
-        status = f"{Color.GREEN}PASSED{Color.END}" if result else f"{Color.RED}FAILED{Color.END}"
+        status = (
+            f"{Color.GREEN}PASSED{Color.END}"
+            if result
+            else f"{Color.RED}FAILED{Color.END}"
+        )
         icon = "✓" if result else "✗"
         print(f"  {icon} {test_name}: {status}")
 
     print(f"\n{Color.BOLD}Overall: {passed}/{total} tests passed{Color.END}")
 
     if passed == total:
-        print(f"\n{Color.GREEN}{Color.BOLD}{'='*70}")
-        print(f"✓ ALL TESTS PASSED - Smart Incremental Builds Working!")
-        print(f"✓ Validated 30-50% speedup target")
-        print(f"✓ Scout cache: FUNCTIONAL")
-        print(f"✓ Test cache: FUNCTIONAL")
-        print(f"✓ Cache manager: FUNCTIONAL")
-        print(f"{'='*70}{Color.END}\n")
+        print(f"\n{Color.GREEN}{Color.BOLD}{'=' * 70}")
+        print("✓ ALL TESTS PASSED - Smart Incremental Builds Working!")
+        print("✓ Validated 30-50% speedup target")
+        print("✓ Scout cache: FUNCTIONAL")
+        print("✓ Test cache: FUNCTIONAL")
+        print("✓ Cache manager: FUNCTIONAL")
+        print(f"{'=' * 70}{Color.END}\n")
         return True
     else:
         print(f"\n{Color.YELLOW}Some tests failed. Review output above.{Color.END}\n")

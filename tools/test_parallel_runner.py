@@ -9,6 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+
 def test_runner():
     """Test the parallel build runner with a simple config."""
 
@@ -19,7 +20,7 @@ def test_runner():
         "project_name": "test-hello-world",
         "github_repo_name": None,
         "enable_test_loop": False,
-        "max_test_iterations": 1
+        "max_test_iterations": 1,
     }
 
     # Make sure test directory exists
@@ -44,7 +45,7 @@ def test_runner():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             stdin=subprocess.PIPE,
-            text=True
+            text=True,
         )
 
         # Send config to stdin
@@ -71,6 +72,7 @@ def test_runner():
     except Exception as e:
         print(f"\n❌ Test FAILED with exception: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

@@ -5,11 +5,9 @@ Schedule and manage overnight Context Foundry sessions
 """
 
 import os
-import sys
-import json
 import smtplib
 import subprocess
-from datetime import datetime, time as dt_time
+from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 from email.mime.text import MIMEText
@@ -44,9 +42,7 @@ class TaskQueue:
                             "project": parts[0].strip(),
                             "description": parts[1].strip(),
                             "hours": int(parts[2].strip()) if len(parts) > 2 else 8,
-                            "priority": int(parts[3].strip())
-                            if len(parts) > 3
-                            else 0,
+                            "priority": int(parts[3].strip()) if len(parts) > 3 else 0,
                             "added": datetime.now().isoformat(),
                         }
                     )
@@ -164,29 +160,31 @@ class NotificationService:
         """Send completion notification."""
         subject = f"✅ Context Foundry: {task['project']} Complete"
         body = f"""
-Project: {task['project']}
-Task: {task['description']}
+Project: {task["project"]}
+Task: {task["description"]}
 
-Status: {'✅ Success' if result.get('success') else '❌ Failed'}
-Duration: {result.get('duration', 'Unknown')}
-Iterations: {result.get('iterations', 'Unknown')}
+Status: {"✅ Success" if result.get("success") else "❌ Failed"}
+Duration: {result.get("duration", "Unknown")}
+Iterations: {result.get("iterations", "Unknown")}
 
 Check results:
-  - Project: examples/{task['project']}/
-  - Logs: {result.get('log_file', 'Unknown')}
+  - Project: examples/{task["project"]}/
+  - Logs: {result.get("log_file", "Unknown")}
 """
 
         # Try all notification methods
         self.send_email(subject, body)
-        self.send_slack(f"Context Foundry: {task['project']} - {'✅ Complete' if result.get('success') else '❌ Failed'}")
+        self.send_slack(
+            f"Context Foundry: {task['project']} - {'✅ Complete' if result.get('success') else '❌ Failed'}"
+        )
         self.send_desktop_notification("Context Foundry", f"{task['project']} complete")
 
     def notify_failure(self, task: Dict, error: str):
         """Send failure notification."""
         subject = f"❌ Context Foundry: {task['project']} Failed"
         body = f"""
-Project: {task['project']}
-Task: {task['description']}
+Project: {task["project"]}
+Task: {task["description"]}
 
 Status: ❌ Failed
 Error: {error}
@@ -208,12 +206,12 @@ class OvernightScheduler:
 
     def run_task(self, task: Dict, max_retries: int = 3) -> Dict:
         """Run a single overnight task with retry logic."""
-        print(f"\n{'='*60}")
-        print(f"🌙 Starting overnight session")
+        print(f"\n{'=' * 60}")
+        print("🌙 Starting overnight session")
         print(f"📋 Project: {task['project']}")
         print(f"📝 Task: {task['description']}")
         print(f"⏰ Duration: {task['hours']} hours")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         for attempt in range(1, max_retries + 1):
             print(f"🔄 Attempt {attempt}/{max_retries}")
@@ -228,7 +226,11 @@ class OvernightScheduler:
                 ]
 
                 result = subprocess.run(
-                    cmd, check=True, capture_output=True, text=True, timeout=task["hours"] * 3600 + 300
+                    cmd,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=task["hours"] * 3600 + 300,
                 )
 
                 # Success
@@ -236,7 +238,7 @@ class OvernightScheduler:
                     "success": True,
                     "attempts": attempt,
                     "output": result.stdout,
-                    "log_file": f"logs/overnight_*.log",
+                    "log_file": "logs/overnight_*.log",
                 }
 
             except subprocess.CalledProcessError as e:
@@ -250,20 +252,24 @@ class OvernightScheduler:
                         "output": e.stderr,
                     }
 
-                print(f"⏸️  Waiting 60s before retry...")
+                print("⏸️  Waiting 60s before retry...")
                 import time
 
                 time.sleep(60)
 
             except subprocess.TimeoutExpired:
-                print(f"⏰ Timeout reached")
+                print("⏰ Timeout reached")
                 return {
                     "success": False,
                     "attempts": attempt,
                     "error": "Timeout exceeded",
                 }
 
-        return {"success": False, "attempts": max_retries, "error": "Max retries exceeded"}
+        return {
+            "success": False,
+            "attempts": max_retries,
+            "error": "Max retries exceeded",
+        }
 
     def process_queue(self):
         """Process all tasks in the queue."""
@@ -276,14 +282,14 @@ class OvernightScheduler:
         print(f"📊 {len(tasks)} tasks in queue\n")
 
         for i, task in enumerate(tasks, 1):
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Task {i}/{len(tasks)}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             result = self.run_task(task)
 
             if result["success"]:
-                print(f"\n✅ Task completed successfully")
+                print("\n✅ Task completed successfully")
                 self.notifier.notify_completion(task, result)
                 self.queue.remove_task(task)
             else:
@@ -291,11 +297,13 @@ class OvernightScheduler:
                 self.notifier.notify_failure(task, result.get("error", "Unknown error"))
                 # Don't remove from queue - will retry next run
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("🌅 All queued tasks processed")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
-    def add_task(self, project: str, description: str, hours: int = 8, priority: int = 0):
+    def add_task(
+        self, project: str, description: str, hours: int = 8, priority: int = 0
+    ):
         """Add a task to the queue."""
         with open(self.queue.queue_file, "a") as f:
             f.write(f"{project}|{description}|{hours}|{priority}\n")
@@ -318,7 +326,9 @@ def main():
     add_parser.add_argument("project", help="Project name")
     add_parser.add_argument("description", help="Task description")
     add_parser.add_argument("--hours", type=int, default=8, help="Duration in hours")
-    add_parser.add_argument("--priority", type=int, default=0, help="Priority (higher = first)")
+    add_parser.add_argument(
+        "--priority", type=int, default=0, help="Priority (higher = first)"
+    )
 
     # List queue
     list_parser = subparsers.add_parser("list", help="List queued tasks")
@@ -331,9 +341,7 @@ def main():
         scheduler.process_queue()
 
     elif args.command == "add":
-        scheduler.add_task(
-            args.project, args.description, args.hours, args.priority
-        )
+        scheduler.add_task(args.project, args.description, args.hours, args.priority)
 
     elif args.command == "list":
         tasks = scheduler.queue.load_tasks()

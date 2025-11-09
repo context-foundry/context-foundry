@@ -1,8 +1,6 @@
 """Phase Pipeline Widget - Visual workflow display"""
 
 from rich.console import RenderableType
-from rich.panel import Panel
-from rich.text import Text
 from textual.reactive import reactive
 from textual.widget import Widget
 
@@ -16,27 +14,33 @@ class PhasesPipelineWidget(Widget):
     time_elapsed: reactive[str] = reactive("0m 0s")
 
     # Phase data (phase_name, progress_percent, status, details)
-    phases: reactive[list] = reactive([
-        ("Scout", 0, "pending", ""),
-        ("Architect", 0, "pending", ""),
-        ("Builder", 0, "pending", ""),
-        ("Tester", 0, "pending", ""),
-        ("Fix Loop", 0, "standby", ""),
-        ("Reviewer", 0, "pending", ""),
-        ("Integrator", 0, "pending", ""),
-        ("Deployer", 0, "pending", "")
-    ])
+    phases: reactive[list] = reactive(
+        [
+            ("Scout", 0, "pending", ""),
+            ("Architect", 0, "pending", ""),
+            ("Builder", 0, "pending", ""),
+            ("Tester", 0, "pending", ""),
+            ("Fix Loop", 0, "standby", ""),
+            ("Reviewer", 0, "pending", ""),
+            ("Integrator", 0, "pending", ""),
+            ("Deployer", 0, "pending", ""),
+        ]
+    )
 
     def render(self) -> RenderableType:
         """Render the visual pipeline"""
         lines = []
 
         # Header
-        lines.append("╔═══════════════════════════════════════════════════════════════════════╗")
+        lines.append(
+            "╔═══════════════════════════════════════════════════════════════════════╗"
+        )
         header_text = f"🚀 {self.session_id} • {self.overall_progress}% • {self.time_elapsed} elapsed"
         padding = 71 - len(header_text)
         lines.append(f"║  {header_text}{' ' * padding}║")
-        lines.append("╚═══════════════════════════════════════════════════════════════════════╝")
+        lines.append(
+            "╚═══════════════════════════════════════════════════════════════════════╝"
+        )
         lines.append("")
 
         # Phase bars
@@ -45,7 +49,7 @@ class PhasesPipelineWidget(Widget):
 
             # Format phase number
             if idx == 4:
-                phase_label = f"Phase 4.5:"
+                phase_label = "Phase 4.5:"
             else:
                 actual_num = idx + 1 if idx < 4 else idx
                 phase_label = f"Phase {actual_num}:"
@@ -55,7 +59,7 @@ class PhasesPipelineWidget(Widget):
                 "completed": "✅",
                 "running": "🔄",
                 "pending": "⏳",
-                "standby": "⏸️"
+                "standby": "⏸️",
             }
             status_icon = status_icons.get(status, "⏳")
 
@@ -92,15 +96,23 @@ class PhasesPipelineWidget(Widget):
 
         # Overall progress
         lines.append("")
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
         # Overall bar (60 chars wide)
         overall_filled = int((self.overall_progress / 100) * 60)
         overall_empty = 60 - overall_filled
-        overall_bar = "█" * overall_filled + "▓" * min(5, overall_empty) + "░" * max(0, overall_empty - 5)
+        overall_bar = (
+            "█" * overall_filled
+            + "▓" * min(5, overall_empty)
+            + "░" * max(0, overall_empty - 5)
+        )
 
         lines.append(f"Overall: {overall_bar} {self.overall_progress}%")
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        )
 
         return "\n".join(lines)
 
@@ -119,7 +131,7 @@ class PhasesPipelineWidget(Widget):
                 ("Fix Loop", 0, "standby", ""),
                 ("Reviewer", 0, "pending", ""),
                 ("Integrator", 0, "pending", ""),
-                ("Deployer", 0, "pending", "")
+                ("Deployer", 0, "pending", ""),
             ]
             return
 
@@ -135,7 +147,11 @@ class PhasesPipelineWidget(Widget):
             self.time_elapsed = "0m 0s"
 
         # Parse current phase
-        current_phase_name = build_status.current_phase.split()[0] if build_status.current_phase else "Scout"
+        current_phase_name = (
+            build_status.current_phase.split()[0]
+            if build_status.current_phase
+            else "Scout"
+        )
         phase_status = build_status.status
 
         # Map phases
@@ -152,7 +168,7 @@ class PhasesPipelineWidget(Widget):
             "Integrator": 6,
             "Deploy": 7,
             "Deployer": 7,
-            "Complete": 8
+            "Complete": 8,
         }
 
         current_phase_idx = phase_map.get(current_phase_name, 0)

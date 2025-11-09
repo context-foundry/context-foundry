@@ -4,7 +4,6 @@ Extensions Loader
 Safely loads extension modules with graceful fallback when extensions are not present.
 """
 
-import importlib.util
 import json
 from pathlib import Path
 from typing import Any, Optional, Dict
@@ -26,9 +25,7 @@ def load_extension_detectors() -> Optional[Dict[str, Any]]:
         # Try to import detector module
         from . import detector
 
-        return {
-            'flowise': detector
-        }
+        return {"flowise": detector}
     except ImportError:
         # Extension not installed, return None gracefully
         return None
@@ -50,22 +47,22 @@ def load_extension_patterns(extension_name: str) -> Optional[Dict[str, Any]]:
         ...     for pattern in patterns.get('patterns', []):
         ...         print(pattern['pattern_id'])
     """
-    if extension_name != 'flowise':
+    if extension_name != "flowise":
         return None
 
     # Try to load patterns from the patterns directory
-    patterns_dir = Path(__file__).parent / 'patterns'
+    patterns_dir = Path(__file__).parent / "patterns"
 
     # Try both .example and regular files
     pattern_files = [
-        patterns_dir / 'flowise-expertise.json',
-        patterns_dir / 'flowise-expertise.json.example'
+        patterns_dir / "flowise-expertise.json",
+        patterns_dir / "flowise-expertise.json.example",
     ]
 
     for pattern_file in pattern_files:
         if pattern_file.exists():
             try:
-                with open(pattern_file, 'r', encoding='utf-8') as f:
+                with open(pattern_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError):
                 continue
@@ -89,17 +86,17 @@ def get_extension_prompt(extension_name: str, phase: str) -> Optional[str]:
         >>> if prompt:
         ...     print("Using Flowise-enhanced Scout prompt")
     """
-    if extension_name != 'flowise':
+    if extension_name != "flowise":
         return None
 
-    prompts_dir = Path(__file__).parent / 'prompts'
-    prompt_file = prompts_dir / f'{phase}-enhancement.txt'
+    prompts_dir = Path(__file__).parent / "prompts"
+    prompt_file = prompts_dir / f"{phase}-enhancement.txt"
 
     if not prompt_file.exists():
         return None
 
     try:
-        with open(prompt_file, 'r', encoding='utf-8') as f:
+        with open(prompt_file, "r", encoding="utf-8") as f:
             return f.read()
     except IOError:
         return None
@@ -119,12 +116,13 @@ def extension_exists(extension_name: str) -> bool:
         >>> if extension_exists("flowise"):
         ...     print("Flowise extension is available")
     """
-    if extension_name != 'flowise':
+    if extension_name != "flowise":
         return False
 
     # Check if we can load the detector module
     try:
         from . import detector
+
         return True
     except ImportError:
         return False
@@ -143,8 +141,8 @@ def get_available_extensions() -> list[str]:
     """
     available = []
 
-    if extension_exists('flowise'):
-        available.append('flowise')
+    if extension_exists("flowise"):
+        available.append("flowise")
 
     return available
 
@@ -161,18 +159,18 @@ def load_flow_templates() -> Optional[Dict[str, Any]]:
         >>> if templates:
         ...     multi_agent_templates = templates.get('templates', {}).get('multi-agent', [])
     """
-    patterns_dir = Path(__file__).parent / 'patterns'
+    patterns_dir = Path(__file__).parent / "patterns"
 
     # Try both .example and regular files
     template_files = [
-        patterns_dir / 'flow-templates.json',
-        patterns_dir / 'flow-templates.json.example'
+        patterns_dir / "flow-templates.json",
+        patterns_dir / "flow-templates.json.example",
     ]
 
     for template_file in template_files:
         if template_file.exists():
             try:
-                with open(template_file, 'r', encoding='utf-8') as f:
+                with open(template_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError):
                 continue
@@ -192,13 +190,13 @@ if __name__ == "__main__":
     if detectors:
         print(f"Available detector modules: {list(detectors.keys())}")
 
-    patterns = load_extension_patterns('flowise')
+    patterns = load_extension_patterns("flowise")
     print(f"Patterns loaded: {patterns is not None}")
 
-    scout_prompt = get_extension_prompt('flowise', 'scout')
+    scout_prompt = get_extension_prompt("flowise", "scout")
     print(f"Scout prompt loaded: {scout_prompt is not None}")
 
-    architect_prompt = get_extension_prompt('flowise', 'architect')
+    architect_prompt = get_extension_prompt("flowise", "architect")
     print(f"Architect prompt loaded: {architect_prompt is not None}")
 
     templates = load_flow_templates()

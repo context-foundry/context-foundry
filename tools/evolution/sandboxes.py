@@ -5,10 +5,8 @@ Protects the Context Foundry repository by running all autonomous builds
 in temporary cloned sandboxes. Each build gets a fresh clone in /tmp.
 """
 
-import os
 import shutil
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -52,7 +50,7 @@ class SandboxManager:
                 ["git", "clone", "--depth", "1", repo_url, str(sandbox_path)],
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300,  # 5 minute timeout
             )
 
             if result.returncode != 0:
@@ -63,13 +61,13 @@ class SandboxManager:
                 "path": sandbox_path,
                 "created_at": datetime.now().isoformat(),
                 "repo_url": repo_url,
-                "status": "active"
+                "status": "active",
             }
 
             return sandbox_path
 
         except subprocess.TimeoutExpired:
-            raise RuntimeError(f"Git clone timed out after 5 minutes")
+            raise RuntimeError("Git clone timed out after 5 minutes")
         except Exception as e:
             # Cleanup on failure
             if sandbox_path.exists():
@@ -154,15 +152,13 @@ class SandboxManager:
             if sandbox_path.exists():
                 # Calculate directory size
                 total_size += sum(
-                    f.stat().st_size
-                    for f in sandbox_path.rglob("*")
-                    if f.is_file()
+                    f.stat().st_size for f in sandbox_path.rglob("*") if f.is_file()
                 )
 
         return {
             "total_sandboxes": len(self.active_sandboxes),
             "total_size_mb": total_size / (1024 * 1024),
-            "base_dir": str(self.base_dir)
+            "base_dir": str(self.base_dir),
         }
 
 

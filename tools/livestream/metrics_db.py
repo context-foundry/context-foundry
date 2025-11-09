@@ -219,22 +219,25 @@ class MetricsDatabase:
         """Create a new task record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO tasks (
                     task_id, project_name, task_description, working_directory,
                     status, phases_completed, current_phase, start_time
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_data['task_id'],
-                task_data.get('project_name'),
-                task_data.get('task_description'),
-                task_data.get('working_directory'),
-                task_data.get('status', 'running'),
-                json.dumps(task_data.get('phases_completed', [])),
-                task_data.get('current_phase'),
-                task_data.get('start_time', datetime.now().isoformat())
-            ))
-        return task_data['task_id']
+            """,
+                (
+                    task_data["task_id"],
+                    task_data.get("project_name"),
+                    task_data.get("task_description"),
+                    task_data.get("working_directory"),
+                    task_data.get("status", "running"),
+                    json.dumps(task_data.get("phases_completed", [])),
+                    task_data.get("current_phase"),
+                    task_data.get("start_time", datetime.now().isoformat()),
+                ),
+            )
+        return task_data["task_id"]
 
     def update_task(self, task_id: str, updates: Dict[str, Any]):
         """Update task record."""
@@ -245,10 +248,13 @@ class MetricsDatabase:
             set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
             values = list(updates.values()) + [task_id]
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 UPDATE tasks SET {set_clause}
                 WHERE task_id = ?
-            """, values)
+            """,
+                values,
+            )
 
     def get_task(self, task_id: str) -> Optional[Dict]:
         """Get task by ID."""
@@ -262,11 +268,14 @@ class MetricsDatabase:
         """Get all tasks, most recent first."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM tasks
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (limit,))
+            """,
+                (limit,),
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     # ============================================================================
@@ -277,44 +286,53 @@ class MetricsDatabase:
         """Add a metrics data point."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO metrics (
                     task_id, timestamp, phase, token_usage, token_percentage,
                     latency_ms, context_resets, elapsed_seconds, estimated_remaining_seconds
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_id,
-                metric_data.get('timestamp', datetime.now().isoformat()),
-                metric_data.get('phase'),
-                metric_data.get('token_usage'),
-                metric_data.get('token_percentage'),
-                metric_data.get('latency_ms'),
-                metric_data.get('context_resets', 0),
-                metric_data.get('elapsed_seconds'),
-                metric_data.get('estimated_remaining_seconds')
-            ))
+            """,
+                (
+                    task_id,
+                    metric_data.get("timestamp", datetime.now().isoformat()),
+                    metric_data.get("phase"),
+                    metric_data.get("token_usage"),
+                    metric_data.get("token_percentage"),
+                    metric_data.get("latency_ms"),
+                    metric_data.get("context_resets", 0),
+                    metric_data.get("elapsed_seconds"),
+                    metric_data.get("estimated_remaining_seconds"),
+                ),
+            )
 
     def get_metrics(self, task_id: str) -> List[Dict]:
         """Get all metrics for a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM metrics
                 WHERE task_id = ?
                 ORDER BY timestamp ASC
-            """, (task_id,))
+            """,
+                (task_id,),
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     def get_latest_metric(self, task_id: str) -> Optional[Dict]:
         """Get most recent metric for a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM metrics
                 WHERE task_id = ?
                 ORDER BY timestamp DESC
                 LIMIT 1
-            """, (task_id,))
+            """,
+                (task_id,),
+            )
             row = cursor.fetchone()
             return dict(row) if row else None
 
@@ -326,36 +344,42 @@ class MetricsDatabase:
         """Add a decision record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO decisions (
                     task_id, timestamp, phase, decision_type, decision_description,
                     quality_rating, difficulty_rating, is_regrettable,
                     used_lessons_learned, pattern_ids, reasoning, outcome
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_id,
-                decision_data.get('timestamp', datetime.now().isoformat()),
-                decision_data.get('phase'),
-                decision_data.get('decision_type'),
-                decision_data.get('decision_description'),
-                decision_data.get('quality_rating'),
-                decision_data.get('difficulty_rating'),
-                decision_data.get('is_regrettable', False),
-                decision_data.get('used_lessons_learned', False),
-                json.dumps(decision_data.get('pattern_ids', [])),
-                decision_data.get('reasoning'),
-                decision_data.get('outcome')
-            ))
+            """,
+                (
+                    task_id,
+                    decision_data.get("timestamp", datetime.now().isoformat()),
+                    decision_data.get("phase"),
+                    decision_data.get("decision_type"),
+                    decision_data.get("decision_description"),
+                    decision_data.get("quality_rating"),
+                    decision_data.get("difficulty_rating"),
+                    decision_data.get("is_regrettable", False),
+                    decision_data.get("used_lessons_learned", False),
+                    json.dumps(decision_data.get("pattern_ids", [])),
+                    decision_data.get("reasoning"),
+                    decision_data.get("outcome"),
+                ),
+            )
 
     def get_decisions(self, task_id: str) -> List[Dict]:
         """Get all decisions for a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM decisions
                 WHERE task_id = ?
                 ORDER BY timestamp ASC
-            """, (task_id,))
+            """,
+                (task_id,),
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     def get_decision_analytics(self, task_id: Optional[str] = None) -> Dict:
@@ -366,7 +390,8 @@ class MetricsDatabase:
             where_clause = "WHERE task_id = ?" if task_id else ""
             params = (task_id,) if task_id else ()
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT
                     COUNT(*) as total_decisions,
                     AVG(quality_rating) as avg_quality,
@@ -375,7 +400,9 @@ class MetricsDatabase:
                     SUM(CASE WHEN used_lessons_learned = 1 THEN 1 ELSE 0 END) as lessons_used_count
                 FROM decisions
                 {where_clause}
-            """, params)
+            """,
+                params,
+            )
 
             row = cursor.fetchone()
             return dict(row) if row else {}
@@ -388,37 +415,43 @@ class MetricsDatabase:
         """Add agent performance record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO agent_performance (
                     task_id, agent_type, phase, start_time, end_time,
                     duration_seconds, success, issues_found, issues_fixed,
                     files_created, files_modified, lines_of_code, tokens_used
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_id,
-                agent_data.get('agent_type'),
-                agent_data.get('phase'),
-                agent_data.get('start_time'),
-                agent_data.get('end_time'),
-                agent_data.get('duration_seconds'),
-                agent_data.get('success', True),
-                agent_data.get('issues_found', 0),
-                agent_data.get('issues_fixed', 0),
-                agent_data.get('files_created', 0),
-                agent_data.get('files_modified', 0),
-                agent_data.get('lines_of_code', 0),
-                agent_data.get('tokens_used', 0)
-            ))
+            """,
+                (
+                    task_id,
+                    agent_data.get("agent_type"),
+                    agent_data.get("phase"),
+                    agent_data.get("start_time"),
+                    agent_data.get("end_time"),
+                    agent_data.get("duration_seconds"),
+                    agent_data.get("success", True),
+                    agent_data.get("issues_found", 0),
+                    agent_data.get("issues_fixed", 0),
+                    agent_data.get("files_created", 0),
+                    agent_data.get("files_modified", 0),
+                    agent_data.get("lines_of_code", 0),
+                    agent_data.get("tokens_used", 0),
+                ),
+            )
 
     def get_agent_performance(self, task_id: str) -> List[Dict]:
         """Get agent performance records for a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM agent_performance
                 WHERE task_id = ?
                 ORDER BY start_time ASC
-            """, (task_id,))
+            """,
+                (task_id,),
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     def get_agent_analytics(self, agent_type: Optional[str] = None) -> Dict:
@@ -429,7 +462,8 @@ class MetricsDatabase:
             where_clause = "WHERE agent_type = ?" if agent_type else ""
             params = (agent_type,) if agent_type else ()
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 SELECT
                     agent_type,
                     COUNT(*) as total_executions,
@@ -441,7 +475,9 @@ class MetricsDatabase:
                 FROM agent_performance
                 {where_clause}
                 GROUP BY agent_type
-            """, params)
+            """,
+                params,
+            )
 
             return [dict(row) for row in cursor.fetchall()]
 
@@ -453,33 +489,39 @@ class MetricsDatabase:
         """Add test iteration record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO test_iterations (
                     task_id, iteration_number, timestamp, tests_run,
                     tests_passed, tests_failed, test_output, fixes_applied,
                     duration_seconds
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_id,
-                test_data.get('iteration_number'),
-                test_data.get('timestamp', datetime.now().isoformat()),
-                test_data.get('tests_run', 0),
-                test_data.get('tests_passed', 0),
-                test_data.get('tests_failed', 0),
-                test_data.get('test_output'),
-                json.dumps(test_data.get('fixes_applied', [])),
-                test_data.get('duration_seconds')
-            ))
+            """,
+                (
+                    task_id,
+                    test_data.get("iteration_number"),
+                    test_data.get("timestamp", datetime.now().isoformat()),
+                    test_data.get("tests_run", 0),
+                    test_data.get("tests_passed", 0),
+                    test_data.get("tests_failed", 0),
+                    test_data.get("test_output"),
+                    json.dumps(test_data.get("fixes_applied", [])),
+                    test_data.get("duration_seconds"),
+                ),
+            )
 
     def get_test_iterations(self, task_id: str) -> List[Dict]:
         """Get test iterations for a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM test_iterations
                 WHERE task_id = ?
                 ORDER BY iteration_number ASC
-            """, (task_id,))
+            """,
+                (task_id,),
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     # ============================================================================
@@ -490,20 +532,23 @@ class MetricsDatabase:
         """Add pattern effectiveness record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO pattern_effectiveness (
                     task_id, pattern_id, pattern_type, was_applied,
                     prevented_issue, issue_description, timestamp
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                task_id,
-                pattern_data.get('pattern_id'),
-                pattern_data.get('pattern_type'),
-                pattern_data.get('was_applied', False),
-                pattern_data.get('prevented_issue', False),
-                pattern_data.get('issue_description'),
-                pattern_data.get('timestamp', datetime.now().isoformat())
-            ))
+            """,
+                (
+                    task_id,
+                    pattern_data.get("pattern_id"),
+                    pattern_data.get("pattern_type"),
+                    pattern_data.get("was_applied", False),
+                    pattern_data.get("prevented_issue", False),
+                    pattern_data.get("issue_description"),
+                    pattern_data.get("timestamp", datetime.now().isoformat()),
+                ),
+            )
 
     def get_pattern_effectiveness(self, task_id: Optional[str] = None) -> List[Dict]:
         """Get pattern effectiveness records."""
@@ -511,11 +556,14 @@ class MetricsDatabase:
             cursor = conn.cursor()
 
             if task_id:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT * FROM pattern_effectiveness
                     WHERE task_id = ?
                     ORDER BY timestamp ASC
-                """, (task_id,))
+                """,
+                    (task_id,),
+                )
             else:
                 cursor.execute("""
                     SELECT * FROM pattern_effectiveness
@@ -533,28 +581,31 @@ class MetricsDatabase:
         """Create a new agent instance record."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO agent_instances (
                     session_id, agent_id, agent_type, agent_name, status,
                     phase, progress_percent, tokens_used, tokens_limit,
                     token_percentage, start_time, parent_agent_id, metadata
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                agent_data['session_id'],
-                agent_data['agent_id'],
-                agent_data['agent_type'],
-                agent_data.get('agent_name', agent_data['agent_type']),
-                agent_data.get('status', 'spawning'),
-                agent_data.get('phase'),
-                agent_data.get('progress_percent', 0.0),
-                agent_data.get('tokens_used', 0),
-                agent_data.get('tokens_limit', 200000),
-                agent_data.get('token_percentage', 0.0),
-                agent_data.get('start_time', datetime.now().isoformat()),
-                agent_data.get('parent_agent_id'),
-                json.dumps(agent_data.get('metadata', {}))
-            ))
-        return agent_data['agent_id']
+            """,
+                (
+                    agent_data["session_id"],
+                    agent_data["agent_id"],
+                    agent_data["agent_type"],
+                    agent_data.get("agent_name", agent_data["agent_type"]),
+                    agent_data.get("status", "spawning"),
+                    agent_data.get("phase"),
+                    agent_data.get("progress_percent", 0.0),
+                    agent_data.get("tokens_used", 0),
+                    agent_data.get("tokens_limit", 200000),
+                    agent_data.get("token_percentage", 0.0),
+                    agent_data.get("start_time", datetime.now().isoformat()),
+                    agent_data.get("parent_agent_id"),
+                    json.dumps(agent_data.get("metadata", {})),
+                ),
+            )
+        return agent_data["agent_id"]
 
     def update_agent_instance(self, agent_id: str, updates: Dict[str, Any]):
         """Update agent instance record."""
@@ -562,28 +613,33 @@ class MetricsDatabase:
             cursor = conn.cursor()
 
             # Always update the updated_at timestamp
-            updates['updated_at'] = datetime.now().isoformat()
+            updates["updated_at"] = datetime.now().isoformat()
 
             # Build dynamic UPDATE query
             set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
             values = list(updates.values()) + [agent_id]
 
-            cursor.execute(f"""
+            cursor.execute(
+                f"""
                 UPDATE agent_instances SET {set_clause}
                 WHERE agent_id = ?
-            """, values)
+            """,
+                values,
+            )
 
     def get_agent_instance(self, agent_id: str) -> Optional[Dict]:
         """Get agent instance by ID."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM agent_instances WHERE agent_id = ?", (agent_id,))
+            cursor.execute(
+                "SELECT * FROM agent_instances WHERE agent_id = ?", (agent_id,)
+            )
             row = cursor.fetchone()
             if row:
                 result = dict(row)
                 # Parse JSON metadata
-                if result.get('metadata'):
-                    result['metadata'] = json.loads(result['metadata'])
+                if result.get("metadata"):
+                    result["metadata"] = json.loads(result["metadata"])
                 return result
             return None
 
@@ -591,16 +647,19 @@ class MetricsDatabase:
         """Get all agent instances for a session."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM agent_instances
                 WHERE session_id = ?
                 ORDER BY created_at ASC
-            """, (session_id,))
+            """,
+                (session_id,),
+            )
             agents = [dict(row) for row in cursor.fetchall()]
             # Parse JSON metadata for each agent
             for agent in agents:
-                if agent.get('metadata'):
-                    agent['metadata'] = json.loads(agent['metadata'])
+                if agent.get("metadata"):
+                    agent["metadata"] = json.loads(agent["metadata"])
             return agents
 
     def get_active_agents(self, session_id: Optional[str] = None) -> List[Dict]:
@@ -608,11 +667,14 @@ class MetricsDatabase:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             if session_id:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT * FROM agent_instances
                     WHERE session_id = ? AND status IN ('spawning', 'active', 'idle')
                     ORDER BY created_at ASC
-                """, (session_id,))
+                """,
+                    (session_id,),
+                )
             else:
                 cursor.execute("""
                     SELECT * FROM agent_instances
@@ -622,8 +684,8 @@ class MetricsDatabase:
             agents = [dict(row) for row in cursor.fetchall()]
             # Parse JSON metadata
             for agent in agents:
-                if agent.get('metadata'):
-                    agent['metadata'] = json.loads(agent['metadata'])
+                if agent.get("metadata"):
+                    agent["metadata"] = json.loads(agent["metadata"])
             return agents
 
     def get_all_instances(self) -> List[Dict]:
@@ -667,7 +729,7 @@ class MetricsDatabase:
                     AVG(duration_seconds) as avg_duration
                 FROM tasks
             """)
-            stats['tasks'] = dict(cursor.fetchone())
+            stats["tasks"] = dict(cursor.fetchone())
 
             # Token stats
             cursor.execute("""
@@ -677,7 +739,7 @@ class MetricsDatabase:
                     AVG(token_percentage) as avg_percentage
                 FROM metrics
             """)
-            stats['tokens'] = dict(cursor.fetchone())
+            stats["tokens"] = dict(cursor.fetchone())
 
             # Decision stats
             cursor.execute("""
@@ -687,7 +749,7 @@ class MetricsDatabase:
                     SUM(CASE WHEN used_lessons_learned = 1 THEN 1 ELSE 0 END) as lessons_used
                 FROM decisions
             """)
-            stats['decisions'] = dict(cursor.fetchone())
+            stats["decisions"] = dict(cursor.fetchone())
 
             return stats
 
@@ -712,24 +774,29 @@ if __name__ == "__main__":
 
     # Test creating a task
     test_task_id = "test_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-    db.create_task({
-        'task_id': test_task_id,
-        'project_name': 'test-project',
-        'task_description': 'Test task',
-        'working_directory': '/tmp/test',
-        'status': 'running',
-        'current_phase': 'Scout'
-    })
+    db.create_task(
+        {
+            "task_id": test_task_id,
+            "project_name": "test-project",
+            "task_description": "Test task",
+            "working_directory": "/tmp/test",
+            "status": "running",
+            "current_phase": "Scout",
+        }
+    )
     print(f"✅ Created test task: {test_task_id}")
 
     # Test adding metrics
-    db.add_metric(test_task_id, {
-        'phase': 'Scout',
-        'token_usage': 15000,
-        'token_percentage': 7.5,
-        'latency_ms': 150.5,
-        'elapsed_seconds': 120
-    })
+    db.add_metric(
+        test_task_id,
+        {
+            "phase": "Scout",
+            "token_usage": 15000,
+            "token_percentage": 7.5,
+            "latency_ms": 150.5,
+            "elapsed_seconds": 120,
+        },
+    )
     print("✅ Added test metric")
 
     # Get summary stats

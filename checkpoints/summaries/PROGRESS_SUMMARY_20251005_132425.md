@@ -15,7 +15,7 @@ The summary will include:
 ## Architecture & Design Decisions
 [Will extract key architectural choices and rationale from the conversation]
 
-## Patterns & Best Practices  
+## Patterns & Best Practices
 [Will identify patterns discovered/applied from the discussion]
 
 ## Current Context

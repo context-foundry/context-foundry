@@ -14,11 +14,7 @@ Priority: 10/10 - This is the real-time monitoring backbone. Failures break visi
 import pytest
 import asyncio
 import json
-import time
-import threading
-from unittest.mock import Mock, patch, MagicMock, mock_open, call
-from pathlib import Path
-from datetime import datetime
+from unittest.mock import Mock, patch, mock_open
 
 from tools.livestream.metrics_collector import MetricsCollector, PhaseFileWatcher
 
@@ -50,7 +46,7 @@ class TestPhaseFileWatcher:
         """Test that directory modification events are ignored"""
         event = Mock()
         event.is_directory = True
-        event.src_path = '/test/dir'
+        event.src_path = "/test/dir"
 
         # Should not raise, should return early
         watcher.on_modified(event)
@@ -62,7 +58,7 @@ class TestPhaseFileWatcher:
         """Test that non-phase files are ignored"""
         event = Mock()
         event.is_directory = False
-        event.src_path = '/test/other-file.json'
+        event.src_path = "/test/other-file.json"
 
         watcher.on_modified(event)
 
@@ -73,19 +69,19 @@ class TestPhaseFileWatcher:
         """Test that current-phase.json changes are detected"""
         event = Mock()
         event.is_directory = False
-        event.src_path = '/test/.context-foundry/current-phase.json'
+        event.src_path = "/test/.context-foundry/current-phase.json"
 
         watcher.on_modified(event)
 
         # Timer should be created
         assert len(watcher.debounce_timers) == 1
-        assert '/test/.context-foundry/current-phase.json' in watcher.debounce_timers
+        assert "/test/.context-foundry/current-phase.json" in watcher.debounce_timers
 
     def test_watcher_debounces_rapid_changes(self, watcher):
         """Test that rapid file changes are debounced"""
         event = Mock()
         event.is_directory = False
-        event.src_path = '/test/.context-foundry/current-phase.json'
+        event.src_path = "/test/.context-foundry/current-phase.json"
 
         # Trigger multiple changes rapidly
         watcher.on_modified(event)
@@ -101,23 +97,23 @@ class TestPhaseFileWatcher:
     def test_handle_phase_update_reads_file(self, watcher, mock_collector):
         """Test that phase update handler reads the file correctly"""
         phase_data = {
-            'session_id': 'test-session-123',
-            'phase': 'build',
-            'progress': 50
+            "session_id": "test-session-123",
+            "phase": "build",
+            "progress": 50,
         }
 
-        with patch('builtins.open', mock_open(read_data=json.dumps(phase_data))):
-            with patch('asyncio.run_coroutine_threadsafe') as mock_run_coro:
-                watcher._handle_phase_update('/test/current-phase.json')
+        with patch("builtins.open", mock_open(read_data=json.dumps(phase_data))):
+            with patch("asyncio.run_coroutine_threadsafe") as mock_run_coro:
+                watcher._handle_phase_update("/test/current-phase.json")
 
                 # Should have scheduled coroutine in collector's loop
                 mock_run_coro.assert_called_once()
 
     def test_handle_phase_update_invalid_json(self, watcher, mock_collector):
         """Test handling of invalid JSON in phase file"""
-        with patch('builtins.open', mock_open(read_data='invalid json {')):
+        with patch("builtins.open", mock_open(read_data="invalid json {")):
             # Should handle gracefully without raising
-            watcher._handle_phase_update('/test/current-phase.json')
+            watcher._handle_phase_update("/test/current-phase.json")
 
 
 class TestMetricsCollectorInitialization:
@@ -125,8 +121,8 @@ class TestMetricsCollectorInitialization:
 
     def test_collector_initialization_defaults(self):
         """Test collector initializes with default parameters"""
-        with patch('tools.livestream.metrics_collector.get_client') as mock_get_client:
-            with patch('tools.livestream.metrics_collector.get_db') as mock_get_db:
+        with patch("tools.livestream.metrics_collector.get_client") as mock_get_client:
+            with patch("tools.livestream.metrics_collector.get_db") as mock_get_db:
                 mock_get_client.return_value = Mock()
                 mock_get_db.return_value = Mock()
 
@@ -143,9 +139,7 @@ class TestMetricsCollectorInitialization:
         mock_db = Mock()
 
         collector = MetricsCollector(
-            mcp_client=mock_client,
-            db=mock_db,
-            poll_interval=5.0
+            mcp_client=mock_client, db=mock_db, poll_interval=5.0
         )
 
         assert collector.mcp_client == mock_client
@@ -159,13 +153,15 @@ class TestFileWatcherStartup:
     @pytest.fixture
     def collector(self):
         """Create collector with mocked dependencies"""
-        with patch('tools.livestream.metrics_collector.get_client'):
-            with patch('tools.livestream.metrics_collector.get_db'):
+        with patch("tools.livestream.metrics_collector.get_client"):
+            with patch("tools.livestream.metrics_collector.get_db"):
                 return MetricsCollector()
 
     def test_start_file_watcher_creates_observer(self, collector):
         """Test that starting file watcher creates observer"""
-        with patch('tools.livestream.metrics_collector.Observer') as mock_observer_class:
+        with patch(
+            "tools.livestream.metrics_collector.Observer"
+        ) as mock_observer_class:
             mock_observer = Mock()
             mock_observer_class.return_value = mock_observer
 
@@ -180,8 +176,10 @@ class TestFileWatcherStartup:
 
     def test_start_file_watcher_schedules_paths(self, collector):
         """Test that file watcher schedules common directories"""
-        with patch('tools.livestream.metrics_collector.Observer') as mock_observer_class:
-            with patch('pathlib.Path.exists') as mock_exists:
+        with patch(
+            "tools.livestream.metrics_collector.Observer"
+        ) as mock_observer_class:
+            with patch("pathlib.Path.exists") as mock_exists:
                 mock_observer = Mock()
                 mock_observer_class.return_value = mock_observer
                 mock_exists.return_value = True  # All paths exist
@@ -196,8 +194,10 @@ class TestFileWatcherStartup:
 
     def test_start_file_watcher_handles_missing_paths(self, collector):
         """Test file watcher handles missing directories gracefully"""
-        with patch('tools.livestream.metrics_collector.Observer') as mock_observer_class:
-            with patch('pathlib.Path.exists') as mock_exists:
+        with patch(
+            "tools.livestream.metrics_collector.Observer"
+        ) as mock_observer_class:
+            with patch("pathlib.Path.exists") as mock_exists:
                 mock_observer = Mock()
                 mock_observer_class.return_value = mock_observer
                 mock_exists.return_value = False  # No paths exist
@@ -224,16 +224,12 @@ class TestMetricsCollectionMainLoop:
         """Test that collect_metrics processes active tasks"""
         # Mock active tasks from MCP
         collector.mcp_client.list_active_tasks.return_value = [
-            {
-                'task_id': 'task-123',
-                'project_name': 'test-project',
-                'status': 'running'
-            }
+            {"task_id": "task-123", "project_name": "test-project", "status": "running"}
         ]
 
-        with patch.object(collector, 'initialize_task') as mock_init:
-            with patch.object(collector, 'update_task_status') as mock_update:
-                with patch.object(collector, 'collect_task_metrics') as mock_collect:
+        with patch.object(collector, "initialize_task") as mock_init:
+            with patch.object(collector, "update_task_status") as mock_update:
+                with patch.object(collector, "collect_task_metrics") as mock_collect:
                     await collector.collect_metrics()
 
                     # Should have initialized new task
@@ -250,26 +246,26 @@ class TestMetricsCollectionMainLoop:
         """Test that completed tasks are finalized"""
         collector.mcp_client.list_active_tasks.return_value = [
             {
-                'task_id': 'task-456',
-                'project_name': 'test-project',
-                'status': 'completed'
+                "task_id": "task-456",
+                "project_name": "test-project",
+                "status": "completed",
             }
         ]
 
         # Add to tracked tasks
-        collector.tracked_tasks.add('task-456')
+        collector.tracked_tasks.add("task-456")
 
-        with patch.object(collector, 'initialize_task'):
-            with patch.object(collector, 'update_task_status'):
-                with patch.object(collector, 'collect_task_metrics'):
-                    with patch.object(collector, 'finalize_task') as mock_finalize:
+        with patch.object(collector, "initialize_task"):
+            with patch.object(collector, "update_task_status"):
+                with patch.object(collector, "collect_task_metrics"):
+                    with patch.object(collector, "finalize_task") as mock_finalize:
                         await collector.collect_metrics()
 
                         # Should have finalized
                         mock_finalize.assert_called_once()
 
                         # Should have removed from tracked tasks
-                        assert 'task-456' not in collector.tracked_tasks
+                        assert "task-456" not in collector.tracked_tasks
 
     @pytest.mark.asyncio
     async def test_collect_metrics_handles_errors(self, collector):
@@ -293,15 +289,15 @@ class TestLivePhaseUpdate:
     @pytest.mark.asyncio
     async def test_collect_live_phase_update(self, collector):
         """Test collecting live phase updates"""
-        session_id = 'test-session-789'
+        session_id = "test-session-789"
         phase_data = {
-            'session_id': session_id,
-            'phase': 'build',
-            'progress': 75,
-            'current_agent': 'builder'
+            "session_id": session_id,
+            "phase": "build",
+            "progress": 75,
+            "current_agent": "builder",
         }
 
-        with patch.object(collector.db, 'update_task_phase') as mock_update:
+        with patch.object(collector.db, "update_task_phase") as mock_update:
             await collector.collect_live_phase_update(session_id, phase_data)
 
             # Should have updated database
@@ -310,8 +306,8 @@ class TestLivePhaseUpdate:
     @pytest.mark.asyncio
     async def test_collect_live_phase_update_handles_errors(self, collector):
         """Test that phase update errors are handled"""
-        session_id = 'test-session'
-        phase_data = {'invalid': 'data'}
+        session_id = "test-session"
+        phase_data = {"invalid": "data"}
 
         # Should not raise even with invalid data
         await collector.collect_live_phase_update(session_id, phase_data)
@@ -323,15 +319,15 @@ class TestEventLoopManagement:
     @pytest.fixture
     def collector(self):
         """Create collector with mocked dependencies"""
-        with patch('tools.livestream.metrics_collector.get_client'):
-            with patch('tools.livestream.metrics_collector.get_db'):
+        with patch("tools.livestream.metrics_collector.get_client"):
+            with patch("tools.livestream.metrics_collector.get_db"):
                 return MetricsCollector(poll_interval=0.1)
 
     @pytest.mark.asyncio
     async def test_start_stores_event_loop(self, collector):
         """Test that start() stores the event loop for cross-thread access"""
-        with patch.object(collector, 'collect_metrics'):
-            with patch.object(collector, 'start_file_watcher'):
+        with patch.object(collector, "collect_metrics"):
+            with patch.object(collector, "start_file_watcher"):
                 # Start in background
                 async def run_briefly():
                     task = asyncio.create_task(collector.start())
@@ -347,8 +343,9 @@ class TestEventLoopManagement:
     @pytest.mark.asyncio
     async def test_start_starts_file_watcher(self, collector):
         """Test that start() initializes file watcher"""
-        with patch.object(collector, 'collect_metrics'):
-            with patch.object(collector, 'start_file_watcher') as mock_start_watcher:
+        with patch.object(collector, "collect_metrics"):
+            with patch.object(collector, "start_file_watcher") as mock_start_watcher:
+
                 async def run_briefly():
                     task = asyncio.create_task(collector.start())
                     await asyncio.sleep(0.2)
@@ -363,8 +360,9 @@ class TestEventLoopManagement:
     @pytest.mark.asyncio
     async def test_start_runs_collection_loop(self, collector):
         """Test that start() runs the collection loop"""
-        with patch.object(collector, 'start_file_watcher'):
-            with patch.object(collector, 'collect_metrics') as mock_collect:
+        with patch.object(collector, "start_file_watcher"):
+            with patch.object(collector, "collect_metrics") as mock_collect:
+
                 async def run_briefly():
                     task = asyncio.create_task(collector.start())
                     await asyncio.sleep(0.25)  # Allow at least 2 polls
@@ -383,8 +381,8 @@ class TestStopAndCleanup:
     @pytest.fixture
     def collector(self):
         """Create collector with mocked dependencies"""
-        with patch('tools.livestream.metrics_collector.get_client'):
-            with patch('tools.livestream.metrics_collector.get_db'):
+        with patch("tools.livestream.metrics_collector.get_client"):
+            with patch("tools.livestream.metrics_collector.get_db"):
                 return MetricsCollector()
 
     def test_stop_sets_running_false(self, collector):
@@ -423,8 +421,8 @@ class TestCrossThreadCommunication:
     async def test_file_watcher_schedules_coroutine_in_collector_loop(self):
         """Test that file watcher can schedule coroutines in collector's event loop"""
         # Create collector with real event loop
-        with patch('tools.livestream.metrics_collector.get_client'):
-            with patch('tools.livestream.metrics_collector.get_db'):
+        with patch("tools.livestream.metrics_collector.get_client"):
+            with patch("tools.livestream.metrics_collector.get_db"):
                 collector = MetricsCollector()
                 collector.loop = asyncio.get_event_loop()
 
@@ -434,14 +432,18 @@ class TestCrossThreadCommunication:
 
                 # Mock the collector's collect_live_phase_update
                 collector.collect_live_phase_update = Mock()
-                collector.collect_live_phase_update.return_value = asyncio.coroutine(lambda: None)()
+                collector.collect_live_phase_update.return_value = asyncio.coroutine(
+                    lambda: None
+                )()
 
                 # Simulate file change from different thread
-                phase_data = {'session_id': 'test', 'phase': 'build'}
+                phase_data = {"session_id": "test", "phase": "build"}
 
-                with patch('builtins.open', mock_open(read_data=json.dumps(phase_data))):
-                    with patch('asyncio.run_coroutine_threadsafe') as mock_run_coro:
-                        watcher._handle_phase_update('/test/current-phase.json')
+                with patch(
+                    "builtins.open", mock_open(read_data=json.dumps(phase_data))
+                ):
+                    with patch("asyncio.run_coroutine_threadsafe") as mock_run_coro:
+                        watcher._handle_phase_update("/test/current-phase.json")
 
                         # Should have used run_coroutine_threadsafe for cross-thread communication
                         mock_run_coro.assert_called_once()
@@ -462,10 +464,10 @@ class TestTaskInitialization:
     async def test_initialize_task_creates_database_entry(self, collector):
         """Test that initializing a task creates database entry"""
         task_data = {
-            'task_id': 'task-999',
-            'project_name': 'test-project',
-            'task_description': 'Test task',
-            'working_directory': '/tmp/test'
+            "task_id": "task-999",
+            "project_name": "test-project",
+            "task_description": "Test task",
+            "working_directory": "/tmp/test",
         }
 
         await collector.initialize_task(task_data)
@@ -474,5 +476,5 @@ class TestTaskInitialization:
         collector.db.create_task.assert_called_once()
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

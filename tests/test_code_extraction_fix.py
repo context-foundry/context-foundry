@@ -5,7 +5,6 @@ Verifies that patterns handle GPT-4o-mini's format (no newline after language).
 """
 
 import re
-from pathlib import Path
 
 
 def test_regex_patterns():
@@ -39,7 +38,7 @@ export class WeatherCard {
 }
 ```""",
             "expected_file": "js/components/WeatherCard.js",
-            "expected_code_start": "/**\n * Weather Card Component\n */"
+            "expected_code_start": "/**\n * Weather Card Component\n */",
         },
         # Case 2: Standard format (with newline)
         {
@@ -50,7 +49,7 @@ def hello():
     print("world")
 ```""",
             "expected_file": "test.py",
-            "expected_code_start": 'def hello():'
+            "expected_code_start": "def hello():",
         },
         # Case 3: No language specified
         {
@@ -62,7 +61,7 @@ def hello():
 }
 ```""",
             "expected_file": "config.json",
-            "expected_code_start": '{\n  "key": "value"'
+            "expected_code_start": '{\n  "key": "value"',
         },
         # Case 4: Lowercase 'file:'
         {
@@ -74,7 +73,7 @@ body {
 }
 ```""",
             "expected_file": "styles.css",
-            "expected_code_start": "body {"
+            "expected_code_start": "body {",
         },
         # Case 5: Markdown header format
         {
@@ -86,7 +85,7 @@ body {
 </html>
 ```""",
             "expected_file": "index.html",
-            "expected_code_start": "<!DOCTYPE html>"
+            "expected_code_start": "<!DOCTYPE html>",
         },
     ]
 
@@ -102,27 +101,33 @@ body {
 
         matched = False
         for pattern in patterns:
-            matches = list(re.finditer(pattern, test_case['text'], re.DOTALL | re.IGNORECASE))
+            matches = list(
+                re.finditer(pattern, test_case["text"], re.DOTALL | re.IGNORECASE)
+            )
 
             if matches:
                 match = matches[0]
                 filepath = match.group(1).strip()
                 code = match.group(2).strip()
 
-                if filepath == test_case['expected_file']:
-                    if test_case['expected_code_start'] in code:
-                        print(f"   ✅ PASS: Extracted file '{filepath}' with correct code")
+                if filepath == test_case["expected_file"]:
+                    if test_case["expected_code_start"] in code:
+                        print(
+                            f"   ✅ PASS: Extracted file '{filepath}' with correct code"
+                        )
                         matched = True
                         break
                     else:
-                        print(f"   ❌ FAIL: File correct but code mismatch")
-                        print(f"      Expected: {test_case['expected_code_start'][:50]}")
+                        print("   ❌ FAIL: File correct but code mismatch")
+                        print(
+                            f"      Expected: {test_case['expected_code_start'][:50]}"
+                        )
                         print(f"      Got: {code[:50]}")
                         all_passed = False
                         break
 
         if not matched:
-            print(f"   ❌ FAIL: No pattern matched")
+            print("   ❌ FAIL: No pattern matched")
             all_passed = False
 
     print("\n" + "=" * 60)

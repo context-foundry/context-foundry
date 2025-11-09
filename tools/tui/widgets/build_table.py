@@ -16,14 +16,7 @@ class BuildTable(DataTable):
         """Setup table columns"""
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self.add_columns(
-            "Status",
-            "Session ID",
-            "Phase",
-            "Started",
-            "Duration",
-            "Iter"
-        )
+        self.add_columns("Status", "Session ID", "Phase", "Started", "Duration", "Iter")
 
     def watch_builds(self, builds: List[BuildSummary]):
         """Update table when builds change"""
@@ -39,7 +32,11 @@ class BuildTable(DataTable):
             status_display = f"{build.get_status_icon()} {build.status}"
 
             # Truncate session ID
-            session_display = build.session_id[:25] + "..." if len(build.session_id) > 25 else build.session_id
+            session_display = (
+                build.session_id[:25] + "..."
+                if len(build.session_id) > 25
+                else build.session_id
+            )
 
             # Format time
             time_display = build.started_at.strftime("%H:%M:%S")
@@ -50,5 +47,5 @@ class BuildTable(DataTable):
                 build.current_phase,
                 time_display,
                 build.get_duration_display(),
-                str(build.test_iterations)
+                str(build.test_iterations),
             )

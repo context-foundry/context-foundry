@@ -18,7 +18,7 @@ from tools.prompts.cached_prompt_builder import (
     _estimate_tokens,
     count_prompt_tokens,
     get_prompt_hash,
-    validate_cache_markers
+    validate_cache_markers,
 )
 from tools.prompts import CacheConfig
 
@@ -33,29 +33,32 @@ class TestCachedPromptBuilder(unittest.TestCase):
             "working_directory": "/tmp/test",
             "mode": "new_project",
             "enable_test_loop": True,
-            "max_test_iterations": 3
+            "max_test_iterations": 3,
         }
 
         # Create temporary orchestrator prompt for testing
         self.temp_prompt_file = tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.txt',
-            delete=False
+            mode="w", suffix=".txt", delete=False
         )
 
         # Write test prompt with cache boundary
         # Need at least 1024 tokens (~4096 characters minimum)
-        test_prompt_content = """YOU ARE A TEST ORCHESTRATOR
+        test_prompt_content = (
+            """YOU ARE A TEST ORCHESTRATOR
 
 This is the static section with instructions.
 It contains phase descriptions and workflows.
 
 More static content here...
-""" + "Static line with more content to reach minimum token count for caching validation.\n" * 80 + """
+"""
+            + "Static line with more content to reach minimum token count for caching validation.\n"
+            * 80
+            + """
 <<CACHE_BOUNDARY_MARKER>>
 
 Dynamic content will be injected here.
 """
+        )
 
         self.temp_prompt_file.write(test_prompt_content)
         self.temp_prompt_file.close()
@@ -70,7 +73,7 @@ Dynamic content will be injected here.
         prompt = build_cached_prompt(
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
-            enable_caching=True
+            enable_caching=True,
         )
 
         # Should contain cache marker
@@ -88,7 +91,7 @@ Dynamic content will be injected here.
         prompt = build_cached_prompt(
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
-            enable_caching=False
+            enable_caching=False,
         )
 
         # Should NOT contain cache marker
@@ -100,10 +103,7 @@ Dynamic content will be injected here.
 
     def test_build_standard_prompt(self):
         """Test standard prompt building (fallback)"""
-        prompt = _build_standard_prompt(
-            self.test_config,
-            self.temp_prompt_path
-        )
+        prompt = _build_standard_prompt(self.test_config, self.temp_prompt_path)
 
         # Should not contain cache markers
         self.assertNotIn("ANTHROPIC_CACHE_CONTROL", prompt)
@@ -163,11 +163,11 @@ Configuration here...
 
         result = validate_cache_markers(prompt)
 
-        self.assertTrue(result['valid'])
-        self.assertTrue(result['has_marker'])
-        self.assertEqual(result['marker_count'], 1)
-        self.assertGreater(result['marker_position'], 0)
-        self.assertEqual(len(result['issues']), 0)
+        self.assertTrue(result["valid"])
+        self.assertTrue(result["has_marker"])
+        self.assertEqual(result["marker_count"], 1)
+        self.assertGreater(result["marker_position"], 0)
+        self.assertEqual(len(result["issues"]), 0)
 
     def test_validate_cache_markers_missing(self):
         """Test cache marker validation with missing marker"""
@@ -180,10 +180,10 @@ Configuration here...
 
         result = validate_cache_markers(prompt)
 
-        self.assertFalse(result['valid'])
-        self.assertFalse(result['has_marker'])
-        self.assertEqual(result['marker_count'], 0)
-        self.assertGreater(len(result['issues']), 0)
+        self.assertFalse(result["valid"])
+        self.assertFalse(result["has_marker"])
+        self.assertEqual(result["marker_count"], 0)
+        self.assertGreater(len(result["issues"]), 0)
 
     def test_validate_cache_markers_multiple(self):
         """Test cache marker validation with multiple markers"""
@@ -200,17 +200,17 @@ AUTONOMOUS BUILD TASK
 
         result = validate_cache_markers(prompt)
 
-        self.assertFalse(result['valid'])
-        self.assertTrue(result['has_marker'])
-        self.assertEqual(result['marker_count'], 2)
-        self.assertIn("Multiple cache markers", result['issues'][0])
+        self.assertFalse(result["valid"])
+        self.assertTrue(result["has_marker"])
+        self.assertEqual(result["marker_count"], 2)
+        self.assertIn("Multiple cache markers", result["issues"][0])
 
     def test_cache_boundary_detection(self):
         """Test that cache boundary is correctly detected"""
         prompt = build_cached_prompt(
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
-            enable_caching=True
+            enable_caching=True,
         )
 
         # Find the cache marker position
@@ -228,7 +228,7 @@ AUTONOMOUS BUILD TASK
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
             enable_caching=True,
-            cache_ttl="5m"
+            cache_ttl="5m",
         )
 
         self.assertIn('"ttl": "5m"', prompt_5m)
@@ -238,7 +238,7 @@ AUTONOMOUS BUILD TASK
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
             enable_caching=True,
-            cache_ttl="1h"
+            cache_ttl="1h",
         )
 
         self.assertIn('"ttl": "1h"', prompt_1h)
@@ -248,7 +248,7 @@ AUTONOMOUS BUILD TASK
         prompt = build_cached_prompt(
             self.test_config,
             orchestrator_prompt_path=self.temp_prompt_path,
-            enable_caching=True
+            enable_caching=True,
         )
 
         # Check all config fields are present
@@ -264,7 +264,7 @@ AUTONOMOUS BUILD TASK
             build_cached_prompt(
                 self.test_config,
                 orchestrator_prompt_path="/nonexistent/path/prompt.txt",
-                enable_caching=True
+                enable_caching=True,
             )
 
 
@@ -275,9 +275,7 @@ class TestCacheConfig(unittest.TestCase):
         """Test loading default configuration"""
         # Create temp config
         temp_config = tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.json',
-            delete=False
+            mode="w", suffix=".json", delete=False
         )
 
         config_data = {
@@ -286,11 +284,9 @@ class TestCacheConfig(unittest.TestCase):
                 "enabled": True,
                 "ttl": "5m",
                 "min_tokens": 1024,
-                "models_supported": ["claude-sonnet-4"]
+                "models_supported": ["claude-sonnet-4"],
             },
-            "metrics": {
-                "track_cache_hits": True
-            }
+            "metrics": {"track_cache_hits": True},
         }
 
         json.dump(config_data, temp_config)
@@ -310,15 +306,11 @@ class TestCacheConfig(unittest.TestCase):
     def test_model_support_check(self):
         """Test model support checking"""
         temp_config = tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.json',
-            delete=False
+            mode="w", suffix=".json", delete=False
         )
 
         config_data = {
-            "caching": {
-                "models_supported": ["claude-sonnet-4", "claude-opus-4"]
-            }
+            "caching": {"models_supported": ["claude-sonnet-4", "claude-opus-4"]}
         }
 
         json.dump(config_data, temp_config)
@@ -339,9 +331,7 @@ class TestCacheConfig(unittest.TestCase):
     def test_enable_disable_caching(self):
         """Test enabling and disabling caching"""
         temp_config = tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.json',
-            delete=False
+            mode="w", suffix=".json", delete=False
         )
 
         config_data = {"caching": {"enabled": True}}
@@ -365,5 +355,5 @@ class TestCacheConfig(unittest.TestCase):
         Path(temp_config.name).unlink()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

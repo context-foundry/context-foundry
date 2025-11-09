@@ -331,4 +331,3 @@ Update phase: "Scout" (1/7, "completed", "Research complete")
 Add to phases_completed: ["Scout"]
 
 ✅ Scout complete. Proceed to Architect.
-

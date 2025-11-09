@@ -69,7 +69,7 @@ Perfect! Now let me create the final JSON output as required by the orchestrator
 
 **Performance Impact:**
 - Small code changes: **70-90% faster**
-- Documentation updates: **95% faster**  
+- Documentation updates: **95% faster**
 - Similar projects: **50-70% faster** (global Scout cache)
 - Full rebuilds: Same as before (graceful fallback)
 

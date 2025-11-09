@@ -10,7 +10,6 @@ import shutil
 import json
 import asyncio
 from pathlib import Path
-from datetime import datetime
 from tools.tui.data.provider import TUIDataProvider
 from tools.tui.config import TUIConfig
 
@@ -44,11 +43,12 @@ class TestTUIDataProvider:
 
     def teardown_method(self):
         """Cleanup"""
-        if hasattr(self, 'temp_dir') and self.temp_dir.exists():
+        if hasattr(self, "temp_dir") and self.temp_dir.exists():
             shutil.rmtree(self.temp_dir)
 
     def test_get_build_logs_no_files(self):
         """Test get_build_logs when no log files exist"""
+
         async def run_test():
             logs = await self.provider.get_build_logs("nonexistent-session")
 
@@ -73,7 +73,7 @@ class TestTUIDataProvider:
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Scout",
-            "status": "running"
+            "status": "running",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -115,7 +115,7 @@ STDERR
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Completed",
-            "status": "completed"
+            "status": "completed",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -157,7 +157,7 @@ STDERR
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Builder",
-            "status": "running"
+            "status": "running",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -177,7 +177,9 @@ STDERR
         """Test reading from multiple log sources"""
         # Create launch log
         launch_log_path = self.test_build_dir / f".launch-{self.test_session_id}.log"
-        launch_log_path.write_text("[INFO] Build started\n[INFO] Initialization complete")
+        launch_log_path.write_text(
+            "[INFO] Build started\n[INFO] Initialization complete"
+        )
 
         # Create build output
         build_output_path = self.cf_dir / f"build-output-{self.test_session_id}.txt"
@@ -191,7 +193,7 @@ STDERR
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Test",
-            "status": "running"
+            "status": "running",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -218,7 +220,7 @@ STDERR
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Scout",
-            "status": "running"
+            "status": "running",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -265,7 +267,7 @@ STDERR
         phase_data = {
             "session_id": self.test_session_id,
             "current_phase": "Scout",
-            "status": "running"
+            "status": "running",
         }
         phase_file = self.cf_dir / "current-phase.json"
         phase_file.write_text(json.dumps(phase_data))
@@ -291,5 +293,5 @@ STDERR
         asyncio.run(run_test())
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

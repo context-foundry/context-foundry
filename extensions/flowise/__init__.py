@@ -12,4 +12,4 @@ from . import detector
 from . import analyzer
 from . import extensions_loader
 
-__all__ = ['detector', 'analyzer', 'extensions_loader']
+__all__ = ["detector", "analyzer", "extensions_loader"]

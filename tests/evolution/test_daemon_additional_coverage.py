@@ -5,21 +5,17 @@ Targets remaining uncovered lines to improve test coverage
 """
 
 import unittest
-from unittest.mock import Mock, patch, MagicMock, call
-from pathlib import Path
-import tempfile
+from unittest.mock import Mock, patch
 import json
-import signal
-import time
 
-from tools.evolution.daemon import EvolutionDaemon, setup_logging
+from tools.evolution.daemon import EvolutionDaemon
 from tools.evolution.task_queue import Task, TaskStatus, TaskType
 
 
 class TestDaemonMaxConcurrentTasks(unittest.TestCase):
     """Test max concurrent task limits in main loop"""
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_main_loop_respects_max_concurrent_limit(self, mock_setup_logging):
         """Test that daemon pauses when max concurrent tasks reached"""
         mock_logger = Mock()
@@ -27,7 +23,7 @@ class TestDaemonMaxConcurrentTasks(unittest.TestCase):
 
         daemon = EvolutionDaemon()
         daemon.stop_requested = False
-        daemon.active_tasks = ['task1', 'task2', 'task3']  # Simulate 3 active tasks
+        daemon.active_tasks = ["task1", "task2", "task3"]  # Simulate 3 active tasks
 
         check_count = [0]
 
@@ -37,21 +33,23 @@ class TestDaemonMaxConcurrentTasks(unittest.TestCase):
                 daemon.stop_requested = True
             return []
 
-        with patch.object(daemon, '_check_open_prs', side_effect=stop_after_checks):
-            with patch.object(daemon.resource_manager, 'can_accept_task', return_value=(True, "")):
-                with patch.object(daemon, '_interruptible_sleep') as mock_sleep:
+        with patch.object(daemon, "_check_open_prs", side_effect=stop_after_checks):
+            with patch.object(
+                daemon.resource_manager, "can_accept_task", return_value=(True, "")
+            ):
+                with patch.object(daemon, "_interruptible_sleep") as mock_sleep:
                     daemon.main_loop()
 
         # Verify daemon logged max concurrent reached
         log_messages = [str(c) for c in mock_logger.debug.call_args_list]
-        max_concurrent_messages = [m for m in log_messages if 'Max concurrent' in m]
+        max_concurrent_messages = [m for m in log_messages if "Max concurrent" in m]
         self.assertGreater(len(max_concurrent_messages), 0)
 
 
 class TestDaemonPeriodicResourceLogging(unittest.TestCase):
     """Test periodic resource usage logging"""
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_main_loop_increments_poll_count(self, mock_setup_logging):
         """Test that main loop increments poll count correctly"""
         mock_logger = Mock()
@@ -70,13 +68,21 @@ class TestDaemonPeriodicResourceLogging(unittest.TestCase):
                 daemon.stop_requested = True
             return []
 
-        with patch.object(daemon, '_check_open_prs', side_effect=stop_after_polls):
-            with patch.object(daemon.resource_manager, 'can_accept_task', return_value=(True, "")):
-                with patch.object(daemon.task_queue, 'get_next_task', return_value=None):
-                    with patch.object(daemon.task_queue, 'count_running', return_value=0):
-                        with patch.object(daemon.task_queue, 'count_pending', return_value=0):
-                            with patch.object(daemon, '_queue_next_improvement_task'):
-                                with patch.object(daemon, '_interruptible_sleep'):
+        with patch.object(daemon, "_check_open_prs", side_effect=stop_after_polls):
+            with patch.object(
+                daemon.resource_manager, "can_accept_task", return_value=(True, "")
+            ):
+                with patch.object(
+                    daemon.task_queue, "get_next_task", return_value=None
+                ):
+                    with patch.object(
+                        daemon.task_queue, "count_running", return_value=0
+                    ):
+                        with patch.object(
+                            daemon.task_queue, "count_pending", return_value=0
+                        ):
+                            with patch.object(daemon, "_queue_next_improvement_task"):
+                                with patch.object(daemon, "_interruptible_sleep"):
                                     daemon.main_loop()
 
         # Verify poll count increased (showing loop ran)
@@ -86,7 +92,7 @@ class TestDaemonPeriodicResourceLogging(unittest.TestCase):
 class TestDaemonExceptionHandling(unittest.TestCase):
     """Test exception handling in main loop"""
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_main_loop_catches_and_logs_exceptions(self, mock_setup_logging):
         """Test that exceptions in main loop are caught and logged"""
         mock_logger = Mock()
@@ -105,20 +111,26 @@ class TestDaemonExceptionHandling(unittest.TestCase):
                 daemon.stop_requested = True
                 return []
 
-        with patch.object(daemon, '_check_open_prs', side_effect=raise_then_stop):
-            with patch.object(daemon, '_interruptible_sleep'):
+        with patch.object(daemon, "_check_open_prs", side_effect=raise_then_stop):
+            with patch.object(daemon, "_interruptible_sleep"):
                 daemon.main_loop()
 
         # Verify exception was logged
-        error_calls = [c for c in mock_logger.error.call_args_list if 'Error in main loop' in str(c)]
+        error_calls = [
+            c
+            for c in mock_logger.error.call_args_list
+            if "Error in main loop" in str(c)
+        ]
         self.assertGreater(len(error_calls), 0)
 
 
 class TestDaemonEmptyQueueBehavior(unittest.TestCase):
     """Test daemon behavior when queue is empty"""
 
-    @patch('tools.evolution.daemon.setup_logging')
-    def test_main_loop_generates_improvement_task_when_queue_empty(self, mock_setup_logging):
+    @patch("tools.evolution.daemon.setup_logging")
+    def test_main_loop_generates_improvement_task_when_queue_empty(
+        self, mock_setup_logging
+    ):
         """Test that daemon generates improvement task when queue is empty"""
         mock_logger = Mock()
         mock_setup_logging.return_value = mock_logger
@@ -134,13 +146,21 @@ class TestDaemonEmptyQueueBehavior(unittest.TestCase):
                 daemon.stop_requested = True
             return []
 
-        with patch.object(daemon, '_check_open_prs', side_effect=stop_after_checks):
-            with patch.object(daemon.resource_manager, 'can_accept_task', return_value=(True, "")):
-                with patch.object(daemon.task_queue, 'count_running', return_value=0):
-                    with patch.object(daemon.task_queue, 'count_pending', return_value=0):
-                        with patch.object(daemon.task_queue, 'get_next_task', return_value=None):
-                            with patch.object(daemon, '_queue_next_improvement_task') as mock_queue:
-                                with patch.object(daemon, '_interruptible_sleep'):
+        with patch.object(daemon, "_check_open_prs", side_effect=stop_after_checks):
+            with patch.object(
+                daemon.resource_manager, "can_accept_task", return_value=(True, "")
+            ):
+                with patch.object(daemon.task_queue, "count_running", return_value=0):
+                    with patch.object(
+                        daemon.task_queue, "count_pending", return_value=0
+                    ):
+                        with patch.object(
+                            daemon.task_queue, "get_next_task", return_value=None
+                        ):
+                            with patch.object(
+                                daemon, "_queue_next_improvement_task"
+                            ) as mock_queue:
+                                with patch.object(daemon, "_interruptible_sleep"):
                                     daemon.main_loop()
 
         # Verify queue_next_improvement_task was called
@@ -150,7 +170,7 @@ class TestDaemonEmptyQueueBehavior(unittest.TestCase):
 class TestDaemonGetUptime(unittest.TestCase):
     """Test get_uptime method"""
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_get_uptime_returns_duration(self, mock_setup_logging):
         """Test that get_uptime returns time since start"""
         mock_logger = Mock()
@@ -169,9 +189,11 @@ class TestDaemonGetUptime(unittest.TestCase):
 class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
     """Test edge cases in PR detection logic"""
 
-    @patch('tools.evolution.daemon.setup_logging')
-    @patch('subprocess.run')
-    def test_check_open_prs_handles_invalid_json_from_gh(self, mock_run, mock_setup_logging):
+    @patch("tools.evolution.daemon.setup_logging")
+    @patch("subprocess.run")
+    def test_check_open_prs_handles_invalid_json_from_gh(
+        self, mock_run, mock_setup_logging
+    ):
         """Test that invalid JSON from gh CLI is handled gracefully"""
         mock_logger = Mock()
         mock_setup_logging.return_value = mock_logger
@@ -189,9 +211,11 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
         # Should return empty list when JSON parsing fails
         self.assertEqual(result, [])
 
-    @patch('tools.evolution.daemon.setup_logging')
-    @patch('subprocess.run')
-    def test_check_recently_closed_prs_handles_no_git_repo(self, mock_run, mock_setup_logging):
+    @patch("tools.evolution.daemon.setup_logging")
+    @patch("subprocess.run")
+    def test_check_recently_closed_prs_handles_no_git_repo(
+        self, mock_run, mock_setup_logging
+    ):
         """Test that check_recently_closed_prs handles non-git directories"""
         mock_logger = Mock()
         mock_setup_logging.return_value = mock_logger
@@ -207,9 +231,11 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
         # Should return empty list
         self.assertEqual(result, [])
 
-    @patch('tools.evolution.daemon.setup_logging')
-    @patch('subprocess.run')
-    def test_detect_prs_and_complete_tasks_handles_no_matching_branch(self, mock_run, mock_setup_logging):
+    @patch("tools.evolution.daemon.setup_logging")
+    @patch("subprocess.run")
+    def test_detect_prs_and_complete_tasks_handles_no_matching_branch(
+        self, mock_run, mock_setup_logging
+    ):
         """Test PR detection when branch name doesn't match task"""
         mock_logger = Mock()
         mock_setup_logging.return_value = mock_logger
@@ -219,32 +245,37 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
         # Mock open PR with branch that doesn't match any task
         mock_result = Mock()
         mock_result.returncode = 0
-        mock_result.stdout = json.dumps([{
-            'number': 123,
-            'title': 'Test PR',
-            'headRefName': 'feature/random-branch'
-        }])
+        mock_result.stdout = json.dumps(
+            [
+                {
+                    "number": 123,
+                    "title": "Test PR",
+                    "headRefName": "feature/random-branch",
+                }
+            ]
+        )
         mock_run.return_value = mock_result
 
         # Mock running task with different branch - use correct Task constructor
         from datetime import datetime
+
         mock_task = Task(
-            id='task-1',
+            id="task-1",
             type=TaskType.SELF_IMPROVEMENT.value,
             status=TaskStatus.RUNNING.value,
             priority=5,
-            params={'branch': 'self-improvement/task-abc123'},
-            created_at=datetime.utcnow().isoformat()
+            params={"branch": "self-improvement/task-abc123"},
+            created_at=datetime.utcnow().isoformat(),
         )
 
-        with patch.object(daemon.task_queue, 'list_tasks', return_value=[mock_task]):
-            with patch.object(daemon.task_queue, 'update_task_status') as mock_update:
+        with patch.object(daemon.task_queue, "list_tasks", return_value=[mock_task]):
+            with patch.object(daemon.task_queue, "update_task_status") as mock_update:
                 daemon._detect_prs_and_complete_tasks()
 
         # Task should not be completed since branch doesn't match
         mock_update.assert_not_called()
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_queue_next_improvement_task_runs_without_error(self, mock_setup_logging):
         """Test that queue_next_improvement_task handles case with no TODOs"""
         mock_logger = Mock()
@@ -253,7 +284,7 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
         daemon = EvolutionDaemon()
 
         # Just verify the method can be called without crashing
-        with patch.object(daemon.task_queue, 'create_task'):
+        with patch.object(daemon.task_queue, "create_task"):
             # Should not raise an exception
             try:
                 daemon._queue_next_improvement_task()
@@ -264,8 +295,10 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
 
             self.assertTrue(success)
 
-    @patch('tools.evolution.daemon.setup_logging')
-    def test_queue_next_improvement_task_creates_task_with_todos(self, mock_setup_logging):
+    @patch("tools.evolution.daemon.setup_logging")
+    def test_queue_next_improvement_task_creates_task_with_todos(
+        self, mock_setup_logging
+    ):
         """Test that queue_next_improvement_task creates task when TODOs exist"""
         mock_logger = Mock()
         mock_setup_logging.return_value = mock_logger
@@ -274,15 +307,17 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
 
         # Mock mode that returns tasks
         mock_mode = Mock()
-        mock_tasks = [{
-            'type': TaskType.SELF_IMPROVEMENT.value,
-            'description': 'Fix TODO: test coverage',
-            'params': {'file': 'test.py', 'line': 10}
-        }]
+        mock_tasks = [
+            {
+                "type": TaskType.SELF_IMPROVEMENT.value,
+                "description": "Fix TODO: test coverage",
+                "params": {"file": "test.py", "line": 10},
+            }
+        ]
         mock_mode.generate_tasks.return_value = mock_tasks
         daemon.mode = mock_mode
 
-        with patch.object(daemon.task_queue, 'create_task') as mock_create:
+        with patch.object(daemon.task_queue, "create_task") as mock_create:
             daemon._queue_next_improvement_task()
 
         # Should create task
@@ -292,7 +327,7 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
 class TestDaemonTaskPickupAndExecution(unittest.TestCase):
     """Test task pickup and execution flow (lines 270-271)"""
 
-    @patch('tools.evolution.daemon.setup_logging')
+    @patch("tools.evolution.daemon.setup_logging")
     def test_main_loop_picks_up_and_executes_task(self, mock_setup_logging):
         """Test that daemon picks up task and executes it (lines 270-271)"""
         mock_logger = Mock()
@@ -303,12 +338,12 @@ class TestDaemonTaskPickupAndExecution(unittest.TestCase):
 
         # Create a mock task
         mock_task = Task(
-            id='task-execute-123',
+            id="task-execute-123",
             type=TaskType.SELF_IMPROVEMENT.value,
             status=TaskStatus.PENDING.value,
             priority=5,
-            params={'description': 'Test task execution'},
-            created_at='2024-01-01T00:00:00'
+            params={"description": "Test task execution"},
+            created_at="2024-01-01T00:00:00",
         )
 
         call_count = [0]
@@ -320,13 +355,21 @@ class TestDaemonTaskPickupAndExecution(unittest.TestCase):
             daemon.stop_requested = True
             return None
 
-        with patch.object(daemon, '_check_open_prs', return_value=[]):
-            with patch.object(daemon.resource_manager, 'can_accept_task', return_value=(True, "")):
-                with patch.object(daemon.task_queue, 'count_running', return_value=0):
-                    with patch.object(daemon.task_queue, 'count_pending', return_value=1):
-                        with patch.object(daemon.task_queue, 'get_next_task', side_effect=return_task_once):
-                            with patch.object(daemon, '_execute_task') as mock_execute:
-                                with patch.object(daemon, '_interruptible_sleep'):
+        with patch.object(daemon, "_check_open_prs", return_value=[]):
+            with patch.object(
+                daemon.resource_manager, "can_accept_task", return_value=(True, "")
+            ):
+                with patch.object(daemon.task_queue, "count_running", return_value=0):
+                    with patch.object(
+                        daemon.task_queue, "count_pending", return_value=1
+                    ):
+                        with patch.object(
+                            daemon.task_queue,
+                            "get_next_task",
+                            side_effect=return_task_once,
+                        ):
+                            with patch.object(daemon, "_execute_task") as mock_execute:
+                                with patch.object(daemon, "_interruptible_sleep"):
                                     daemon.main_loop()
 
         # Verify task was picked up and executed (line 270-271)
@@ -334,9 +377,11 @@ class TestDaemonTaskPickupAndExecution(unittest.TestCase):
 
         # Verify log message for picking up task (line 270)
         log_messages = [str(c) for c in mock_logger.info.call_args_list]
-        pickup_messages = [m for m in log_messages if 'Picked up task: task-execute-123' in m]
+        pickup_messages = [
+            m for m in log_messages if "Picked up task: task-execute-123" in m
+        ]
         self.assertGreater(len(pickup_messages), 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

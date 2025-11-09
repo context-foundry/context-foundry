@@ -1,6 +1,6 @@
 """Data models for TUI"""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from enum import Enum
@@ -8,6 +8,7 @@ from enum import Enum
 
 class PhaseStatus(Enum):
     """Build phase status"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -17,6 +18,7 @@ class PhaseStatus(Enum):
 @dataclass
 class BuildStatus:
     """Represents current build status from current-phase.json"""
+
     session_id: str
     current_phase: str
     phase_number: str
@@ -30,20 +32,20 @@ class BuildStatus:
     tasks_completed: int = 0
 
     @classmethod
-    def from_json(cls, data: Dict[str, Any]) -> 'BuildStatus':
+    def from_json(cls, data: Dict[str, Any]) -> "BuildStatus":
         """Parse from JSON file data"""
         return cls(
-            session_id=data.get('session_id', 'unknown'),
-            current_phase=data.get('current_phase', 'Unknown'),
-            phase_number=data.get('phase_number', '0/7'),
-            status=data.get('status', 'unknown'),
-            progress_detail=data.get('progress_detail', ''),
-            test_iteration=data.get('test_iteration', 0),
-            phases_completed=data.get('phases_completed', []),
-            started_at=cls._parse_datetime(data.get('started_at')),
-            last_updated=cls._parse_datetime(data.get('last_updated')),
-            parallel_execution=data.get('parallel_execution', False),
-            tasks_completed=data.get('tasks_completed', 0)
+            session_id=data.get("session_id", "unknown"),
+            current_phase=data.get("current_phase", "Unknown"),
+            phase_number=data.get("phase_number", "0/7"),
+            status=data.get("status", "unknown"),
+            progress_detail=data.get("progress_detail", ""),
+            test_iteration=data.get("test_iteration", 0),
+            phases_completed=data.get("phases_completed", []),
+            started_at=cls._parse_datetime(data.get("started_at")),
+            last_updated=cls._parse_datetime(data.get("last_updated")),
+            parallel_execution=data.get("parallel_execution", False),
+            tasks_completed=data.get("tasks_completed", 0),
         )
 
     @staticmethod
@@ -52,14 +54,14 @@ class BuildStatus:
         if not dt_str:
             return datetime.now()
         try:
-            return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+            return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             return datetime.now()
 
     def get_progress_percentage(self) -> float:
         """Calculate progress percentage based on phase"""
         try:
-            current, total = self.phase_number.split('/')
+            current, total = self.phase_number.split("/")
             return (int(current) / int(total)) * 100
         except (ValueError, ZeroDivisionError):
             return 0.0
@@ -68,6 +70,7 @@ class BuildStatus:
 @dataclass
 class AgentMetrics:
     """Agent activity metrics"""
+
     agent_name: str
     total_calls: int
     tokens_used: int
@@ -79,6 +82,7 @@ class AgentMetrics:
 @dataclass
 class SystemStats:
     """Overall system statistics"""
+
     total_builds: int
     active_builds: int
     completed_builds: int
@@ -92,6 +96,7 @@ class SystemStats:
 @dataclass
 class BuildSummary:
     """Summary info for build list"""
+
     session_id: str
     status: str
     current_phase: str
@@ -109,10 +114,5 @@ class BuildSummary:
 
     def get_status_icon(self) -> str:
         """Get status icon"""
-        icons = {
-            "completed": "✓",
-            "failed": "✗",
-            "in_progress": "⋯",
-            "pending": "○"
-        }
+        icons = {"completed": "✓", "failed": "✗", "in_progress": "⋯", "pending": "○"}
         return icons.get(self.status.lower(), "•")

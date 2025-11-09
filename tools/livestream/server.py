@@ -11,10 +11,9 @@ import asyncio
 import hashlib
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -83,7 +82,7 @@ class SessionMonitor:
                 "last_update": session_data.get("last_updated"),
                 "phases_completed": session_data.get("phases_completed", []),
                 "is_complete": session_data.get("status") == "completed",
-                "source": "live"
+                "source": "live",
             }
             sessions.append(session_info)
 
@@ -120,7 +119,7 @@ class SessionMonitor:
                         "total_tasks": len(progress.get("completed", []))
                         + len(progress.get("remaining", [])),
                         "is_complete": (session_dir / "COMPLETE").exists(),
-                        "source": "checkpoint"
+                        "source": "checkpoint",
                     }
 
                     sessions.append(session_info)
@@ -146,19 +145,28 @@ class SessionMonitor:
                     start_time = datetime.fromisoformat(started_at_str)
                     # Make datetime.now() timezone-aware for comparison
                     from datetime import timezone
-                    elapsed_seconds = (datetime.now(timezone.utc) - start_time).total_seconds()
+
+                    elapsed_seconds = (
+                        datetime.now(timezone.utc) - start_time
+                    ).total_seconds()
                 except Exception as e:
                     print(f"Error parsing started_at: {e}", file=sys.stderr)
                     pass
 
             # Count completed phases for progress
             phases_completed = live_data.get("phases_completed", [])
-            total_phases = 7  # Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy
+            total_phases = (
+                7  # Scout, Architect, Builder, Test, Screenshot, Documentation, Deploy
+            )
 
             # Calculate overall progress percentage
             phase_number_str = live_data.get("phase_number", "?/7")
             try:
-                current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+                current_phase_num = (
+                    int(phase_number_str.split("/")[0])
+                    if "/" in phase_number_str
+                    else None
+                )
             except:
                 current_phase_num = None
 
@@ -191,12 +199,14 @@ class SessionMonitor:
                     "completed": phases_completed,
                     "remaining": [],
                     "total": total_phases,
-                    "progress_percent": int((len(phases_completed) / total_phases * 100)),
+                    "progress_percent": int(
+                        (len(phases_completed) / total_phases * 100)
+                    ),
                 },
                 "phase_breakdown": {
                     "completed": phases_completed,
                     "current": live_data.get("current_phase", "Unknown"),
-                    "remaining": []
+                    "remaining": [],
                 },
                 "context": {
                     "percentage": 0,  # Live data doesn't have token info yet
@@ -205,7 +215,7 @@ class SessionMonitor:
                 "artifacts": {},
                 "is_complete": live_data.get("status") == "completed",
                 "notes": [],
-                "source": "live"
+                "source": "live",
             }
 
         # Fall back to checkpoint-based session lookup
@@ -229,7 +239,9 @@ class SessionMonitor:
                     progress = json.load(f)
 
             # Calculate stats
-            start_time = datetime.fromisoformat(state.get("start_time", datetime.now().isoformat()))
+            start_time = datetime.fromisoformat(
+                state.get("start_time", datetime.now().isoformat())
+            )
             elapsed_seconds = (datetime.now() - start_time).total_seconds()
 
             completed = len(progress.get("completed", []))
@@ -256,7 +268,9 @@ class SessionMonitor:
                     "completed": progress.get("completed", []),
                     "remaining": progress.get("remaining", []),
                     "total": total,
-                    "progress_percent": int((completed / total * 100)) if total > 0 else 0,
+                    "progress_percent": int((completed / total * 100))
+                    if total > 0
+                    else 0,
                 },
                 "context": {
                     "percentage": 0,  # Would need to read from Claude logs
@@ -265,7 +279,7 @@ class SessionMonitor:
                 "artifacts": state.get("artifacts", {}),
                 "is_complete": (session_dir / "COMPLETE").exists(),
                 "notes": progress.get("notes", []),
-                "source": "checkpoint"
+                "source": "checkpoint",
             }
 
         except Exception as e:
@@ -414,8 +428,10 @@ async def phase_update(phase_data: Dict):
         "progress_detail": phase_data.get("progress_detail", ""),
         "test_iteration": phase_data.get("test_iteration", 0),
         "phases_completed": phase_data.get("phases_completed", []),
-        "started_at": phase_data.get("started_at") or existing_session.get("started_at") or datetime.now().isoformat(),
-        "last_updated": datetime.now().isoformat()
+        "started_at": phase_data.get("started_at")
+        or existing_session.get("started_at")
+        or datetime.now().isoformat(),
+        "last_updated": datetime.now().isoformat(),
     }
 
     # Broadcast to connected clients
@@ -423,10 +439,9 @@ async def phase_update(phase_data: Dict):
     if session_id in connections:
         for connection in connections[session_id]:
             try:
-                await connection.send_json({
-                    "type": "phase_update",
-                    "data": monitor.sessions[session_id]
-                })
+                await connection.send_json(
+                    {"type": "phase_update", "data": monitor.sessions[session_id]}
+                )
                 broadcast_count += 1
             except:
                 pass
@@ -435,7 +450,7 @@ async def phase_update(phase_data: Dict):
         "status": "received",
         "session_id": session_id,
         "phase": phase_data.get("current_phase"),
-        "broadcasted_to": broadcast_count
+        "broadcasted_to": broadcast_count,
     }
 
 
@@ -453,6 +468,7 @@ async def health():
 # Phase Tracking & Session Filtering Endpoints (Dashboard Redesign)
 # ============================================================================
 
+
 def get_phase_breakdown(session_data: Dict) -> Dict:
     """
     Calculate detailed phase breakdown from session data.
@@ -463,11 +479,16 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
         {"number": 0, "name": "Codebase Analysis", "emoji": "🔍"},
         {"number": 1, "name": "Scout", "emoji": "🔍"},
         {"number": 2, "name": "Architect", "emoji": "🏗️"},
-        {"number": 3, "name": "Builder", "emoji": "🔨", "note": "This is typically the longest phase!"},
+        {
+            "number": 3,
+            "name": "Builder",
+            "emoji": "🔨",
+            "note": "This is typically the longest phase!",
+        },
         {"number": 4, "name": "Tester", "emoji": "🧪"},
         {"number": 5, "name": "Test Loop", "emoji": "🔄"},
         {"number": 6, "name": "Documentation", "emoji": "📝"},
-        {"number": 7, "name": "Deployer", "emoji": "🚀"}
+        {"number": 7, "name": "Deployer", "emoji": "🚀"},
     ]
 
     total_phases = len(PHASE_DEFINITIONS)
@@ -477,7 +498,9 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
 
     # Parse current phase number
     try:
-        current_phase_num = int(phase_number_str.split('/')[0]) if '/' in phase_number_str else None
+        current_phase_num = (
+            int(phase_number_str.split("/")[0]) if "/" in phase_number_str else None
+        )
     except:
         current_phase_num = None
 
@@ -496,7 +519,7 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
         phase_info = {
             "number": phase_def["number"],
             "name": phase_name,
-            "emoji": phase_def["emoji"]
+            "emoji": phase_def["emoji"],
         }
 
         # Add note if present
@@ -509,7 +532,9 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
             phase_info["description"] = f"Completed {phase_name.lower()} phase"
         elif phase_name == current_phase:
             phase_info["status"] = "in_progress"
-            phase_info["description"] = session_data.get("progress_detail", "In progress...")
+            phase_info["description"] = session_data.get(
+                "progress_detail", "In progress..."
+            )
             phase_info["detail"] = session_data.get("progress_detail", "")
         else:
             phase_info["status"] = "pending"
@@ -523,7 +548,7 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
         "phases_completed_count": phases_completed_count,
         "current_phase_number": current_phase_num,
         "overall_progress_percent": round(overall_progress, 1),
-        "phases": phases
+        "phases": phases,
     }
 
 
@@ -542,22 +567,26 @@ async def get_session_phases(session_id: str):
         return JSONResponse({"error": "Session not found"}, status_code=404)
 
     # Create minimal phase breakdown for legacy sessions
-    return JSONResponse({
-        "session_id": session_id,
-        "total_phases": 7,
-        "phases_completed_count": 0,
-        "current_phase_number": None,
-        "overall_progress_percent": 0,
-        "phases": [],
-        "legacy": True
-    })
+    return JSONResponse(
+        {
+            "session_id": session_id,
+            "total_phases": 7,
+            "phases_completed_count": 0,
+            "current_phase_number": None,
+            "overall_progress_percent": 0,
+            "phases": [],
+            "legacy": True,
+        }
+    )
 
 
 @app.get("/api/sessions/active")
 async def get_active_sessions():
     """Get only active/running sessions."""
     sessions = monitor.discover_sessions()
-    active = [s for s in sessions if not s.get('is_complete') and s.get('status') != 'failed']
+    active = [
+        s for s in sessions if not s.get("is_complete") and s.get("status") != "failed"
+    ]
     return JSONResponse({"sessions": active, "count": len(active)})
 
 
@@ -565,7 +594,9 @@ async def get_active_sessions():
 async def get_completed_sessions():
     """Get only completed sessions."""
     sessions = monitor.discover_sessions()
-    completed = [s for s in sessions if s.get('is_complete') or s.get('status') == 'completed']
+    completed = [
+        s for s in sessions if s.get("is_complete") or s.get("status") == "completed"
+    ]
     return JSONResponse({"sessions": completed, "count": len(completed)})
 
 
@@ -573,7 +604,7 @@ async def get_completed_sessions():
 async def get_failed_sessions():
     """Get only failed sessions."""
     sessions = monitor.discover_sessions()
-    failed = [s for s in sessions if s.get('status') == 'failed']
+    failed = [s for s in sessions if s.get("status") == "failed"]
     return JSONResponse({"sessions": failed, "count": len(failed)})
 
 
@@ -581,23 +612,30 @@ async def get_failed_sessions():
 # Multi-Agent Monitoring Endpoints (NEW)
 # ============================================================================
 
+
 @app.get("/api/agents/{session_id}")
 async def get_session_agents(session_id: str):
     """Get all agent instances for a session."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+        return JSONResponse(
+            {"error": "Multi-agent features require MCP enhancement"}, status_code=503
+        )
 
     try:
         db = get_db()
         agents = db.get_session_agents(session_id)
-        active_agents = [a for a in agents if a['status'] in ['spawning', 'active', 'idle']]
+        active_agents = [
+            a for a in agents if a["status"] in ["spawning", "active", "idle"]
+        ]
 
-        return JSONResponse({
-            "session_id": session_id,
-            "agents": agents,
-            "total_agents": len(agents),
-            "active_agents": len(active_agents)
-        })
+        return JSONResponse(
+            {
+                "session_id": session_id,
+                "agents": agents,
+                "total_agents": len(agents),
+                "active_agents": len(active_agents),
+            }
+        )
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -606,7 +644,9 @@ async def get_session_agents(session_id: str):
 async def get_agent_detail(agent_id: str):
     """Get detailed status for a specific agent."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+        return JSONResponse(
+            {"error": "Multi-agent features require MCP enhancement"}, status_code=503
+        )
 
     try:
         db = get_db()
@@ -616,18 +656,25 @@ async def get_agent_detail(agent_id: str):
             return JSONResponse({"error": "Agent not found"}, status_code=404)
 
         # Calculate elapsed seconds if agent is still running
-        if agent['start_time'] and not agent['end_time']:
+        if agent["start_time"] and not agent["end_time"]:
             from datetime import datetime, timezone
-            start_time = datetime.fromisoformat(agent['start_time'].replace('Z', '+00:00'))
-            elapsed_seconds = int((datetime.now(timezone.utc) - start_time).total_seconds())
-            agent['elapsed_seconds'] = elapsed_seconds
+
+            start_time = datetime.fromisoformat(
+                agent["start_time"].replace("Z", "+00:00")
+            )
+            elapsed_seconds = int(
+                (datetime.now(timezone.utc) - start_time).total_seconds()
+            )
+            agent["elapsed_seconds"] = elapsed_seconds
 
             # Estimate remaining time based on progress
-            if agent['progress_percent'] > 0:
-                estimated_total = elapsed_seconds / (agent['progress_percent'] / 100.0)
-                agent['estimated_remaining_seconds'] = int(estimated_total - elapsed_seconds)
+            if agent["progress_percent"] > 0:
+                estimated_total = elapsed_seconds / (agent["progress_percent"] / 100.0)
+                agent["estimated_remaining_seconds"] = int(
+                    estimated_total - elapsed_seconds
+                )
             else:
-                agent['estimated_remaining_seconds'] = 0
+                agent["estimated_remaining_seconds"] = 0
 
         return JSONResponse(agent)
     except Exception as e:
@@ -638,16 +685,15 @@ async def get_agent_detail(agent_id: str):
 async def get_all_instances():
     """Get all running Context Foundry instances with summary stats."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+        return JSONResponse(
+            {"error": "Multi-agent features require MCP enhancement"}, status_code=503
+        )
 
     try:
         db = get_db()
         instances = db.get_all_instances()
 
-        return JSONResponse({
-            "instances": instances,
-            "total_instances": len(instances)
-        })
+        return JSONResponse({"instances": instances, "total_instances": len(instances)})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -659,7 +705,9 @@ async def agent_update(agent_data: Dict):
     Creates or updates agent instance and broadcasts to connected clients.
     """
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "Multi-agent features require MCP enhancement"}, status_code=503)
+        return JSONResponse(
+            {"error": "Multi-agent features require MCP enhancement"}, status_code=503
+        )
 
     try:
         db = get_db()
@@ -667,7 +715,9 @@ async def agent_update(agent_data: Dict):
         agent_id = agent_data.get("agent_id")
 
         if not session_id or not agent_id:
-            return JSONResponse({"error": "session_id and agent_id required"}, status_code=400)
+            return JSONResponse(
+                {"error": "session_id and agent_id required"}, status_code=400
+            )
 
         # Check if agent exists
         existing_agent = db.get_agent_instance(agent_id)
@@ -675,22 +725,34 @@ async def agent_update(agent_data: Dict):
         if existing_agent:
             # Update existing agent
             updates = {}
-            for key in ['status', 'phase', 'progress_percent', 'tokens_used', 'token_percentage', 'error_message']:
+            for key in [
+                "status",
+                "phase",
+                "progress_percent",
+                "tokens_used",
+                "token_percentage",
+                "error_message",
+            ]:
                 if key in agent_data:
                     updates[key] = agent_data[key]
 
             # Calculate token percentage if tokens_used provided
-            if 'tokens_used' in updates and existing_agent.get('tokens_limit'):
-                updates['token_percentage'] = (updates['tokens_used'] / existing_agent['tokens_limit']) * 100
+            if "tokens_used" in updates and existing_agent.get("tokens_limit"):
+                updates["token_percentage"] = (
+                    updates["tokens_used"] / existing_agent["tokens_limit"]
+                ) * 100
 
             # Set end_time if status is completed or failed
-            if updates.get('status') in ['completed', 'failed']:
-                updates['end_time'] = datetime.now().isoformat()
-                if existing_agent.get('start_time'):
+            if updates.get("status") in ["completed", "failed"]:
+                updates["end_time"] = datetime.now().isoformat()
+                if existing_agent.get("start_time"):
                     from datetime import datetime as dt
-                    start = dt.fromisoformat(existing_agent['start_time'].replace('Z', '+00:00'))
+
+                    start = dt.fromisoformat(
+                        existing_agent["start_time"].replace("Z", "+00:00")
+                    )
                     end = dt.now(timezone.utc)
-                    updates['duration_seconds'] = int((end - start).total_seconds())
+                    updates["duration_seconds"] = int((end - start).total_seconds())
 
             db.update_agent_instance(agent_id, updates)
         else:
@@ -703,7 +765,7 @@ async def agent_update(agent_data: Dict):
             event = {
                 "type": "agent_progress",
                 "session_id": session_id,
-                "data": agent_data
+                "data": agent_data,
             }
             for connection in connections[session_id]:
                 try:
@@ -712,11 +774,13 @@ async def agent_update(agent_data: Dict):
                 except:
                     pass
 
-        return JSONResponse({
-            "status": "updated",
-            "agent_id": agent_id,
-            "broadcasted_to": broadcast_count
-        })
+        return JSONResponse(
+            {
+                "status": "updated",
+                "agent_id": agent_id,
+                "broadcasted_to": broadcast_count,
+            }
+        )
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -731,6 +795,7 @@ try:
     from .mcp_client import get_client
     from .metrics_db import get_db
     from .config import TOKEN_BUDGET_LIMIT, get_token_status
+
     MCP_ENHANCED = True
 except ImportError:
     try:
@@ -738,6 +803,7 @@ except ImportError:
         from mcp_client import get_client
         from metrics_db import get_db
         from config import TOKEN_BUDGET_LIMIT, get_token_status
+
         MCP_ENHANCED = True
     except ImportError:
         print("⚠️  Enhanced MCP modules not available", file=sys.stderr)
@@ -748,7 +814,9 @@ except ImportError:
 async def get_mcp_tasks():
     """Get all active MCP delegation tasks."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         mcp_client = get_client()
@@ -762,7 +830,9 @@ async def get_mcp_tasks():
 async def get_mcp_task(task_id: str):
     """Get detailed status for an MCP delegation task."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         mcp_client = get_client()
@@ -776,7 +846,9 @@ async def get_mcp_task(task_id: str):
 async def get_task_metrics(task_id: str):
     """Get comprehensive metrics for a task."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         db = get_db()
@@ -806,36 +878,44 @@ async def get_task_metrics(task_id: str):
 
         # Get token estimate
         token_estimate = mcp_client.estimate_token_usage(task_id)
-        token_status = get_token_status(token_estimate['estimated_tokens'])
+        token_status = get_token_status(token_estimate["estimated_tokens"])
 
-        return JSONResponse({
-            "task": task_data,
-            "metrics": {
-                "latest": latest_metric,
-                "history": metrics[-20:] if len(metrics) > 20 else metrics,  # Last 20
-                "token_usage": token_status,
-            },
-            "decisions": {
-                "recent": decisions[-10:] if len(decisions) > 10 else decisions,  # Last 10
-                "analytics": decision_analytics
-            },
-            "agent_performance": agent_performance,
-            "test_iterations": test_iterations,
-            "pattern_effectiveness": pattern_effectiveness
-        })
+        return JSONResponse(
+            {
+                "task": task_data,
+                "metrics": {
+                    "latest": latest_metric,
+                    "history": metrics[-20:]
+                    if len(metrics) > 20
+                    else metrics,  # Last 20
+                    "token_usage": token_status,
+                },
+                "decisions": {
+                    "recent": decisions[-10:]
+                    if len(decisions) > 10
+                    else decisions,  # Last 10
+                    "analytics": decision_analytics,
+                },
+                "agent_performance": agent_performance,
+                "test_iterations": test_iterations,
+                "pattern_effectiveness": pattern_effectiveness,
+            }
+        )
     except Exception as e:
         import traceback
-        return JSONResponse({
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, status_code=500)
+
+        return JSONResponse(
+            {"error": str(e), "traceback": traceback.format_exc()}, status_code=500
+        )
 
 
 @app.get("/api/metrics/historical")
 async def get_historical_metrics(limit: int = 100):
     """Get historical metrics across all tasks."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         db = get_db()
@@ -846,11 +926,9 @@ async def get_historical_metrics(limit: int = 100):
         # Get summary stats
         stats = db.get_summary_stats()
 
-        return JSONResponse({
-            "tasks": tasks,
-            "summary": stats,
-            "total_tasks": len(tasks)
-        })
+        return JSONResponse(
+            {"tasks": tasks, "summary": stats, "total_tasks": len(tasks)}
+        )
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -859,17 +937,16 @@ async def get_historical_metrics(limit: int = 100):
 async def get_decision_analytics(task_id: Optional[str] = None):
     """Get decision quality analytics."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         db = get_db()
 
         analytics = db.get_decision_analytics(task_id)
 
-        return JSONResponse({
-            "analytics": analytics,
-            "task_id": task_id
-        })
+        return JSONResponse({"analytics": analytics, "task_id": task_id})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -878,17 +955,16 @@ async def get_decision_analytics(task_id: Optional[str] = None):
 async def get_agent_analytics(agent_type: Optional[str] = None):
     """Get agent performance analytics."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         db = get_db()
 
         analytics = db.get_agent_analytics(agent_type)
 
-        return JSONResponse({
-            "analytics": analytics,
-            "agent_type": agent_type
-        })
+        return JSONResponse({"analytics": analytics, "agent_type": agent_type})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -897,13 +973,15 @@ async def get_agent_analytics(agent_type: Optional[str] = None):
 async def get_token_usage_status(task_id: str):
     """Get detailed token usage status for a task."""
     if not MCP_ENHANCED:
-        return JSONResponse({"error": "MCP enhanced features not available"}, status_code=503)
+        return JSONResponse(
+            {"error": "MCP enhanced features not available"}, status_code=503
+        )
 
     try:
         mcp_client = get_client()
 
         token_estimate = mcp_client.estimate_token_usage(task_id)
-        token_status = get_token_status(token_estimate['estimated_tokens'])
+        token_status = get_token_status(token_estimate["estimated_tokens"])
 
         return JSONResponse(token_status)
     except Exception as e:
@@ -916,6 +994,7 @@ async def get_token_usage_status(task_id: str):
 
 # Global metrics collector instance
 metrics_collector_task = None
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -955,15 +1034,15 @@ def main():
     port = int(os.getenv("LIVESTREAM_PORT", "8080"))
     host = os.getenv("LIVESTREAM_HOST", "0.0.0.0")
 
-    print(f"🎥 Context Foundry Livestream")
+    print("🎥 Context Foundry Livestream")
     print(f"📡 Starting server on http://{host}:{port}")
     print(f"🌐 Dashboard: http://localhost:{port}")
     print(f"📊 API Docs: http://localhost:{port}/docs")
     if MCP_ENHANCED:
-        print(f"🔄 Enhanced MCP metrics: Enabled")
+        print("🔄 Enhanced MCP metrics: Enabled")
     else:
-        print(f"⚠️  Enhanced MCP metrics: Disabled")
-    print(f"\nPress Ctrl+C to stop")
+        print("⚠️  Enhanced MCP metrics: Disabled")
+    print("\nPress Ctrl+C to stop")
 
     uvicorn.run(app, host=host, port=port, log_level="info")
 

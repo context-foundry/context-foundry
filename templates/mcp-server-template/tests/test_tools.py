@@ -3,6 +3,7 @@ Tests for MCP server tools
 
 Run with: python3 -m pytest tests/
 """
+
 import json
 import sys
 from pathlib import Path

@@ -6,13 +6,11 @@ and querying status. Used by Mission Control UI and CLI tools.
 """
 
 import json
-import os
-import signal
 import subprocess
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from typing import Dict, Optional
-from urllib.parse import parse_qs, urlparse
+from typing import Dict
+from urllib.parse import urlparse
 
 from .sandboxes import SandboxManager
 
@@ -124,20 +122,22 @@ class CommandHandler(BaseHTTPRequestHandler):
         issue_count = self._get_issue_count()
         sandboxes = self.sandbox_manager.list_sandboxes()
 
-        self._json_response({
-            "success": True,
-            "daemon": daemon_status,
-            "mcp": mcp_status,
-            "backlog": {
-                "count": issue_count,
-                "target": 20,
-                "healthy": issue_count >= 18
-            },
-            "sandboxes": {
-                "active": len(sandboxes),
-                "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"]
+        self._json_response(
+            {
+                "success": True,
+                "daemon": daemon_status,
+                "mcp": mcp_status,
+                "backlog": {
+                    "count": issue_count,
+                    "target": 20,
+                    "healthy": issue_count >= 18,
+                },
+                "sandboxes": {
+                    "active": len(sandboxes),
+                    "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"],
+                },
             }
-        })
+        )
 
     def _handle_daemon_status(self):
         """Get daemon status"""
@@ -156,16 +156,15 @@ class CommandHandler(BaseHTTPRequestHandler):
         # Convert Path objects to strings for JSON serialization
         sandboxes_serializable = {}
         for task_id, info in sandboxes.items():
-            sandboxes_serializable[task_id] = {
-                **info,
-                "path": str(info["path"])
-            }
+            sandboxes_serializable[task_id] = {**info, "path": str(info["path"])}
 
-        self._json_response({
-            "success": True,
-            "sandboxes": sandboxes_serializable,
-            "stats": self.sandbox_manager.get_stats()
-        })
+        self._json_response(
+            {
+                "success": True,
+                "sandboxes": sandboxes_serializable,
+                "stats": self.sandbox_manager.get_stats(),
+            }
+        )
 
     def _handle_list_issues(self):
         """List GitHub issues"""
@@ -174,16 +173,14 @@ class CommandHandler(BaseHTTPRequestHandler):
                 ["gh", "issue", "list", "--json", "number,title,labels,state"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
 
             if result.returncode == 0:
                 issues = json.loads(result.stdout)
-                self._json_response({
-                    "success": True,
-                    "issues": issues,
-                    "count": len(issues)
-                })
+                self._json_response(
+                    {"success": True, "issues": issues, "count": len(issues)}
+                )
             else:
                 self._error_response("Failed to fetch issues")
 
@@ -203,6 +200,7 @@ class CommandHandler(BaseHTTPRequestHandler):
         try:
             # Generate task ID
             import uuid
+
             task_id = str(uuid.uuid4())
 
             # Create sandbox
@@ -223,19 +221,21 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 ["bash", "-c", build_command],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                cwd=str(sandbox_path)
+                cwd=str(sandbox_path),
             )
 
-            self._json_response({
-                "success": True,
-                "task_id": task_id,
-                "sandbox_path": str(sandbox_path),
-                "project_name": project_name,
-                "task": task,
-                "build_pid": build_process.pid,
-                "status": "building",
-                "message": f"Build started in headless Claude instance (PID: {build_process.pid})"
-            })
+            self._json_response(
+                {
+                    "success": True,
+                    "task_id": task_id,
+                    "sandbox_path": str(sandbox_path),
+                    "project_name": project_name,
+                    "task": task,
+                    "build_pid": build_process.pid,
+                    "status": "building",
+                    "message": f"Build started in headless Claude instance (PID: {build_process.pid})",
+                }
+            )
 
         except Exception as e:
             self._error_response(f"Failed to start build: {e}")
@@ -249,14 +249,11 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 capture_output=True,
                 text=True,
                 cwd=str(cf_root),
-                timeout=5
+                timeout=5,
             )
 
             if result.returncode == 0:
-                self._json_response({
-                    "success": True,
-                    "message": "Daemon started"
-                })
+                self._json_response({"success": True, "message": "Daemon started"})
             else:
                 self._error_response(f"Failed to start daemon: {result.stderr}")
 
@@ -272,14 +269,11 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 capture_output=True,
                 text=True,
                 cwd=str(cf_root),
-                timeout=5
+                timeout=5,
             )
 
             if result.returncode == 0:
-                self._json_response({
-                    "success": True,
-                    "message": "Daemon stopped"
-                })
+                self._json_response({"success": True, "message": "Daemon stopped"})
             else:
                 self._error_response(f"Failed to stop daemon: {result.stderr}")
 
@@ -295,10 +289,9 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
         """Cleanup a sandbox"""
         success = self.sandbox_manager.cleanup_sandbox(task_id)
         if success:
-            self._json_response({
-                "success": True,
-                "message": f"Sandbox {task_id} cleaned up"
-            })
+            self._json_response(
+                {"success": True, "message": f"Sandbox {task_id} cleaned up"}
+            )
         else:
             self._error_response(f"Sandbox {task_id} not found", 404)
 
@@ -312,7 +305,7 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 capture_output=True,
                 text=True,
                 cwd=str(cf_root),
-                timeout=2
+                timeout=2,
             )
 
             running = "running" in result.stdout.lower()
@@ -327,7 +320,7 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
             return {
                 "running": running,
                 "pid": pid,
-                "status": "running" if running else "stopped"
+                "status": "running" if running else "stopped",
             }
 
         except Exception as e:
@@ -338,17 +331,14 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
         try:
             # Check if Claude CLI is available
             result = subprocess.run(
-                ["which", "claude"],
-                capture_output=True,
-                text=True,
-                timeout=2
+                ["which", "claude"], capture_output=True, text=True, timeout=2
             )
 
             if result.returncode == 0:
                 # Claude CLI is installed - MCP available via headless instances
                 return {
                     "available": True,
-                    "reason": "Claude CLI available - can spawn headless instances"
+                    "reason": "Claude CLI available - can spawn headless instances",
                 }
 
             # Check if MCP tools are defined (even without CLI)
@@ -356,12 +346,12 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
             if mcp_server_path.exists():
                 return {
                     "available": True,
-                    "reason": "MCP tools defined (use Claude CLI for builds)"
+                    "reason": "MCP tools defined (use Claude CLI for builds)",
                 }
 
             return {
                 "available": False,
-                "reason": "Claude CLI not found (install from https://claude.ai/cli)"
+                "reason": "Claude CLI not found (install from https://claude.ai/cli)",
             }
 
         except Exception as e:
@@ -374,7 +364,7 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 ["gh", "issue", "list", "--state", "open", "--json", "number"],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
 
             if result.returncode == 0:
@@ -390,11 +380,7 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
         try:
             delegations_dir = Path.home() / ".context-foundry" / "delegations"
             if not delegations_dir.exists():
-                self._json_response({
-                    "success": True,
-                    "delegations": [],
-                    "count": 0
-                })
+                self._json_response({"success": True, "delegations": [], "count": 0})
                 return
 
             delegations = []
@@ -408,11 +394,9 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
             # Sort by started time (newest first)
             delegations.sort(key=lambda x: x.get("started", ""), reverse=True)
 
-            self._json_response({
-                "success": True,
-                "delegations": delegations,
-                "count": len(delegations)
-            })
+            self._json_response(
+                {"success": True, "delegations": delegations, "count": len(delegations)}
+            )
 
         except Exception as e:
             self._error_response(f"Error listing delegations: {e}")
@@ -428,10 +412,7 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
                 return
 
             metadata = json.loads(task_file.read_text())
-            self._json_response({
-                "success": True,
-                "delegation": metadata
-            })
+            self._json_response({"success": True, "delegation": metadata})
 
         except Exception as e:
             self._error_response(f"Error getting delegation: {e}")
@@ -463,25 +444,39 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
 
                 # Update metadata
                 metadata["status"] = "cancelled"
-                metadata["cancelled_at"] = json.loads(subprocess.run(
-                    ["python3", "-c", "from datetime import datetime; print(datetime.now().isoformat())"],
-                    capture_output=True, text=True, timeout=2
-                ).stdout.strip().replace("'", '"'))
+                metadata["cancelled_at"] = json.loads(
+                    subprocess.run(
+                        [
+                            "python3",
+                            "-c",
+                            "from datetime import datetime; print(datetime.now().isoformat())",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    .stdout.strip()
+                    .replace("'", '"')
+                )
 
                 task_file.write_text(json.dumps(metadata, indent=2))
 
-                self._json_response({
-                    "success": True,
-                    "message": f"Delegation {task_id} cancelled",
-                    "pid": pid
-                })
+                self._json_response(
+                    {
+                        "success": True,
+                        "message": f"Delegation {task_id} cancelled",
+                        "pid": pid,
+                    }
+                )
 
             except psutil.NoSuchProcess:
-                self._json_response({
-                    "success": False,
-                    "error": f"Process with PID {pid} is not running",
-                    "message": "Delegation may have already completed"
-                })
+                self._json_response(
+                    {
+                        "success": False,
+                        "error": f"Process with PID {pid} is not running",
+                        "message": "Delegation may have already completed",
+                    }
+                )
 
         except Exception as e:
             self._error_response(f"Error cancelling delegation: {e}")

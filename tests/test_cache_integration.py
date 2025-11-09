@@ -5,8 +5,7 @@ Test integration with mcp_server and cost calculation
 """
 
 import unittest
-import json
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 import sys
 
@@ -27,7 +26,7 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=100,
             output_tokens=200,
             cache_read_tokens=8500,  # Large cached section
-            cache_write_tokens=0
+            cache_write_tokens=0,
         )
 
         calc = CostCalculator()
@@ -40,9 +39,9 @@ class TestCacheIntegration(unittest.TestCase):
         # Total: $0.00585
 
         expected_cost = (
-            (100 / 1_000_000) * 3.00 +      # Input
-            (200 / 1_000_000) * 15.00 +     # Output
-            (8500 / 1_000_000) * 0.30       # Cache read
+            (100 / 1_000_000) * 3.00  # Input
+            + (200 / 1_000_000) * 15.00  # Output
+            + (8500 / 1_000_000) * 0.30  # Cache read
         )
 
         self.assertAlmostEqual(cost, expected_cost, places=6)
@@ -54,7 +53,7 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=100,
             output_tokens=200,
             cache_read_tokens=0,
-            cache_write_tokens=8500  # Cache creation
+            cache_write_tokens=8500,  # Cache creation
         )
 
         calc = CostCalculator()
@@ -67,9 +66,9 @@ class TestCacheIntegration(unittest.TestCase):
         # Total: $0.035175
 
         expected_cost = (
-            (100 / 1_000_000) * 3.00 +      # Input
-            (200 / 1_000_000) * 15.00 +     # Output
-            (8500 / 1_000_000) * 3.75       # Cache write
+            (100 / 1_000_000) * 3.00  # Input
+            + (200 / 1_000_000) * 15.00  # Output
+            + (8500 / 1_000_000) * 3.75  # Cache write
         )
 
         self.assertAlmostEqual(cost, expected_cost, places=6)
@@ -83,7 +82,7 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=100,
             output_tokens=200,
             cache_read_tokens=8500,
-            cache_write_tokens=0
+            cache_write_tokens=0,
         )
 
         # Usage without cache (first request)
@@ -91,7 +90,7 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=8600,  # 100 + 8500 (no caching)
             output_tokens=200,
             cache_read_tokens=0,
-            cache_write_tokens=0
+            cache_write_tokens=0,
         )
 
         cached_cost = calc.calculate_cost(cached_usage, "claude-sonnet-4")
@@ -113,24 +112,24 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=100,
             output_tokens=200,
             cache_read_tokens=8500,
-            cache_write_tokens=0
+            cache_write_tokens=0,
         )
 
         calc = CostCalculator()
         breakdown = calc.get_cost_breakdown(usage, "claude-sonnet-4")
 
         # Verify breakdown includes all components
-        self.assertIn('input_tokens', breakdown)
-        self.assertIn('input_cost', breakdown)
-        self.assertIn('output_tokens', breakdown)
-        self.assertIn('output_cost', breakdown)
-        self.assertIn('cache_read_tokens', breakdown)
-        self.assertIn('cache_read_cost', breakdown)
-        self.assertIn('cache_savings', breakdown)
-        self.assertIn('total_cost', breakdown)
+        self.assertIn("input_tokens", breakdown)
+        self.assertIn("input_cost", breakdown)
+        self.assertIn("output_tokens", breakdown)
+        self.assertIn("output_cost", breakdown)
+        self.assertIn("cache_read_tokens", breakdown)
+        self.assertIn("cache_read_cost", breakdown)
+        self.assertIn("cache_savings", breakdown)
+        self.assertIn("total_cost", breakdown)
 
         # Verify cache savings is calculated
-        self.assertGreater(breakdown['cache_savings'], 0)
+        self.assertGreater(breakdown["cache_savings"], 0)
 
     def test_batch_cost_with_mixed_cache_usage(self):
         """Test batch cost calculation with mixed cache hits/misses"""
@@ -141,7 +140,7 @@ class TestCacheIntegration(unittest.TestCase):
             input_tokens=100,
             output_tokens=200,
             cache_read_tokens=0,
-            cache_write_tokens=8500
+            cache_write_tokens=8500,
         )
 
         # Builds 2-5: Cache hits
@@ -151,19 +150,23 @@ class TestCacheIntegration(unittest.TestCase):
         usage5 = TokenUsage(input_tokens=100, output_tokens=200, cache_read_tokens=8500)
 
         # Calculate batch cost
-        result = calc.calculate_batch_cost([usage1, usage2, usage3, usage4, usage5], "claude-sonnet-4")
+        result = calc.calculate_batch_cost(
+            [usage1, usage2, usage3, usage4, usage5], "claude-sonnet-4"
+        )
 
         # Verify aggregation
-        self.assertEqual(result['call_count'], 5)
-        self.assertEqual(result['total_cache_write_tokens'], 8500)
-        self.assertEqual(result['total_cache_read_tokens'], 8500 * 4)
+        self.assertEqual(result["call_count"], 5)
+        self.assertEqual(result["total_cache_write_tokens"], 8500)
+        self.assertEqual(result["total_cache_read_tokens"], 8500 * 4)
 
         # Total cost should be significantly less than 5× non-cached requests
         no_cache_cost = 5 * ((8600 / 1_000_000) * 3.00 + (200 / 1_000_000) * 15.00)
-        self.assertLess(result['total_cost'], no_cache_cost * 0.5)  # At least 50% savings
+        self.assertLess(
+            result["total_cost"], no_cache_cost * 0.5
+        )  # At least 50% savings
 
     @unittest.skip("Requires fastmcp package - tested manually in E2E")
-    @patch('subprocess.Popen')
+    @patch("subprocess.Popen")
     def test_mcp_server_uses_cached_prompts(self, mock_popen):
         """Test that autonomous_build_and_deploy uses cached prompt builder"""
         # Mock the subprocess
@@ -176,9 +179,7 @@ class TestCacheIntegration(unittest.TestCase):
 
         # Call autonomous build
         result = autonomous_build_and_deploy(
-            task="Test build",
-            working_directory="/tmp/test-cache",
-            mode="new_project"
+            task="Test build", working_directory="/tmp/test-cache", mode="new_project"
         )
 
         # Verify subprocess was called
@@ -208,19 +209,15 @@ class TestCacheIntegration(unittest.TestCase):
         usages = []
 
         # Build 1: Cache miss
-        usages.append(TokenUsage(
-            input_tokens=100,
-            output_tokens=200,
-            cache_write_tokens=8500
-        ))
+        usages.append(
+            TokenUsage(input_tokens=100, output_tokens=200, cache_write_tokens=8500)
+        )
 
         # Builds 2-10: Cache hits
         for _ in range(9):
-            usages.append(TokenUsage(
-                input_tokens=100,
-                output_tokens=200,
-                cache_read_tokens=8500
-            ))
+            usages.append(
+                TokenUsage(input_tokens=100, output_tokens=200, cache_read_tokens=8500)
+            )
 
         # Count cache hits/misses
         cache_hits = sum(1 for u in usages if u.cache_read_tokens > 0)
@@ -239,7 +236,7 @@ class TestCacheIntegration(unittest.TestCase):
         usage_5m = TokenUsage(
             input_tokens=100,
             output_tokens=200,
-            cache_write_tokens=8500  # $3.75/MTok
+            cache_write_tokens=8500,  # $3.75/MTok
         )
 
         # 1h cache write (2× cost)
@@ -247,7 +244,7 @@ class TestCacheIntegration(unittest.TestCase):
         usage_1h = TokenUsage(
             input_tokens=100,
             output_tokens=200,
-            cache_write_tokens=8500  # Would be $7.50/MTok for 1h
+            cache_write_tokens=8500,  # Would be $7.50/MTok for 1h
         )
 
         cost_5m = calc.calculate_cost(usage_5m, "claude-sonnet-4")
@@ -270,7 +267,7 @@ class TestCacheMetrics(unittest.TestCase):
             output_tokens=200,
             cache_read_tokens=8500,
             cache_write_tokens=0,
-            model="claude-sonnet-4"
+            model="claude-sonnet-4",
         )
 
         self.assertEqual(usage.input_tokens, 100)
@@ -289,5 +286,5 @@ class TestCacheMetrics(unittest.TestCase):
         self.assertEqual(usage.cache_write_tokens, 0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

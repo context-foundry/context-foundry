@@ -12,10 +12,14 @@ import sys
 # Try to import tiktoken, fall back gracefully if not available
 try:
     import tiktoken
+
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     TIKTOKEN_AVAILABLE = False
-    print("Warning: tiktoken not available, using fallback token estimation", file=sys.stderr)
+    print(
+        "Warning: tiktoken not available, using fallback token estimation",
+        file=sys.stderr,
+    )
 
 
 class TokenCounter:
@@ -23,31 +27,31 @@ class TokenCounter:
 
     # Model to tiktoken encoding mapping
     ENCODINGS = {
-        'claude-sonnet-4': 'cl100k_base',
-        'claude-3-5-sonnet': 'cl100k_base',
-        'claude-3-sonnet': 'cl100k_base',
-        'claude-3-opus': 'cl100k_base',
-        'claude-3-haiku': 'cl100k_base',
-        'gpt-4': 'cl100k_base',
-        'gpt-4-turbo': 'cl100k_base',
-        'gpt-4o': 'cl100k_base',
-        'gpt-3.5-turbo': 'cl100k_base',
+        "claude-sonnet-4": "cl100k_base",
+        "claude-3-5-sonnet": "cl100k_base",
+        "claude-3-sonnet": "cl100k_base",
+        "claude-3-opus": "cl100k_base",
+        "claude-3-haiku": "cl100k_base",
+        "gpt-4": "cl100k_base",
+        "gpt-4-turbo": "cl100k_base",
+        "gpt-4o": "cl100k_base",
+        "gpt-3.5-turbo": "cl100k_base",
     }
 
     # Context window sizes (tokens)
     CONTEXT_WINDOWS = {
-        'claude-sonnet-4': 200000,
-        'claude-3-5-sonnet': 200000,
-        'claude-3-sonnet': 200000,
-        'claude-3-opus': 200000,
-        'claude-3-haiku': 200000,
-        'gpt-4': 128000,
-        'gpt-4-turbo': 128000,
-        'gpt-4o': 128000,
-        'gpt-3.5-turbo': 16385,
+        "claude-sonnet-4": 200000,
+        "claude-3-5-sonnet": 200000,
+        "claude-3-sonnet": 200000,
+        "claude-3-opus": 200000,
+        "claude-3-haiku": 200000,
+        "gpt-4": 128000,
+        "gpt-4-turbo": 128000,
+        "gpt-4o": 128000,
+        "gpt-3.5-turbo": 16385,
     }
 
-    def __init__(self, model: str = 'claude-sonnet-4'):
+    def __init__(self, model: str = "claude-sonnet-4"):
         """
         Initialize token counter.
 
@@ -62,7 +66,7 @@ class TokenCounter:
         if not TIKTOKEN_AVAILABLE:
             return None
 
-        encoding_name = self.ENCODINGS.get(self.model, 'cl100k_base')
+        encoding_name = self.ENCODINGS.get(self.model, "cl100k_base")
         try:
             return tiktoken.get_encoding(encoding_name)
         except Exception as e:
@@ -112,10 +116,12 @@ class TokenCounter:
             if not file_path.exists():
                 return 0
 
-            content = file_path.read_text(encoding='utf-8', errors='ignore')
+            content = file_path.read_text(encoding="utf-8", errors="ignore")
             return self.estimate_tokens(content)
         except Exception as e:
-            print(f"Warning: Failed to count tokens in {file_path}: {e}", file=sys.stderr)
+            print(
+                f"Warning: Failed to count tokens in {file_path}: {e}", file=sys.stderr
+            )
             return 0
 
     def count_message_tokens(self, messages: List[Dict]) -> int:
@@ -131,18 +137,18 @@ class TokenCounter:
         total = 0
         for message in messages:
             # Count role
-            role = message.get('role', '')
+            role = message.get("role", "")
             total += self.estimate_tokens(role)
 
             # Count content
-            content = message.get('content', '')
+            content = message.get("content", "")
             if isinstance(content, str):
                 total += self.estimate_tokens(content)
             elif isinstance(content, list):
                 # Handle multi-part content (text + images)
                 for part in content:
-                    if isinstance(part, dict) and 'text' in part:
-                        total += self.estimate_tokens(part['text'])
+                    if isinstance(part, dict) and "text" in part:
+                        total += self.estimate_tokens(part["text"])
 
             # Add overhead per message (~4 tokens for formatting)
             total += 4
@@ -191,7 +197,7 @@ class TokenCounter:
         return self.CONTEXT_WINDOWS.get(model, 200000)  # Default to 200K
 
 
-def estimate_tokens(text: str, model: str = 'claude-sonnet-4') -> int:
+def estimate_tokens(text: str, model: str = "claude-sonnet-4") -> int:
     """
     Convenience function for quick token estimation.
 
@@ -206,7 +212,7 @@ def estimate_tokens(text: str, model: str = 'claude-sonnet-4') -> int:
     return counter.estimate_tokens(text)
 
 
-def get_context_window_size(model: str = 'claude-sonnet-4') -> int:
+def get_context_window_size(model: str = "claude-sonnet-4") -> int:
     """
     Get context window size for model.
 

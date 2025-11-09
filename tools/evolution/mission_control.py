@@ -11,9 +11,7 @@ Beautiful terminal UI for managing Evolution System:
 import asyncio
 import json
 import sqlite3
-import subprocess
 import sys
-import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -24,17 +22,29 @@ from __version__ import __version__
 
 from enum import Enum
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll, ScrollableContainer
-from textual.widgets import Header, Footer, Static, Button, Label, RichLog, Tree, ListView, ListItem, TabbedContent, TabPane, Input
-from textual.widgets.tree import TreeNode
-from textual.screen import Screen, ModalScreen
+from textual.containers import (
+    Container,
+    Horizontal,
+    Vertical,
+    VerticalScroll,
+    ScrollableContainer,
+)
+from textual.widgets import (
+    Footer,
+    Static,
+    Button,
+    Label,
+    RichLog,
+    TabbedContent,
+    TabPane,
+    Input,
+)
+from textual.screen import ModalScreen
 from textual.binding import Binding
 from textual.reactive import reactive
-from textual.message import Message
 from rich.text import Text
-from rich.panel import Panel
-from rich.table import Table
-from rich.syntax import Syntax
+
+
 # Helper function to query daemon monitoring status
 def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
     """Query daemon task queue to get monitoring status for a delegation"""
@@ -47,7 +57,8 @@ def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
         conn.row_factory = sqlite3.Row
 
         # Find delegation monitoring task
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT status, json_extract(result_json, '$.pid') as pid,
                    json_extract(params_json, '$.mcp_task_id') as mcp_id
             FROM tasks
@@ -55,17 +66,15 @@ def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
               AND json_extract(params_json, '$.mcp_task_id') = ?
             ORDER BY created_at DESC
             LIMIT 1
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
 
         row = cursor.fetchone()
         conn.close()
 
         if row:
-            return {
-                "monitored": True,
-                "task_status": row["status"],
-                "pid": row["pid"]
-            }
+            return {"monitored": True, "task_status": row["status"], "pid": row["pid"]}
 
         return None
 
@@ -75,6 +84,7 @@ def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
 
 class ViewMode(Enum):
     """View modes for single-focus interface"""
+
     CONVERSATION = "conversation"
     BUILDS = "builds"
     DIRECTORY = "directory"
@@ -99,7 +109,9 @@ class TabBar(Label):
             style = f"bold {color}" if active else "dim"
             result.append(Text(label, style=style))
 
-        append_tab("Conversation", self.current_view == ViewMode.CONVERSATION, "#8B5CF6")
+        append_tab(
+            "Conversation", self.current_view == ViewMode.CONVERSATION, "#8B5CF6"
+        )
         result.append(Text(self.TAB_SPACING))
         append_tab("Builds", self.current_view == ViewMode.BUILDS, "#3B82F6")
         result.append(Text(self.TAB_SPACING))
@@ -151,8 +163,8 @@ class StatusBar(Static):
             model_display = {
                 "sonnet": "Sonnet 4.5",
                 "opus": "Opus 4",
-                "haiku": "Haiku 3.5"
-            }.get(app.model if hasattr(app, 'model') else "sonnet", "Sonnet 4.5")
+                "haiku": "Haiku 3.5",
+            }.get(app.model if hasattr(app, "model") else "sonnet", "Sonnet 4.5")
 
             # Count active builds
             delegations_dir = Path.home() / ".context-foundry" / "delegations"
@@ -172,17 +184,21 @@ class StatusBar(Static):
 
             # Get current view mode
             view_mode = "Conversation"
-            if hasattr(app, 'current_view'):
+            if hasattr(app, "current_view"):
                 view_mode = app.current_view.value.capitalize()
 
             # Simple status line
-            builds_text = f"{active_builds} build{'s' if active_builds != 1 else ''}" if active_builds > 0 else "No builds"
+            builds_text = (
+                f"{active_builds} build{'s' if active_builds != 1 else ''}"
+                if active_builds > 0
+                else "No builds"
+            )
             status_line = f"Context Foundry v{__version__} | {status_text} | {builds_text} active | {model_display} | Press ? for help"
 
             self.update(Text(status_line, style="dim"))
 
-        except Exception as e:
-            self.update(Text(f"Status error", style="dim red"))
+        except Exception:
+            self.update(Text("Status error", style="dim red"))
 
     def _get_mcp_status(self) -> dict:
         """Check MCP server availability via Claude Code"""
@@ -195,15 +211,9 @@ class StatusBar(Static):
 
             if mcp_server_path.exists():
                 # MCP tools are defined and available via Claude Code
-                return {
-                    "available": True,
-                    "status": "Ready (Claude Code MCP)"
-                }
+                return {"available": True, "status": "Ready (Claude Code MCP)"}
             else:
-                return {
-                    "available": False,
-                    "status": "MCP tools not found"
-                }
+                return {"available": False, "status": "MCP tools not found"}
 
         except Exception as e:
             return {"available": False, "status": f"Error: {e}"}
@@ -272,7 +282,7 @@ class FileTreeWidget(VerticalScroll):
             latest_mtime = 0
             try:
                 for item in build_dir.rglob("*"):
-                    if item.name.startswith('.'):
+                    if item.name.startswith("."):
                         continue
                     if item.is_file():
                         file_count += 1
@@ -329,13 +339,15 @@ class FileTreeWidget(VerticalScroll):
                 """Recursively add directory contents to the tree"""
                 try:
                     # Get all items, sort directories first, then files
-                    items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+                    items = sorted(
+                        directory.iterdir(), key=lambda x: (x.is_file(), x.name.lower())
+                    )
 
                     # Filter out hidden files/dirs
-                    items = [item for item in items if not item.name.startswith('.')]
+                    items = [item for item in items if not item.name.startswith(".")]
 
                     for i, item in enumerate(items):
-                        is_last_item = (i == len(items) - 1)
+                        is_last_item = i == len(items) - 1
 
                         # Tree structure characters
                         if is_last_item:
@@ -385,7 +397,9 @@ class FileTreeWidget(VerticalScroll):
 
         except Exception:
             if self.content_widget:
-                self.content_widget.update(Text(f"Error loading build directory", style="dim red"))
+                self.content_widget.update(
+                    Text("Error loading build directory", style="dim red")
+                )
 
 
 class DirectoryTabbedPanel(Static):
@@ -424,11 +438,13 @@ class DirectoryTabbedPanel(Static):
 
                     # Track running and recently completed builds
                     if working_dir and Path(working_dir).exists():
-                        project_name = metadata.get("github_repo_name") or Path(working_dir).name
+                        project_name = (
+                            metadata.get("github_repo_name") or Path(working_dir).name
+                        )
                         current_builds[task_id] = {
                             "working_dir": Path(working_dir),
                             "project": project_name,
-                            "status": status
+                            "status": status,
                         }
                 except:
                     continue
@@ -461,7 +477,12 @@ class DirectoryTabbedPanel(Static):
                     existing_panes = list(tabbed_content.query(TabPane))
                     if not any(pane.id == "no-builds" for pane in existing_panes):
                         pane = TabPane("No Builds", id="no-builds")
-                        placeholder = Static(Text("No active builds\n\nStart a build to see its directory tree here", style="dim italic"))
+                        placeholder = Static(
+                            Text(
+                                "No active builds\n\nStart a build to see its directory tree here",
+                                style="dim italic",
+                            )
+                        )
                         await pane.mount(placeholder)
                         tabbed_content.add_pane(pane)
                 except:
@@ -479,7 +500,9 @@ class DirectoryTabbedPanel(Static):
         except Exception:
             pass
 
-    async def _add_build_tab(self, task_id: str, build_info: dict, tabbed_content: TabbedContent) -> None:
+    async def _add_build_tab(
+        self, task_id: str, build_info: dict, tabbed_content: TabbedContent
+    ) -> None:
         """Add a new build tab"""
         try:
             project_name = build_info["project"]
@@ -505,7 +528,9 @@ class DirectoryTabbedPanel(Static):
         except Exception:
             pass
 
-    async def _remove_build_tab(self, task_id: str, tabbed_content: TabbedContent) -> None:
+    async def _remove_build_tab(
+        self, task_id: str, tabbed_content: TabbedContent
+    ) -> None:
         """Remove a build tab"""
         try:
             self.tracked_builds.pop(task_id, None)
@@ -528,7 +553,9 @@ class DelegationsListPanel(Static, can_focus=True):
 
         # Create and configure DataTable
         self.table = DataTable(show_header=True, show_cursor=True, zebra_stripes=True)
-        self.table.add_columns("Status", "Project", "Started", "Duration", "Phase", "Progress", "Daemon")
+        self.table.add_columns(
+            "Status", "Project", "Started", "Duration", "Phase", "Progress", "Daemon"
+        )
         await self.mount(self.table)
 
         # Start refresh interval
@@ -553,7 +580,9 @@ class DelegationsListPanel(Static, can_focus=True):
                     metadata = json.loads(task_file.read_text())
 
                     # Get start time - check both 'start_time' and 'started' keys
-                    start_time_str = metadata.get("start_time") or metadata.get("started", "")
+                    start_time_str = metadata.get("start_time") or metadata.get(
+                        "started", ""
+                    )
                     start_time = None
                     start_display = "unknown"
                     if start_time_str:
@@ -578,7 +607,9 @@ class DelegationsListPanel(Static, can_focus=True):
                                 duration_secs = metadata.get("duration", 0)
                         else:
                             # Still running - use current time
-                            duration_secs = (datetime.now() - start_time).total_seconds()
+                            duration_secs = (
+                                datetime.now() - start_time
+                            ).total_seconds()
                     else:
                         # No start time - fall back to persisted duration if available
                         duration_secs = metadata.get("duration")
@@ -609,7 +640,11 @@ class DelegationsListPanel(Static, can_focus=True):
                     # Get phase information
                     phase = metadata.get("current_phase", "-")
                     phase_status = metadata.get("phase_status", "")
-                    progress = metadata.get("progress_detail", "")[:50] if metadata.get("progress_detail") else ""
+                    progress = (
+                        metadata.get("progress_detail", "")[:50]
+                        if metadata.get("progress_detail")
+                        else ""
+                    )
 
                     # Query daemon monitoring status
                     task_id = metadata.get("task_id", "unknown")
@@ -629,18 +664,20 @@ class DelegationsListPanel(Static, can_focus=True):
                     else:
                         daemon_display = "-"
 
-                    delegations.append({
-                        "task_id": task_id,
-                        "status": status,
-                        "status_display": status_display,
-                        "project": github_repo[:20],
-                        "start_time": start_display,
-                        "duration": duration_display,
-                        "phase": phase,
-                        "progress": progress,
-                        "working_directory": metadata.get("working_directory", ""),
-                        "daemon_status": daemon_display,
-                    })
+                    delegations.append(
+                        {
+                            "task_id": task_id,
+                            "status": status,
+                            "status_display": status_display,
+                            "project": github_repo[:20],
+                            "start_time": start_display,
+                            "duration": duration_display,
+                            "phase": phase,
+                            "progress": progress,
+                            "working_directory": metadata.get("working_directory", ""),
+                            "daemon_status": daemon_display,
+                        }
+                    )
                 except Exception:
                     continue
 
@@ -733,6 +770,7 @@ class ChatMessage(Static):
         else:
             # Assistant messages with markup support
             from rich.markup import render
+
             text = render(self.content)
             yield Static(text, classes="assistant-message")
 
@@ -748,7 +786,7 @@ class ChatPanel(VerticalScroll):
         # Use markup for colored header
         await self.add_message(
             "assistant",
-            "[bold #8B5CF6]Home • Conversation[/bold #8B5CF6]\n\nReady to help. What are you building?"
+            "[bold #8B5CF6]Home • Conversation[/bold #8B5CF6]\n\nReady to help. What are you building?",
         )
 
     async def on_click(self) -> None:
@@ -771,12 +809,15 @@ class ChatInput(Input, can_focus=True):
     def __init__(self, **kwargs):
         super().__init__(
             placeholder="Type a message... (Enter to send, Tab to switch views)",
-            **kwargs
+            **kwargs,
         )
 
     async def on_key(self, event) -> None:
         """Handle Enter key to submit message"""
-        if getattr(self.app, "current_view", ViewMode.CONVERSATION) != ViewMode.CONVERSATION:
+        if (
+            getattr(self.app, "current_view", ViewMode.CONVERSATION)
+            != ViewMode.CONVERSATION
+        ):
             return
 
         # Plain Enter sends the message
@@ -809,7 +850,7 @@ class ActivityLog(RichLog):
         try:
             # First, check for active builds and show their progress
             app = self.app
-            if hasattr(app, 'active_builds') and app.active_builds:
+            if hasattr(app, "active_builds") and app.active_builds:
                 for build in app.active_builds:
                     task_id = build.get("task_id")
                     project = build.get("project", "unknown")
@@ -818,9 +859,13 @@ class ActivityLog(RichLog):
                         await self._show_build_progress(task_id, project)
 
             # Also show daemon log as fallback
-            log_file = Path.home() / ".context-foundry" / "evolution" / "logs" / "daemon.log"
+            log_file = (
+                Path.home() / ".context-foundry" / "evolution" / "logs" / "daemon.log"
+            )
 
-            if log_file.exists() and (not hasattr(app, 'active_builds') or not app.active_builds):
+            if log_file.exists() and (
+                not hasattr(app, "active_builds") or not app.active_builds
+            ):
                 # Only show daemon log if no active builds
                 lines = log_file.read_text().strip().split("\n")[-3:]
 
@@ -843,7 +888,9 @@ class ActivityLog(RichLog):
         """Show progress for a specific build"""
         try:
             # Read delegation output file
-            output_file = Path.home() / ".context-foundry" / "delegations" / f"task-{task_id}.log"
+            output_file = (
+                Path.home() / ".context-foundry" / "delegations" / f"task-{task_id}.log"
+            )
 
             if output_file.exists():
                 # Read last few lines
@@ -890,8 +937,7 @@ class DetailsModal(ModalScreen):
         with Container(id="details_modal"):
             yield Static(f"Build Details: {self.task_id[:8]}...", id="modal_title")
             yield ScrollableContainer(
-                Static(self.result_text, id="details_content"),
-                id="details_scroll"
+                Static(self.result_text, id="details_content"), id="details_scroll"
             )
             yield Button("Close (ESC)", id="btn_close_details", variant="primary")
 
@@ -910,17 +956,16 @@ class DetailsModal(ModalScreen):
                 return
 
             process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
+                python_cmd,
+                str(wrapper_path),
                 "get_result",
-                "--task-id", self.task_id,
+                "--task-id",
+                self.task_id,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=5.0
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
 
             if process.returncode == 0 and stdout:
                 result = json.loads(stdout.decode())
@@ -928,13 +973,19 @@ class DetailsModal(ModalScreen):
                 # Format the result nicely
                 formatted = []
                 formatted.append(f"[bold cyan]Task ID:[/bold cyan] {self.task_id}")
-                formatted.append(f"[bold cyan]Status:[/bold cyan] {result.get('status', 'unknown')}")
-                formatted.append(f"[bold cyan]Duration:[/bold cyan] {result.get('duration', 'unknown')}")
+                formatted.append(
+                    f"[bold cyan]Status:[/bold cyan] {result.get('status', 'unknown')}"
+                )
+                formatted.append(
+                    f"[bold cyan]Duration:[/bold cyan] {result.get('duration', 'unknown')}"
+                )
                 formatted.append("")
 
                 if result.get("stdout"):
                     formatted.append("[bold green]Output:[/bold green]")
-                    formatted.append(result.get("stdout", "")[:2000])  # Limit to 2000 chars
+                    formatted.append(
+                        result.get("stdout", "")[:2000]
+                    )  # Limit to 2000 chars
 
                 if result.get("stderr"):
                     formatted.append("")
@@ -985,8 +1036,7 @@ class PatternsModal(ModalScreen):
         with Container(id="patterns_modal"):
             yield Static("🎓 Global Learnings & Patterns", id="modal_title")
             yield ScrollableContainer(
-                Static(self.patterns_text, id="patterns_content"),
-                id="patterns_scroll"
+                Static(self.patterns_text, id="patterns_content"), id="patterns_scroll"
             )
             yield Button("Close (ESC)", id="btn_close_patterns", variant="primary")
 
@@ -1005,17 +1055,16 @@ class PatternsModal(ModalScreen):
                 return
 
             process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
+                python_cmd,
+                str(wrapper_path),
                 "patterns",
-                "--type", "common-issues",
+                "--type",
+                "common-issues",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=5.0
-            )
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5.0)
 
             if process.returncode == 0 and stdout:
                 result = json.loads(stdout.decode())
@@ -1027,12 +1076,20 @@ class PatternsModal(ModalScreen):
                 patterns = result.get("patterns", [])
                 if patterns:
                     for i, pattern in enumerate(patterns[:10], 1):  # Show top 10
-                        formatted.append(f"[bold yellow]{i}. {pattern.get('issue', 'Unknown')}[/bold yellow]")
-                        formatted.append(f"   Frequency: {pattern.get('frequency', 0)} times")
-                        formatted.append(f"   Solution: {pattern.get('solution', 'N/A')[:100]}")
+                        formatted.append(
+                            f"[bold yellow]{i}. {pattern.get('issue', 'Unknown')}[/bold yellow]"
+                        )
+                        formatted.append(
+                            f"   Frequency: {pattern.get('frequency', 0)} times"
+                        )
+                        formatted.append(
+                            f"   Solution: {pattern.get('solution', 'N/A')[:100]}"
+                        )
                         formatted.append("")
                 else:
-                    formatted.append("[dim]No patterns learned yet. Build more projects to accumulate learnings![/dim]")
+                    formatted.append(
+                        "[dim]No patterns learned yet. Build more projects to accumulate learnings![/dim]"
+                    )
 
                 self.patterns_text = "\n".join(formatted)
             else:
@@ -1084,7 +1141,7 @@ class ConfirmCancelModal(ModalScreen):
                 f"[bold cyan]Project:[/bold cyan] {self.project_name}\n"
                 f"[bold cyan]Task ID:[/bold cyan] {self.task_id[:8]}...\n\n"
                 f"[yellow]This action cannot be undone.[/yellow]",
-                id="confirm_message"
+                id="confirm_message",
             )
             with Horizontal(id="confirm_buttons"):
                 yield Button("OK, Cancel Build", id="btn_confirm_yes", variant="error")
@@ -1319,7 +1376,10 @@ class MissionControlApp(App):
         yield DirectoryTabbedPanel(id="file_tree")
         yield DelegationsListPanel(id="delegations")
         yield ChatInput(id="chat_input")
-        yield Static("Press Enter to send · Shift+Enter for new line · Tab cycles views", id="chat_hint")
+        yield Static(
+            "Press Enter to send · Shift+Enter for new line · Tab cycles views",
+            id="chat_hint",
+        )
         yield StatusBar(id="status_bar")
         yield Footer()
 
@@ -1435,7 +1495,7 @@ class MissionControlApp(App):
                 try:
                     input_widget = self.query_one("#chat_input", ChatInput)
                     input_widget.focus()
-                except Exception as e:
+                except Exception:
                     # Log error but don't crash
                     pass
 
@@ -1460,10 +1520,11 @@ class MissionControlApp(App):
 
             # Call status command
             process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
+                python_cmd,
+                str(wrapper_path),
                 "status",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
             stdout, stderr = await process.communicate()
@@ -1474,6 +1535,7 @@ class MissionControlApp(App):
                 # Try to parse error JSON
                 try:
                     import json
+
                     error_data = json.loads(stderr.decode())
                     return (
                         f"❌ {error_data.get('error', 'Status Error')}\n\n"
@@ -1492,12 +1554,24 @@ class MissionControlApp(App):
         word_count = len(message_lower.split())
 
         # Greetings and casual messages first (exact matches only)
-        greeting_keywords = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo"]
+        greeting_keywords = [
+            "hi",
+            "hello",
+            "hey",
+            "greetings",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "sup",
+            "yo",
+        ]
         if message_lower in greeting_keywords:
             return "Hello! What would you like to build?"
 
         # Help commands - only for SHORT messages (1-3 words) with help keywords
-        if word_count <= 3 and any(word in message_lower.split() for word in ["help", "?", "how"]):
+        if word_count <= 3 and any(
+            word in message_lower.split() for word in ["help", "?", "how"]
+        ):
             return (
                 "Quick Commands - Just Say:\n\n"
                 "🚀 Build & Deploy:\n"
@@ -1520,12 +1594,28 @@ class MissionControlApp(App):
             )
 
         # Status commands - only for SHORT messages (1-3 words) with status keywords
-        if word_count <= 3 and any(word in message_lower.split() for word in ["status", "health"]):
+        if word_count <= 3 and any(
+            word in message_lower.split() for word in ["status", "health"]
+        ):
             return await self._get_mcp_status()
 
         # Build commands - CHECK FIRST for any substantial message
         # Keywords: build, create, make, develop, implement, write, design, upgrade, fix, update
-        build_keywords = ["build", "create", "make", "develop", "implement", "write", "design", "upgrade", "fix", "update", "add", "modify", "deploy"]
+        build_keywords = [
+            "build",
+            "create",
+            "make",
+            "develop",
+            "implement",
+            "write",
+            "design",
+            "upgrade",
+            "fix",
+            "update",
+            "add",
+            "modify",
+            "deploy",
+        ]
         if any(word in message_lower for word in build_keywords):
             return await self._start_autonomous_build(message)
 
@@ -1534,8 +1624,19 @@ class MissionControlApp(App):
             return await self._start_autonomous_build(message)
 
         # Check for query/info commands that should NOT trigger builds (only for short messages)
-        query_keywords = ["get", "show", "list", "view", "display", "details", "result", "info"]
-        if word_count <= 3 and any(word in message_lower.split() for word in query_keywords):
+        query_keywords = [
+            "get",
+            "show",
+            "list",
+            "view",
+            "display",
+            "details",
+            "result",
+            "info",
+        ]
+        if word_count <= 3 and any(
+            word in message_lower.split() for word in query_keywords
+        ):
             return "Use Tab to switch views, or type 'help' for commands"
 
         # Very short messages (1-2 words) that aren't commands - ask for clarification
@@ -1550,26 +1651,31 @@ class MissionControlApp(App):
         try:
             # Import needed modules first
             import re
-            import tempfile
 
             # Extract project name from task if possible
             words = task_description.split()
             if "build" in task_description.lower():
                 # Try to extract name after "build"/"build a"
-                build_idx = next((i for i, w in enumerate(words) if w.lower() == "build"), 0)
+                build_idx = next(
+                    (i for i, w in enumerate(words) if w.lower() == "build"), 0
+                )
                 # Skip articles
                 name_start = build_idx + 1
-                if name_start < len(words) and words[name_start].lower() in ["a", "an", "the"]:
+                if name_start < len(words) and words[name_start].lower() in [
+                    "a",
+                    "an",
+                    "the",
+                ]:
                     name_start += 1
                 # Take next 1-3 words as project name
-                name_words = words[name_start:min(name_start + 3, len(words))]
+                name_words = words[name_start : min(name_start + 3, len(words))]
                 project_name = "-".join(name_words).lower().replace(",", "")
             else:
                 # Use first few words
                 project_name = "-".join(words[:3]).lower().replace(",", "")
 
             # Clean project name
-            project_name = re.sub(r'[^a-z0-9-]', '', project_name)[:30]
+            project_name = re.sub(r"[^a-z0-9-]", "", project_name)[:30]
             if not project_name:
                 project_name = "mission-control-build"
 
@@ -1592,21 +1698,26 @@ class MissionControlApp(App):
             # Start the build and wait for task ID (fast - just returns delegation info)
             # The actual build runs in background via delegation system
             process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
+                python_cmd,
+                str(wrapper_path),
                 "autonomous_build",
-                "--task", task_description,
-                "--working-directory", str(working_dir),
-                "--github-repo-name", project_name,
-                "--model", self.model,
+                "--task",
+                task_description,
+                "--working-directory",
+                str(working_dir),
+                "--github-repo-name",
+                project_name,
+                "--model",
+                self.model,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
 
             # Wait for response (should be quick - just returns task ID)
             try:
                 stdout, stderr = await asyncio.wait_for(
                     process.communicate(),
-                    timeout=10.0  # 10 second timeout for initial response
+                    timeout=10.0,  # 10 second timeout for initial response
                 )
 
                 # Check for errors first
@@ -1641,7 +1752,7 @@ class MissionControlApp(App):
                         "project": project_name,
                         "working_directory": str(working_dir),
                         "start_time": datetime.now().isoformat(),
-                        "status": "running"
+                        "status": "running",
                     }
 
                     # Save to disk for persistence
@@ -1667,10 +1778,10 @@ class MissionControlApp(App):
 
             except asyncio.TimeoutError:
                 return (
-                    f"⚠️ Build start timeout\n\n"
-                    f"The build may still be starting in the background.\n"
-                    f"Check the delegation system with:\n"
-                    f"`claude-code 'list delegations'`"
+                    "⚠️ Build start timeout\n\n"
+                    "The build may still be starting in the background.\n"
+                    "Check the delegation system with:\n"
+                    "`claude-code 'list delegations'`"
                 )
 
         except Exception as e:
@@ -1707,7 +1818,7 @@ class MissionControlApp(App):
             # Write merged delegation metadata
             task_file.write_text(json.dumps(merged_metadata, indent=2))
 
-        except Exception as e:
+        except Exception:
             pass  # Don't crash if saving fails
 
     def _load_tracked_builds(self) -> list:
@@ -1721,10 +1832,14 @@ class MissionControlApp(App):
                 active_builds = []
                 for build in builds:
                     if build.get("status") == "running":
-                        start_time_str = build.get("start_time") or build.get("started", "")
+                        start_time_str = build.get("start_time") or build.get(
+                            "started", ""
+                        )
                         if start_time_str:
                             try:
-                                started = datetime.fromisoformat(start_time_str).timestamp()
+                                started = datetime.fromisoformat(
+                                    start_time_str
+                                ).timestamp()
                                 if started > cutoff:
                                     active_builds.append(build)
                             except:
@@ -1779,7 +1894,7 @@ class MissionControlApp(App):
             "  ↑↓ - Navigate builds\n"
             "  x - Cancel build\n"
             "  Ctrl+M - Change model\n"
-            "  Ctrl+C - Quit"
+            "  Ctrl+C - Quit",
         )
 
     async def action_cycle_model(self) -> None:
@@ -1791,15 +1906,8 @@ class MissionControlApp(App):
 
         # Show notification
         chat_panel = self.query_one("#chat", ChatPanel)
-        model_names = {
-            "sonnet": "Sonnet 4.5",
-            "opus": "Opus 4",
-            "haiku": "Haiku 3.5"
-        }
-        await chat_panel.add_message(
-            "assistant",
-            f"Model: {model_names[self.model]}"
-        )
+        model_names = {"sonnet": "Sonnet 4.5", "opus": "Opus 4", "haiku": "Haiku 3.5"}
+        await chat_panel.add_message("assistant", f"Model: {model_names[self.model]}")
 
     async def action_select_up(self) -> None:
         """Move delegation selection up - DataTable handles this natively"""
@@ -1820,7 +1928,7 @@ class MissionControlApp(App):
                 if task_id:
                     # Push the details modal screen
                     await self.push_screen(DetailsModal(task_id))
-        except Exception as e:
+        except Exception:
             pass
 
     async def action_cancel_build(self) -> None:
@@ -1855,17 +1963,19 @@ class MissionControlApp(App):
 
             if Path(python_cmd).exists():
                 process = await asyncio.create_subprocess_exec(
-                    python_cmd, str(wrapper_path),
+                    python_cmd,
+                    str(wrapper_path),
                     "cancel",
-                    "--task-id", task_id,
-                    "--reason", "User cancelled via Mission Control",
+                    "--task-id",
+                    task_id,
+                    "--reason",
+                    "User cancelled via Mission Control",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
                 )
 
                 stdout, stderr = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=5.0
+                    process.communicate(), timeout=5.0
                 )
 
                 if process.returncode == 0:
@@ -1873,14 +1983,14 @@ class MissionControlApp(App):
                     chat_panel = self.query_one("#chat", ChatPanel)
                     await chat_panel.add_message(
                         "assistant",
-                        f"✅ Cancelled build: {project_name} ({task_id[:8]}...)"
+                        f"✅ Cancelled build: {project_name} ({task_id[:8]}...)",
                     )
 
                     # Force immediate refresh of delegations list
                     await delegations_panel.refresh_delegations()
                 else:
                     # Parse error message from stderr if possible
-                    error_msg = stderr.decode() if stderr else 'Unknown error'
+                    error_msg = stderr.decode() if stderr else "Unknown error"
                     try:
                         # Try to parse JSON error for better message
                         error_json = json.loads(error_msg)
@@ -1891,20 +2001,19 @@ class MissionControlApp(App):
 
                     chat_panel = self.query_one("#chat", ChatPanel)
                     await chat_panel.add_message(
-                        "assistant",
-                        f"Failed to cancel build: {error_detail}"
+                        "assistant", f"Failed to cancel build: {error_detail}"
                     )
         except Exception as e:
             # Show actual errors instead of swallowing them
             try:
                 chat_panel = self.query_one("#chat", ChatPanel)
                 await chat_panel.add_message(
-                    "assistant",
-                    f"Error cancelling build: {str(e)}"
+                    "assistant", f"Error cancelling build: {str(e)}"
                 )
             except:
                 # If even showing the error fails, at least log it
                 import traceback
+
                 traceback.print_exc()
 
     async def action_show_learnings(self) -> None:
@@ -1912,7 +2021,7 @@ class MissionControlApp(App):
         try:
             # Push the patterns modal screen
             await self.push_screen(PatternsModal())
-        except Exception as e:
+        except Exception:
             pass
 
 

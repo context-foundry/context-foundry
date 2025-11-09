@@ -19,9 +19,9 @@ from tools.mcp_server import _detect_existing_codebase
 
 def test_file_based_detection():
     """Test detection of existing Flowise JSON files."""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEST 1: File-Based Detection")
-    print("="*70)
+    print("=" * 70)
 
     # Test with extensions/flowise directory (has example JSON files)
     test_dir = cf_root / "extensions" / "flowise" / "examples"
@@ -34,7 +34,7 @@ def test_file_based_detection():
 
         # Create a minimal Flowise flow JSON
         sample_json = test_dir / "test-flow.json"
-        sample_json.write_text('''{
+        sample_json.write_text("""{
     "nodes": [
         {
             "id": "chatOpenAI_0",
@@ -43,20 +43,20 @@ def test_file_based_detection():
         }
     ],
     "edges": []
-}''')
+}""")
         print(f"   ✅ Created test file: {sample_json}")
 
     print(f"\n📁 Testing directory: {test_dir}")
     result = _detect_existing_codebase(test_dir)
 
-    print(f"\n📊 Detection Results:")
+    print("\n📊 Detection Results:")
     print(f"   flowise_flow: {result.get('flowise_flow', False)}")
     print(f"   flowise_flow_type: {result.get('flowise_flow_type', 'N/A')}")
     print(f"   flowise_complexity: {result.get('flowise_complexity', 'N/A')}")
     print(f"   project_type: {result.get('project_type', 'N/A')}")
     print(f"   languages: {result.get('languages', [])}")
 
-    if result.get('flowise_flow'):
+    if result.get("flowise_flow"):
         print("\n✅ File-based detection PASSED!")
         return True
     else:
@@ -68,9 +68,9 @@ def test_file_based_detection():
 
 def test_keyword_detection():
     """Test keyword-based detection from task description."""
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("TEST 2: Keyword-Based Detection")
-    print("="*70)
+    print("=" * 70)
 
     # Simulate what happens in autonomous_build_and_deploy
     test_dir = cf_root / "test_keyword_detection"
@@ -86,27 +86,27 @@ def test_keyword_detection():
     task_lower = task.lower()
 
     flowise_keywords = [
-        'flowise',
-        'agent flow',
-        'multi-agent flow',
-        'chatflow',
-        'agentflow',
-        'flowise workflow'
+        "flowise",
+        "agent flow",
+        "multi-agent flow",
+        "chatflow",
+        "agentflow",
+        "flowise workflow",
     ]
 
     print(f"\n📝 Task: '{task}'")
     print(f"🔍 Checking for keywords: {flowise_keywords}")
 
-    if not codebase_info.get('flowise_flow', False):
+    if not codebase_info.get("flowise_flow", False):
         if any(keyword in task_lower for keyword in flowise_keywords):
-            codebase_info['flowise_flow'] = True
+            codebase_info["flowise_flow"] = True
 
             # Infer flow type
-            if 'multi-agent' in task_lower:
-                codebase_info['flowise_flow_type'] = 'multi-agent'
-            codebase_info['flowise_complexity'] = 'moderate'
+            if "multi-agent" in task_lower:
+                codebase_info["flowise_flow_type"] = "multi-agent"
+            codebase_info["flowise_complexity"] = "moderate"
 
-    print(f"\n📊 Detection Results:")
+    print("\n📊 Detection Results:")
     print(f"   flowise_flow: {codebase_info.get('flowise_flow', False)}")
     print(f"   flowise_flow_type: {codebase_info.get('flowise_flow_type', 'N/A')}")
     print(f"   flowise_complexity: {codebase_info.get('flowise_complexity', 'N/A')}")
@@ -114,7 +114,10 @@ def test_keyword_detection():
     # Cleanup
     test_dir.rmdir()
 
-    if codebase_info.get('flowise_flow') and codebase_info.get('flowise_flow_type') == 'multi-agent':
+    if (
+        codebase_info.get("flowise_flow")
+        and codebase_info.get("flowise_flow_type") == "multi-agent"
+    ):
         print("\n✅ Keyword-based detection PASSED!")
         return True
     else:
@@ -124,14 +127,14 @@ def test_keyword_detection():
 
 def main():
     print("\n🧪 Flowise Extension Integration Tests")
-    print("="*70)
+    print("=" * 70)
 
     test1_passed = test_file_based_detection()
     test2_passed = test_keyword_detection()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print(f"File-based detection: {'✅ PASS' if test1_passed else '❌ FAIL'}")
     print(f"Keyword detection:    {'✅ PASS' if test2_passed else '❌ FAIL'}")
 

@@ -21,15 +21,15 @@ import json
 import hashlib
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime
 
 from . import (
     get_cache_dir,
     is_cache_valid,
     save_cache_metadata,
     load_cache_metadata,
-    DEFAULT_CACHE_TTL_HOURS
+    DEFAULT_CACHE_TTL_HOURS,
 )
+
 
 def hash_file(file_path: Path) -> str:
     """Generate SHA256 hash of a file's contents."""
@@ -37,6 +37,7 @@ def hash_file(file_path: Path) -> str:
         return hashlib.sha256(file_path.read_bytes()).hexdigest()
     except OSError:
         return ""
+
 
 def get_source_files(working_directory: str) -> List[Path]:
     """
@@ -48,20 +49,45 @@ def get_source_files(working_directory: str) -> List[Path]:
 
     # Patterns to ignore
     ignore_patterns = {
-        '.git', 'node_modules', '__pycache__', '.pytest_cache',
-        'venv', 'env', '.venv', 'dist', 'build', '.context-foundry',
-        'coverage', '.nyc_output', '*.pyc', '*.log'
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        "venv",
+        "env",
+        ".venv",
+        "dist",
+        "build",
+        ".context-foundry",
+        "coverage",
+        ".nyc_output",
+        "*.pyc",
+        "*.log",
     }
 
     source_files = []
 
     # Common source file extensions
     source_extensions = {
-        '.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.c', '.cpp',
-        '.h', '.hpp', '.go', '.rs', '.rb', '.php', '.cs', '.swift'
+        ".py",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".go",
+        ".rs",
+        ".rb",
+        ".php",
+        ".cs",
+        ".swift",
     }
 
-    for file in project_root.rglob('*'):
+    for file in project_root.rglob("*"):
         # Skip ignored paths
         if any(ignore in file.parts for ignore in ignore_patterns):
             continue
@@ -71,6 +97,7 @@ def get_source_files(working_directory: str) -> List[Path]:
             source_files.append(file)
 
     return source_files
+
 
 def compute_file_hashes(working_directory: str) -> Dict[str, str]:
     """
@@ -89,19 +116,21 @@ def compute_file_hashes(working_directory: str) -> Dict[str, str]:
 
     return file_hashes
 
+
 def get_test_cache_path(working_directory: str) -> Path:
     """Get the file path for test results cache."""
     cache_dir = get_cache_dir(working_directory)
     return cache_dir / "test-results.json"
+
 
 def get_file_hashes_path(working_directory: str) -> Path:
     """Get the file path for file hashes snapshot."""
     cache_dir = get_cache_dir(working_directory)
     return cache_dir / "file-hashes.json"
 
+
 def get_cached_test_results(
-    working_directory: str,
-    ttl_hours: int = DEFAULT_CACHE_TTL_HOURS
+    working_directory: str, ttl_hours: int = DEFAULT_CACHE_TTL_HOURS
 ) -> Optional[Dict[str, Any]]:
     """
     Retrieve cached test results if code hasn't changed.
@@ -141,7 +170,8 @@ def get_cached_test_results(
         added_files = set(current_hashes.keys()) - set(cached_hashes.keys())
         removed_files = set(cached_hashes.keys()) - set(current_hashes.keys())
         modified_files = {
-            f for f in current_hashes
+            f
+            for f in current_hashes
             if f in cached_hashes and current_hashes[f] != cached_hashes[f]
         }
 
@@ -165,10 +195,14 @@ def get_cached_test_results(
         # Load metadata
         metadata = load_cache_metadata(test_cache_file)
 
-        print(f"✅ Test cache HIT! No code changes detected")
-        print(f"   Cached results from: {metadata.get('created_at', 'unknown') if metadata else 'unknown'}")
+        print("✅ Test cache HIT! No code changes detected")
+        print(
+            f"   Cached results from: {metadata.get('created_at', 'unknown') if metadata else 'unknown'}"
+        )
         print(f"   Files tracked: {len(current_hashes)}")
-        print(f"   Tests passed: {test_results.get('passed', 'unknown')}/{test_results.get('total', 'unknown')}")
+        print(
+            f"   Tests passed: {test_results.get('passed', 'unknown')}/{test_results.get('total', 'unknown')}"
+        )
 
         return test_results
 
@@ -176,9 +210,9 @@ def get_cached_test_results(
         print(f"⚠️ Test cache miss: Failed to load test results: {e}")
         return None
 
+
 def save_test_results_to_cache(
-    working_directory: str,
-    test_results: Dict[str, Any]
+    working_directory: str, test_results: Dict[str, Any]
 ) -> None:
     """
     Save test results to cache along with file hash snapshot.
@@ -206,18 +240,21 @@ def save_test_results_to_cache(
         # Save metadata
         metadata = {
             "files_tracked": len(file_hashes),
-            "tests_passed": test_results.get('passed', 0),
-            "tests_total": test_results.get('total', 0),
-            "test_success": test_results.get('success', False)
+            "tests_passed": test_results.get("passed", 0),
+            "tests_total": test_results.get("total", 0),
+            "test_success": test_results.get("success", False),
         }
         save_cache_metadata(test_cache_file, metadata)
 
-        print(f"💾 Test results cached successfully")
-        print(f"   Tests: {test_results.get('passed', 0)}/{test_results.get('total', 0)} passed")
+        print("💾 Test results cached successfully")
+        print(
+            f"   Tests: {test_results.get('passed', 0)}/{test_results.get('total', 0)} passed"
+        )
         print(f"   Files tracked: {len(file_hashes)}")
 
     except OSError as e:
         print(f"⚠️ Failed to save test results to cache: {e}")
+
 
 def clear_test_cache(working_directory: str) -> int:
     """
@@ -238,7 +275,7 @@ def clear_test_cache(working_directory: str) -> int:
             try:
                 file.unlink()
                 # Also delete metadata
-                meta_file = file.with_suffix('.meta.json')
+                meta_file = file.with_suffix(".meta.json")
                 if meta_file.exists():
                     meta_file.unlink()
                 deleted_count += 1
@@ -247,44 +284,40 @@ def clear_test_cache(working_directory: str) -> int:
 
     return deleted_count
 
+
 def get_test_cache_stats(working_directory: str) -> Dict[str, Any]:
     """Get statistics about test cache."""
     test_cache_file = get_test_cache_path(working_directory)
     hash_cache_file = get_file_hashes_path(working_directory)
 
     if not test_cache_file.exists():
-        return {
-            "has_cached_results": False,
-            "cache_valid": False,
-            "files_tracked": 0
-        }
+        return {"has_cached_results": False, "cache_valid": False, "files_tracked": 0}
 
     # Load cached data
     try:
         test_results = json.loads(test_cache_file.read_text())
-        file_hashes = json.loads(hash_cache_file.read_text()) if hash_cache_file.exists() else {}
+        file_hashes = (
+            json.loads(hash_cache_file.read_text()) if hash_cache_file.exists() else {}
+        )
 
         return {
             "has_cached_results": True,
             "cache_valid": is_cache_valid(test_cache_file),
             "files_tracked": len(file_hashes),
-            "last_test_passed": test_results.get('passed', 0),
-            "last_test_total": test_results.get('total', 0),
-            "last_test_success": test_results.get('success', False)
+            "last_test_passed": test_results.get("passed", 0),
+            "last_test_total": test_results.get("total", 0),
+            "last_test_success": test_results.get("success", False),
         }
     except (json.JSONDecodeError, OSError):
-        return {
-            "has_cached_results": False,
-            "cache_valid": False,
-            "files_tracked": 0
-        }
+        return {"has_cached_results": False, "cache_valid": False, "files_tracked": 0}
+
 
 __all__ = [
-    'hash_file',
-    'get_source_files',
-    'compute_file_hashes',
-    'get_cached_test_results',
-    'save_test_results_to_cache',
-    'clear_test_cache',
-    'get_test_cache_stats'
+    "hash_file",
+    "get_source_files",
+    "compute_file_hashes",
+    "get_cached_test_results",
+    "save_test_results_to_cache",
+    "clear_test_cache",
+    "get_test_cache_stats",
 ]

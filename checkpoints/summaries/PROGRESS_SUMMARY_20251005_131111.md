@@ -39,7 +39,7 @@
 
 **Immediate Context**: Working on the WeatherCard component that handles current weather display with:
 - Dynamic weather icon generation (SVG-based)
-- Real-time data updates with proper state management  
+- Real-time data updates with proper state management
 - Interactive elements (favorites, location clicks)
 - Comprehensive weather details display
 
@@ -72,7 +72,7 @@
 
 **Memory Management**: Implemented proper cleanup patterns with interval clearing and event listener removal to prevent memory leaks.
 
-**Performance Considerations**: 
+**Performance Considerations**:
 - Debounced search inputs to prevent API spam
 - Cached responses with intelligent TTL
 - Lazy loading patterns for non-critical features

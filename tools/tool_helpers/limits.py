@@ -10,7 +10,7 @@ Key principles:
 - Validation with helpful error messages
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
 import os
 
@@ -99,6 +99,7 @@ def get_default_limits() -> ToolLimits:
         >>> limits.max_file_read_chars
         100000
     """
+
     def get_int_env(key: str, default: int) -> int:
         """Get integer from environment or use default."""
         value = os.environ.get(key)
@@ -115,28 +116,28 @@ def get_default_limits() -> ToolLimits:
         value = os.environ.get(key)
         if value is None:
             return default
-        return value.lower() in ('true', '1', 'yes', 'on')
+        return value.lower() in ("true", "1", "yes", "on")
 
     return ToolLimits(
-        max_file_read_lines=get_int_env('CF_LIMIT_FILE_READ_LINES', 50000),
-        max_file_read_chars=get_int_env('CF_LIMIT_FILE_READ_CHARS', 500000),
-        max_grep_matches=get_int_env('CF_LIMIT_GREP_MATCHES', 10000),
-        max_grep_output_chars=get_int_env('CF_LIMIT_GREP_CHARS', 300000),
-        max_grep_line_length=get_int_env('CF_LIMIT_GREP_LINE_LENGTH', 1000),
-        max_glob_files=get_int_env('CF_LIMIT_GLOB_FILES', 5000),
-        max_glob_depth=get_int_env('CF_LIMIT_GLOB_DEPTH', 20),
-        subprocess_timeout_seconds=get_int_env('CF_LIMIT_SUBPROCESS_TIMEOUT', 120),
-        subprocess_max_output_lines=get_int_env('CF_LIMIT_SUBPROCESS_LINES', 10000),
-        subprocess_max_output_chars=get_int_env('CF_LIMIT_SUBPROCESS_CHARS', 200000),
-        test_timeout_seconds=get_int_env('CF_LIMIT_TEST_TIMEOUT', 300),
-        test_max_output_chars=get_int_env('CF_LIMIT_TEST_CHARS', 100000),
-        build_timeout_seconds=get_int_env('CF_LIMIT_BUILD_TIMEOUT', 600),
-        build_max_output_chars=get_int_env('CF_LIMIT_BUILD_CHARS', 150000),
-        use_relative_paths=get_bool_env('CF_USE_RELATIVE_PATHS', True),
-        enable_token_counting=get_bool_env('CF_ENABLE_TOKEN_COUNTING', True),
-        token_estimation_threshold=get_int_env('CF_TOKEN_THRESHOLD', 40000),
-        truncation_strategy=os.environ.get('CF_TRUNCATION_STRATEGY', 'smart'),
-        include_recovery_instructions=get_bool_env('CF_INCLUDE_RECOVERY', True),
+        max_file_read_lines=get_int_env("CF_LIMIT_FILE_READ_LINES", 50000),
+        max_file_read_chars=get_int_env("CF_LIMIT_FILE_READ_CHARS", 500000),
+        max_grep_matches=get_int_env("CF_LIMIT_GREP_MATCHES", 10000),
+        max_grep_output_chars=get_int_env("CF_LIMIT_GREP_CHARS", 300000),
+        max_grep_line_length=get_int_env("CF_LIMIT_GREP_LINE_LENGTH", 1000),
+        max_glob_files=get_int_env("CF_LIMIT_GLOB_FILES", 5000),
+        max_glob_depth=get_int_env("CF_LIMIT_GLOB_DEPTH", 20),
+        subprocess_timeout_seconds=get_int_env("CF_LIMIT_SUBPROCESS_TIMEOUT", 120),
+        subprocess_max_output_lines=get_int_env("CF_LIMIT_SUBPROCESS_LINES", 10000),
+        subprocess_max_output_chars=get_int_env("CF_LIMIT_SUBPROCESS_CHARS", 200000),
+        test_timeout_seconds=get_int_env("CF_LIMIT_TEST_TIMEOUT", 300),
+        test_max_output_chars=get_int_env("CF_LIMIT_TEST_CHARS", 100000),
+        build_timeout_seconds=get_int_env("CF_LIMIT_BUILD_TIMEOUT", 600),
+        build_max_output_chars=get_int_env("CF_LIMIT_BUILD_CHARS", 150000),
+        use_relative_paths=get_bool_env("CF_USE_RELATIVE_PATHS", True),
+        enable_token_counting=get_bool_env("CF_ENABLE_TOKEN_COUNTING", True),
+        token_estimation_threshold=get_int_env("CF_TOKEN_THRESHOLD", 40000),
+        truncation_strategy=os.environ.get("CF_TRUNCATION_STRATEGY", "smart"),
+        include_recovery_instructions=get_bool_env("CF_INCLUDE_RECOVERY", True),
     )
 
 
@@ -161,13 +162,21 @@ def validate_limits(limits: ToolLimits) -> Tuple[bool, List[str]]:
 
     # Validate positive values
     positive_fields = [
-        'max_file_read_lines', 'max_file_read_chars',
-        'max_grep_matches', 'max_grep_output_chars', 'max_grep_line_length',
-        'max_glob_files', 'max_glob_depth',
-        'subprocess_timeout_seconds', 'subprocess_max_output_lines', 'subprocess_max_output_chars',
-        'test_timeout_seconds', 'test_max_output_chars',
-        'build_timeout_seconds', 'build_max_output_chars',
-        'token_estimation_threshold'
+        "max_file_read_lines",
+        "max_file_read_chars",
+        "max_grep_matches",
+        "max_grep_output_chars",
+        "max_grep_line_length",
+        "max_glob_files",
+        "max_glob_depth",
+        "subprocess_timeout_seconds",
+        "subprocess_max_output_lines",
+        "subprocess_max_output_chars",
+        "test_timeout_seconds",
+        "test_max_output_chars",
+        "build_timeout_seconds",
+        "build_max_output_chars",
+        "token_estimation_threshold",
     ]
 
     for field in positive_fields:
@@ -177,22 +186,30 @@ def validate_limits(limits: ToolLimits) -> Tuple[bool, List[str]]:
 
     # Validate reasonable ranges
     if limits.max_file_read_chars > 10_000_000:  # 10MB
-        errors.append(f"max_file_read_chars too large: {limits.max_file_read_chars} (max 10M)")
+        errors.append(
+            f"max_file_read_chars too large: {limits.max_file_read_chars} (max 10M)"
+        )
 
     if limits.subprocess_timeout_seconds > 3600:  # 1 hour
-        errors.append(f"subprocess_timeout_seconds too large: {limits.subprocess_timeout_seconds} (max 3600)")
+        errors.append(
+            f"subprocess_timeout_seconds too large: {limits.subprocess_timeout_seconds} (max 3600)"
+        )
 
     if limits.max_glob_depth > 100:
         errors.append(f"max_glob_depth too large: {limits.max_glob_depth} (max 100)")
 
     # Validate truncation strategy
-    if limits.truncation_strategy not in ('smart', 'simple'):
-        errors.append(f"truncation_strategy must be 'smart' or 'simple', got '{limits.truncation_strategy}'")
+    if limits.truncation_strategy not in ("smart", "simple"):
+        errors.append(
+            f"truncation_strategy must be 'smart' or 'simple', got '{limits.truncation_strategy}'"
+        )
 
     return (len(errors) == 0, errors)
 
 
-def get_limit_for_operation(operation_type: str, limits: ToolLimits = None) -> Dict[str, Any]:
+def get_limit_for_operation(
+    operation_type: str, limits: ToolLimits = None
+) -> Dict[str, Any]:
     """Get specific limits for an operation type.
 
     Args:
@@ -216,40 +233,42 @@ def get_limit_for_operation(operation_type: str, limits: ToolLimits = None) -> D
         limits = get_default_limits()
 
     operation_limits = {
-        'file_read': {
-            'max_lines': limits.max_file_read_lines,
-            'max_chars': limits.max_file_read_chars,
-            'use_relative_paths': limits.use_relative_paths,
+        "file_read": {
+            "max_lines": limits.max_file_read_lines,
+            "max_chars": limits.max_file_read_chars,
+            "use_relative_paths": limits.use_relative_paths,
         },
-        'grep': {
-            'max_matches': limits.max_grep_matches,
-            'max_chars': limits.max_grep_output_chars,
-            'max_line_length': limits.max_grep_line_length,
-            'use_relative_paths': limits.use_relative_paths,
+        "grep": {
+            "max_matches": limits.max_grep_matches,
+            "max_chars": limits.max_grep_output_chars,
+            "max_line_length": limits.max_grep_line_length,
+            "use_relative_paths": limits.use_relative_paths,
         },
-        'glob': {
-            'max_files': limits.max_glob_files,
-            'max_depth': limits.max_glob_depth,
-            'use_relative_paths': limits.use_relative_paths,
+        "glob": {
+            "max_files": limits.max_glob_files,
+            "max_depth": limits.max_glob_depth,
+            "use_relative_paths": limits.use_relative_paths,
         },
-        'subprocess': {
-            'timeout_seconds': limits.subprocess_timeout_seconds,
-            'max_output_lines': limits.subprocess_max_output_lines,
-            'max_output_chars': limits.subprocess_max_output_chars,
+        "subprocess": {
+            "timeout_seconds": limits.subprocess_timeout_seconds,
+            "max_output_lines": limits.subprocess_max_output_lines,
+            "max_output_chars": limits.subprocess_max_output_chars,
         },
-        'test': {
-            'timeout_seconds': limits.test_timeout_seconds,
-            'max_output_chars': limits.test_max_output_chars,
+        "test": {
+            "timeout_seconds": limits.test_timeout_seconds,
+            "max_output_chars": limits.test_max_output_chars,
         },
-        'build': {
-            'timeout_seconds': limits.build_timeout_seconds,
-            'max_output_chars': limits.build_max_output_chars,
+        "build": {
+            "timeout_seconds": limits.build_timeout_seconds,
+            "max_output_chars": limits.build_max_output_chars,
         },
     }
 
     if operation_type not in operation_limits:
-        valid_types = ', '.join(operation_limits.keys())
-        raise ValueError(f"Unknown operation type '{operation_type}'. Valid types: {valid_types}")
+        valid_types = ", ".join(operation_limits.keys())
+        raise ValueError(
+            f"Unknown operation type '{operation_type}'. Valid types: {valid_types}"
+        )
 
     return operation_limits[operation_type]
 
@@ -275,17 +294,33 @@ def format_limits_summary(limits: ToolLimits = None) -> str:
         limits = get_default_limits()
 
     lines = ["Tool Limits Configuration:"]
-    lines.append(f"  File Read: {limits.max_file_read_lines:,} lines, {limits.max_file_read_chars:,} chars (~{limits.max_file_read_chars//4:,} tokens)")
-    lines.append(f"  Grep: {limits.max_grep_matches:,} matches, {limits.max_grep_output_chars:,} chars (~{limits.max_grep_output_chars//4:,} tokens)")
-    lines.append(f"  Glob: {limits.max_glob_files:,} files, depth {limits.max_glob_depth}")
-    lines.append(f"  Subprocess: {limits.subprocess_timeout_seconds}s timeout, {limits.subprocess_max_output_chars:,} chars")
-    lines.append(f"  Test: {limits.test_timeout_seconds}s timeout, {limits.test_max_output_chars:,} chars")
-    lines.append(f"  Build: {limits.build_timeout_seconds}s timeout, {limits.build_max_output_chars:,} chars")
+    lines.append(
+        f"  File Read: {limits.max_file_read_lines:,} lines, {limits.max_file_read_chars:,} chars (~{limits.max_file_read_chars // 4:,} tokens)"
+    )
+    lines.append(
+        f"  Grep: {limits.max_grep_matches:,} matches, {limits.max_grep_output_chars:,} chars (~{limits.max_grep_output_chars // 4:,} tokens)"
+    )
+    lines.append(
+        f"  Glob: {limits.max_glob_files:,} files, depth {limits.max_glob_depth}"
+    )
+    lines.append(
+        f"  Subprocess: {limits.subprocess_timeout_seconds}s timeout, {limits.subprocess_max_output_chars:,} chars"
+    )
+    lines.append(
+        f"  Test: {limits.test_timeout_seconds}s timeout, {limits.test_max_output_chars:,} chars"
+    )
+    lines.append(
+        f"  Build: {limits.build_timeout_seconds}s timeout, {limits.build_max_output_chars:,} chars"
+    )
     lines.append(f"  Paths: {'relative' if limits.use_relative_paths else 'absolute'}")
-    lines.append(f"  Token Counting: {'enabled' if limits.enable_token_counting else 'disabled'}")
-    lines.append(f"  Truncation: {limits.truncation_strategy} with recovery={'yes' if limits.include_recovery_instructions else 'no'}")
+    lines.append(
+        f"  Token Counting: {'enabled' if limits.enable_token_counting else 'disabled'}"
+    )
+    lines.append(
+        f"  Truncation: {limits.truncation_strategy} with recovery={'yes' if limits.include_recovery_instructions else 'no'}"
+    )
 
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 # Singleton for default limits (avoids repeated environment variable reads)

@@ -32,8 +32,7 @@ class BuildDetailScreen(Screen):
         with Container():
             with Vertical():
                 yield Static(
-                    f"[bold]Build Details: {self.session_id}[/bold]",
-                    id="build-title"
+                    f"[bold]Build Details: {self.session_id}[/bold]", id="build-title"
                 )
                 yield Static("Loading...", id="build-info")
                 yield Static("[bold]Build Logs[/bold]", id="logs-title")
@@ -60,9 +59,9 @@ class BuildDetailScreen(Screen):
 [bold]Status:[/bold] {build.status}
 [bold]Progress:[/bold] {build.progress_detail}
 [bold]Test Iteration:[/bold] {build.test_iteration}
-[bold]Phases Completed:[/bold] {', '.join(build.phases_completed)}
-[bold]Started:[/bold] {build.started_at.strftime('%Y-%m-%d %H:%M:%S')}
-[bold]Last Updated:[/bold] {build.last_updated.strftime('%Y-%m-%d %H:%M:%S')}
+[bold]Phases Completed:[/bold] {", ".join(build.phases_completed)}
+[bold]Started:[/bold] {build.started_at.strftime("%Y-%m-%d %H:%M:%S")}
+[bold]Last Updated:[/bold] {build.last_updated.strftime("%Y-%m-%d %H:%M:%S")}
 """
                 info.update(info_text)
 

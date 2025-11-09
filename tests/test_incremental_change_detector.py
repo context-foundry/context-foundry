@@ -8,7 +8,7 @@ import pytest
 import tempfile
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from dataclasses import asdict
 
 # Import modules to test
@@ -19,7 +19,7 @@ from tools.incremental.change_detector import (
     get_git_commit_sha,
     get_git_changed_files,
     detect_changes,
-    capture_build_snapshot
+    capture_build_snapshot,
 )
 
 
@@ -37,7 +37,7 @@ class TestChangeReport:
             git_available=True,
             git_diff_sha="abc123",
             total_files=5,
-            detection_method="git"
+            detection_method="git",
         )
 
         assert len(report.changed_files) == 2
@@ -58,7 +58,7 @@ class TestChangeReport:
             git_available=False,
             git_diff_sha=None,
             total_files=2,
-            detection_method="hash"
+            detection_method="hash",
         )
 
         result = asdict(report)
@@ -94,7 +94,7 @@ class TestHashFile:
 
     def test_hash_file_returns_sha256(self):
         """Test that hash_file returns SHA256 hash."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write("Test content")
             temp_path = Path(f.name)
 
@@ -103,13 +103,13 @@ class TestHashFile:
 
             # SHA256 hash should be 64 hex characters
             assert len(hash_value) == 64
-            assert all(c in '0123456789abcdef' for c in hash_value)
+            assert all(c in "0123456789abcdef" for c in hash_value)
         finally:
             temp_path.unlink()
 
     def test_hash_file_consistent(self):
         """Test that hash_file returns same hash for same content."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
             f.write("Same content")
             temp_path = Path(f.name)
 
@@ -123,11 +123,11 @@ class TestHashFile:
 
     def test_hash_file_different_content(self):
         """Test that different content produces different hash."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='1.txt') as f1:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix="1.txt") as f1:
             f1.write("Content 1")
             path1 = Path(f1.name)
 
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='2.txt') as f2:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix="2.txt") as f2:
             f2.write("Content 2")
             path2 = Path(f2.name)
 
@@ -142,8 +142,8 @@ class TestHashFile:
 
     def test_hash_file_binary_content(self):
         """Test hashing binary files."""
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as f:
-            f.write(b'\x00\x01\x02\x03\xFF\xFE')
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
+            f.write(b"\x00\x01\x02\x03\xff\xfe")
             temp_path = Path(f.name)
 
         try:
@@ -183,7 +183,7 @@ class TestHashFile:
 class TestGetGitCommitSha:
     """Test get_git_commit_sha function."""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_commit_sha_success(self, mock_run):
         """Test getting git commit SHA successfully."""
         mock_result = Mock()
@@ -196,7 +196,7 @@ class TestGetGitCommitSha:
         assert sha == "abc123def456"
         mock_run.assert_called_once()
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_commit_sha_not_a_repo(self, mock_run):
         """Test git commit SHA when not in a git repo."""
         mock_result = Mock()
@@ -207,7 +207,7 @@ class TestGetGitCommitSha:
 
         assert sha is None
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_commit_sha_git_not_installed(self, mock_run):
         """Test when git is not installed."""
         mock_run.side_effect = FileNotFoundError()
@@ -216,20 +216,22 @@ class TestGetGitCommitSha:
 
         assert sha is None
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_commit_sha_timeout(self, mock_run):
         """Test git command timeout."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("git", 5)
 
         sha = get_git_commit_sha("/tmp/project")
 
         assert sha is None
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_commit_sha_subprocess_error(self, mock_run):
         """Test subprocess error handling."""
         import subprocess
+
         mock_run.side_effect = subprocess.SubprocessError()
 
         sha = get_git_commit_sha("/tmp/project")
@@ -240,7 +242,7 @@ class TestGetGitCommitSha:
 class TestGetGitChangedFiles:
     """Test get_git_changed_files function."""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_changed_files_success(self, mock_run):
         """Test getting changed files successfully."""
         mock_result = Mock()
@@ -252,7 +254,7 @@ class TestGetGitChangedFiles:
 
         assert files == ["file1.py", "file2.py", "file3.py"]
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_changed_files_no_changes(self, mock_run):
         """Test when no files changed."""
         mock_result = Mock()
@@ -264,7 +266,7 @@ class TestGetGitChangedFiles:
 
         assert files == []
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_changed_files_error(self, mock_run):
         """Test error handling in git diff."""
         mock_result = Mock()
@@ -275,10 +277,11 @@ class TestGetGitChangedFiles:
 
         assert files is None
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_get_git_changed_files_timeout(self, mock_run):
         """Test timeout handling."""
         import subprocess
+
         mock_run.side_effect = subprocess.TimeoutExpired("git", 10)
 
         files = get_git_changed_files("/tmp/project", "abc123")
@@ -304,8 +307,8 @@ class TestDetectChanges:
 
             yield project_root
 
-    @patch('tools.incremental.change_detector.get_git_commit_sha')
-    @patch('tools.incremental.change_detector.get_git_changed_files')
+    @patch("tools.incremental.change_detector.get_git_commit_sha")
+    @patch("tools.incremental.change_detector.get_git_changed_files")
     def test_detect_changes_with_git(self, mock_git_files, mock_git_sha, temp_project):
         """Test change detection using git."""
         mock_git_sha.return_value = "current_sha"
@@ -316,10 +319,7 @@ class TestDetectChanges:
         snapshot_data = {
             "timestamp": "2024-01-01T00:00:00",
             "git_sha": "old_sha",
-            "file_hashes": {
-                "file1.py": "old_hash1",
-                "file2.py": "hash2"
-            }
+            "file_hashes": {"file1.py": "old_hash1", "file2.py": "hash2"},
         }
         snapshot_path.write_text(json.dumps(snapshot_data))
 
@@ -329,7 +329,7 @@ class TestDetectChanges:
         assert report.detection_method == "git"
         assert "file1.py" in report.changed_files
 
-    @patch('tools.incremental.change_detector.get_git_commit_sha')
+    @patch("tools.incremental.change_detector.get_git_commit_sha")
     def test_detect_changes_without_git_uses_hash(self, mock_git_sha, temp_project):
         """Test change detection falls back to hash when git unavailable."""
         mock_git_sha.return_value = None
@@ -344,8 +344,8 @@ class TestDetectChanges:
             "git_sha": None,
             "file_hashes": {
                 str(file1.relative_to(temp_project)): "old_hash",
-                str(file2.relative_to(temp_project)): hash_file(file2)
-            }
+                str(file2.relative_to(temp_project)): hash_file(file2),
+            },
         }
         snapshot_path.write_text(json.dumps(snapshot_data))
 
@@ -368,7 +368,7 @@ class TestDetectChanges:
         capture_build_snapshot(str(temp_project))
 
         # Immediately detect changes (nothing changed)
-        with patch('tools.incremental.change_detector.get_git_commit_sha') as mock_sha:
+        with patch("tools.incremental.change_detector.get_git_commit_sha") as mock_sha:
             mock_sha.return_value = None  # Force hash-based detection
 
             report = detect_changes(str(temp_project))
@@ -385,9 +385,9 @@ class TestDetectChanges:
 
         # Total files should match sum of categories
         total_categorized = (
-            len(report.changed_files) +
-            len(report.added_files) +
-            len(report.unchanged_files)
+            len(report.changed_files)
+            + len(report.added_files)
+            + len(report.unchanged_files)
         )
         # Note: deleted_files are not counted in total_files
 
@@ -415,7 +415,7 @@ class TestCaptureSnapshot:
             assert "timestamp" in snapshot
             assert "file_hashes" in snapshot
 
-    @patch('tools.incremental.change_detector.get_git_commit_sha')
+    @patch("tools.incremental.change_detector.get_git_commit_sha")
     def test_capture_snapshot_includes_git_sha(self, mock_git_sha):
         """Test that snapshot includes git SHA when available."""
         mock_git_sha.return_value = "abc123def"
@@ -425,7 +425,7 @@ class TestCaptureSnapshot:
 
             assert snapshot["git_sha"] == "abc123def"
 
-    @patch('tools.incremental.change_detector.get_git_commit_sha')
+    @patch("tools.incremental.change_detector.get_git_commit_sha")
     def test_capture_snapshot_without_git(self, mock_git_sha):
         """Test snapshot when git is not available."""
         mock_git_sha.return_value = None
@@ -491,14 +491,14 @@ class TestEdgeCases:
 
             # Create large file (1MB)
             large_file = project_root / "large.bin"
-            large_file.write_bytes(b'0' * 1024 * 1024)
+            large_file.write_bytes(b"0" * 1024 * 1024)
 
             hash_value = hash_file(large_file)
 
             # Should still produce valid hash
             assert len(hash_value) == 64
 
-    @patch('tools.incremental.change_detector.get_git_commit_sha')
+    @patch("tools.incremental.change_detector.get_git_commit_sha")
     def test_detect_changes_same_git_sha(self, mock_git_sha):
         """Test when git SHA hasn't changed."""
         mock_git_sha.return_value = "same_sha"
@@ -514,11 +514,13 @@ class TestEdgeCases:
             snapshot_data = {
                 "timestamp": "2024-01-01T00:00:00",
                 "git_sha": "same_sha",
-                "file_hashes": {}
+                "file_hashes": {},
             }
             snapshot_path.write_text(json.dumps(snapshot_data))
 
-            with patch('tools.incremental.change_detector.get_git_changed_files') as mock_git_files:
+            with patch(
+                "tools.incremental.change_detector.get_git_changed_files"
+            ) as mock_git_files:
                 mock_git_files.return_value = []
 
                 report = detect_changes(tmpdir)

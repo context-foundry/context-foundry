@@ -15,7 +15,10 @@ def _detect_mcp_capabilities() -> Tuple[bool, str]:
 
     fastmcp_spec = importlib.util.find_spec("fastmcp")
     if fastmcp_spec is None:
-        return False, "fastmcp package not installed (pip install -r requirements-mcp.txt)"
+        return (
+            False,
+            "fastmcp package not installed (pip install -r requirements-mcp.txt)",
+        )
 
     return True, ""
 

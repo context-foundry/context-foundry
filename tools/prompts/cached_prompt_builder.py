@@ -7,14 +7,14 @@ Build orchestrator prompts with Anthropic cache control markers for 90% cost sav
 import json
 import hashlib
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 def build_cached_prompt(
     task_config: Dict[str, Any],
     orchestrator_prompt_path: str = "tools/orchestrator_prompt.txt",
     enable_caching: bool = True,
-    cache_ttl: str = "5m"
+    cache_ttl: str = "5m",
 ) -> str:
     """
     Build orchestrator prompt with Anthropic cache control markers.
@@ -46,6 +46,7 @@ def build_cached_prompt(
     """
     # Load cache configuration
     from tools.prompts import CacheConfig
+
     cache_config = CacheConfig()
 
     # Check if caching should be enabled
@@ -58,7 +59,7 @@ def build_cached_prompt(
     if not prompt_path.exists():
         raise FileNotFoundError(f"Orchestrator prompt not found: {prompt_path}")
 
-    with open(prompt_path, 'r') as f:
+    with open(prompt_path, "r") as f:
         orchestrator_content = f.read()
 
     # Find cache boundary marker
@@ -72,7 +73,7 @@ def build_cached_prompt(
     else:
         # No boundary marker found - use heuristic
         # Find "BEGIN AUTONOMOUS EXECUTION NOW" and split there
-        lines = orchestrator_content.split('\n')
+        lines = orchestrator_content.split("\n")
         boundary_line = None
 
         for i, line in enumerate(lines):
@@ -81,20 +82,22 @@ def build_cached_prompt(
                 break
 
         if boundary_line:
-            static_section = '\n'.join(lines[:boundary_line]).strip()
-            dynamic_template = '\n'.join(lines[boundary_line:]).strip()
+            static_section = "\n".join(lines[:boundary_line]).strip()
+            dynamic_template = "\n".join(lines[boundary_line:]).strip()
         else:
             # Can't find boundary - use last 50 lines as dynamic
-            static_section = '\n'.join(lines[:-50]).strip()
-            dynamic_template = '\n'.join(lines[-50:]).strip()
+            static_section = "\n".join(lines[:-50]).strip()
+            dynamic_template = "\n".join(lines[-50:]).strip()
 
     # Validate static section meets minimum token requirement
     static_tokens = _estimate_tokens(static_section)
     min_tokens = cache_config.get_min_tokens()
 
     if static_tokens < min_tokens:
-        print(f"⚠️ WARNING: Static section only {static_tokens} tokens (need {min_tokens}+)")
-        print(f"   Caching disabled - section too small to cache")
+        print(
+            f"⚠️ WARNING: Static section only {static_tokens} tokens (need {min_tokens}+)"
+        )
+        print("   Caching disabled - section too small to cache")
         return _build_standard_prompt(task_config, orchestrator_prompt_path)
 
     # Build cache control marker
@@ -117,18 +120,17 @@ BEGIN AUTONOMOUS EXECUTION NOW.
     final_prompt = static_section + cache_marker + task_section
 
     # Log cache info
-    print(f"✅ Prompt caching enabled:")
+    print("✅ Prompt caching enabled:")
     print(f"   Static section: ~{static_tokens:,} tokens (cacheable)")
     print(f"   Dynamic section: ~{_estimate_tokens(task_section):,} tokens")
     print(f"   Cache TTL: {cache_ttl}")
-    print(f"   Expected savings: 90% on cache hits\n")
+    print("   Expected savings: 90% on cache hits\n")
 
     return final_prompt
 
 
 def _build_standard_prompt(
-    task_config: Dict[str, Any],
-    orchestrator_prompt_path: str
+    task_config: Dict[str, Any], orchestrator_prompt_path: str
 ) -> str:
     """
     Build standard prompt without cache markers (fallback).
@@ -144,7 +146,7 @@ def _build_standard_prompt(
     if not prompt_path.exists():
         raise FileNotFoundError(f"Orchestrator prompt not found: {prompt_path}")
 
-    with open(prompt_path, 'r') as f:
+    with open(prompt_path, "r") as f:
         orchestrator_content = f.read()
 
     # Remove cache boundary marker if present
@@ -213,7 +215,7 @@ def get_prompt_hash(prompt: str) -> str:
     Returns:
         SHA256 hash (first 12 chars)
     """
-    hash_obj = hashlib.sha256(prompt.encode('utf-8'))
+    hash_obj = hashlib.sha256(prompt.encode("utf-8"))
     return hash_obj.hexdigest()[:12]
 
 
@@ -269,7 +271,7 @@ def validate_cache_markers(prompt: str) -> Dict[str, Any]:
         "has_marker": has_marker,
         "marker_count": marker_count,
         "marker_position": marker_position,
-        "issues": issues
+        "issues": issues,
     }
 
 
@@ -285,7 +287,7 @@ if __name__ == "__main__":
         "working_directory": "/tmp/test",
         "mode": "new_project",
         "enable_test_loop": True,
-        "max_test_iterations": 3
+        "max_test_iterations": 3,
     }
 
     # Build cached prompt
@@ -293,24 +295,24 @@ if __name__ == "__main__":
     prompt = build_cached_prompt(
         task_config=test_config,
         orchestrator_prompt_path="tools/orchestrator_prompt.txt",
-        enable_caching=True
+        enable_caching=True,
     )
 
     # Validate
     validation = validate_cache_markers(prompt)
-    print(f"\nValidation Results:")
+    print("\nValidation Results:")
     print(f"  Valid: {validation['valid']}")
     print(f"  Has marker: {validation['has_marker']}")
     print(f"  Marker count: {validation['marker_count']}")
     print(f"  Marker position: {validation['marker_position']}")
 
-    if validation['issues']:
-        print(f"\n  Issues:")
-        for issue in validation['issues']:
+    if validation["issues"]:
+        print("\n  Issues:")
+        for issue in validation["issues"]:
             print(f"    - {issue}")
 
     # Show prompt stats
-    print(f"\nPrompt Statistics:")
+    print("\nPrompt Statistics:")
     print(f"  Total length: {len(prompt):,} characters")
     print(f"  Estimated tokens: ~{_estimate_tokens(prompt):,}")
     print(f"  Prompt hash: {get_prompt_hash(prompt)}")
@@ -318,6 +320,6 @@ if __name__ == "__main__":
     # Optionally save to file
     if len(sys.argv) > 1 and sys.argv[1] == "--save":
         output_path = "/tmp/cached_prompt_test.txt"
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(prompt)
         print(f"\n✅ Saved prompt to: {output_path}")

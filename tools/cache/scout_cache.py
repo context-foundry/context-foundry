@@ -18,10 +18,8 @@ Example:
 - Result: Cache HIT (semantically similar)
 """
 
-import json
 from pathlib import Path
 from typing import Optional, Dict, Any
-from datetime import datetime
 
 from . import (
     get_cache_dir,
@@ -29,8 +27,9 @@ from . import (
     is_cache_valid,
     save_cache_metadata,
     load_cache_metadata,
-    DEFAULT_CACHE_TTL_HOURS
+    DEFAULT_CACHE_TTL_HOURS,
 )
+
 
 def normalize_task_description(task: str) -> str:
     """
@@ -41,14 +40,11 @@ def normalize_task_description(task: str) -> str:
     - Sort words for position-independent matching
     """
     # Basic normalization
-    normalized = ' '.join(task.lower().split())
+    normalized = " ".join(task.lower().split())
     return normalized
 
-def generate_scout_cache_key(
-    task: str,
-    mode: str,
-    working_directory: str
-) -> str:
+
+def generate_scout_cache_key(task: str, mode: str, working_directory: str) -> str:
     """
     Generate a cache key for Scout phase.
 
@@ -68,16 +64,18 @@ def generate_scout_cache_key(
 
     return hash_string(cache_key_input)
 
+
 def get_scout_cache_path(working_directory: str, cache_key: str) -> Path:
     """Get the file path for a Scout cache entry."""
     cache_dir = get_cache_dir(working_directory)
     return cache_dir / f"scout-{cache_key}.md"
 
+
 def get_cached_scout_report(
     task: str,
     mode: str,
     working_directory: str,
-    ttl_hours: int = DEFAULT_CACHE_TTL_HOURS
+    ttl_hours: int = DEFAULT_CACHE_TTL_HOURS,
 ) -> Optional[str]:
     """
     Retrieve a cached Scout report if available and valid.
@@ -107,20 +105,22 @@ def get_cached_scout_report(
         cached_content = cache_file.read_text()
 
         # Log cache hit
-        print(f"✅ Scout cache HIT! Using cached report from {metadata.get('created_at', 'unknown time') if metadata else 'unknown time'}")
+        print(
+            f"✅ Scout cache HIT! Using cached report from {metadata.get('created_at', 'unknown time') if metadata else 'unknown time'}"
+        )
         print(f"   Cache key: {cache_key}")
-        print(f"   Original task: {metadata.get('original_task', 'unknown') if metadata else 'unknown'}")
+        print(
+            f"   Original task: {metadata.get('original_task', 'unknown') if metadata else 'unknown'}"
+        )
 
         return cached_content
     except OSError as e:
         print(f"⚠️ Failed to read Scout cache: {e}")
         return None
 
+
 def save_scout_report_to_cache(
-    task: str,
-    mode: str,
-    working_directory: str,
-    scout_report_content: str
+    task: str, mode: str, working_directory: str, scout_report_content: str
 ) -> None:
     """
     Save a Scout report to cache.
@@ -144,16 +144,17 @@ def save_scout_report_to_cache(
             "original_task": task,
             "normalized_task": normalize_task_description(task),
             "mode": mode,
-            "cache_key": cache_key
+            "cache_key": cache_key,
         }
         save_cache_metadata(cache_file, metadata)
 
-        print(f"💾 Scout report cached successfully")
+        print("💾 Scout report cached successfully")
         print(f"   Cache key: {cache_key}")
         print(f"   Location: {cache_file}")
 
     except OSError as e:
         print(f"⚠️ Failed to save Scout report to cache: {e}")
+
 
 def clear_scout_cache(working_directory: str) -> int:
     """
@@ -172,7 +173,7 @@ def clear_scout_cache(working_directory: str) -> int:
         try:
             file.unlink()
             # Also delete metadata
-            meta_file = file.with_suffix('.meta.json')
+            meta_file = file.with_suffix(".meta.json")
             if meta_file.exists():
                 meta_file.unlink()
             deleted_count += 1
@@ -180,6 +181,7 @@ def clear_scout_cache(working_directory: str) -> int:
             pass
 
     return deleted_count
+
 
 def get_scout_cache_stats(working_directory: str) -> Dict[str, Any]:
     """Get statistics about Scout cache."""
@@ -190,7 +192,7 @@ def get_scout_cache_stats(working_directory: str) -> Dict[str, Any]:
             "total_entries": 0,
             "valid_entries": 0,
             "expired_entries": 0,
-            "total_size_kb": 0
+            "total_size_kb": 0,
         }
 
     total = 0
@@ -211,14 +213,15 @@ def get_scout_cache_stats(working_directory: str) -> Dict[str, Any]:
         "total_entries": total,
         "valid_entries": valid,
         "expired_entries": expired,
-        "total_size_kb": round(total_size / 1024, 2)
+        "total_size_kb": round(total_size / 1024, 2),
     }
 
+
 __all__ = [
-    'normalize_task_description',
-    'generate_scout_cache_key',
-    'get_cached_scout_report',
-    'save_scout_report_to_cache',
-    'clear_scout_cache',
-    'get_scout_cache_stats'
+    "normalize_task_description",
+    "generate_scout_cache_key",
+    "get_cached_scout_report",
+    "save_scout_report_to_cache",
+    "clear_scout_cache",
+    "get_scout_cache_stats",
 ]

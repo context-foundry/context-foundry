@@ -13,18 +13,8 @@ Key features:
 
 from typing import Any, Dict, Optional, Union
 from pathlib import Path
-from .truncation import (
-    truncate_with_recovery,
-    format_file_truncation,
-    format_grep_truncation,
-    format_command_truncation,
-    count_tokens
-)
-from .path_utils import (
-    to_relative_path,
-    format_tool_output_paths,
-    is_within_project
-)
+from .truncation import truncate_with_recovery, count_tokens
+from .path_utils import to_relative_path, format_tool_output_paths
 from .limits import ToolLimits, get_cached_default_limits
 
 
@@ -57,7 +47,7 @@ class ToolResponse:
         metadata: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
         working_dir: Optional[Union[str, Path]] = None,
-        limits: Optional[ToolLimits] = None
+        limits: Optional[ToolLimits] = None,
     ):
         """Initialize tool response.
 
@@ -110,8 +100,8 @@ class ToolResponse:
             output_parts.append(data_str)
 
         # 4. Recovery instructions (if truncated)
-        if self.metadata.get('was_truncated'):
-            recovery = self.metadata.get('recovery_instructions')
+        if self.metadata.get("was_truncated"):
+            recovery = self.metadata.get("recovery_instructions")
             if recovery:
                 output_parts.append("")
                 output_parts.append("═" * 60)
@@ -119,7 +109,7 @@ class ToolResponse:
                 output_parts.append("═" * 60)
                 output_parts.append(recovery)
 
-        return '\n\n'.join(output_parts)
+        return "\n\n".join(output_parts)
 
     def _format_metadata(self) -> str:
         """Format metadata section with relative paths.
@@ -132,12 +122,19 @@ class ToolResponse:
         # Convert paths to relative
         for key, value in self.metadata.items():
             # Skip internal metadata fields
-            if key in ('was_truncated', 'recovery_instructions', 'truncation_reason',
-                      'original_chars', 'original_lines', 'truncated_chars', 'truncated_lines'):
+            if key in (
+                "was_truncated",
+                "recovery_instructions",
+                "truncation_reason",
+                "original_chars",
+                "original_lines",
+                "truncated_chars",
+                "truncated_lines",
+            ):
                 continue
 
             # Format based on key type
-            if 'path' in key.lower() or 'file' in key.lower():
+            if "path" in key.lower() or "file" in key.lower():
                 # Convert path to relative
                 if isinstance(value, (str, Path)):
                     relative = to_relative_path(value, self.working_dir, strict=False)
@@ -149,7 +146,7 @@ class ToolResponse:
             else:
                 lines.append(f"{key.replace('_', ' ').title()}: {value}")
 
-        return '\n'.join(lines) if lines else ""
+        return "\n".join(lines) if lines else ""
 
     def _format_data(self) -> str:
         """Format data section.
@@ -165,6 +162,7 @@ class ToolResponse:
         elif isinstance(self.data, (list, dict)):
             # Format structured data
             import json
+
             formatted = json.dumps(self.data, indent=2)
             if self.limits.use_relative_paths:
                 return format_tool_output_paths(formatted, self.working_dir)
@@ -179,10 +177,10 @@ class ToolResponse:
             Dictionary representation
         """
         return {
-            'success': self.success,
-            'data': self.data,
-            'metadata': self.metadata,
-            'error': self.error
+            "success": self.success,
+            "data": self.data,
+            "metadata": self.metadata,
+            "error": self.error,
         }
 
     @classmethod
@@ -191,8 +189,8 @@ class ToolResponse:
         content: str,
         file_path: Union[str, Path],
         working_dir: Optional[Union[str, Path]] = None,
-        limits: Optional[ToolLimits] = None
-    ) -> 'ToolResponse':
+        limits: Optional[ToolLimits] = None,
+    ) -> "ToolResponse":
         """Create response for file read operation.
 
         Args:
@@ -220,22 +218,22 @@ class ToolResponse:
         truncated, was_truncated, meta = truncate_with_recovery(
             content=content,
             file_path=str(file_path),
-            operation_type='file_read',
-            limits=limits
+            operation_type="file_read",
+            limits=limits,
         )
 
         # Get file stats
-        lines = content.split('\n')
+        lines = content.split("\n")
         chars = len(content)
         tokens = count_tokens(content)
 
         metadata = {
-            'file_path': file_path,
-            'lines': len(lines),
-            'chars': chars,
-            'tokens': tokens,
-            'was_truncated': was_truncated,
-            **meta
+            "file_path": file_path,
+            "lines": len(lines),
+            "chars": chars,
+            "tokens": tokens,
+            "was_truncated": was_truncated,
+            **meta,
         }
 
         return cls(
@@ -243,7 +241,7 @@ class ToolResponse:
             data=truncated,
             metadata=metadata,
             working_dir=working_dir,
-            limits=limits
+            limits=limits,
         )
 
     @classmethod
@@ -253,8 +251,8 @@ class ToolResponse:
         pattern: str,
         num_matches: int,
         working_dir: Optional[Union[str, Path]] = None,
-        limits: Optional[ToolLimits] = None
-    ) -> 'ToolResponse':
+        limits: Optional[ToolLimits] = None,
+    ) -> "ToolResponse":
         """Create response for grep operation.
 
         Args:
@@ -272,16 +270,14 @@ class ToolResponse:
 
         # Apply truncation if needed
         truncated, was_truncated, meta = truncate_with_recovery(
-            content=results,
-            operation_type='grep',
-            limits=limits
+            content=results, operation_type="grep", limits=limits
         )
 
         metadata = {
-            'pattern': pattern,
-            'matches': num_matches,
-            'was_truncated': was_truncated,
-            **meta
+            "pattern": pattern,
+            "matches": num_matches,
+            "was_truncated": was_truncated,
+            **meta,
         }
 
         return cls(
@@ -289,7 +285,7 @@ class ToolResponse:
             data=truncated,
             metadata=metadata,
             working_dir=working_dir,
-            limits=limits
+            limits=limits,
         )
 
     @classmethod
@@ -299,8 +295,8 @@ class ToolResponse:
         command: str,
         exit_code: int,
         working_dir: Optional[Union[str, Path]] = None,
-        limits: Optional[ToolLimits] = None
-    ) -> 'ToolResponse':
+        limits: Optional[ToolLimits] = None,
+    ) -> "ToolResponse":
         """Create response for subprocess execution.
 
         Args:
@@ -318,18 +314,16 @@ class ToolResponse:
 
         # Apply truncation if needed
         truncated, was_truncated, meta = truncate_with_recovery(
-            content=output,
-            operation_type='subprocess',
-            limits=limits
+            content=output, operation_type="subprocess", limits=limits
         )
 
         success = exit_code == 0
 
         metadata = {
-            'command': command,
-            'exit_code': exit_code,
-            'was_truncated': was_truncated,
-            **meta
+            "command": command,
+            "exit_code": exit_code,
+            "was_truncated": was_truncated,
+            **meta,
         }
 
         return cls(
@@ -338,7 +332,7 @@ class ToolResponse:
             metadata=metadata,
             error=None if success else f"Command exited with code {exit_code}",
             working_dir=working_dir,
-            limits=limits
+            limits=limits,
         )
 
     @classmethod
@@ -346,8 +340,8 @@ class ToolResponse:
         cls,
         error: str,
         operation: str = "operation",
-        details: Optional[Dict[str, Any]] = None
-    ) -> 'ToolResponse':
+        details: Optional[Dict[str, Any]] = None,
+    ) -> "ToolResponse":
         """Create error response.
 
         Args:
@@ -368,20 +362,15 @@ class ToolResponse:
             False
         """
         metadata = details or {}
-        metadata['operation'] = operation
+        metadata["operation"] = operation
 
-        return cls(
-            success=False,
-            data=None,
-            metadata=metadata,
-            error=error
-        )
+        return cls(success=False, data=None, metadata=metadata, error=error)
 
 
 def format_file_read_output(
     content: str,
     file_path: Union[str, Path],
-    working_dir: Optional[Union[str, Path]] = None
+    working_dir: Optional[Union[str, Path]] = None,
 ) -> str:
     """Convenience function to format file read output.
 
@@ -406,7 +395,7 @@ def format_grep_output(
     results: str,
     pattern: str,
     num_matches: int,
-    working_dir: Optional[Union[str, Path]] = None
+    working_dir: Optional[Union[str, Path]] = None,
 ) -> str:
     """Convenience function to format grep output.
 
@@ -427,7 +416,7 @@ def format_subprocess_output(
     output: str,
     command: str,
     exit_code: int,
-    working_dir: Optional[Union[str, Path]] = None
+    working_dir: Optional[Union[str, Path]] = None,
 ) -> str:
     """Convenience function to format subprocess output.
 

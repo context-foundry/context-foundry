@@ -9,15 +9,15 @@ for GitHub README visualization.
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List
 
 
 def sanitize_label(label: str) -> str:
     """Sanitize label for Mermaid syntax."""
     # Remove special characters that could break Mermaid syntax
     label = label.replace('"', "'")
-    label = label.replace('\n', ' ')
-    label = label.replace('\r', ' ')
+    label = label.replace("\n", " ")
+    label = label.replace("\r", " ")
     # Truncate if too long
     if len(label) > 50:
         label = label[:47] + "..."
@@ -40,7 +40,7 @@ def get_node_emoji(node_type: str) -> str:
         "DirectReply": "💭",
         "Loop": "🔄",
         "Iteration": "🔁",
-        "StickyNote": "📝"
+        "StickyNote": "📝",
     }
     return emoji_map.get(node_type, "⬜")
 
@@ -58,43 +58,31 @@ def get_node_style(node_type: str, node_data: Dict) -> tuple:
     node_styles = {
         # Start node - Stadium shape, green
         "Start": ("([{}])", "#7EE787"),
-
         # Agent nodes - Rectangle, teal
         "Agent": ("[{}]", "#4DD0E1"),
-
         # Condition nodes - Diamond, orange / Hexagon, pink
         "Condition": ("{{{{{}}}}}", "#FFB938"),
         "ConditionAgent": ("{{{{{}}}}}", "#ff8fab"),
-
         # LLM nodes - Rounded rectangle, blue
         "LLM": ("(({}))", "#64B5F6"),
-
         # Tool nodes - Trapezoid, brown
         "Tool": ("[/{}/]", "#d4a373"),
-
         # ExecuteFlow - Rectangle, olive
         "ExecuteFlow": ("[{}]", "#a3b18a"),
-
         # CustomFunction - Rectangle, purple
         "CustomFunction": ("[{}]", "#E4B7FF"),
-
         # HTTP - Rectangle, red
         "HTTP": ("[{}]", "#FF7F7F"),
-
         # HumanInput - Hexagon, indigo
         "HumanInput": ("{{{{{}}}}}", "#6E6EFD"),
-
         # DirectReply - Rectangle, mint
         "DirectReply": ("[{}]", "#4DDBBB"),
-
         # Loop - Asymmetric shape, coral
         "Loop": ("([{}])", "#FFA07A"),
-
         # Iteration - Rectangle, lavender (will use subgraph)
         "Iteration": ("[{}]", "#9C89B8"),
-
         # StickyNote - Rectangle, yellow
-        "StickyNote": ("[{}]", "#fee440")
+        "StickyNote": ("[{}]", "#fee440"),
     }
 
     # Try exact type match first
@@ -110,8 +98,16 @@ def get_node_style(node_type: str, node_data: Dict) -> tuple:
         return node_styles["Start"][0], node_styles["Start"][1], get_node_emoji("Start")
     elif "condition" in name_lower:
         if "agent" in name_lower:
-            return node_styles["ConditionAgent"][0], node_styles["ConditionAgent"][1], get_node_emoji("ConditionAgent")
-        return node_styles["Condition"][0], node_styles["Condition"][1], get_node_emoji("Condition")
+            return (
+                node_styles["ConditionAgent"][0],
+                node_styles["ConditionAgent"][1],
+                get_node_emoji("ConditionAgent"),
+            )
+        return (
+            node_styles["Condition"][0],
+            node_styles["Condition"][1],
+            get_node_emoji("Condition"),
+        )
     elif "agent" in name_lower:
         return node_styles["Agent"][0], node_styles["Agent"][1], get_node_emoji("Agent")
     elif "llm" in name_lower:
@@ -155,7 +151,7 @@ def extract_node_info(node: Dict) -> Dict:
         "instructions": instructions[:200] if instructions else "",  # Truncate
         "shape": shape,
         "color": color,
-        "emoji": emoji
+        "emoji": emoji,
     }
 
 
@@ -192,7 +188,9 @@ def extract_flow_metadata(workflow_json: Dict) -> Dict:
 
     # Count node types
     agent_count = sum(1 for n in nodes if n.get("data", {}).get("type") == "Agent")
-    condition_count = sum(1 for n in nodes if "Condition" in n.get("data", {}).get("type", ""))
+    condition_count = sum(
+        1 for n in nodes if "Condition" in n.get("data", {}).get("type", "")
+    )
     tool_count = sum(1 for n in nodes if n.get("data", {}).get("type") == "Tool")
     llm_count = sum(1 for n in nodes if n.get("data", {}).get("type") == "LLM")
 
@@ -207,8 +205,12 @@ def extract_flow_metadata(workflow_json: Dict) -> Dict:
         complexity = "Complex"
 
     # Check for memory and tools
-    has_memory = any("memory" in str(n.get("data", {}).get("inputs", {})).lower() for n in nodes)
-    has_tools = tool_count > 0 or any("tools" in str(n.get("data", {}).get("inputs", {})).lower() for n in nodes)
+    has_memory = any(
+        "memory" in str(n.get("data", {}).get("inputs", {})).lower() for n in nodes
+    )
+    has_tools = tool_count > 0 or any(
+        "tools" in str(n.get("data", {}).get("inputs", {})).lower() for n in nodes
+    )
 
     return {
         "total_nodes": total_nodes,
@@ -219,7 +221,7 @@ def extract_flow_metadata(workflow_json: Dict) -> Dict:
         "llm_count": llm_count,
         "complexity": complexity,
         "has_memory": has_memory,
-        "has_tools": has_tools
+        "has_tools": has_tools,
     }
 
 
@@ -259,28 +261,36 @@ def generate_badges(metadata: Dict) -> str:
     badges = []
 
     # Node count badge
-    badges.append(f"![Nodes](https://img.shields.io/badge/Nodes-{metadata['total_nodes']}-blue)")
+    badges.append(
+        f"![Nodes](https://img.shields.io/badge/Nodes-{metadata['total_nodes']}-blue)"
+    )
 
     # Agent count badge
-    if metadata['agent_count'] > 0:
-        badges.append(f"![Agents](https://img.shields.io/badge/Agents-{metadata['agent_count']}-green)")
+    if metadata["agent_count"] > 0:
+        badges.append(
+            f"![Agents](https://img.shields.io/badge/Agents-{metadata['agent_count']}-green)"
+        )
 
     # Complexity badge
     complexity_colors = {
         "Simple": "brightgreen",
         "Moderate": "yellow",
-        "Complex": "orange"
+        "Complex": "orange",
     }
-    color = complexity_colors.get(metadata['complexity'], "gray")
-    badges.append(f"![Complexity](https://img.shields.io/badge/Complexity-{metadata['complexity']}-{color})")
+    color = complexity_colors.get(metadata["complexity"], "gray")
+    badges.append(
+        f"![Complexity](https://img.shields.io/badge/Complexity-{metadata['complexity']}-{color})"
+    )
 
     # Memory badge
-    if metadata['has_memory']:
+    if metadata["has_memory"]:
         badges.append("![Memory](https://img.shields.io/badge/Memory-Enabled-purple)")
 
     # Tools badge
-    if metadata['has_tools']:
-        badges.append(f"![Tools](https://img.shields.io/badge/Tools-{metadata['tool_count']}-red)")
+    if metadata["has_tools"]:
+        badges.append(
+            f"![Tools](https://img.shields.io/badge/Tools-{metadata['tool_count']}-red)"
+        )
 
     return " ".join(badges)
 
@@ -306,7 +316,7 @@ def generate_legend() -> str:
         "| 🔄 | Loop | Loop back to previous node |",
         "| 🔁 | Iteration | Iterate over array |",
         "| 📝 | StickyNote | Documentation note |",
-        ""
+        "",
     ]
     return "\n".join(legend)
 
@@ -329,7 +339,7 @@ def generate_mermaid(workflow_json: Dict, include_details: bool = False) -> str:
     mermaid_lines = [
         "```mermaid",
         "%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#4DD0E1','primaryTextColor':'#000','primaryBorderColor':'#0097A7','lineColor':'#757575','secondaryColor':'#ff8fab','tertiaryColor':'#7EE787'}}}%%",
-        f"graph {direction}"
+        f"graph {direction}",
     ]
 
     # Add nodes with styled shapes (no emojis in boxes - too crowded)
@@ -344,7 +354,9 @@ def generate_mermaid(workflow_json: Dict, include_details: bool = False) -> str:
         mermaid_lines.append(node_def)
 
         # Add styling
-        mermaid_lines.append(f"    style {node_id} fill:{color},stroke:#333,stroke-width:2px")
+        mermaid_lines.append(
+            f"    style {node_id} fill:{color},stroke:#333,stroke-width:2px"
+        )
 
     # Add empty line for readability
     mermaid_lines.append("")
@@ -361,23 +373,21 @@ def generate_mermaid(workflow_json: Dict, include_details: bool = False) -> str:
 
     # Add detailed legend if requested
     if include_details:
-        mermaid_lines.extend([
-            "",
-            "### Node Details",
-            ""
-        ])
+        mermaid_lines.extend(["", "### Node Details", ""])
 
         for node_id, info in nodes_info.items():
             mermaid_lines.append(f"**{info['label']}** (`{node_id}`)")
             mermaid_lines.append(f"- Type: {info['type']}")
-            if info['description']:
+            if info["description"]:
                 mermaid_lines.append(f"- Description: {info['description']}")
             mermaid_lines.append("")
 
     return "\n".join(mermaid_lines)
 
 
-def generate_interactive_section(workflow_json: Dict, include_badges: bool = True, include_legend: bool = True) -> str:
+def generate_interactive_section(
+    workflow_json: Dict, include_badges: bool = True, include_legend: bool = True
+) -> str:
     """Generate an interactive/collapsible section with agent details."""
     nodes = workflow_json.get("nodes", [])
     metadata = extract_flow_metadata(workflow_json)
@@ -390,21 +400,25 @@ def generate_interactive_section(workflow_json: Dict, include_badges: bool = Tru
         sections.extend([badges, "", "---", ""])
 
     # 2. Flow metadata
-    sections.extend([
-        f"**Total Nodes**: {metadata['total_nodes']} | ",
-        f"**Agents**: {metadata['agent_count']} | ",
-        f"**Complexity**: {metadata['complexity']}",
-        "",
-    ])
+    sections.extend(
+        [
+            f"**Total Nodes**: {metadata['total_nodes']} | ",
+            f"**Agents**: {metadata['agent_count']} | ",
+            f"**Complexity**: {metadata['complexity']}",
+            "",
+        ]
+    )
 
     # 3. Collapsible agent details
-    sections.extend([
-        "<details>",
-        "<summary><b>🔍 View Agent Details (Click to Expand)</b></summary>",
-        "",
-        "| Agent | Type | Description |",
-        "|-------|------|-------------|"
-    ])
+    sections.extend(
+        [
+            "<details>",
+            "<summary><b>🔍 View Agent Details (Click to Expand)</b></summary>",
+            "",
+            "| Agent | Type | Description |",
+            "|-------|------|-------------|",
+        ]
+    )
 
     for node in nodes:
         data = node.get("data", {})
@@ -416,11 +430,7 @@ def generate_interactive_section(workflow_json: Dict, include_badges: bool = Tru
         # Include emoji in agent column
         sections.append(f"| {emoji} {label} | {node_type} | {description} |")
 
-    sections.extend([
-        "",
-        "</details>",
-        ""
-    ])
+    sections.extend(["", "</details>", ""])
 
     # 4. Add legend if requested
     if include_legend:
@@ -436,14 +446,20 @@ def main():
         print("\nGenerates a Mermaid diagram from a Flowise workflow JSON file.")
         print("\nOptions:")
         print("  --include-details    Include detailed node descriptions")
-        print("  --interactive        Include interactive/collapsible agent details (default)")
+        print(
+            "  --interactive        Include interactive/collapsible agent details (default)"
+        )
         print("  --badges             Include flow metadata badges")
         print("  --legend             Include node type legend")
         print("  --no-interactive     Disable interactive features")
         sys.exit(1)
 
     input_path = Path(sys.argv[1])
-    output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and not sys.argv[2].startswith('--') else None
+    output_path = (
+        Path(sys.argv[2])
+        if len(sys.argv) > 2 and not sys.argv[2].startswith("--")
+        else None
+    )
 
     include_details = "--include-details" in sys.argv
     no_interactive = "--no-interactive" in sys.argv
@@ -455,7 +471,9 @@ def main():
         include_badges = False
         include_legend = False
     else:
-        include_interactive = "--interactive" in sys.argv or (len([arg for arg in sys.argv if arg.startswith('--')]) == 0)
+        include_interactive = "--interactive" in sys.argv or (
+            len([arg for arg in sys.argv if arg.startswith("--")]) == 0
+        )
         include_badges = "--badges" in sys.argv or include_interactive
         include_legend = "--legend" in sys.argv or include_interactive
 
@@ -465,7 +483,7 @@ def main():
 
     # Load workflow JSON
     try:
-        with open(input_path, 'r') as f:
+        with open(input_path, "r") as f:
             workflow_json = json.load(f)
     except json.JSONDecodeError as e:
         print(f"Error: Invalid JSON file: {e}")
@@ -477,15 +495,13 @@ def main():
     # Add interactive section if requested
     if include_interactive:
         interactive_section = generate_interactive_section(
-            workflow_json,
-            include_badges=include_badges,
-            include_legend=include_legend
+            workflow_json, include_badges=include_badges, include_legend=include_legend
         )
         mermaid_output = mermaid_output + "\n\n" + interactive_section
 
     # Output to file or stdout
     if output_path:
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             f.write(mermaid_output)
         print(f"✅ Mermaid diagram generated: {output_path}")
     else:

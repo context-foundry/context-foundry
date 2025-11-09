@@ -39,8 +39,7 @@ MCP_CACHE_TTL = 2.0
 
 # SQLite database path
 DATABASE_PATH = os.getenv(
-    "CF_METRICS_DB",
-    str(Path.home() / ".context-foundry" / "metrics.db")
+    "CF_METRICS_DB", str(Path.home() / ".context-foundry" / "metrics.db")
 )
 
 # Enable historical analytics
@@ -115,7 +114,7 @@ AGENT_TYPES = [
     "Builder",
     "Tester",
     "Deployer",
-    "FeedbackAnalyzer"
+    "FeedbackAnalyzer",
 ]
 
 # ============================================================================
@@ -130,19 +129,19 @@ PHASES = [
     "Screenshot",
     "Documentation",
     "Deploy",
-    "Feedback"
+    "Feedback",
 ]
 
 # Phase colors for UI (dark mode gradients)
 PHASE_COLORS = {
-    "Scout": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",      # Purple
-    "Architect": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", # Pink
-    "Builder": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",   # Blue
-    "Test": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",      # Orange/Yellow
-    "Screenshot": "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)", # Cyan/Pink
-    "Documentation": "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)", # Rose
-    "Deploy": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",    # Green
-    "Feedback": "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)"   # Peach
+    "Scout": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",  # Purple
+    "Architect": "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",  # Pink
+    "Builder": "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",  # Blue
+    "Test": "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",  # Orange/Yellow
+    "Screenshot": "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",  # Cyan/Pink
+    "Documentation": "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)",  # Rose
+    "Deploy": "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",  # Green
+    "Feedback": "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",  # Peach
 }
 
 # ============================================================================
@@ -182,7 +181,7 @@ ENABLE_EXPORT = True
 ENABLE_SESSION_REPLAY = False  # Future feature
 
 # Enable notifications
-ENABLE_NOTIFICATIONS = False   # Future feature
+ENABLE_NOTIFICATIONS = False  # Future feature
 
 # ============================================================================
 # Development Configuration
@@ -198,6 +197,7 @@ ENABLE_CORS = os.getenv("ENABLE_CORS", "true").lower() == "true"
 # Utility Functions
 # ============================================================================
 
+
 def get_checkpoint_path(session_id: str) -> Path:
     """Get path to checkpoint directory for a session."""
     return CHECKPOINTS_DIR / session_id
@@ -210,7 +210,8 @@ def get_working_directory(session_id: str) -> Path:
 
     if state_file.exists():
         import json
-        with open(state_file, 'r') as f:
+
+        with open(state_file, "r") as f:
             state = json.load(f)
             return Path(state.get("working_directory", ""))
 
@@ -261,7 +262,7 @@ def get_token_status(used: int, limit: int = TOKEN_BUDGET_LIMIT) -> Dict[str, An
         "limit": limit,
         "percentage": round(percentage, 1),
         "level": level,
-        "color": color
+        "color": color,
     }
 
 

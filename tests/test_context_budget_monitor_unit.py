@@ -21,11 +21,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.context_budget.monitor import (
-    ContextBudgetMonitor,
-    ContextZone,
-    PhaseAnalysis
-)
+from tools.context_budget.monitor import ContextBudgetMonitor, ContextZone
 
 
 class TestContextBudgetMonitorInitialization:
@@ -36,7 +32,7 @@ class TestContextBudgetMonitorInitialization:
         monitor = ContextBudgetMonitor()
 
         assert monitor.context_window_size == 200000
-        assert monitor.model == 'claude-sonnet-4'
+        assert monitor.model == "claude-sonnet-4"
         assert isinstance(monitor._phase_history, dict)
         assert len(monitor._phase_history) == 0
 
@@ -48,9 +44,9 @@ class TestContextBudgetMonitorInitialization:
 
     def test_custom_model(self):
         """Test monitor initializes with custom model name"""
-        monitor = ContextBudgetMonitor(model='gpt-4')
+        monitor = ContextBudgetMonitor(model="gpt-4")
 
-        assert monitor.model == 'gpt-4'
+        assert monitor.model == "gpt-4"
 
 
 class TestBudgetCalculations:
@@ -59,14 +55,14 @@ class TestBudgetCalculations:
     def test_get_budget_for_scout_phase(self):
         """Test Scout phase gets 7% budget allocation"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
-        budget = monitor.get_budget_for_phase('scout')
+        budget = monitor.get_budget_for_phase("scout")
 
         assert budget == 14000  # 7% of 200K
 
     def test_get_budget_for_builder_phase(self):
         """Test Builder phase gets 20% budget allocation"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
-        budget = monitor.get_budget_for_phase('builder')
+        budget = monitor.get_budget_for_phase("builder")
 
         assert budget == 40000  # 20% of 200K
 
@@ -75,23 +71,23 @@ class TestBudgetCalculations:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # All these should map to the same phase
-        budget1 = monitor.get_budget_for_phase('scout')
-        budget2 = monitor.get_budget_for_phase('Scout')
-        budget3 = monitor.get_budget_for_phase('SCOUT')
+        budget1 = monitor.get_budget_for_phase("scout")
+        budget2 = monitor.get_budget_for_phase("Scout")
+        budget3 = monitor.get_budget_for_phase("SCOUT")
 
         assert budget1 == budget2 == budget3
 
     def test_unknown_phase_defaults(self):
         """Test unknown phase defaults to 5% budget"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
-        budget = monitor.get_budget_for_phase('unknown_phase')
+        budget = monitor.get_budget_for_phase("unknown_phase")
 
         assert budget == 10000  # 5% of 200K
 
     def test_budget_with_zero_context_window(self):
         """Test budget calculation handles 0 context window gracefully"""
         monitor = ContextBudgetMonitor(context_window_size=0)
-        budget = monitor.get_budget_for_phase('scout')
+        budget = monitor.get_budget_for_phase("scout")
 
         assert budget == 0
 
@@ -157,9 +153,9 @@ class TestPhaseAnalysis:
         """Test check_phase() with typical usage"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('Scout', 12000)
+        analysis = monitor.check_phase("Scout", 12000)
 
-        assert analysis.phase_name == 'Scout'
+        assert analysis.phase_name == "Scout"
         assert analysis.tokens_used == 12000
         assert analysis.percentage == pytest.approx(6.0, abs=0.1)
         assert analysis.zone == ContextZone.SMART
@@ -172,29 +168,29 @@ class TestPhaseAnalysis:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Scout phase: budget is 14K, use 20K (exceeded)
-        analysis = monitor.check_phase('Scout', 20000)
+        analysis = monitor.check_phase("Scout", 20000)
 
         assert analysis.budget_exceeded_by == 6000
         assert len(analysis.warnings) > 0
-        assert any('exceeded budget' in w.lower() for w in analysis.warnings)
+        assert any("exceeded budget" in w.lower() for w in analysis.warnings)
 
     def test_phase_analysis_warnings_for_critical_zone(self):
         """Test warnings generation for CRITICAL zone"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Use 170K tokens (85%)
-        analysis = monitor.check_phase('Builder', 170000)
+        analysis = monitor.check_phase("Builder", 170000)
 
         assert analysis.zone == ContextZone.CRITICAL
         assert len(analysis.warnings) > 0
-        assert any('CRITICAL' in w for w in analysis.warnings)
+        assert any("CRITICAL" in w for w in analysis.warnings)
 
     def test_phase_analysis_recommendations_for_exceeded_budget(self):
         """Test recommendations generation for exceeded budget"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Exceed budget significantly
-        analysis = monitor.check_phase('Scout', 30000)
+        analysis = monitor.check_phase("Scout", 30000)
 
         assert len(analysis.recommendations) > 0
 
@@ -203,7 +199,7 @@ class TestPhaseAnalysis:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Use 10K out of 14K budget
-        analysis = monitor.check_phase('Scout', 10000)
+        analysis = monitor.check_phase("Scout", 10000)
 
         assert analysis.budget_remaining == 4000
 
@@ -211,10 +207,10 @@ class TestPhaseAnalysis:
         """Test phase analyses are stored in history"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 12000)
-        monitor.check_phase('Scout', 15000)
+        monitor.check_phase("Scout", 12000)
+        monitor.check_phase("Scout", 15000)
 
-        history = monitor.get_phase_history('Scout')
+        history = monitor.get_phase_history("Scout")
         assert len(history) == 2
         assert history[0].tokens_used == 12000
         assert history[1].tokens_used == 15000
@@ -224,7 +220,7 @@ class TestPhaseAnalysis:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # 50% usage
-        analysis = monitor.check_phase('Builder', 100000)
+        analysis = monitor.check_phase("Builder", 100000)
 
         assert analysis.percentage == pytest.approx(50.0, abs=0.1)
 
@@ -232,17 +228,17 @@ class TestPhaseAnalysis:
         """Test PhaseAnalysis.to_dict() produces valid structure"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('Scout', 12000)
+        analysis = monitor.check_phase("Scout", 12000)
         result = analysis.to_dict()
 
         assert isinstance(result, dict)
-        assert 'phase_name' in result
-        assert 'tokens_used' in result
-        assert 'percentage' in result
-        assert 'zone' in result
-        assert result['phase_name'] == 'Scout'
-        assert result['tokens_used'] == 12000
-        assert result['zone'] == 'smart'
+        assert "phase_name" in result
+        assert "tokens_used" in result
+        assert "percentage" in result
+        assert "zone" in result
+        assert result["phase_name"] == "Scout"
+        assert result["tokens_used"] == 12000
+        assert result["zone"] == "smart"
 
 
 class TestHistoricalTracking:
@@ -252,14 +248,14 @@ class TestHistoricalTracking:
         """Test get_phase_history() returns analyses for specific phase"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 12000)
-        monitor.check_phase('Architect', 10000)
-        monitor.check_phase('Scout', 15000)
+        monitor.check_phase("Scout", 12000)
+        monitor.check_phase("Architect", 10000)
+        monitor.check_phase("Scout", 15000)
 
-        scout_history = monitor.get_phase_history('Scout')
+        scout_history = monitor.get_phase_history("Scout")
         assert len(scout_history) == 2
 
-        architect_history = monitor.get_phase_history('Architect')
+        architect_history = monitor.get_phase_history("Architect")
         assert len(architect_history) == 1
 
     def test_multiple_analyses_for_same_phase(self):
@@ -267,16 +263,16 @@ class TestHistoricalTracking:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         for i in range(5):
-            monitor.check_phase('Builder', 10000 + i * 1000)
+            monitor.check_phase("Builder", 10000 + i * 1000)
 
-        history = monitor.get_phase_history('Builder')
+        history = monitor.get_phase_history("Builder")
         assert len(history) == 5
 
     def test_empty_history_for_new_phase(self):
         """Test get_phase_history() returns empty list for untracked phase"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        history = monitor.get_phase_history('NonExistent')
+        history = monitor.get_phase_history("NonExistent")
         assert history == []
 
 
@@ -287,42 +283,42 @@ class TestOverallStatistics:
         """Test get_overall_stats() aggregates across all phases"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 12000)
-        monitor.check_phase('Architect', 10000)
-        monitor.check_phase('Builder', 40000)
+        monitor.check_phase("Scout", 12000)
+        monitor.check_phase("Architect", 10000)
+        monitor.check_phase("Builder", 40000)
 
         stats = monitor.get_overall_stats()
 
-        assert stats['total_phases'] == 3
-        assert stats['peak_phase'] == 'Builder'
-        assert stats['peak_usage_tokens'] == 40000
+        assert stats["total_phases"] == 3
+        assert stats["peak_phase"] == "Builder"
+        assert stats["peak_usage_tokens"] == 40000
 
     def test_peak_usage_detection(self):
         """Test peak usage is correctly identified"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 12000)
-        monitor.check_phase('Builder', 50000)  # Peak
-        monitor.check_phase('Test', 30000)
+        monitor.check_phase("Scout", 12000)
+        monitor.check_phase("Builder", 50000)  # Peak
+        monitor.check_phase("Test", 30000)
 
         stats = monitor.get_overall_stats()
 
-        assert stats['peak_usage_tokens'] == 50000
-        assert stats['peak_phase'] == 'Builder'
+        assert stats["peak_usage_tokens"] == 50000
+        assert stats["peak_phase"] == "Builder"
 
     def test_smart_zone_percentage_calculation(self):
         """Test smart zone percentage is calculated correctly"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # 2 in SMART, 1 in DUMB
-        monitor.check_phase('Scout', 12000)    # SMART (6%)
-        monitor.check_phase('Builder', 40000)  # SMART (20%)
-        monitor.check_phase('Test', 100000)    # DUMB (50%)
+        monitor.check_phase("Scout", 12000)  # SMART (6%)
+        monitor.check_phase("Builder", 40000)  # SMART (20%)
+        monitor.check_phase("Test", 100000)  # DUMB (50%)
 
         stats = monitor.get_overall_stats()
 
         # 2 out of 3 = 66.67%
-        assert stats['smart_zone_percentage'] == pytest.approx(66.67, abs=0.1)
+        assert stats["smart_zone_percentage"] == pytest.approx(66.67, abs=0.1)
 
 
 class TestExportToSessionSummary:
@@ -332,30 +328,30 @@ class TestExportToSessionSummary:
         """Test export_to_session_summary() produces correct structure"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 12000)
-        monitor.check_phase('Builder', 40000)
+        monitor.check_phase("Scout", 12000)
+        monitor.check_phase("Builder", 40000)
 
         export = monitor.export_to_session_summary()
 
-        assert 'max_context_window' in export
-        assert 'model' in export
-        assert 'by_phase' in export
-        assert 'overall' in export
-        assert export['max_context_window'] == 200000
-        assert export['model'] == 'claude-sonnet-4'
+        assert "max_context_window" in export
+        assert "model" in export
+        assert "by_phase" in export
+        assert "overall" in export
+        assert export["max_context_window"] == 200000
+        assert export["model"] == "claude-sonnet-4"
 
     def test_export_includes_latest_phase_analysis(self):
         """Test export uses most recent analysis for each phase"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        monitor.check_phase('Scout', 10000)
-        monitor.check_phase('Scout', 15000)  # Latest
+        monitor.check_phase("Scout", 10000)
+        monitor.check_phase("Scout", 15000)  # Latest
 
         export = monitor.export_to_session_summary()
 
         # Should use latest analysis (15000)
-        assert export['by_phase']['phase_scout']['tokens_used'] == 15000
+        assert export["by_phase"]["phase_scout"]["tokens_used"] == 15000
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

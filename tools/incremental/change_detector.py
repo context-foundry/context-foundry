@@ -15,21 +15,22 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 
 @dataclass
 class ChangeReport:
     """Report of changes detected between builds."""
-    changed_files: List[str]      # Files modified
-    added_files: List[str]         # New files
-    deleted_files: List[str]       # Removed files
-    unchanged_files: List[str]     # Same as before
-    change_percentage: float       # % of files changed
-    git_available: bool            # Whether git was used
-    git_diff_sha: Optional[str]    # Git commit SHA
-    total_files: int               # Total files tracked
-    detection_method: str          # 'git' or 'hash'
+
+    changed_files: List[str]  # Files modified
+    added_files: List[str]  # New files
+    deleted_files: List[str]  # Removed files
+    unchanged_files: List[str]  # Same as before
+    change_percentage: float  # % of files changed
+    git_available: bool  # Whether git was used
+    git_diff_sha: Optional[str]  # Git commit SHA
+    total_files: int  # Total files tracked
+    detection_method: str  # 'git' or 'hash'
 
 
 def get_last_build_snapshot_path(working_directory: str) -> Path:
@@ -76,11 +77,11 @@ def get_git_commit_sha(working_directory: str) -> Optional[str]:
     """
     try:
         result = subprocess.run(
-            ['git', 'rev-parse', 'HEAD'],
+            ["git", "rev-parse", "HEAD"],
             cwd=working_directory,
             capture_output=True,
             text=True,
-            timeout=5
+            timeout=5,
         )
 
         if result.returncode == 0:
@@ -106,30 +107,34 @@ def get_git_changed_files(working_directory: str, base_sha: str) -> Optional[Lis
     try:
         # Get changed files (modified + added)
         result = subprocess.run(
-            ['git', 'diff', '--name-only', base_sha, 'HEAD'],
+            ["git", "diff", "--name-only", base_sha, "HEAD"],
             cwd=working_directory,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode != 0:
             return None
 
-        changed = [f.strip() for f in result.stdout.strip().split('\n') if f.strip()]
+        changed = [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
 
         # Get deleted files
         result_deleted = subprocess.run(
-            ['git', 'diff', '--name-only', '--diff-filter=D', base_sha, 'HEAD'],
+            ["git", "diff", "--name-only", "--diff-filter=D", base_sha, "HEAD"],
             cwd=working_directory,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         deleted = []
         if result_deleted.returncode == 0:
-            deleted = [f.strip() for f in result_deleted.stdout.strip().split('\n') if f.strip()]
+            deleted = [
+                f.strip()
+                for f in result_deleted.stdout.strip().split("\n")
+                if f.strip()
+            ]
 
         return changed + deleted
 
@@ -151,21 +156,49 @@ def get_source_files(working_directory: str) -> List[Path]:
 
     # Patterns to ignore
     ignore_patterns = {
-        '.git', 'node_modules', '__pycache__', '.pytest_cache',
-        'venv', 'env', '.venv', 'dist', 'build', '.context-foundry',
-        'coverage', '.nyc_output'
+        ".git",
+        "node_modules",
+        "__pycache__",
+        ".pytest_cache",
+        "venv",
+        "env",
+        ".venv",
+        "dist",
+        "build",
+        ".context-foundry",
+        "coverage",
+        ".nyc_output",
     }
 
     # Common source file extensions
     source_extensions = {
-        '.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.c', '.cpp',
-        '.h', '.hpp', '.go', '.rs', '.rb', '.php', '.cs', '.swift',
-        '.md', '.json', '.yaml', '.yml', '.toml', '.txt'
+        ".py",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".go",
+        ".rs",
+        ".rb",
+        ".php",
+        ".cs",
+        ".swift",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".txt",
     }
 
     source_files = []
 
-    for file in project_root.rglob('*'):
+    for file in project_root.rglob("*"):
         # Skip ignored paths
         if any(ignore in file.parts for ignore in ignore_patterns):
             continue
@@ -216,7 +249,7 @@ def capture_build_snapshot(working_directory: str) -> Dict[str, Any]:
         "git_sha": git_sha,
         "git_available": git_sha is not None,
         "file_hashes": file_hashes,
-        "total_files": len(file_hashes)
+        "total_files": len(file_hashes),
     }
 
     # Save snapshot
@@ -233,8 +266,7 @@ def capture_build_snapshot(working_directory: str) -> Dict[str, Any]:
 
 
 def detect_changes(
-    working_directory: str,
-    previous_snapshot: Optional[Dict[str, Any]] = None
+    working_directory: str, previous_snapshot: Optional[Dict[str, Any]] = None
 ) -> ChangeReport:
     """
     Detect changes between current state and previous snapshot.
@@ -261,7 +293,7 @@ def detect_changes(
                 git_available=False,
                 git_diff_sha=None,
                 total_files=len(current_hashes),
-                detection_method='none'
+                detection_method="none",
             )
 
         try:
@@ -279,11 +311,11 @@ def detect_changes(
                 git_available=False,
                 git_diff_sha=None,
                 total_files=len(current_hashes),
-                detection_method='error'
+                detection_method="error",
             )
 
     # Try git-based detection first (faster)
-    git_sha = previous_snapshot.get('git_sha')
+    git_sha = previous_snapshot.get("git_sha")
     current_git_sha = get_git_commit_sha(working_directory)
 
     if git_sha and current_git_sha:
@@ -291,7 +323,7 @@ def detect_changes(
 
         if changed_files_git is not None:
             # Git detection successful
-            previous_hashes = previous_snapshot.get('file_hashes', {})
+            previous_hashes = previous_snapshot.get("file_hashes", {})
             all_files = set(previous_hashes.keys())
             changed_set = set(changed_files_git)
 
@@ -302,7 +334,9 @@ def detect_changes(
             unchanged_files = list(all_files - changed_set)
 
             total_files = len(all_files) + len(added_files)
-            change_percentage = (len(changed_set) / total_files * 100) if total_files > 0 else 0
+            change_percentage = (
+                (len(changed_set) / total_files * 100) if total_files > 0 else 0
+            )
 
             print(f"🔍 Change detection (git): {len(changed_set)} changes detected")
             print(f"   Modified: {len(changed_files)}")
@@ -319,13 +353,13 @@ def detect_changes(
                 git_available=True,
                 git_diff_sha=current_git_sha,
                 total_files=total_files,
-                detection_method='git'
+                detection_method="git",
             )
 
     # Fallback to hash-based detection
     print("🔍 Git unavailable, using hash-based detection...")
 
-    previous_hashes = previous_snapshot.get('file_hashes', {})
+    previous_hashes = previous_snapshot.get("file_hashes", {})
     current_hashes = compute_file_hashes(working_directory)
 
     # Find changes
@@ -366,15 +400,15 @@ def detect_changes(
         git_available=False,
         git_diff_sha=current_git_sha,
         total_files=total_files,
-        detection_method='hash'
+        detection_method="hash",
     )
 
 
 __all__ = [
-    'ChangeReport',
-    'capture_build_snapshot',
-    'detect_changes',
-    'get_last_build_snapshot_path',
-    'get_git_commit_sha',
-    'compute_file_hashes'
+    "ChangeReport",
+    "capture_build_snapshot",
+    "detect_changes",
+    "get_last_build_snapshot_path",
+    "get_git_commit_sha",
+    "compute_file_hashes",
 ]

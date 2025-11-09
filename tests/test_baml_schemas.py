@@ -205,7 +205,10 @@ class TestClientsSchema:
 
         # Claude clients removed to avoid Anthropic API charges
         # BAML uses OpenAI GPT-4o-mini instead
-        assert "Claude clients removed" in content or "// Claude clients removed" in content
+        assert (
+            "Claude clients removed" in content
+            or "// Claude clients removed" in content
+        )
 
     def test_defines_openai_clients(self):
         """Test that OpenAI clients are defined"""

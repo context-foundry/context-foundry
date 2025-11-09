@@ -15,12 +15,11 @@ Priority: 9/10 - Critical daemon reliability with <40% coverage
 import pytest
 import tempfile
 import json
-from unittest.mock import Mock, patch, MagicMock, mock_open
+from unittest.mock import Mock, patch
 from pathlib import Path
 import sys
-from datetime import datetime, timedelta
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
 
 
 @pytest.mark.unit
@@ -28,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'tools'))
 class TestQueueNextImprovementTaskErrors:
     """Test _queue_next_improvement_task() error handling"""
 
-    @patch('tools.evolution.daemon.TaskQueue')
+    @patch("tools.evolution.daemon.TaskQueue")
     def test_queue_task_mode_find_todos_exception(self, mock_queue_class):
         """Test when mode._find_todos() raises exception"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -47,7 +46,7 @@ class TestQueueNextImprovementTaskErrors:
             # Daemon should catch and log, not crash
             assert False, f"Daemon crashed on mode exception: {e}"
 
-    @patch('tools.evolution.daemon.TaskQueue')
+    @patch("tools.evolution.daemon.TaskQueue")
     def test_queue_task_database_write_failure(self, mock_queue_class):
         """Test when database write fails"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -59,8 +58,8 @@ class TestQueueNextImprovementTaskErrors:
         mock_mode = Mock(spec=SelfImprovementMode)
         mock_mode.generate_tasks.return_value = [
             {
-                'type': 'self_improvement',
-                'params': {'action': 'test', 'file': 'test.py', 'line': 10}
+                "type": "self_improvement",
+                "params": {"action": "test", "file": "test.py", "line": 10},
             }
         ]
 
@@ -75,7 +74,7 @@ class TestQueueNextImprovementTaskErrors:
         except Exception as e:
             assert False, f"Daemon crashed on database error: {e}"
 
-    @patch('tools.evolution.daemon.TaskQueue')
+    @patch("tools.evolution.daemon.TaskQueue")
     def test_queue_task_invalid_todo_data(self, mock_queue_class):
         """Test when mode returns invalid TODO data"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -88,7 +87,7 @@ class TestQueueNextImprovementTaskErrors:
         mock_mode.generate_tasks.return_value = [
             {
                 # Missing 'type' field
-                'params': {'action': 'test'}
+                "params": {"action": "test"}
             }
         ]
 
@@ -98,7 +97,7 @@ class TestQueueNextImprovementTaskErrors:
         # Should handle invalid data gracefully
         try:
             daemon._queue_next_improvement_task(mock_mode)
-        except Exception as e:
+        except Exception:
             # May raise validation error, which is acceptable
             pass
 
@@ -108,7 +107,7 @@ class TestQueueNextImprovementTaskErrors:
 class TestGitHubAPIErrors:
     """Test GitHub API error recovery"""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_rate_limiting(self, mock_run):
         """Test handling GitHub API rate limiting"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -117,9 +116,7 @@ class TestGitHubAPIErrors:
 
         # Mock gh CLI rate limit error
         mock_run.return_value = Mock(
-            returncode=1,
-            stdout='',
-            stderr='API rate limit exceeded'
+            returncode=1, stdout="", stderr="API rate limit exceeded"
         )
 
         # Should handle rate limiting gracefully
@@ -130,7 +127,7 @@ class TestGitHubAPIErrors:
         except Exception as e:
             assert False, f"Daemon crashed on rate limit: {e}"
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_network_failure(self, mock_run):
         """Test handling network failures"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -144,11 +141,11 @@ class TestGitHubAPIErrors:
         try:
             prs = daemon._check_open_prs()
             assert isinstance(prs, list)
-        except Exception as e:
+        except Exception:
             # Acceptable to fail, but should not crash daemon
             pass
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_invalid_token(self, mock_run):
         """Test handling invalid GitHub token"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -156,11 +153,7 @@ class TestGitHubAPIErrors:
         daemon = EvolutionDaemon()
 
         # Mock authentication error
-        mock_run.return_value = Mock(
-            returncode=1,
-            stdout='',
-            stderr='Bad credentials'
-        )
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="Bad credentials")
 
         # Should handle auth error gracefully
         try:
@@ -169,7 +162,7 @@ class TestGitHubAPIErrors:
         except Exception as e:
             assert False, f"Daemon crashed on auth error: {e}"
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_malformed_response(self, mock_run):
         """Test handling malformed GitHub API response"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -177,11 +170,7 @@ class TestGitHubAPIErrors:
         daemon = EvolutionDaemon()
 
         # Mock malformed JSON response
-        mock_run.return_value = Mock(
-            returncode=0,
-            stdout='{ invalid json }',
-            stderr=''
-        )
+        mock_run.return_value = Mock(returncode=0, stdout="{ invalid json }", stderr="")
 
         # Should handle malformed response gracefully
         try:
@@ -191,7 +180,7 @@ class TestGitHubAPIErrors:
             # JSON parsing may fail, which is acceptable
             pass
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_recently_closed_prs_timestamp_parsing_error(self, mock_run):
         """Test handling PR data with invalid timestamps"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -199,16 +188,16 @@ class TestGitHubAPIErrors:
         daemon = EvolutionDaemon()
 
         # Mock PR with invalid timestamp
-        pr_data = [{
-            'number': 123,
-            'title': 'Test PR',
-            'closedAt': 'invalid-timestamp',
-            'mergedAt': 'also-invalid'
-        }]
+        pr_data = [
+            {
+                "number": 123,
+                "title": "Test PR",
+                "closedAt": "invalid-timestamp",
+                "mergedAt": "also-invalid",
+            }
+        ]
         mock_run.return_value = Mock(
-            returncode=0,
-            stdout=json.dumps(pr_data),
-            stderr=''
+            returncode=0, stdout=json.dumps(pr_data), stderr=""
         )
 
         # Should handle timestamp parsing errors
@@ -219,7 +208,7 @@ class TestGitHubAPIErrors:
             # Timestamp parsing may fail
             pass
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_recently_closed_prs_missing_fields(self, mock_run):
         """Test handling PR data with missing required fields"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -227,14 +216,14 @@ class TestGitHubAPIErrors:
         daemon = EvolutionDaemon()
 
         # Mock PR with missing fields
-        pr_data = [{
-            'number': 123,
-            # Missing 'title', 'closedAt', 'mergedAt'
-        }]
+        pr_data = [
+            {
+                "number": 123,
+                # Missing 'title', 'closedAt', 'mergedAt'
+            }
+        ]
         mock_run.return_value = Mock(
-            returncode=0,
-            stdout=json.dumps(pr_data),
-            stderr=''
+            returncode=0, stdout=json.dumps(pr_data), stderr=""
         )
 
         # Should handle missing fields
@@ -255,12 +244,12 @@ class TestConfigLoadingErrors:
         from tools.evolution.daemon import EvolutionDaemon
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / 'daemon_config.json'
-            config_path.write_text('{ invalid json syntax }')
+            config_path = Path(tmpdir) / "daemon_config.json"
+            config_path.write_text("{ invalid json syntax }")
 
             daemon = EvolutionDaemon()
 
-            with patch('pathlib.Path.home', return_value=Path(tmpdir)):
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
                 # Should handle malformed JSON gracefully
                 try:
                     config = daemon._load_config()
@@ -274,13 +263,13 @@ class TestConfigLoadingErrors:
         from tools.evolution.daemon import EvolutionDaemon
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / 'daemon_config.json'
+            config_path = Path(tmpdir) / "daemon_config.json"
             # Missing critical fields
             config_path.write_text('{"incomplete": true}')
 
             daemon = EvolutionDaemon()
 
-            with patch('pathlib.Path.home', return_value=Path(tmpdir)):
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
                 try:
                     config = daemon._load_config()
                     # Should apply defaults for missing fields
@@ -293,18 +282,18 @@ class TestConfigLoadingErrors:
         from tools.evolution.daemon import EvolutionDaemon
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / 'daemon_config.json'
+            config_path = Path(tmpdir) / "daemon_config.json"
             # Invalid types (string instead of number, etc.)
             invalid_config = {
-                'poll_interval': 'not-a-number',
-                'max_concurrent_tasks': 'also-not-a-number',
-                'enabled': 'not-a-boolean'
+                "poll_interval": "not-a-number",
+                "max_concurrent_tasks": "also-not-a-number",
+                "enabled": "not-a-boolean",
             }
             config_path.write_text(json.dumps(invalid_config))
 
             daemon = EvolutionDaemon()
 
-            with patch('pathlib.Path.home', return_value=Path(tmpdir)):
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
                 try:
                     config = daemon._load_config()
                     # Should validate and use defaults for invalid types
@@ -317,13 +306,13 @@ class TestConfigLoadingErrors:
         from tools.evolution.daemon import EvolutionDaemon
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / 'daemon_config.json'
+            config_path = Path(tmpdir) / "daemon_config.json"
             config_path.write_text('{"test": true}')
             config_path.chmod(0o000)  # Remove all permissions
 
             daemon = EvolutionDaemon()
 
-            with patch('pathlib.Path.home', return_value=Path(tmpdir)):
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
                 try:
                     config = daemon._load_config()
                     # Should fall back to defaults
@@ -341,7 +330,7 @@ class TestConfigLoadingErrors:
         daemon = EvolutionDaemon()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch('pathlib.Path.home', return_value=Path(tmpdir)):
+            with patch("pathlib.Path.home", return_value=Path(tmpdir)):
                 # Config file doesn't exist
                 config = daemon._load_config()
                 # Should return default config
@@ -353,7 +342,7 @@ class TestConfigLoadingErrors:
 class TestPRDetectionEdgeCases:
     """Test PR detection edge cases"""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_detect_prs_empty_repository(self, mock_run):
         """Test PR detection on repository with no PRs"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -361,16 +350,12 @@ class TestPRDetectionEdgeCases:
         daemon = EvolutionDaemon()
 
         # Mock empty PR list
-        mock_run.return_value = Mock(
-            returncode=0,
-            stdout='[]',
-            stderr=''
-        )
+        mock_run.return_value = Mock(returncode=0, stdout="[]", stderr="")
 
         prs = daemon._check_open_prs()
         assert prs == [] or isinstance(prs, list)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_detect_prs_very_large_response(self, mock_run):
         """Test handling very large PR list response"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -379,13 +364,10 @@ class TestPRDetectionEdgeCases:
 
         # Mock very large PR list (1000 PRs)
         large_pr_list = [
-            {'number': i, 'title': f'PR {i}', 'state': 'open'}
-            for i in range(1000)
+            {"number": i, "title": f"PR {i}", "state": "open"} for i in range(1000)
         ]
         mock_run.return_value = Mock(
-            returncode=0,
-            stdout=json.dumps(large_pr_list),
-            stderr=''
+            returncode=0, stdout=json.dumps(large_pr_list), stderr=""
         )
 
         try:
@@ -396,7 +378,7 @@ class TestPRDetectionEdgeCases:
             # Memory/parsing may fail on very large response
             pass
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_detect_prs_gh_cli_not_installed(self, mock_run):
         """Test when gh CLI is not installed"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -420,7 +402,7 @@ class TestPRDetectionEdgeCases:
 class TestDaemonRecoveryMechanisms:
     """Test daemon self-recovery mechanisms"""
 
-    @patch('tools.evolution.daemon.TaskQueue')
+    @patch("tools.evolution.daemon.TaskQueue")
     def test_daemon_continues_after_task_execution_error(self, mock_queue_class):
         """Test that daemon continues running after task execution fails"""
         from tools.evolution.daemon import EvolutionDaemon
@@ -455,5 +437,5 @@ class TestDaemonRecoveryMechanisms:
         assert daemon.running == False
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

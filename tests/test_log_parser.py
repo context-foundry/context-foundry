@@ -17,7 +17,7 @@ class TestLogParser:
 
     def test_parse_api_response_json(self):
         """Test parsing standard Claude API JSON response"""
-        log_line = '''{"id": "msg_123", "type": "message", "usage": {"input_tokens": 1250, "output_tokens": 580, "cache_read_input_tokens": 940}}'''
+        log_line = """{"id": "msg_123", "type": "message", "usage": {"input_tokens": 1250, "output_tokens": 580, "cache_read_input_tokens": 940}}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -29,7 +29,7 @@ class TestLogParser:
 
     def test_parse_api_response_with_cache_write(self):
         """Test parsing response with cache write tokens"""
-        log_line = '''{"usage": {"input_tokens": 500, "output_tokens": 200, "cache_creation_input_tokens": 300, "cache_read_input_tokens": 100}}'''
+        log_line = """{"usage": {"input_tokens": 500, "output_tokens": 200, "cache_creation_input_tokens": 300, "cache_read_input_tokens": 100}}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -62,7 +62,7 @@ class TestLogParser:
 
     def test_parse_malformed_json(self):
         """Test handling malformed JSON"""
-        log_line = '''{"usage": {"input_tokens": 500, "output_tok'''
+        log_line = """{"usage": {"input_tokens": 500, "output_tok"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -70,7 +70,7 @@ class TestLogParser:
 
     def test_parse_missing_usage_field(self):
         """Test handling JSON without usage field"""
-        log_line = '''{"id": "msg_123", "type": "message"}'''
+        log_line = """{"id": "msg_123", "type": "message"}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -78,7 +78,7 @@ class TestLogParser:
 
     def test_parse_zero_tokens(self):
         """Test handling zero token counts"""
-        log_line = '''{"usage": {"input_tokens": 0, "output_tokens": 0}}'''
+        log_line = """{"usage": {"input_tokens": 0, "output_tokens": 0}}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -88,7 +88,7 @@ class TestLogParser:
 
     def test_parse_large_token_counts(self):
         """Test handling large token counts"""
-        log_line = '''{"usage": {"input_tokens": 195000, "output_tokens": 4500}}'''
+        log_line = """{"usage": {"input_tokens": 195000, "output_tokens": 4500}}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -99,7 +99,7 @@ class TestLogParser:
 
     def test_parse_with_model_info(self):
         """Test extracting model information"""
-        log_line = '''{"id": "msg_123", "model": "claude-sonnet-4-20250514", "usage": {"input_tokens": 1000, "output_tokens": 500}}'''
+        log_line = """{"id": "msg_123", "model": "claude-sonnet-4-20250514", "usage": {"input_tokens": 1000, "output_tokens": 500}}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -120,7 +120,7 @@ class TestLogParser:
 
     def test_parse_unicode_handling(self):
         """Test handling Unicode characters in logs"""
-        log_line = '''{"id": "msg_123", "usage": {"input_tokens": 1000, "output_tokens": 500}, "content": "Hello 世界"}'''
+        log_line = """{"id": "msg_123", "usage": {"input_tokens": 1000, "output_tokens": 500}, "content": "Hello 世界"}"""
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -129,11 +129,7 @@ class TestLogParser:
 
     def test_total_tokens_calculation(self):
         """Test total tokens property calculation"""
-        usage = TokenUsage(
-            input_tokens=1250,
-            output_tokens=580,
-            cache_read_tokens=940
-        )
+        usage = TokenUsage(input_tokens=1250, output_tokens=580, cache_read_tokens=940)
 
         assert usage.total_tokens == 1830
 
@@ -143,16 +139,16 @@ class TestLogParser:
             input_tokens=1000,
             output_tokens=500,
             cache_read_tokens=200,
-            request_id="msg_123"
+            request_id="msg_123",
         )
 
         result = usage.to_dict()
 
-        assert result['input_tokens'] == 1000
-        assert result['output_tokens'] == 500
-        assert result['cache_read_tokens'] == 200
-        assert result['total_tokens'] == 1500
-        assert result['request_id'] == "msg_123"
+        assert result["input_tokens"] == 1000
+        assert result["output_tokens"] == 500
+        assert result["cache_read_tokens"] == 200
+        assert result["total_tokens"] == 1500
+        assert result["request_id"] == "msg_123"
 
     def test_calculate_latency(self):
         """Test latency calculation"""
@@ -181,7 +177,7 @@ class TestLogParser:
         """Test parsing multiple API responses from stream"""
         lines = [
             '{"usage": {"input_tokens": 1000, "output_tokens": 500}}',
-            'Some other log line',
+            "Some other log line",
             '{"usage": {"input_tokens": 2000, "output_tokens": 800}}',
         ]
 
@@ -195,7 +191,7 @@ class TestLogParser:
         """Test parsing stream with mixed formats"""
         lines = [
             '{"usage": {"input_tokens": 1000, "output_tokens": 500}}',
-            'Input tokens: 1250, Output tokens: 580',
+            "Input tokens: 1250, Output tokens: 580",
         ]
 
         results = list(self.parser.parse_stream(lines))
@@ -212,7 +208,9 @@ class TestLogParser:
 
     def test_parse_usage_string_utility(self):
         """Test parse_usage_string utility function"""
-        usage = parse_usage_string('{"usage": {"input_tokens": 1500, "output_tokens": 750}}')
+        usage = parse_usage_string(
+            '{"usage": {"input_tokens": 1500, "output_tokens": 750}}'
+        )
 
         assert usage is not None
         assert usage.input_tokens == 1500
@@ -220,7 +218,7 @@ class TestLogParser:
 
     def test_parse_nested_json_block(self):
         """Test parsing nested JSON with usage field"""
-        log_line = '''
+        log_line = """
         {
             "id": "msg_456",
             "type": "message",
@@ -232,7 +230,7 @@ class TestLogParser:
             },
             "content": [{"type": "text", "text": "Response"}]
         }
-        '''
+        """
 
         usage = self.parser.parse_api_response(log_line)
 
@@ -251,5 +249,5 @@ class TestLogParser:
         assert usage.timestamp == "2025-01-13T10:30:00"
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

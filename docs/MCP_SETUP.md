@@ -327,4 +327,3 @@ The complete MCP implementation is ready and tested. When Claude Desktop adds sa
 
 **For now:**
 Use API mode with your Anthropic API key. It works perfectly and gives you the full Context Foundry experience. This incurs per-token API charges separate from your Claude subscription.
-

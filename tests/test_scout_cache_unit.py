@@ -12,13 +12,11 @@ Tests:
 
 import pytest
 import tempfile
-import time
 from pathlib import Path
-from unittest.mock import patch
-from datetime import datetime, timedelta
 
 # Import scout cache module
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from tools.cache.scout_cache import (
@@ -27,7 +25,7 @@ from tools.cache.scout_cache import (
     get_cached_scout_report,
     save_scout_report_to_cache,
     clear_scout_cache,
-    get_scout_cache_stats
+    get_scout_cache_stats,
 )
 
 
@@ -58,7 +56,7 @@ class TestNormalizeTaskDescription:
         task1 = "Build a weather app"
         task2 = "Build  a   weather    app"
         task3 = "BUILD A WEATHER APP"
-        
+
         assert normalize_task_description(task1) == normalize_task_description(task2)
         assert normalize_task_description(task1) == normalize_task_description(task3)
 
@@ -96,7 +94,9 @@ class TestGenerateCacheKey:
     def test_different_tasks_generate_different_keys(self):
         """Test that different tasks produce different keys."""
         key1 = generate_scout_cache_key("Build TODO app", "new_project", "/tmp/project")
-        key2 = generate_scout_cache_key("Build weather app", "new_project", "/tmp/project")
+        key2 = generate_scout_cache_key(
+            "Build weather app", "new_project", "/tmp/project"
+        )
         assert key1 != key2
 
     @pytest.mark.unit
@@ -119,8 +119,12 @@ class TestGenerateCacheKey:
     @pytest.mark.tier1
     def test_normalized_tasks_generate_same_key(self):
         """Test that variations of same task generate same key."""
-        key1 = generate_scout_cache_key("Build weather app", "new_project", "/tmp/project")
-        key2 = generate_scout_cache_key("BUILD  WEATHER   APP", "new_project", "/tmp/project")
+        key1 = generate_scout_cache_key(
+            "Build weather app", "new_project", "/tmp/project"
+        )
+        key2 = generate_scout_cache_key(
+            "BUILD  WEATHER   APP", "new_project", "/tmp/project"
+        )
         assert key1 == key2  # Should be same due to normalization
 
 
@@ -143,10 +147,10 @@ class TestScoutCacheHitMiss:
             task = "Build test app"
             mode = "new_project"
             report = "# Scout Report\nTest content"
-            
+
             # Save report
             save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Retrieve report
             cached = get_cached_scout_report(task, mode, tmpdir)
             assert cached == report
@@ -160,10 +164,10 @@ class TestScoutCacheHitMiss:
             task2 = "Build app B"
             mode = "new_project"
             report = "# Scout Report"
-            
+
             # Save for task1
             save_scout_report_to_cache(task1, mode, tmpdir, report)
-            
+
             # Try to retrieve for task2
             cached = get_cached_scout_report(task2, mode, tmpdir)
             assert cached is None
@@ -177,10 +181,10 @@ class TestScoutCacheHitMiss:
             mode1 = "new_project"
             mode2 = "add_feature"
             report = "# Scout Report"
-            
+
             # Save for mode1
             save_scout_report_to_cache(task, mode1, tmpdir, report)
-            
+
             # Try to retrieve for mode2
             cached = get_cached_scout_report(task, mode2, tmpdir)
             assert cached is None
@@ -194,10 +198,10 @@ class TestScoutCacheHitMiss:
             task2 = "BUILD  WEATHER   APP"  # Different case/spacing
             mode = "new_project"
             report = "# Scout Report"
-            
+
             # Save for task1
             save_scout_report_to_cache(task1, mode, tmpdir, report)
-            
+
             # Retrieve for task2 (should hit due to normalization)
             cached = get_cached_scout_report(task2, mode, tmpdir)
             assert cached == report
@@ -214,10 +218,10 @@ class TestScoutCacheTTL:
             task = "Build app"
             mode = "new_project"
             report = "# Scout Report"
-            
+
             # Save report
             save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Retrieve immediately (within TTL)
             cached = get_cached_scout_report(task, mode, tmpdir, ttl_hours=24)
             assert cached == report
@@ -230,10 +234,10 @@ class TestScoutCacheTTL:
             task = "Build app"
             mode = "new_project"
             report = "# Scout Report"
-            
+
             # Save report
             save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Should be valid with large TTL
             cached = get_cached_scout_report(task, mode, tmpdir, ttl_hours=1000)
             assert cached == report
@@ -250,13 +254,13 @@ class TestSaveScoutReport:
             task = "Build app"
             mode = "new_project"
             report = "# Scout Report\nContent"
-            
+
             save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Check that cache directory was created
             cache_dir = Path(tmpdir) / ".context-foundry" / "cache"
             assert cache_dir.exists()
-            
+
             # Check that a scout cache file exists
             scout_files = list(cache_dir.glob("scout-*.md"))
             assert len(scout_files) > 0
@@ -269,10 +273,10 @@ class TestSaveScoutReport:
             task = "Build app"
             mode = "new_project"
             report = "# Scout Report\n\nDetailed content\n\nMore sections"
-            
+
             save_scout_report_to_cache(task, mode, tmpdir, report)
             cached = get_cached_scout_report(task, mode, tmpdir)
-            
+
             assert cached == report
 
     @pytest.mark.unit
@@ -284,13 +288,13 @@ class TestSaveScoutReport:
             mode = "new_project"
             report1 = "# Scout Report v1"
             report2 = "# Scout Report v2"
-            
+
             # Save first version
             save_scout_report_to_cache(task, mode, tmpdir, report1)
-            
+
             # Save second version (should overwrite)
             save_scout_report_to_cache(task, mode, tmpdir, report2)
-            
+
             # Should get second version
             cached = get_cached_scout_report(task, mode, tmpdir)
             assert cached == report2
@@ -307,16 +311,13 @@ class TestClearScoutCache:
             # Save multiple reports
             for i in range(3):
                 save_scout_report_to_cache(
-                    f"Build app {i}",
-                    "new_project",
-                    tmpdir,
-                    f"# Report {i}"
+                    f"Build app {i}", "new_project", tmpdir, f"# Report {i}"
                 )
-            
+
             # Clear cache
             deleted = clear_scout_cache(tmpdir)
             assert deleted == 3
-            
+
             # Verify all cleared
             cache_dir = Path(tmpdir) / ".context-foundry" / "cache"
             scout_files = list(cache_dir.glob("scout-*.md"))
@@ -356,9 +357,9 @@ class TestScoutCacheStats:
                     f"Build app {i}",
                     "new_project",
                     tmpdir,
-                    f"# Report {i}" * 100  # Make it reasonably sized
+                    f"# Report {i}" * 100,  # Make it reasonably sized
                 )
-            
+
             stats = get_scout_cache_stats(tmpdir)
             assert stats["total_entries"] == 3
             assert stats["valid_entries"] == 3
@@ -371,13 +372,8 @@ class TestScoutCacheStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Save a report with known size
             large_report = "# Scout Report\n" + ("x" * 10000)  # ~10KB
-            save_scout_report_to_cache(
-                "Build app",
-                "new_project",
-                tmpdir,
-                large_report
-            )
-            
+            save_scout_report_to_cache("Build app", "new_project", tmpdir, large_report)
+
             stats = get_scout_cache_stats(tmpdir)
             assert stats["total_size_kb"] > 9  # Should be at least 9KB
 
@@ -393,15 +389,15 @@ class TestScoutCacheIntegration:
             tasks = [
                 ("Build TODO app", "# TODO Report"),
                 ("Build weather app", "# Weather Report"),
-                ("Build blog", "# Blog Report")
+                ("Build blog", "# Blog Report"),
             ]
-            
+
             mode = "new_project"
-            
+
             # Save all reports
             for task, report in tasks:
                 save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Verify each can be retrieved correctly
             for task, expected_report in tasks:
                 cached = get_cached_scout_report(task, mode, tmpdir)
@@ -415,26 +411,26 @@ class TestScoutCacheIntegration:
             task = "Build app"
             mode = "new_project"
             report = "# Scout Report"
-            
+
             # Save
             save_scout_report_to_cache(task, mode, tmpdir, report)
-            
+
             # Retrieve
             cached = get_cached_scout_report(task, mode, tmpdir)
             assert cached == report
-            
+
             # Check stats
             stats = get_scout_cache_stats(tmpdir)
             assert stats["total_entries"] == 1
-            
+
             # Clear
             deleted = clear_scout_cache(tmpdir)
             assert deleted == 1
-            
+
             # Verify cleared
             cached_after_clear = get_cached_scout_report(task, mode, tmpdir)
             assert cached_after_clear is None
-            
+
             # Stats should be empty
             stats_after = get_scout_cache_stats(tmpdir)
             assert stats_after["total_entries"] == 0

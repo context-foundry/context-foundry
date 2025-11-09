@@ -16,7 +16,6 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Set, Optional
 from dataclasses import dataclass, asdict
-from datetime import datetime
 
 from .change_detector import ChangeReport
 
@@ -24,32 +23,28 @@ from .change_detector import ChangeReport
 @dataclass
 class DependencyGraph:
     """Dependency graph structure."""
+
     nodes: Dict[str, Dict[str, Any]]  # file -> {type, imports}
-    edges: List[List[str]]             # [[from, to], ...]
+    edges: List[List[str]]  # [[from, to], ...]
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for JSON serialization."""
-        return {
-            "nodes": self.nodes,
-            "edges": self.edges
-        }
+        return {"nodes": self.nodes, "edges": self.edges}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'DependencyGraph':
+    def from_dict(cls, data: Dict[str, Any]) -> "DependencyGraph":
         """Create from dict."""
-        return cls(
-            nodes=data.get('nodes', {}),
-            edges=data.get('edges', [])
-        )
+        return cls(nodes=data.get("nodes", {}), edges=data.get("edges", []))
 
 
 @dataclass
 class BuildPlan:
     """Incremental build plan."""
-    files_to_preserve: List[str]    # Copy from previous build
-    files_to_rebuild: List[str]     # Regenerate
-    files_to_create: List[str]      # New files
-    dependency_order: List[str]     # Build order
+
+    files_to_preserve: List[str]  # Copy from previous build
+    files_to_rebuild: List[str]  # Regenerate
+    files_to_create: List[str]  # New files
+    dependency_order: List[str]  # Build order
     estimated_time_saved_minutes: float
 
     def to_dict(self) -> Dict[str, Any]:
@@ -82,11 +77,11 @@ def extract_python_imports(file_path: Path) -> List[str]:
 
         # Match: import foo, from foo import bar, from foo.bar import baz
         import_patterns = [
-            r'^\s*import\s+([\w.]+)',
-            r'^\s*from\s+([\w.]+)\s+import',
+            r"^\s*import\s+([\w.]+)",
+            r"^\s*from\s+([\w.]+)\s+import",
         ]
 
-        for line in content.split('\n'):
+        for line in content.split("\n"):
             for pattern in import_patterns:
                 match = re.match(pattern, line)
                 if match:
@@ -131,9 +126,7 @@ def extract_javascript_imports(file_path: Path) -> List[str]:
 
 
 def resolve_module_to_file(
-    module_name: str,
-    file_type: str,
-    project_root: Path
+    module_name: str, file_type: str, project_root: Path
 ) -> Optional[str]:
     """
     Resolve module name to file path (relative to project root).
@@ -146,9 +139,9 @@ def resolve_module_to_file(
     Returns:
         Relative file path or None if not found
     """
-    if file_type == 'python':
+    if file_type == "python":
         # Convert module.submodule to module/submodule.py
-        module_path = module_name.replace('.', '/')
+        module_path = module_name.replace(".", "/")
 
         # Try .py file
         py_file = project_root / f"{module_path}.py"
@@ -160,22 +153,21 @@ def resolve_module_to_file(
         if init_file.exists():
             return str(init_file.relative_to(project_root))
 
-    elif file_type == 'javascript':
+    elif file_type == "javascript":
         # Handle relative imports (./foo, ../bar)
-        if module_name.startswith('.'):
+        if module_name.startswith("."):
             # Resolve relative path (simplified)
             return None  # Skip relative imports for now
 
         # Try node_modules (skip external dependencies)
-        if not module_name.startswith('.') and not module_name.startswith('/'):
+        if not module_name.startswith(".") and not module_name.startswith("/"):
             return None  # External dependency
 
     return None
 
 
 def build_dependency_graph(
-    working_directory: str,
-    source_files: Optional[List[str]] = None
+    working_directory: str, source_files: Optional[List[str]] = None
 ) -> DependencyGraph:
     """
     Build dependency graph from source code.
@@ -192,6 +184,7 @@ def build_dependency_graph(
     # Auto-detect source files if not provided
     if source_files is None:
         from .change_detector import get_source_files
+
         source_files_paths = get_source_files(working_directory)
         source_files = [str(f.relative_to(project_root)) for f in source_files_paths]
 
@@ -206,11 +199,11 @@ def build_dependency_graph(
 
         # Determine file type
         file_type = None
-        if file_path.suffix == '.py':
-            file_type = 'python'
+        if file_path.suffix == ".py":
+            file_type = "python"
             imports = extract_python_imports(file_path)
-        elif file_path.suffix in {'.js', '.jsx', '.ts', '.tsx'}:
-            file_type = 'javascript'
+        elif file_path.suffix in {".js", ".jsx", ".ts", ".tsx"}:
+            file_type = "javascript"
             imports = extract_javascript_imports(file_path)
         else:
             # Unsupported file type - add node but no imports
@@ -218,10 +211,7 @@ def build_dependency_graph(
             continue
 
         # Add node
-        nodes[file_rel] = {
-            "type": file_type,
-            "imports": imports
-        }
+        nodes[file_rel] = {"type": file_type, "imports": imports}
 
         # Resolve imports to file paths and add edges
         for module_name in imports:
@@ -243,10 +233,7 @@ def build_dependency_graph(
     return graph
 
 
-def find_affected_files(
-    graph: DependencyGraph,
-    changed_files: List[str]
-) -> List[str]:
+def find_affected_files(graph: DependencyGraph, changed_files: List[str]) -> List[str]:
     """
     Find files affected by changes (transitive dependencies).
 
@@ -281,7 +268,9 @@ def find_affected_files(
                     affected.add(dependent)
                     queue.append(dependent)
 
-    print(f"📈 Affected files: {len(changed_files)} changed → {len(affected)} affected (transitive)")
+    print(
+        f"📈 Affected files: {len(changed_files)} changed → {len(affected)} affected (transitive)"
+    )
 
     return sorted(affected)
 
@@ -307,9 +296,7 @@ def get_previous_build_dir(working_directory: str) -> Optional[Path]:
 
 
 def preserve_unchanged_files(
-    working_directory: str,
-    previous_build_dir: str,
-    unchanged_files: List[str]
+    working_directory: str, previous_build_dir: str, unchanged_files: List[str]
 ) -> int:
     """
     Copy unchanged files from previous build.
@@ -391,7 +378,7 @@ def create_incremental_build_plan(
     working_directory: str,
     change_report: ChangeReport,
     graph: Optional[DependencyGraph] = None,
-    avg_file_build_time_minutes: float = 0.5
+    avg_file_build_time_minutes: float = 0.5,
 ) -> BuildPlan:
     """
     Generate incremental build plan.
@@ -425,8 +412,7 @@ def create_incremental_build_plan(
     files_to_rebuild = affected_files
     files_to_create = change_report.added_files
     files_to_preserve = [
-        f for f in change_report.unchanged_files
-        if f not in affected_files
+        f for f in change_report.unchanged_files if f not in affected_files
     ]
 
     # Get build order (topological sort)
@@ -440,10 +426,14 @@ def create_incremental_build_plan(
     files_preserved_count = len(files_to_preserve)
     time_saved = files_preserved_count * avg_file_build_time_minutes
 
-    print(f"")
-    print(f"📋 Incremental Build Plan:")
-    print(f"   Files to preserve: {len(files_to_preserve)} ({files_preserved_count/total_files*100:.1f}%)")
-    print(f"   Files to rebuild: {len(files_to_rebuild)} ({len(files_to_rebuild)/total_files*100:.1f}%)")
+    print("")
+    print("📋 Incremental Build Plan:")
+    print(
+        f"   Files to preserve: {len(files_to_preserve)} ({files_preserved_count / total_files * 100:.1f}%)"
+    )
+    print(
+        f"   Files to rebuild: {len(files_to_rebuild)} ({len(files_to_rebuild) / total_files * 100:.1f}%)"
+    )
     print(f"   Files to create: {len(files_to_create)}")
     print(f"   Estimated time saved: {time_saved:.1f} minutes")
 
@@ -452,16 +442,16 @@ def create_incremental_build_plan(
         files_to_rebuild=files_to_rebuild,
         files_to_create=files_to_create,
         dependency_order=dependency_order,
-        estimated_time_saved_minutes=time_saved
+        estimated_time_saved_minutes=time_saved,
     )
 
 
 __all__ = [
-    'DependencyGraph',
-    'BuildPlan',
-    'build_dependency_graph',
-    'find_affected_files',
-    'create_incremental_build_plan',
-    'preserve_unchanged_files',
-    'get_build_graph_path'
+    "DependencyGraph",
+    "BuildPlan",
+    "build_dependency_graph",
+    "find_affected_files",
+    "create_incremental_build_plan",
+    "preserve_unchanged_files",
+    "get_build_graph_path",
 ]

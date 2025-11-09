@@ -5,7 +5,6 @@ Manages settings, profiles, and environment configuration.
 """
 
 import os
-import json
 import logging
 from pathlib import Path
 from typing import Dict, Optional, Any
@@ -18,27 +17,32 @@ logger = logging.getLogger(__name__)
 
 class ConfigError(Exception):
     """Base exception for configuration errors."""
+
     pass
 
 
 class ConfigFileError(ConfigError):
     """Exception raised for config file read/write errors."""
+
     pass
 
 
 class ConfigValidationError(ConfigError):
     """Exception raised for configuration validation errors."""
+
     pass
 
 
 class ConfigParseError(ConfigError):
     """Exception raised for YAML/JSON parsing errors."""
+
     pass
 
 
 @dataclass
 class FoundryConfig:
     """Context Foundry configuration."""
+
     # API Settings
     api_key: str = ""
     model: str = "claude-sonnet-4-20250514"
@@ -114,9 +118,13 @@ class ConfigManager:
                 with open(self.config_path) as f:
                     data = yaml.safe_load(f) or {}
             except OSError as e:
-                raise ConfigFileError(f"Failed to read config file {self.config_path}: {e}") from e
+                raise ConfigFileError(
+                    f"Failed to read config file {self.config_path}: {e}"
+                ) from e
             except yaml.YAMLError as e:
-                raise ConfigParseError(f"Failed to parse YAML in {self.config_path}: {e}") from e
+                raise ConfigParseError(
+                    f"Failed to parse YAML in {self.config_path}: {e}"
+                ) from e
 
             # Load profiles
             profiles_data = data.get("profiles", {})
@@ -124,7 +132,9 @@ class ConfigManager:
                 try:
                     self.profiles[profile_name] = FoundryConfig(**profile_data)
                 except TypeError as e:
-                    logger.warning(f"Invalid data for profile '{profile_name}': {e}. Using defaults.")
+                    logger.warning(
+                        f"Invalid data for profile '{profile_name}': {e}. Using defaults."
+                    )
                     self.profiles[profile_name] = FoundryConfig()
 
             # Set current profile
@@ -138,7 +148,9 @@ class ConfigManager:
 
         # Ensure current profile exists
         if self.current_profile not in self.profiles:
-            logger.warning(f"Current profile '{self.current_profile}' not found. Creating with defaults.")
+            logger.warning(
+                f"Current profile '{self.current_profile}' not found. Creating with defaults."
+            )
             self.profiles[self.current_profile] = FoundryConfig()
 
     def _apply_env_overrides(self):
@@ -155,12 +167,16 @@ class ConfigManager:
             if os.getenv("MAX_TOKENS"):
                 try:
                     profile.max_tokens = int(os.getenv("MAX_TOKENS"))
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid MAX_TOKENS value: {os.getenv('MAX_TOKENS')}. Using default.")
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Invalid MAX_TOKENS value: {os.getenv('MAX_TOKENS')}. Using default."
+                    )
 
             # Context settings
             if os.getenv("USE_CONTEXT_MANAGER"):
-                profile.use_context_manager = os.getenv("USE_CONTEXT_MANAGER").lower() == "true"
+                profile.use_context_manager = (
+                    os.getenv("USE_CONTEXT_MANAGER").lower() == "true"
+                )
 
             # Pattern settings
             if os.getenv("USE_PATTERNS"):
@@ -172,8 +188,10 @@ class ConfigManager:
             if os.getenv("SMTP_PORT"):
                 try:
                     profile.smtp_port = int(os.getenv("SMTP_PORT"))
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid SMTP_PORT value: {os.getenv('SMTP_PORT')}. Using default.")
+                except (ValueError, TypeError):
+                    logger.warning(
+                        f"Invalid SMTP_PORT value: {os.getenv('SMTP_PORT')}. Using default."
+                    )
             if os.getenv("SMTP_USER"):
                 profile.smtp_user = os.getenv("SMTP_USER")
             if os.getenv("SMTP_PASS"):
@@ -258,25 +276,30 @@ class ConfigManager:
         try:
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            raise ConfigFileError(f"Failed to create config directory {self.config_path.parent}: {e}") from e
+            raise ConfigFileError(
+                f"Failed to create config directory {self.config_path.parent}: {e}"
+            ) from e
 
         data = {
             "current_profile": self.current_profile,
             "profiles": {
-                name: asdict(config)
-                for name, config in self.profiles.items()
-            }
+                name: asdict(config) for name, config in self.profiles.items()
+            },
         }
 
         try:
             with open(self.config_path, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
         except OSError as e:
-            raise ConfigFileError(f"Failed to write config file {self.config_path}: {e}") from e
+            raise ConfigFileError(
+                f"Failed to write config file {self.config_path}: {e}"
+            ) from e
         except yaml.YAMLError as e:
             raise ConfigParseError(f"Failed to serialize config to YAML: {e}") from e
 
-    def create_profile(self, name: str, from_profile: Optional[str] = None) -> FoundryConfig:
+    def create_profile(
+        self, name: str, from_profile: Optional[str] = None
+    ) -> FoundryConfig:
         """Create a new profile.
 
         Args:
@@ -342,7 +365,7 @@ class ConfigManager:
                 "autonomous": config.autonomous_mode,
                 "context_manager": config.use_context_manager,
                 "patterns": config.use_patterns,
-                "is_current": name == self.current_profile
+                "is_current": name == self.current_profile,
             }
         return summaries
 
@@ -367,20 +390,28 @@ class ConfigManager:
 
         # Validate thresholds
         if config.context_threshold < 0 or config.context_threshold > 1:
-            errors.append(f"Invalid context_threshold: {config.context_threshold} (must be 0-1)")
+            errors.append(
+                f"Invalid context_threshold: {config.context_threshold} (must be 0-1)"
+            )
 
         if config.context_target < 0 or config.context_target > 1:
-            errors.append(f"Invalid context_target: {config.context_target} (must be 0-1)")
+            errors.append(
+                f"Invalid context_target: {config.context_target} (must be 0-1)"
+            )
 
         if config.context_target >= config.context_threshold:
             warnings.append("context_target should be less than context_threshold")
 
         # Validate pattern settings
         if config.min_pattern_relevance < 0 or config.min_pattern_relevance > 1:
-            errors.append(f"Invalid min_pattern_relevance: {config.min_pattern_relevance} (must be 0-1)")
+            errors.append(
+                f"Invalid min_pattern_relevance: {config.min_pattern_relevance} (must be 0-1)"
+            )
 
         if config.min_pattern_success_rate < 0 or config.min_pattern_success_rate > 100:
-            errors.append(f"Invalid min_pattern_success_rate: {config.min_pattern_success_rate} (must be 0-100)")
+            errors.append(
+                f"Invalid min_pattern_success_rate: {config.min_pattern_success_rate} (must be 0-100)"
+            )
 
         # Check notification settings
         if config.notification_email and not config.smtp_host:

@@ -7,11 +7,9 @@ Includes logging setup, retry logic, and helper functions.
 import asyncio
 import logging
 import sys
+from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
-
-from collections.abc import Callable
-
 
 T = TypeVar("T")
 
@@ -83,8 +81,7 @@ async def retry_with_backoff(
         except Exception as e:
             last_exception = e
             logger.warning(
-                f"Attempt {attempt + 1}/{max_retries} failed: {e}. "
-                f"Retrying in {delay:.1f}s..."
+                f"Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in {delay:.1f}s..."
             )
             await asyncio.sleep(delay)
             delay *= backoff_factor

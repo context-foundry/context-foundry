@@ -24,7 +24,9 @@ class BacklogGenerator:
     def __init__(self, project_root: Path, target_backlog_size: int = 20):
         self.project_root = project_root
         self.target_backlog_size = target_backlog_size
-        self.template_path = project_root / "tools/evolution/templates/github_issue_template.md"
+        self.template_path = (
+            project_root / "tools/evolution/templates/github_issue_template.md"
+        )
         self.valid_labels = None  # Cache for valid labels
 
         # Load template
@@ -40,15 +42,15 @@ class BacklogGenerator:
 
         try:
             result = subprocess.run(
-                ['gh', 'label', 'list', '--json', 'name'],
+                ["gh", "label", "list", "--json", "name"],
                 capture_output=True,
                 text=True,
-                cwd=self.project_root
+                cwd=self.project_root,
             )
 
             if result.returncode == 0:
                 labels_data = json.loads(result.stdout)
-                self.valid_labels = [label['name'] for label in labels_data]
+                self.valid_labels = [label["name"] for label in labels_data]
                 return self.valid_labels
             else:
                 print(f"  ⚠️  Failed to get label list: {result.stderr}")
@@ -61,10 +63,10 @@ class BacklogGenerator:
         """Get count of current open issues"""
         try:
             result = subprocess.run(
-                ['gh', 'issue', 'list', '--state', 'open', '--json', 'number'],
+                ["gh", "issue", "list", "--state", "open", "--json", "number"],
                 capture_output=True,
                 text=True,
-                cwd=self.project_root
+                cwd=self.project_root,
             )
 
             if result.returncode == 0:
@@ -82,24 +84,24 @@ class BacklogGenerator:
 
         # Determine emoji based on finding type
         emoji_map = {
-            'security': '🔒',
-            'bug': '🐛',
-            'performance': '⚡',
-            'enhancement': '✨',
-            'debt': '🏗️'
+            "security": "🔒",
+            "bug": "🐛",
+            "performance": "⚡",
+            "enhancement": "✨",
+            "debt": "🏗️",
         }
-        emoji = emoji_map.get(finding.finding_type, '📋')
+        emoji = emoji_map.get(finding.finding_type, "📋")
 
         # Determine effort label
         effort_map = {
-            'small': 'Small (< 1 day)',
-            'medium': 'Medium (1-3 days)',
-            'large': 'Large (3+ days)'
+            "small": "Small (< 1 day)",
+            "medium": "Medium (1-3 days)",
+            "large": "Large (3+ days)",
         }
-        effort = effort_map.get(finding.effort, 'Medium (1-3 days)')
+        effort = effort_map.get(finding.effort, "Medium (1-3 days)")
 
         # Format categories
-        categories = ', '.join(finding.category) if finding.category else 'general'
+        categories = ", ".join(finding.category) if finding.category else "general"
 
         # Add file metadata if present
         file_metadata = ""
@@ -110,10 +112,10 @@ class BacklogGenerator:
 
         # Add AI analysis section if available
         ai_analysis = ""
-        if finding.research and 'expert_perspectives' in finding.research:
-            perspectives = finding.research['expert_perspectives']
-            reasoning = finding.research.get('reasoning', '')
-            ai_score = finding.research.get('ai_score', 0)
+        if finding.research and "expert_perspectives" in finding.research:
+            perspectives = finding.research["expert_perspectives"]
+            reasoning = finding.research.get("reasoning", "")
+            ai_score = finding.research.get("ai_score", 0)
 
             ai_analysis = "\n### AI Analysis\n"
             ai_analysis += f"**Priority Score:** {ai_score}/10\n\n"
@@ -137,7 +139,7 @@ class BacklogGenerator:
             effort=effort,
             file_metadata=file_metadata,
             description=finding.description,
-            ai_analysis=ai_analysis
+            ai_analysis=ai_analysis,
         )
 
         return body
@@ -164,8 +166,8 @@ class BacklogGenerator:
             labels.extend(finding.category)
 
         # Add AI-recommended labels if available
-        if finding.research and 'github_labels' in finding.research:
-            ai_labels = finding.research['github_labels']
+        if finding.research and "github_labels" in finding.research:
+            ai_labels = finding.research["github_labels"]
             for label in ai_labels:
                 if label not in labels:
                     labels.append(label)
@@ -182,18 +184,15 @@ class BacklogGenerator:
 
         try:
             # Create issue using gh CLI
-            cmd = ['gh', 'issue', 'create', '--title', title, '--body', body]
+            cmd = ["gh", "issue", "create", "--title", title, "--body", body]
 
             # Add labels if we have them
             if filtered_labels:
                 for label in filtered_labels:
-                    cmd.extend(['--label', label])
+                    cmd.extend(["--label", label])
 
             result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=self.project_root
+                cmd, capture_output=True, text=True, cwd=self.project_root
             )
 
             if result.returncode == 0:
@@ -243,16 +242,20 @@ class BacklogGenerator:
         print()
         print(f"✅ Created {created} new issues")
         print()
-        print(f"✅ Backlog updated: {current_count + created}/{self.target_backlog_size} issues")
+        print(
+            f"✅ Backlog updated: {current_count + created}/{self.target_backlog_size} issues"
+        )
 
 
 def main():
     """CLI entry point"""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Maintain GitHub issue backlog')
-    parser.add_argument('action', choices=['maintain'], help='Action to perform')
-    parser.add_argument('--target-size', type=int, default=20, help='Target backlog size')
+    parser = argparse.ArgumentParser(description="Maintain GitHub issue backlog")
+    parser.add_argument("action", choices=["maintain"], help="Action to perform")
+    parser.add_argument(
+        "--target-size", type=int, default=20, help="Target backlog size"
+    )
 
     args = parser.parse_args()
 
@@ -260,9 +263,9 @@ def main():
 
     generator = BacklogGenerator(project_root, target_backlog_size=args.target_size)
 
-    if args.action == 'maintain':
+    if args.action == "maintain":
         generator.maintain_backlog()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

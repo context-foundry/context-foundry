@@ -16,7 +16,6 @@ NOTE: The rest_api module is currently a placeholder with function stubs.
 These tests verify the API structure and function signatures are defined correctly.
 """
 
-import pytest
 import sys
 from pathlib import Path
 
@@ -31,23 +30,23 @@ class TestAPIStructure:
 
     def test_api_routes_defined(self):
         """Test that API routes are documented"""
-        assert hasattr(rest_api, 'API_ROUTES')
+        assert hasattr(rest_api, "API_ROUTES")
         assert isinstance(rest_api.API_ROUTES, dict)
         assert len(rest_api.API_ROUTES) > 0
 
     def test_api_routes_structure(self):
         """Test API routes contain expected endpoints"""
         routes = rest_api.API_ROUTES
-        assert 'POST /tasks' in routes
-        assert 'GET /tasks' in routes
-        assert 'GET /health' in routes
+        assert "POST /tasks" in routes
+        assert "GET /tasks" in routes
+        assert "GET /health" in routes
 
     def test_endpoints_exist(self):
         """Test that all endpoint functions are defined"""
-        assert hasattr(rest_api, 'create_task')
-        assert hasattr(rest_api, 'list_tasks')
-        assert hasattr(rest_api, 'get_task')
-        assert hasattr(rest_api, 'health_check')
+        assert hasattr(rest_api, "create_task")
+        assert hasattr(rest_api, "list_tasks")
+        assert hasattr(rest_api, "get_task")
+        assert hasattr(rest_api, "health_check")
 
 
 class TestCreateTask:
@@ -55,19 +54,20 @@ class TestCreateTask:
 
     def test_create_task_function_exists(self):
         """Test that create_task function is defined"""
-        assert hasattr(rest_api, 'create_task')
+        assert hasattr(rest_api, "create_task")
         assert callable(rest_api.create_task)
 
     def test_create_task_signature(self):
         """Test create_task has correct signature"""
         import inspect
+
         sig = inspect.signature(rest_api.create_task)
         params = list(sig.parameters.keys())
-        assert 'task_data' in params
+        assert "task_data" in params
 
     def test_create_task_callable(self):
         """Test create_task can be called (placeholder implementation)"""
-        task_data = {'task_type': 'self_improvement', 'params': {}}
+        task_data = {"task_type": "self_improvement", "params": {}}
         result = rest_api.create_task(task_data)
         # Placeholder returns None
         assert result is None
@@ -78,16 +78,17 @@ class TestListTasks:
 
     def test_list_tasks_function_exists(self):
         """Test that list_tasks function is defined"""
-        assert hasattr(rest_api, 'list_tasks')
+        assert hasattr(rest_api, "list_tasks")
         assert callable(rest_api.list_tasks)
 
     def test_list_tasks_signature(self):
         """Test list_tasks has correct signature"""
         import inspect
+
         sig = inspect.signature(rest_api.list_tasks)
         params = list(sig.parameters.keys())
         # Should support optional status and limit params
-        assert 'status' in params or 'limit' in params or len(params) >= 0
+        assert "status" in params or "limit" in params or len(params) >= 0
 
     def test_list_tasks_callable(self):
         """Test list_tasks can be called (placeholder implementation)"""
@@ -97,7 +98,7 @@ class TestListTasks:
 
     def test_list_tasks_with_parameters(self):
         """Test list_tasks accepts status and limit parameters"""
-        result = rest_api.list_tasks(status='completed', limit=10)
+        result = rest_api.list_tasks(status="completed", limit=10)
         # Placeholder returns None
         assert result is None
 
@@ -107,19 +108,20 @@ class TestGetTask:
 
     def test_get_task_function_exists(self):
         """Test that get_task function is defined"""
-        assert hasattr(rest_api, 'get_task')
+        assert hasattr(rest_api, "get_task")
         assert callable(rest_api.get_task)
 
     def test_get_task_signature(self):
         """Test get_task has correct signature"""
         import inspect
+
         sig = inspect.signature(rest_api.get_task)
         params = list(sig.parameters.keys())
-        assert 'task_id' in params
+        assert "task_id" in params
 
     def test_get_task_callable(self):
         """Test get_task can be called (placeholder implementation)"""
-        result = rest_api.get_task('task-123')
+        result = rest_api.get_task("task-123")
         # Placeholder returns None
         assert result is None
 
@@ -129,7 +131,7 @@ class TestHealthCheck:
 
     def test_health_check_function_exists(self):
         """Test that health_check function is defined"""
-        assert hasattr(rest_api, 'health_check')
+        assert hasattr(rest_api, "health_check")
         assert callable(rest_api.health_check)
 
     def test_health_check_callable(self):
@@ -145,12 +147,14 @@ class TestAPIDesign:
     def test_all_routes_have_handlers(self):
         """Test that all routes in API_ROUTES have corresponding handlers"""
         # Skip routes with handlers not yet implemented (cancel_task, list_projects, list_agents)
-        implemented_handlers = ['create_task', 'list_tasks', 'get_task', 'health_check']
+        implemented_handlers = ["create_task", "list_tasks", "get_task", "health_check"]
 
         for route, handler_name in rest_api.API_ROUTES.items():
             if handler_name in implemented_handlers:
                 # Handler name is the function name
-                assert hasattr(rest_api, handler_name), f"Handler {handler_name} not found for route {route}"
+                assert hasattr(rest_api, handler_name), (
+                    f"Handler {handler_name} not found for route {route}"
+                )
 
     def test_module_docstring(self):
         """Test that module has documentation"""

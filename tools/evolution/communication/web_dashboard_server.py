@@ -9,7 +9,6 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime
 import subprocess
-import json
 import os
 import requests
 from typing import List, Dict, Optional
@@ -17,9 +16,10 @@ from typing import List, Dict, Optional
 app = Flask(__name__)
 
 # GitHub configuration
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')  # Optional: set for higher rate limits
-GITHUB_REPO = os.environ.get('GITHUB_REPO', 'context-foundry')  # Default repo name
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")  # Optional: set for higher rate limits
+GITHUB_REPO = os.environ.get("GITHUB_REPO", "context-foundry")  # Default repo name
 GITHUB_OWNER = None  # Will be auto-detected from git remote
+
 
 def get_github_owner() -> Optional[str]:
     """Auto-detect GitHub owner from git remote"""
@@ -30,11 +30,11 @@ def get_github_owner() -> Optional[str]:
     try:
         # Get git remote URL
         result = subprocess.run(
-            ['git', 'remote', 'get-url', 'origin'],
+            ["git", "remote", "get-url", "origin"],
             capture_output=True,
             text=True,
             timeout=5,
-            cwd=Path(__file__).parent.parent.parent.parent
+            cwd=Path(__file__).parent.parent.parent.parent,
         )
 
         if result.returncode != 0:
@@ -45,11 +45,11 @@ def get_github_owner() -> Optional[str]:
         # Parse owner from URL (supports both HTTPS and SSH)
         # https://github.com/owner/repo.git
         # git@github.com:owner/repo.git
-        if 'github.com' in url:
-            if url.startswith('https://'):
-                parts = url.replace('https://github.com/', '').split('/')
-            elif url.startswith('git@'):
-                parts = url.replace('git@github.com:', '').split('/')
+        if "github.com" in url:
+            if url.startswith("https://"):
+                parts = url.replace("https://github.com/", "").split("/")
+            elif url.startswith("git@"):
+                parts = url.replace("git@github.com:", "").split("/")
             else:
                 return None
 
@@ -62,6 +62,7 @@ def get_github_owner() -> Optional[str]:
         print(f"Error detecting GitHub owner: {e}")
         return None
 
+
 def get_open_prs() -> List[Dict]:
     """Fetch open PRs from GitHub API"""
     owner = get_github_owner()
@@ -71,11 +72,11 @@ def get_open_prs() -> List[Dict]:
     try:
         headers = {}
         if GITHUB_TOKEN:
-            headers['Authorization'] = f'token {GITHUB_TOKEN}'
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
 
         # GitHub API: List pull requests
-        url = f'https://api.github.com/repos/{owner}/{GITHUB_REPO}/pulls'
-        params = {'state': 'open', 'sort': 'created', 'direction': 'desc'}
+        url = f"https://api.github.com/repos/{owner}/{GITHUB_REPO}/pulls"
+        params = {"state": "open", "sort": "created", "direction": "desc"}
 
         response = requests.get(url, headers=headers, params=params, timeout=10)
 
@@ -89,21 +90,24 @@ def get_open_prs() -> List[Dict]:
         evolution_prs = []
         for pr in prs:
             # Check if PR is from self-improvement branch
-            if 'self-improvement' in pr.get('head', {}).get('ref', ''):
-                evolution_prs.append({
-                    'number': pr['number'],
-                    'title': pr['title'],
-                    'url': pr['html_url'],
-                    'branch': pr['head']['ref'],
-                    'created_at': pr['created_at'],
-                    'user': pr['user']['login'],
-                    'labels': [label['name'] for label in pr.get('labels', [])]
-                })
+            if "self-improvement" in pr.get("head", {}).get("ref", ""):
+                evolution_prs.append(
+                    {
+                        "number": pr["number"],
+                        "title": pr["title"],
+                        "url": pr["html_url"],
+                        "branch": pr["head"]["ref"],
+                        "created_at": pr["created_at"],
+                        "user": pr["user"]["login"],
+                        "labels": [label["name"] for label in pr.get("labels", [])],
+                    }
+                )
 
         return evolution_prs
     except Exception as e:
         print(f"Error fetching PRs: {e}")
         return []
+
 
 def check_pr_merged(pr_number: int) -> bool:
     """Check if a specific PR has been merged"""
@@ -114,19 +118,20 @@ def check_pr_merged(pr_number: int) -> bool:
     try:
         headers = {}
         if GITHUB_TOKEN:
-            headers['Authorization'] = f'token {GITHUB_TOKEN}'
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"
 
-        url = f'https://api.github.com/repos/{owner}/{GITHUB_REPO}/pulls/{pr_number}'
+        url = f"https://api.github.com/repos/{owner}/{GITHUB_REPO}/pulls/{pr_number}"
         response = requests.get(url, headers=headers, timeout=10)
 
         if response.status_code != 200:
             return False
 
         pr_data = response.json()
-        return pr_data.get('merged', False)
+        return pr_data.get("merged", False)
     except Exception as e:
         print(f"Error checking PR status: {e}")
         return False
+
 
 # HTML Template
 DASHBOARD_HTML = """
@@ -529,48 +534,56 @@ DASHBOARD_HTML = """
 </html>
 """
 
+
 def get_db_path():
     """Get path to task queue database"""
     return Path.home() / ".context-foundry" / "evolution" / "task_queue.db"
+
 
 def get_daemon_status():
     """Check if daemon is running"""
     try:
         pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
         if not pid_file.exists():
-            return {'status': 'stopped', 'pid': 'N/A', 'uptime': 'N/A'}
+            return {"status": "stopped", "pid": "N/A", "uptime": "N/A"}
 
         pid = pid_file.read_text().strip()
 
         # Check if process is running
-        result = subprocess.run(['ps', '-p', pid], capture_output=True)
+        result = subprocess.run(["ps", "-p", pid], capture_output=True)
         if result.returncode != 0:
-            return {'status': 'stopped', 'pid': 'N/A', 'uptime': 'N/A'}
+            return {"status": "stopped", "pid": "N/A", "uptime": "N/A"}
 
         # Get uptime
-        uptime_result = subprocess.run(['ps', '-p', pid, '-o', 'etime='], capture_output=True, text=True)
-        uptime = uptime_result.stdout.strip() if uptime_result.returncode == 0 else 'N/A'
+        uptime_result = subprocess.run(
+            ["ps", "-p", pid, "-o", "etime="], capture_output=True, text=True
+        )
+        uptime = (
+            uptime_result.stdout.strip() if uptime_result.returncode == 0 else "N/A"
+        )
 
-        return {'status': 'running', 'pid': pid, 'uptime': uptime}
+        return {"status": "running", "pid": pid, "uptime": uptime}
     except Exception as e:
-        return {'status': 'error', 'pid': f'Error: {e}', 'uptime': 'N/A'}
+        return {"status": "error", "pid": f"Error: {e}", "uptime": "N/A"}
+
 
 def get_task_stats():
     """Get task queue statistics"""
     db_path = get_db_path()
     if not db_path.exists():
-        return {'pending': 0, 'running': 0, 'completed': 0, 'failed': 0}
+        return {"pending": 0, "running": 0, "completed": 0, "failed": 0}
 
     conn = sqlite3.connect(str(db_path))
     cursor = conn.cursor()
 
     stats = {}
-    for status in ['pending', 'running', 'completed', 'failed']:
+    for status in ["pending", "running", "completed", "failed"]:
         cursor.execute("SELECT COUNT(*) FROM tasks WHERE status = ?", (status,))
         stats[status] = cursor.fetchone()[0]
 
     conn.close()
     return stats
+
 
 def get_recent_tasks(limit=5):
     """Get recent tasks"""
@@ -582,19 +595,23 @@ def get_recent_tasks(limit=5):
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT id, type, status, priority, created_at
         FROM tasks
         ORDER BY created_at DESC
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     tasks = [dict(row) for row in cursor.fetchall()]
     conn.close()
 
     return tasks
 
-@app.route('/')
+
+@app.route("/")
 def dashboard():
     """Main dashboard page with PR integration"""
     daemon = get_daemon_status()
@@ -607,21 +624,22 @@ def dashboard():
 
     return render_template_string(
         DASHBOARD_HTML,
-        daemon_status=daemon['status'],
-        daemon_pid=daemon['pid'],
-        daemon_uptime=daemon['uptime'],
+        daemon_status=daemon["status"],
+        daemon_pid=daemon["pid"],
+        daemon_uptime=daemon["uptime"],
         daemon_paused=daemon_paused,
-        last_poll='Active' if daemon['status'] == 'running' else 'N/A',
-        tasks_pending=stats['pending'],
-        tasks_running=stats['running'],
-        tasks_completed=stats['completed'],
-        tasks_failed=stats['failed'],
+        last_poll="Active" if daemon["status"] == "running" else "N/A",
+        tasks_pending=stats["pending"],
+        tasks_running=stats["running"],
+        tasks_completed=stats["completed"],
+        tasks_failed=stats["failed"],
         tasks=tasks,
         open_prs=open_prs,
-        current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        current_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     )
 
-@app.route('/api/status')
+
+@app.route("/api/status")
 def api_status():
     """API endpoint for status (JSON) with PR integration"""
     daemon = get_daemon_status()
@@ -629,29 +647,35 @@ def api_status():
     tasks = get_recent_tasks()
     open_prs = get_open_prs()
 
-    return jsonify({
-        'daemon': daemon,
-        'task_stats': stats,
-        'recent_tasks': tasks,
-        'open_prs': open_prs,
-        'daemon_paused': len(open_prs) > 0,
-        'github_owner': get_github_owner(),
-        'timestamp': datetime.now().isoformat()
-    })
+    return jsonify(
+        {
+            "daemon": daemon,
+            "task_stats": stats,
+            "recent_tasks": tasks,
+            "open_prs": open_prs,
+            "daemon_paused": len(open_prs) > 0,
+            "github_owner": get_github_owner(),
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
-@app.route('/api/pr/<int:pr_number>/check_merged')
+
+@app.route("/api/pr/<int:pr_number>/check_merged")
 def check_pr_merged_api(pr_number):
     """API endpoint to check if a PR is merged"""
     is_merged = check_pr_merged(pr_number)
-    return jsonify({
-        'pr_number': pr_number,
-        'merged': is_merged,
-        'timestamp': datetime.now().isoformat()
-    })
+    return jsonify(
+        {
+            "pr_number": pr_number,
+            "merged": is_merged,
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("🌐 Starting Evolution System Web Dashboard...")
     print("📊 Dashboard: http://localhost:8765")
     print("🔌 API: http://localhost:8765/api/status")
     print("\n✨ Press Ctrl+C to stop\n")
-    app.run(host='0.0.0.0', port=8765, debug=False)
+    app.run(host="0.0.0.0", port=8765, debug=False)

@@ -1,7 +1,7 @@
 # Anthropic Prompt Caching Implementation
 
-**Version**: 1.0.0  
-**Date**: 2025-01-13  
+**Version**: 1.0.0
+**Date**: 2025-01-13
 **Status**: ✅ Production Ready
 
 ## Overview
@@ -24,7 +24,7 @@ foundry build app-1 "Create hello world app"
 # Cost: ~$0.034 (cache creation)
 
 # Second build within 5 minutes (uses cache)
-foundry build app-2 "Create goodbye app"  
+foundry build app-2 "Create goodbye app"
 # Cost: ~$0.003 (90% savings!)
 ```
 
@@ -93,7 +93,7 @@ config.enable_caching()   # Re-enable
 - Savings: ~85%
 
 **1-hour cache** (extended, coming soon):
-- Cost: $7.50/MTok cache writes  
+- Cost: $7.50/MTok cache writes
 - Best for: Heavy usage days
 - Savings: ~92%
 
@@ -323,19 +323,19 @@ python3 tools/prompts/cache_analysis.py
 
 ## FAQ
 
-**Q: Does caching affect build quality?**  
+**Q: Does caching affect build quality?**
 A: No, the output is identical. Caching only reduces token costs.
 
-**Q: What if my prompt changes?**  
+**Q: What if my prompt changes?**
 A: Cache invalidates automatically. New cache created with updated prompt.
 
-**Q: Can I see cache statistics?**  
+**Q: Can I see cache statistics?**
 A: Yes, run `python3 tools/prompts/cache_analysis.py`
 
-**Q: Does it work with other models?**  
+**Q: Does it work with other models?**
 A: Only Claude 3.5+ supports caching. Other models fall back gracefully.
 
-**Q: How long does cache last?**  
+**Q: How long does cache last?**
 A: 5 minutes by default, refreshed on each use.
 
 ## References
@@ -347,12 +347,12 @@ A: 5 minutes by default, refreshed on each use.
 
 ## Support
 
-**Issues**: Create GitHub issue with `[prompt-caching]` tag  
-**Questions**: See troubleshooting section above  
+**Issues**: Create GitHub issue with `[prompt-caching]` tag
+**Questions**: See troubleshooting section above
 **Performance**: Monitor cache hit rates and cost savings
 
 ---
 
-**Built with**: Context Foundry v1.2.1  
-**Caching**: Anthropic Prompt Caching API  
+**Built with**: Context Foundry v1.2.1
+**Caching**: Anthropic Prompt Caching API
 **License**: MIT

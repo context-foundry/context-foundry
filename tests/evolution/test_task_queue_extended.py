@@ -12,22 +12,20 @@ import tempfile
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from tools.evolution.task_queue import (
-    Task, TaskQueueManager, TaskStatus, TaskType
-)
+from tools.evolution.task_queue import Task, TaskQueueManager, TaskStatus, TaskType
 
 
 @pytest.fixture
 def temp_db():
     """Create a temporary database for testing"""
-    fd, path = tempfile.mkstemp(suffix='.db')
+    fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     yield path
     # Cleanup
     if os.path.exists(path):
         os.unlink(path)
     # Cleanup WAL files
-    for ext in ['-wal', '-shm']:
+    for ext in ["-wal", "-shm"]:
         wal_path = path + ext
         if os.path.exists(wal_path):
             os.unlink(wal_path)
@@ -50,40 +48,40 @@ class TestTaskDataclass:
             result=None,
             error_message=None,
             retry_count=0,
-            max_retries=3
+            max_retries=3,
         )
 
         task_dict = task.to_dict()
 
-        assert task_dict['id'] == "task-123"
-        assert task_dict['type'] == "self_improvement"
-        assert task_dict['status'] == "pending"
-        assert task_dict['priority'] == 5
-        assert task_dict['params'] == {"key": "value"}
-        assert task_dict['retry_count'] == 0
+        assert task_dict["id"] == "task-123"
+        assert task_dict["type"] == "self_improvement"
+        assert task_dict["status"] == "pending"
+        assert task_dict["priority"] == 5
+        assert task_dict["params"] == {"key": "value"}
+        assert task_dict["retry_count"] == 0
 
     def test_task_from_dict(self):
         """Test creating task from dictionary"""
         task_dict = {
-            'id': 'task-456',
-            'type': 'chaos_creative',
-            'status': 'running',
-            'priority': 7,
-            'params': {'test': 'data'},
-            'created_at': '2025-11-07T10:00:00',
-            'started_at': '2025-11-07T10:05:00',
-            'completed_at': None,
-            'result': None,
-            'error_message': None,
-            'retry_count': 1,
-            'max_retries': 3
+            "id": "task-456",
+            "type": "chaos_creative",
+            "status": "running",
+            "priority": 7,
+            "params": {"test": "data"},
+            "created_at": "2025-11-07T10:00:00",
+            "started_at": "2025-11-07T10:05:00",
+            "completed_at": None,
+            "result": None,
+            "error_message": None,
+            "retry_count": 1,
+            "max_retries": 3,
         }
 
         task = Task.from_dict(task_dict)
 
-        assert task.id == 'task-456'
-        assert task.type == 'chaos_creative'
-        assert task.status == 'running'
+        assert task.id == "task-456"
+        assert task.type == "chaos_creative"
+        assert task.status == "running"
         assert task.priority == 7
         assert task.retry_count == 1
 
@@ -110,9 +108,9 @@ class TestTaskQueueInit:
         """)
         tables = [row[0] for row in cursor.fetchall()]
 
-        assert 'tasks' in tables
-        assert 'task_history' in tables
-        assert 'project_registry' in tables or 'agent_network' in tables
+        assert "tasks" in tables
+        assert "task_history" in tables
+        assert "project_registry" in tables or "agent_network" in tables
 
     def test_wal_mode_enabled(self, temp_db):
         """Test that WAL mode is enabled for concurrency"""
@@ -122,7 +120,7 @@ class TestTaskQueueInit:
         cursor.execute("PRAGMA journal_mode")
         mode = cursor.fetchone()[0]
 
-        assert mode.lower() == 'wal'
+        assert mode.lower() == "wal"
 
     def test_default_path_creation(self):
         """Test that default path creates directory structure"""
@@ -135,7 +133,7 @@ class TestTaskQueueInit:
         # Cleanup
         manager.close()
         os.unlink(manager.db_path)
-        for ext in ['-wal', '-shm']:
+        for ext in ["-wal", "-shm"]:
             wal_path = manager.db_path + ext
             if os.path.exists(wal_path):
                 os.unlink(wal_path)
@@ -149,9 +147,7 @@ class TestCreateTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={"test": "data"},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={"test": "data"}, priority=5
         )
 
         assert task_id is not None
@@ -163,23 +159,21 @@ class TestCreateTask:
         row = cursor.fetchone()
 
         assert row is not None
-        assert row['type'] == 'self_improvement'
-        assert row['status'] == 'pending'
-        assert row['priority'] == 5
+        assert row["type"] == "self_improvement"
+        assert row["status"] == "pending"
+        assert row["priority"] == 5
 
     def test_create_task_with_high_priority(self, temp_db):
         """Test creating high priority task"""
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.VALIDATE,
-            params={},
-            priority=10
+            task_type=TaskType.VALIDATE, params={}, priority=10
         )
 
         cursor = manager.conn.cursor()
         cursor.execute("SELECT priority FROM tasks WHERE id = ?", (task_id,))
-        priority = cursor.fetchone()['priority']
+        priority = cursor.fetchone()["priority"]
 
         assert priority == 10
 
@@ -188,14 +182,12 @@ class TestCreateTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.RESEARCH,
-            params={},
-            priority=1
+            task_type=TaskType.RESEARCH, params={}, priority=1
         )
 
         cursor = manager.conn.cursor()
         cursor.execute("SELECT priority FROM tasks WHERE id = ?", (task_id,))
-        priority = cursor.fetchone()['priority']
+        priority = cursor.fetchone()["priority"]
 
         assert priority == 1
 
@@ -216,9 +208,7 @@ class TestGetNextTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={"key": "value"},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={"key": "value"}, priority=5
         )
 
         task = manager.get_next_task()
@@ -234,19 +224,13 @@ class TestGetNextTask:
 
         # Create tasks with different priorities
         low_id = manager.create_task(
-            task_type=TaskType.RESEARCH,
-            params={"priority": "low"},
-            priority=3
+            task_type=TaskType.RESEARCH, params={"priority": "low"}, priority=3
         )
         high_id = manager.create_task(
-            task_type=TaskType.VALIDATE,
-            params={"priority": "high"},
-            priority=9
+            task_type=TaskType.VALIDATE, params={"priority": "high"}, priority=9
         )
         mid_id = manager.create_task(
-            task_type=TaskType.CHAOS_CREATIVE,
-            params={"priority": "mid"},
-            priority=6
+            task_type=TaskType.CHAOS_CREATIVE, params={"priority": "mid"}, priority=6
         )
 
         # Should get high priority first
@@ -266,14 +250,10 @@ class TestGetNextTask:
         manager = TaskQueueManager(temp_db)
 
         task_id1 = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={}, priority=5
         )
         task_id2 = manager.create_task(
-            task_type=TaskType.RESEARCH,
-            params={},
-            priority=4
+            task_type=TaskType.RESEARCH, params={}, priority=4
         )
 
         # Get first task (should be running now)
@@ -297,56 +277,51 @@ class TestUpdateTaskStatus:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={}, priority=5
         )
 
         result = {"output": "success"}
-        manager.update_task_status(
-            task_id,
-            TaskStatus.COMPLETED,
-            result=result
-        )
+        manager.update_task_status(task_id, TaskStatus.COMPLETED, result=result)
 
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT status, result_json, completed_at
             FROM tasks WHERE id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         row = cursor.fetchone()
 
-        assert row['status'] == 'completed'
-        assert row['completed_at'] is not None
+        assert row["status"] == "completed"
+        assert row["completed_at"] is not None
         import json
-        assert json.loads(row['result_json']) == result
+
+        assert json.loads(row["result_json"]) == result
 
     def test_update_to_failed(self, temp_db):
         """Test updating task to failed"""
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.VALIDATE,
-            params={},
-            priority=5
+            task_type=TaskType.VALIDATE, params={}, priority=5
         )
 
         error_msg = "Task failed due to error"
-        manager.update_task_status(
-            task_id,
-            TaskStatus.FAILED,
-            error=error_msg
-        )
+        manager.update_task_status(task_id, TaskStatus.FAILED, error=error_msg)
 
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT status, error_message
             FROM tasks WHERE id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         row = cursor.fetchone()
 
-        assert row['status'] == 'failed'
-        assert row['error_message'] == error_msg
+        assert row["status"] == "failed"
+        assert row["error_message"] == error_msg
 
 
 class TestRetryTask:
@@ -357,17 +332,18 @@ class TestRetryTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={}, priority=5
         )
 
         # Manually set retry count
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE tasks SET retry_count = 2
             WHERE id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         manager.conn.commit()
 
         # Get task and check
@@ -380,17 +356,18 @@ class TestRetryTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.VALIDATE,
-            params={},
-            priority=5
+            task_type=TaskType.VALIDATE, params={}, priority=5
         )
 
         # Set retry count to max
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE tasks SET retry_count = 3
             WHERE id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         manager.conn.commit()
 
         # Get task and check
@@ -403,22 +380,23 @@ class TestRetryTask:
         manager = TaskQueueManager(temp_db)
 
         task_id = manager.create_task(
-            task_type=TaskType.CHAOS_CREATIVE,
-            params={},
-            priority=5
+            task_type=TaskType.CHAOS_CREATIVE, params={}, priority=5
         )
 
         manager.retry_task(task_id)
 
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT retry_count, status
             FROM tasks WHERE id = ?
-        """, (task_id,))
+        """,
+            (task_id,),
+        )
         row = cursor.fetchone()
 
-        assert row['retry_count'] == 1
-        assert row['status'] == 'pending'
+        assert row["retry_count"] == 1
+        assert row["status"] == "pending"
 
 
 class TestListTasks:
@@ -429,14 +407,10 @@ class TestListTasks:
         manager = TaskQueueManager(temp_db)
 
         task_id1 = manager.create_task(
-            task_type=TaskType.SELF_IMPROVEMENT,
-            params={},
-            priority=5
+            task_type=TaskType.SELF_IMPROVEMENT, params={}, priority=5
         )
         task_id2 = manager.create_task(
-            task_type=TaskType.RESEARCH,
-            params={},
-            priority=7
+            task_type=TaskType.RESEARCH, params={}, priority=7
         )
 
         tasks = manager.list_tasks()
@@ -451,14 +425,10 @@ class TestListTasks:
         manager = TaskQueueManager(temp_db)
 
         pending_id = manager.create_task(
-            task_type=TaskType.VALIDATE,
-            params={},
-            priority=5
+            task_type=TaskType.VALIDATE, params={}, priority=5
         )
         running_id = manager.create_task(
-            task_type=TaskType.RESEARCH,
-            params={},
-            priority=5
+            task_type=TaskType.RESEARCH, params={}, priority=5
         )
 
         # Update one to running
@@ -479,9 +449,7 @@ class TestListTasks:
 
         for i in range(5):
             manager.create_task(
-                task_type=TaskType.SELF_IMPROVEMENT,
-                params={},
-                priority=5
+                task_type=TaskType.SELF_IMPROVEMENT, params={}, priority=5
             )
 
         tasks = manager.list_tasks(limit=3)
@@ -546,10 +514,13 @@ class TestArchiveTasks:
         # Manually set completed_at to 40 days ago
         old_date = (datetime.utcnow() - timedelta(days=40)).isoformat()
         cursor = manager.conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE tasks SET completed_at = ?
             WHERE id = ?
-        """, (old_date, old_task_id))
+        """,
+            (old_date, old_task_id),
+        )
         manager.conn.commit()
 
         # Create recent completed task
@@ -562,9 +533,12 @@ class TestArchiveTasks:
         assert archived_count == 1
 
         # Verify old task is archived
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT status FROM tasks WHERE id = ?
-        """, (old_task_id,))
+        """,
+            (old_task_id,),
+        )
         # The archived task should no longer exist or have different status
         # Implementation may vary
 
@@ -584,7 +558,7 @@ class TestCancelTask:
         cursor.execute("SELECT status FROM tasks WHERE id = ?", (task_id,))
         row = cursor.fetchone()
 
-        assert row['status'] == 'cancelled'
+        assert row["status"] == "cancelled"
 
 
 class TestClose:

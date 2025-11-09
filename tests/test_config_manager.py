@@ -4,7 +4,6 @@ Comprehensive tests for ConfigManager
 Tests all critical paths including initialization, profiles, validation, and persistence.
 """
 
-import os
 import pytest
 import tempfile
 from pathlib import Path
@@ -14,7 +13,7 @@ from tools.config_manager import ConfigManager, FoundryConfig
 @pytest.fixture
 def temp_config_file():
     """Create a temporary config file for testing."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         config_path = Path(f.name)
     yield config_path
     # Cleanup
@@ -47,9 +46,7 @@ class TestFoundryConfigDefaults:
     def test_custom_values(self):
         """Test creating config with custom values."""
         config = FoundryConfig(
-            model="claude-opus-4",
-            max_tokens=16000,
-            autonomous_mode=True
+            model="claude-opus-4", max_tokens=16000, autonomous_mode=True
         )
         assert config.model == "claude-opus-4"
         assert config.max_tokens == 16000
@@ -110,7 +107,9 @@ class TestConfigManagerGetSet:
         config_manager.create_profile("custom")
         config_manager.set("model", "custom-model", profile="custom")
         assert config_manager.get("model", profile="custom") == "custom-model"
-        assert config_manager.get("model") != "custom-model"  # Default profile unchanged
+        assert (
+            config_manager.get("model") != "custom-model"
+        )  # Default profile unchanged
 
 
 class TestConfigManagerProfiles:
@@ -192,7 +191,9 @@ class TestConfigManagerValidation:
         config_manager.set("context_threshold", 0.3)
         config_manager.set("context_target", 0.4)
         validation = config_manager.validate()
-        assert any("context_target should be less" in warn for warn in validation["warnings"])
+        assert any(
+            "context_target should be less" in warn for warn in validation["warnings"]
+        )
 
     def test_validation_invalid_pattern_relevance(self, config_manager):
         """Test validation detects invalid pattern relevance."""
@@ -205,7 +206,9 @@ class TestConfigManagerValidation:
         config_manager.set("notification_email", "test@example.com")
         config_manager.set("smtp_host", "")
         validation = config_manager.validate()
-        assert any("smtp_host not configured" in warn for warn in validation["warnings"])
+        assert any(
+            "smtp_host not configured" in warn for warn in validation["warnings"]
+        )
 
 
 class TestConfigManagerPersistence:
@@ -300,13 +303,14 @@ class TestConfigManagerEnvironmentOverrides:
         # Environment variables are only applied if profiles exist
         # So we need to create a config file with profiles first
         monkeypatch.setenv("ANTHROPIC_API_KEY", "env-key")
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             import yaml
+
             config_data = {
                 "current_profile": "default",
                 "profiles": {
                     "default": {"api_key": "", "model": "claude-sonnet-4-20250514"}
-                }
+                },
             }
             yaml.dump(config_data, f)
             temp_path = Path(f.name)
@@ -320,13 +324,12 @@ class TestConfigManagerEnvironmentOverrides:
     def test_env_model_override(self, monkeypatch):
         """Test model override from environment."""
         monkeypatch.setenv("CLAUDE_MODEL", "env-model")
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             import yaml
+
             config_data = {
                 "current_profile": "default",
-                "profiles": {
-                    "default": {"model": "default-model"}
-                }
+                "profiles": {"default": {"model": "default-model"}},
             }
             yaml.dump(config_data, f)
             temp_path = Path(f.name)
@@ -340,13 +343,12 @@ class TestConfigManagerEnvironmentOverrides:
     def test_env_max_tokens_override(self, monkeypatch):
         """Test max_tokens override from environment."""
         monkeypatch.setenv("MAX_TOKENS", "16000")
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             import yaml
+
             config_data = {
                 "current_profile": "default",
-                "profiles": {
-                    "default": {"max_tokens": 8000}
-                }
+                "profiles": {"default": {"max_tokens": 8000}},
             }
             yaml.dump(config_data, f)
             temp_path = Path(f.name)
@@ -360,13 +362,12 @@ class TestConfigManagerEnvironmentOverrides:
     def test_env_boolean_override(self, monkeypatch):
         """Test boolean settings override from environment."""
         monkeypatch.setenv("USE_CONTEXT_MANAGER", "false")
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             import yaml
+
             config_data = {
                 "current_profile": "default",
-                "profiles": {
-                    "default": {"use_context_manager": True}
-                }
+                "profiles": {"default": {"use_context_manager": True}},
             }
             yaml.dump(config_data, f)
             temp_path = Path(f.name)

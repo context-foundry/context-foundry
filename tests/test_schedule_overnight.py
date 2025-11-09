@@ -4,20 +4,14 @@ Comprehensive tests for tools/schedule_overnight.py
 Tests TaskQueue, NotificationService, and OvernightScheduler.
 """
 
-import os
 import pytest
 import tempfile
 import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, call
-from datetime import datetime
+from unittest.mock import Mock, patch
 
 # Import modules to test
-from tools.schedule_overnight import (
-    TaskQueue,
-    NotificationService,
-    OvernightScheduler
-)
+from tools.schedule_overnight import TaskQueue, NotificationService, OvernightScheduler
 
 
 class TestTaskQueue:
@@ -26,7 +20,7 @@ class TestTaskQueue:
     @pytest.fixture
     def temp_queue_file(self):
         """Create temporary queue file."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             queue_file = Path(f.name)
         yield queue_file
         if queue_file.exists():
@@ -63,9 +57,7 @@ class TestTaskQueue:
     def test_load_tasks_multiple_tasks(self, temp_queue_file):
         """Test loading multiple tasks."""
         temp_queue_file.write_text(
-            "project1|Task 1|8|5\n"
-            "project2|Task 2|4|10\n"
-            "project3|Task 3|6|3\n"
+            "project1|Task 1|8|5\nproject2|Task 2|4|10\nproject3|Task 3|6|3\n"
         )
         queue = TaskQueue(temp_queue_file)
 
@@ -73,8 +65,8 @@ class TestTaskQueue:
         assert len(tasks) == 3
         # Should be sorted by priority (descending)
         assert tasks[0]["priority"] == 10  # project2
-        assert tasks[1]["priority"] == 5   # project1
-        assert tasks[2]["priority"] == 3   # project3
+        assert tasks[1]["priority"] == 5  # project1
+        assert tasks[2]["priority"] == 3  # project3
 
     def test_load_tasks_with_comments(self, temp_queue_file):
         """Test that comments and empty lines are ignored."""
@@ -114,9 +106,7 @@ class TestTaskQueue:
     def test_load_tasks_malformed_line(self, temp_queue_file):
         """Test that malformed lines (single field) are skipped."""
         temp_queue_file.write_text(
-            "project1|Task 1|8|5\n"
-            "malformed_line\n"
-            "project2|Task 2|4|10\n"
+            "project1|Task 1|8|5\nmalformed_line\nproject2|Task 2|4|10\n"
         )
         queue = TaskQueue(temp_queue_file)
 
@@ -126,9 +116,7 @@ class TestTaskQueue:
     def test_remove_task(self, temp_queue_file):
         """Test removing a task from the queue."""
         temp_queue_file.write_text(
-            "project1|Task 1|8|5\n"
-            "project2|Task 2|4|10\n"
-            "project3|Task 3|6|3\n"
+            "project1|Task 1|8|5\nproject2|Task 2|4|10\nproject3|Task 3|6|3\n"
         )
         queue = TaskQueue(temp_queue_file)
 
@@ -157,10 +145,7 @@ class TestTaskQueue:
 
     def test_remove_task_by_project_and_description(self, temp_queue_file):
         """Test that removal matches both project and description."""
-        temp_queue_file.write_text(
-            "project1|Task 1|8|5\n"
-            "project1|Task 2|4|10\n"
-        )
+        temp_queue_file.write_text("project1|Task 1|8|5\nproject1|Task 2|4|10\n")
         queue = TaskQueue(temp_queue_file)
 
         tasks = queue.load_tasks()
@@ -199,7 +184,13 @@ class TestNotificationService:
     def test_load_email_config_missing_vars(self, monkeypatch):
         """Test that missing env vars result in no config."""
         # Clear any existing env vars
-        for key in ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "NOTIFICATION_EMAIL"]:
+        for key in [
+            "SMTP_HOST",
+            "SMTP_PORT",
+            "SMTP_USER",
+            "SMTP_PASS",
+            "NOTIFICATION_EMAIL",
+        ]:
             monkeypatch.delenv(key, raising=False)
 
         notifier = NotificationService()
@@ -214,7 +205,7 @@ class TestNotificationService:
         captured = capsys.readouterr()
         assert "Email not configured" in captured.out
 
-    @patch('smtplib.SMTP')
+    @patch("smtplib.SMTP")
     def test_send_email_success(self, mock_smtp):
         """Test successful email sending."""
         notifier = NotificationService()
@@ -223,7 +214,7 @@ class TestNotificationService:
             "port": 587,
             "user": "user@example.com",
             "password": "password",
-            "to": "notify@example.com"
+            "to": "notify@example.com",
         }
 
         notifier.send_email("Test Subject", "Test Body")
@@ -236,7 +227,7 @@ class TestNotificationService:
         server_instance.starttls.assert_called_once()
         server_instance.login.assert_called_once_with("user@example.com", "password")
 
-    @patch('smtplib.SMTP')
+    @patch("smtplib.SMTP")
     def test_send_email_failure(self, mock_smtp, capsys):
         """Test email sending failure handling."""
         mock_smtp.side_effect = Exception("SMTP error")
@@ -247,7 +238,7 @@ class TestNotificationService:
             "port": 587,
             "user": "user@example.com",
             "password": "password",
-            "to": "notify@example.com"
+            "to": "notify@example.com",
         }
 
         notifier.send_email("Test", "Body")
@@ -269,9 +260,14 @@ class TestNotificationService:
         monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/test")
 
         # Mock requests at import time
-        with patch('builtins.__import__', side_effect=lambda name, *args, **kwargs:
-                   Mock(post=Mock(return_value=Mock(status_code=200))) if name == 'requests'
-                   else __import__(name, *args, **kwargs)):
+        with patch(
+            "builtins.__import__",
+            side_effect=lambda name, *args, **kwargs: Mock(
+                post=Mock(return_value=Mock(status_code=200))
+            )
+            if name == "requests"
+            else __import__(name, *args, **kwargs),
+        ):
             notifier = NotificationService()
             notifier.send_slack("Test message")
 
@@ -283,16 +279,21 @@ class TestNotificationService:
         monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/test")
 
         # Mock requests with failure response
-        with patch('builtins.__import__', side_effect=lambda name, *args, **kwargs:
-                   Mock(post=Mock(return_value=Mock(status_code=500))) if name == 'requests'
-                   else __import__(name, *args, **kwargs)):
+        with patch(
+            "builtins.__import__",
+            side_effect=lambda name, *args, **kwargs: Mock(
+                post=Mock(return_value=Mock(status_code=500))
+            )
+            if name == "requests"
+            else __import__(name, *args, **kwargs),
+        ):
             notifier = NotificationService()
             notifier.send_slack("Test message")
 
             captured = capsys.readouterr()
             assert "Slack failed" in captured.out
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_send_desktop_notification_macos(self, mock_run):
         """Test desktop notification on macOS."""
         notifier = NotificationService()
@@ -304,7 +305,7 @@ class TestNotificationService:
         assert "osascript" in call_args
         assert "-e" in call_args
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_send_desktop_notification_failure(self, mock_run, capsys):
         """Test desktop notification failure handling."""
         mock_run.side_effect = Exception("Not available")
@@ -317,19 +318,17 @@ class TestNotificationService:
 
     def test_notify_completion(self, notifier):
         """Test completion notification sends all methods."""
-        with patch.object(notifier, 'send_email') as mock_email, \
-             patch.object(notifier, 'send_slack') as mock_slack, \
-             patch.object(notifier, 'send_desktop_notification') as mock_desktop:
-
-            task = {
-                "project": "test_project",
-                "description": "Test task"
-            }
+        with (
+            patch.object(notifier, "send_email") as mock_email,
+            patch.object(notifier, "send_slack") as mock_slack,
+            patch.object(notifier, "send_desktop_notification") as mock_desktop,
+        ):
+            task = {"project": "test_project", "description": "Test task"}
             result = {
                 "success": True,
                 "duration": "2h",
                 "iterations": 10,
-                "log_file": "test.log"
+                "log_file": "test.log",
             }
 
             notifier.notify_completion(task, result)
@@ -344,14 +343,12 @@ class TestNotificationService:
 
     def test_notify_failure(self, notifier):
         """Test failure notification sends all methods."""
-        with patch.object(notifier, 'send_email') as mock_email, \
-             patch.object(notifier, 'send_slack') as mock_slack, \
-             patch.object(notifier, 'send_desktop_notification') as mock_desktop:
-
-            task = {
-                "project": "test_project",
-                "description": "Test task"
-            }
+        with (
+            patch.object(notifier, "send_email") as mock_email,
+            patch.object(notifier, "send_slack") as mock_slack,
+            patch.object(notifier, "send_desktop_notification") as mock_desktop,
+        ):
+            task = {"project": "test_project", "description": "Test task"}
             error = "Test error message"
 
             notifier.notify_failure(task, error)
@@ -372,7 +369,7 @@ class TestOvernightScheduler:
     @pytest.fixture
     def temp_queue_file(self):
         """Create temporary queue file."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             queue_file = Path(f.name)
         yield queue_file
         if queue_file.exists():
@@ -383,18 +380,14 @@ class TestOvernightScheduler:
         """Create OvernightScheduler instance."""
         return OvernightScheduler(temp_queue_file)
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_task_success(self, mock_run, scheduler):
         """Test successful task execution."""
         mock_result = Mock()
         mock_result.stdout = "Task output"
         mock_run.return_value = mock_result
 
-        task = {
-            "project": "test_project",
-            "description": "Test task",
-            "hours": 1
-        }
+        task = {"project": "test_project", "description": "Test task", "hours": 1}
 
         result = scheduler.run_task(task, max_retries=1)
 
@@ -402,73 +395,57 @@ class TestOvernightScheduler:
         assert result["attempts"] == 1
         assert "output" in result
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_task_failure_with_retries(self, mock_run, scheduler):
         """Test task failure with retry logic."""
         # Fail first two attempts, succeed on third
         mock_run.side_effect = [
             subprocess.CalledProcessError(1, "cmd", stderr="Error 1"),
             subprocess.CalledProcessError(1, "cmd", stderr="Error 2"),
-            Mock(stdout="Success")
+            Mock(stdout="Success"),
         ]
 
-        task = {
-            "project": "test_project",
-            "description": "Test task",
-            "hours": 1
-        }
+        task = {"project": "test_project", "description": "Test task", "hours": 1}
 
-        with patch('time.sleep'):  # Skip actual sleep
+        with patch("time.sleep"):  # Skip actual sleep
             result = scheduler.run_task(task, max_retries=3)
 
         assert result["success"] is True
         assert result["attempts"] == 3
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_task_max_retries_exceeded(self, mock_run, scheduler):
         """Test task failure after max retries."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd", stderr="Error")
 
-        task = {
-            "project": "test_project",
-            "description": "Test task",
-            "hours": 1
-        }
+        task = {"project": "test_project", "description": "Test task", "hours": 1}
 
-        with patch('time.sleep'):
+        with patch("time.sleep"):
             result = scheduler.run_task(task, max_retries=2)
 
         assert result["success"] is False
         assert result["attempts"] == 2
         assert "error" in result
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_task_timeout(self, mock_run, scheduler):
         """Test task timeout handling."""
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 3600)
 
-        task = {
-            "project": "test_project",
-            "description": "Test task",
-            "hours": 1
-        }
+        task = {"project": "test_project", "description": "Test task", "hours": 1}
 
         result = scheduler.run_task(task, max_retries=1)
 
         assert result["success"] is False
         assert "Timeout" in result["error"]
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_run_task_command_format(self, mock_run, scheduler):
         """Test that run_task builds correct command."""
         mock_result = Mock(stdout="output")
         mock_run.return_value = mock_result
 
-        task = {
-            "project": "my_project",
-            "description": "My task",
-            "hours": 4
-        }
+        task = {"project": "my_project", "description": "My task", "hours": 4}
 
         scheduler.run_task(task, max_retries=1)
 
@@ -487,7 +464,7 @@ class TestOvernightScheduler:
         captured = capsys.readouterr()
         assert "No tasks in queue" in captured.out
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_process_queue_single_task(self, mock_run, temp_queue_file):
         """Test processing single task."""
         temp_queue_file.write_text("project1|Task 1|1|5\n")
@@ -496,14 +473,14 @@ class TestOvernightScheduler:
         mock_result = Mock(stdout="output")
         mock_run.return_value = mock_result
 
-        with patch.object(scheduler.notifier, 'notify_completion'):
+        with patch.object(scheduler.notifier, "notify_completion"):
             scheduler.process_queue()
 
         # Task should be removed after success
         remaining = scheduler.queue.load_tasks()
         assert len(remaining) == 0
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_process_queue_failed_task_not_removed(self, mock_run, temp_queue_file):
         """Test that failed tasks remain in queue."""
         temp_queue_file.write_text("project1|Task 1|1|5\n")
@@ -511,8 +488,7 @@ class TestOvernightScheduler:
 
         mock_run.side_effect = subprocess.CalledProcessError(1, "cmd")
 
-        with patch.object(scheduler.notifier, 'notify_failure'), \
-             patch('time.sleep'):
+        with patch.object(scheduler.notifier, "notify_failure"), patch("time.sleep"):
             scheduler.process_queue()
 
         # Failed task should remain
@@ -539,7 +515,7 @@ class TestEdgeCases:
 
     def test_task_queue_invalid_hours(self):
         """Test handling of invalid hours value."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("project1|Task|invalid|5\n")
             queue_file = Path(f.name)
 
@@ -553,7 +529,7 @@ class TestEdgeCases:
 
     def test_task_queue_invalid_priority(self):
         """Test handling of invalid priority value."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("project1|Task|8|invalid\n")
             queue_file = Path(f.name)
 
@@ -581,7 +557,7 @@ class TestEdgeCases:
 
     def test_empty_task_description(self):
         """Test handling of empty task description."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("project1||8|5\n")
             queue_file = Path(f.name)
 

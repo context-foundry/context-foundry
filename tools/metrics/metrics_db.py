@@ -6,7 +6,6 @@ Thread-safe SQLite database for metrics storage with schema migrations
 
 import sqlite3
 import threading
-import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
@@ -31,7 +30,7 @@ class MetricsDatabase:
             db_path: Path to database file (default: ~/.context-foundry/metrics.db)
         """
         if db_path is None:
-            db_path = str(Path.home() / '.context-foundry' / 'metrics.db')
+            db_path = str(Path.home() / ".context-foundry" / "metrics.db")
 
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -41,18 +40,20 @@ class MetricsDatabase:
 
     def _get_connection(self) -> sqlite3.Connection:
         """Get thread-local database connection"""
-        if not hasattr(_thread_local, 'connection') or not hasattr(_thread_local, 'db_path') or _thread_local.db_path != str(self.db_path):
+        if (
+            not hasattr(_thread_local, "connection")
+            or not hasattr(_thread_local, "db_path")
+            or _thread_local.db_path != str(self.db_path)
+        ):
             # Close old connection if it exists and path changed
-            if hasattr(_thread_local, 'connection'):
+            if hasattr(_thread_local, "connection"):
                 try:
                     _thread_local.connection.close()
                 except:
                     pass
 
             _thread_local.connection = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False,
-                timeout=30.0
+                str(self.db_path), check_same_thread=False, timeout=30.0
             )
             _thread_local.connection.row_factory = sqlite3.Row
             # Enable foreign keys
@@ -62,12 +63,12 @@ class MetricsDatabase:
 
     def close(self):
         """Close database connection"""
-        if hasattr(_thread_local, 'connection'):
+        if hasattr(_thread_local, "connection"):
             try:
                 _thread_local.connection.close()
-                delattr(_thread_local, 'connection')
-                if hasattr(_thread_local, 'db_path'):
-                    delattr(_thread_local, 'db_path')
+                delattr(_thread_local, "connection")
+                if hasattr(_thread_local, "db_path"):
+                    delattr(_thread_local, "db_path")
             except:
                 pass
 
@@ -98,7 +99,7 @@ class MetricsDatabase:
         # Check current version
         cursor.execute("SELECT MAX(version) as version FROM schema_version")
         row = cursor.fetchone()
-        current_version = row['version'] if row['version'] is not None else 0
+        current_version = row["version"] if row["version"] is not None else 0
 
         # Apply migrations
         if current_version < 1:
@@ -130,8 +131,12 @@ class MetricsDatabase:
         """)
 
         # Create indexes
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_builds_session ON builds(session_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_builds_created ON builds(created_at)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_builds_session ON builds(session_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_builds_created ON builds(created_at)"
+        )
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_builds_status ON builds(status)")
 
         # phases table
@@ -152,8 +157,12 @@ class MetricsDatabase:
             )
         """)
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_phases_build ON phases(build_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_phases_name ON phases(phase_name)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_phases_build ON phases(build_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_phases_name ON phases(phase_name)"
+        )
 
         # api_calls table
         cursor.execute("""
@@ -172,9 +181,15 @@ class MetricsDatabase:
             )
         """)
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_calls_phase ON api_calls(phase_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_calls_model ON api_calls(model)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_calls_timestamp ON api_calls(timestamp)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_calls_phase ON api_calls(phase_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_calls_model ON api_calls(model)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_calls_timestamp ON api_calls(timestamp)"
+        )
 
         # budget_snapshots table
         cursor.execute("""
@@ -188,7 +203,9 @@ class MetricsDatabase:
             )
         """)
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_budget_period ON budget_snapshots(period_type, period_start)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_budget_period ON budget_snapshots(period_type, period_start)"
+        )
 
         # Mark version as applied
         cursor.execute("INSERT INTO schema_version (version) VALUES (?)", (1,))
@@ -207,15 +224,15 @@ class MetricsDatabase:
         with self._transaction() as conn:
             cursor = conn.cursor()
 
-            fields = ['session_id']
+            fields = ["session_id"]
             values = [session_id]
 
             for key, value in kwargs.items():
-                if key in ['task', 'mode', 'status', 'working_directory']:
+                if key in ["task", "mode", "status", "working_directory"]:
                     fields.append(key)
                     values.append(value)
 
-            placeholders = ','.join(['?'] * len(values))
+            placeholders = ",".join(["?"] * len(values))
             sql = f"INSERT INTO builds ({','.join(fields)}) VALUES ({placeholders})"
 
             cursor.execute(sql, values)
@@ -275,16 +292,24 @@ class MetricsDatabase:
         with self._transaction() as conn:
             cursor = conn.cursor()
 
-            fields = ['build_id', 'phase_name']
+            fields = ["build_id", "phase_name"]
             values = [build_id, phase_name]
 
             for key, value in kwargs.items():
-                if key in ['phase_number', 'tokens_input', 'tokens_output', 'tokens_cached',
-                          'cost', 'duration_seconds', 'started_at', 'completed_at']:
+                if key in [
+                    "phase_number",
+                    "tokens_input",
+                    "tokens_output",
+                    "tokens_cached",
+                    "cost",
+                    "duration_seconds",
+                    "started_at",
+                    "completed_at",
+                ]:
                     fields.append(key)
                     values.append(value)
 
-            placeholders = ','.join(['?'] * len(values))
+            placeholders = ",".join(["?"] * len(values))
             sql = f"INSERT INTO phases ({','.join(fields)}) VALUES ({placeholders})"
 
             cursor.execute(sql, values)
@@ -310,9 +335,17 @@ class MetricsDatabase:
             sql = f"UPDATE phases SET {', '.join(set_clauses)} WHERE id = ?"
             cursor.execute(sql, values)
 
-    def record_api_call(self, phase_id: int, model: str, tokens_input: int,
-                       tokens_output: int, tokens_cached: int, cost: float,
-                       latency_ms: Optional[int] = None, request_id: Optional[str] = None):
+    def record_api_call(
+        self,
+        phase_id: int,
+        model: str,
+        tokens_input: int,
+        tokens_output: int,
+        tokens_cached: int,
+        cost: float,
+        latency_ms: Optional[int] = None,
+        request_id: Optional[str] = None,
+    ):
         """
         Record individual API call.
 
@@ -329,13 +362,24 @@ class MetricsDatabase:
         with self._transaction() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO api_calls (
                     phase_id, model, tokens_input, tokens_output, tokens_cached,
                     cost, latency_ms, request_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (phase_id, model, tokens_input, tokens_output, tokens_cached,
-                  cost, latency_ms, request_id))
+            """,
+                (
+                    phase_id,
+                    model,
+                    tokens_input,
+                    tokens_output,
+                    tokens_cached,
+                    cost,
+                    latency_ms,
+                    request_id,
+                ),
+            )
 
     def get_build_metrics(self, session_id: str) -> Dict[str, Any]:
         """
@@ -360,7 +404,8 @@ class MetricsDatabase:
         build = dict(build_row)
 
         # Get phase metrics
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 phase_name,
                 phase_number,
@@ -374,31 +419,33 @@ class MetricsDatabase:
             FROM phases
             WHERE build_id = ?
             ORDER BY id
-        """, (build['id'],))
+        """,
+            (build["id"],),
+        )
 
         phases = [dict(row) for row in cursor.fetchall()]
 
         # Calculate totals from phases (more accurate than build-level aggregates)
-        total_tokens_input = sum(p['tokens_input'] or 0 for p in phases)
-        total_tokens_output = sum(p['tokens_output'] or 0 for p in phases)
-        total_tokens_cached = sum(p['tokens_cached'] or 0 for p in phases)
-        total_cost = sum(p['cost'] or 0.0 for p in phases)
+        total_tokens_input = sum(p["tokens_input"] or 0 for p in phases)
+        total_tokens_output = sum(p["tokens_output"] or 0 for p in phases)
+        total_tokens_cached = sum(p["tokens_cached"] or 0 for p in phases)
+        total_cost = sum(p["cost"] or 0.0 for p in phases)
 
         return {
-            'session_id': build['session_id'],
-            'task': build['task'],
-            'mode': build['mode'],
-            'status': build['status'],
-            'total_tokens': total_tokens_input + total_tokens_output,
-            'total_tokens_input': total_tokens_input,
-            'total_tokens_output': total_tokens_output,
-            'total_tokens_cached': total_tokens_cached,
-            'total_cost': total_cost,
-            'duration_seconds': build['duration_seconds'],
-            'working_directory': build['working_directory'],
-            'created_at': build['created_at'],
-            'completed_at': build['completed_at'],
-            'phases': phases
+            "session_id": build["session_id"],
+            "task": build["task"],
+            "mode": build["mode"],
+            "status": build["status"],
+            "total_tokens": total_tokens_input + total_tokens_output,
+            "total_tokens_input": total_tokens_input,
+            "total_tokens_output": total_tokens_output,
+            "total_tokens_cached": total_tokens_cached,
+            "total_cost": total_cost,
+            "duration_seconds": build["duration_seconds"],
+            "working_directory": build["working_directory"],
+            "created_at": build["created_at"],
+            "completed_at": build["completed_at"],
+            "phases": phases,
         }
 
     def get_phase_totals(self, phase_name: str, days: int = 30) -> Dict[str, Any]:
@@ -417,7 +464,8 @@ class MetricsDatabase:
 
         since_date = (datetime.now() - timedelta(days=days)).isoformat()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 COUNT(*) as total_runs,
                 SUM(tokens_input) as total_tokens_input,
@@ -427,36 +475,45 @@ class MetricsDatabase:
                 AVG(duration_seconds) as avg_duration_seconds
             FROM phases
             WHERE phase_name = ? AND started_at >= ?
-        """, (phase_name, since_date))
+        """,
+            (phase_name, since_date),
+        )
 
         row = cursor.fetchone()
 
         if row:
             result = dict(row)
-            result['total_tokens'] = (result['total_tokens_input'] or 0) + (result['total_tokens_output'] or 0)
+            result["total_tokens"] = (result["total_tokens_input"] or 0) + (
+                result["total_tokens_output"] or 0
+            )
 
             # Get average latency from API calls
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT AVG(latency_ms) as avg_latency_ms
                 FROM api_calls
                 INNER JOIN phases ON api_calls.phase_id = phases.id
                 WHERE phases.phase_name = ? AND phases.started_at >= ?
-            """, (phase_name, since_date))
+            """,
+                (phase_name, since_date),
+            )
 
             latency_row = cursor.fetchone()
-            result['avg_latency_ms'] = latency_row['avg_latency_ms'] if latency_row else 0
+            result["avg_latency_ms"] = (
+                latency_row["avg_latency_ms"] if latency_row else 0
+            )
 
             return result
 
         return {
-            'total_runs': 0,
-            'total_tokens': 0,
-            'total_tokens_input': 0,
-            'total_tokens_output': 0,
-            'total_tokens_cached': 0,
-            'total_cost': 0.0,
-            'avg_duration_seconds': 0,
-            'avg_latency_ms': 0
+            "total_runs": 0,
+            "total_tokens": 0,
+            "total_tokens_input": 0,
+            "total_tokens_output": 0,
+            "total_tokens_cached": 0,
+            "total_cost": 0.0,
+            "avg_duration_seconds": 0,
+            "avg_latency_ms": 0,
         }
 
     def get_total_metrics(self, days: int = 30) -> Dict[str, Any]:
@@ -474,7 +531,8 @@ class MetricsDatabase:
 
         since_date = (datetime.now() - timedelta(days=days)).isoformat()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 COUNT(*) as total_builds,
                 SUM(total_tokens_input) as total_tokens_input,
@@ -483,22 +541,26 @@ class MetricsDatabase:
                 SUM(total_cost) as total_cost
             FROM builds
             WHERE created_at >= ?
-        """, (since_date,))
+        """,
+            (since_date,),
+        )
 
         row = cursor.fetchone()
 
         if row:
             result = dict(row)
-            result['total_tokens'] = (result['total_tokens_input'] or 0) + (result['total_tokens_output'] or 0)
+            result["total_tokens"] = (result["total_tokens_input"] or 0) + (
+                result["total_tokens_output"] or 0
+            )
             return result
 
         return {
-            'total_builds': 0,
-            'total_tokens': 0,
-            'total_tokens_input': 0,
-            'total_tokens_output': 0,
-            'total_tokens_cached': 0,
-            'total_cost': 0.0
+            "total_builds": 0,
+            "total_tokens": 0,
+            "total_tokens_input": 0,
+            "total_tokens_output": 0,
+            "total_tokens_cached": 0,
+            "total_cost": 0.0,
         }
 
     def get_cost_summary(self, start_date: str, end_date: str) -> Dict[str, Any]:
@@ -515,7 +577,8 @@ class MetricsDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT
                 COUNT(*) as build_count,
                 SUM(total_tokens_input + total_tokens_output) as total_tokens,
@@ -525,7 +588,9 @@ class MetricsDatabase:
                 MAX(total_cost) as max_cost
             FROM builds
             WHERE created_at >= ? AND created_at <= ?
-        """, (start_date, end_date))
+        """,
+            (start_date, end_date),
+        )
 
         row = cursor.fetchone()
 
@@ -533,12 +598,12 @@ class MetricsDatabase:
             return dict(row)
 
         return {
-            'build_count': 0,
-            'total_tokens': 0,
-            'total_cost': 0.0,
-            'avg_cost_per_build': 0.0,
-            'min_cost': 0.0,
-            'max_cost': 0.0
+            "build_count": 0,
+            "total_tokens": 0,
+            "total_cost": 0.0,
+            "avg_cost_per_build": 0.0,
+            "min_cost": 0.0,
+            "max_cost": 0.0,
         }
 
     def cleanup_old_data(self, days: int = 90) -> int:
@@ -557,10 +622,13 @@ class MetricsDatabase:
             cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
 
             # Delete old builds (cascades to phases and api_calls)
-            cursor.execute("""
+            cursor.execute(
+                """
                 DELETE FROM builds
                 WHERE created_at < ? AND status IN ('completed', 'failed')
-            """, (cutoff_date,))
+            """,
+                (cutoff_date,),
+            )
 
             deleted_count = cursor.rowcount
 
@@ -584,10 +652,10 @@ class MetricsDatabase:
         api_calls = [dict(row) for row in cursor.fetchall()]
 
         return {
-            'builds': builds,
-            'phases': phases,
-            'api_calls': api_calls,
-            'exported_at': datetime.now().isoformat()
+            "builds": builds,
+            "phases": phases,
+            "api_calls": api_calls,
+            "exported_at": datetime.now().isoformat(),
         }
 
 

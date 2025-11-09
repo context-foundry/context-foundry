@@ -8,13 +8,12 @@ Tests for:
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 from datetime import datetime
 
 from tools.evolution.modes.research_discovery import ResearchDiscoveryMode
 from tools.evolution.modes.chaos_creative import ChaosCreativeMode
 from tools.evolution.modes.base_mode import TaskResult
-from tools.evolution.task_queue import Task, TaskStatus, TaskType
 
 
 class TestResearchDiscoveryMode:
@@ -39,33 +38,31 @@ class TestResearchDiscoveryMode:
         # Create mock task
         task = Mock()
         task.params = {
-            'prompt': 'Investigate quantum computing advances',
-            'sources': ['web', 'arxiv']
+            "prompt": "Investigate quantum computing advances",
+            "sources": ["web", "arxiv"],
         }
 
         result = mode.execute_task(task)
 
         assert result.success is True
         assert result.output is not None
-        assert 'report' in result.output
-        assert 'sources_searched' in result.output
-        assert 'papers_analyzed' in result.output
-        assert result.output['sources_searched'] == ['web', 'arxiv']
-        assert result.output['papers_analyzed'] == 0
+        assert "report" in result.output
+        assert "sources_searched" in result.output
+        assert "papers_analyzed" in result.output
+        assert result.output["sources_searched"] == ["web", "arxiv"]
+        assert result.output["papers_analyzed"] == 0
 
     def test_execute_task_with_minimal_params(self):
         """Test execution with minimal parameters"""
         mode = ResearchDiscoveryMode()
 
         task = Mock()
-        task.params = {
-            'prompt': 'Test research'
-        }
+        task.params = {"prompt": "Test research"}
 
         result = mode.execute_task(task)
 
         assert result.success is True
-        assert result.output['sources_searched'] == ['web']
+        assert result.output["sources_searched"] == ["web"]
 
     def test_execute_task_with_empty_params(self):
         """Test execution with empty params"""
@@ -77,7 +74,7 @@ class TestResearchDiscoveryMode:
         result = mode.execute_task(task)
 
         assert result.success is True
-        assert 'report' in result.output
+        assert "report" in result.output
 
     def test_execute_task_handles_exception(self):
         """Test that execute_task handles exceptions gracefully"""
@@ -98,10 +95,7 @@ class TestResearchDiscoveryMode:
         """Test validation of successful result"""
         mode = ResearchDiscoveryMode()
 
-        result = TaskResult(
-            success=True,
-            output={'report': 'Test report'}
-        )
+        result = TaskResult(success=True, output={"report": "Test report"})
 
         assert mode.validate_result(result) is True
 
@@ -109,11 +103,7 @@ class TestResearchDiscoveryMode:
         """Test validation of failed result"""
         mode = ResearchDiscoveryMode()
 
-        result = TaskResult(
-            success=False,
-            output=None,
-            error="Error occurred"
-        )
+        result = TaskResult(success=False, output=None, error="Error occurred")
 
         assert mode.validate_result(result) is False
 
@@ -121,10 +111,7 @@ class TestResearchDiscoveryMode:
         """Test validation of result with success=True but no output"""
         mode = ResearchDiscoveryMode()
 
-        result = TaskResult(
-            success=True,
-            output=None
-        )
+        result = TaskResult(success=True, output=None)
 
         assert mode.validate_result(result) is False
 
@@ -164,8 +151,8 @@ class TestChaosCreativeMode:
         """Test mode can be initialized"""
         mode = ChaosCreativeMode()
         assert mode is not None
-        assert hasattr(mode, 'PROJECT_TYPES')
-        assert hasattr(mode, 'PROJECT_IDEAS')
+        assert hasattr(mode, "PROJECT_TYPES")
+        assert hasattr(mode, "PROJECT_IDEAS")
 
     def test_project_types_probabilities_sum_to_one(self):
         """Test that project type probabilities sum to approximately 1.0"""
@@ -179,22 +166,22 @@ class TestChaosCreativeMode:
         tasks = mode.generate_tasks()
 
         assert len(tasks) == 1
-        assert tasks[0]['type'] == 'chaos_creative'
-        assert 'params' in tasks[0]
+        assert tasks[0]["type"] == "chaos_creative"
+        assert "params" in tasks[0]
 
     def test_generate_tasks_has_required_fields(self):
         """Test that generated tasks have required fields"""
         mode = ChaosCreativeMode()
         tasks = mode.generate_tasks()
 
-        params = tasks[0]['params']
-        assert 'project_type' in params
-        assert 'idea' in params
-        assert 'tech_stack' in params
+        params = tasks[0]["params"]
+        assert "project_type" in params
+        assert "idea" in params
+        assert "tech_stack" in params
 
-        assert params['project_type'] in mode.PROJECT_TYPES
-        assert isinstance(params['idea'], str)
-        assert isinstance(params['tech_stack'], list)
+        assert params["project_type"] in mode.PROJECT_TYPES
+        assert isinstance(params["idea"], str)
+        assert isinstance(params["tech_stack"], list)
 
     def test_weighted_random_selection(self):
         """Test weighted random selection logic"""
@@ -218,35 +205,35 @@ class TestChaosCreativeMode:
         """Test weighted random with only one option"""
         mode = ChaosCreativeMode()
 
-        weights = {'only_option': 1.0}
+        weights = {"only_option": 1.0}
         result = mode._weighted_random(weights)
 
-        assert result == 'only_option'
+        assert result == "only_option"
 
     def test_select_tech_stack_web_app(self):
         """Test tech stack selection for web app"""
         mode = ChaosCreativeMode()
-        stack = mode._select_tech_stack('web_app')
+        stack = mode._select_tech_stack("web_app")
 
         assert isinstance(stack, list)
         assert len(stack) > 0
-        assert 'react' in stack or 'typescript' in stack or 'tailwind' in stack
+        assert "react" in stack or "typescript" in stack or "tailwind" in stack
 
     def test_select_tech_stack_cli_tool(self):
         """Test tech stack selection for CLI tool"""
         mode = ChaosCreativeMode()
-        stack = mode._select_tech_stack('cli_tool')
+        stack = mode._select_tech_stack("cli_tool")
 
         assert isinstance(stack, list)
-        assert 'python' in stack or 'click' in stack or 'rich' in stack
+        assert "python" in stack or "click" in stack or "rich" in stack
 
     def test_select_tech_stack_unknown_type(self):
         """Test tech stack selection for unknown project type"""
         mode = ChaosCreativeMode()
-        stack = mode._select_tech_stack('unknown_type')
+        stack = mode._select_tech_stack("unknown_type")
 
         # Should return default stack
-        assert stack == ['python']
+        assert stack == ["python"]
 
     def test_select_tech_stack_all_types(self):
         """Test that all project types have tech stacks"""
@@ -263,19 +250,19 @@ class TestChaosCreativeMode:
 
         task = Mock()
         task.params = {
-            'project_type': 'web_app',
-            'idea': 'Test idea',
-            'tech_stack': ['react', 'typescript']
+            "project_type": "web_app",
+            "idea": "Test idea",
+            "tech_stack": ["react", "typescript"],
         }
 
         result = mode.execute_task(task)
 
         assert result.success is True
         assert result.output is not None
-        assert result.output['project_type'] == 'web_app'
-        assert result.output['idea'] == 'Test idea'
-        assert result.output['tech_stack'] == ['react', 'typescript']
-        assert 'message' in result.output
+        assert result.output["project_type"] == "web_app"
+        assert result.output["idea"] == "Test idea"
+        assert result.output["tech_stack"] == ["react", "typescript"]
+        assert "message" in result.output
 
     def test_execute_task_handles_exception(self):
         """Test that execute_task handles exceptions"""
@@ -294,10 +281,7 @@ class TestChaosCreativeMode:
         """Test validation of successful result"""
         mode = ChaosCreativeMode()
 
-        result = TaskResult(
-            success=True,
-            output={'project_type': 'web_app'}
-        )
+        result = TaskResult(success=True, output={"project_type": "web_app"})
 
         assert mode.validate_result(result) is True
 
@@ -305,11 +289,7 @@ class TestChaosCreativeMode:
         """Test validation of failed result"""
         mode = ChaosCreativeMode()
 
-        result = TaskResult(
-            success=False,
-            output=None,
-            error="Error"
-        )
+        result = TaskResult(success=False, output=None, error="Error")
 
         assert mode.validate_result(result) is False
 
@@ -330,7 +310,7 @@ class TestChaosCreativeMode:
         ideas = set()
         for _ in range(20):
             tasks = mode.generate_tasks()
-            idea = tasks[0]['params']['idea']
+            idea = tasks[0]["params"]["idea"]
             ideas.add(idea)
 
         # Should have at least a few different ideas
@@ -355,24 +335,24 @@ class TestCommunicationModulesPlaceholder:
         """Test that REST API routes are documented"""
         from tools.evolution.communication import rest_api
 
-        assert hasattr(rest_api, 'API_ROUTES')
+        assert hasattr(rest_api, "API_ROUTES")
         assert isinstance(rest_api.API_ROUTES, dict)
         assert len(rest_api.API_ROUTES) > 0
 
         # Verify expected routes are documented
-        assert 'POST /tasks' in rest_api.API_ROUTES
-        assert 'GET /tasks' in rest_api.API_ROUTES
-        assert 'GET /health' in rest_api.API_ROUTES
+        assert "POST /tasks" in rest_api.API_ROUTES
+        assert "GET /tasks" in rest_api.API_ROUTES
+        assert "GET /health" in rest_api.API_ROUTES
 
     def test_rest_api_functions_exist(self):
         """Test that REST API functions are defined"""
         from tools.evolution.communication import rest_api
 
         # Functions should exist even if they're placeholders
-        assert hasattr(rest_api, 'create_task')
-        assert hasattr(rest_api, 'list_tasks')
-        assert hasattr(rest_api, 'get_task')
-        assert hasattr(rest_api, 'health_check')
+        assert hasattr(rest_api, "create_task")
+        assert hasattr(rest_api, "list_tasks")
+        assert hasattr(rest_api, "get_task")
+        assert hasattr(rest_api, "health_check")
 
         # Verify they're callable
         assert callable(rest_api.create_task)
@@ -381,5 +361,5 @@ class TestCommunicationModulesPlaceholder:
         assert callable(rest_api.health_check)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

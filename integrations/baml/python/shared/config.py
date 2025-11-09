@@ -90,8 +90,7 @@ def load_config(env_file: Path | None = None) -> Config:
     config_dict = {
         "anthropic_api_key": os.getenv("ANTHROPIC_API_KEY", ""),
         "baml_log_level": os.getenv("BAML_LOG_LEVEL", "INFO"),
-        "run_integration_tests": os.getenv("RUN_INTEGRATION_TESTS", "false").lower()
-        == "true",
+        "run_integration_tests": os.getenv("RUN_INTEGRATION_TESTS", "false").lower() == "true",
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
     }
 

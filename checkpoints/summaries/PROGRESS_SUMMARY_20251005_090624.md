@@ -32,7 +32,7 @@
 
 **Phase**: Research and planning phase transitioning to implementation
 
-**Immediate Next Steps**: 
+**Immediate Next Steps**:
 - Task 3: Update endpoint configuration in `weather.js`
 - Replace paid URL with free URL
 - Implement timeout handling to prevent hanging
@@ -78,9 +78,9 @@
 
 **Timeout Implementation**: Use `fetch()` with `AbortSignal.timeout(10000)` to prevent hanging requests.
 
-**Error Handling Strategy**: 
+**Error Handling Strategy**:
 - Status 401: Invalid API key message
-- Status 429: Rate limit exceeded with retry suggestion  
+- Status 429: Rate limit exceeded with retry suggestion
 - Status 404: City not found error
 - Network errors: Connection issue guidance
 

@@ -8,12 +8,7 @@ class LogViewerWidget(RichLog):
     """Display build logs with rich formatting"""
 
     def __init__(self, **kwargs):
-        super().__init__(
-            max_lines=1000,
-            highlight=True,
-            markup=True,
-            **kwargs
-        )
+        super().__init__(max_lines=1000, highlight=True, markup=True, **kwargs)
 
     def add_log(self, message: str, level: str = "info"):
         """Add log message with styling"""

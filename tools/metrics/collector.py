@@ -21,9 +21,11 @@ from .cost_calculator import CostCalculator, get_cost_calculator
 class MetricsCollector:
     """Real-time metrics collection orchestrator"""
 
-    def __init__(self,
-                 db: Optional[MetricsDatabase] = None,
-                 calculator: Optional[CostCalculator] = None):
+    def __init__(
+        self,
+        db: Optional[MetricsDatabase] = None,
+        calculator: Optional[CostCalculator] = None,
+    ):
         """
         Initialize metrics collector.
 
@@ -37,15 +39,19 @@ class MetricsCollector:
 
         self._usage_queue = queue.Queue()
         self._shutdown = threading.Event()
-        self._last_response_time: Optional[str] = None  # Track last response time for latency calculation
+        self._last_response_time: Optional[str] = (
+            None  # Track last response time for latency calculation
+        )
 
-    def collect_from_subprocess(self,
-                                process: subprocess.Popen,
-                                session_id: str,
-                                phase_name: str,
-                                model: str = 'claude-sonnet-4',
-                                batch_size: int = 10,
-                                batch_timeout: float = 5.0):
+    def collect_from_subprocess(
+        self,
+        process: subprocess.Popen,
+        session_id: str,
+        phase_name: str,
+        model: str = "claude-sonnet-4",
+        batch_size: int = 10,
+        batch_timeout: float = 5.0,
+    ):
         """
         Collect metrics from running subprocess in real-time.
 
@@ -62,20 +68,18 @@ class MetricsCollector:
         if not build:
             build_id = self.db.create_build(session_id)
         else:
-            build_id = build['id']
+            build_id = build["id"]
 
         # Create phase record
         phase_id = self.db.create_phase(
-            build_id,
-            phase_name,
-            started_at=datetime.now().isoformat()
+            build_id, phase_name, started_at=datetime.now().isoformat()
         )
 
         # Start background writer thread
         writer_thread = threading.Thread(
             target=self._batch_writer,
             args=(phase_id, model, batch_size, batch_timeout),
-            daemon=True
+            daemon=True,
         )
         writer_thread.start()
 
@@ -96,10 +100,7 @@ class MetricsCollector:
             writer_thread.join(timeout=10)
 
             # Update phase completion
-            self.db.update_phase(
-                phase_id,
-                completed_at=datetime.now().isoformat()
-            )
+            self.db.update_phase(phase_id, completed_at=datetime.now().isoformat())
 
     def _batch_writer(self, phase_id: int, model: str, batch_size: int, timeout: float):
         """Background thread for batch writing API calls"""
@@ -141,8 +142,7 @@ class MetricsCollector:
             if usage.timestamp:
                 if self._last_response_time:
                     latency_ms = self.parser.calculate_latency(
-                        self._last_response_time,
-                        usage.timestamp
+                        self._last_response_time, usage.timestamp
                     )
                 # Update for next iteration
                 self._last_response_time = usage.timestamp
@@ -155,7 +155,7 @@ class MetricsCollector:
                 tokens_cached=usage.cache_read_tokens,
                 cost=cost,
                 latency_ms=latency_ms,
-                request_id=usage.request_id
+                request_id=usage.request_id,
             )
 
     def _update_phase_totals(self, phase_id: int, usage: TokenUsage, model: str):
@@ -168,7 +168,9 @@ class MetricsCollector:
         # The database queries will calculate totals dynamically
         pass
 
-    def collect_from_phase_file(self, phase_file: Path, session_id: str) -> Dict[str, Any]:
+    def collect_from_phase_file(
+        self, phase_file: Path, session_id: str
+    ) -> Dict[str, Any]:
         """
         Collect metrics from .context-foundry/current-phase.json.
 
@@ -180,45 +182,45 @@ class MetricsCollector:
             Dict with collected metrics
         """
         try:
-            with open(phase_file, 'r') as f:
+            with open(phase_file, "r") as f:
                 phase_data = json.load(f)
 
             # Ensure build exists
             build = self.db.get_build(session_id)
             if not build:
                 build_id = self.db.create_build(
-                    session_id,
-                    status=phase_data.get('status', 'running')
+                    session_id, status=phase_data.get("status", "running")
                 )
             else:
-                build_id = build['id']
+                build_id = build["id"]
                 # Update status
                 self.db.update_build(
-                    session_id,
-                    status=phase_data.get('status', 'running')
+                    session_id, status=phase_data.get("status", "running")
                 )
 
             # Get phase info
-            phase_name = phase_data.get('current_phase', 'Unknown')
-            phase_number = phase_data.get('phase_number', '?/7')
+            phase_name = phase_data.get("current_phase", "Unknown")
+            phase_number = phase_data.get("phase_number", "?/7")
 
             return {
-                'session_id': session_id,
-                'build_id': build_id,
-                'phase_name': phase_name,
-                'phase_number': phase_number,
-                'status': phase_data.get('status', 'running'),
-                'phases_completed': phase_data.get('phases_completed', [])
+                "session_id": session_id,
+                "build_id": build_id,
+                "phase_name": phase_name,
+                "phase_number": phase_number,
+                "status": phase_data.get("status", "running"),
+                "phases_completed": phase_data.get("phases_completed", []),
             }
 
         except (FileNotFoundError, json.JSONDecodeError) as e:
-            return {
-                'error': str(e),
-                'session_id': session_id
-            }
+            return {"error": str(e), "session_id": session_id}
 
-    def collect_from_log_file(self, log_file: Path, session_id: str,
-                              phase_name: str, model: str = 'claude-sonnet-4'):
+    def collect_from_log_file(
+        self,
+        log_file: Path,
+        session_id: str,
+        phase_name: str,
+        model: str = "claude-sonnet-4",
+    ):
         """
         Collect metrics from existing log file.
 
@@ -233,13 +235,11 @@ class MetricsCollector:
         if not build:
             build_id = self.db.create_build(session_id)
         else:
-            build_id = build['id']
+            build_id = build["id"]
 
         # Create phase
         phase_id = self.db.create_phase(
-            build_id,
-            phase_name,
-            started_at=datetime.now().isoformat()
+            build_id, phase_name, started_at=datetime.now().isoformat()
         )
 
         # Parse log file
@@ -259,8 +259,7 @@ class MetricsCollector:
             if usage.timestamp:
                 if last_timestamp:
                     latency_ms = self.parser.calculate_latency(
-                        last_timestamp,
-                        usage.timestamp
+                        last_timestamp, usage.timestamp
                     )
                 last_timestamp = usage.timestamp
 
@@ -272,7 +271,7 @@ class MetricsCollector:
                 tokens_cached=usage.cache_read_tokens,
                 cost=cost,
                 latency_ms=latency_ms,
-                request_id=usage.request_id
+                request_id=usage.request_id,
             )
 
             total_cost += cost
@@ -287,10 +286,10 @@ class MetricsCollector:
             tokens_output=total_output,
             tokens_cached=total_cached,
             cost=total_cost,
-            completed_at=datetime.now().isoformat()
+            completed_at=datetime.now().isoformat(),
         )
 
-    def finalize_build(self, session_id: str, status: str = 'completed'):
+    def finalize_build(self, session_id: str, status: str = "completed"):
         """
         Finalize build metrics.
 
@@ -309,15 +308,15 @@ class MetricsCollector:
         self.db.update_build(
             session_id,
             status=status,
-            total_tokens_input=metrics['total_tokens_input'],
-            total_tokens_output=metrics['total_tokens_output'],
-            total_tokens_cached=metrics['total_tokens_cached'],
-            total_cost=metrics['total_cost'],
-            completed_at=datetime.now().isoformat()
+            total_tokens_input=metrics["total_tokens_input"],
+            total_tokens_output=metrics["total_tokens_output"],
+            total_tokens_cached=metrics["total_tokens_cached"],
+            total_cost=metrics["total_cost"],
+            completed_at=datetime.now().isoformat(),
         )
 
         # Check budget alerts
-        alerts = self.calculator.get_budget_status(self.db).get('alerts', [])
+        alerts = self.calculator.get_budget_status(self.db).get("alerts", [])
         for alert in alerts:
             print(alert)
 
@@ -336,7 +335,7 @@ class MetricsCollector:
                 self.collector = collector
 
             def on_modified(self, event):
-                if event.src_path.endswith('current-phase.json'):
+                if event.src_path.endswith("current-phase.json"):
                     # Extract session ID from path
                     path = Path(event.src_path)
                     session_id = path.parent.parent.name
@@ -347,7 +346,7 @@ class MetricsCollector:
         observer = Observer()
         handler = PhaseFileHandler(self)
 
-        cf_dir = Path(working_directory) / '.context-foundry'
+        cf_dir = Path(working_directory) / ".context-foundry"
         if cf_dir.exists():
             observer.schedule(handler, str(cf_dir), recursive=False)
             observer.start()
@@ -366,20 +365,20 @@ def collect_metrics_for_build(working_directory: str, session_id: str):
     collector = MetricsCollector()
 
     # Look for log files in .context-foundry/
-    cf_dir = Path(working_directory) / '.context-foundry'
+    cf_dir = Path(working_directory) / ".context-foundry"
 
     if not cf_dir.exists():
         return
 
     # Parse phase files to determine what was built
-    phase_file = cf_dir / 'current-phase.json'
+    phase_file = cf_dir / "current-phase.json"
     if phase_file.exists():
         collector.collect_from_phase_file(phase_file, session_id)
 
     # Look for build logs
-    for log_file in cf_dir.glob('*.log'):
+    for log_file in cf_dir.glob("*.log"):
         # Try to extract phase from filename
-        phase_name = log_file.stem.replace('-', ' ').title()
+        phase_name = log_file.stem.replace("-", " ").title()
         collector.collect_from_log_file(log_file, session_id, phase_name)
 
     # Finalize

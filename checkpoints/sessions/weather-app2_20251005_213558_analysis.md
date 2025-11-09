@@ -40,4 +40,3 @@
 ### Top Patterns
 
 ## Recommendations
-

@@ -136,4 +136,3 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
 - APIs get documentation/Postman screenshots
 - If project type cannot be determined or screenshots not applicable, create a visual representation of the project structure instead
 - Graceful degradation: missing screenshots won't block documentation or deployment
-

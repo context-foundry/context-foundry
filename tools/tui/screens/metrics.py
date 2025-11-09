@@ -88,7 +88,7 @@ class MetricsScreen(Screen):
                         str(agent.total_calls),
                         f"{agent.tokens_used:,}",
                         f"${agent.cost_usd:.2f}",
-                        f"{agent.avg_latency_ms:.0f}ms"
+                        f"{agent.avg_latency_ms:.0f}ms",
                     )
             else:
                 table.add_row("—", "No agent data available", "—", "—", "—")

@@ -15,7 +15,7 @@ Test Coverage:
 import pytest
 import sys
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -23,8 +23,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 # Mock FastAPI WebSocket dependencies
 mock_fastapi = MagicMock()
 mock_websocket = MagicMock()
-sys.modules['fastapi'] = mock_fastapi
-sys.modules['fastapi'].WebSocket = mock_websocket
+sys.modules["fastapi"] = mock_fastapi
+sys.modules["fastapi"].WebSocket = mock_websocket
 
 from tools.evolution.communication import websocket_stream
 
@@ -35,7 +35,7 @@ class TestWebSocketHandler:
     @pytest.mark.asyncio
     async def test_stream_handler_exists(self):
         """Test that stream handler function is defined"""
-        assert hasattr(websocket_stream, 'stream_handler')
+        assert hasattr(websocket_stream, "stream_handler")
         assert callable(websocket_stream.stream_handler)
 
     @pytest.mark.asyncio
@@ -118,7 +118,9 @@ class TestWebSocketHandler:
         mock_ws.accept = AsyncMock()
 
         # Simulate disconnection during receive
-        mock_ws.receive_text = AsyncMock(side_effect=Exception("WebSocket disconnected"))
+        mock_ws.receive_text = AsyncMock(
+            side_effect=Exception("WebSocket disconnected")
+        )
         mock_ws.close = AsyncMock()
 
         try:
@@ -155,11 +157,9 @@ class TestWebSocketLifecycle:
         mock_ws = AsyncMock()
         mock_ws.accept = AsyncMock()
         mock_ws.send_text = AsyncMock()
-        mock_ws.receive_text = AsyncMock(side_effect=[
-            "message1",
-            "message2",
-            Exception("Connection closed")
-        ])
+        mock_ws.receive_text = AsyncMock(
+            side_effect=["message1", "message2", Exception("Connection closed")]
+        )
         mock_ws.close = AsyncMock()
 
         try:
@@ -267,6 +267,7 @@ class TestWebSocketIntegration:
     def test_websocket_handler_signature(self):
         """Test handler has correct signature"""
         import inspect
+
         sig = inspect.signature(websocket_stream.stream_handler)
         params = list(sig.parameters.keys())
 
@@ -277,6 +278,7 @@ class TestWebSocketIntegration:
     async def test_websocket_async_compatibility(self):
         """Test handler is async compatible"""
         import inspect
+
         assert inspect.iscoroutinefunction(websocket_stream.stream_handler)
 
 

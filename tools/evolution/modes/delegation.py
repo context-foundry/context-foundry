@@ -3,10 +3,8 @@
 import json
 import logging
 import os
-import subprocess
-import sys
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 from datetime import datetime
 
 from .base_mode import BaseEvolutionMode, TaskResult
@@ -51,7 +49,9 @@ class DelegationMode(BaseEvolutionMode):
                 # Check if build artifacts exist to infer completion
                 working_dir = metadata.get("working_directory", "")
                 if working_dir:
-                    phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+                    phase_file = (
+                        Path(working_dir) / ".context-foundry" / "current-phase.json"
+                    )
                     if phase_file.exists():
                         try:
                             phase_info = json.loads(phase_file.read_text())
@@ -62,8 +62,13 @@ class DelegationMode(BaseEvolutionMode):
                             final_status = None
                             if phase_status == "completed":
                                 # Check if Deploy is in completed phases (full success)
-                                phases_completed = phase_info.get("phases_completed", [])
-                                if "Deploy" in phases_completed or current_phase in ["Deploy", "Feedback"]:
+                                phases_completed = phase_info.get(
+                                    "phases_completed", []
+                                )
+                                if "Deploy" in phases_completed or current_phase in [
+                                    "Deploy",
+                                    "Feedback",
+                                ]:
                                     # Deploy completed (with or without Feedback phase)
                                     final_status = "completed"
                                 else:
@@ -79,32 +84,50 @@ class DelegationMode(BaseEvolutionMode):
                                 # Update metadata
                                 metadata["status"] = final_status
                                 metadata["end_time"] = datetime.now().isoformat()
-                                metadata["current_phase"] = phase_info.get("current_phase", "Unknown")
+                                metadata["current_phase"] = phase_info.get(
+                                    "current_phase", "Unknown"
+                                )
                                 metadata["phase_status"] = phase_status
-                                metadata["phases_completed"] = phase_info.get("phases_completed", [])
-                                metadata["progress_detail"] = phase_info.get("progress_detail", "")
+                                metadata["phases_completed"] = phase_info.get(
+                                    "phases_completed", []
+                                )
+                                metadata["progress_detail"] = phase_info.get(
+                                    "progress_detail", ""
+                                )
 
                                 # Clear stale error message if marking as completed
                                 if final_status == "completed" and "error" in metadata:
                                     del metadata["error"]
 
                                 # Calculate duration
-                                start_time_str = metadata.get("start_time") or metadata.get("started")
+                                start_time_str = metadata.get(
+                                    "start_time"
+                                ) or metadata.get("started")
                                 if start_time_str:
                                     try:
-                                        start_time = datetime.fromisoformat(start_time_str)
-                                        duration = (datetime.now() - start_time).total_seconds()
+                                        start_time = datetime.fromisoformat(
+                                            start_time_str
+                                        )
+                                        duration = (
+                                            datetime.now() - start_time
+                                        ).total_seconds()
                                         metadata["duration"] = round(duration, 2)
                                     except:
                                         pass
 
                                 # Write updated metadata
-                                task_file = self.delegations_dir / f"task-{task_id}.json"
+                                task_file = (
+                                    self.delegations_dir / f"task-{task_id}.json"
+                                )
                                 task_file.write_text(json.dumps(metadata, indent=2))
-                                logger.info(f"{'✅' if final_status == 'completed' else '❌'} Delegation {task_id[:8]} marked as {final_status} (no PID, inferred from phase)")
+                                logger.info(
+                                    f"{'✅' if final_status == 'completed' else '❌'} Delegation {task_id[:8]} marked as {final_status} (no PID, inferred from phase)"
+                                )
 
                         except Exception as e:
-                            logger.debug(f"Could not read phase info for {task_id[:8]}: {e}")
+                            logger.debug(
+                                f"Could not read phase info for {task_id[:8]}: {e}"
+                            )
                     else:
                         # No phase file - mark as failed
                         metadata["status"] = "failed"
@@ -113,7 +136,9 @@ class DelegationMode(BaseEvolutionMode):
 
                         task_file = self.delegations_dir / f"task-{task_id}.json"
                         task_file.write_text(json.dumps(metadata, indent=2))
-                        logger.warning(f"❌ Delegation {task_id[:8]} marked as failed (no PID, no phase file)")
+                        logger.warning(
+                            f"❌ Delegation {task_id[:8]} marked as failed (no PID, no phase file)"
+                        )
 
                 return metadata
 
@@ -122,7 +147,9 @@ class DelegationMode(BaseEvolutionMode):
                 # os.kill(pid, 0) doesn't kill, just checks if process exists
                 os.kill(pid, 0)
                 # Process still running
-                logger.debug(f"Process {pid} for delegation {task_id[:8]} is still running")
+                logger.debug(
+                    f"Process {pid} for delegation {task_id[:8]} is still running"
+                )
                 return metadata
 
             except OSError:
@@ -131,7 +158,9 @@ class DelegationMode(BaseEvolutionMode):
 
                 # Read phase information to determine success/failure
                 working_dir = metadata.get("working_directory", "")
-                phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+                phase_file = (
+                    Path(working_dir) / ".context-foundry" / "current-phase.json"
+                )
 
                 final_status = "completed"  # Assume success unless we find otherwise
                 phase_data = {}
@@ -145,7 +174,10 @@ class DelegationMode(BaseEvolutionMode):
 
                         # Check if Deploy is in completed phases (matches no-PID logic)
                         if phase_status == "completed":
-                            if "Deploy" in phases_completed or current_phase in ["Deploy", "Feedback"]:
+                            if "Deploy" in phases_completed or current_phase in [
+                                "Deploy",
+                                "Feedback",
+                            ]:
                                 # Deploy completed (with or without Feedback phase)
                                 final_status = "completed"
                             else:
@@ -158,7 +190,9 @@ class DelegationMode(BaseEvolutionMode):
                             final_status = "failed"
 
                     except Exception as e:
-                        logger.warning(f"Could not read phase info for {task_id[:8]}: {e}")
+                        logger.warning(
+                            f"Could not read phase info for {task_id[:8]}: {e}"
+                        )
                         final_status = "failed"
                 else:
                     # No phase file - likely failed early
@@ -174,9 +208,13 @@ class DelegationMode(BaseEvolutionMode):
 
                 # Add phase information if available
                 if phase_data:
-                    metadata["current_phase"] = phase_data.get("current_phase", "Unknown")
+                    metadata["current_phase"] = phase_data.get(
+                        "current_phase", "Unknown"
+                    )
                     metadata["phase_status"] = phase_data.get("status", "unknown")
-                    metadata["phases_completed"] = phase_data.get("phases_completed", [])
+                    metadata["phases_completed"] = phase_data.get(
+                        "phases_completed", []
+                    )
                     metadata["progress_detail"] = phase_data.get("progress_detail", "")
 
                 # Calculate duration
@@ -223,22 +261,27 @@ class DelegationMode(BaseEvolutionMode):
                 # (pending delegations haven't started yet)
                 if status in ["running", "pending"]:
                     working_dir = metadata.get("working_directory", "")
-                    project = metadata.get("github_repo_name") or metadata.get("project", "")
+                    project = metadata.get("github_repo_name") or metadata.get(
+                        "project", ""
+                    )
 
                     if not project:
                         project = Path(working_dir).name if working_dir else "unknown"
 
-                    tasks.append({
-                        "type": "delegation_build",
-                        "params": {
-                            "mcp_task_id": task_id,
-                            "project": project,
-                            "working_directory": working_dir,
-                            "started": metadata.get("started") or metadata.get("start_time"),
-                            "user_initiated": True
-                        },
-                        "priority": 7  # Higher priority than evolution tasks
-                    })
+                    tasks.append(
+                        {
+                            "type": "delegation_build",
+                            "params": {
+                                "mcp_task_id": task_id,
+                                "project": project,
+                                "working_directory": working_dir,
+                                "started": metadata.get("started")
+                                or metadata.get("start_time"),
+                                "user_initiated": True,
+                            },
+                            "priority": 7,  # Higher priority than evolution tasks
+                        }
+                    )
             except Exception:
                 continue
 
@@ -257,9 +300,7 @@ class DelegationMode(BaseEvolutionMode):
 
             if not mcp_task_id:
                 return TaskResult(
-                    success=False,
-                    output=None,
-                    error="No mcp_task_id in task params"
+                    success=False, output=None, error="No mcp_task_id in task params"
                 )
 
             # Read delegation metadata
@@ -269,7 +310,7 @@ class DelegationMode(BaseEvolutionMode):
                 return TaskResult(
                     success=False,
                     output=None,
-                    error=f"Delegation file not found: {task_file}"
+                    error=f"Delegation file not found: {task_file}",
                 )
 
             # Read current metadata
@@ -297,9 +338,9 @@ class DelegationMode(BaseEvolutionMode):
                         "project": params.get("project"),
                         "working_directory": params.get("working_directory"),
                         "duration": metadata.get("duration"),
-                        "exit_code": metadata.get("exit_code")
+                        "exit_code": metadata.get("exit_code"),
                     },
-                    error=None if status == "completed" else f"Build {status}"
+                    error=None if status == "completed" else f"Build {status}",
                 )
 
             # Still running - register with watchdog if we have PID
@@ -309,14 +350,16 @@ class DelegationMode(BaseEvolutionMode):
                 if pid not in self.watchdog.processes:
                     # Determine log file path
                     working_dir = params.get("working_directory", "")
-                    log_file = str(Path(working_dir) / ".context-foundry" / "build-output.txt")
+                    log_file = str(
+                        Path(working_dir) / ".context-foundry" / "build-output.txt"
+                    )
 
                     self.watchdog.register_process(
-                        pid=pid,
-                        task_id=mcp_task_id,
-                        log_file=log_file
+                        pid=pid, task_id=mcp_task_id, log_file=log_file
                     )
-                    logger.info(f"Registered delegation PID {pid} with watchdog (task: {mcp_task_id[:8]})")
+                    logger.info(
+                        f"Registered delegation PID {pid} with watchdog (task: {mcp_task_id[:8]})"
+                    )
 
             return TaskResult(
                 success=True,
@@ -326,15 +369,15 @@ class DelegationMode(BaseEvolutionMode):
                     "project": params.get("project"),
                     "current_phase": metadata.get("current_phase"),
                     "phase_status": metadata.get("phase_status"),
-                    "pid": pid
-                }
+                    "pid": pid,
+                },
             )
 
         except Exception as e:
             return TaskResult(
                 success=False,
                 output=None,
-                error=f"Error monitoring delegation: {str(e)}"
+                error=f"Error monitoring delegation: {str(e)}",
             )
 
     def validate_result(self, result: TaskResult) -> bool:

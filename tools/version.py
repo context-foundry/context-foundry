@@ -10,6 +10,7 @@ from pathlib import Path
 # Read version from VERSION file (single source of truth)
 VERSION_FILE = Path(__file__).parent.parent / "VERSION"
 
+
 def get_version() -> str:
     """
     Get the current Context Foundry version.
@@ -21,6 +22,7 @@ def get_version() -> str:
         return VERSION_FILE.read_text().strip()
     except FileNotFoundError:
         return "unknown"
+
 
 def get_version_info() -> dict:
     """
@@ -38,8 +40,9 @@ def get_version_info() -> dict:
         "minor": int(parts[1]) if len(parts) > 1 else 0,
         "patch": int(parts[2]) if len(parts) > 2 else 0,
         "version_string": f"v{version}",
-        "display_name": f"Context Foundry v{version}"
+        "display_name": f"Context Foundry v{version}",
     }
+
 
 # Module-level constants for convenience
 __version__ = get_version()

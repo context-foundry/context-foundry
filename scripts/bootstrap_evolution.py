@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Bootstrap Evolution System - Make it fully functional"""
+
 import sys
 from tools.evolution.task_queue import TaskQueueManager, TaskType
+
 
 def main():
     queue = TaskQueueManager()
@@ -35,18 +37,19 @@ def main():
 This is the Evolution System implementing its own missing features!
 Make it production-ready so it can continuously improve Context Foundry.""",
             "target_file": "tools/evolution/modes/self_improvement.py",
-            "test_required": True
+            "test_required": True,
         },
-        priority=10  # Highest priority
+        priority=10,  # Highest priority
     )
 
     print(f"🚀 Created BOOTSTRAP task: {task_id}")
-    print(f"📋 This task will make Evolution System fully functional!")
-    print(f"⚡ Priority: 10 (URGENT)")
-    print(f"\n🔄 Evolution System will now implement its own missing features!")
-    print(f"🤖 Meta-recursion: AI improving its own improvement system!")
+    print("📋 This task will make Evolution System fully functional!")
+    print("⚡ Priority: 10 (URGENT)")
+    print("\n🔄 Evolution System will now implement its own missing features!")
+    print("🤖 Meta-recursion: AI improving its own improvement system!")
 
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

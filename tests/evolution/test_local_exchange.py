@@ -6,11 +6,8 @@ These tests ensure the LocalExchange correctly manages file-based
 message passing between agents.
 """
 
-import pytest
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from tools.evolution.communication.local_exchange import LocalExchange
 
 
@@ -19,7 +16,9 @@ class TestLocalExchangeInit:
 
     def test_initialization(self, tmp_path):
         """Test that LocalExchange creates shared directory"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -30,7 +29,9 @@ class TestLocalExchangeInit:
 
     def test_shared_dir_already_exists(self, tmp_path):
         """Test initialization when shared directory already exists"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             # Create directory beforehand
@@ -47,7 +48,9 @@ class TestWriteMessage:
 
     def test_write_message(self, tmp_path):
         """Test writing a message to shared directory"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -57,13 +60,15 @@ class TestWriteMessage:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test"},
-                "timestamp": "2025-11-07T10:00:00.123456"
+                "timestamp": "2025-11-07T10:00:00.123456",
             }
 
             exchange.write_message("AgentB", message)
 
             # Check file was created
-            expected_file = exchange.shared_dir / "msg_AgentB_2025-11-07T10:00:00.123456.json"
+            expected_file = (
+                exchange.shared_dir / "msg_AgentB_2025-11-07T10:00:00.123456.json"
+            )
             assert expected_file.exists()
 
             # Check content
@@ -74,7 +79,9 @@ class TestWriteMessage:
 
     def test_write_multiple_messages(self, tmp_path):
         """Test writing multiple messages"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -84,7 +91,7 @@ class TestWriteMessage:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test1"},
-                "timestamp": "2025-11-07T10:00:00.000001"
+                "timestamp": "2025-11-07T10:00:00.000001",
             }
 
             message2 = {
@@ -92,7 +99,7 @@ class TestWriteMessage:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test2"},
-                "timestamp": "2025-11-07T10:00:00.000002"
+                "timestamp": "2025-11-07T10:00:00.000002",
             }
 
             exchange.write_message("AgentB", message1)
@@ -104,7 +111,9 @@ class TestWriteMessage:
 
     def test_write_message_different_agents(self, tmp_path):
         """Test writing messages to different agents"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -114,7 +123,7 @@ class TestWriteMessage:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "for B"},
-                "timestamp": "2025-11-07T10:00:00.000001"
+                "timestamp": "2025-11-07T10:00:00.000001",
             }
 
             message2 = {
@@ -122,7 +131,7 @@ class TestWriteMessage:
                 "to": "AgentC",
                 "type": "task",
                 "payload": {"data": "for C"},
-                "timestamp": "2025-11-07T10:00:00.000002"
+                "timestamp": "2025-11-07T10:00:00.000002",
             }
 
             exchange.write_message("AgentB", message1)
@@ -141,7 +150,9 @@ class TestReadMessages:
 
     def test_read_messages_empty(self, tmp_path):
         """Test reading messages when none exist"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -152,7 +163,9 @@ class TestReadMessages:
 
     def test_read_single_message(self, tmp_path):
         """Test reading a single message"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -162,7 +175,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test"},
-                "timestamp": "2025-11-07T10:00:00.123456"
+                "timestamp": "2025-11-07T10:00:00.123456",
             }
 
             exchange.write_message("AgentB", message)
@@ -174,7 +187,9 @@ class TestReadMessages:
 
     def test_read_multiple_messages(self, tmp_path):
         """Test reading multiple messages"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -184,7 +199,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test1"},
-                "timestamp": "2025-11-07T10:00:00.000001"
+                "timestamp": "2025-11-07T10:00:00.000001",
             }
 
             message2 = {
@@ -192,7 +207,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test2"},
-                "timestamp": "2025-11-07T10:00:00.000002"
+                "timestamp": "2025-11-07T10:00:00.000002",
             }
 
             exchange.write_message("AgentB", message1)
@@ -208,7 +223,9 @@ class TestReadMessages:
 
     def test_read_messages_deletes_files(self, tmp_path):
         """Test that reading messages deletes the files"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -218,7 +235,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test"},
-                "timestamp": "2025-11-07T10:00:00.123456"
+                "timestamp": "2025-11-07T10:00:00.123456",
             }
 
             exchange.write_message("AgentB", message)
@@ -236,7 +253,9 @@ class TestReadMessages:
 
     def test_read_messages_only_for_agent(self, tmp_path):
         """Test that reading only returns messages for specific agent"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -246,7 +265,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "for B"},
-                "timestamp": "2025-11-07T10:00:00.000001"
+                "timestamp": "2025-11-07T10:00:00.000001",
             }
 
             message_c = {
@@ -254,7 +273,7 @@ class TestReadMessages:
                 "to": "AgentC",
                 "type": "task",
                 "payload": {"data": "for C"},
-                "timestamp": "2025-11-07T10:00:00.000002"
+                "timestamp": "2025-11-07T10:00:00.000002",
             }
 
             exchange.write_message("AgentB", message_b)
@@ -273,7 +292,9 @@ class TestReadMessages:
 
     def test_read_messages_twice_returns_empty(self, tmp_path):
         """Test that reading messages twice returns empty on second read"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -283,7 +304,7 @@ class TestReadMessages:
                 "to": "AgentB",
                 "type": "task",
                 "payload": {"data": "test"},
-                "timestamp": "2025-11-07T10:00:00.123456"
+                "timestamp": "2025-11-07T10:00:00.123456",
             }
 
             exchange.write_message("AgentB", message)
@@ -302,7 +323,9 @@ class TestIntegration:
 
     def test_full_message_flow(self, tmp_path):
         """Test complete message exchange flow"""
-        with patch('tools.evolution.communication.local_exchange.Path.home') as mock_home:
+        with patch(
+            "tools.evolution.communication.local_exchange.Path.home"
+        ) as mock_home:
             mock_home.return_value = tmp_path
 
             exchange = LocalExchange()
@@ -313,7 +336,7 @@ class TestIntegration:
                 "to": "AgentB",
                 "type": "request",
                 "payload": {"task": "analyze_code", "file": "main.py"},
-                "timestamp": "2025-11-07T10:00:00.123456"
+                "timestamp": "2025-11-07T10:00:00.123456",
             }
 
             exchange.write_message("AgentB", message)

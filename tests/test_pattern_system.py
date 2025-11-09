@@ -7,10 +7,10 @@ that enables cross-project learning.
 
 import json
 import pytest
-import tempfile
 from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
+from unittest.mock import patch, MagicMock
 import sys
+
 
 # Mock FastMCP before importing tools.mcp_server
 class MockFastMCP:
@@ -19,30 +19,35 @@ class MockFastMCP:
 
     def tool(self, *args, **kwargs):
         """Decorator that returns the original function unchanged"""
+
         def decorator(func):
             return func
+
         if args and callable(args[0]):
             return args[0]
         return decorator
 
     def resource(self, *args, **kwargs):
         """Decorator that returns the original function unchanged"""
+
         def decorator(func):
             return func
+
         return decorator
 
     def run(self):
         """Mock run method"""
         pass
 
+
 mock_module = MagicMock()
 mock_module.FastMCP = MockFastMCP
 mock_module.Context = MagicMock
 
-sys.modules['fastmcp'] = mock_module
-sys.modules['fastmcp.server'] = MagicMock()
-sys.modules['fastmcp.server.dependencies'] = MagicMock()
-sys.modules['fastmcp.server.dependencies'].get_context = MagicMock()
+sys.modules["fastmcp"] = mock_module
+sys.modules["fastmcp.server"] = MagicMock()
+sys.modules["fastmcp.server.dependencies"] = MagicMock()
+sys.modules["fastmcp.server.dependencies"].get_context = MagicMock()
 
 # Add repo root to sys.path so we can import tools.mcp_server
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -58,14 +63,14 @@ SAMPLE_PATTERN = {
     "issue": "Test issue",
     "solution": {"builder": "Test solution"},
     "severity": "LOW",
-    "auto_apply": True
+    "auto_apply": True,
 }
 
 SAMPLE_PATTERNS_FILE = {
     "patterns": [SAMPLE_PATTERN],
     "version": "1.0",
     "last_updated": "2025-10-19T10:00:00Z",
-    "total_builds": 1
+    "total_builds": 1,
 }
 
 
@@ -143,7 +148,7 @@ class TestPatternMerging:
         new_pattern = {
             "pattern_id": "test-pattern-002",
             "first_seen": "2025-10-19",
-            "frequency": 1
+            "frequency": 1,
         }
 
         # Merge logic
@@ -172,8 +177,7 @@ class TestPatternMerging:
         """Test merging multiple patterns at once."""
         existing = {"patterns": []}
         new_patterns = [
-            {"pattern_id": f"pattern-{i}", "frequency": 1}
-            for i in range(3)
+            {"pattern_id": f"pattern-{i}", "frequency": 1} for i in range(3)
         ]
 
         for pattern in new_patterns:
@@ -197,7 +201,8 @@ class TestPatternMatching:
 
         project_type = "python"
         matched = [
-            p for p in patterns["patterns"]
+            p
+            for p in patterns["patterns"]
             if project_type in p.get("project_types", [])
         ]
 
@@ -249,6 +254,7 @@ class TestPatternBackup:
 
         # Backup logic
         import shutil
+
         shutil.copytree(source, backup_dir / "patterns", dirs_exist_ok=True)
 
         assert (backup_dir / "patterns" / "common-issues.json").exists()
@@ -308,7 +314,7 @@ class TestBootstrapPatterns:
 
     def test_bootstrap_merges_project_patterns(self, tmp_path):
         """Test that bootstrap correctly merges project patterns into global storage."""
-        from tools.mcp_server import _merge_project_patterns_impl, bootstrap_patterns_on_startup
+        from tools.mcp_server import bootstrap_patterns_on_startup
 
         # Setup: Create fake project patterns directory
         project_dir = tmp_path / "project"
@@ -317,12 +323,22 @@ class TestBootstrapPatterns:
 
         project_data = {
             "patterns": [
-                {"pattern_id": "test-pattern-1", "frequency": 1, "issue": "Test 1", "project_types": ["test"]},
-                {"pattern_id": "test-pattern-2", "frequency": 1, "issue": "Test 2", "project_types": ["test"]}
+                {
+                    "pattern_id": "test-pattern-1",
+                    "frequency": 1,
+                    "issue": "Test 1",
+                    "project_types": ["test"],
+                },
+                {
+                    "pattern_id": "test-pattern-2",
+                    "frequency": 1,
+                    "issue": "Test 2",
+                    "project_types": ["test"],
+                },
             ],
             "version": "1.0",
             "last_updated": "2025-11-09",
-            "total_builds": 1
+            "total_builds": 1,
         }
         (project_patterns / "common-issues.json").write_text(json.dumps(project_data))
 
@@ -331,8 +347,10 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute bootstrap
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=tmp_path / "global"):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: Global patterns now contain project patterns
@@ -358,8 +376,10 @@ class TestBootstrapPatterns:
         (global_patterns / ".bootstrap-done").write_text("Already done")
 
         # Execute: Bootstrap should return early
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=tmp_path / "global"):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: No error raised (would fail if it tried to merge non-existent project dir)
@@ -376,8 +396,10 @@ class TestBootstrapPatterns:
         global_dir = tmp_path / "global"
 
         # Execute
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=global_dir):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=global_dir),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: No global patterns directory created
@@ -394,28 +416,40 @@ class TestBootstrapPatterns:
 
         # Common issues
         common_issues = {
-            "patterns": [{"pattern_id": "issue-1", "frequency": 1, "project_types": ["test"]}],
+            "patterns": [
+                {"pattern_id": "issue-1", "frequency": 1, "project_types": ["test"]}
+            ],
             "version": "1.0",
             "last_updated": "2025-11-09",
-            "total_builds": 1
+            "total_builds": 1,
         }
         (project_patterns / "common-issues.json").write_text(json.dumps(common_issues))
 
         # Scout learnings
         scout_learnings = {
-            "learnings": [{"learning_id": "learning-1", "key_points": ["test"], "project_types": ["test"]}],
+            "learnings": [
+                {
+                    "learning_id": "learning-1",
+                    "key_points": ["test"],
+                    "project_types": ["test"],
+                }
+            ],
             "version": "1.0",
-            "last_updated": "2025-11-09"
+            "last_updated": "2025-11-09",
         }
-        (project_patterns / "scout-learnings.json").write_text(json.dumps(scout_learnings))
+        (project_patterns / "scout-learnings.json").write_text(
+            json.dumps(scout_learnings)
+        )
 
         # Setup global directory
         global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
         global_patterns.mkdir(parents=True)
 
         # Execute
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=tmp_path / "global"):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: Both pattern files merged
@@ -427,7 +461,9 @@ class TestBootstrapPatterns:
         assert len(issues_data["patterns"]) == 1
         assert issues_data["patterns"][0]["pattern_id"] == "issue-1"
 
-        learnings_data = json.loads((global_patterns / "scout-learnings.json").read_text())
+        learnings_data = json.loads(
+            (global_patterns / "scout-learnings.json").read_text()
+        )
         assert len(learnings_data["learnings"]) == 1
         assert learnings_data["learnings"][0]["learning_id"] == "learning-1"
 
@@ -443,11 +479,11 @@ class TestBootstrapPatterns:
         project_data = {
             "patterns": [
                 {"pattern_id": "p1", "frequency": 1, "project_types": ["test"]},
-                {"pattern_id": "p2", "frequency": 1, "project_types": ["test"]}
+                {"pattern_id": "p2", "frequency": 1, "project_types": ["test"]},
             ],
             "version": "1.0",
             "last_updated": "2025-11-09",
-            "total_builds": 1
+            "total_builds": 1,
         }
         (project_patterns / "common-issues.json").write_text(json.dumps(project_data))
 
@@ -455,8 +491,10 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=tmp_path / "global"):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: Marker contains metadata
@@ -482,9 +520,11 @@ class TestBootstrapPatterns:
 
         # Create valid file
         valid_data = {
-            "learnings": [{"learning_id": "l1", "key_points": ["test"], "project_types": ["test"]}],
+            "learnings": [
+                {"learning_id": "l1", "key_points": ["test"], "project_types": ["test"]}
+            ],
             "version": "1.0",
-            "last_updated": "2025-11-09"
+            "last_updated": "2025-11-09",
         }
         (project_patterns / "scout-learnings.json").write_text(json.dumps(valid_data))
 
@@ -492,8 +532,10 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute: Should not crash
-        with patch("pathlib.Path.cwd", return_value=project_dir), \
-             patch("pathlib.Path.home", return_value=tmp_path / "global"):
+        with (
+            patch("pathlib.Path.cwd", return_value=project_dir),
+            patch("pathlib.Path.home", return_value=tmp_path / "global"),
+        ):
             bootstrap_patterns_on_startup()
 
         # Assert: Valid file was still merged

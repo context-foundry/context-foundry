@@ -28,17 +28,19 @@ from typing import Dict, List, Any
 
 def read_json_file(file_path: Path) -> Dict[str, Any]:
     """Read and parse a JSON file."""
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         return json.load(f)
 
 
 def write_json_file(file_path: Path, data: Dict[str, Any]) -> None:
     """Write data to a JSON file with pretty formatting."""
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=2)
 
 
-def merge_common_issues(project_patterns: List[Dict], global_patterns: List[Dict]) -> tuple[List[Dict], int, int]:
+def merge_common_issues(
+    project_patterns: List[Dict], global_patterns: List[Dict]
+) -> tuple[List[Dict], int, int]:
     """
     Merge common issue patterns.
 
@@ -80,7 +82,9 @@ def merge_common_issues(project_patterns: List[Dict], global_patterns: List[Dict
             existing_solution = existing.get("solution", {})
             new_solution = proj_pattern.get("solution", {})
             for key, value in new_solution.items():
-                if key not in existing_solution or len(value) > len(existing_solution.get(key, "")):
+                if key not in existing_solution or len(value) > len(
+                    existing_solution.get(key, "")
+                ):
                     existing_solution[key] = value
             existing["solution"] = existing_solution
 
@@ -88,7 +92,9 @@ def merge_common_issues(project_patterns: List[Dict], global_patterns: List[Dict
         else:
             # Add new pattern
             new_pattern = proj_pattern.copy()
-            new_pattern["first_seen"] = proj_pattern.get("first_seen", datetime.now().strftime("%Y-%m-%d"))
+            new_pattern["first_seen"] = proj_pattern.get(
+                "first_seen", datetime.now().strftime("%Y-%m-%d")
+            )
             new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
             new_pattern["frequency"] = proj_pattern.get("frequency", 1)
             global_patterns.append(new_pattern)
@@ -97,7 +103,9 @@ def merge_common_issues(project_patterns: List[Dict], global_patterns: List[Dict
     return global_patterns, new_count, updated_count
 
 
-def merge_scout_learnings(project_learnings: List[Dict], global_learnings: List[Dict]) -> tuple[List[Dict], int, int]:
+def merge_scout_learnings(
+    project_learnings: List[Dict], global_learnings: List[Dict]
+) -> tuple[List[Dict], int, int]:
     """
     Merge scout learning patterns.
 
@@ -137,7 +145,9 @@ def merge_scout_learnings(project_learnings: List[Dict], global_learnings: List[
         else:
             # Add new learning
             new_learning = proj_learning.copy()
-            new_learning["first_seen"] = proj_learning.get("first_seen", datetime.now().strftime("%Y-%m-%d"))
+            new_learning["first_seen"] = proj_learning.get(
+                "first_seen", datetime.now().strftime("%Y-%m-%d")
+            )
             global_learnings.append(new_learning)
             new_count += 1
 
@@ -155,7 +165,7 @@ def migrate_project_patterns(project_dir: Path, global_dir: Path) -> Dict[str, A
         "project": project_dir.name,
         "files_migrated": [],
         "patterns_added": 0,
-        "patterns_updated": 0
+        "patterns_updated": 0,
     }
 
     # Migrate common-issues.json
@@ -174,13 +184,12 @@ def migrate_project_patterns(project_dir: Path, global_dir: Path) -> Dict[str, A
                     "patterns": [],
                     "version": "1.0",
                     "last_updated": datetime.now().isoformat(),
-                    "total_builds": 0
+                    "total_builds": 0,
                 }
 
             # Merge
             merged_patterns, new_count, updated_count = merge_common_issues(
-                project_patterns,
-                global_data["patterns"]
+                project_patterns, global_data["patterns"]
             )
 
             global_data["patterns"] = merged_patterns
@@ -212,13 +221,12 @@ def migrate_project_patterns(project_dir: Path, global_dir: Path) -> Dict[str, A
                 global_data = {
                     "learnings": [],
                     "version": "1.0",
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
                 }
 
             # Merge
             merged_learnings, new_count, updated_count = merge_scout_learnings(
-                project_learnings,
-                global_data["learnings"]
+                project_learnings, global_data["learnings"]
             )
 
             global_data["learnings"] = merged_learnings
@@ -263,7 +271,7 @@ def main():
     # Find all projects with patterns
     projects_with_patterns = []
     for project_dir in projects_base.iterdir():
-        if project_dir.is_dir() and not project_dir.name.startswith('.'):
+        if project_dir.is_dir() and not project_dir.name.startswith("."):
             pattern_dir = project_dir / ".context-foundry" / "patterns"
             if pattern_dir.exists():
                 projects_with_patterns.append(project_dir)
@@ -284,7 +292,7 @@ def main():
     migration_summary = {
         "total_projects": 0,
         "total_patterns_added": 0,
-        "total_patterns_updated": 0
+        "total_patterns_updated": 0,
     }
 
     for project_dir in projects_with_patterns:

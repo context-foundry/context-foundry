@@ -88,7 +88,7 @@ class EventBroadcaster:
         except requests.exceptions.ConnectionError:
             # Server not running - that's okay
             pass
-        except Exception as e:
+        except Exception:
             # Don't let broadcast failures break execution
             pass
 
@@ -129,10 +129,7 @@ class EventBroadcaster:
 
     def phase_change(self, phase: str, context_percent: int = 0):
         """Emit phase change event."""
-        self.emit(
-            "phase_change",
-            {"phase": phase, "context_percent": context_percent}
-        )
+        self.emit("phase_change", {"phase": phase, "context_percent": context_percent})
 
     def iteration_start(self, iteration: int):
         """Emit iteration start event."""
@@ -148,16 +145,12 @@ class EventBroadcaster:
     def task_complete(self, task_name: str, context_percent: int):
         """Emit task complete event."""
         self.emit(
-            "task_complete",
-            {"task": task_name, "context_percent": context_percent}
+            "task_complete", {"task": task_name, "context_percent": context_percent}
         )
 
     def context_update(self, percent: int, tokens_used: int):
         """Emit context usage update."""
-        self.emit(
-            "context_update",
-            {"percent": percent, "tokens_used": tokens_used}
-        )
+        self.emit("context_update", {"percent": percent, "tokens_used": tokens_used})
 
     def log_line(self, line: str, level: str = "info"):
         """Emit log line."""
@@ -169,10 +162,7 @@ class EventBroadcaster:
 
     def completion(self, success: bool, summary: Optional[Dict] = None):
         """Emit completion event."""
-        self.emit(
-            "completion",
-            {"success": success, "summary": summary or {}}
-        )
+        self.emit("completion", {"success": success, "summary": summary or {}})
 
 
 # Global broadcaster instance
@@ -199,7 +189,9 @@ def get_broadcaster(session_id: Optional[str] = None) -> EventBroadcaster:
     return _broadcaster
 
 
-def init_broadcaster(session_id: str, server_url: str = "http://localhost:8080") -> EventBroadcaster:
+def init_broadcaster(
+    session_id: str, server_url: str = "http://localhost:8080"
+) -> EventBroadcaster:
     """
     Initialize global broadcaster.
 
@@ -229,7 +221,7 @@ if __name__ == "__main__":
         enable_recording=True,
     )
 
-    print(f"📡 Broadcasting to: http://localhost:8080")
+    print("📡 Broadcasting to: http://localhost:8080")
     print(f"📁 Recording to: {broadcaster.events_file}")
     print()
 
@@ -279,8 +271,7 @@ if __name__ == "__main__":
     print("\n✅ COMPLETE")
     broadcaster.phase_change("complete", context_percent=0)
     broadcaster.completion(
-        success=True,
-        summary={"tasks": len(tasks), "iterations": len(tasks) + 2}
+        success=True, summary={"tasks": len(tasks), "iterations": len(tasks) + 2}
     )
 
     print(f"\n📊 Total events emitted: {broadcaster.event_count}")

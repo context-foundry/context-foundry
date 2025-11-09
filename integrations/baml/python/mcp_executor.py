@@ -38,11 +38,7 @@ class MCPExecutor:
         self.working_dir = Path("/tmp/baml-mcp-tasks")
         self.working_dir.mkdir(parents=True, exist_ok=True)
 
-    async def analyze_document(
-        self,
-        file_path: str,
-        questions: list[str]
-    ) -> dict[str, Any]:
+    async def analyze_document(self, file_path: str, questions: list[str]) -> dict[str, Any]:
         """
         Analyze a document using spawned Claude with Agent Skills.
 
@@ -112,7 +108,7 @@ Return ONLY the JSON, no markdown formatting, no explanation.
                 "key_findings": [
                     "Document processed using Agent Skills",
                     "Spawned Claude instance had full Skills access",
-                    "No API costs incurred (subscription-based)"
+                    "No API costs incurred (subscription-based)",
                 ],
                 "answers": {q: f"Answer via MCP: {q}" for q in questions},
                 "confidence_score": 0.90,
@@ -120,8 +116,8 @@ Return ONLY the JSON, no markdown formatting, no explanation.
                     "file_name": Path(file_path).name,
                     "skills_used": "pdf_reader",
                     "execution_method": "mcp_delegation",
-                    "cost": "$0.00 (subscription)"
-                }
+                    "cost": "$0.00 (subscription)",
+                },
             }
 
             logger.info("Document analysis complete (via MCP)")
@@ -131,11 +127,7 @@ Return ONLY the JSON, no markdown formatting, no explanation.
             logger.error(f"MCP delegation failed: {e}")
             raise
 
-    async def analyze_dataset(
-        self,
-        data_source: str,
-        analysis_type: str
-    ) -> dict[str, Any]:
+    async def analyze_dataset(self, data_source: str, analysis_type: str) -> dict[str, Any]:
         """
         Analyze a dataset using spawned Claude with Agent Skills.
 
@@ -183,26 +175,14 @@ Return ONLY the JSON, no markdown formatting.
         try:
             # Would call MCP delegation here
             result = {
-                "trends": [
-                    "Upward trend in Q4",
-                    "Seasonal patterns detected"
-                ],
-                "anomalies": [
-                    "Outlier on Nov 15th"
-                ],
-                "recommendations": [
-                    "Investigate Q4 spike",
-                    "Adjust seasonal forecasts"
-                ],
+                "trends": ["Upward trend in Q4", "Seasonal patterns detected"],
+                "anomalies": ["Outlier on Nov 15th"],
+                "recommendations": ["Investigate Q4 spike", "Adjust seasonal forecasts"],
                 "visualizations": {
                     "line_chart": "Time series showing trends",
-                    "scatter_plot": "Anomaly detection visualization"
+                    "scatter_plot": "Anomaly detection visualization",
                 },
-                "statistics": {
-                    "mean": 156.78,
-                    "median": 145.20,
-                    "std_dev": 23.45
-                }
+                "statistics": {"mean": 156.78, "median": 145.20, "std_dev": 23.45},
             }
 
             logger.info("Dataset analysis complete (via MCP)")
@@ -212,11 +192,7 @@ Return ONLY the JSON, no markdown formatting.
             logger.error(f"MCP delegation failed: {e}")
             raise
 
-    async def process_with_custom_skill(
-        self,
-        task: str,
-        skill_name: str
-    ) -> dict[str, Any]:
+    async def process_with_custom_skill(self, task: str, skill_name: str) -> dict[str, Any]:
         """
         Process a task using a custom Agent Skill via spawned Claude.
 
@@ -263,10 +239,10 @@ Return ONLY the JSON.
                 "metadata": {
                     "execution_method": "mcp_delegation",
                     "cost": "$0.00",
-                    "fresh_context": "200K tokens"
+                    "fresh_context": "200K tokens",
                 },
                 "success": True,
-                "timestamp": "2025-01-14T12:00:00Z"
+                "timestamp": "2025-01-14T12:00:00Z",
             }
 
             logger.info("Custom skill processing complete (via MCP)")
@@ -277,9 +253,7 @@ Return ONLY the JSON.
             raise
 
     async def progressive_skill_loading(
-        self,
-        user_task: str,
-        available_skills: list[str]
+        self, user_task: str, available_skills: list[str]
     ) -> dict[str, Any]:
         """
         Demonstrate progressive skill disclosure via spawned Claude.
@@ -328,14 +302,14 @@ Return ONLY the JSON.
                 "loaded_skills": ["pdf_reader", "data_processor"],
                 "loading_rationale": {
                     "pdf_reader": "Task requires document analysis",
-                    "data_processor": "Task involves data extraction"
+                    "data_processor": "Task involves data extraction",
                 },
                 "skipped_skills": ["image_recognition", "web_scraper"],
                 "metrics": {
                     "load_time_ms": 120,
                     "cognitive_load_reduced": 0.70,
-                    "execution_method": "mcp_delegation"
-                }
+                    "execution_method": "mcp_delegation",
+                },
             }
 
             logger.info("Progressive skill loading complete (via MCP)")

@@ -7,7 +7,6 @@ Enables Claude Desktop to use Context Foundry without API charges
 import os
 import sys
 import json
-import asyncio
 import subprocess
 import time
 import uuid
@@ -20,14 +19,10 @@ from typing import Optional, Dict, Any, List
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import version management (single source of truth)
-from tools.version import get_version, VERSION_INFO
+from tools.version import get_version
 
 # Import BAML integration for type-safe phase tracking
-from tools.baml_integration import (
-    update_phase_with_baml,
-    is_baml_available,
-    get_baml_error
-)
+from tools.baml_integration import is_baml_available, get_baml_error
 
 # Check if FastMCP is available
 try:
@@ -36,7 +31,10 @@ try:
 except ImportError:
     print("❌ Error: FastMCP not installed", file=sys.stderr)
     print("", file=sys.stderr)
-    print("MCP Server mode requires Python 3.10+ and the fastmcp package.", file=sys.stderr)
+    print(
+        "MCP Server mode requires Python 3.10+ and the fastmcp package.",
+        file=sys.stderr,
+    )
     print("", file=sys.stderr)
     print("To install MCP mode dependencies:", file=sys.stderr)
     print("  1. Upgrade to Python 3.10 or higher", file=sys.stderr)
@@ -61,7 +59,9 @@ active_builds = {}
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
 
-def _read_phase_info(working_directory: str, task_start_time: Optional[datetime] = None) -> Dict[str, Any]:
+def _read_phase_info(
+    working_directory: str, task_start_time: Optional[datetime] = None
+) -> Dict[str, Any]:
     """
     Read phase tracking information from .context-foundry/current-phase.json with staleness validation.
 
@@ -85,7 +85,7 @@ def _read_phase_info(working_directory: str, task_start_time: Optional[datetime]
                 # Return empty dict to avoid showing old phase data
                 return {}
 
-        with open(phase_file, 'r') as f:
+        with open(phase_file, "r") as f:
             phase_data = json.load(f)
 
         return phase_data
@@ -119,8 +119,6 @@ def _get_context_foundry_parent_dir() -> Path:
     return cf_dir.parent
 
 
-
-
 def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, dict]:
     """
     Truncate large output to fit within token limits while preserving critical info.
@@ -141,16 +139,13 @@ def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, d
     # Rough heuristic: ~4 chars per token
     max_chars = max_tokens * 4
 
-    lines = output.split('\n')
+    lines = output.split("\n")
     total_lines = len(lines)
     total_chars = len(output)
 
     # If output is small enough, return as-is
     if total_chars <= max_chars:
-        return output, False, {
-            "total_lines": total_lines,
-            "total_chars": total_chars
-        }
+        return output, False, {"total_lines": total_lines, "total_chars": total_chars}
 
     # Calculate how many characters to keep from start and end
     # Keep 45% from start, 45% from end, 10% for truncation message
@@ -174,21 +169,25 @@ def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, d
             break
 
     # Build truncated output
-    start_section = '\n'.join(lines[:start_line_idx])
-    end_section = '\n'.join(lines[end_line_idx:])
+    start_section = "\n".join(lines[:start_line_idx])
+    end_section = "\n".join(lines[end_line_idx:])
 
     truncated_lines = end_line_idx - start_line_idx
-    truncation_message = f"\n\n{'='*60}\n[OUTPUT TRUNCATED]\nShowing: First {start_line_idx} lines + Last {len(lines) - end_line_idx} lines\nHidden: {truncated_lines} lines ({total_chars - len(start_section) - len(end_section):,} chars)\nTotal: {total_lines:,} lines ({total_chars:,} chars)\n{'='*60}\n\n"
+    truncation_message = f"\n\n{'=' * 60}\n[OUTPUT TRUNCATED]\nShowing: First {start_line_idx} lines + Last {len(lines) - end_line_idx} lines\nHidden: {truncated_lines} lines ({total_chars - len(start_section) - len(end_section):,} chars)\nTotal: {total_lines:,} lines ({total_chars:,} chars)\n{'=' * 60}\n\n"
 
     truncated_output = start_section + truncation_message + end_section
 
-    return truncated_output, True, {
-        "total_lines": total_lines,
-        "total_chars": total_chars,
-        "truncated_lines": truncated_lines,
-        "kept_start_lines": start_line_idx,
-        "kept_end_lines": len(lines) - end_line_idx
-    }
+    return (
+        truncated_output,
+        True,
+        {
+            "total_lines": total_lines,
+            "total_chars": total_chars,
+            "truncated_lines": truncated_lines,
+            "kept_start_lines": start_line_idx,
+            "kept_end_lines": len(lines) - end_line_idx,
+        },
+    )
 
 
 def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
@@ -213,7 +212,9 @@ def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
         print(f"Warning: Failed to write delegation metadata: {e}", file=sys.stderr)
 
 
-def _write_full_output_to_file(working_directory: str, stdout: str, stderr: str, task_id: str) -> str:
+def _write_full_output_to_file(
+    working_directory: str, stdout: str, stderr: str, task_id: str
+) -> str:
     """
     Write full stdout and stderr to a file in .context-foundry directory.
 
@@ -234,15 +235,15 @@ def _write_full_output_to_file(working_directory: str, stdout: str, stderr: str,
         # Write output to file
         output_file = context_dir / f"build-output-{task_id}.txt"
 
-        with open(output_file, 'w') as f:
-            f.write("="*80 + "\n")
+        with open(output_file, "w") as f:
+            f.write("=" * 80 + "\n")
             f.write("STDOUT\n")
-            f.write("="*80 + "\n\n")
+            f.write("=" * 80 + "\n\n")
             f.write(stdout or "(empty)\n")
             f.write("\n\n")
-            f.write("="*80 + "\n")
+            f.write("=" * 80 + "\n")
             f.write("STDERR\n")
-            f.write("="*80 + "\n\n")
+            f.write("=" * 80 + "\n\n")
             f.write(stderr or "(empty)\n")
 
         return str(output_file)
@@ -268,7 +269,7 @@ def _create_output_summary(output: str, max_lines: int = 50) -> tuple[str, dict]
     if not output:
         return "(empty)", {"total_lines": 0, "shown_lines": 0, "hidden_lines": 0}
 
-    lines = output.split('\n')
+    lines = output.split("\n")
     total_lines = len(lines)
 
     # If output is small enough, return as-is
@@ -276,7 +277,7 @@ def _create_output_summary(output: str, max_lines: int = 50) -> tuple[str, dict]
         return output, {
             "total_lines": total_lines,
             "shown_lines": total_lines,
-            "hidden_lines": 0
+            "hidden_lines": 0,
         }
 
     # Get first and last N lines
@@ -285,13 +286,13 @@ def _create_output_summary(output: str, max_lines: int = 50) -> tuple[str, dict]
     hidden_lines = total_lines - (max_lines * 2)
 
     # Build summary
-    separator = f"\n\n{'='*60}\n[{hidden_lines:,} lines hidden - see output_file for full content]\n{'='*60}\n\n"
-    summary = '\n'.join(first_lines) + separator + '\n'.join(last_lines)
+    separator = f"\n\n{'=' * 60}\n[{hidden_lines:,} lines hidden - see output_file for full content]\n{'=' * 60}\n\n"
+    summary = "\n".join(first_lines) + separator + "\n".join(last_lines)
 
     return summary, {
         "total_lines": total_lines,
         "shown_lines": max_lines * 2,
-        "hidden_lines": hidden_lines
+        "hidden_lines": hidden_lines,
     }
 
 
@@ -341,7 +342,7 @@ def delegate_to_claude_code(
     working_directory: Optional[str] = None,
     timeout_minutes: float = 10.0,
     additional_flags: Optional[str] = None,
-    include_full_output: bool = False
+    include_full_output: bool = False,
 ) -> str:
     """
     Delegate a task to a fresh Claude Code CLI instance.
@@ -384,12 +385,21 @@ def delegate_to_claude_code(
         # Use --permission-mode bypassPermissions to skip all permission prompts
         # Use --strict-mcp-config to prevent spawned instance from loading MCP servers (avoids recursion)
         # Disable thinking mode to prevent thinking blocks in output
-        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--settings", '{"thinkingMode": "off"}']
+        cmd = [
+            "claude",
+            "--print",
+            "--permission-mode",
+            "bypassPermissions",
+            "--strict-mcp-config",
+            "--settings",
+            '{"thinkingMode": "off"}',
+        ]
 
         # Add additional flags if provided
         if additional_flags:
             # Split flags by spaces, handling quoted strings
             import shlex
+
             flags = shlex.split(additional_flags)
             cmd.extend(flags)
 
@@ -426,8 +436,8 @@ Please provide a valid directory path or omit the working_directory parameter to
             stdin=subprocess.DEVNULL,
             env={
                 **os.environ,  # Inherit current environment including PATH
-                'PYTHONUNBUFFERED': '1',  # Disable Python output buffering
-            }
+                "PYTHONUNBUFFERED": "1",  # Disable Python output buffering
+            },
         )
 
         # Calculate duration
@@ -436,7 +446,11 @@ Please provide a valid directory path or omit the working_directory parameter to
 
         # Format the output
         status_emoji = "✅" if result.returncode == 0 else "❌"
-        status_text = "Success" if result.returncode == 0 else f"Failed (exit code: {result.returncode})"
+        status_text = (
+            "Success"
+            if result.returncode == 0
+            else f"Failed (exit code: {result.returncode})"
+        )
 
         # Apply output truncation if requested
         if include_full_output:
@@ -444,8 +458,12 @@ Please provide a valid directory path or omit the working_directory parameter to
             stderr_display = result.stderr if result.stderr else "(empty)"
             truncation_notice = ""
         else:
-            stdout_truncated, stdout_was_truncated, stdout_stats = _truncate_output(result.stdout or "", max_tokens=10000)
-            stderr_truncated, stderr_was_truncated, stderr_stats = _truncate_output(result.stderr or "", max_tokens=10000)
+            stdout_truncated, stdout_was_truncated, stdout_stats = _truncate_output(
+                result.stdout or "", max_tokens=10000
+            )
+            stderr_truncated, stderr_was_truncated, stderr_stats = _truncate_output(
+                result.stderr or "", max_tokens=10000
+            )
 
             stdout_display = stdout_truncated if stdout_truncated else "(empty)"
             stderr_display = stderr_truncated if stderr_truncated else "(empty)"
@@ -461,7 +479,7 @@ Please provide a valid directory path or omit the working_directory parameter to
 **Task:** {task}
 **Working Directory:** {cwd}
 **Duration:** {duration_formatted}
-**Command:** {' '.join(cmd)}
+**Command:** {" ".join(cmd)}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📤 STDOUT:
@@ -501,12 +519,13 @@ The 'claude' CLI executable is not in your PATH.
 2. Add it to your PATH environment variable
 3. Verify installation: `which claude` or `claude --version`
 
-**Current PATH:** {os.environ.get('PATH', 'not set')}
+**Current PATH:** {os.environ.get("PATH", "not set")}
 **Current Working Directory:** {cwd}
 """
 
     except Exception as e:
         import traceback
+
         error_details = traceback.format_exc()
         return f"""❌ Error during claude delegation
 
@@ -518,7 +537,7 @@ The 'claude' CLI executable is not in your PATH.
 
 **Debug Info:**
 - Working Directory: {cwd}
-- Command: {' '.join(cmd) if 'cmd' in locals() else 'N/A'}
+- Command: {" ".join(cmd) if "cmd" in locals() else "N/A"}
 """
 
 
@@ -527,7 +546,7 @@ def delegate_to_claude_code_async(
     task: str,
     working_directory: Optional[str] = None,
     timeout_minutes: float = 10.0,
-    additional_flags: Optional[str] = None
+    additional_flags: Optional[str] = None,
 ) -> str:
     """
     Delegate a task to a fresh Claude Code CLI instance asynchronously (runs in background).
@@ -554,11 +573,20 @@ def delegate_to_claude_code_async(
     """
     try:
         # Build the command with thinking disabled
-        cmd = ["claude", "--print", "--permission-mode", "bypassPermissions", "--strict-mcp-config", "--settings", '{"thinkingMode": "off"}']
+        cmd = [
+            "claude",
+            "--print",
+            "--permission-mode",
+            "bypassPermissions",
+            "--strict-mcp-config",
+            "--settings",
+            '{"thinkingMode": "off"}',
+        ]
 
         # Add additional flags if provided
         if additional_flags:
             import shlex
+
             flags = shlex.split(additional_flags)
             cmd.extend(flags)
 
@@ -570,11 +598,13 @@ def delegate_to_claude_code_async(
 
         # Validate working directory exists
         if not os.path.isdir(cwd):
-            return json.dumps({
-                "error": f"Working directory does not exist: {cwd}",
-                "task_id": None,
-                "status": "failed"
-            })
+            return json.dumps(
+                {
+                    "error": f"Working directory does not exist: {cwd}",
+                    "task_id": None,
+                    "status": "failed",
+                }
+            )
 
         # Generate unique task ID
         task_id = str(uuid.uuid4())
@@ -589,8 +619,8 @@ def delegate_to_claude_code_async(
             text=True,
             env={
                 **os.environ,
-                'PYTHONUNBUFFERED': '1',
-            }
+                "PYTHONUNBUFFERED": "1",
+            },
         )
 
         # Store task info
@@ -609,33 +639,43 @@ def delegate_to_claude_code_async(
         }
 
         # Write delegation info to shared disk location for cross-process visibility
-        _write_delegation_metadata(task_id, {
-            "task_id": task_id,
-            "status": "running",
-            "task": task,
-            "working_directory": cwd,
-            "start_time": datetime.now().isoformat(),
-            "timeout_minutes": timeout_minutes,
-            "pid": process.pid,
-        })
+        _write_delegation_metadata(
+            task_id,
+            {
+                "task_id": task_id,
+                "status": "running",
+                "task": task,
+                "working_directory": cwd,
+                "start_time": datetime.now().isoformat(),
+                "timeout_minutes": timeout_minutes,
+                "pid": process.pid,
+            },
+        )
 
-        return json.dumps({
-            "task_id": task_id,
-            "status": "started",
-            "task": task,
-            "working_directory": cwd,
-            "timeout_minutes": timeout_minutes,
-            "message": f"Task started successfully. Use get_delegation_result('{task_id}') to check status and retrieve results."
-        }, indent=2)
+        return json.dumps(
+            {
+                "task_id": task_id,
+                "status": "started",
+                "task": task,
+                "working_directory": cwd,
+                "timeout_minutes": timeout_minutes,
+                "message": f"Task started successfully. Use get_delegation_result('{task_id}') to check status and retrieve results.",
+            },
+            indent=2,
+        )
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "task_id": None,
-            "status": "failed"
-        }, indent=2)
+
+        return json.dumps(
+            {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "task_id": None,
+                "status": "failed",
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
@@ -669,11 +709,14 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
     try:
         # Check if task exists
         if task_id not in active_tasks:
-            return json.dumps({
-                "task_id": task_id,
-                "status": "not_found",
-                "error": f"Task ID '{task_id}' not found. Use list_delegations() to see active tasks."
-            }, indent=2)
+            return json.dumps(
+                {
+                    "task_id": task_id,
+                    "status": "not_found",
+                    "error": f"Task ID '{task_id}' not found. Use list_delegations() to see active tasks.",
+                },
+                indent=2,
+            )
 
         task_info = active_tasks[task_id]
         process = task_info["process"]
@@ -695,24 +738,27 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 task_info["duration"] = elapsed
 
                 # Update delegation metadata on disk
-                _write_delegation_metadata(task_id, {
-                    "task_id": task_id,
-                    "status": "timeout",
-                    "task": task_info["task"],
-                    "working_directory": task_info["cwd"],
-                    "start_time": task_info["start_time"].isoformat(),
-                    "end_time": datetime.now().isoformat(),
-                    "duration": round(elapsed, 2),
-                    "exit_code": -1,  # -1 indicates timeout/killed
-                    "timeout_minutes": task_info["timeout_minutes"],
-                })
+                _write_delegation_metadata(
+                    task_id,
+                    {
+                        "task_id": task_id,
+                        "status": "timeout",
+                        "task": task_info["task"],
+                        "working_directory": task_info["cwd"],
+                        "start_time": task_info["start_time"].isoformat(),
+                        "end_time": datetime.now().isoformat(),
+                        "duration": round(elapsed, 2),
+                        "exit_code": -1,  # -1 indicates timeout/killed
+                        "timeout_minutes": task_info["timeout_minutes"],
+                    },
+                )
 
                 timeout_result = {
                     "task_id": task_id,
                     "status": "timeout",
                     "elapsed_seconds": elapsed,
                     "timeout_minutes": task_info["timeout_minutes"],
-                    "message": f"Task exceeded timeout of {task_info['timeout_minutes']} minutes and was terminated."
+                    "message": f"Task exceeded timeout of {task_info['timeout_minutes']} minutes and was terminated.",
                 }
 
                 return json.dumps(timeout_result, indent=2)
@@ -726,7 +772,7 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 "status": "running",
                 "elapsed_seconds": round(elapsed, 2),
                 "timeout_minutes": task_info["timeout_minutes"],
-                "progress": f"{round((elapsed / timeout_seconds) * 100, 1)}% of timeout elapsed"
+                "progress": f"{round((elapsed / timeout_seconds) * 100, 1)}% of timeout elapsed",
             }
 
             # Add phase information if available
@@ -734,7 +780,9 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 result["current_phase"] = phase_info.get("current_phase", "Unknown")
                 result["phase_number"] = phase_info.get("phase_number", "?/7")
                 result["phase_status"] = phase_info.get("status", "unknown")
-                result["progress_detail"] = phase_info.get("progress_detail", "Working...")
+                result["progress_detail"] = phase_info.get(
+                    "progress_detail", "Working..."
+                )
                 result["test_iteration"] = phase_info.get("test_iteration", 0)
                 result["phases_completed"] = phase_info.get("phases_completed", [])
 
@@ -763,7 +811,7 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 working_directory=task_info["cwd"],
                 stdout=stdout,
                 stderr=stderr,
-                task_id=task_id
+                task_id=task_id,
             )
             task_info["output_file"] = output_file_path
 
@@ -786,9 +834,13 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
 
             # Add phase information if available
             if phase_info:
-                updated_metadata["current_phase"] = phase_info.get("current_phase", "Unknown")
+                updated_metadata["current_phase"] = phase_info.get(
+                    "current_phase", "Unknown"
+                )
                 updated_metadata["phase_status"] = phase_info.get("status", "unknown")
-                updated_metadata["completion_percentage"] = phase_info.get("completion_percentage", 0)
+                updated_metadata["completion_percentage"] = phase_info.get(
+                    "completion_percentage", 0
+                )
                 updated_metadata["test_iteration"] = phase_info.get("test_iteration", 0)
 
             _write_delegation_metadata(task_id, updated_metadata)
@@ -804,35 +856,51 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
             if is_autonomous_build and build_successful:
                 try:
                     # Look for feedback file in .context-foundry/feedback/
-                    feedback_dir = Path(task_info["cwd"]) / ".context-foundry" / "feedback"
+                    feedback_dir = (
+                        Path(task_info["cwd"]) / ".context-foundry" / "feedback"
+                    )
                     if feedback_dir.exists():
                         # Find the most recent build-feedback file
-                        feedback_files = list(feedback_dir.glob("build-feedback-*.json"))
+                        feedback_files = list(
+                            feedback_dir.glob("build-feedback-*.json")
+                        )
                         if feedback_files:
                             # Sort by modification time, get most recent
-                            latest_feedback = max(feedback_files, key=lambda p: p.stat().st_mtime)
+                            latest_feedback = max(
+                                feedback_files, key=lambda p: p.stat().st_mtime
+                            )
 
                             # Call merge_project_patterns to save learnings to global database
                             merge_result_str = merge_project_patterns(
                                 project_pattern_file=str(latest_feedback),
                                 pattern_type="common-issues",
-                                increment_build_count=True
+                                increment_build_count=True,
                             )
 
                             # Parse result to check success
                             merge_result = json.loads(merge_result_str)
                             if merge_result.get("status") == "success":
                                 stats = merge_result.get("merge_stats", {})
-                                print(f"\n✅ Patterns merged to global database:")
-                                print(f"   New patterns: {stats.get('new_patterns', 0)}")
-                                print(f"   Updated patterns: {stats.get('updated_patterns', 0)}")
-                                print(f"   Global pattern file: {merge_result.get('global_file', 'unknown')}")
+                                print("\n✅ Patterns merged to global database:")
+                                print(
+                                    f"   New patterns: {stats.get('new_patterns', 0)}"
+                                )
+                                print(
+                                    f"   Updated patterns: {stats.get('updated_patterns', 0)}"
+                                )
+                                print(
+                                    f"   Global pattern file: {merge_result.get('global_file', 'unknown')}"
+                                )
 
                                 # Store merge result in task info for reporting
                                 task_info["pattern_merge_result"] = merge_result
                             else:
-                                print(f"\n⚠️  Pattern merge failed: {merge_result.get('error', 'unknown error')}")
-                                task_info["pattern_merge_error"] = merge_result.get("error")
+                                print(
+                                    f"\n⚠️  Pattern merge failed: {merge_result.get('error', 'unknown error')}"
+                                )
+                                task_info["pattern_merge_error"] = merge_result.get(
+                                    "error"
+                                )
 
                 except Exception as e:
                     # Pattern merge failure should not break the build result
@@ -848,29 +916,41 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
             result = {
                 "task_id": task_id,
                 "status": task_info["status"],
-                "task": task_info["task"][:500] + "..." if len(task_info["task"]) > 500 else task_info["task"],
+                "task": task_info["task"][:500] + "..."
+                if len(task_info["task"]) > 500
+                else task_info["task"],
                 "working_directory": task_info["cwd"],
                 "duration_seconds": round(task_info["duration"], 2),
                 "exit_code": task_info["exit_code"],
-                "command": " ".join(task_info["cmd"])[:200] + "..." if len(" ".join(task_info["cmd"])) > 200 else " ".join(task_info["cmd"]),
+                "command": " ".join(task_info["cmd"])[:200] + "..."
+                if len(" ".join(task_info["cmd"])) > 200
+                else " ".join(task_info["cmd"]),
                 "stdout": stdout_display,
                 "stderr": stderr_display,
                 "output_mode": "full",
-                "output_file": task_info.get("output_file", "not_created")
+                "output_file": task_info.get("output_file", "not_created"),
             }
         else:
             # Use smart summary (first 50 + last 50 lines) to stay well under token limits
-            stdout_summary, stdout_stats = _create_output_summary(task_info["stdout"] or "", max_lines=50)
-            stderr_summary, stderr_stats = _create_output_summary(task_info["stderr"] or "", max_lines=50)
+            stdout_summary, stdout_stats = _create_output_summary(
+                task_info["stdout"] or "", max_lines=50
+            )
+            stderr_summary, stderr_stats = _create_output_summary(
+                task_info["stderr"] or "", max_lines=50
+            )
 
             result = {
                 "task_id": task_id,
                 "status": task_info["status"],
-                "task": task_info["task"][:500] + "..." if len(task_info["task"]) > 500 else task_info["task"],
+                "task": task_info["task"][:500] + "..."
+                if len(task_info["task"]) > 500
+                else task_info["task"],
                 "working_directory": task_info["cwd"],
                 "duration_seconds": round(task_info["duration"], 2),
                 "exit_code": task_info["exit_code"],
-                "command": " ".join(task_info["cmd"])[:200] + "..." if len(" ".join(task_info["cmd"])) > 200 else " ".join(task_info["cmd"]),
+                "command": " ".join(task_info["cmd"])[:200] + "..."
+                if len(" ".join(task_info["cmd"])) > 200
+                else " ".join(task_info["cmd"]),
                 "stdout_summary": stdout_summary,
                 "stderr_summary": stderr_summary,
                 "output_mode": "summary",
@@ -878,20 +958,24 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 "output_summary_info": {
                     "stdout": stdout_stats,
                     "stderr": stderr_stats,
-                    "message": f"Showing first 50 + last 50 lines. Full output saved to: {task_info.get('output_file', 'not_created')}"
-                }
+                    "message": f"Showing first 50 + last 50 lines. Full output saved to: {task_info.get('output_file', 'not_created')}",
+                },
             }
 
         return json.dumps(result, indent=2)
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "task_id": task_id,
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, indent=2)
+
+        return json.dumps(
+            {
+                "task_id": task_id,
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
@@ -928,14 +1012,18 @@ def list_delegations() -> str:
             else:
                 status = task_info["status"]
 
-            tasks_list.append({
-                "task_id": task_id,
-                "status": status,
-                "task": task_info["task"][:80] + "..." if len(task_info["task"]) > 80 else task_info["task"],
-                "elapsed_seconds": round(elapsed, 2),
-                "timeout_minutes": task_info["timeout_minutes"],
-                "working_directory": task_info["cwd"]
-            })
+            tasks_list.append(
+                {
+                    "task_id": task_id,
+                    "status": status,
+                    "task": task_info["task"][:80] + "..."
+                    if len(task_info["task"]) > 80
+                    else task_info["task"],
+                    "elapsed_seconds": round(elapsed, 2),
+                    "timeout_minutes": task_info["timeout_minutes"],
+                    "working_directory": task_info["cwd"],
+                }
+            )
             seen_task_ids.add(task_id)
 
         # Then, add tasks from disk (other processes / sessions)
@@ -960,37 +1048,41 @@ def list_delegations() -> str:
                         except:
                             pass
 
-                    tasks_list.append({
-                        "task_id": task_id,
-                        "status": metadata.get("status", "unknown"),
-                        "task": metadata.get("task", "")[:80],
-                        "elapsed_seconds": round(elapsed, 2),
-                        "timeout_minutes": metadata.get("timeout_minutes", 0),
-                        "working_directory": metadata.get("working_directory", "")
-                    })
+                    tasks_list.append(
+                        {
+                            "task_id": task_id,
+                            "status": metadata.get("status", "unknown"),
+                            "task": metadata.get("task", "")[:80],
+                            "elapsed_seconds": round(elapsed, 2),
+                            "timeout_minutes": metadata.get("timeout_minutes", 0),
+                            "working_directory": metadata.get("working_directory", ""),
+                        }
+                    )
                     seen_task_ids.add(task_id)
 
                 except Exception:
                     continue
 
         if not tasks_list:
-            return json.dumps({
-                "message": "No delegation tasks found",
-                "delegations": []
-            }, indent=2)
+            return json.dumps(
+                {"message": "No delegation tasks found", "delegations": []}, indent=2
+            )
 
-        return json.dumps({
-            "total_tasks": len(tasks_list),
-            "delegations": tasks_list,
-            "message": f"Use get_delegation_result(task_id) to retrieve results"
-        }, indent=2)
+        return json.dumps(
+            {
+                "total_tasks": len(tasks_list),
+                "delegations": tasks_list,
+                "message": "Use get_delegation_result(task_id) to retrieve results",
+            },
+            indent=2,
+        )
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, indent=2)
+
+        return json.dumps(
+            {"error": str(e), "traceback": traceback.format_exc()}, indent=2
+        )
 
 
 @mcp.tool()
@@ -1028,32 +1120,41 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
             task_file = delegations_dir / f"task-{task_id}.json"
 
             if not task_file.exists():
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Task ID '{task_id}' not found",
-                    "message": "Task metadata file does not exist",
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Task ID '{task_id}' not found",
+                        "message": "Task metadata file does not exist",
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
 
             # Read metadata from disk
             try:
                 metadata = json.loads(task_file.read_text())
             except Exception as e:
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Failed to read task metadata: {str(e)}",
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Failed to read task metadata: {str(e)}",
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
 
             # Get PID from metadata
             pid = metadata.get("pid")
             if not pid:
-                return json.dumps({
-                    "status": "error",
-                    "error": "Task metadata does not contain PID",
-                    "message": "Cannot cancel task without process ID",
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": "Task metadata does not contain PID",
+                        "message": "Cannot cancel task without process ID",
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
 
             # Check if process is still running using psutil
             try:
@@ -1062,15 +1163,20 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
                 # Verify it's actually a claude-code process (basic sanity check)
                 cmdline = " ".join(proc.cmdline())
                 if "claude" not in cmdline.lower() and "python" not in cmdline.lower():
-                    return json.dumps({
-                        "status": "error",
-                        "error": f"PID {pid} exists but doesn't appear to be a claude-code process",
-                        "message": f"Process command: {cmdline[:100]}",
-                        "cancelled": False
-                    }, indent=2)
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "error": f"PID {pid} exists but doesn't appear to be a claude-code process",
+                            "message": f"Process command: {cmdline[:100]}",
+                            "cancelled": False,
+                        },
+                        indent=2,
+                    )
 
                 # Kill the process
-                start_time = datetime.fromisoformat(metadata.get("start_time", datetime.now().isoformat()))
+                start_time = datetime.fromisoformat(
+                    metadata.get("start_time", datetime.now().isoformat())
+                )
                 elapsed = (datetime.now() - start_time).total_seconds()
 
                 try:
@@ -1087,61 +1193,78 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
                 # Update metadata file
                 metadata["status"] = "cancelled"
                 metadata["cancelled_at"] = datetime.now().isoformat()
-                metadata["cancellation_reason"] = reason or "Manual cancellation by user"
+                metadata["cancellation_reason"] = (
+                    reason or "Manual cancellation by user"
+                )
                 metadata["duration_seconds"] = elapsed
                 metadata["termination_method"] = termination_method
                 task_file.write_text(json.dumps(metadata, indent=2))
 
-                return json.dumps({
-                    "status": "success",
-                    "message": f"Task cancelled successfully via {termination_method}",
-                    "task_id": task_id,
-                    "cancelled": True,
-                    "task_summary": metadata.get("task", "")[:100],
-                    "working_directory": metadata.get("working_directory", ""),
-                    "elapsed_seconds": round(elapsed, 2),
-                    "termination_method": termination_method,
-                    "reason": reason or "Manual cancellation by user",
-                    "timestamp": datetime.now().isoformat()
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "success",
+                        "message": f"Task cancelled successfully via {termination_method}",
+                        "task_id": task_id,
+                        "cancelled": True,
+                        "task_summary": metadata.get("task", "")[:100],
+                        "working_directory": metadata.get("working_directory", ""),
+                        "elapsed_seconds": round(elapsed, 2),
+                        "termination_method": termination_method,
+                        "reason": reason or "Manual cancellation by user",
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                    indent=2,
+                )
 
             except psutil.NoSuchProcess:
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Process with PID {pid} is not running",
-                    "message": "Task may have already completed or been killed",
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Process with PID {pid} is not running",
+                        "message": "Task may have already completed or been killed",
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
             except Exception as e:
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Failed to kill process: {str(e)}",
-                    "task_id": task_id,
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Failed to kill process: {str(e)}",
+                        "task_id": task_id,
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
 
         # Continue with existing logic for in-memory tasks
         process = task_info.get("process") if isinstance(task_info, dict) else None
         if not process:
-            return json.dumps({
-                "status": "error",
-                "error": "Task info corrupted - no process object",
-                "cancelled": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": "Task info corrupted - no process object",
+                    "cancelled": False,
+                },
+                indent=2,
+            )
 
         # Check if already completed
         poll_result = process.poll()
         if poll_result is not None:
             # Process already finished
             elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
-            return json.dumps({
-                "status": "already_finished",
-                "message": "Task already completed - cannot cancel",
-                "task_id": task_id,
-                "exit_code": poll_result,
-                "elapsed_seconds": round(elapsed, 2),
-                "cancelled": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "already_finished",
+                    "message": "Task already completed - cannot cancel",
+                    "task_id": task_id,
+                    "exit_code": poll_result,
+                    "elapsed_seconds": round(elapsed, 2),
+                    "cancelled": False,
+                },
+                indent=2,
+            )
 
         # Calculate elapsed time before killing
         elapsed = (datetime.now() - task_info["start_time"]).total_seconds()
@@ -1158,19 +1281,22 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
                 process.kill()
                 process.wait()
                 termination_method = "forced (SIGKILL)"
-        except Exception as e:
+        except Exception:
             # If terminate/kill fails, try kill directly
             try:
                 process.kill()
                 process.wait()
                 termination_method = "forced (SIGKILL - fallback)"
             except Exception as kill_error:
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Failed to kill process: {str(kill_error)}",
-                    "task_id": task_id,
-                    "cancelled": False
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Failed to kill process: {str(kill_error)}",
+                        "task_id": task_id,
+                        "cancelled": False,
+                    },
+                    indent=2,
+                )
 
         # Capture any remaining output
         try:
@@ -1195,7 +1321,7 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
             working_directory=task_info["cwd"],
             stdout=stdout or "(cancelled - no output)",
             stderr=stderr or "(cancelled - no output)",
-            task_id=task_id
+            task_id=task_id,
         )
         task_info["output_file"] = output_file_path
 
@@ -1208,7 +1334,9 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
                 metadata["status"] = "cancelled"
                 metadata["end_time"] = datetime.now().isoformat()
                 metadata["cancelled_at"] = datetime.now().isoformat()
-                metadata["cancellation_reason"] = reason or "Manual cancellation by user"
+                metadata["cancellation_reason"] = (
+                    reason or "Manual cancellation by user"
+                )
                 metadata["duration"] = round(elapsed, 2)
                 metadata["exit_code"] = -15  # Standard SIGTERM exit code
                 metadata["termination_method"] = termination_method
@@ -1218,29 +1346,37 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
             # Don't fail the cancellation if metadata update fails
             pass
 
-        return json.dumps({
-            "status": "success",
-            "message": f"Task cancelled successfully via {termination_method}",
-            "task_id": task_id,
-            "cancelled": True,
-            "task_summary": task_info["task"][:100] + ("..." if len(task_info["task"]) > 100 else ""),
-            "working_directory": task_info["cwd"],
-            "elapsed_seconds": round(elapsed, 2),
-            "termination_method": termination_method,
-            "reason": reason or "Manual cancellation by user",
-            "output_file": output_file_path,
-            "timestamp": datetime.now().isoformat()
-        }, indent=2)
+        return json.dumps(
+            {
+                "status": "success",
+                "message": f"Task cancelled successfully via {termination_method}",
+                "task_id": task_id,
+                "cancelled": True,
+                "task_summary": task_info["task"][:100]
+                + ("..." if len(task_info["task"]) > 100 else ""),
+                "working_directory": task_info["cwd"],
+                "elapsed_seconds": round(elapsed, 2),
+                "termination_method": termination_method,
+                "reason": reason or "Manual cancellation by user",
+                "output_file": output_file_path,
+                "timestamp": datetime.now().isoformat(),
+            },
+            indent=2,
+        )
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "task_id": task_id,
-            "cancelled": False
-        }, indent=2)
+
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "task_id": task_id,
+                "cancelled": False,
+            },
+            indent=2,
+        )
 
 
 @mcp.tool()
@@ -1248,7 +1384,7 @@ def stream_delegation_output(
     task_id: str,
     lines: int = 50,
     include_phase_info: bool = True,
-    filter_pattern: Optional[str] = None
+    filter_pattern: Optional[str] = None,
 ) -> str:
     """
     Stream raw, real-time output from a running or completed delegation task.
@@ -1290,12 +1426,15 @@ def stream_delegation_output(
 
         # Check if task exists
         if task_id not in active_tasks:
-            return json.dumps({
-                "status": "error",
-                "error": f"Task ID '{task_id}' not found",
-                "message": "Use list_delegations() to see active tasks",
-                "task_id": task_id
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Task ID '{task_id}' not found",
+                    "message": "Use list_delegations() to see active tasks",
+                    "task_id": task_id,
+                },
+                indent=2,
+            )
 
         task_info = active_tasks[task_id]
         process = task_info["process"]
@@ -1326,8 +1465,9 @@ def stream_delegation_output(
                 # We'll use a small buffer approach
                 try:
                     import select
+
                     # Check if there's data available (Unix-only)
-                    if process.stdout and hasattr(select, 'select'):
+                    if process.stdout and hasattr(select, "select"):
                         readable, _, _ = select.select([process.stdout], [], [], 0.1)
                         if readable:
                             # Read available data
@@ -1336,7 +1476,7 @@ def stream_delegation_output(
                                 stdout_data += new_data
                                 task_info["stdout"] = stdout_data
 
-                    if process.stderr and hasattr(select, 'select'):
+                    if process.stderr and hasattr(select, "select"):
                         readable, _, _ = select.select([process.stderr], [], [], 0.1)
                         if readable:
                             new_data = process.stderr.read(8192)
@@ -1380,7 +1520,7 @@ def stream_delegation_output(
             combined_output = "(no output yet)\n"
 
         # Split into lines
-        all_lines = combined_output.split('\n')
+        all_lines = combined_output.split("\n")
 
         # Apply filter if specified
         if filter_pattern:
@@ -1390,11 +1530,14 @@ def stream_delegation_output(
                 display_lines = filtered_lines
                 filter_info = f"Filtered by pattern '{filter_pattern}': {len(filtered_lines)} / {len(all_lines)} lines matched"
             except re.error as e:
-                return json.dumps({
-                    "status": "error",
-                    "error": f"Invalid regex pattern: {str(e)}",
-                    "task_id": task_id
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "error": f"Invalid regex pattern: {str(e)}",
+                        "task_id": task_id,
+                    },
+                    indent=2,
+                )
         else:
             display_lines = all_lines
             filter_info = None
@@ -1409,7 +1552,7 @@ def stream_delegation_output(
             truncated = False
             hidden_lines = 0
 
-        output_text = '\n'.join(shown_lines)
+        output_text = "\n".join(shown_lines)
 
         # Get phase information if requested
         phase_info = {}
@@ -1423,7 +1566,7 @@ def stream_delegation_output(
                         "status": phase_data.get("status", "unknown"),
                         "progress_detail": phase_data.get("progress_detail", ""),
                         "test_iteration": phase_data.get("test_iteration", 0),
-                        "phases_completed": phase_data.get("phases_completed", [])
+                        "phases_completed": phase_data.get("phases_completed", []),
                     }
             except:
                 phase_info = {"error": "Could not read phase info"}
@@ -1432,7 +1575,8 @@ def stream_delegation_output(
         response = {
             "status": "success",
             "task_id": task_id,
-            "task_summary": task_info["task"][:80] + ("..." if len(task_info["task"]) > 80 else ""),
+            "task_summary": task_info["task"][:80]
+            + ("..." if len(task_info["task"]) > 80 else ""),
             "working_directory": task_info["cwd"],
             "is_running": is_running,
             "elapsed_seconds": round(elapsed, 2),
@@ -1442,10 +1586,10 @@ def stream_delegation_output(
                 "hidden_lines": hidden_lines,
                 "truncated": truncated,
                 "filter_applied": filter_pattern is not None,
-                "filter_info": filter_info
+                "filter_info": filter_info,
             },
             "raw_output": output_text,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         if include_phase_info and phase_info:
@@ -1453,20 +1597,28 @@ def stream_delegation_output(
 
         # Add helpful hints
         if is_running:
-            response["hint"] = "Task is still running. Call this tool again to see new output."
+            response["hint"] = (
+                "Task is still running. Call this tool again to see new output."
+            )
         else:
-            response["hint"] = f"Task completed with exit code {poll_result}. Use get_delegation_result('{task_id}') for full results."
+            response["hint"] = (
+                f"Task completed with exit code {poll_result}. Use get_delegation_result('{task_id}') for full results."
+            )
 
         return json.dumps(response, indent=2)
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "task_id": task_id
-        }, indent=2)
+
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "task_id": task_id,
+            },
+            indent=2,
+        )
 
 
 def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
@@ -1495,7 +1647,7 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
         "has_git": False,
         "git_clean": None,
         "project_files": [],
-        "confidence": "low"
+        "confidence": "low",
     }
 
     if not directory.exists():
@@ -1508,12 +1660,13 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
         # Check if git repo is clean
         try:
             import subprocess
+
             status_result = subprocess.run(
                 ["git", "status", "--porcelain"],
                 cwd=str(directory),
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             # Empty output means clean repo
             result["git_clean"] = len(status_result.stdout.strip()) == 0
@@ -1523,42 +1676,62 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
     # Define project indicator files
     project_indicators = {
         # JavaScript/TypeScript
-        "package.json": {"type": "nodejs", "language": "JavaScript", "confidence": "high"},
-        "package-lock.json": {"type": "nodejs", "language": "JavaScript", "confidence": "medium"},
-        "yarn.lock": {"type": "nodejs", "language": "JavaScript", "confidence": "medium"},
-        "tsconfig.json": {"type": "nodejs", "language": "TypeScript", "confidence": "high"},
-
+        "package.json": {
+            "type": "nodejs",
+            "language": "JavaScript",
+            "confidence": "high",
+        },
+        "package-lock.json": {
+            "type": "nodejs",
+            "language": "JavaScript",
+            "confidence": "medium",
+        },
+        "yarn.lock": {
+            "type": "nodejs",
+            "language": "JavaScript",
+            "confidence": "medium",
+        },
+        "tsconfig.json": {
+            "type": "nodejs",
+            "language": "TypeScript",
+            "confidence": "high",
+        },
         # Python
-        "requirements.txt": {"type": "python", "language": "Python", "confidence": "high"},
+        "requirements.txt": {
+            "type": "python",
+            "language": "Python",
+            "confidence": "high",
+        },
         "setup.py": {"type": "python", "language": "Python", "confidence": "high"},
-        "pyproject.toml": {"type": "python", "language": "Python", "confidence": "high"},
+        "pyproject.toml": {
+            "type": "python",
+            "language": "Python",
+            "confidence": "high",
+        },
         "Pipfile": {"type": "python", "language": "Python", "confidence": "high"},
         "poetry.lock": {"type": "python", "language": "Python", "confidence": "medium"},
-
         # Rust
         "Cargo.toml": {"type": "rust", "language": "Rust", "confidence": "high"},
         "Cargo.lock": {"type": "rust", "language": "Rust", "confidence": "medium"},
-
         # Go
         "go.mod": {"type": "golang", "language": "Go", "confidence": "high"},
         "go.sum": {"type": "golang", "language": "Go", "confidence": "medium"},
-
         # Java
         "pom.xml": {"type": "maven", "language": "Java", "confidence": "high"},
         "build.gradle": {"type": "gradle", "language": "Java", "confidence": "high"},
-        "build.gradle.kts": {"type": "gradle", "language": "Kotlin", "confidence": "high"},
-
+        "build.gradle.kts": {
+            "type": "gradle",
+            "language": "Kotlin",
+            "confidence": "high",
+        },
         # Ruby
         "Gemfile": {"type": "ruby", "language": "Ruby", "confidence": "high"},
         "Gemfile.lock": {"type": "ruby", "language": "Ruby", "confidence": "medium"},
-
         # PHP
         "composer.json": {"type": "php", "language": "PHP", "confidence": "high"},
-
         # C/C++
         "CMakeLists.txt": {"type": "cmake", "language": "C/C++", "confidence": "high"},
         "Makefile": {"type": "make", "language": "C/C++", "confidence": "medium"},
-
         # .NET
         ".csproj": {"type": "dotnet", "language": "C#", "confidence": "high"},
         ".sln": {"type": "dotnet", "language": "C#", "confidence": "high"},
@@ -1593,7 +1766,9 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
             language = info["language"]
             confidence = info["confidence"]
 
-            types[proj_type] = types.get(proj_type, 0) + (2 if confidence == "high" else 1)
+            types[proj_type] = types.get(proj_type, 0) + (
+                2 if confidence == "high" else 1
+            )
             languages.add(language)
             confidence_scores.append(confidence)
 
@@ -1629,7 +1804,7 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
         cf_base = Path(__file__).parent.parent
 
         # Check if extensions/flowise exists
-        flowise_ext_path = cf_base / 'extensions' / 'flowise'
+        flowise_ext_path = cf_base / "extensions" / "flowise"
 
         if flowise_ext_path.exists():
             # Add to sys.path if not already there
@@ -1643,45 +1818,66 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
             # Load Flowise detectors
             flowise_detectors = extensions_loader.load_extension_detectors()
 
-            if flowise_detectors and 'flowise' in flowise_detectors:
+            if flowise_detectors and "flowise" in flowise_detectors:
                 # Check for Flowise JSON files in project directory
                 json_files = list(directory.glob("*.json"))
 
                 # Sample first 10 JSON files to avoid performance issues
                 for json_file in json_files[:10]:
                     try:
-                        detection = flowise_detectors['flowise'].detect_flowise_flow(json_file)
+                        detection = flowise_detectors["flowise"].detect_flowise_flow(
+                            json_file
+                        )
 
-                        if detection.get('is_flowise'):
+                        if detection.get("is_flowise"):
                             # Flowise flow detected!
-                            print(f"🔍 Flowise Extension: Detected {detection.get('flow_type')} flow in {json_file}")
+                            print(
+                                f"🔍 Flowise Extension: Detected {detection.get('flow_type')} flow in {json_file}"
+                            )
                             print(f"   - Complexity: {detection.get('complexity')}")
                             print(f"   - Nodes: {detection.get('node_count', 0)}")
                             print(f"   - Agents: {detection.get('agent_count', 0)}")
-                            print(f"   - Has Memory: {detection.get('has_memory', False)}")
-                            print(f"   - Has Tools: {detection.get('has_tools', False)}")
+                            print(
+                                f"   - Has Memory: {detection.get('has_memory', False)}"
+                            )
+                            print(
+                                f"   - Has Tools: {detection.get('has_tools', False)}"
+                            )
 
-                            result['flowise_flow'] = True
-                            result['flowise_flow_type'] = detection.get('flow_type')
-                            result['flowise_complexity'] = detection.get('complexity')
-                            result['flowise_node_count'] = detection.get('node_count', 0)
-                            result['flowise_agent_count'] = detection.get('agent_count', 0)
-                            result['flowise_has_memory'] = detection.get('has_memory', False)
-                            result['flowise_has_tools'] = detection.get('has_tools', False)
+                            result["flowise_flow"] = True
+                            result["flowise_flow_type"] = detection.get("flow_type")
+                            result["flowise_complexity"] = detection.get("complexity")
+                            result["flowise_node_count"] = detection.get(
+                                "node_count", 0
+                            )
+                            result["flowise_agent_count"] = detection.get(
+                                "agent_count", 0
+                            )
+                            result["flowise_has_memory"] = detection.get(
+                                "has_memory", False
+                            )
+                            result["flowise_has_tools"] = detection.get(
+                                "has_tools", False
+                            )
 
                             # Update project classification
-                            if result["project_type"] is None or result["confidence"] != 'high':
-                                result["project_type"] = 'flowise-workflow'
-                                result["confidence"] = 'high'
+                            if (
+                                result["project_type"] is None
+                                or result["confidence"] != "high"
+                            ):
+                                result["project_type"] = "flowise-workflow"
+                                result["confidence"] = "high"
 
                             # Add to languages list
-                            if 'flowise' not in result["languages"]:
-                                result["languages"].append('flowise')
+                            if "flowise" not in result["languages"]:
+                                result["languages"].append("flowise")
 
                             # Add the detected flow file
                             result["project_files"].append(str(json_file))
 
-                            print(f"✅ Flowise Extension: Setting flowise_flow=True in CONFIGURATION")
+                            print(
+                                "✅ Flowise Extension: Setting flowise_flow=True in CONFIGURATION"
+                            )
 
                             # Stop after first detection (optimization)
                             break
@@ -1710,23 +1906,52 @@ def _detect_task_intent(task: str) -> str:
     task_lower = task.lower()
 
     # Fix/bug keywords
-    if any(word in task_lower for word in ["fix", "bug", "issue", "error", "broken", "repair"]):
+    if any(
+        word in task_lower
+        for word in ["fix", "bug", "issue", "error", "broken", "repair"]
+    ):
         return "fix_bug"
 
     # Upgrade/dependency keywords
-    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "update packages", "update all", "migrate to"]):
+    if any(
+        word in task_lower
+        for word in [
+            "upgrade",
+            "update dependencies",
+            "update deps",
+            "update packages",
+            "update all",
+            "migrate to",
+        ]
+    ):
         return "upgrade_deps"
 
     # Refactor keywords
-    if any(word in task_lower for word in ["refactor", "restructure", "reorganize", "clean up"]):
+    if any(
+        word in task_lower
+        for word in ["refactor", "restructure", "reorganize", "clean up"]
+    ):
         return "refactor"
 
     # Test keywords
-    if any(word in task_lower for word in ["add tests", "write tests", "test coverage", "unit test"]):
+    if any(
+        word in task_lower
+        for word in ["add tests", "write tests", "test coverage", "unit test"]
+    ):
         return "add_tests"
 
     # Add feature/enhance keywords
-    if any(word in task_lower for word in ["add", "enhance", "improve", "implement", "create feature", "new feature"]):
+    if any(
+        word in task_lower
+        for word in [
+            "add",
+            "enhance",
+            "improve",
+            "implement",
+            "create feature",
+            "new feature",
+        ]
+    ):
         return "add_feature"
 
     # Default to new project if no enhancement keywords found
@@ -1744,7 +1969,7 @@ def _autonomous_build_and_deploy_impl(
     timeout_minutes: float = 90.0,
     use_parallel: bool = False,
     incremental: bool = False,
-    force_rebuild: bool = False
+    force_rebuild: bool = False,
 ) -> str:
     """Internal implementation of autonomous_build_and_deploy (not decorated)"""
     """
@@ -1842,11 +2067,14 @@ def _autonomous_build_and_deploy_impl(
                 "Install with: pip install baml-py\n"
                 "Set API key: export OPENAI_API_KEY=your-key\n"
             )
-            return json.dumps({
-                "error": error_msg,
-                "baml_available": False,
-                "baml_error": get_baml_error()
-            }, indent=2)
+            return json.dumps(
+                {
+                    "error": error_msg,
+                    "baml_available": False,
+                    "baml_error": get_baml_error(),
+                },
+                indent=2,
+            )
 
         print("✅ BAML is available and ready for phase tracking", file=sys.stderr)
 
@@ -1893,14 +2121,19 @@ Auto-correcting to use_parallel=False...
         # This system DOES support parallel execution via bash process spawning:
         # - Phase 2.5: Parallel Builders (2-8 concurrent)
         # - Phase 4.5: Parallel Tests (unit/E2E/lint concurrent)
-        print(f"✅ Using /agents-based orchestrator (supports parallel execution)", file=sys.stderr)
-        print(f"   See docs/PARALLEL_AGENTS_ARCHITECTURE.md for details\n", file=sys.stderr)
+        print(
+            "✅ Using /agents-based orchestrator (supports parallel execution)",
+            file=sys.stderr,
+        )
+        print(
+            "   See docs/PARALLEL_AGENTS_ARCHITECTURE.md for details\n", file=sys.stderr
+        )
 
         # ═══════════════════════════════════════════════════════════════════════
         # ENHANCEMENT MODE: Detect existing codebase and task intent
         # ═══════════════════════════════════════════════════════════════════════
 
-        print(f"🔍 Analyzing workspace...", file=sys.stderr)
+        print("🔍 Analyzing workspace...", file=sys.stderr)
 
         # Detect existing codebase
         codebase_info = _detect_existing_codebase(final_working_dir)
@@ -1909,54 +2142,60 @@ Auto-correcting to use_parallel=False...
         # FLOWISE KEYWORD DETECTION (for new Flowise projects)
         # ═══════════════════════════════════════════════════════════════════
         # If file-based detection didn't find Flowise flows, check task keywords
-        if not codebase_info.get('flowise_flow', False):
+        if not codebase_info.get("flowise_flow", False):
             task_lower = task.lower()
             flowise_keywords = [
-                'flowise',
-                'agent flow',
-                'multi-agent flow',
-                'chatflow',
-                'agentflow',
-                'flowise workflow'
+                "flowise",
+                "agent flow",
+                "multi-agent flow",
+                "chatflow",
+                "agentflow",
+                "flowise workflow",
             ]
 
             if any(keyword in task_lower for keyword in flowise_keywords):
                 # Activate Flowise extension based on keywords
-                print(f"🔍 Flowise Extension: Keyword detection triggered!", file=sys.stderr)
-                print(f"   Task contains Flowise keywords", file=sys.stderr)
+                print(
+                    "🔍 Flowise Extension: Keyword detection triggered!",
+                    file=sys.stderr,
+                )
+                print("   Task contains Flowise keywords", file=sys.stderr)
 
-                codebase_info['flowise_flow'] = True
+                codebase_info["flowise_flow"] = True
 
                 # Infer flow type from task description
-                if 'multi-agent' in task_lower or 'multi agent' in task_lower:
-                    codebase_info['flowise_flow_type'] = 'multi-agent'
-                    print(f"   Inferred flow type: multi-agent", file=sys.stderr)
-                elif 'rag' in task_lower or 'retrieval' in task_lower:
-                    codebase_info['flowise_flow_type'] = 'rag'
-                    print(f"   Inferred flow type: rag", file=sys.stderr)
-                elif 'workflow' in task_lower or 'orchestrat' in task_lower:
-                    codebase_info['flowise_flow_type'] = 'workflow'
-                    print(f"   Inferred flow type: workflow", file=sys.stderr)
-                elif 'chatbot' in task_lower or 'chat' in task_lower:
-                    codebase_info['flowise_flow_type'] = 'chatbot'
-                    print(f"   Inferred flow type: chatbot", file=sys.stderr)
+                if "multi-agent" in task_lower or "multi agent" in task_lower:
+                    codebase_info["flowise_flow_type"] = "multi-agent"
+                    print("   Inferred flow type: multi-agent", file=sys.stderr)
+                elif "rag" in task_lower or "retrieval" in task_lower:
+                    codebase_info["flowise_flow_type"] = "rag"
+                    print("   Inferred flow type: rag", file=sys.stderr)
+                elif "workflow" in task_lower or "orchestrat" in task_lower:
+                    codebase_info["flowise_flow_type"] = "workflow"
+                    print("   Inferred flow type: workflow", file=sys.stderr)
+                elif "chatbot" in task_lower or "chat" in task_lower:
+                    codebase_info["flowise_flow_type"] = "chatbot"
+                    print("   Inferred flow type: chatbot", file=sys.stderr)
                 else:
-                    codebase_info['flowise_flow_type'] = 'general'
-                    print(f"   Inferred flow type: general", file=sys.stderr)
+                    codebase_info["flowise_flow_type"] = "general"
+                    print("   Inferred flow type: general", file=sys.stderr)
 
                 # Set default complexity for new projects
-                codebase_info['flowise_complexity'] = 'moderate'
+                codebase_info["flowise_complexity"] = "moderate"
 
                 # Add flowise to languages if not already there
-                if 'flowise' not in codebase_info["languages"]:
-                    codebase_info["languages"].append('flowise')
+                if "flowise" not in codebase_info["languages"]:
+                    codebase_info["languages"].append("flowise")
 
-                print(f"✅ Flowise Extension: Setting flowise_flow=True via keyword detection", file=sys.stderr)
+                print(
+                    "✅ Flowise Extension: Setting flowise_flow=True via keyword detection",
+                    file=sys.stderr,
+                )
 
                 # Update project type if not already set
                 if codebase_info["project_type"] is None:
-                    codebase_info["project_type"] = 'flowise-workflow'
-                    codebase_info["confidence"] = 'medium'
+                    codebase_info["project_type"] = "flowise-workflow"
+                    codebase_info["confidence"] = "medium"
         # ═══════════════════════════════════════════════════════════════════
 
         # Detect task intent from description
@@ -1964,17 +2203,29 @@ Auto-correcting to use_parallel=False...
 
         # Log detection results
         if codebase_info["has_code"]:
-            print(f"   ✅ Existing codebase detected:", file=sys.stderr)
+            print("   ✅ Existing codebase detected:", file=sys.stderr)
             print(f"      Type: {codebase_info['project_type']}", file=sys.stderr)
-            print(f"      Languages: {', '.join(codebase_info['languages'])}", file=sys.stderr)
-            print(f"      Confidence: {codebase_info['confidence'].upper()}", file=sys.stderr)
+            print(
+                f"      Languages: {', '.join(codebase_info['languages'])}",
+                file=sys.stderr,
+            )
+            print(
+                f"      Confidence: {codebase_info['confidence'].upper()}",
+                file=sys.stderr,
+            )
             if codebase_info["has_git"]:
                 git_status = "clean" if codebase_info["git_clean"] else "dirty"
                 print(f"      Git: {git_status}", file=sys.stderr)
         else:
-            print(f"   📁 No existing codebase detected (empty/new directory)", file=sys.stderr)
+            print(
+                "   📁 No existing codebase detected (empty/new directory)",
+                file=sys.stderr,
+            )
 
-        print(f"   🎯 Detected intent: {detected_intent.replace('_', ' ').title()}", file=sys.stderr)
+        print(
+            f"   🎯 Detected intent: {detected_intent.replace('_', ' ').title()}",
+            file=sys.stderr,
+        )
 
         # Auto-adjust mode based on detection
         original_mode = mode
@@ -1985,34 +2236,48 @@ Auto-correcting to use_parallel=False...
             # Existing code detected, use detected intent instead of new_project
             auto_mode = detected_intent
             if detected_intent != "new_project":
-                print(f"   🔄 Auto-adjusted mode: new_project → {detected_intent}", file=sys.stderr)
+                print(
+                    f"   🔄 Auto-adjusted mode: new_project → {detected_intent}",
+                    file=sys.stderr,
+                )
 
         # Validate mode conflicts
         warnings = []
 
         if auto_mode == "new_project" and codebase_info["has_code"]:
-            warnings.append("⚠️  WARNING: Mode is 'new_project' but existing codebase detected!")
-            warnings.append("   Recommendation: Use mode='add_feature' or 'fix_bug' instead")
+            warnings.append(
+                "⚠️  WARNING: Mode is 'new_project' but existing codebase detected!"
+            )
+            warnings.append(
+                "   Recommendation: Use mode='add_feature' or 'fix_bug' instead"
+            )
 
         if auto_mode != "new_project" and not codebase_info["has_code"]:
-            warnings.append(f"⚠️  WARNING: Mode is '{auto_mode}' but no existing codebase found!")
+            warnings.append(
+                f"⚠️  WARNING: Mode is '{auto_mode}' but no existing codebase found!"
+            )
             warnings.append("   Recommendation: Use mode='new_project' instead")
 
         if codebase_info["has_git"] and codebase_info["git_clean"] == False:
             warnings.append("⚠️  WARNING: Git repository has uncommitted changes")
-            warnings.append("   Recommendation: Commit or stash changes before enhancement")
+            warnings.append(
+                "   Recommendation: Commit or stash changes before enhancement"
+            )
 
         # Print warnings
         if warnings:
-            print(f"\n", file=sys.stderr)
+            print("\n", file=sys.stderr)
             for warning in warnings:
                 print(f"   {warning}", file=sys.stderr)
-            print(f"\n", file=sys.stderr)
+            print("\n", file=sys.stderr)
 
         # Use auto-adjusted mode
         final_mode = auto_mode
 
-        print(f"   ✨ Final mode: {final_mode.replace('_', ' ').title()}\n", file=sys.stderr)
+        print(
+            f"   ✨ Final mode: {final_mode.replace('_', ' ').title()}\n",
+            file=sys.stderr,
+        )
 
         # ═══════════════════════════════════════════════════════════════════════
 
@@ -2027,7 +2292,8 @@ Auto-correcting to use_parallel=False...
             "enable_test_loop": enable_test_loop,
             "max_test_iterations": max_test_iterations,
             # Smart Incremental Builds (Phase 1 implementation)
-            "incremental": incremental and not force_rebuild,  # Enable only if incremental=True and not forced rebuild
+            "incremental": incremental
+            and not force_rebuild,  # Enable only if incremental=True and not forced rebuild
             "force_rebuild": force_rebuild,
             # Flowise extension fields (TOP LEVEL for orchestrator access)
             "flowise_flow": codebase_info.get("flowise_flow", False),
@@ -2045,7 +2311,9 @@ Auto-correcting to use_parallel=False...
                 "confidence": codebase_info["confidence"],
                 "has_git": codebase_info["has_git"],
                 "git_clean": codebase_info["git_clean"],
-                "project_files": codebase_info["project_files"][:10],  # Limit to first 10 files
+                "project_files": codebase_info["project_files"][
+                    :10
+                ],  # Limit to first 10 files
                 "detected_intent": detected_intent,
                 # Flowise extension fields (NESTED for backward compatibility)
                 "flowise_flow": codebase_info.get("flowise_flow", False),
@@ -2054,17 +2322,20 @@ Auto-correcting to use_parallel=False...
                 "flowise_node_count": codebase_info.get("flowise_node_count", 0),
                 "flowise_agent_count": codebase_info.get("flowise_agent_count", 0),
                 "flowise_has_memory": codebase_info.get("flowise_has_memory", False),
-                "flowise_has_tools": codebase_info.get("flowise_has_tools", False)
-            }
+                "flowise_has_tools": codebase_info.get("flowise_has_tools", False),
+            },
         }
 
         # Load orchestrator system prompt with caching support
         orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
         if not orchestrator_prompt_path.exists():
-            return json.dumps({
-                "status": "error",
-                "error": f"Orchestrator prompt not found at {orchestrator_prompt_path}. Please create tools/orchestrator_prompt.txt"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Orchestrator prompt not found at {orchestrator_prompt_path}. Please create tools/orchestrator_prompt.txt",
+                },
+                indent=2,
+            )
 
         # Try to use cached prompt builder (with graceful fallback)
         try:
@@ -2075,20 +2346,24 @@ Auto-correcting to use_parallel=False...
                 task_config=task_config,
                 orchestrator_prompt_path=str(orchestrator_prompt_path),
                 enable_caching=True,  # Will auto-disable if not supported
-                cache_ttl="5m"
+                cache_ttl="5m",
             )
 
         except Exception as e:
             # Fallback to non-cached prompt if builder fails
             print(f"⚠️  Cached prompt builder failed: {e}", file=sys.stderr)
-            print(f"   Falling back to standard prompt (no caching)\n", file=sys.stderr)
+            print("   Falling back to standard prompt (no caching)\n", file=sys.stderr)
 
             with open(orchestrator_prompt_path) as f:
                 orchestrator_content = f.read()
 
             # Remove cache boundary marker if present
-            orchestrator_content = orchestrator_content.replace("<<CACHE_BOUNDARY_MARKER>>", "")
-            orchestrator_content = orchestrator_content.replace("END OF STATIC ORCHESTRATOR INSTRUCTIONS", "")
+            orchestrator_content = orchestrator_content.replace(
+                "<<CACHE_BOUNDARY_MARKER>>", ""
+            )
+            orchestrator_content = orchestrator_content.replace(
+                "END OF STATIC ORCHESTRATOR INSTRUCTIONS", ""
+            )
 
             # Build task section
             task_section = f"""
@@ -2109,12 +2384,16 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         # Build command with thinking disabled
         # Note: System prompt now includes both static (cached) and dynamic (task config) sections
         cmd = [
-            "claude", "--print",
-            "--permission-mode", "bypassPermissions",
+            "claude",
+            "--print",
+            "--permission-mode",
+            "bypassPermissions",
             "--strict-mcp-config",
-            "--settings", '{"thinkingMode": "off"}',
-            "--system-prompt", system_prompt,
-            "BEGIN AUTONOMOUS EXECUTION"  # Trigger message for orchestrator
+            "--settings",
+            '{"thinkingMode": "off"}',
+            "--system-prompt",
+            system_prompt,
+            "BEGIN AUTONOMOUS EXECUTION",  # Trigger message for orchestrator
         ]
 
         # Generate unique task ID
@@ -2130,8 +2409,8 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             text=True,
             env={
                 **os.environ,
-                'PYTHONUNBUFFERED': '1',
-            }
+                "PYTHONUNBUFFERED": "1",
+            },
         )
 
         # Store task info
@@ -2148,20 +2427,21 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "stderr": None,
             "duration": None,
             "task_config": task_config,
-            "build_type": "autonomous"  # Mark as autonomous build for special handling
+            "build_type": "autonomous",  # Mark as autonomous build for special handling
         }
 
-        return json.dumps({
-            "task_id": task_id,
-            "status": "started",
-            "project": project_name,
-            "task_summary": task[:100] + ("..." if len(task) > 100 else ""),
-            "working_directory": final_working_dir_str,
-            "github_repo": github_repo_name,
-            "timeout_minutes": timeout_minutes,
-            "enable_test_loop": enable_test_loop,
-            "incremental_mode": incremental and not force_rebuild,
-            "message": f"""
+        return json.dumps(
+            {
+                "task_id": task_id,
+                "status": "started",
+                "project": project_name,
+                "task_summary": task[:100] + ("..." if len(task) > 100 else ""),
+                "working_directory": final_working_dir_str,
+                "github_repo": github_repo_name,
+                "timeout_minutes": timeout_minutes,
+                "enable_test_loop": enable_test_loop,
+                "incremental_mode": incremental and not force_rebuild,
+                "message": f"""
 🚀 Autonomous build started!
 
 Project: {project_name}
@@ -2181,20 +2461,30 @@ List all builds:
   • Or use: list_delegations()
 
 I'll notify you when it's complete!
-""".strip()
-        }, indent=2)
+""".strip(),
+            },
+            indent=2,
+        )
 
     except Exception as e:
         import traceback
+
         # Try to use final_working_dir if available, otherwise use original input
-        error_working_dir = final_working_dir_str if 'final_working_dir_str' in locals() else working_directory
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "task": task,
-            "working_directory": error_working_dir
-        }, indent=2)
+        error_working_dir = (
+            final_working_dir_str
+            if "final_working_dir_str" in locals()
+            else working_directory
+        )
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "task": task,
+                "working_directory": error_working_dir,
+            },
+            indent=2,
+        )
 
 
 # MCP tool wrapper (calls the implementation function above)
@@ -2210,7 +2500,7 @@ def autonomous_build_and_deploy(
     timeout_minutes: float = 90.0,
     use_parallel: bool = False,
     incremental: bool = False,
-    force_rebuild: bool = False
+    force_rebuild: bool = False,
 ) -> str:
     """
     MCP tool wrapper for autonomous_build_and_deploy.
@@ -2228,7 +2518,7 @@ def autonomous_build_and_deploy(
         timeout_minutes=timeout_minutes,
         use_parallel=use_parallel,
         incremental=incremental,
-        force_rebuild=force_rebuild
+        force_rebuild=force_rebuild,
     )
 
 
@@ -2240,6 +2530,7 @@ def autonomous_build_and_deploy(
 # ============================================================================
 # Internal Pattern Storage Implementations (callable from Python)
 # ============================================================================
+
 
 def _read_global_patterns_impl(pattern_type: str = "common-issues") -> dict:
     """
@@ -2266,14 +2557,14 @@ def _read_global_patterns_impl(pattern_type: str = "common-issues") -> dict:
             "build-metrics": "build-metrics.json",
             "architecture-patterns": "architecture-patterns.json",
             "test-patterns": "test-patterns.json",
-            "mcp-server-patterns": "mcp-server-patterns.json"
+            "mcp-server-patterns": "mcp-server-patterns.json",
         }
 
         if pattern_type not in pattern_files:
             return {
                 "status": "error",
                 "error": f"Invalid pattern_type: {pattern_type}",
-                "valid_types": list(pattern_files.keys())
+                "valid_types": list(pattern_files.keys()),
             }
 
         pattern_file = global_pattern_dir / pattern_files[pattern_type]
@@ -2289,59 +2580,56 @@ def _read_global_patterns_impl(pattern_type: str = "common-issues") -> dict:
                     "patterns": [],
                     "version": "1.0",
                     "last_updated": datetime.now().isoformat(),
-                    "total_builds": 0
+                    "total_builds": 0,
                 }
             elif pattern_type == "scout-learnings":
                 default_data = {
                     "learnings": [],
                     "version": "1.0",
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
                 }
             elif pattern_type == "build-metrics":
                 default_data = {
                     "metrics": [],
                     "version": "1.0",
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
                 }
             else:
                 default_data = {
                     "patterns": [],
                     "version": "1.0",
-                    "last_updated": datetime.now().isoformat()
+                    "last_updated": datetime.now().isoformat(),
                 }
 
             return {
                 "status": "success",
                 "message": f"No existing {pattern_type} found, returning empty structure",
                 "data": default_data,
-                "file_path": str(pattern_file)
+                "file_path": str(pattern_file),
             }
 
         # Read existing patterns
-        with open(pattern_file, 'r') as f:
+        with open(pattern_file, "r") as f:
             data = json.load(f)
 
         return {
             "status": "success",
             "data": data,
             "file_path": str(pattern_file),
-            "last_updated": data.get("last_updated", "unknown")
+            "last_updated": data.get("last_updated", "unknown"),
         }
 
     except json.JSONDecodeError as e:
         return {
             "status": "error",
             "error": f"Invalid JSON in pattern file: {str(e)}",
-            "file_path": str(pattern_file)
+            "file_path": str(pattern_file),
         }
 
     except Exception as e:
         import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
 
 
 def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
@@ -2371,14 +2659,14 @@ def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
             "build-metrics": "build-metrics.json",
             "architecture-patterns": "architecture-patterns.json",
             "test-patterns": "test-patterns.json",
-            "mcp-server-patterns": "mcp-server-patterns.json"
+            "mcp-server-patterns": "mcp-server-patterns.json",
         }
 
         if pattern_type not in pattern_files:
             return {
                 "status": "error",
                 "error": f"Invalid pattern_type: {pattern_type}",
-                "valid_types": list(pattern_files.keys())
+                "valid_types": list(pattern_files.keys()),
             }
 
         pattern_file = global_pattern_dir / pattern_files[pattern_type]
@@ -2387,7 +2675,7 @@ def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
         data["last_updated"] = datetime.now().isoformat()
 
         # Write to file
-        with open(pattern_file, 'w') as f:
+        with open(pattern_file, "w") as f:
             json.dump(data, f, indent=2)
 
         # Get count of items
@@ -2404,22 +2692,19 @@ def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
             "status": "success",
             "message": f"Saved {count} {pattern_type} to global storage",
             "file_path": str(pattern_file),
-            "last_updated": data["last_updated"]
+            "last_updated": data["last_updated"],
         }
 
     except Exception as e:
         import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
 
 
 def _merge_project_patterns_impl(
     project_pattern_file: str,
     pattern_type: str = "common-issues",
-    increment_build_count: bool = True
+    increment_build_count: bool = True,
 ) -> dict:
     """
     Internal implementation for merging project patterns into global storage.
@@ -2442,10 +2727,10 @@ def _merge_project_patterns_impl(
         if not project_file_path.exists():
             return {
                 "status": "error",
-                "error": f"Project pattern file not found: {project_pattern_file}"
+                "error": f"Project pattern file not found: {project_pattern_file}",
             }
 
-        with open(project_file_path, 'r') as f:
+        with open(project_file_path, "r") as f:
             project_data = json.load(f)
 
         # Read global patterns using internal implementation
@@ -2455,7 +2740,7 @@ def _merge_project_patterns_impl(
             return {
                 "status": "error",
                 "error": "Failed to read global patterns",
-                "details": global_response
+                "details": global_response,
             }
 
         global_data = global_response["data"]
@@ -2464,7 +2749,7 @@ def _merge_project_patterns_impl(
         merge_stats = {
             "new_patterns": 0,
             "updated_patterns": 0,
-            "total_project_patterns": 0
+            "total_project_patterns": 0,
         }
 
         if pattern_type == "common-issues":
@@ -2503,9 +2788,22 @@ def _merge_project_patterns_impl(
                     existing["project_types"] = sorted(list(existing_types | new_types))
 
                     # Preserve highest severity
-                    severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "critical": 4, "high": 3, "medium": 2, "low": 1}
-                    existing_severity = severity_order.get(existing.get("severity", "LOW"), 1)
-                    new_severity = severity_order.get(proj_pattern.get("severity", "LOW"), 1)
+                    severity_order = {
+                        "CRITICAL": 4,
+                        "HIGH": 3,
+                        "MEDIUM": 2,
+                        "LOW": 1,
+                        "critical": 4,
+                        "high": 3,
+                        "medium": 2,
+                        "low": 1,
+                    }
+                    existing_severity = severity_order.get(
+                        existing.get("severity", "LOW"), 1
+                    )
+                    new_severity = severity_order.get(
+                        proj_pattern.get("severity", "LOW"), 1
+                    )
                     if new_severity > existing_severity:
                         existing["severity"] = proj_pattern["severity"]
 
@@ -2532,7 +2830,11 @@ def _merge_project_patterns_impl(
             merge_stats["total_project_patterns"] = len(project_learnings)
 
             # Create lookup by learning_id
-            global_by_id = {l.get("learning_id"): i for i, l in enumerate(global_learnings) if l.get("learning_id")}
+            global_by_id = {
+                l.get("learning_id"): i
+                for i, l in enumerate(global_learnings)
+                if l.get("learning_id")
+            }
 
             for proj_learning in project_learnings:
                 learning_id = proj_learning.get("learning_id")
@@ -2564,7 +2866,11 @@ def _merge_project_patterns_impl(
 
             global_data["learnings"] = global_learnings
 
-        elif pattern_type in ["architecture-patterns", "test-patterns", "mcp-server-patterns"]:
+        elif pattern_type in [
+            "architecture-patterns",
+            "test-patterns",
+            "mcp-server-patterns",
+        ]:
             # These pattern types use the same structure as common-issues
             project_patterns = project_data.get("patterns", [])
             global_patterns = global_data.get("patterns", [])
@@ -2601,9 +2907,22 @@ def _merge_project_patterns_impl(
 
                     # Preserve highest severity if present
                     if "severity" in existing or "severity" in proj_pattern:
-                        severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "critical": 4, "high": 3, "medium": 2, "low": 1}
-                        existing_severity = severity_order.get(existing.get("severity", "LOW"), 1)
-                        new_severity = severity_order.get(proj_pattern.get("severity", "LOW"), 1)
+                        severity_order = {
+                            "CRITICAL": 4,
+                            "HIGH": 3,
+                            "MEDIUM": 2,
+                            "LOW": 1,
+                            "critical": 4,
+                            "high": 3,
+                            "medium": 2,
+                            "low": 1,
+                        }
+                        existing_severity = severity_order.get(
+                            existing.get("severity", "LOW"), 1
+                        )
+                        new_severity = severity_order.get(
+                            proj_pattern.get("severity", "LOW"), 1
+                        )
                         if new_severity > existing_severity:
                             existing["severity"] = proj_pattern["severity"]
 
@@ -2626,7 +2945,7 @@ def _merge_project_patterns_impl(
             return {
                 "status": "error",
                 "error": "Failed to save merged patterns",
-                "details": save_response
+                "details": save_response,
             }
 
         return {
@@ -2634,28 +2953,26 @@ def _merge_project_patterns_impl(
             "message": f"Successfully merged {pattern_type} from project",
             "merge_stats": merge_stats,
             "global_file": save_response["file_path"],
-            "project_file": str(project_file_path)
+            "project_file": str(project_file_path),
         }
 
     except json.JSONDecodeError as e:
         return {
             "status": "error",
             "error": f"Invalid JSON in pattern file: {str(e)}",
-            "file_path": project_pattern_file
+            "file_path": project_pattern_file,
         }
 
     except Exception as e:
         import traceback
-        return {
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }
+
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
 
 
 # ============================================================================
 # MCP Tool Wrappers (external interface)
 # ============================================================================
+
 
 @mcp.tool()
 def read_global_patterns(pattern_type: str = "common-issues") -> str:
@@ -2704,10 +3021,10 @@ def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
         # Parse patterns data
         data = json.loads(patterns_data)
     except json.JSONDecodeError as e:
-        return json.dumps({
-            "status": "error",
-            "error": f"Invalid JSON in patterns_data: {str(e)}"
-        }, indent=2)
+        return json.dumps(
+            {"status": "error", "error": f"Invalid JSON in patterns_data: {str(e)}"},
+            indent=2,
+        )
 
     # Call internal implementation
     result = _save_global_patterns_impl(pattern_type, data)
@@ -2718,7 +3035,7 @@ def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
 def merge_project_patterns(
     project_pattern_file: str,
     pattern_type: str = "common-issues",
-    increment_build_count: bool = True
+    increment_build_count: bool = True,
 ) -> str:
     """
     Merge patterns from a project-specific file into global pattern storage.
@@ -2745,7 +3062,9 @@ def merge_project_patterns(
         )
     """
     # Call internal implementation
-    result = _merge_project_patterns_impl(project_pattern_file, pattern_type, increment_build_count)
+    result = _merge_project_patterns_impl(
+        project_pattern_file, pattern_type, increment_build_count
+    )
     return json.dumps(result, indent=2)
 
 
@@ -2769,10 +3088,13 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
     try:
         base_path = Path(projects_base_dir)
         if not base_path.exists():
-            return json.dumps({
-                "status": "error",
-                "error": f"Directory not found: {projects_base_dir}"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Directory not found: {projects_base_dir}",
+                },
+                indent=2,
+            )
 
         # Find all project pattern directories
         pattern_dirs = []
@@ -2780,23 +3102,25 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
             if project_dir.is_dir():
                 pattern_dir = project_dir / ".context-foundry" / "patterns"
                 if pattern_dir.exists():
-                    pattern_dirs.append({
-                        "project": project_dir.name,
-                        "path": pattern_dir
-                    })
+                    pattern_dirs.append(
+                        {"project": project_dir.name, "path": pattern_dir}
+                    )
 
         if not pattern_dirs:
-            return json.dumps({
-                "status": "success",
-                "message": "No project patterns found to migrate",
-                "projects_scanned": len(list(base_path.iterdir()))
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": "No project patterns found to migrate",
+                    "projects_scanned": len(list(base_path.iterdir())),
+                },
+                indent=2,
+            )
 
         # Migrate each project
         migration_results = {
             "projects_migrated": 0,
             "total_patterns_merged": 0,
-            "errors": []
+            "errors": [],
         }
 
         for proj_info in pattern_dirs:
@@ -2809,17 +3133,23 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
                 result_data = _merge_project_patterns_impl(
                     str(common_issues_file),
                     "common-issues",
-                    increment_build_count=False  # Don't increment for migration
+                    increment_build_count=False,  # Don't increment for migration
                 )
                 if result_data["status"] == "success":
-                    migration_results["total_patterns_merged"] += result_data["merge_stats"]["new_patterns"]
-                    migration_results["total_patterns_merged"] += result_data["merge_stats"]["updated_patterns"]
+                    migration_results["total_patterns_merged"] += result_data[
+                        "merge_stats"
+                    ]["new_patterns"]
+                    migration_results["total_patterns_merged"] += result_data[
+                        "merge_stats"
+                    ]["updated_patterns"]
                 else:
-                    migration_results["errors"].append({
-                        "project": project_name,
-                        "file": "common-issues.json",
-                        "error": result_data.get("error", "Unknown error")
-                    })
+                    migration_results["errors"].append(
+                        {
+                            "project": project_name,
+                            "file": "common-issues.json",
+                            "error": result_data.get("error", "Unknown error"),
+                        }
+                    )
 
             # Migrate scout-learnings.json if it exists
             scout_learnings_file = pattern_dir / "scout-learnings.json"
@@ -2827,40 +3157,48 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
                 result_data = _merge_project_patterns_impl(
                     str(scout_learnings_file),
                     "scout-learnings",
-                    increment_build_count=False
+                    increment_build_count=False,
                 )
                 if result_data["status"] == "success":
-                    migration_results["total_patterns_merged"] += result_data["merge_stats"]["new_patterns"]
-                    migration_results["total_patterns_merged"] += result_data["merge_stats"]["updated_patterns"]
+                    migration_results["total_patterns_merged"] += result_data[
+                        "merge_stats"
+                    ]["new_patterns"]
+                    migration_results["total_patterns_merged"] += result_data[
+                        "merge_stats"
+                    ]["updated_patterns"]
                 else:
-                    migration_results["errors"].append({
-                        "project": project_name,
-                        "file": "scout-learnings.json",
-                        "error": result_data.get("error", "Unknown error")
-                    })
+                    migration_results["errors"].append(
+                        {
+                            "project": project_name,
+                            "file": "scout-learnings.json",
+                            "error": result_data.get("error", "Unknown error"),
+                        }
+                    )
 
             migration_results["projects_migrated"] += 1
 
-        return json.dumps({
-            "status": "success",
-            "message": f"Migrated patterns from {migration_results['projects_migrated']} projects",
-            "migration_results": migration_results,
-            "projects_found": len(pattern_dirs)
-        }, indent=2)
+        return json.dumps(
+            {
+                "status": "success",
+                "message": f"Migrated patterns from {migration_results['projects_migrated']} projects",
+                "migration_results": migration_results,
+                "projects_found": len(pattern_dirs),
+            },
+            indent=2,
+        )
 
     except Exception as e:
         import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, indent=2)
+
+        return json.dumps(
+            {"status": "error", "error": str(e), "traceback": traceback.format_exc()},
+            indent=2,
+        )
 
 
 @mcp.tool()
 def share_patterns_to_community(
-    auto_confirm: bool = True,
-    skip_if_no_changes: bool = True
+    auto_confirm: bool = True, skip_if_no_changes: bool = True
 ) -> str:
     """
     Automatically share locally-learned patterns with the Context Foundry community.
@@ -2891,69 +3229,86 @@ def share_patterns_to_community(
         share_script = repo_root / "scripts" / "share-my-patterns.sh"
 
         if not share_script.exists():
-            return json.dumps({
-                "status": "error",
-                "error": f"Pattern sharing script not found: {share_script}",
-                "shared": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Pattern sharing script not found: {share_script}",
+                    "shared": False,
+                },
+                indent=2,
+            )
 
         # Check if gh CLI is available and authenticated
         try:
             result = subprocess.run(
-                ["gh", "auth", "status"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["gh", "auth", "status"], capture_output=True, text=True, timeout=5
             )
             if result.returncode != 0:
-                return json.dumps({
-                    "status": "skipped",
-                    "reason": "GitHub CLI not authenticated",
-                    "message": "Run 'gh auth login' to enable automatic pattern sharing",
-                    "shared": False,
-                    "setup_instructions": "https://cli.github.com/manual/gh_auth_login"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "status": "skipped",
+                        "reason": "GitHub CLI not authenticated",
+                        "message": "Run 'gh auth login' to enable automatic pattern sharing",
+                        "shared": False,
+                        "setup_instructions": "https://cli.github.com/manual/gh_auth_login",
+                    },
+                    indent=2,
+                )
         except FileNotFoundError:
-            return json.dumps({
-                "status": "skipped",
-                "reason": "GitHub CLI not installed",
-                "message": "Install gh CLI to enable automatic pattern sharing",
-                "shared": False,
-                "setup_instructions": "https://cli.github.com/"
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "GitHub CLI not installed",
+                    "message": "Install gh CLI to enable automatic pattern sharing",
+                    "shared": False,
+                    "setup_instructions": "https://cli.github.com/",
+                },
+                indent=2,
+            )
         except subprocess.TimeoutExpired:
-            return json.dumps({
-                "status": "error",
-                "error": "gh auth status check timed out",
-                "shared": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": "gh auth status check timed out",
+                    "shared": False,
+                },
+                indent=2,
+            )
 
         # Check if local patterns exist
         local_patterns_dir = Path.home() / ".context-foundry" / "patterns"
         if not local_patterns_dir.exists():
-            return json.dumps({
-                "status": "skipped",
-                "reason": "No local patterns found",
-                "message": "No patterns to share yet",
-                "shared": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "No local patterns found",
+                    "message": "No patterns to share yet",
+                    "shared": False,
+                },
+                indent=2,
+            )
 
         # Count pattern files
         pattern_files = list(local_patterns_dir.glob("*.json"))
         if not pattern_files:
-            return json.dumps({
-                "status": "skipped",
-                "reason": "No pattern files found",
-                "message": "No patterns to share yet",
-                "shared": False
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "skipped",
+                    "reason": "No pattern files found",
+                    "message": "No patterns to share yet",
+                    "shared": False,
+                },
+                indent=2,
+            )
 
         # Check if there are changes since last share (if skip_if_no_changes=True)
         if skip_if_no_changes:
             # Check if .last-pattern-share file exists
             last_share_file = local_patterns_dir / ".last-pattern-share"
             if last_share_file.exists():
-                last_share_time = datetime.fromtimestamp(last_share_file.stat().st_mtime)
+                last_share_time = datetime.fromtimestamp(
+                    last_share_file.stat().st_mtime
+                )
 
                 # Check if any pattern files were modified after last share
                 any_newer = False
@@ -2963,15 +3318,18 @@ def share_patterns_to_community(
                         break
 
                 if not any_newer:
-                    return json.dumps({
-                        "status": "skipped",
-                        "reason": "No new patterns since last share",
-                        "message": f"Last shared: {last_share_time.isoformat()}",
-                        "shared": False
-                    }, indent=2)
+                    return json.dumps(
+                        {
+                            "status": "skipped",
+                            "reason": "No new patterns since last share",
+                            "message": f"Last shared: {last_share_time.isoformat()}",
+                            "shared": False,
+                        },
+                        indent=2,
+                    )
 
         # Run the share script with auto-confirmation
-        print(f"\n🔄 Automatically sharing patterns to community...", file=sys.stderr)
+        print("\n🔄 Automatically sharing patterns to community...", file=sys.stderr)
 
         # Prepare environment with auto-confirm
         env = os.environ.copy()
@@ -2985,7 +3343,7 @@ def share_patterns_to_community(
                 stderr=subprocess.PIPE,
                 text=True,
                 cwd=str(repo_root),
-                env=env
+                env=env,
             )
             stdout, stderr = process.communicate(input="y\n", timeout=120)
         else:
@@ -2994,7 +3352,7 @@ def share_patterns_to_community(
                 capture_output=True,
                 text=True,
                 cwd=str(repo_root),
-                timeout=120
+                timeout=120,
             )
             stdout = process.stdout
             stderr = process.stderr
@@ -3006,41 +3364,54 @@ def share_patterns_to_community(
         if process.returncode == 0:
             # Extract PR URL from output if present
             pr_url = None
-            for line in stdout.split('\n'):
-                if 'https://github.com' in line and '/pull/' in line:
+            for line in stdout.split("\n"):
+                if "https://github.com" in line and "/pull/" in line:
                     pr_url = line.strip()
                     break
 
-            return json.dumps({
-                "status": "success",
-                "message": "Patterns shared successfully",
-                "shared": True,
-                "pr_url": pr_url,
-                "timestamp": datetime.now().isoformat(),
-                "output_summary": stdout[-500:] if len(stdout) > 500 else stdout
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": "Patterns shared successfully",
+                    "shared": True,
+                    "pr_url": pr_url,
+                    "timestamp": datetime.now().isoformat(),
+                    "output_summary": stdout[-500:] if len(stdout) > 500 else stdout,
+                },
+                indent=2,
+            )
         else:
-            return json.dumps({
-                "status": "error",
-                "error": f"Share script failed with code {process.returncode}",
-                "shared": False,
-                "stderr": stderr[-500:] if len(stderr) > 500 else stderr
-            }, indent=2)
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Share script failed with code {process.returncode}",
+                    "shared": False,
+                    "stderr": stderr[-500:] if len(stderr) > 500 else stderr,
+                },
+                indent=2,
+            )
 
     except subprocess.TimeoutExpired:
-        return json.dumps({
-            "status": "error",
-            "error": "Pattern sharing timed out after 120 seconds",
-            "shared": False
-        }, indent=2)
+        return json.dumps(
+            {
+                "status": "error",
+                "error": "Pattern sharing timed out after 120 seconds",
+                "shared": False,
+            },
+            indent=2,
+        )
     except Exception as e:
         import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "shared": False,
-            "traceback": traceback.format_exc()
-        }, indent=2)
+
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "shared": False,
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
 
 
 @mcp.resource("logs://latest")
@@ -3081,14 +3452,22 @@ from tools.evolution_mcp_tools import (
     apply_pattern_to_project_impl,
     validate_project_health_impl,
     register_agent_impl,
-    send_agent_message_impl
+    send_agent_message_impl,
 )
 
 
 @mcp.tool()
-def create_evolution_task(task_type: str, target_project: Optional[str] = None, pattern_id: Optional[str] = None, priority: int = 5, params: Optional[Dict] = None) -> str:
+def create_evolution_task(
+    task_type: str,
+    target_project: Optional[str] = None,
+    pattern_id: Optional[str] = None,
+    priority: int = 5,
+    params: Optional[Dict] = None,
+) -> str:
     """Create new evolution task and add to queue. Types: self_improvement, chaos_creative, research, apply_pattern, validate."""
-    return create_evolution_task_impl(task_type, target_project, pattern_id, priority, params)
+    return create_evolution_task_impl(
+        task_type, target_project, pattern_id, priority, params
+    )
 
 
 @mcp.tool()
@@ -3116,7 +3495,9 @@ def get_daemon_status() -> str:
 
 
 @mcp.tool()
-def register_project(project_path: str, project_type: str, metadata: Optional[Dict] = None) -> str:
+def register_project(
+    project_path: str, project_type: str, metadata: Optional[Dict] = None
+) -> str:
     """Register a project in the global registry."""
     return register_project_impl(project_path, project_type, metadata)
 
@@ -3134,7 +3515,11 @@ def validate_project_health(project_path: str) -> str:
 
 
 @mcp.tool()
-def register_agent(agent_name: str, agent_url: Optional[str] = None, capabilities: Optional[List[str]] = None) -> str:
+def register_agent(
+    agent_name: str,
+    agent_url: Optional[str] = None,
+    capabilities: Optional[List[str]] = None,
+) -> str:
     """Register an agent in the network."""
     return register_agent_impl(agent_name, agent_url, capabilities)
 
@@ -3158,6 +3543,7 @@ def bootstrap_patterns_on_startup():
     """
     try:
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Check if running from a Context Foundry project directory
@@ -3186,18 +3572,23 @@ def bootstrap_patterns_on_startup():
 
             try:
                 result = _merge_project_patterns_impl(
-                    str(pattern_file),
-                    pattern_type,
-                    increment_build_count=False
+                    str(pattern_file), pattern_type, increment_build_count=False
                 )
 
                 if result["status"] == "success":
                     pattern_files_merged += 1
                     total_patterns_added += result["merge_stats"]["new_patterns"]
-                    logger.info(f"✓ Merged {pattern_file.name}: {result['merge_stats']}")
-                    print(f"  ✓ Merged {pattern_file.name}: +{result['merge_stats']['new_patterns']} new patterns", file=sys.stderr)
+                    logger.info(
+                        f"✓ Merged {pattern_file.name}: {result['merge_stats']}"
+                    )
+                    print(
+                        f"  ✓ Merged {pattern_file.name}: +{result['merge_stats']['new_patterns']} new patterns",
+                        file=sys.stderr,
+                    )
                 else:
-                    logger.warning(f"✗ Failed to merge {pattern_file.name}: {result.get('error')}")
+                    logger.warning(
+                        f"✗ Failed to merge {pattern_file.name}: {result.get('error')}"
+                    )
                     print(f"  ✗ Failed to merge {pattern_file.name}", file=sys.stderr)
 
             except Exception as e:
@@ -3211,11 +3602,17 @@ def bootstrap_patterns_on_startup():
             f"New patterns added: {total_patterns_added}\n"
         )
 
-        logger.info(f"✅ Bootstrap complete: {pattern_files_merged} files, {total_patterns_added} new patterns")
-        print(f"✅ Bootstrap complete: {pattern_files_merged} pattern files merged, {total_patterns_added} new patterns added\n", file=sys.stderr)
+        logger.info(
+            f"✅ Bootstrap complete: {pattern_files_merged} files, {total_patterns_added} new patterns"
+        )
+        print(
+            f"✅ Bootstrap complete: {pattern_files_merged} pattern files merged, {total_patterns_added} new patterns added\n",
+            file=sys.stderr,
+        )
 
     except Exception as e:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.error(f"Bootstrap failed: {e}", exc_info=True)
         print(f"⚠️  Bootstrap warning: {e}", file=sys.stderr)
@@ -3232,18 +3629,53 @@ if __name__ == "__main__":
     print("", file=sys.stderr)
     print("📋 Available tools:", file=sys.stderr)
     print("   - context_foundry_status: Get server status", file=sys.stderr)
-    print("   - delegate_to_claude_code: Delegate tasks to fresh Claude instances (synchronous)", file=sys.stderr)
-    print("   - delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)", file=sys.stderr)
-    print("   - get_delegation_result: Check status and get results of async tasks", file=sys.stderr)
-    print("   - list_delegations: List all active and completed async tasks", file=sys.stderr)
-    print("   - cancel_delegation: Manually cancel/kill a running task", file=sys.stderr)
-    print("   - stream_delegation_output: Stream raw real-time output from running tasks", file=sys.stderr)
-    print("   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy (runs in background)", file=sys.stderr)
-    print("   - read_global_patterns: Read patterns from global pattern storage", file=sys.stderr)
-    print("   - save_global_patterns: Save patterns to global pattern storage", file=sys.stderr)
-    print("   - merge_project_patterns: Merge project patterns into global storage", file=sys.stderr)
-    print("   - migrate_all_project_patterns: Migrate all project patterns to global storage", file=sys.stderr)
-    print("   - share_patterns_to_community: Automatically share patterns to community (creates PR)", file=sys.stderr)
+    print(
+        "   - delegate_to_claude_code: Delegate tasks to fresh Claude instances (synchronous)",
+        file=sys.stderr,
+    )
+    print(
+        "   - delegate_to_claude_code_async: Delegate tasks asynchronously (parallel execution)",
+        file=sys.stderr,
+    )
+    print(
+        "   - get_delegation_result: Check status and get results of async tasks",
+        file=sys.stderr,
+    )
+    print(
+        "   - list_delegations: List all active and completed async tasks",
+        file=sys.stderr,
+    )
+    print(
+        "   - cancel_delegation: Manually cancel/kill a running task", file=sys.stderr
+    )
+    print(
+        "   - stream_delegation_output: Stream raw real-time output from running tasks",
+        file=sys.stderr,
+    )
+    print(
+        "   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy (runs in background)",
+        file=sys.stderr,
+    )
+    print(
+        "   - read_global_patterns: Read patterns from global pattern storage",
+        file=sys.stderr,
+    )
+    print(
+        "   - save_global_patterns: Save patterns to global pattern storage",
+        file=sys.stderr,
+    )
+    print(
+        "   - merge_project_patterns: Merge project patterns into global storage",
+        file=sys.stderr,
+    )
+    print(
+        "   - migrate_all_project_patterns: Migrate all project patterns to global storage",
+        file=sys.stderr,
+    )
+    print(
+        "   - share_patterns_to_community: Automatically share patterns to community (creates PR)",
+        file=sys.stderr,
+    )
     print("", file=sys.stderr)
     print("🔄 Evolution System Tools (CFES):", file=sys.stderr)
     print("   - create_evolution_task: Create new evolution task", file=sys.stderr)
@@ -3256,6 +3688,9 @@ if __name__ == "__main__":
     print("   - validate_project_health: Validate project health", file=sys.stderr)
     print("   - register_agent: Register agent in network", file=sys.stderr)
     print("   - send_agent_message: Send inter-agent message", file=sys.stderr)
-    print("💡 Configure in Claude Desktop or Claude Code CLI to use this server!", file=sys.stderr)
+    print(
+        "💡 Configure in Claude Desktop or Claude Code CLI to use this server!",
+        file=sys.stderr,
+    )
 
     mcp.run()

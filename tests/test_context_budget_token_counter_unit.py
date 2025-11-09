@@ -18,7 +18,7 @@ import pytest
 import sys
 from pathlib import Path
 import tempfile
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tools.context_budget.token_counter import (
     TokenCounter,
     estimate_tokens,
-    get_context_window_size
+    get_context_window_size,
 )
 
 
@@ -37,22 +37,24 @@ class TestTokenCounterInitialization:
         """Test TokenCounter initializes with default model"""
         counter = TokenCounter()
 
-        assert counter.model == 'claude-sonnet-4'
+        assert counter.model == "claude-sonnet-4"
 
     def test_custom_model_initialization(self):
         """Test TokenCounter initializes with custom model"""
-        counter = TokenCounter(model='gpt-4')
+        counter = TokenCounter(model="gpt-4")
 
-        assert counter.model == 'gpt-4'
+        assert counter.model == "gpt-4"
 
 
 class TestTokenEstimationWithTiktoken:
     """Test token estimation when tiktoken is available"""
 
     @pytest.mark.skipif(
-        not hasattr(sys.modules.get('tools.context_budget.token_counter'), 'TIKTOKEN_AVAILABLE')
-        or not sys.modules['tools.context_budget.token_counter'].TIKTOKEN_AVAILABLE,
-        reason="tiktoken not available"
+        not hasattr(
+            sys.modules.get("tools.context_budget.token_counter"), "TIKTOKEN_AVAILABLE"
+        )
+        or not sys.modules["tools.context_budget.token_counter"].TIKTOKEN_AVAILABLE,
+        reason="tiktoken not available",
     )
     def test_estimate_tokens_with_tiktoken(self):
         """Test estimate_tokens() uses tiktoken when available"""
@@ -66,9 +68,11 @@ class TestTokenEstimationWithTiktoken:
         assert tokens < len(text)  # Tokens should be less than char count
 
     @pytest.mark.skipif(
-        not hasattr(sys.modules.get('tools.context_budget.token_counter'), 'TIKTOKEN_AVAILABLE')
-        or not sys.modules['tools.context_budget.token_counter'].TIKTOKEN_AVAILABLE,
-        reason="tiktoken not available"
+        not hasattr(
+            sys.modules.get("tools.context_budget.token_counter"), "TIKTOKEN_AVAILABLE"
+        )
+        or not sys.modules["tools.context_budget.token_counter"].TIKTOKEN_AVAILABLE,
+        reason="tiktoken not available",
     )
     def test_accuracy_against_known_counts(self):
         """Test tiktoken estimation accuracy"""
@@ -87,9 +91,11 @@ class TestTokenEstimationWithTiktoken:
         assert counter.estimate_tokens(None) == 0
 
     @pytest.mark.skipif(
-        not hasattr(sys.modules.get('tools.context_budget.token_counter'), 'TIKTOKEN_AVAILABLE')
-        or not sys.modules['tools.context_budget.token_counter'].TIKTOKEN_AVAILABLE,
-        reason="tiktoken not available"
+        not hasattr(
+            sys.modules.get("tools.context_budget.token_counter"), "TIKTOKEN_AVAILABLE"
+        )
+        or not sys.modules["tools.context_budget.token_counter"].TIKTOKEN_AVAILABLE,
+        reason="tiktoken not available",
     )
     def test_unicode_text_handling(self):
         """Test unicode text is handled correctly"""
@@ -101,9 +107,11 @@ class TestTokenEstimationWithTiktoken:
         assert tokens > 0
 
     @pytest.mark.skipif(
-        not hasattr(sys.modules.get('tools.context_budget.token_counter'), 'TIKTOKEN_AVAILABLE')
-        or not sys.modules['tools.context_budget.token_counter'].TIKTOKEN_AVAILABLE,
-        reason="tiktoken not available"
+        not hasattr(
+            sys.modules.get("tools.context_budget.token_counter"), "TIKTOKEN_AVAILABLE"
+        )
+        or not sys.modules["tools.context_budget.token_counter"].TIKTOKEN_AVAILABLE,
+        reason="tiktoken not available",
     )
     def test_very_long_text_handling(self):
         """Test very long text is handled correctly"""
@@ -121,11 +129,11 @@ class TestTokenEstimationWithTiktoken:
 class TestTokenEstimationFallback:
     """Test token estimation fallback when tiktoken unavailable"""
 
-    @patch('tools.context_budget.token_counter.TIKTOKEN_AVAILABLE', False)
+    @patch("tools.context_budget.token_counter.TIKTOKEN_AVAILABLE", False)
     def test_fallback_heuristic_without_tiktoken(self):
         """Test fallback heuristic when tiktoken unavailable"""
         # Create counter with tiktoken mocked as unavailable
-        with patch('tools.context_budget.token_counter.TIKTOKEN_AVAILABLE', False):
+        with patch("tools.context_budget.token_counter.TIKTOKEN_AVAILABLE", False):
             counter = TokenCounter()
             counter.encoding = None  # Force fallback
 
@@ -165,7 +173,7 @@ class TestFileTokenCounting:
         counter = TokenCounter()
 
         # Create temp file with known content
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("Hello world! " * 100)
             temp_path = f.name
 
@@ -179,7 +187,7 @@ class TestFileTokenCounting:
         """Test count_file_tokens() with non-existent file"""
         counter = TokenCounter()
 
-        nonexistent = Path('/tmp/this_file_does_not_exist_12345.txt')
+        nonexistent = Path("/tmp/this_file_does_not_exist_12345.txt")
         tokens = counter.count_file_tokens(nonexistent)
 
         assert tokens == 0
@@ -189,8 +197,8 @@ class TestFileTokenCounting:
         counter = TokenCounter()
 
         # Create temp binary file
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as f:
-            f.write(b'\x00\x01\x02\x03' * 100)
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
+            f.write(b"\x00\x01\x02\x03" * 100)
             temp_path = f.name
 
         try:
@@ -205,8 +213,8 @@ class TestFileTokenCounting:
         counter = TokenCounter()
 
         # Create file with invalid UTF-8
-        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as f:
-            f.write(b'\xff\xfe Invalid UTF-8')
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False) as f:
+            f.write(b"\xff\xfe Invalid UTF-8")
             temp_path = f.name
 
         try:
@@ -229,13 +237,13 @@ class TestDirectoryTokenCounting:
             tmppath = Path(tmpdir)
 
             # Create Python files
-            (tmppath / 'file1.py').write_text('print("hello")\n' * 10)
-            (tmppath / 'file2.py').write_text('print("world")\n' * 10)
+            (tmppath / "file1.py").write_text('print("hello")\n' * 10)
+            (tmppath / "file2.py").write_text('print("world")\n' * 10)
             # Create non-Python file
-            (tmppath / 'readme.txt').write_text('This is a readme\n' * 10)
+            (tmppath / "readme.txt").write_text("This is a readme\n" * 10)
 
             # Count only .py files
-            tokens = counter.count_directory_tokens(tmppath, pattern='*.py')
+            tokens = counter.count_directory_tokens(tmppath, pattern="*.py")
 
             assert tokens > 0
 
@@ -257,8 +265,8 @@ class TestMessageTokenCounting:
         counter = TokenCounter()
 
         messages = [
-            {'role': 'user', 'content': 'Hello, how are you?'},
-            {'role': 'assistant', 'content': 'I am doing well, thank you!'}
+            {"role": "user", "content": "Hello, how are you?"},
+            {"role": "assistant", "content": "I am doing well, thank you!"},
         ]
 
         tokens = counter.count_message_tokens(messages)
@@ -272,11 +280,11 @@ class TestMessageTokenCounting:
 
         messages = [
             {
-                'role': 'user',
-                'content': [
-                    {'text': 'What is this image?'},
-                    {'type': 'image', 'source': 'base64...'}
-                ]
+                "role": "user",
+                "content": [
+                    {"text": "What is this image?"},
+                    {"type": "image", "source": "base64..."},
+                ],
             }
         ]
 
@@ -291,7 +299,7 @@ class TestContextWindowSize:
 
     def test_get_context_window_for_claude(self):
         """Test get_context_window_size() for Claude models"""
-        counter = TokenCounter(model='claude-sonnet-4')
+        counter = TokenCounter(model="claude-sonnet-4")
 
         size = counter.get_context_window_size()
 
@@ -299,7 +307,7 @@ class TestContextWindowSize:
 
     def test_get_context_window_for_gpt4(self):
         """Test get_context_window_size() for GPT-4"""
-        counter = TokenCounter(model='gpt-4')
+        counter = TokenCounter(model="gpt-4")
 
         size = counter.get_context_window_size()
 
@@ -307,7 +315,7 @@ class TestContextWindowSize:
 
     def test_get_context_window_default(self):
         """Test get_context_window_size() defaults to 200K"""
-        counter = TokenCounter(model='unknown-model')
+        counter = TokenCounter(model="unknown-model")
 
         size = counter.get_context_window_size()
 
@@ -325,7 +333,7 @@ class TestConvenienceFunctions:
 
     def test_get_context_window_size_convenience_function(self):
         """Test get_context_window_size() convenience function"""
-        size = get_context_window_size('claude-sonnet-4')
+        size = get_context_window_size("claude-sonnet-4")
 
         assert size == 200000
 
@@ -337,7 +345,7 @@ class TestEdgeCases:
         """Test count_file_tokens() accepts string paths"""
         counter = TokenCounter()
 
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
             f.write("Test content")
             temp_path = f.name
 
@@ -353,12 +361,12 @@ class TestEdgeCases:
         counter = TokenCounter()
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            (Path(tmpdir) / 'test.py').write_text('print("hello")')
+            (Path(tmpdir) / "test.py").write_text('print("hello")')
 
             # Pass as string instead of Path
-            tokens = counter.count_directory_tokens(tmpdir, pattern='*.py')
+            tokens = counter.count_directory_tokens(tmpdir, pattern="*.py")
             assert tokens > 0
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

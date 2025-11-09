@@ -87,7 +87,7 @@ test('docs.js file is accessible', async () => {
 // Run tests
 (async () => {
   console.log('\n🧪 Running Documentation Site Tests...\n');
-  
+
   for (const { name, fn } of tests) {
     try {
       await fn();
@@ -99,9 +99,9 @@ test('docs.js file is accessible', async () => {
       console.log(`   Error: ${err.message}\n`);
     }
   }
-  
+
   console.log(`\n📊 Test Results: ${passed} passed, ${failed} failed, ${tests.length} total\n`);
-  
+
   if (failed > 0) {
     console.log('❌ Tests FAILED - some issues remain\n');
     process.exit(1);

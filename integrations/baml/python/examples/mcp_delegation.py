@@ -44,9 +44,9 @@ async def document_processing_example():
     - Structured output matching BAML schema
     - No API keys required
     """
-    logger.info("="*70)
+    logger.info("=" * 70)
     logger.info("DOCUMENT PROCESSING VIA MCP DELEGATION")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     # Analyze a document
     result = await executor.analyze_document(
@@ -54,8 +54,8 @@ async def document_processing_example():
         questions=[
             "What are the key findings?",
             "What is the budget?",
-            "What are the recommendations?"
-        ]
+            "What are the recommendations?",
+        ],
     )
 
     logger.info("\n📄 Document Analysis Results:")
@@ -77,13 +77,12 @@ async def data_analysis_example():
     - Skills for CSV/Excel file handling
     - Progressive skill disclosure
     """
-    logger.info("\n" + "="*70)
+    logger.info("\n" + "=" * 70)
     logger.info("DATA ANALYSIS VIA MCP DELEGATION")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     result = await executor.analyze_dataset(
-        data_source="test_data/sample.csv",
-        analysis_type="trends"
+        data_source="test_data/sample.csv", analysis_type="trends"
     )
 
     logger.info("\n📊 Data Analysis Results:")
@@ -105,13 +104,12 @@ async def custom_skill_example():
     - Use any Agent Skill available
     - Get structured results
     """
-    logger.info("\n" + "="*70)
+    logger.info("\n" + "=" * 70)
     logger.info("CUSTOM SKILL VIA MCP DELEGATION")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     result = await executor.process_with_custom_skill(
-        task="Extract all email addresses from the document",
-        skill_name="custom_extractor"
+        task="Extract all email addresses from the document", skill_name="custom_extractor"
     )
 
     logger.info("\n🔧 Custom Skill Results:")
@@ -132,9 +130,9 @@ async def progressive_disclosure_example():
     - Reducing cognitive load
     - Optimizing performance
     """
-    logger.info("\n" + "="*70)
+    logger.info("\n" + "=" * 70)
     logger.info("PROGRESSIVE SKILL DISCLOSURE VIA MCP")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     result = await executor.progressive_skill_loading(
         user_task="Analyze this PDF report and create a summary",
@@ -143,15 +141,15 @@ async def progressive_disclosure_example():
             "docx_parser",
             "data_processor",
             "image_recognition",
-            "web_scraper"
-        ]
+            "web_scraper",
+        ],
     )
 
     logger.info("\n🎯 Progressive Disclosure Results:")
     logger.info(f"Loaded Skills: {result['loaded_skills']}")
     logger.info(f"Skipped Skills: {result['skipped_skills']}")
     logger.info("\nRationale:")
-    for skill, reason in result['loading_rationale'].items():
+    for skill, reason in result["loading_rationale"].items():
         logger.info(f"  - {skill}: {reason}")
     logger.info("\nMetrics:")
     logger.info(f"  - Load time: {result['metrics']['load_time_ms']}ms")
@@ -164,9 +162,9 @@ async def cost_comparison():
     """
     Demonstrate cost savings of MCP delegation vs direct API calls.
     """
-    logger.info("\n" + "="*70)
+    logger.info("\n" + "=" * 70)
     logger.info("COST COMPARISON: MCP vs DIRECT API")
-    logger.info("="*70)
+    logger.info("=" * 70)
 
     # Simulate processing 100 documents
     num_docs = 100
@@ -196,15 +194,15 @@ async def main():
     setup_logging()
     load_config()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("BAML + AGENT SKILLS VIA MCP DELEGATION")
     print("Context Foundry Meta-MCP Pattern")
-    print("="*70)
+    print("=" * 70)
     print("\n🎯 ALL operations run on your Claude Code subscription")
     print("💰 NO API costs - completely FREE and UNLIMITED")
     print("🔑 NO API keys needed - inherits Claude Code auth")
     print("⚡ AGENT SKILLS available in all spawned instances")
-    print("\n" + "="*70 + "\n")
+    print("\n" + "=" * 70 + "\n")
 
     # Run examples
     await document_processing_example()
@@ -213,16 +211,16 @@ async def main():
     await progressive_disclosure_example()
     await cost_comparison()
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("KEY TAKEAWAYS")
-    print("="*70)
+    print("=" * 70)
     print("✓ Zero cost - runs on Claude Code subscription")
     print("✓ No API keys needed - inherits authentication")
     print("✓ Full Agent Skills access - PDF, DOCX, data processing")
     print("✓ Fresh 200K context per spawn - no accumulation")
     print("✓ Type-safe with BAML schemas - validation without API calls")
     print("✓ This is the TRUE Context Foundry way!")
-    print("="*70 + "\n")
+    print("=" * 70 + "\n")
 
 
 if __name__ == "__main__":

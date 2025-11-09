@@ -21,7 +21,7 @@ try:
     cf_base = Path(__file__).parent.parent
 
     # Check if extensions/flowise exists
-    flowise_ext_path = cf_base / 'extensions' / 'flowise'
+    flowise_ext_path = cf_base / "extensions" / "flowise"
 
     if flowise_ext_path.exists():
         # Add to sys.path if not already there
@@ -35,29 +35,35 @@ try:
         # Load Flowise detectors
         flowise_detectors = extensions_loader.load_extension_detectors()
 
-        if flowise_detectors and 'flowise' in flowise_detectors:
+        if flowise_detectors and "flowise" in flowise_detectors:
             # Check for Flowise JSON files in project directory
             json_files = list(directory.glob("*.json"))
 
             # Sample first 10 JSON files to avoid performance issues
             for json_file in json_files[:10]:
                 try:
-                    detection = flowise_detectors['flowise'].detect_flowise_flow(json_file)
+                    detection = flowise_detectors["flowise"].detect_flowise_flow(
+                        json_file
+                    )
 
-                    if detection.get('is_flowise'):
+                    if detection.get("is_flowise"):
                         # Flowise flow detected!
-                        project_indicators['flowise_flow'] = True
-                        project_indicators['flowise_flow_type'] = detection.get('flow_type')
-                        project_indicators['flowise_complexity'] = detection.get('complexity')
+                        project_indicators["flowise_flow"] = True
+                        project_indicators["flowise_flow_type"] = detection.get(
+                            "flow_type"
+                        )
+                        project_indicators["flowise_complexity"] = detection.get(
+                            "complexity"
+                        )
 
                         # Update project classification
-                        if project_type is None or confidence != 'high':
-                            project_type = 'flowise-workflow'
-                            confidence = 'high'
+                        if project_type is None or confidence != "high":
+                            project_type = "flowise-workflow"
+                            confidence = "high"
 
                         # Add to languages list
-                        if 'flowise' not in languages:
-                            languages.append('flowise')
+                        if "flowise" not in languages:
+                            languages.append("flowise")
 
                         # Add the detected flow file
                         project_files.append(str(json_file))
@@ -68,7 +74,7 @@ try:
                         # Stop after first detection (optimization)
                         break
 
-                except Exception as e:
+                except Exception:
                     # Don't fail entire detection if one file has issues
                     # logger.debug(f"Error analyzing {json_file} for Flowise: {e}")
                     continue
@@ -77,7 +83,7 @@ except ImportError:
     # Flowise extension not installed, continue without it
     # This is expected behavior for public Context Foundry installations
     pass
-except Exception as e:
+except Exception:
     # Any other error - log but don't break detection
     # logger.debug(f"Flowise extension error: {e}")
     pass

@@ -6,7 +6,6 @@ This reduces the base orchestrator prompt size while preserving all functionalit
 """
 
 from pathlib import Path
-from typing import Optional
 import sys
 
 # Add parent directory to path for imports
@@ -14,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
     from extensions.flowise import extensions_loader
+
     FLOWISE_AVAILABLE = True
 except ImportError:
     FLOWISE_AVAILABLE = False
@@ -78,13 +78,15 @@ def get_phase_prompt(phase: str, flowise_mode: bool = False) -> str:
         raise FileNotFoundError(f"Phase file not found: {phase_path}")
 
     # Read base phase instructions
-    with open(phase_path, 'r', encoding='utf-8') as f:
+    with open(phase_path, "r", encoding="utf-8") as f:
         base_prompt = f.read()
 
     # Add Flowise enhancements if applicable
     if flowise_mode and FLOWISE_AVAILABLE:
         phase_name = PHASE_NAME_MAP.get(phase, "")
-        flowise_enhancement = extensions_loader.get_extension_prompt("flowise", phase_name)
+        flowise_enhancement = extensions_loader.get_extension_prompt(
+            "flowise", phase_name
+        )
 
         if flowise_enhancement:
             # Append Flowise-specific instructions

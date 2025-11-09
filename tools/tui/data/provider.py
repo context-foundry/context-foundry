@@ -2,9 +2,8 @@
 
 from typing import List, Optional, Dict, Any, Callable
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 import json
-import asyncio
 import subprocess
 import uuid
 import os
@@ -18,10 +17,12 @@ from ..config import TUIConfig
 try:
     import sys
     from pathlib import Path as PathLib
-    metrics_path = PathLib(__file__).parent.parent.parent / 'metrics'
+
+    metrics_path = PathLib(__file__).parent.parent.parent / "metrics"
     if str(metrics_path) not in sys.path:
         sys.path.insert(0, str(metrics_path))
     from tools.metrics.metrics_db import get_metrics_db
+
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False
@@ -59,12 +60,12 @@ class TUIDataProvider:
 
     def _load_tracked_builds(self):
         """Load tracked builds from cache file"""
-        cache_file = Path.home() / '.context-foundry' / 'tui-tracked-builds.json'
+        cache_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
         if cache_file.exists():
             try:
-                with open(cache_file, 'r') as f:
+                with open(cache_file, "r") as f:
                     data = json.load(f)
-                    self._tracked_builds = data.get('builds', [])
+                    self._tracked_builds = data.get("builds", [])
             except (json.JSONDecodeError, OSError):
                 self._tracked_builds = []
         else:
@@ -72,12 +73,12 @@ class TUIDataProvider:
 
     def _save_tracked_builds(self):
         """Save tracked builds to cache file"""
-        cache_dir = Path.home() / '.context-foundry'
+        cache_dir = Path.home() / ".context-foundry"
         cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_dir / 'tui-tracked-builds.json'
+        cache_file = cache_dir / "tui-tracked-builds.json"
         try:
-            with open(cache_file, 'w') as f:
-                json.dump({'builds': self._tracked_builds}, f, indent=2)
+            with open(cache_file, "w") as f:
+                json.dump({"builds": self._tracked_builds}, f, indent=2)
         except OSError:
             pass  # Ignore write errors
 
@@ -88,29 +89,27 @@ class TUIDataProvider:
             self._save_tracked_builds()
             # Add file watcher for this directory
             if self._file_observer:
-                cf_dir = Path(working_directory) / '.context-foundry'
+                cf_dir = Path(working_directory) / ".context-foundry"
                 if cf_dir.exists():
                     event_handler = PhaseFileHandler(self._on_file_change)
-                    self._file_observer.schedule(event_handler, str(cf_dir), recursive=True)
+                    self._file_observer.schedule(
+                        event_handler, str(cf_dir), recursive=True
+                    )
 
     def _auto_detect_builds(self):
         """Auto-detect running Context Foundry builds by scanning for claude processes"""
         import subprocess as sp
+
         try:
             # Find all running claude processes
-            result = sp.run(
-                ["ps", "aux"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            result = sp.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
 
             if result.returncode != 0:
                 return
 
             # Look for claude processes
-            for line in result.stdout.split('\n'):
-                if 'claude' in line.lower() and 'grep' not in line:
+            for line in result.stdout.split("\n"):
+                if "claude" in line.lower() and "grep" not in line:
                     # Extract PID (second column)
                     parts = line.split()
                     if len(parts) < 2:
@@ -127,29 +126,37 @@ class TUIDataProvider:
                             ["lsof", "-p", str(pid)],
                             capture_output=True,
                             text=True,
-                            timeout=2
+                            timeout=2,
                         )
 
                         if lsof_result.returncode != 0:
                             continue
 
                         # Find cwd line
-                        for lsof_line in lsof_result.stdout.split('\n'):
-                            if 'cwd' in lsof_line:
+                        for lsof_line in lsof_result.stdout.split("\n"):
+                            if "cwd" in lsof_line:
                                 # Last column is the directory
                                 cwd = lsof_line.split()[-1]
 
                                 # Check if this directory has .context-foundry/current-phase.json
-                                phase_file = Path(cwd) / '.context-foundry' / 'current-phase.json'
+                                phase_file = (
+                                    Path(cwd)
+                                    / ".context-foundry"
+                                    / "current-phase.json"
+                                )
                                 if phase_file.exists():
                                     # Check if build is still running
                                     try:
-                                        with open(phase_file, 'r') as f:
+                                        with open(phase_file, "r") as f:
                                             phase_data = json.load(f)
-                                            status = phase_data.get('status', '')
+                                            status = phase_data.get("status", "")
 
                                             # Add if running or in_progress
-                                            if status in ['running', 'in_progress', 'started']:
+                                            if status in [
+                                                "running",
+                                                "in_progress",
+                                                "started",
+                                            ]:
                                                 self._add_tracked_build(cwd)
                                     except (json.JSONDecodeError, OSError):
                                         pass
@@ -173,7 +180,7 @@ class TUIDataProvider:
 
         # Watch all tracked build directories
         for build_dir in self._tracked_builds:
-            cf_dir = Path(build_dir) / '.context-foundry'
+            cf_dir = Path(build_dir) / ".context-foundry"
             if cf_dir.exists():
                 self._file_observer.schedule(event_handler, str(cf_dir), recursive=True)
 
@@ -225,7 +232,9 @@ class TUIDataProvider:
         self._cache[key] = value
         self._cache_ttl[key] = datetime.now()
 
-    async def get_current_build(self, project_dir: Optional[Path] = None) -> Optional[BuildStatus]:
+    async def get_current_build(
+        self, project_dir: Optional[Path] = None
+    ) -> Optional[BuildStatus]:
         """Get current build status from current-phase.json"""
         if project_dir is None:
             project_dir = Path.cwd()
@@ -243,7 +252,7 @@ class TUIDataProvider:
             return None
 
         try:
-            with open(json_file, 'r') as f:
+            with open(json_file, "r") as f:
                 data = json.load(f)
             build_status = BuildStatus.from_json(data)
             self._set_cache(cache_key, build_status)
@@ -271,18 +280,27 @@ class TUIDataProvider:
             build_status = await self.get_current_build(Path(build_dir))
             if build_status:
                 # Count by status
-                if build_status.status in ['running', 'in_progress', 'started', 'implementing']:
+                if build_status.status in [
+                    "running",
+                    "in_progress",
+                    "started",
+                    "implementing",
+                ]:
                     active_builds += 1
-                elif build_status.status == 'completed':
+                elif build_status.status == "completed":
                     completed_builds += 1
-                elif build_status.status == 'failed':
+                elif build_status.status == "failed":
                     failed_builds += 1
 
                 # Calculate duration for completed/failed builds
-                if build_status.started_at and build_status.status in ['completed', 'failed']:
+                if build_status.started_at and build_status.status in [
+                    "completed",
+                    "failed",
+                ]:
                     now = datetime.now()
                     if build_status.started_at.tzinfo is not None:
                         from datetime import timezone
+
                         now = datetime.now(timezone.utc)
                         started = build_status.started_at.astimezone(timezone.utc)
                     else:
@@ -292,7 +310,11 @@ class TUIDataProvider:
                     total_duration += duration
                     build_count_with_duration += 1
 
-        avg_duration = total_duration / build_count_with_duration if build_count_with_duration > 0 else 0.0
+        avg_duration = (
+            total_duration / build_count_with_duration
+            if build_count_with_duration > 0
+            else 0.0
+        )
 
         # Get real token and cost data from metrics DB
         total_tokens_used = 0
@@ -302,9 +324,9 @@ class TUIDataProvider:
             try:
                 metrics_db = get_metrics_db()
                 total_metrics = metrics_db.get_total_metrics(days=30)
-                total_tokens_used = total_metrics.get('total_tokens', 0)
-                total_cost_usd = total_metrics.get('total_cost', 0.0)
-            except Exception as e:
+                total_tokens_used = total_metrics.get("total_tokens", 0)
+                total_cost_usd = total_metrics.get("total_cost", 0.0)
+            except Exception:
                 # Gracefully degrade if metrics DB unavailable
                 pass
 
@@ -316,7 +338,7 @@ class TUIDataProvider:
             total_tokens_used=total_tokens_used,
             total_cost_usd=total_cost_usd,
             avg_build_duration_minutes=avg_duration,
-            last_updated=datetime.now()
+            last_updated=datetime.now(),
         )
 
         self._set_cache(cache_key, stats)
@@ -336,8 +358,15 @@ class TUIDataProvider:
 
         for build_dir in self._tracked_builds:
             build_status = await self.get_current_build(Path(build_dir))
-            if build_status and build_status.status in ['running', 'in_progress', 'started', 'implementing']:
-                phase = build_status.current_phase.split()[0]  # Get first word (Scout, Architect, etc.)
+            if build_status and build_status.status in [
+                "running",
+                "in_progress",
+                "started",
+                "implementing",
+            ]:
+                phase = build_status.current_phase.split()[
+                    0
+                ]  # Get first word (Scout, Architect, etc.)
                 if phase in phase_counts:
                     phase_counts[phase] += 1
                 else:
@@ -354,21 +383,23 @@ class TUIDataProvider:
                 try:
                     metrics_db = get_metrics_db()
                     phase_metrics = metrics_db.get_phase_totals(phase, days=30)
-                    tokens_used = phase_metrics.get('total_tokens', 0)
-                    cost_usd = phase_metrics.get('total_cost', 0.0)
-                    avg_latency_ms = phase_metrics.get('avg_latency_ms', 0.0)
+                    tokens_used = phase_metrics.get("total_tokens", 0)
+                    cost_usd = phase_metrics.get("total_cost", 0.0)
+                    avg_latency_ms = phase_metrics.get("avg_latency_ms", 0.0)
                 except Exception:
                     # Gracefully degrade
                     pass
 
-            metrics.append(AgentMetrics(
-                agent_name=f"{phase} Agent",
-                total_calls=count,
-                tokens_used=tokens_used,
-                cost_usd=cost_usd,
-                avg_latency_ms=avg_latency_ms,
-                last_active=datetime.now()
-            ))
+            metrics.append(
+                AgentMetrics(
+                    agent_name=f"{phase} Agent",
+                    total_calls=count,
+                    tokens_used=tokens_used,
+                    cost_usd=cost_usd,
+                    avg_latency_ms=avg_latency_ms,
+                    last_active=datetime.now(),
+                )
+            )
 
         self._set_cache(cache_key, metrics)
         return metrics
@@ -395,6 +426,7 @@ class TUIDataProvider:
                     if build_status.started_at.tzinfo is not None:
                         # Use UTC for timezone-aware comparison
                         from datetime import timezone
+
                         now = datetime.now(timezone.utc)
                         # Convert started_at to UTC if it has tzinfo
                         started = build_status.started_at.astimezone(timezone.utc)
@@ -404,14 +436,16 @@ class TUIDataProvider:
                     elapsed = now - started
                     duration = elapsed.total_seconds() / 60.0
 
-                builds.append(BuildSummary(
-                    session_id=build_status.session_id,
-                    status=build_status.status,
-                    current_phase=build_status.current_phase,
-                    started_at=build_status.started_at,
-                    duration_minutes=duration,
-                    test_iterations=build_status.test_iteration
-                ))
+                builds.append(
+                    BuildSummary(
+                        session_id=build_status.session_id,
+                        status=build_status.status,
+                        current_phase=build_status.current_phase,
+                        started_at=build_status.started_at,
+                        duration_minutes=duration,
+                        test_iterations=build_status.test_iteration,
+                    )
+                )
 
         # Sort by started_at (most recent first)
         builds.sort(key=lambda b: b.started_at or datetime.min, reverse=True)
@@ -437,12 +471,12 @@ class TUIDataProvider:
         build_dir = None
         for tracked_dir in self._tracked_builds:
             # Check if this directory has a build with matching session_id
-            phase_file = Path(tracked_dir) / '.context-foundry' / 'current-phase.json'
+            phase_file = Path(tracked_dir) / ".context-foundry" / "current-phase.json"
             if phase_file.exists():
                 try:
-                    with open(phase_file, 'r') as f:
+                    with open(phase_file, "r") as f:
                         phase_data = json.load(f)
-                        if phase_data.get('session_id') == session_id:
+                        if phase_data.get("session_id") == session_id:
                             build_dir = Path(tracked_dir)
                             break
                 except (json.JSONDecodeError, OSError):
@@ -454,11 +488,11 @@ class TUIDataProvider:
             # Look for .launch-{session_id}.log in common locations
             search_paths = [
                 Path.cwd(),
-                Path.home() / 'homelab',
+                Path.home() / "homelab",
             ]
 
             for search_path in search_paths:
-                log_file = search_path / f'.launch-{session_id}.log'
+                log_file = search_path / f".launch-{session_id}.log"
                 if log_file.exists():
                     build_dir = search_path
                     break
@@ -468,10 +502,10 @@ class TUIDataProvider:
 
         if build_dir:
             # 1. Try .launch-{session_id}.log (for launched builds)
-            launch_log = build_dir / f'.launch-{session_id}.log'
+            launch_log = build_dir / f".launch-{session_id}.log"
             if launch_log.exists():
                 try:
-                    with open(launch_log, 'r') as f:
+                    with open(launch_log, "r") as f:
                         content = f.read()
                         # Split into lines and add to logs
                         for line in content.splitlines():
@@ -482,12 +516,12 @@ class TUIDataProvider:
                     pass
 
             # 2. Try build-output-{session_id}.txt (for completed builds)
-            cf_dir = build_dir / '.context-foundry'
+            cf_dir = build_dir / ".context-foundry"
             if cf_dir.exists():
-                build_output = cf_dir / f'build-output-{session_id}.txt'
+                build_output = cf_dir / f"build-output-{session_id}.txt"
                 if build_output.exists():
                     try:
-                        with open(build_output, 'r') as f:
+                        with open(build_output, "r") as f:
                             content = f.read()
                             if logs:
                                 logs.append("=" * 80)
@@ -501,10 +535,10 @@ class TUIDataProvider:
                         pass
 
                 # 3. Try build-log.md (current build log)
-                build_log_md = cf_dir / 'build-log.md'
+                build_log_md = cf_dir / "build-log.md"
                 if build_log_md.exists():
                     try:
-                        with open(build_log_md, 'r') as f:
+                        with open(build_log_md, "r") as f:
                             content = f.read()
                             if logs:
                                 logs.append("=" * 80)
@@ -536,7 +570,7 @@ class TUIDataProvider:
         mode: str = "new_project",
         enable_test_loop: bool = True,
         max_test_iterations: int = 3,
-        timeout_minutes: float = 90.0
+        timeout_minutes: float = 90.0,
     ) -> Dict[str, Any]:
         """
         Launch a new autonomous build using Context Foundry.
@@ -561,34 +595,34 @@ class TUIDataProvider:
             task_id = str(uuid.uuid4())
 
             # Get Context Foundry directory
-            cf_dir = Path.home() / 'homelab' / 'context-foundry'
-            orchestrator_prompt = cf_dir / 'tools' / 'orchestrator_prompt.txt'
+            cf_dir = Path.home() / "homelab" / "context-foundry"
+            orchestrator_prompt = cf_dir / "tools" / "orchestrator_prompt.txt"
 
             if not orchestrator_prompt.exists():
                 return {
                     "error": f"Orchestrator prompt not found: {orchestrator_prompt}",
-                    "status": "failed"
+                    "status": "failed",
                 }
 
             # Build claude-code command
             # Use the orchestrator prompt with environment variables
             env = {
                 **dict(os.environ),
-                'CF_TASK': task,
-                'CF_WORKING_DIR': working_directory,
-                'CF_GITHUB_REPO': github_repo_name or '',
-                'CF_MODE': mode,
-                'CF_TEST_LOOP': 'true' if enable_test_loop else 'false',
-                'CF_MAX_TEST_ITERATIONS': str(max_test_iterations),
-                'CF_TIMEOUT_MINUTES': str(timeout_minutes),
-                'CF_SESSION_ID': task_id
+                "CF_TASK": task,
+                "CF_WORKING_DIR": working_directory,
+                "CF_GITHUB_REPO": github_repo_name or "",
+                "CF_MODE": mode,
+                "CF_TEST_LOOP": "true" if enable_test_loop else "false",
+                "CF_MAX_TEST_ITERATIONS": str(max_test_iterations),
+                "CF_TIMEOUT_MINUTES": str(timeout_minutes),
+                "CF_SESSION_ID": task_id,
             }
 
             # Create build prompt file
             build_prompt = Path(working_directory) / f".launch-{task_id}.txt"
             build_prompt.write_text(f"""Task: {task}
 Working Directory: {working_directory}
-GitHub Repo: {github_repo_name or 'none'}
+GitHub Repo: {github_repo_name or "none"}
 Mode: {mode}
 Enable Test Loop: {enable_test_loop}
 Max Test Iterations: {max_test_iterations}
@@ -604,25 +638,29 @@ Execute the Context Foundry autonomous build orchestrator.
                 [
                     "claude",
                     "--print",
-                    "--system-prompt", str(orchestrator_prompt),
-                    f"Build project: {task}. Working directory: {working_directory}. GitHub repo: {github_repo_name or 'skip deployment'}. Session ID: {task_id}"
+                    "--system-prompt",
+                    str(orchestrator_prompt),
+                    f"Build project: {task}. Working directory: {working_directory}. GitHub repo: {github_repo_name or 'skip deployment'}. Session ID: {task_id}",
                 ],
                 cwd=working_directory,
-                stdout=open(log_file, 'w'),
+                stdout=open(log_file, "w"),
                 stderr=subprocess.STDOUT,
                 text=True,
-                env=env
+                env=env,
             )
 
             # Store build info for tracking
-            self._set_cache(f"launched_build:{task_id}", {
-                "task_id": task_id,
-                "working_directory": working_directory,
-                "pid": process.pid,
-                "task": task,
-                "github_repo": github_repo_name,
-                "started_at": datetime.now()
-            })
+            self._set_cache(
+                f"launched_build:{task_id}",
+                {
+                    "task_id": task_id,
+                    "working_directory": working_directory,
+                    "pid": process.pid,
+                    "task": task,
+                    "github_repo": github_repo_name,
+                    "started_at": datetime.now(),
+                },
+            )
 
             # Add to tracked builds list
             self._add_tracked_build(working_directory)
@@ -633,15 +671,16 @@ Execute the Context Foundry autonomous build orchestrator.
                 "status": "started",
                 "working_directory": working_directory,
                 "message": f"Build launched in background (PID: {process.pid})",
-                "log_file": str(log_file)
+                "log_file": str(log_file),
             }
 
         except Exception as e:
             import traceback
+
             return {
                 "error": str(e),
                 "traceback": traceback.format_exc(),
-                "status": "failed"
+                "status": "failed",
             }
 
 
@@ -659,7 +698,7 @@ class PhaseFileHandler(FileSystemEventHandler):
             return
 
         # Only process JSON files
-        if not event.src_path.endswith('.json'):
+        if not event.src_path.endswith(".json"):
             return
 
         path = Path(event.src_path)

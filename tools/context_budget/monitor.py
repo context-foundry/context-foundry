@@ -6,20 +6,22 @@ Core monitoring logic for context window budget tracking and zone detection.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 from enum import Enum
 
 
 class ContextZone(Enum):
     """Context usage zones based on performance research"""
-    SMART = "smart"          # 0-40% - optimal performance
-    DUMB = "dumb"            # 40-80% - degraded performance
-    CRITICAL = "critical"    # 80-100% - severe degradation
+
+    SMART = "smart"  # 0-40% - optimal performance
+    DUMB = "dumb"  # 40-80% - degraded performance
+    CRITICAL = "critical"  # 80-100% - severe degradation
 
 
 @dataclass
 class PhaseAnalysis:
     """Analysis results for a build phase"""
+
     phase_name: str
     tokens_used: int
     percentage: float
@@ -33,15 +35,15 @@ class PhaseAnalysis:
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization"""
         return {
-            'phase_name': self.phase_name,
-            'tokens_used': self.tokens_used,
-            'percentage': round(self.percentage, 2),
-            'zone': self.zone.value,
-            'budget_allocated': self.budget_allocated,
-            'budget_remaining': self.budget_remaining,
-            'budget_exceeded_by': self.budget_exceeded_by,
-            'warnings': self.warnings,
-            'recommendations': self.recommendations,
+            "phase_name": self.phase_name,
+            "tokens_used": self.tokens_used,
+            "percentage": round(self.percentage, 2),
+            "zone": self.zone.value,
+            "budget_allocated": self.budget_allocated,
+            "budget_remaining": self.budget_remaining,
+            "budget_exceeded_by": self.budget_exceeded_by,
+            "warnings": self.warnings,
+            "recommendations": self.recommendations,
         }
 
 
@@ -62,24 +64,26 @@ class ContextBudgetMonitor:
 
     # Budget allocations (percentage of context window)
     BUDGETS = {
-        'scout': 7,
-        'architect': 7,
-        'builder': 20,
-        'test': 20,
-        'documentation': 5,
-        'deploy': 3,
-        'feedback': 5,
-        'system_prompts': 15,
-        'codebase_analysis': 10,
-        'screenshot': 3,
-        'github': 5,
+        "scout": 7,
+        "architect": 7,
+        "builder": 20,
+        "test": 20,
+        "documentation": 5,
+        "deploy": 3,
+        "feedback": 5,
+        "system_prompts": 15,
+        "codebase_analysis": 10,
+        "screenshot": 3,
+        "github": 5,
     }
 
     # Zone thresholds (percentage)
     SMART_ZONE_MAX = 40
     CRITICAL_ZONE_MIN = 80
 
-    def __init__(self, context_window_size: int = 200000, model: str = 'claude-sonnet-4'):
+    def __init__(
+        self, context_window_size: int = 200000, model: str = "claude-sonnet-4"
+    ):
         """
         Initialize context budget monitor.
 
@@ -103,13 +107,17 @@ class ContextBudgetMonitor:
             PhaseAnalysis with full analysis results
         """
         # Normalize phase name
-        phase_key = phase_name.lower().replace(' ', '_').replace('-', '_')
+        phase_key = phase_name.lower().replace(" ", "_").replace("-", "_")
 
         # Get budget for phase
         budget_allocated = self.get_budget_for_phase(phase_key)
 
         # Calculate percentage of total context
-        percentage = (tokens_used / self.context_window_size) * 100 if self.context_window_size > 0 else 0
+        percentage = (
+            (tokens_used / self.context_window_size) * 100
+            if self.context_window_size > 0
+            else 0
+        )
 
         # Determine zone
         zone = self.get_zone(tokens_used)
@@ -119,10 +127,14 @@ class ContextBudgetMonitor:
         budget_exceeded_by = max(0, tokens_used - budget_allocated)
 
         # Generate warnings
-        warnings = self._generate_warnings(phase_key, tokens_used, budget_allocated, zone, percentage)
+        warnings = self._generate_warnings(
+            phase_key, tokens_used, budget_allocated, zone, percentage
+        )
 
         # Generate recommendations
-        recommendations = self._generate_recommendations(phase_key, zone, budget_exceeded_by, percentage)
+        recommendations = self._generate_recommendations(
+            phase_key, zone, budget_exceeded_by, percentage
+        )
 
         # Create analysis
         analysis = PhaseAnalysis(
@@ -154,7 +166,7 @@ class ContextBudgetMonitor:
         Returns:
             Token budget for phase
         """
-        phase_key = phase_name.lower().replace(' ', '_').replace('-', '_')
+        phase_key = phase_name.lower().replace(" ", "_").replace("-", "_")
         budget_percentage = self.BUDGETS.get(phase_key, 5)  # Default 5% if unknown
         return int(self.context_window_size * (budget_percentage / 100))
 
@@ -190,9 +202,14 @@ class ContextBudgetMonitor:
         else:
             return ContextZone.CRITICAL
 
-    def _generate_warnings(self, phase_name: str, tokens_used: int,
-                          budget_allocated: int, zone: ContextZone,
-                          percentage: float) -> List[str]:
+    def _generate_warnings(
+        self,
+        phase_name: str,
+        tokens_used: int,
+        budget_allocated: int,
+        zone: ContextZone,
+        percentage: float,
+    ) -> List[str]:
         """Generate warnings for phase analysis"""
         warnings = []
 
@@ -216,8 +233,13 @@ class ContextBudgetMonitor:
 
         return warnings
 
-    def _generate_recommendations(self, phase_name: str, zone: ContextZone,
-                                 budget_exceeded_by: int, percentage: float) -> List[str]:
+    def _generate_recommendations(
+        self,
+        phase_name: str,
+        zone: ContextZone,
+        budget_exceeded_by: int,
+        percentage: float,
+    ) -> List[str]:
         """Generate actionable recommendations"""
         recommendations = []
 
@@ -241,11 +263,11 @@ class ContextBudgetMonitor:
             )
 
         # Phase-specific recommendations
-        if phase_name == 'architect' and budget_exceeded_by > 10000:
+        if phase_name == "architect" and budget_exceeded_by > 10000:
             recommendations.append(
                 "Architect phase too large - use modular architecture design"
             )
-        elif phase_name == 'builder' and budget_exceeded_by > 20000:
+        elif phase_name == "builder" and budget_exceeded_by > 20000:
             recommendations.append(
                 "Builder phase too large - implement in parallel with sub-agents"
             )
@@ -262,7 +284,7 @@ class ContextBudgetMonitor:
         Returns:
             List of PhaseAnalysis objects
         """
-        phase_key = phase_name.lower().replace(' ', '_').replace('-', '_')
+        phase_key = phase_name.lower().replace(" ", "_").replace("-", "_")
         return self._phase_history.get(phase_key, [])
 
     def get_overall_stats(self) -> Dict:
@@ -274,12 +296,12 @@ class ContextBudgetMonitor:
         """
         if not self._phase_history:
             return {
-                'peak_usage_tokens': 0,
-                'peak_usage_percentage': 0.0,
-                'peak_phase': None,
-                'avg_usage_percentage': 0.0,
-                'smart_zone_percentage': 100.0,
-                'total_phases': 0,
+                "peak_usage_tokens": 0,
+                "peak_usage_percentage": 0.0,
+                "peak_phase": None,
+                "avg_usage_percentage": 0.0,
+                "smart_zone_percentage": 100.0,
+                "total_phases": 0,
             }
 
         all_analyses = [
@@ -299,12 +321,12 @@ class ContextBudgetMonitor:
         smart_percentage = (smart_count / len(all_analyses)) * 100
 
         return {
-            'peak_usage_tokens': peak_analysis.tokens_used,
-            'peak_usage_percentage': peak_analysis.percentage,
-            'peak_phase': peak_analysis.phase_name,
-            'avg_usage_percentage': avg_percentage,
-            'smart_zone_percentage': smart_percentage,
-            'total_phases': len(all_analyses),
+            "peak_usage_tokens": peak_analysis.tokens_used,
+            "peak_usage_percentage": peak_analysis.percentage,
+            "peak_phase": peak_analysis.phase_name,
+            "avg_usage_percentage": avg_percentage,
+            "smart_zone_percentage": smart_percentage,
+            "total_phases": len(all_analyses),
         }
 
     def export_to_session_summary(self) -> Dict:
@@ -333,11 +355,11 @@ class ContextBudgetMonitor:
                         f"{latest.phase_name} consistently in {latest.zone.value} zone - optimize context usage"
                     )
 
-        overall['recommendations'] = recommendations
+        overall["recommendations"] = recommendations
 
         return {
-            'max_context_window': self.context_window_size,
-            'model': self.model,
-            'by_phase': by_phase,
-            'overall': overall,
+            "max_context_window": self.context_window_size,
+            "model": self.model,
+            "by_phase": by_phase,
+            "overall": overall,
         }

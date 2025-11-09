@@ -9,6 +9,7 @@ import os
 @dataclass
 class TUIConfig:
     """TUI configuration"""
+
     # Update intervals
     update_interval_seconds: float = 1.5
     file_watch_debounce_ms: int = 500
@@ -31,28 +32,28 @@ class TUIConfig:
     key_metrics: str = "m"
 
     @classmethod
-    def from_env(cls) -> 'TUIConfig':
+    def from_env(cls) -> "TUIConfig":
         """Load config from environment variables"""
         config = cls()
 
         # Override from environment
-        if interval := os.getenv('TUI_UPDATE_INTERVAL'):
+        if interval := os.getenv("TUI_UPDATE_INTERVAL"):
             config.update_interval_seconds = float(interval)
 
-        if cf_dir := os.getenv('CONTEXT_FOUNDRY_DIR'):
+        if cf_dir := os.getenv("CONTEXT_FOUNDRY_DIR"):
             config.context_foundry_dir = Path(cf_dir)
 
-        if db_path := os.getenv('METRICS_DB_PATH'):
+        if db_path := os.getenv("METRICS_DB_PATH"):
             config.metrics_db_path = Path(db_path)
 
-        if mcp_url := os.getenv('MCP_SERVER_URL'):
+        if mcp_url := os.getenv("MCP_SERVER_URL"):
             config.mcp_server_url = mcp_url
 
-        if theme := os.getenv('TUI_THEME'):
+        if theme := os.getenv("TUI_THEME"):
             config.theme = theme
 
-        if debug := os.getenv('TUI_DEBUG'):
-            config.show_debug_panel = debug.lower() in ('1', 'true', 'yes')
+        if debug := os.getenv("TUI_DEBUG"):
+            config.show_debug_panel = debug.lower() in ("1", "true", "yes")
 
         return config
 

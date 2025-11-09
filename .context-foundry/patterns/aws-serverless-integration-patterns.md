@@ -32,7 +32,7 @@ def lambda_handler(event, context):
 # For API Gateway + Step Functions (dual use)
 def lambda_handler(event, context):
     result = process_data(event)
-    
+
     # Detect caller
     if 'requestContext' in event:  # API Gateway
         return {'statusCode': 200, 'body': json.dumps(result)}
@@ -65,7 +65,7 @@ resultSelector: {
 
 **Symptom:** CDK deployment fails with validation error
 ```
-ValidationError: AWS_REGION environment variable is reserved by the lambda runtime 
+ValidationError: AWS_REGION environment variable is reserved by the lambda runtime
 and can not be set manually
 ```
 
@@ -114,7 +114,7 @@ custom_region = os.environ.get('BEDROCK_REGION', 'us-east-1')
 
 **Symptom:** Bedrock InvokeModel fails with AccessDeniedException
 ```
-AccessDeniedException: User is not authorized to perform bedrock:InvokeModel 
+AccessDeniedException: User is not authorized to perform bedrock:InvokeModel
 on resource: arn:aws:bedrock:us-west-2::foundation-model/...
 ```
 Even though IAM policy allows `us-east-1`.
@@ -152,7 +152,7 @@ resources: [
 model_id = 'us.anthropic.claude-3-5-sonnet-20241022-v2:0'
 
 # Region-specific foundation model (requires that specific region in IAM)
-model_id = 'anthropic.claude-3-5-sonnet-20241022-v2:0'  
+model_id = 'anthropic.claude-3-5-sonnet-20241022-v2:0'
 # Note: v2 models REQUIRE inference profiles, cannot use foundation model directly
 ```
 

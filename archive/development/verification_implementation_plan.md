@@ -4,7 +4,7 @@
 
 **Repository:** https://github.com/snedea/context-foundry
 
-**Timeline:** 5 phases over 4-6 weeks  
+**Timeline:** 5 phases over 4-6 weeks
 **Success Metric:** 90%+ of generated projects pass verification on first run
 
 ---
@@ -29,7 +29,7 @@ from .primitives import RunStep, HttpStep, FileExistsStep, PortOpenStep, EnvVarS
 
 __all__ = [
     'VerificationHarness',
-    'VerificationResult', 
+    'VerificationResult',
     'StepResult',
     'RunStep',
     'HttpStep',
@@ -66,7 +66,7 @@ class VerificationResult:
     steps: List[StepResult]
     total_duration_ms: int
     artifacts_path: Path
-    
+
     @property
     def failed_step(self) -> Optional[StepResult]:
         """Return first failed step if any"""
@@ -77,16 +77,16 @@ class VerificationResult:
 
 class VerificationHarness:
     """Executes verify.yml deterministically"""
-    
+
     def __init__(self, project_path: Path, artifacts_dir: Optional[Path] = None):
         self.project_path = Path(project_path)
         self.artifacts_dir = artifacts_dir or (self.project_path / 'artifacts')
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
-        
+
     def run(self, verify_file: str = 'verify.yml') -> VerificationResult:
         """Execute verification workflow"""
         verify_path = self.project_path / verify_file
-        
+
         if not verify_path.exists():
             return VerificationResult(
                 passed=False,
@@ -101,53 +101,53 @@ class VerificationHarness:
                 total_duration_ms=0,
                 artifacts_path=self.artifacts_dir
             )
-        
+
         with open(verify_path) as f:
             config = yaml.safe_load(f)
-        
+
         start_time = time.time()
         steps_results = []
-        
+
         # Execute phases in order: setup, build, start, checks, tests, teardown
         phases = ['setup', 'build', 'start', 'checks', 'tests', 'teardown']
-        
+
         for phase in phases:
             if phase not in config:
                 continue
-                
+
             phase_steps = config[phase]
             if not isinstance(phase_steps, list):
                 phase_steps = [phase_steps]
-            
+
             for idx, step in enumerate(phase_steps):
                 step_name = f"{phase}_{idx}"
                 result = self._execute_step(step_name, step, phase)
                 steps_results.append(result)
-                
+
                 # Fail fast (except for teardown which is best-effort)
                 if not result.passed and phase != 'teardown':
                     # Run teardown even if main steps fail
                     self._run_teardown(config.get('teardown', []), steps_results)
                     break
-            
+
             # Stop processing phases if any step failed
             if steps_results and not steps_results[-1].passed and phase != 'teardown':
                 break
-        
+
         total_duration = int((time.time() - start_time) * 1000)
         all_passed = all(s.passed for s in steps_results if s.step_name.split('_')[0] != 'teardown')
-        
+
         return VerificationResult(
             passed=all_passed,
             steps=steps_results,
             total_duration_ms=total_duration,
             artifacts_path=self.artifacts_dir
         )
-    
+
     def _execute_step(self, name: str, step: Dict[str, Any], phase: str) -> StepResult:
         """Execute a single verification step"""
         step_executor = get_step_executor(step)
-        
+
         step_start = time.time()
         try:
             result = step_executor.execute(
@@ -156,7 +156,7 @@ class VerificationHarness:
                 artifacts_dir=self.artifacts_dir
             )
             duration = int((time.time() - step_start) * 1000)
-            
+
             return StepResult(
                 step_name=name,
                 step_type=step_executor.step_type,
@@ -177,12 +177,12 @@ class VerificationHarness:
                 error_code="E999",
                 message=f"Unexpected error: {str(e)}"
             )
-    
+
     def _run_teardown(self, teardown_steps: List[Dict], results: List[StepResult]):
         """Best-effort teardown execution"""
         if not teardown_steps:
             return
-            
+
         for idx, step in enumerate(teardown_steps):
             result = self._execute_step(f"teardown_{idx}", step, "teardown")
             results.append(result)
@@ -211,19 +211,19 @@ class ExecutionResult:
 
 class StepExecutor(ABC):
     step_type: str
-    
+
     @abstractmethod
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         pass
 
 class RunStep(StepExecutor):
     step_type = "run"
-    
+
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         command = step.get('run')
         timeout = step.get('timeoutSeconds', 300)
         expect_exit = step.get('expect_exit', 0)
-        
+
         try:
             result = subprocess.run(
                 command,
@@ -233,7 +233,7 @@ class RunStep(StepExecutor):
                 capture_output=True,
                 text=True
             )
-            
+
             # Save output to artifacts
             step_artifact = artifacts_dir / f"run_{hash(command)}.log"
             with open(step_artifact, 'w') as f:
@@ -241,7 +241,7 @@ class RunStep(StepExecutor):
                 f.write(f"EXIT CODE: {result.returncode}\n")
                 f.write(f"STDOUT:\n{result.stdout}\n")
                 f.write(f"STDERR:\n{result.stderr}\n")
-            
+
             if result.returncode != expect_exit:
                 return ExecutionResult(
                     passed=False,
@@ -250,9 +250,9 @@ class RunStep(StepExecutor):
                     stdout=result.stdout,
                     stderr=result.stderr
                 )
-            
+
             return ExecutionResult(passed=True, stdout=result.stdout, stderr=result.stderr)
-            
+
         except subprocess.TimeoutExpired:
             return ExecutionResult(
                 passed=False,
@@ -268,7 +268,7 @@ class RunStep(StepExecutor):
 
 class HttpStep(StepExecutor):
     step_type = "http"
-    
+
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         http_config = step.get('http', {})
         url = http_config.get('url')
@@ -279,14 +279,14 @@ class HttpStep(StepExecutor):
         expect_body_contains = http_config.get('expect_body_contains', [])
         timeout = http_config.get('timeoutSeconds', 30)
         retry_count = http_config.get('retries', 3)
-        
+
         if isinstance(expect_status, int):
             expect_status = [expect_status]
-        
+
         # Retry logic with exponential backoff
         backoff = 1
         last_error = None
-        
+
         for attempt in range(retry_count):
             try:
                 response = requests.request(
@@ -297,7 +297,7 @@ class HttpStep(StepExecutor):
                     timeout=5,
                     allow_redirects=False
                 )
-                
+
                 # Check status code
                 if response.status_code not in expect_status:
                     return ExecutionResult(
@@ -306,7 +306,7 @@ class HttpStep(StepExecutor):
                         message=f"HTTP {response.status_code}, expected {expect_status}",
                         stdout=response.text[:500]
                     )
-                
+
                 # Check body contains
                 for substring in expect_body_contains:
                     if substring not in response.text:
@@ -316,15 +316,15 @@ class HttpStep(StepExecutor):
                             message=f"Response missing expected substring: {substring}",
                             stdout=response.text[:500]
                         )
-                
+
                 return ExecutionResult(passed=True, stdout=response.text[:500])
-                
+
             except requests.exceptions.RequestException as e:
                 last_error = str(e)
                 if attempt < retry_count - 1:
                     time.sleep(backoff)
                     backoff = min(backoff * 1.5, 5)
-        
+
         return ExecutionResult(
             passed=False,
             error_code="E303",
@@ -333,33 +333,33 @@ class HttpStep(StepExecutor):
 
 class FileExistsStep(StepExecutor):
     step_type = "file_exists"
-    
+
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         files = step.get('file_exists', [])
         if isinstance(files, str):
             files = [files]
-        
+
         missing = []
         for file_path in files:
             full_path = project_path / file_path
             if not full_path.exists():
                 missing.append(file_path)
-        
+
         if missing:
             return ExecutionResult(
                 passed=False,
                 error_code="E101",
                 message=f"Missing required files: {', '.join(missing)}"
             )
-        
+
         return ExecutionResult(passed=True)
 
 class PortOpenStep(StepExecutor):
     step_type = "port_open"
-    
+
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         port_config = step.get('port_open')
-        
+
         if isinstance(port_config, int):
             port = port_config
             host = 'localhost'
@@ -368,10 +368,10 @@ class PortOpenStep(StepExecutor):
             port = port_config.get('port')
             host = port_config.get('host', 'localhost')
             timeout = port_config.get('timeoutSeconds', 30)
-        
+
         start = time.time()
         backoff = 1
-        
+
         while time.time() - start < timeout:
             try:
                 sock = socket.create_connection((host, port), timeout=2)
@@ -380,7 +380,7 @@ class PortOpenStep(StepExecutor):
             except (socket.timeout, ConnectionRefusedError, OSError):
                 time.sleep(backoff)
                 backoff = min(backoff * 1.5, 5)
-        
+
         return ExecutionResult(
             passed=False,
             error_code="E304",
@@ -389,24 +389,24 @@ class PortOpenStep(StepExecutor):
 
 class EnvVarSetStep(StepExecutor):
     step_type = "env_var_set"
-    
+
     def execute(self, step: Dict[str, Any], project_path: Path, artifacts_dir: Path) -> ExecutionResult:
         vars_required = step.get('env_var_set', [])
         if isinstance(vars_required, str):
             vars_required = [vars_required]
-        
+
         missing = []
         for var in vars_required:
             if var not in os.environ:
                 missing.append(var)
-        
+
         if missing:
             return ExecutionResult(
                 passed=False,
                 error_code="E102",
                 message=f"Missing required environment variables: {', '.join(missing)}"
             )
-        
+
         return ExecutionResult(passed=True)
 
 # Registry
@@ -423,7 +423,7 @@ def get_step_executor(step: Dict[str, Any]) -> StepExecutor:
     for step_type, executor in STEP_EXECUTORS.items():
         if step_type in step:
             return executor
-    
+
     raise ValueError(f"Unknown step type in: {step}")
 ```
 
@@ -442,32 +442,32 @@ from ace.verifiers import VerificationHarness
 def verify(project_path, verify_file, artifacts_dir, fail_fast):
     """
     Run verification on a generated project.
-    
+
     Executes verify.yml and reports pass/fail deterministically.
     """
     project = Path(project_path)
     artifacts = Path(artifacts_dir) if artifacts_dir else None
-    
+
     click.echo(f"🔍 Running verification on {project.name}...")
     click.echo()
-    
+
     harness = VerificationHarness(project, artifacts)
     result = harness.run(verify_file)
-    
+
     # Print results
     for step in result.steps:
         status = "✅" if step.passed else "❌"
         click.echo(f"{status} {step.step_name} ({step.duration_ms}ms)")
-        
+
         if not step.passed:
             click.echo(f"   Error {step.error_code}: {step.message}")
             if step.stderr:
                 click.echo(f"   stderr: {step.stderr[:200]}")
-    
+
     click.echo()
     click.echo(f"Total duration: {result.total_duration_ms}ms")
     click.echo(f"Artifacts saved to: {result.artifacts_path}")
-    
+
     if result.passed:
         click.echo("✅ Verification PASSED")
         return 0
@@ -521,7 +521,7 @@ foundry verify test_project
 # 🔍 Running verification on test_project...
 # ✅ checks_0 (5ms)
 # ✅ checks_1 (10ms)
-# 
+#
 # Total duration: 15ms
 # Artifacts saved to: test_project/artifacts
 # ✅ Verification PASSED
@@ -663,7 +663,7 @@ from typing import Dict, Any
 
 class SpecYamlGenerator:
     """Generate machine-readable SPEC.yaml from specification"""
-    
+
     SPEC_YAML_PROMPT = """
 You have written a detailed specification (SPEC.md). Now generate a machine-readable SPEC.yaml.
 
@@ -695,32 +695,32 @@ Include concrete examples in the 'example' field where helpful.
 
 Output ONLY the YAML content, no markdown fences or explanations.
 """
-    
+
     def __init__(self, client):
         self.client = client
-    
+
     def generate(self, spec_md_content: str, project_type: str = "api") -> str:
         """Generate SPEC.yaml from SPEC.md"""
-        
+
         prompt = self.SPEC_YAML_PROMPT.format(
             spec_content=spec_md_content,
             project_type=project_type
         )
-        
+
         response = self.client.messages.create(
             model="claude-sonnet-4",
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}]
         )
-        
+
         spec_yaml = response.content[0].text.strip()
-        
+
         # Validate it's proper YAML
         try:
             yaml.safe_load(spec_yaml)
         except yaml.YAMLError as e:
             raise ValueError(f"Generated invalid YAML: {e}")
-        
+
         return spec_yaml
 ```
 
@@ -735,38 +735,38 @@ from ace.architects.spec_generator import SpecYamlGenerator
 class ArchitectAgent:
     def run(self, research, project_info):
         # ... existing code to generate SPEC.md ...
-        
+
         # NEW: Generate SPEC.yaml
         spec_generator = SpecYamlGenerator(self.client)
-        
+
         # Detect project type from SPEC.md
         project_type = self._detect_project_type(spec_content)
-        
+
         spec_yaml = spec_generator.generate(
             spec_md_content=spec_content,
             project_type=project_type
         )
-        
+
         # Save SPEC.yaml alongside SPEC.md
         spec_yaml_path = self.blueprint_path / "SPEC.yaml"
         with open(spec_yaml_path, 'w') as f:
             f.write(spec_yaml)
-        
+
         self.logger.info(f"Generated SPEC.yaml at {spec_yaml_path}")
-        
+
         # ... continue with existing PLAN.md and TASKS.json generation ...
-    
+
     def _detect_project_type(self, spec_content: str) -> str:
         """Detect project type from spec content"""
         spec_lower = spec_content.lower()
-        
+
         if any(word in spec_lower for word in ['api', 'endpoint', 'rest', 'http', 'route']):
             return 'api'
         elif any(word in spec_lower for word in ['cli', 'command', 'terminal', 'shell']):
             return 'cli'
         elif any(word in spec_lower for word in ['web', 'page', 'website', 'frontend']):
             return 'web'
-        
+
         # Default to API
         return 'api'
 ```
@@ -820,7 +820,7 @@ from typing import Dict, Any
 
 class ContractTestGenerator:
     """Generate executable contract tests from SPEC.yaml"""
-    
+
     API_TEST_TEMPLATE = """
 // Generated contract tests from SPEC.yaml
 const request = require('supertest');
@@ -831,19 +831,19 @@ describe('contract:{service_name}', () => {{
 {test_cases}
 }});
 """
-    
+
     API_TEST_CASE = """
   test('{test_name}', async () => {{
     const res = await request(base)
       .{method_lower}('{path}')
       {request_body}
       .redirects(0);
-    
+
     expect({expect_status}).toContain(res.status);
     {expect_body}
   }});
 """
-    
+
     CLI_TEST_TEMPLATE = """
 # Generated contract tests from SPEC.yaml
 import subprocess
@@ -859,70 +859,70 @@ def run_cli(*args):
 
 {test_cases}
 """
-    
+
     CLI_TEST_CASE = """
 def test_{test_name}():
     result = run_cli({args})
     assert result.returncode == {expected_exit}
     {stdout_check}
 """
-    
+
     def __init__(self, client=None):
         self.client = client
-    
+
     def generate_from_yaml(self, spec_yaml_path: Path) -> Dict[str, str]:
         """
         Generate contract tests from SPEC.yaml
-        
+
         Returns:
             Dict mapping filename to test content
         """
         with open(spec_yaml_path) as f:
             spec = yaml.safe_load(f)
-        
+
         kind = spec.get('kind', 'api')
-        
+
         if kind == 'api':
             return self._generate_api_tests(spec)
         elif kind == 'cli':
             return self._generate_cli_tests(spec)
         elif kind == 'web':
             return self._generate_web_tests(spec)
-        
+
         raise ValueError(f"Unknown project kind: {kind}")
-    
+
     def _generate_api_tests(self, spec: Dict) -> Dict[str, str]:
         """Generate Jest tests for API"""
         service = spec.get('service', 'service')
         base_url = spec.get('contract', {}).get('base_url', 'http://localhost:3000')
         endpoints = spec.get('contract', {}).get('endpoints', [])
-        
+
         test_cases = []
-        
+
         for endpoint in endpoints:
             name = endpoint.get('name', 'unnamed')
             method = endpoint.get('method', 'GET')
             path = endpoint.get('path', '/')
             response = endpoint.get('response', {})
             request_data = endpoint.get('request', {})
-            
+
             # Build test case
             test_name = f"{method.upper()} {path} - {name}"
-            
+
             # Request body
             request_body = ""
             if request_data and method.upper() in ['POST', 'PUT', 'PATCH']:
                 example = endpoint.get('example', {}).get('request', {})
                 if example:
                     request_body = f".send({example})"
-            
+
             # Expect status
             status = response.get('status', 200)
             if isinstance(status, list):
                 expect_status = f"[{','.join(map(str, status))}]"
             else:
                 expect_status = f"[{status}]"
-            
+
             # Expect body
             expect_body = ""
             response_schema = response.get('json', {})
@@ -931,7 +931,7 @@ def test_{test_name}():
                 for key in response_schema.keys():
                     checks.append(f"expect(res.body).toHaveProperty('{key}');")
                 expect_body = "\n    ".join(checks)
-            
+
             test_case = self.API_TEST_CASE.format(
                 test_name=test_name,
                 method_lower=method.lower(),
@@ -941,36 +941,36 @@ def test_{test_name}():
                 expect_body=expect_body
             )
             test_cases.append(test_case)
-        
+
         content = self.API_TEST_TEMPLATE.format(
             service_name=service,
             base_url=base_url,
             test_cases="\n".join(test_cases)
         )
-        
+
         return {f"tests/contract/{service}.contract.test.js": content}
-    
+
     def _generate_cli_tests(self, spec: Dict) -> Dict[str, str]:
         """Generate pytest tests for CLI"""
         binary = spec.get('binary', 'app')
         commands = spec.get('commands', [])
-        
+
         test_cases = []
-        
+
         for cmd in commands:
             name = cmd.get('name', 'unnamed')
             args = cmd.get('args', [])
             exit_codes = cmd.get('exit_codes', {0: 'success'})
-            
+
             # Get expected exit code (default to 0)
             expected_exit = 0
             for code in exit_codes.keys():
                 expected_exit = code
                 break
-            
+
             # Build args list
             args_str = ', '.join([f"'{arg}'" for arg in args])
-            
+
             test_case = self.CLI_TEST_CASE.format(
                 test_name=name.replace('-', '_'),
                 args=args_str,
@@ -978,26 +978,26 @@ def test_{test_name}():
                 stdout_check=""  # Can add stdout assertions later
             )
             test_cases.append(test_case)
-        
+
         content = self.CLI_TEST_TEMPLATE.format(
             binary=binary,
             test_cases="\n".join(test_cases)
         )
-        
+
         return {f"tests/contract/test_{binary}_contract.py": content}
-    
+
     def _generate_web_tests(self, spec: Dict) -> Dict[str, str]:
         """Generate basic web tests"""
         # For v1, just check pages load
         base_url = spec.get('base_url', 'http://localhost:3000')
         pages = spec.get('pages', [])
-        
+
         test_cases = []
         for page in pages:
             path = page.get('path', '/')
             title = page.get('title_contains', '')
             status = page.get('status', 200)
-            
+
             test_name = f"GET {path}"
             test_case = f"""
   test('{test_name}', async () => {{
@@ -1007,7 +1007,7 @@ def test_{test_name}():
   }});
 """
             test_cases.append(test_case)
-        
+
         content = f"""
 const request = require('supertest');
 
@@ -1029,26 +1029,26 @@ from ace.architects.contract_test_generator import ContractTestGenerator
 class ArchitectAgent:
     def run(self, research, project_info):
         # ... existing SPEC.md and SPEC.yaml generation ...
-        
+
         # NEW: Generate contract tests from SPEC.yaml
         test_generator = ContractTestGenerator()
-        
+
         try:
             contract_tests = test_generator.generate_from_yaml(spec_yaml_path)
-            
+
             # Write contract tests to project
             for test_file, test_content in contract_tests.items():
                 test_path = self.project_path / test_file
                 test_path.parent.mkdir(parents=True, exist_ok=True)
-                
+
                 with open(test_path, 'w') as f:
                     f.write(test_content)
-                
+
                 self.logger.info(f"Generated contract test: {test_file}")
-            
+
         except Exception as e:
             self.logger.warning(f"Could not generate contract tests: {e}")
-        
+
         # ... continue with existing workflow ...
 ```
 
@@ -1096,7 +1096,7 @@ from typing import Dict, Any
 
 class VerifyYmlGenerator:
     """Generate verify.yml based on project type and SPEC.yaml"""
-    
+
     API_VERIFY_TEMPLATE = {
         'version': 1,
         'setup': [],
@@ -1106,28 +1106,28 @@ class VerifyYmlGenerator:
         'tests': [],
         'teardown': []
     }
-    
+
     def generate(self, spec: Dict[str, Any], project_path: Path) -> str:
         """Generate verify.yml from SPEC.yaml"""
         kind = spec.get('kind', 'api')
-        
+
         if kind == 'api':
             return self._generate_api_verify(spec, project_path)
         elif kind == 'cli':
             return self._generate_cli_verify(spec, project_path)
         elif kind == 'web':
             return self._generate_web_verify(spec, project_path)
-        
+
         raise ValueError(f"Unknown kind: {kind}")
-    
+
     def _generate_api_verify(self, spec: Dict, project_path: Path) -> str:
         """Generate verify.yml for API project"""
         verify = self.API_VERIFY_TEMPLATE.copy()
-        
+
         # Detect package manager
         has_package_json = (project_path / 'package.json').exists()
         has_requirements = (project_path / 'requirements.txt').exists()
-        
+
         # Setup phase
         if has_package_json:
             verify['setup'] = [
@@ -1137,22 +1137,22 @@ class VerifyYmlGenerator:
             verify['setup'] = [
                 {'run': 'pip install -r requirements.txt'}
             ]
-        
+
         # Build phase (if needed)
         if (project_path / 'tsconfig.json').exists():
             verify['build'] = [
                 {'run': 'npm run build'}
             ]
-        
+
         # Start phase
         port = 3000  # Default
         health_path = '/health'
-        
+
         # Try to detect from spec
         contract = spec.get('contract', {})
         if 'health' in contract:
             health_path = contract['health'].get('path', '/health')
-        
+
         if has_package_json:
             verify['start'] = [
                 {'run': 'npm start &'},
@@ -1163,7 +1163,7 @@ class VerifyYmlGenerator:
                 {'run': 'python app.py &'},
                 {'port_open': port}
             ]
-        
+
         # Checks phase
         verify['checks'] = [
             {'file_exists': ['README.md', '.env.example']},
@@ -1174,12 +1174,12 @@ class VerifyYmlGenerator:
                 }
             }
         ]
-        
+
         # Check for required env vars
         env_required = spec.get('env', {}).get('required', [])
         if env_required:
             verify['checks'].insert(0, {'env_var_set': env_required})
-        
+
         # Tests phase
         if has_package_json:
             verify['tests'] = [
@@ -1189,7 +1189,7 @@ class VerifyYmlGenerator:
             verify['tests'] = [
                 {'run': 'pytest tests/contract/ -v'}
             ]
-        
+
         # Teardown phase
         if has_package_json:
             verify['teardown'] = [
@@ -1199,13 +1199,13 @@ class VerifyYmlGenerator:
             verify['teardown'] = [
                 {'run': 'pkill -f "python app.py" || true'}
             ]
-        
+
         return yaml.dump(verify, default_flow_style=False, sort_keys=False)
-    
+
     def _generate_cli_verify(self, spec: Dict, project_path: Path) -> str:
         """Generate verify.yml for CLI project"""
         binary = spec.get('binary', 'app')
-        
+
         verify = {
             'version': 1,
             'setup': [],
@@ -1217,17 +1217,17 @@ class VerifyYmlGenerator:
                 {'run': 'pytest tests/contract/ -v'}
             ]
         }
-        
+
         if (project_path / 'requirements.txt').exists():
             verify['setup'] = [{'run': 'pip install -r requirements.txt'}]
-        
+
         return yaml.dump(verify, default_flow_style=False, sort_keys=False)
-    
+
     def _generate_web_verify(self, spec: Dict, project_path: Path) -> str:
         """Generate verify.yml for web project"""
         base_url = spec.get('base_url', 'http://localhost:3000')
         port = 3000
-        
+
         verify = {
             'version': 1,
             'setup': [
@@ -1255,7 +1255,7 @@ class VerifyYmlGenerator:
                 {'run': 'pkill -f "npm start" || true'}
             ]
         }
-        
+
         return yaml.dump(verify, default_flow_style=False, sort_keys=False)
 ```
 
@@ -1270,23 +1270,23 @@ from ace.architects.verify_yml_generator import VerifyYmlGenerator
 class ArchitectAgent:
     def run(self, research, project_info):
         # ... existing SPEC.yaml and contract test generation ...
-        
+
         # NEW: Generate verify.yml
         verify_generator = VerifyYmlGenerator()
-        
+
         # Load SPEC.yaml
         with open(spec_yaml_path) as f:
             spec = yaml.safe_load(f)
-        
+
         verify_yml = verify_generator.generate(spec, self.project_path)
-        
+
         # Write verify.yml to project root
         verify_path = self.project_path / 'verify.yml'
         with open(verify_path, 'w') as f:
             f.write(verify_yml)
-        
+
         self.logger.info(f"Generated verify.yml at {verify_path}")
-        
+
         # ... continue with existing workflow ...
 ```
 
@@ -1297,16 +1297,16 @@ class ArchitectAgent:
 # After builder finishes all tasks:
 def orchestrate_build(project_name, description, autonomous=False):
     # ... existing Scout, Architect, Builder phases ...
-    
+
     # NEW: Run verification (non-blocking in v1)
     logger.info("Running verification...")
-    
+
     from ace.verifiers import VerificationHarness
-    
+
     try:
         harness = VerificationHarness(project_path)
         result = harness.run()
-        
+
         if result.passed:
             logger.info("✅ Verification PASSED")
         else:
@@ -1314,17 +1314,17 @@ def orchestrate_build(project_name, description, autonomous=False):
             logger.warning(f"Failed at: {result.failed_step.step_name}")
             logger.warning(f"Error: {result.failed_step.message}")
             logger.warning(f"Run 'foundry verify {project_path}' for details")
-        
+
         # Save result to session
         session['verification'] = {
             'passed': result.passed,
             'duration_ms': result.total_duration_ms,
             'artifacts_path': str(result.artifacts_path)
         }
-        
+
     except Exception as e:
         logger.warning(f"Verification error (non-blocking): {e}")
-    
+
     logger.info(f"Build complete. Project: {project_path}")
 ```
 
@@ -1384,29 +1384,29 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         # Add more matrix dimensions based on project type
-    
+
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup environment
         run: |
           # Install dependencies based on project type
           # This will be generated per-project
-      
+
       - name: Load environment
         run: |
           cp .env.example .env || true
-      
+
       - name: Run verification
         run: |
           # Install foundry (or use Docker)
           pip install -r requirements.txt || npm ci || true
-          
+
           # Run verify
           python -m ace.verifiers.cli .
-      
+
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -1426,22 +1426,22 @@ from typing import Dict
 
 class CIWorkflowGenerator:
     """Generate .github/workflows/verify.yml"""
-    
+
     def generate(self, spec: Dict, project_path: Path) -> str:
         """Generate CI workflow based on project type"""
         kind = spec.get('kind', 'api')
-        
+
         # Detect language/runtime
         has_package_json = (project_path / 'package.json').exists()
         has_requirements = (project_path / 'requirements.txt').exists()
-        
+
         setup_steps = []
-        
+
         if has_package_json:
             setup_steps.append("npm ci")
         elif has_requirements:
             setup_steps.append("pip install -r requirements.txt")
-        
+
         workflow = f"""name: Verify
 
 on:
@@ -1452,29 +1452,29 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         if: ${{{{ hashFiles('package.json') }}}}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
       - name: Setup Python
         if: ${{{{ hashFiles('requirements.txt') }}}}
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      
+
       - name: Install dependencies
         run: |
 {chr(10).join(f'          {step}' for step in setup_steps)}
-      
+
       - name: Copy environment template
         run: cp .env.example .env || true
-      
+
       - name: Run verification
         run: |
           pip install PyYAML requests
@@ -1486,7 +1486,7 @@ from ace.verifiers import VerificationHarness
 result = VerificationHarness(Path('.')).run()
 sys.exit(0 if result.passed else 1)
 "
-      
+
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -1511,17 +1511,17 @@ from ace.architects.ci_workflow_generator import CIWorkflowGenerator
 class ArchitectAgent:
     def run(self, research, project_info):
         # ... existing generation ...
-        
+
         # NEW: Generate GitHub Actions workflow
         ci_generator = CIWorkflowGenerator()
         workflow_content = ci_generator.generate(spec, self.project_path)
-        
+
         workflow_path = self.project_path / '.github' / 'workflows' / 'verify.yml'
         workflow_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         with open(workflow_path, 'w') as f:
             f.write(workflow_content)
-        
+
         self.logger.info(f"Generated CI workflow at {workflow_path}")
 ```
 
@@ -1529,34 +1529,34 @@ class ArchitectAgent:
 ```python
 def orchestrate_build(project_name, description, autonomous=False, skip_verify=False):
     # ... existing Scout, Architect, Builder phases ...
-    
+
     if skip_verify:
         logger.info("Skipping verification (--skip-verify)")
         return session
-    
+
     # Run verification (NOW BLOCKING)
     logger.info("Running verification (blocking)...")
-    
+
     max_verify_attempts = 3
     verify_attempt = 0
-    
+
     while verify_attempt < max_verify_attempts:
         verify_attempt += 1
-        
+
         harness = VerificationHarness(project_path)
         result = harness.run()
-        
+
         if result.passed:
             logger.info("✅ Verification PASSED")
             break
-        
+
         logger.warning(f"❌ Verification FAILED (attempt {verify_attempt}/{max_verify_attempts})")
         logger.warning(f"Failed at: {result.failed_step.step_name}")
         logger.warning(f"Error: {result.failed_step.error_code} - {result.failed_step.message}")
-        
+
         if verify_attempt < max_verify_attempts:
             logger.info("Asking Builder to fix verification failure...")
-            
+
             # Feed error back to Builder
             fix_task = {
                 'id': f'fix_verification_{verify_attempt}',
@@ -1569,25 +1569,25 @@ def orchestrate_build(project_name, description, autonomous=False, skip_verify=F
                     'artifacts': str(result.artifacts_path)
                 }
             }
-            
+
             builder.execute_task(fix_task)
         else:
             logger.error("❌ Verification failed after max attempts")
             logger.error(f"Manual intervention required. Run: foundry verify {project_path}")
-            
+
             if not autonomous:
                 # Ask user if they want to continue anyway
                 response = input("Verification failed. Continue anyway? [y/N]: ")
                 if response.lower() != 'y':
                     raise Exception("Build failed verification")
-    
+
     # Save verification result
     session['verification'] = {
         'passed': result.passed,
         'attempts': verify_attempt,
         'duration_ms': result.total_duration_ms
     }
-    
+
     return session
 ```
 
@@ -1597,14 +1597,14 @@ def orchestrate_build(project_name, description, autonomous=False, skip_verify=F
 @click.option('--skip-verify', is_flag=True, help='Skip verification step')
 def build(name, description, autonomous, overnight, livestream, push, skip_verify):
     """Build a new project"""
-    
+
     session = orchestrate_build(
         project_name=name,
         description=description,
         autonomous=autonomous,
         skip_verify=skip_verify
     )
-    
+
     # ... rest of build command ...
 ```
 

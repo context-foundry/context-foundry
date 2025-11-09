@@ -7,7 +7,6 @@ Tests Finding class and ScoutAgent critical paths.
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 
 # Import modules to test
 from tools.evolution.agents.scout_agent import Finding, ScoutAgent
@@ -23,7 +22,7 @@ class TestFinding:
             finding_type="bug",
             priority="P1",
             category=["reliability"],
-            description="Test description"
+            description="Test description",
         )
 
         assert finding.title == "Test Issue"
@@ -43,7 +42,7 @@ class TestFinding:
             file_path="tools/test.py",
             line_number=42,
             evidence="eval(user_input)",
-            effort="small"
+            effort="small",
         )
 
         assert finding.file_path == "tools/test.py"
@@ -60,7 +59,7 @@ class TestFinding:
             category=["testing"],
             description="Test desc",
             file_path="test.py",
-            line_number=10
+            line_number=10,
         )
 
         result = finding.to_dict()
@@ -80,7 +79,7 @@ class TestFinding:
             finding_type="enhancement",
             priority="P3",
             category=["quality"],
-            description="Desc"
+            description="Desc",
         )
 
         assert finding.research is None
@@ -98,7 +97,7 @@ class TestFinding:
             finding_type="debt",
             priority="P2",
             category=["architecture"],
-            description="Desc"
+            description="Desc",
         )
 
         assert finding.architectural_analysis is None
@@ -313,7 +312,9 @@ security_patterns = [
 
         # Should not flag pattern definitions
         # (This tests the false positive filtering logic)
-        findings_with_eval = [f for f in agent.findings if "eval" in f.description.lower()]
+        findings_with_eval = [
+            f for f in agent.findings if "eval" in f.description.lower()
+        ]
         # May still find some depending on filtering logic, but should minimize false positives
 
     def test_scan_security_skips_os_system_in_patterns(self, temp_project):
@@ -330,8 +331,12 @@ security_patterns = [
         agent._scan_security_patterns()
 
         # Should not flag os.system when it's in a pattern definition
-        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
-        assert len(os_system_findings) == 0, "Should not flag os.system() in pattern definitions"
+        os_system_findings = [
+            f for f in agent.findings if "os.system" in f.description.lower()
+        ]
+        assert len(os_system_findings) == 0, (
+            "Should not flag os.system() in pattern definitions"
+        )
 
     def test_scan_security_skips_unsafe_doc_examples(self, temp_project):
         """Test that scan skips documentation examples marked as UNSAFE."""
@@ -348,8 +353,12 @@ subprocess.run(['claude', '--prompt', task], check=True)
         agent._scan_security_patterns()
 
         # Should not flag the documented unsafe example
-        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
-        assert len(os_system_findings) == 0, "Should not flag documentation examples marked as UNSAFE"
+        os_system_findings = [
+            f for f in agent.findings if "os.system" in f.description.lower()
+        ]
+        assert len(os_system_findings) == 0, (
+            "Should not flag documentation examples marked as UNSAFE"
+        )
 
     def test_scan_security_finds_actual_os_system_usage(self, temp_project):
         """Test that scan DOES find actual unsafe os.system() usage."""
@@ -366,7 +375,9 @@ def run_command(user_input):
         agent._scan_security_patterns()
 
         # Should find the actual dangerous usage
-        os_system_findings = [f for f in agent.findings if "os.system" in f.description.lower()]
+        os_system_findings = [
+            f for f in agent.findings if "os.system" in f.description.lower()
+        ]
         assert len(os_system_findings) >= 1, "Should flag actual os.system() usage"
         assert os_system_findings[0].finding_type == "security"
         assert os_system_findings[0].priority == "P0"
@@ -403,7 +414,12 @@ CREATE TABLE tasks (
         """Test detection of potential N+1 query patterns."""
         db_file = temp_project / "task_queue.py"
         # Need more execute() calls to trigger the N+1 detection
-        execute_calls = "\n        ".join([f'cursor.execute("SELECT * FROM table WHERE id = ?", ({i},))' for i in range(15)])
+        execute_calls = "\n        ".join(
+            [
+                f'cursor.execute("SELECT * FROM table WHERE id = ?", ({i},))'
+                for i in range(15)
+            ]
+        )
         db_file.write_text(f"""
 def get_all_data():
     cursor = db.cursor()
@@ -476,7 +492,9 @@ def run_command():
 
         # Should not flag when try/except ratio is good
         # (2 subprocess calls, 2 try blocks)
-        findings_for_file = [f for f in agent.findings if "safe_runner.py" in str(f.file_path or "")]
+        findings_for_file = [
+            f for f in agent.findings if "safe_runner.py" in str(f.file_path or "")
+        ]
         assert len(findings_for_file) == 0
 
 
@@ -518,7 +536,9 @@ numpy==1.24.0
         agent._scan_dependencies()
 
         # Should not flag pinned versions
-        findings_about_pinning = [f for f in agent.findings if "pin" in f.description.lower()]
+        findings_about_pinning = [
+            f for f in agent.findings if "pin" in f.description.lower()
+        ]
         assert len(findings_about_pinning) == 0
 
 
@@ -577,14 +597,14 @@ def process(input):
             finding_type="bug",
             priority="P2",
             category=["test"],
-            description="Test"
+            description="Test",
         )
         finding2 = Finding(
             title="Duplicate",
             finding_type="bug",
             priority="P2",
             category=["test"],
-            description="Test"
+            description="Test",
         )
 
         agent.findings = [finding1, finding2]
@@ -694,7 +714,7 @@ class TestEdgeCases:
             category=[],
             description="Test",
             file_path=None,
-            line_number=None
+            line_number=None,
         )
 
         result = finding.to_dict()
@@ -718,7 +738,9 @@ class TestEdgeCases:
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
             test_file = project_root / "unicode.py"
-            test_file.write_text("# Comment with émojis 🔥\ndef func(): pass", encoding='utf-8')
+            test_file.write_text(
+                "# Comment with émojis 🔥\ndef func(): pass", encoding="utf-8"
+            )
 
             agent = ScoutAgent(project_root)
             agent._scan_security_patterns()

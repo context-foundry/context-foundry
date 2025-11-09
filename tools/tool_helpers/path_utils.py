@@ -19,9 +19,7 @@ import re
 
 
 def to_relative_path(
-    path: Union[str, Path],
-    working_dir: Union[str, Path] = None,
-    strict: bool = False
+    path: Union[str, Path], working_dir: Union[str, Path] = None, strict: bool = False
 ) -> str:
     """Convert absolute path to relative path from working directory.
 
@@ -68,8 +66,7 @@ def to_relative_path(
 
 
 def to_absolute_path(
-    path: Union[str, Path],
-    working_dir: Union[str, Path] = None
+    path: Union[str, Path], working_dir: Union[str, Path] = None
 ) -> str:
     """Convert relative path to absolute path.
 
@@ -96,8 +93,7 @@ def to_absolute_path(
 
 
 def is_within_project(
-    path: Union[str, Path],
-    working_dir: Union[str, Path] = None
+    path: Union[str, Path], working_dir: Union[str, Path] = None
 ) -> bool:
     """Check if path is within the project working directory.
 
@@ -129,9 +125,7 @@ def is_within_project(
 
 
 def format_tool_output_paths(
-    output: str,
-    working_dir: Union[str, Path] = None,
-    preserve_patterns: list = None
+    output: str, working_dir: Union[str, Path] = None, preserve_patterns: list = None
 ) -> str:
     """Convert all absolute paths in tool output to relative paths.
 
@@ -159,15 +153,15 @@ def format_tool_output_paths(
 
     # Default patterns to preserve (system paths)
     default_preserve = [
-        r'^/usr/',
-        r'^/bin/',
-        r'^/sbin/',
-        r'^/lib/',
-        r'^/etc/',
-        r'^/System/',
-        r'^/Library/',
-        r'^C:\\Windows\\',
-        r'^C:\\Program Files',
+        r"^/usr/",
+        r"^/bin/",
+        r"^/sbin/",
+        r"^/lib/",
+        r"^/etc/",
+        r"^/System/",
+        r"^/Library/",
+        r"^C:\\Windows\\",
+        r"^C:\\Program Files",
     ]
 
     preserve_patterns = preserve_patterns or default_preserve
@@ -198,7 +192,7 @@ def format_tool_output_paths(
 def format_file_path_for_display(
     path: Union[str, Path],
     working_dir: Union[str, Path] = None,
-    max_length: Optional[int] = None
+    max_length: Optional[int] = None,
 ) -> str:
     """Format a file path for display in tool output.
 
@@ -242,11 +236,11 @@ def format_file_path_for_display(
     # Still too long, truncate last part
     max_last = max_length - len(first) - 5  # "/.../..."
     if max_last > 10:
-        last_truncated = last[:max_last-3] + "..."
+        last_truncated = last[: max_last - 3] + "..."
         return f"{first}/.../{last_truncated}"
 
     # Give up, just truncate the whole thing
-    return relative[:max_length-3] + "..."
+    return relative[: max_length - 3] + "..."
 
 
 def normalize_path_separators(path: str) -> str:
@@ -265,7 +259,7 @@ def normalize_path_separators(path: str) -> str:
         >>> normalize_path_separators('tools\\\\cache\\\\manager.py')
         'tools/cache/manager.py'
     """
-    return path.replace('\\\\', '/').replace('\\', '/')
+    return path.replace("\\\\", "/").replace("\\", "/")
 
 
 def get_common_path_prefix(paths: list[Union[str, Path]]) -> str:
@@ -307,9 +301,7 @@ def get_common_path_prefix(paths: list[Union[str, Path]]) -> str:
 
 
 def relativize_paths_in_dict(
-    data: dict,
-    working_dir: Union[str, Path] = None,
-    path_keys: list[str] = None
+    data: dict, working_dir: Union[str, Path] = None, path_keys: list[str] = None
 ) -> dict:
     """Convert absolute paths in dictionary values to relative paths.
 
@@ -341,7 +333,7 @@ def relativize_paths_in_dict(
             return [process_value(item) for item in value]
         elif isinstance(value, str):
             # Check if this looks like a path
-            if '/' in value or '\\' in value:
+            if "/" in value or "\\" in value:
                 # Try to convert to relative
                 try:
                     return to_relative_path(value, working_dir, strict=False)

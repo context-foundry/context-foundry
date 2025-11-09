@@ -606,4 +606,3 @@ EOF
    - Mark status as "FAILED_MAX_ITERATIONS"
    - Do NOT proceed to deployment
    - Return failure report
-

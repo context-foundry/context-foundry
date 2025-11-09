@@ -29,7 +29,7 @@ class ToolHelpersConfig:
             limits: Custom ToolLimits instance (uses defaults if None)
         """
         self.limits = limits if limits is not None else get_default_limits()
-        self._debug = os.environ.get('CF_DEBUG', '').lower() in ('true', '1', 'yes')
+        self._debug = os.environ.get("CF_DEBUG", "").lower() in ("true", "1", "yes")
 
     @property
     def debug(self) -> bool:
@@ -53,6 +53,7 @@ class ToolHelpersConfig:
             500000
         """
         from .limits import get_limit_for_operation
+
         op_limits = get_limit_for_operation(operation_type, self.limits)
         return op_limits.get(key, default)
 
@@ -67,7 +68,7 @@ class ToolHelpersConfig:
         lines.append("")
         lines.append(format_limits_summary(self.limits))
 
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary.
@@ -76,13 +77,11 @@ class ToolHelpersConfig:
             Dictionary representation of configuration
         """
         from dataclasses import asdict
-        return {
-            'debug': self.debug,
-            'limits': asdict(self.limits)
-        }
+
+        return {"debug": self.debug, "limits": asdict(self.limits)}
 
     @classmethod
-    def from_env(cls) -> 'ToolHelpersConfig':
+    def from_env(cls) -> "ToolHelpersConfig":
         """Create configuration from environment variables.
 
         Returns:
@@ -141,6 +140,6 @@ def print_config():
     print(config.format_config_summary())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # When run as script, print configuration
     print_config()

@@ -17,7 +17,7 @@ Context Foundry implements back pressure at three key phases:
 **When**: After Scout creates `scout-report.md`
 **What**: Validates technology stack is available and feasible
 **Time**: ~5 seconds
-**Catches**: 
+**Catches**:
 - Missing language runtimes (Python, Node, Rust, Go)
 - Version mismatches
 - Unavailable dependencies
@@ -247,7 +247,7 @@ Create a new validator in `tools/back_pressure/`:
 def validate_custom(project_path: str) -> dict:
     """
     Custom validation logic.
-    
+
     Returns:
         {'success': bool, 'errors': list, 'duration': float}
     """

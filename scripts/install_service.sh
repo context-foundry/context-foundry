@@ -148,7 +148,7 @@ PLIST
     echo "   Stderr:  tail -f ~/.context-foundry/evolution/logs/launchd-stderr.log"
     echo ""
     echo "📊 Monitor: bash tools/evolution/scripts/watch-evolution.sh"
-    
+
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     # Linux - use systemd
     echo "🐧 Detected Linux - installing systemd service"
@@ -225,7 +225,7 @@ SERVICE
     echo "   System:  journalctl --user -u context-foundry-evolution -f"
     echo ""
     echo "📊 Monitor: bash tools/evolution/scripts/watch-evolution.sh"
-    
+
 else
     echo "❌ Unsupported OS: $OSTYPE"
     echo "Manual installation required"

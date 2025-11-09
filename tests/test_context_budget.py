@@ -50,7 +50,7 @@ class TestTokenCounter:
         counter = TokenCounter()
 
         # Create temporary file
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.py') as f:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".py") as f:
             f.write("def hello():\n    print('Hello, world!')\n")
             temp_path = Path(f.name)
 
@@ -64,7 +64,7 @@ class TestTokenCounter:
     def test_count_file_tokens_nonexistent(self):
         """Test counting tokens in nonexistent file"""
         counter = TokenCounter()
-        tokens = counter.count_file_tokens(Path('/nonexistent/file.txt'))
+        tokens = counter.count_file_tokens(Path("/nonexistent/file.txt"))
         assert tokens == 0
 
     def test_count_message_tokens(self):
@@ -90,8 +90,8 @@ class TestTokenCounter:
                 "role": "user",
                 "content": [
                     {"text": "What's in this image?"},
-                    {"type": "image"}  # Images not counted in text tokens
-                ]
+                    {"type": "image"},  # Images not counted in text tokens
+                ],
             }
         ]
 
@@ -100,10 +100,10 @@ class TestTokenCounter:
 
     def test_get_context_window_size(self):
         """Test getting context window size for models"""
-        counter = TokenCounter('claude-sonnet-4')
+        counter = TokenCounter("claude-sonnet-4")
         assert counter.get_context_window_size() == 200000
 
-        counter_gpt = TokenCounter('gpt-4')
+        counter_gpt = TokenCounter("gpt-4")
         assert counter_gpt.get_context_window_size() == 128000
 
     def test_estimate_tokens_convenience_function(self):
@@ -117,25 +117,27 @@ class TestContextBudgetMonitor:
 
     def test_initialization(self):
         """Test monitor initialization"""
-        monitor = ContextBudgetMonitor(context_window_size=200000, model='claude-sonnet-4')
+        monitor = ContextBudgetMonitor(
+            context_window_size=200000, model="claude-sonnet-4"
+        )
         assert monitor.context_window_size == 200000
-        assert monitor.model == 'claude-sonnet-4'
+        assert monitor.model == "claude-sonnet-4"
 
     def test_get_budget_for_phase(self):
         """Test budget allocation for phases"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Scout: 7% of 200K = 14K
-        assert monitor.get_budget_for_phase('scout') == 14000
+        assert monitor.get_budget_for_phase("scout") == 14000
 
         # Architect: 7% of 200K = 14K
-        assert monitor.get_budget_for_phase('architect') == 14000
+        assert monitor.get_budget_for_phase("architect") == 14000
 
         # Builder: 20% of 200K = 40K
-        assert monitor.get_budget_for_phase('builder') == 40000
+        assert monitor.get_budget_for_phase("builder") == 40000
 
         # Unknown phase: 5% default
-        assert monitor.get_budget_for_phase('unknown_phase') == 10000
+        assert monitor.get_budget_for_phase("unknown_phase") == 10000
 
     def test_is_in_smart_zone(self):
         """Test smart zone detection"""
@@ -171,9 +173,9 @@ class TestContextBudgetMonitor:
         """Test phase analysis within budget"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('scout', tokens_used=12000)
+        analysis = monitor.check_phase("scout", tokens_used=12000)
 
-        assert analysis.phase_name == 'scout'
+        assert analysis.phase_name == "scout"
         assert analysis.tokens_used == 12000
         assert analysis.zone == ContextZone.SMART
         assert analysis.budget_allocated == 14000
@@ -185,50 +187,50 @@ class TestContextBudgetMonitor:
         """Test phase analysis with budget exceeded"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('scout', tokens_used=20000)
+        analysis = monitor.check_phase("scout", tokens_used=20000)
 
         assert analysis.budget_exceeded_by == 6000  # 20K - 14K
         assert analysis.budget_remaining == 0
         assert len(analysis.warnings) > 0
-        assert any('exceeded budget' in w.lower() for w in analysis.warnings)
+        assert any("exceeded budget" in w.lower() for w in analysis.warnings)
 
     def test_check_phase_dumb_zone(self):
         """Test phase analysis in dumb zone"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('architect', tokens_used=85000)
+        analysis = monitor.check_phase("architect", tokens_used=85000)
 
         assert analysis.zone == ContextZone.DUMB
         assert len(analysis.warnings) > 0
-        assert any('dumb zone' in w.lower() for w in analysis.warnings)
+        assert any("dumb zone" in w.lower() for w in analysis.warnings)
         assert len(analysis.recommendations) > 0
 
     def test_check_phase_critical_zone(self):
         """Test phase analysis in critical zone"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
-        analysis = monitor.check_phase('builder', tokens_used=170000)
+        analysis = monitor.check_phase("builder", tokens_used=170000)
 
         assert analysis.zone == ContextZone.CRITICAL
         assert len(analysis.warnings) > 0
-        assert any('critical' in w.lower() for w in analysis.warnings)
+        assert any("critical" in w.lower() for w in analysis.warnings)
 
     def test_phase_history(self):
         """Test phase history tracking"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Run multiple checks
-        monitor.check_phase('scout', 12000)
-        monitor.check_phase('scout', 15000)
-        monitor.check_phase('architect', 20000)
+        monitor.check_phase("scout", 12000)
+        monitor.check_phase("scout", 15000)
+        monitor.check_phase("architect", 20000)
 
         # Get history
-        scout_history = monitor.get_phase_history('scout')
+        scout_history = monitor.get_phase_history("scout")
         assert len(scout_history) == 2
         assert scout_history[0].tokens_used == 12000
         assert scout_history[1].tokens_used == 15000
 
-        architect_history = monitor.get_phase_history('architect')
+        architect_history = monitor.get_phase_history("architect")
         assert len(architect_history) == 1
 
     def test_get_overall_stats(self):
@@ -236,32 +238,34 @@ class TestContextBudgetMonitor:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Run checks
-        monitor.check_phase('scout', 12000)
-        monitor.check_phase('architect', 85000)
-        monitor.check_phase('builder', 40000)
+        monitor.check_phase("scout", 12000)
+        monitor.check_phase("architect", 85000)
+        monitor.check_phase("builder", 40000)
 
         stats = monitor.get_overall_stats()
 
-        assert stats['peak_usage_tokens'] == 85000
-        assert stats['peak_phase'] == 'architect'
-        assert stats['total_phases'] == 3
-        assert 0 <= stats['smart_zone_percentage'] <= 100
+        assert stats["peak_usage_tokens"] == 85000
+        assert stats["peak_phase"] == "architect"
+        assert stats["total_phases"] == 3
+        assert 0 <= stats["smart_zone_percentage"] <= 100
 
     def test_export_to_session_summary(self):
         """Test export to session summary format"""
-        monitor = ContextBudgetMonitor(context_window_size=200000, model='claude-sonnet-4')
+        monitor = ContextBudgetMonitor(
+            context_window_size=200000, model="claude-sonnet-4"
+        )
 
-        monitor.check_phase('scout', 12000)
-        monitor.check_phase('architect', 85000)
+        monitor.check_phase("scout", 12000)
+        monitor.check_phase("architect", 85000)
 
         export = monitor.export_to_session_summary()
 
-        assert export['max_context_window'] == 200000
-        assert export['model'] == 'claude-sonnet-4'
-        assert 'by_phase' in export
-        assert 'overall' in export
-        assert 'phase_scout' in export['by_phase']
-        assert 'phase_architect' in export['by_phase']
+        assert export["max_context_window"] == 200000
+        assert export["model"] == "claude-sonnet-4"
+        assert "by_phase" in export
+        assert "overall" in export
+        assert "phase_scout" in export["by_phase"]
+        assert "phase_architect" in export["by_phase"]
 
 
 class TestPhaseAnalysis:
@@ -270,22 +274,22 @@ class TestPhaseAnalysis:
     def test_to_dict(self):
         """Test conversion to dictionary"""
         analysis = PhaseAnalysis(
-            phase_name='scout',
+            phase_name="scout",
             tokens_used=12000,
             percentage=6.0,
             zone=ContextZone.SMART,
             budget_allocated=14000,
             budget_remaining=2000,
             warnings=[],
-            recommendations=[]
+            recommendations=[],
         )
 
         data = analysis.to_dict()
 
-        assert data['phase_name'] == 'scout'
-        assert data['tokens_used'] == 12000
-        assert data['zone'] == 'smart'
-        assert isinstance(data['percentage'], (int, float))
+        assert data["phase_name"] == "scout"
+        assert data["tokens_used"] == 12000
+        assert data["zone"] == "smart"
+        assert isinstance(data["percentage"], (int, float))
 
 
 class TestContextBudgetReporter:
@@ -296,95 +300,95 @@ class TestContextBudgetReporter:
         reporter = ContextBudgetReporter()
 
         context_metrics = {
-            'max_context_window': 200000,
-            'model': 'claude-sonnet-4',
-            'by_phase': {
-                'phase_scout': {
-                    'phase_name': 'Scout',
-                    'tokens_used': 12000,
-                    'percentage': 6.0,
-                    'zone': 'smart',
-                    'budget_allocated': 14000,
-                    'budget_remaining': 2000,
+            "max_context_window": 200000,
+            "model": "claude-sonnet-4",
+            "by_phase": {
+                "phase_scout": {
+                    "phase_name": "Scout",
+                    "tokens_used": 12000,
+                    "percentage": 6.0,
+                    "zone": "smart",
+                    "budget_allocated": 14000,
+                    "budget_remaining": 2000,
                 }
             },
-            'overall': {
-                'peak_usage_tokens': 12000,
-                'peak_usage_percentage': 6.0,
-                'peak_phase': 'Scout',
-                'avg_usage_percentage': 6.0,
-                'smart_zone_percentage': 100.0,
-            }
+            "overall": {
+                "peak_usage_tokens": 12000,
+                "peak_usage_percentage": 6.0,
+                "peak_phase": "Scout",
+                "avg_usage_percentage": 6.0,
+                "smart_zone_percentage": 100.0,
+            },
         }
 
         report = reporter.generate_context_report(context_metrics)
 
-        assert 'Context Window Budget Report' in report
-        assert 'claude-sonnet-4' in report
-        assert 'Scout' in report
+        assert "Context Window Budget Report" in report
+        assert "claude-sonnet-4" in report
+        assert "Scout" in report
 
     def test_generate_context_report_empty(self):
         """Test report generation with no data"""
         reporter = ContextBudgetReporter()
         report = reporter.generate_context_report({})
-        assert 'No context metrics available' in report
+        assert "No context metrics available" in report
 
     def test_generate_phase_table(self):
         """Test phase table generation"""
         reporter = ContextBudgetReporter()
 
         by_phase = {
-            'phase_scout': {
-                'phase_name': 'Scout',
-                'tokens_used': 12000,
-                'percentage': 6.0,
-                'zone': 'smart',
-                'budget_allocated': 14000,
+            "phase_scout": {
+                "phase_name": "Scout",
+                "tokens_used": 12000,
+                "percentage": 6.0,
+                "zone": "smart",
+                "budget_allocated": 14000,
             }
         }
 
         table = reporter.generate_phase_table(by_phase)
 
-        assert '┌' in table  # Table border
-        assert 'Scout' in table
-        assert '✅' in table  # Smart zone indicator
+        assert "┌" in table  # Table border
+        assert "Scout" in table
+        assert "✅" in table  # Smart zone indicator
 
     def test_visualize_context_usage(self):
         """Test visualization generation"""
         reporter = ContextBudgetReporter()
 
         context_metrics = {
-            'by_phase': {
-                'phase_scout': {
-                    'phase_name': 'Scout',
-                    'percentage': 6.0,
-                    'zone': 'smart',
+            "by_phase": {
+                "phase_scout": {
+                    "phase_name": "Scout",
+                    "percentage": 6.0,
+                    "zone": "smart",
                 }
             }
         }
 
         viz = reporter.visualize_context_usage(context_metrics)
 
-        assert 'Scout' in viz
-        assert '█' in viz or '░' in viz  # Bar chart characters
+        assert "Scout" in viz
+        assert "█" in viz or "░" in viz  # Bar chart characters
 
     def test_get_optimization_suggestions(self):
         """Test optimization suggestions"""
         reporter = ContextBudgetReporter()
 
         context_metrics = {
-            'by_phase': {
-                'phase_scout': {
-                    'phase_name': 'Scout',
-                    'tokens_used': 12000,
-                    'budget_allocated': 14000,
-                    'zone': 'smart',
+            "by_phase": {
+                "phase_scout": {
+                    "phase_name": "Scout",
+                    "tokens_used": 12000,
+                    "budget_allocated": 14000,
+                    "zone": "smart",
                 }
             },
-            'overall': {
-                'avg_usage_percentage': 10.0,
-                'smart_zone_percentage': 100.0,
-            }
+            "overall": {
+                "avg_usage_percentage": 10.0,
+                "smart_zone_percentage": 100.0,
+            },
         }
 
         suggestions = reporter.get_optimization_suggestions(context_metrics)
@@ -396,49 +400,49 @@ class TestContextBudgetReporter:
         """Test zone indicator formatting"""
         reporter = ContextBudgetReporter()
 
-        assert '✅' in reporter.format_zone_indicator('smart')
-        assert '⚠️' in reporter.format_zone_indicator('dumb')
-        assert '🚨' in reporter.format_zone_indicator('critical')
+        assert "✅" in reporter.format_zone_indicator("smart")
+        assert "⚠️" in reporter.format_zone_indicator("dumb")
+        assert "🚨" in reporter.format_zone_indicator("critical")
 
     def test_generate_summary_json(self):
         """Test JSON summary generation"""
         reporter = ContextBudgetReporter()
 
         context_metrics = {
-            'overall': {
-                'peak_usage_percentage': 6.0,
-                'smart_zone_percentage': 100.0,
-                'total_phases': 1,
+            "overall": {
+                "peak_usage_percentage": 6.0,
+                "smart_zone_percentage": 100.0,
+                "total_phases": 1,
             },
-            'by_phase': {}
+            "by_phase": {},
         }
 
         summary = reporter.generate_summary_json(context_metrics)
 
-        assert 'status' in summary
-        assert summary['status'] == 'optimal'
-        assert 'recommendations' in summary
+        assert "status" in summary
+        assert summary["status"] == "optimal"
+        assert "recommendations" in summary
 
     def test_export_markdown_report(self):
         """Test markdown report export"""
         reporter = ContextBudgetReporter()
 
         context_metrics = {
-            'max_context_window': 200000,
-            'model': 'claude-sonnet-4',
-            'by_phase': {},
-            'overall': {
-                'peak_usage_tokens': 0,
-                'smart_zone_percentage': 100.0,
-                'total_phases': 0,
-            }
+            "max_context_window": 200000,
+            "model": "claude-sonnet-4",
+            "by_phase": {},
+            "overall": {
+                "peak_usage_tokens": 0,
+                "smart_zone_percentage": 100.0,
+                "total_phases": 0,
+            },
         }
 
         markdown = reporter.export_markdown_report(context_metrics)
 
-        assert '# Context Window Budget Analysis' in markdown
-        assert '## Summary' in markdown
-        assert '## Optimization Suggestions' in markdown
+        assert "# Context Window Budget Analysis" in markdown
+        assert "## Summary" in markdown
+        assert "## Optimization Suggestions" in markdown
 
 
 class TestIntegration:
@@ -450,10 +454,10 @@ class TestIntegration:
         monitor = ContextBudgetMonitor(context_window_size=200000)
 
         # Simulate build phases
-        monitor.check_phase('scout', 12000)
-        monitor.check_phase('architect', 85000)
-        monitor.check_phase('builder', 40000)
-        monitor.check_phase('test', 30000)
+        monitor.check_phase("scout", 12000)
+        monitor.check_phase("architect", 85000)
+        monitor.check_phase("builder", 40000)
+        monitor.check_phase("test", 30000)
 
         # Export metrics
         metrics = monitor.export_to_session_summary()
@@ -462,22 +466,22 @@ class TestIntegration:
         reporter = ContextBudgetReporter()
         report = reporter.generate_context_report(metrics)
 
-        assert 'scout' in report or 'Scout' in report
-        assert 'architect' in report or 'Architect' in report
+        assert "scout" in report or "Scout" in report
+        assert "architect" in report or "Architect" in report
         assert len(report) > 100  # Should be substantial report
 
     def test_session_summary_compatibility(self):
         """Test that export is compatible with session-summary.json format"""
         monitor = ContextBudgetMonitor()
-        monitor.check_phase('scout', 12000)
+        monitor.check_phase("scout", 12000)
 
         export = monitor.export_to_session_summary()
 
         # Verify structure matches expected schema
-        assert 'max_context_window' in export
-        assert 'model' in export
-        assert 'by_phase' in export
-        assert 'overall' in export
+        assert "max_context_window" in export
+        assert "model" in export
+        assert "by_phase" in export
+        assert "overall" in export
 
         # Should be JSON serializable
         json_str = json.dumps(export)
@@ -490,7 +494,7 @@ class TestEdgeCases:
     def test_zero_tokens(self):
         """Test handling of zero tokens"""
         monitor = ContextBudgetMonitor()
-        analysis = monitor.check_phase('scout', 0)
+        analysis = monitor.check_phase("scout", 0)
 
         assert analysis.tokens_used == 0
         assert analysis.zone == ContextZone.SMART
@@ -498,7 +502,7 @@ class TestEdgeCases:
     def test_massive_tokens(self):
         """Test handling of tokens exceeding context window"""
         monitor = ContextBudgetMonitor(context_window_size=200000)
-        analysis = monitor.check_phase('architect', 250000)
+        analysis = monitor.check_phase("architect", 250000)
 
         assert analysis.tokens_used == 250000
         assert analysis.zone == ContextZone.CRITICAL
@@ -507,9 +511,9 @@ class TestEdgeCases:
     def test_unknown_phase_name(self):
         """Test handling of unknown phase names"""
         monitor = ContextBudgetMonitor()
-        analysis = monitor.check_phase('unknown_phase_xyz', 10000)
+        analysis = monitor.check_phase("unknown_phase_xyz", 10000)
 
-        assert analysis.phase_name == 'unknown_phase_xyz'
+        assert analysis.phase_name == "unknown_phase_xyz"
         # Should use default budget (5%)
         assert analysis.budget_allocated == 10000
 
@@ -518,15 +522,15 @@ class TestEdgeCases:
         monitor = ContextBudgetMonitor()
         stats = monitor.get_overall_stats()
 
-        assert stats['peak_usage_tokens'] == 0
-        assert stats['total_phases'] == 0
+        assert stats["peak_usage_tokens"] == 0
+        assert stats["total_phases"] == 0
 
     def test_reporter_with_malformed_data(self):
         """Test reporter handles malformed data gracefully"""
         reporter = ContextBudgetReporter()
 
         # Missing fields
-        metrics = {'by_phase': {}}
+        metrics = {"by_phase": {}}
         report = reporter.generate_context_report(metrics)
         assert isinstance(report, str)
 
@@ -535,5 +539,5 @@ class TestEdgeCases:
         assert isinstance(viz, str)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

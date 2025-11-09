@@ -17,7 +17,7 @@ To create the comprehensive summary you need, I would require:
 Could you please provide the conversation content that needs to be summarized? Once I have that information, I'll create a thorough structured summary following your specified format that preserves all critical:
 
 - Architecture decisions
-- Patterns and best practices  
+- Patterns and best practices
 - Current task context
 - Progress made
 - Critical errors/learnings

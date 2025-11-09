@@ -11,7 +11,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from tools.evolution.daemon import EvolutionDaemon, setup_logging
 from tools.evolution.task_queue import Task, TaskType, TaskStatus
 
@@ -19,24 +19,24 @@ from tools.evolution.task_queue import Task, TaskType, TaskStatus
 @pytest.fixture
 def temp_config():
     """Create temporary config file."""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         config = {
             "daemon": {
                 "enabled": True,
                 "poll_interval_seconds": 1,  # Short interval for testing
                 "max_concurrent_tasks": 2,
-                "log_level": "INFO"
+                "log_level": "INFO",
             },
             "modes": {
                 "self_improvement": {"enabled": True, "priority": 8},
                 "chaos_creative": {"enabled": True, "priority": 5},
-                "research_discovery": {"enabled": False, "priority": 9}
+                "research_discovery": {"enabled": False, "priority": 9},
             },
             "resources": {
                 "max_cpu_percent": 80,
                 "max_memory_gb": 16,
-                "active_hours": [0, 23]
-            }
+                "active_hours": [0, 23],
+            },
         }
         json.dump(config, f)
         config_path = f.name
@@ -64,16 +64,16 @@ class TestDaemonInitialization:
         """Test initialization with config file."""
         daemon = EvolutionDaemon(temp_config)
         assert daemon.config is not None
-        assert daemon.config['daemon']['poll_interval_seconds'] == 1
-        assert daemon.config['daemon']['max_concurrent_tasks'] == 2
+        assert daemon.config["daemon"]["poll_interval_seconds"] == 1
+        assert daemon.config["daemon"]["max_concurrent_tasks"] == 2
         daemon.cleanup()
 
     def test_init_without_config_file(self):
         """Test initialization without config file (uses defaults)."""
         daemon = EvolutionDaemon(config_path="/nonexistent/path.json")
         assert daemon.config is not None
-        assert daemon.config['daemon']['poll_interval_seconds'] == 60
-        assert daemon.config['daemon']['enabled'] is True
+        assert daemon.config["daemon"]["poll_interval_seconds"] == 60
+        assert daemon.config["daemon"]["enabled"] is True
         daemon.cleanup()
 
     def test_init_creates_components(self, daemon):
@@ -139,7 +139,7 @@ class TestDaemonPIDManagement:
         """Test is_running returns False for non-existent PID."""
         daemon.pid_file.parent.mkdir(parents=True, exist_ok=True)
         # Write a PID that doesn't exist (99999 unlikely to be running)
-        with open(daemon.pid_file, 'w') as f:
+        with open(daemon.pid_file, "w") as f:
             f.write("99999")
         assert daemon.is_running() is False
 
@@ -161,12 +161,12 @@ class TestDaemonSignalHandling:
         """Test SIGHUP handler reloads configuration."""
         # Create daemon with temp config
         daemon = EvolutionDaemon(temp_config)
-        original_interval = daemon.config['daemon']['poll_interval_seconds']
+        original_interval = daemon.config["daemon"]["poll_interval_seconds"]
 
         # Modify config file
-        with open(temp_config, 'w') as f:
+        with open(temp_config, "w") as f:
             new_config = daemon.config.copy()
-            new_config['daemon']['poll_interval_seconds'] = 999
+            new_config["daemon"]["poll_interval_seconds"] = 999
             json.dump(new_config, f)
 
         # Store the config path for reload
@@ -174,7 +174,7 @@ class TestDaemonSignalHandling:
         daemon.config_path = original_path
 
         # Mock _load_config to actually load from the file we just modified
-        with patch.object(daemon, '_load_config') as mock_load:
+        with patch.object(daemon, "_load_config") as mock_load:
             # Make _load_config return the new config
             with open(temp_config) as f:
                 new_config = json.load(f)
@@ -184,7 +184,7 @@ class TestDaemonSignalHandling:
             daemon._handle_sighup(None, None)
 
             # Verify config was reloaded
-            assert daemon.config['daemon']['poll_interval_seconds'] == 999
+            assert daemon.config["daemon"]["poll_interval_seconds"] == 999
 
         daemon.cleanup()
 
@@ -210,6 +210,7 @@ class TestDaemonInterruptibleSleep:
             daemon.stop_requested = True
 
         import threading
+
         thread = threading.Thread(target=set_stop)
         thread.start()
 
@@ -234,7 +235,7 @@ class TestDaemonTaskExecution:
             status=TaskStatus.PENDING.value,
             priority=5,
             params={"test": "value"},
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
         )
 
         # Mock the mode execution
@@ -242,9 +243,19 @@ class TestDaemonTaskExecution:
         mock_result.output = {"status": "completed"}
         mock_result.error = None
 
-        with patch.object(daemon.modes[TaskType.SELF_IMPROVEMENT.value], 'execute_task', return_value=mock_result):
-            with patch.object(daemon.modes[TaskType.SELF_IMPROVEMENT.value], 'validate_result', return_value=True):
-                with patch.object(daemon.task_queue, 'update_task_status') as mock_update:
+        with patch.object(
+            daemon.modes[TaskType.SELF_IMPROVEMENT.value],
+            "execute_task",
+            return_value=mock_result,
+        ):
+            with patch.object(
+                daemon.modes[TaskType.SELF_IMPROVEMENT.value],
+                "validate_result",
+                return_value=True,
+            ):
+                with patch.object(
+                    daemon.task_queue, "update_task_status"
+                ) as mock_update:
                     daemon._execute_task(task)
 
                     # Verify task was marked as completed
@@ -261,13 +272,19 @@ class TestDaemonTaskExecution:
             status=TaskStatus.PENDING.value,
             priority=5,
             params={},
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
         )
 
         # Mock mode to raise exception
-        with patch.object(daemon.modes[TaskType.SELF_IMPROVEMENT.value], 'execute_task', side_effect=Exception("Test error")):
-            with patch.object(daemon.task_queue, 'should_retry', return_value=False):
-                with patch.object(daemon.task_queue, 'update_task_status') as mock_update:
+        with patch.object(
+            daemon.modes[TaskType.SELF_IMPROVEMENT.value],
+            "execute_task",
+            side_effect=Exception("Test error"),
+        ):
+            with patch.object(daemon.task_queue, "should_retry", return_value=False):
+                with patch.object(
+                    daemon.task_queue, "update_task_status"
+                ) as mock_update:
                     daemon._execute_task(task)
 
                     # Verify task was marked as failed
@@ -286,13 +303,17 @@ class TestDaemonTaskExecution:
             params={},
             created_at=datetime.now().isoformat(),
             max_retries=3,
-            retry_count=0
+            retry_count=0,
         )
 
         # Mock mode to raise exception
-        with patch.object(daemon.modes[TaskType.SELF_IMPROVEMENT.value], 'execute_task', side_effect=Exception("Temporary error")):
-            with patch.object(daemon.task_queue, 'should_retry', return_value=True):
-                with patch.object(daemon.task_queue, 'retry_task') as mock_retry:
+        with patch.object(
+            daemon.modes[TaskType.SELF_IMPROVEMENT.value],
+            "execute_task",
+            side_effect=Exception("Temporary error"),
+        ):
+            with patch.object(daemon.task_queue, "should_retry", return_value=True):
+                with patch.object(daemon.task_queue, "retry_task") as mock_retry:
                     daemon._execute_task(task)
 
                     # Verify task was retried
@@ -306,11 +327,11 @@ class TestDaemonTaskExecution:
             status=TaskStatus.PENDING.value,
             priority=5,
             params={},
-            created_at=datetime.now().isoformat()
+            created_at=datetime.now().isoformat(),
         )
 
-        with patch.object(daemon.task_queue, 'should_retry', return_value=False):
-            with patch.object(daemon.task_queue, 'update_task_status') as mock_update:
+        with patch.object(daemon.task_queue, "should_retry", return_value=False):
+            with patch.object(daemon.task_queue, "update_task_status") as mock_update:
                 daemon._execute_task(task)
 
                 # Should mark as failed
@@ -332,6 +353,7 @@ class TestDaemonStop:
             daemon.active_tasks.clear()
 
         import threading
+
         thread = threading.Thread(target=clear_tasks)
         thread.start()
 
@@ -372,7 +394,7 @@ class TestDaemonCleanup:
 
     def test_cleanup_closes_queue(self, daemon):
         """Test cleanup closes task queue."""
-        with patch.object(daemon.task_queue, 'close') as mock_close:
+        with patch.object(daemon.task_queue, "close") as mock_close:
             daemon.cleanup()
             mock_close.assert_called_once()
 
@@ -383,14 +405,22 @@ class TestDaemonResourceManagement:
     def test_respects_resource_limits(self, daemon):
         """Test daemon respects resource limits."""
         # Mock resource manager to deny tasks
-        with patch.object(daemon.resource_manager, 'can_accept_task', return_value=(False, "CPU limit exceeded")):
+        with patch.object(
+            daemon.resource_manager,
+            "can_accept_task",
+            return_value=(False, "CPU limit exceeded"),
+        ):
             # Should not execute tasks when resources are exhausted
-            with patch.object(daemon.task_queue, 'get_next_task') as mock_get:
+            with patch.object(daemon.task_queue, "get_next_task") as mock_get:
                 # Set up minimal main loop iteration
                 daemon.stop_requested = False
 
                 # Run one iteration
-                with patch.object(daemon, '_interruptible_sleep', side_effect=lambda x: setattr(daemon, 'stop_requested', True)):
+                with patch.object(
+                    daemon,
+                    "_interruptible_sleep",
+                    side_effect=lambda x: setattr(daemon, "stop_requested", True),
+                ):
                     daemon.main_loop()
 
                 # Should not have tried to get tasks
@@ -400,33 +430,32 @@ class TestDaemonResourceManagement:
 class TestDaemonPRDetection:
     """Test PR detection and pausing."""
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_success(self, mock_run, daemon):
         """Test successful PR detection."""
         # Mock git remote command
         mock_run.return_value = Mock(
-            returncode=0,
-            stdout="https://github.com/owner/repo.git\n"
+            returncode=0, stdout="https://github.com/owner/repo.git\n"
         )
 
         # Mock requests
-        with patch('requests.get') as mock_get:
+        with patch("requests.get") as mock_get:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = [
                 {
-                    'number': 123,
-                    'head': {'ref': 'self-improvement/test-branch'},
-                    'title': 'Test PR'
+                    "number": 123,
+                    "head": {"ref": "self-improvement/test-branch"},
+                    "title": "Test PR",
                 }
             ]
             mock_get.return_value = mock_response
 
             prs = daemon._check_open_prs()
             assert len(prs) == 1
-            assert prs[0]['number'] == 123
+            assert prs[0]["number"] == 123
 
-    @patch('subprocess.run')
+    @patch("subprocess.run")
     def test_check_open_prs_no_git(self, mock_run, daemon):
         """Test PR detection when git fails."""
         mock_run.return_value = Mock(returncode=1, stdout="")
@@ -454,16 +483,16 @@ class TestDaemonIntegration:
         """Test configuration can be reloaded."""
         # Create daemon with temp config
         daemon = EvolutionDaemon(temp_config)
-        original_interval = daemon.config['daemon']['poll_interval_seconds']
+        original_interval = daemon.config["daemon"]["poll_interval_seconds"]
 
         # Modify config
-        with open(temp_config, 'w') as f:
+        with open(temp_config, "w") as f:
             new_config = daemon.config.copy()
-            new_config['daemon']['poll_interval_seconds'] = original_interval + 100
+            new_config["daemon"]["poll_interval_seconds"] = original_interval + 100
             json.dump(new_config, f)
 
         # Mock _load_config to actually load from the file we modified
-        with patch.object(daemon, '_load_config') as mock_load:
+        with patch.object(daemon, "_load_config") as mock_load:
             # Make _load_config return the new config
             with open(temp_config) as f:
                 new_cfg = json.load(f)
@@ -472,7 +501,10 @@ class TestDaemonIntegration:
             # Reload
             daemon._handle_sighup(None, None)
 
-            assert daemon.config['daemon']['poll_interval_seconds'] == original_interval + 100
+            assert (
+                daemon.config["daemon"]["poll_interval_seconds"]
+                == original_interval + 100
+            )
 
         daemon.cleanup()
 

@@ -1,10 +1,9 @@
 """New Project screen - launch autonomous builds"""
 
-import os
 from pathlib import Path
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Horizontal
 from textual.widgets import Header, Footer, Static, Input, Button, Label
 from textual.binding import Binding
 
@@ -95,7 +94,7 @@ class NewProjectScreen(Screen):
             yield Input(
                 placeholder="e.g., Build a tic-tac-toe game with React",
                 id="task-input",
-                classes="field-input"
+                classes="field-input",
             )
 
             yield Label("Working Directory:", classes="field-label")
@@ -103,21 +102,21 @@ class NewProjectScreen(Screen):
                 placeholder=str(Path.home() / "homelab"),
                 value=str(Path.home() / "homelab"),
                 id="directory-input",
-                classes="field-input"
+                classes="field-input",
             )
 
             yield Label("Project Name (optional):", classes="field-label")
             yield Input(
                 placeholder="e.g., my-game",
                 id="project-name-input",
-                classes="field-input"
+                classes="field-input",
             )
 
             yield Label("GitHub Repo Name (optional):", classes="field-label")
             yield Input(
                 placeholder="e.g., my-game (leave empty to skip deploy)",
                 id="repo-input",
-                classes="field-input"
+                classes="field-input",
             )
 
             with Horizontal(id="button-container"):
@@ -142,7 +141,12 @@ class NewProjectScreen(Screen):
     def on_input_submitted(self, event: Input.Submitted):
         """Handle Enter key in any input field"""
         # If Enter is pressed in any input, launch build
-        if event.input.id in ["task-input", "directory-input", "project-name-input", "repo-input"]:
+        if event.input.id in [
+            "task-input",
+            "directory-input",
+            "project-name-input",
+            "repo-input",
+        ]:
             self.run_worker(self.launch_build())
 
     async def launch_build(self):
@@ -188,7 +192,7 @@ class NewProjectScreen(Screen):
                 result = await self.provider.launch_build(
                     task=task,
                     working_directory=str(working_dir),
-                    github_repo_name=repo_name if repo_name else None
+                    github_repo_name=repo_name if repo_name else None,
                 )
 
                 if "error" in result:
@@ -197,7 +201,7 @@ class NewProjectScreen(Screen):
                     task_id = result["task_id"]
                     self.show_message(
                         f"✅ Build started!\nTask ID: {task_id}\nDirectory: {working_dir}",
-                        "success"
+                        "success",
                     )
 
                     # Wait 2 seconds then close screen
@@ -207,13 +211,19 @@ class NewProjectScreen(Screen):
 
             except Exception as e:
                 import traceback
+
                 error_detail = traceback.format_exc()
-                self.show_message(f"❌ Error launching: {e}\n{error_detail[:200]}", "error")
+                self.show_message(
+                    f"❌ Error launching: {e}\n{error_detail[:200]}", "error"
+                )
 
         except Exception as e:
             import traceback
+
             error_detail = traceback.format_exc()
-            self.show_message(f"❌ Unexpected error: {e}\n{error_detail[:200]}", "error")
+            self.show_message(
+                f"❌ Unexpected error: {e}\n{error_detail[:200]}", "error"
+            )
 
     def show_message(self, message: str, status_type: str = "info"):
         """Show status message"""

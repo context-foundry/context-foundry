@@ -1,7 +1,7 @@
 # Context Foundry Evolution System (CFES)
 
-**Version:** 1.0.0  
-**Status:** Alpha  
+**Version:** 1.0.0
+**Status:** Alpha
 **Architecture:** Daemon-based autonomous evolution layer
 
 ## Table of Contents
@@ -487,11 +487,11 @@ Send message to another agent.
 
 ### Configuration Options
 
-**daemon.poll_interval_seconds**: How often to check queue (default: 60)  
+**daemon.poll_interval_seconds**: How often to check queue (default: 60)
 **daemon.max_concurrent_tasks**: Max tasks running simultaneously (default: 3)
 
-**resources.max_cpu_percent**: Max CPU usage before pausing (default: 80)  
-**resources.max_memory_gb**: Max memory before pausing (default: 16)  
+**resources.max_cpu_percent**: Max CPU usage before pausing (default: 80)
+**resources.max_memory_gb**: Max memory before pausing (default: 16)
 **resources.active_hours**: [start_hour, end_hour] (default: [6, 22])
 
 ---
@@ -647,11 +647,11 @@ class MyMode(BaseEvolutionMode):
     def generate_tasks(self):
         # Return list of task dicts
         pass
-    
+
     def execute_task(self, task):
         # Execute and return TaskResult
         pass
-    
+
     def validate_result(self, result):
         # Validate and return bool
         pass

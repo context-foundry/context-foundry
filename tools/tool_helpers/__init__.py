@@ -32,7 +32,7 @@ Configuration:
 """
 
 # Version
-__version__ = '1.0.0'
+__version__ = "1.0.0"
 
 # Core configuration and limits
 from .limits import (
@@ -41,15 +41,10 @@ from .limits import (
     get_cached_default_limits,
     validate_limits,
     get_limit_for_operation,
-    format_limits_summary
+    format_limits_summary,
 )
 
-from .config import (
-    ToolHelpersConfig,
-    get_config,
-    reset_config,
-    print_config
-)
+from .config import ToolHelpersConfig, get_config, reset_config, print_config
 
 # Path utilities
 from .path_utils import (
@@ -60,7 +55,7 @@ from .path_utils import (
     format_file_path_for_display,
     normalize_path_separators,
     get_common_path_prefix,
-    relativize_paths_in_dict
+    relativize_paths_in_dict,
 )
 
 # Truncation utilities
@@ -72,7 +67,7 @@ from .truncation import (
     truncate_line,
     count_tokens,
     format_token_count,
-    TIKTOKEN_AVAILABLE
+    TIKTOKEN_AVAILABLE,
 )
 
 # Response formatting
@@ -80,51 +75,47 @@ from .response_formatter import (
     ToolResponse,
     format_file_read_output,
     format_grep_output,
-    format_subprocess_output
+    format_subprocess_output,
 )
 
 # Public API
 __all__ = [
     # Version
-    '__version__',
-
+    "__version__",
     # Configuration
-    'ToolLimits',
-    'ToolHelpersConfig',
-    'get_default_limits',
-    'get_cached_default_limits',
-    'validate_limits',
-    'get_limit_for_operation',
-    'format_limits_summary',
-    'get_config',
-    'reset_config',
-    'print_config',
-
+    "ToolLimits",
+    "ToolHelpersConfig",
+    "get_default_limits",
+    "get_cached_default_limits",
+    "validate_limits",
+    "get_limit_for_operation",
+    "format_limits_summary",
+    "get_config",
+    "reset_config",
+    "print_config",
     # Path utilities
-    'to_relative_path',
-    'to_absolute_path',
-    'is_within_project',
-    'format_tool_output_paths',
-    'format_file_path_for_display',
-    'normalize_path_separators',
-    'get_common_path_prefix',
-    'relativize_paths_in_dict',
-
+    "to_relative_path",
+    "to_absolute_path",
+    "is_within_project",
+    "format_tool_output_paths",
+    "format_file_path_for_display",
+    "normalize_path_separators",
+    "get_common_path_prefix",
+    "relativize_paths_in_dict",
     # Truncation
-    'truncate_with_recovery',
-    'format_file_truncation',
-    'format_grep_truncation',
-    'format_command_truncation',
-    'truncate_line',
-    'count_tokens',
-    'format_token_count',
-    'TIKTOKEN_AVAILABLE',
-
+    "truncate_with_recovery",
+    "format_file_truncation",
+    "format_grep_truncation",
+    "format_command_truncation",
+    "truncate_line",
+    "count_tokens",
+    "format_token_count",
+    "TIKTOKEN_AVAILABLE",
     # Response formatting
-    'ToolResponse',
-    'format_file_read_output',
-    'format_grep_output',
-    'format_subprocess_output',
+    "ToolResponse",
+    "format_file_read_output",
+    "format_grep_output",
+    "format_subprocess_output",
 ]
 
 
@@ -156,6 +147,6 @@ def print_info():
     print_config()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # When run as module, print info
     print_info()

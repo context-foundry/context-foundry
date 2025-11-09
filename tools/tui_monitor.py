@@ -2,7 +2,6 @@
 """Context Foundry TUI Monitor - Entry Point"""
 
 import sys
-import asyncio
 from pathlib import Path
 
 # Add parent directory to path for imports

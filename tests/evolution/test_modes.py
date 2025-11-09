@@ -19,7 +19,7 @@ def test_chaos_creative_mode():
     tasks = mode.generate_tasks()
     assert isinstance(tasks, list)
     assert len(tasks) > 0
-    assert 'project_type' in tasks[0]['params']
+    assert "project_type" in tasks[0]["params"]
 
 
 def test_research_discovery_mode():
@@ -29,5 +29,5 @@ def test_research_discovery_mode():
     assert isinstance(tasks, list)
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -12,12 +12,11 @@ Priority: 10/10 - Core MCP functionality with <20% coverage
 """
 
 import pytest
-import tempfile
-import shutil
 from unittest.mock import Mock, patch, MagicMock, mock_open
 from pathlib import Path
 from datetime import datetime
 import sys
+
 
 # Mock FastMCP with pass-through decorators
 class MockFastMCP:
@@ -26,26 +25,31 @@ class MockFastMCP:
 
     def tool(self, *args, **kwargs):
         """Decorator that returns the original function unchanged"""
+
         def decorator(func):
             return func
+
         return decorator
 
     def resource(self, *args, **kwargs):
         """Decorator that returns the original function unchanged"""
+
         def decorator(func):
             return func
+
         return decorator
+
 
 mock_module = MagicMock()
 mock_module.FastMCP = MockFastMCP
 mock_module.Context = MagicMock
 
-sys.modules['fastmcp'] = mock_module
-sys.modules['fastmcp.server'] = MagicMock()
-sys.modules['fastmcp.server.dependencies'] = MagicMock()
-sys.modules['fastmcp.server.dependencies'].get_context = MagicMock()
+sys.modules["fastmcp"] = mock_module
+sys.modules["fastmcp.server"] = MagicMock()
+sys.modules["fastmcp.server.dependencies"] = MagicMock()
+sys.modules["fastmcp.server.dependencies"].get_context = MagicMock()
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'tools'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
 
 @pytest.mark.integration
@@ -63,32 +67,37 @@ class TestContextFoundryStatus:
         result = context_foundry_status()
 
         # Should report version and server status
-        assert 'Context Foundry' in result or 'context foundry' in result.lower()
-        assert 'Version' in result or 'version' in result.lower()
-        assert 'Server' in result or 'server' in result.lower() or 'Running' in result or 'running' in result.lower()
+        assert "Context Foundry" in result or "context foundry" in result.lower()
+        assert "Version" in result or "version" in result.lower()
+        assert (
+            "Server" in result
+            or "server" in result.lower()
+            or "Running" in result
+            or "running" in result.lower()
+        )
 
     def test_status_with_active_tasks(self):
         """Test status report with active delegation tasks"""
         from mcp_server import context_foundry_status, active_tasks
 
         # Add mock active tasks
-        active_tasks['task-1'] = {
-            'status': 'running',
-            'start_time': datetime.now(),
-            'cmd': ['claude', 'test task 1']
+        active_tasks["task-1"] = {
+            "status": "running",
+            "start_time": datetime.now(),
+            "cmd": ["claude", "test task 1"],
         }
-        active_tasks['task-2'] = {
-            'status': 'completed',
-            'start_time': datetime.now(),
-            'cmd': ['claude', 'test task 2'],
-            'duration': 5.2
+        active_tasks["task-2"] = {
+            "status": "completed",
+            "start_time": datetime.now(),
+            "cmd": ["claude", "test task 2"],
+            "duration": 5.2,
         }
 
         result = context_foundry_status()
 
         # Should show task count
-        assert '2' in result  # 2 active tasks
-        assert 'task-1' in result or 'running' in result.lower()
+        assert "2" in result  # 2 active tasks
+        assert "task-1" in result or "running" in result.lower()
 
 
 @pytest.mark.integration
@@ -105,49 +114,53 @@ class TestStreamDelegationOutput:
         result = stream_delegation_output(task_id="nonexistent-task")
 
         # Should return error
-        assert 'not found' in result.lower() or '❌' in result
+        assert "not found" in result.lower() or "❌" in result
 
     def test_stream_running_task(self):
         """Test streaming output from running task"""
         from mcp_server import stream_delegation_output, active_tasks
 
         # Create mock running task
-        task_id = 'stream-test-123'
+        task_id = "stream-test-123"
         mock_process = Mock()
         mock_process.poll.return_value = None  # Still running
 
         active_tasks[task_id] = {
-            'process': mock_process,
-            'status': 'running',
-            'cmd': ['claude', 'test'],
-            'start_time': datetime.now(),
-            'stdout': 'Line 1\nLine 2\nLine 3\n',
-            'stderr': ''
+            "process": mock_process,
+            "status": "running",
+            "cmd": ["claude", "test"],
+            "start_time": datetime.now(),
+            "stdout": "Line 1\nLine 2\nLine 3\n",
+            "stderr": "",
         }
 
         result = stream_delegation_output(task_id=task_id)
 
         # Should show streaming output
-        assert task_id in result or 'streaming' in result.lower() or 'running' in result.lower()
+        assert (
+            task_id in result
+            or "streaming" in result.lower()
+            or "running" in result.lower()
+        )
 
     def test_stream_completed_task(self):
         """Test streaming output from completed task"""
         from mcp_server import stream_delegation_output, active_tasks
 
-        task_id = 'stream-completed-456'
+        task_id = "stream-completed-456"
         active_tasks[task_id] = {
-            'status': 'completed',
-            'start_time': datetime.now(),
-            'duration': 3.5,
-            'exit_code': 0,
-            'stdout': 'Task completed successfully\nAll tests passed\n',
-            'stderr': ''
+            "status": "completed",
+            "start_time": datetime.now(),
+            "duration": 3.5,
+            "exit_code": 0,
+            "stdout": "Task completed successfully\nAll tests passed\n",
+            "stderr": "",
         }
 
         result = stream_delegation_output(task_id=task_id)
 
         # Should show completion status
-        assert 'completed' in result.lower() or '✅' in result
+        assert "completed" in result.lower() or "✅" in result
 
 
 @pytest.mark.integration
@@ -164,28 +177,30 @@ class TestCancelDelegation:
         result = cancel_delegation(task_id="nonexistent")
 
         # Should return error
-        assert 'not found' in result.lower() or '❌' in result
+        assert "not found" in result.lower() or "❌" in result
 
-    @patch('os.kill')
+    @patch("os.kill")
     def test_cancel_running_task(self, mock_kill):
         """Test canceling a running task"""
         from mcp_server import cancel_delegation, active_tasks
         import signal
 
         # Create mock running task
-        task_id = 'cancel-test-789'
+        task_id = "cancel-test-789"
         mock_process = Mock()
         mock_process.pid = 12345
         mock_process.poll.return_value = None  # Still running
 
         active_tasks[task_id] = {
-            'process': mock_process,
-            'status': 'running',
-            'cmd': ['claude', 'test'],
-            'start_time': datetime.now()
+            "process": mock_process,
+            "status": "running",
+            "cmd": ["claude", "test"],
+            "start_time": datetime.now(),
         }
 
-        result = cancel_delegation(task_id=task_id, reason="User requested cancellation")
+        result = cancel_delegation(
+            task_id=task_id, reason="User requested cancellation"
+        )
 
         # Verify process was killed
         if mock_kill.called:
@@ -195,24 +210,26 @@ class TestCancelDelegation:
             assert call_args[0][1] == signal.SIGTERM  # Signal
 
         # Result should indicate cancellation
-        assert 'cancel' in result.lower() or '⏹️' in result or 'stopped' in result.lower()
+        assert (
+            "cancel" in result.lower() or "⏹️" in result or "stopped" in result.lower()
+        )
 
     def test_cancel_already_completed_task(self):
         """Test attempting to cancel already completed task"""
         from mcp_server import cancel_delegation, active_tasks
 
-        task_id = 'already-done-999'
+        task_id = "already-done-999"
         active_tasks[task_id] = {
-            'status': 'completed',
-            'start_time': datetime.now(),
-            'duration': 2.1,
-            'exit_code': 0
+            "status": "completed",
+            "start_time": datetime.now(),
+            "duration": 2.1,
+            "exit_code": 0,
         }
 
         result = cancel_delegation(task_id=task_id)
 
         # Should indicate task already completed
-        assert 'already' in result.lower() or 'completed' in result.lower()
+        assert "already" in result.lower() or "completed" in result.lower()
 
 
 @pytest.mark.integration
@@ -222,8 +239,8 @@ class TestPatternManagement:
 
     def test_read_global_patterns_common_issues(self):
         """Test reading common-issues patterns"""
-        with patch('pathlib.Path.exists') as mock_exists:
-            with patch('builtins.open', mock_open(read_data='{"patterns": []}')):
+        with patch("pathlib.Path.exists") as mock_exists:
+            with patch("builtins.open", mock_open(read_data='{"patterns": []}')):
                 mock_exists.return_value = True
 
                 from mcp_server import read_global_patterns
@@ -231,11 +248,15 @@ class TestPatternManagement:
                 result = read_global_patterns(pattern_type="common-issues")
 
                 # Should return pattern data
-                assert 'pattern' in result.lower() or 'common' in result.lower() or '{' in result
+                assert (
+                    "pattern" in result.lower()
+                    or "common" in result.lower()
+                    or "{" in result
+                )
 
     def test_read_global_patterns_file_not_found(self):
         """Test reading patterns when file doesn't exist"""
-        with patch('pathlib.Path.exists') as mock_exists:
+        with patch("pathlib.Path.exists") as mock_exists:
             mock_exists.return_value = False
 
             from mcp_server import read_global_patterns
@@ -243,23 +264,34 @@ class TestPatternManagement:
             result = read_global_patterns(pattern_type="nonexistent")
 
             # Should return error for invalid pattern type
-            assert 'error' in result.lower() or 'invalid' in result.lower() or '{' in result
+            assert (
+                "error" in result.lower()
+                or "invalid" in result.lower()
+                or "{" in result
+            )
 
     def test_save_global_patterns(self):
         """Test saving global patterns"""
-        with patch('pathlib.Path.mkdir') as mock_mkdir:
-            with patch('builtins.open', mock_open()) as mock_file:
+        with patch("pathlib.Path.mkdir") as mock_mkdir:
+            with patch("builtins.open", mock_open()) as mock_file:
                 from mcp_server import save_global_patterns
 
-                pattern_data = '{"patterns": [{"id": "test", "description": "Test pattern"}]}'
+                pattern_data = (
+                    '{"patterns": [{"id": "test", "description": "Test pattern"}]}'
+                )
 
                 result = save_global_patterns(
                     pattern_type="common-issues",  # Use valid pattern type
-                    patterns_data=pattern_data
+                    patterns_data=pattern_data,
                 )
 
                 # Should indicate success or error
-                assert '✅' in result or 'success' in result.lower() or 'saved' in result.lower() or 'error' in result.lower()
+                assert (
+                    "✅" in result
+                    or "success" in result.lower()
+                    or "saved" in result.lower()
+                    or "error" in result.lower()
+                )
 
 
 @pytest.mark.integration
@@ -274,11 +306,16 @@ class TestEvolutionMCPTools:
         result = create_evolution_task(
             task_type="self_improvement",  # Use valid task type with underscore
             target_project="/tmp/test-project",
-            priority=7
+            priority=7,
         )
 
         # Should create task or return status/error
-        assert 'task' in result.lower() or 'evolution' in result.lower() or 'error' in result.lower() or 'success' in result.lower()
+        assert (
+            "task" in result.lower()
+            or "evolution" in result.lower()
+            or "error" in result.lower()
+            or "success" in result.lower()
+        )
 
     def test_get_evolution_tasks(self):
         """Test retrieving evolution tasks"""
@@ -287,7 +324,12 @@ class TestEvolutionMCPTools:
         result = get_evolution_tasks(status="pending", limit=10)
 
         # Should return task list or status
-        assert 'task' in result.lower() or 'pending' in result.lower() or '[]' in result or '❌' in result
+        assert (
+            "task" in result.lower()
+            or "pending" in result.lower()
+            or "[]" in result
+            or "❌" in result
+        )
 
     def test_get_daemon_status(self):
         """Test getting evolution daemon status"""
@@ -296,8 +338,13 @@ class TestEvolutionMCPTools:
         result = get_daemon_status()
 
         # Should return daemon status
-        assert 'daemon' in result.lower() or 'status' in result.lower() or 'running' in result.lower() or 'stopped' in result.lower()
+        assert (
+            "daemon" in result.lower()
+            or "status" in result.lower()
+            or "running" in result.lower()
+            or "stopped" in result.lower()
+        )
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

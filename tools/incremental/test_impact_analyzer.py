@@ -16,7 +16,6 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, asdict
-from datetime import datetime
 
 from .change_detector import ChangeReport
 
@@ -24,8 +23,11 @@ from .change_detector import ChangeReport
 @dataclass
 class TestCoverageMap:
     """Mapping of tests to source files they cover."""
+
     framework: str  # pytest, jest, mocha, etc.
-    tests: Dict[str, Dict[str, Any]]  # test_id -> {covers: [files], duration_seconds: float}
+    tests: Dict[
+        str, Dict[str, Any]
+    ]  # test_id -> {covers: [files], duration_seconds: float}
     total_duration_seconds: float
 
     def to_dict(self) -> Dict[str, Any]:
@@ -33,18 +35,19 @@ class TestCoverageMap:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'TestCoverageMap':
+    def from_dict(cls, data: Dict[str, Any]) -> "TestCoverageMap":
         """Create from dict."""
         return cls(
-            framework=data.get('framework', 'unknown'),
-            tests=data.get('tests', {}),
-            total_duration_seconds=data.get('total_duration_seconds', 0.0)
+            framework=data.get("framework", "unknown"),
+            tests=data.get("tests", {}),
+            total_duration_seconds=data.get("total_duration_seconds", 0.0),
         )
 
 
 @dataclass
 class TestPlan:
     """Selective test execution plan."""
+
     tests_to_run: List[str]  # Affected tests
     tests_to_skip: List[str]  # Unaffected tests
     run_all: bool  # Fallback to running all
@@ -77,13 +80,15 @@ def detect_test_framework(working_directory: str) -> Optional[str]:
     project_root = Path(working_directory)
 
     # Check for Python pytest
-    if (project_root / "pytest.ini").exists() or \
-       (project_root / "pyproject.toml").exists():
+    if (project_root / "pytest.ini").exists() or (
+        project_root / "pyproject.toml"
+    ).exists():
         return "pytest"
 
     # Check for JavaScript jest
-    if (project_root / "jest.config.js").exists() or \
-       (project_root / "jest.config.json").exists():
+    if (project_root / "jest.config.js").exists() or (
+        project_root / "jest.config.json"
+    ).exists():
         return "jest"
 
     # Check for package.json with test scripts
@@ -117,11 +122,11 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
     try:
         # Run pytest with coverage
         result = subprocess.run(
-            ['pytest', '--collect-only', '-q'],
+            ["pytest", "--collect-only", "-q"],
             cwd=working_directory,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
 
         if result.returncode != 0:
@@ -129,9 +134,9 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
 
         # Parse collected tests
         test_list = []
-        for line in result.stdout.split('\n'):
+        for line in result.stdout.split("\n"):
             # Match: tests/test_foo.py::test_bar
-            match = re.match(r'^(tests/[^\s]+::[^\s]+)', line)
+            match = re.match(r"^(tests/[^\s]+::[^\s]+)", line)
             if match:
                 test_list.append(match.group(1))
 
@@ -141,7 +146,7 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
 
         for test_id in test_list:
             # Extract test file path
-            test_file = test_id.split('::')[0]
+            test_file = test_id.split("::")[0]
 
             # Infer covered files (simplified heuristic)
             # - Test file itself
@@ -150,11 +155,11 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
 
             # Try to find corresponding source file
             test_name = Path(test_file).stem  # 'test_foo'
-            if test_name.startswith('test_'):
+            if test_name.startswith("test_"):
                 source_name = test_name[5:]  # 'foo'
 
                 # Check common source locations
-                for source_dir in ['', 'src/', 'tools/', 'tools/incremental/']:
+                for source_dir in ["", "src/", "tools/", "tools/incremental/"]:
                     source_path = f"{source_dir}{source_name}.py"
                     if (Path(working_directory) / source_path).exists():
                         covered_files.append(source_path)
@@ -162,7 +167,7 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
 
             tests_map[test_id] = {
                 "covers": covered_files,
-                "duration_seconds": 0.5  # Default estimate
+                "duration_seconds": 0.5,  # Default estimate
             }
 
         total_duration = len(tests_map) * 0.5
@@ -170,19 +175,20 @@ def build_test_coverage_map_pytest(working_directory: str) -> Optional[TestCover
         print(f"📊 Test coverage map built (pytest): {len(tests_map)} tests")
 
         return TestCoverageMap(
-            framework="pytest",
-            tests=tests_map,
-            total_duration_seconds=total_duration
+            framework="pytest", tests=tests_map, total_duration_seconds=total_duration
         )
 
-    except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ) as e:
         print(f"⚠️  Failed to build pytest coverage map: {e}")
         return None
 
 
 def build_test_coverage_map(
-    working_directory: str,
-    test_framework: Optional[str] = None
+    working_directory: str, test_framework: Optional[str] = None
 ) -> Optional[TestCoverageMap]:
     """
     Build test coverage map.
@@ -224,8 +230,7 @@ def build_test_coverage_map(
 
 
 def find_affected_tests(
-    coverage_map: TestCoverageMap,
-    changed_files: List[str]
+    coverage_map: TestCoverageMap, changed_files: List[str]
 ) -> List[str]:
     """
     Find tests affected by changed files.
@@ -241,7 +246,7 @@ def find_affected_tests(
     changed_files_set = set(changed_files)
 
     for test_id, test_data in coverage_map.tests.items():
-        covered_files = test_data.get('covers', [])
+        covered_files = test_data.get("covers", [])
 
         # Check if any covered file changed
         if any(f in changed_files_set for f in covered_files):
@@ -256,7 +261,7 @@ def create_test_plan(
     working_directory: str,
     change_report: ChangeReport,
     coverage_map: Optional[TestCoverageMap] = None,
-    threshold_percentage: float = 30.0
+    threshold_percentage: float = 30.0,
 ) -> TestPlan:
     """
     Generate selective test execution plan.
@@ -290,7 +295,7 @@ def create_test_plan(
             tests_to_skip=[],
             run_all=True,
             reason="No test coverage map available",
-            estimated_time_saved_minutes=0.0
+            estimated_time_saved_minutes=0.0,
         )
 
     # If too many files changed, run all tests
@@ -300,7 +305,7 @@ def create_test_plan(
             tests_to_skip=[],
             run_all=True,
             reason=f"Too many files changed ({change_report.change_percentage:.1f}% > {threshold_percentage}%)",
-            estimated_time_saved_minutes=0.0
+            estimated_time_saved_minutes=0.0,
         )
 
     # Find affected tests
@@ -314,7 +319,7 @@ def create_test_plan(
             tests_to_skip=[],
             run_all=True,
             reason="No affected tests found (running all to be safe)",
-            estimated_time_saved_minutes=0.0
+            estimated_time_saved_minutes=0.0,
         )
 
     # Create selective test plan
@@ -323,15 +328,18 @@ def create_test_plan(
 
     # Calculate time saved
     skipped_duration = sum(
-        coverage_map.tests[t].get('duration_seconds', 0.5)
-        for t in tests_to_skip
+        coverage_map.tests[t].get("duration_seconds", 0.5) for t in tests_to_skip
     )
     time_saved_minutes = skipped_duration / 60.0
 
-    print(f"")
-    print(f"📋 Test Plan:")
-    print(f"   Tests to run: {len(affected_tests)} ({len(affected_tests)/len(all_tests)*100:.1f}%)")
-    print(f"   Tests to skip: {len(tests_to_skip)} ({len(tests_to_skip)/len(all_tests)*100:.1f}%)")
+    print("")
+    print("📋 Test Plan:")
+    print(
+        f"   Tests to run: {len(affected_tests)} ({len(affected_tests) / len(all_tests) * 100:.1f}%)"
+    )
+    print(
+        f"   Tests to skip: {len(tests_to_skip)} ({len(tests_to_skip) / len(all_tests) * 100:.1f}%)"
+    )
     print(f"   Estimated time saved: {time_saved_minutes:.1f} minutes")
 
     return TestPlan(
@@ -339,16 +347,16 @@ def create_test_plan(
         tests_to_skip=tests_to_skip,
         run_all=False,
         reason=f"Selective testing: {len(affected_tests)} affected tests",
-        estimated_time_saved_minutes=time_saved_minutes
+        estimated_time_saved_minutes=time_saved_minutes,
     )
 
 
 __all__ = [
-    'TestCoverageMap',
-    'TestPlan',
-    'build_test_coverage_map',
-    'find_affected_tests',
-    'create_test_plan',
-    'detect_test_framework',
-    'get_test_coverage_map_path'
+    "TestCoverageMap",
+    "TestPlan",
+    "build_test_coverage_map",
+    "find_affected_tests",
+    "create_test_plan",
+    "detect_test_framework",
+    "get_test_coverage_map_path",
 ]

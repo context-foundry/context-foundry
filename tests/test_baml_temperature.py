@@ -7,7 +7,6 @@ With temperature 0.0, the same input should produce identical outputs.
 """
 
 import sys
-import json
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -16,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tools.baml_integration import (
     update_phase_with_baml,
     is_baml_available,
-    clear_baml_cache
+    clear_baml_cache,
 )
 
 
@@ -42,7 +41,7 @@ def test_temperature_zero_produces_deterministic_outputs():
             status="Researching",  # Use capitalized form to match BAML enum
             detail="Determinism test run",
             session_id="temperature-test",
-            iteration=0
+            iteration=0,
         )
         results.append(result)
 
@@ -52,7 +51,9 @@ def test_temperature_zero_produces_deterministic_outputs():
 
     # Debug: print first result to see structure
     print(f"Result structure: {results[0]}")
-    print(f"Result keys: {results[0].keys() if isinstance(results[0], dict) else dir(results[0])}")
+    print(
+        f"Result keys: {results[0].keys() if isinstance(results[0], dict) else dir(results[0])}"
+    )
 
     # BAML returns PhaseInfo objects - check if they have the expected attributes
     # The test may need to access attributes differently (e.g., result.session_id vs result['session_id'])
@@ -60,7 +61,11 @@ def test_temperature_zero_produces_deterministic_outputs():
 
     # Try both dict-style and attribute-style access
     try:
-        session_id = first_result['session_id'] if isinstance(first_result, dict) else first_result.session_id
+        session_id = (
+            first_result["session_id"]
+            if isinstance(first_result, dict)
+            else first_result.session_id
+        )
     except (KeyError, AttributeError):
         # If BAML returns a complex object, this test may not work with the actual API
         # Skip the detailed comparison for actual API calls
@@ -73,24 +78,31 @@ def test_temperature_zero_produces_deterministic_outputs():
 
     # Check that core fields are consistent
     for i in range(1, 3):
-        assert results[0]['session_id'] == results[i]['session_id'], \
+        assert results[0]["session_id"] == results[i]["session_id"], (
             f"session_id should be identical (run {i})"
-        assert results[0]['current_phase'] == results[i]['current_phase'], \
+        )
+        assert results[0]["current_phase"] == results[i]["current_phase"], (
             f"current_phase should be identical (run {i})"
-        assert results[0]['status'] == results[i]['status'], \
+        )
+        assert results[0]["status"] == results[i]["status"], (
             f"status should be identical (run {i})"
-        assert results[0]['progress_detail'] == results[i]['progress_detail'], \
+        )
+        assert results[0]["progress_detail"] == results[i]["progress_detail"], (
             f"progress_detail should be identical (run {i})"
-        assert results[0]['test_iteration'] == results[i]['test_iteration'], \
+        )
+        assert results[0]["test_iteration"] == results[i]["test_iteration"], (
             f"test_iteration should be identical (run {i})"
+        )
 
     print("✅ Temperature 0.0 verified: All outputs are deterministic and consistent")
-    print(f"   Ran 3 identical calls, all produced same structured output")
+    print("   Ran 3 identical calls, all produced same structured output")
 
 
 def test_temperature_setting_in_schema():
     """Test that temperature is configured in BAML schema"""
-    schema_file = Path(__file__).parent.parent / "tools" / "baml_schemas" / "clients.baml"
+    schema_file = (
+        Path(__file__).parent.parent / "tools" / "baml_schemas" / "clients.baml"
+    )
 
     assert schema_file.exists(), "BAML clients schema should exist"
 
@@ -106,15 +118,19 @@ def test_temperature_setting_in_schema():
     # Extract just the GPT4oMini client block (until next client or end)
     next_client = content.find("client<llm>", gpt4omini_start + 1)
     if next_client == -1:
-        next_client = content.find("//", gpt4omini_start + 50)  # Find next comment section
+        next_client = content.find(
+            "//", gpt4omini_start + 50
+        )  # Find next comment section
 
     gpt4omini_block = content[gpt4omini_start:next_client]
 
     # Verify temperature is set to 0.0
-    assert "temperature" in gpt4omini_block, \
+    assert "temperature" in gpt4omini_block, (
         "GPT4oMini client should have temperature setting"
-    assert "0.0" in gpt4omini_block or "0" in gpt4omini_block, \
+    )
+    assert "0.0" in gpt4omini_block or "0" in gpt4omini_block, (
         "Temperature should be set to 0.0 for deterministic outputs"
+    )
 
     print("✅ BAML schema verified: temperature 0.0 configured for GPT4oMini")
     print(f"   Schema location: {schema_file}")

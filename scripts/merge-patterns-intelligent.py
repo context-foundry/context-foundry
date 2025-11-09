@@ -54,13 +54,11 @@ class PatternMerger:
             "new_patterns": 0,
             "updated_patterns": 0,
             "conflicts_resolved": 0,
-            "validation_errors": 0
+            "validation_errors": 0,
         }
 
     def merge_common_issues(
-        self,
-        source_patterns: List[Dict],
-        dest_patterns: List[Dict]
+        self, source_patterns: List[Dict], dest_patterns: List[Dict]
     ) -> Tuple[List[Dict], Dict[str, int]]:
         """
         Merge common issue patterns.
@@ -80,15 +78,16 @@ class PatternMerger:
 
             if not pattern_id:
                 self.stats["validation_errors"] += 1
-                print(f"⚠️  Warning: Pattern missing pattern_id, skipping", file=sys.stderr)
+                print(
+                    "⚠️  Warning: Pattern missing pattern_id, skipping", file=sys.stderr
+                )
                 continue
 
             if pattern_id in dest_by_id:
                 # Update existing pattern
                 idx = dest_by_id[pattern_id]
                 self._update_existing_common_issue(
-                    existing=dest_patterns[idx],
-                    incoming=source_pattern
+                    existing=dest_patterns[idx], incoming=source_pattern
                 )
                 self.stats["updated_patterns"] += 1
             else:
@@ -103,7 +102,9 @@ class PatternMerger:
     def _update_existing_common_issue(self, existing: Dict, incoming: Dict) -> None:
         """Update existing pattern with incoming data."""
         # Increment frequency
-        existing["frequency"] = existing.get("frequency", 1) + incoming.get("frequency", 1)
+        existing["frequency"] = existing.get("frequency", 1) + incoming.get(
+            "frequency", 1
+        )
 
         # Update last_seen to most recent
         incoming_date = incoming.get("last_seen", datetime.now().strftime("%Y-%m-%d"))
@@ -143,7 +144,9 @@ class PatternMerger:
                 # Handle dict-type solutions (more complex structures)
                 if incoming_text and not existing_text:
                     existing_solution[phase] = incoming_text
-                elif incoming_text and len(str(incoming_text)) > len(str(existing_text)):
+                elif incoming_text and len(str(incoming_text)) > len(
+                    str(existing_text)
+                ):
                     existing_solution[phase] = incoming_text
             else:
                 # Handle string solutions
@@ -173,8 +176,12 @@ class PatternMerger:
     def _prepare_new_common_issue(self, pattern: Dict) -> Dict:
         """Prepare a new pattern for insertion."""
         new_pattern = pattern.copy()
-        new_pattern["first_seen"] = pattern.get("first_seen", datetime.now().strftime("%Y-%m-%d"))
-        new_pattern["last_seen"] = pattern.get("last_seen", datetime.now().strftime("%Y-%m-%d"))
+        new_pattern["first_seen"] = pattern.get(
+            "first_seen", datetime.now().strftime("%Y-%m-%d")
+        )
+        new_pattern["last_seen"] = pattern.get(
+            "last_seen", datetime.now().strftime("%Y-%m-%d")
+        )
         new_pattern["frequency"] = pattern.get("frequency", 1)
 
         # Ensure required fields have defaults
@@ -186,9 +193,7 @@ class PatternMerger:
         return new_pattern
 
     def merge_scout_learnings(
-        self,
-        source_learnings: List[Dict],
-        dest_learnings: List[Dict]
+        self, source_learnings: List[Dict], dest_learnings: List[Dict]
     ) -> Tuple[List[Dict], Dict[str, int]]:
         """
         Merge scout learning patterns.
@@ -208,23 +213,24 @@ class PatternMerger:
 
             if not learning_id:
                 self.stats["validation_errors"] += 1
-                print(f"⚠️  Warning: Learning missing learning_id, skipping", file=sys.stderr)
+                print(
+                    "⚠️  Warning: Learning missing learning_id, skipping",
+                    file=sys.stderr,
+                )
                 continue
 
             if learning_id in dest_by_id:
                 # Update existing learning
                 idx = dest_by_id[learning_id]
                 self._update_existing_scout_learning(
-                    existing=dest_learnings[idx],
-                    incoming=source_learning
+                    existing=dest_learnings[idx], incoming=source_learning
                 )
                 self.stats["updated_patterns"] += 1
             else:
                 # Add new learning
                 new_learning = source_learning.copy()
                 new_learning["first_seen"] = source_learning.get(
-                    "first_seen",
-                    datetime.now().strftime("%Y-%m-%d")
+                    "first_seen", datetime.now().strftime("%Y-%m-%d")
                 )
                 dest_learnings.append(new_learning)
                 dest_by_id[learning_id] = len(dest_learnings) - 1
@@ -269,22 +275,19 @@ def load_json_file(file_path: Path) -> Dict[str, Any]:
     if not file_path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    with open(file_path, 'r') as f:
+    with open(file_path, "r") as f:
         return json.load(f)
 
 
 def save_json_file(file_path: Path, data: Dict[str, Any]) -> None:
     """Save data to a JSON file with pretty formatting."""
-    with open(file_path, 'w') as f:
+    with open(file_path, "w") as f:
         json.dump(data, f, indent=2)
     print(f"✅ Saved to: {file_path}")
 
 
 def merge_pattern_files(
-    source_file: Path,
-    dest_file: Path,
-    pattern_type: str,
-    output_file: Path
+    source_file: Path, dest_file: Path, pattern_type: str, output_file: Path
 ) -> Dict[str, Any]:
     """
     Merge two pattern files intelligently.
@@ -307,11 +310,11 @@ def merge_pattern_files(
         print(f"📖 Loading destination: {dest_file}")
         dest_data = load_json_file(dest_file)
     else:
-        print(f"📄 Creating new destination file")
+        print("📄 Creating new destination file")
         dest_data = {
             "version": "1.0",
             "last_updated": datetime.now().isoformat(),
-            "total_builds": 0
+            "total_builds": 0,
         }
 
         if pattern_type == "common-issues":
@@ -329,7 +332,9 @@ def merge_pattern_files(
         source_patterns = source_data.get("patterns", [])
         dest_patterns = dest_data.get("patterns", [])
 
-        merged_patterns, stats = merger.merge_common_issues(source_patterns, dest_patterns)
+        merged_patterns, stats = merger.merge_common_issues(
+            source_patterns, dest_patterns
+        )
         dest_data["patterns"] = merged_patterns
 
         # Update total_builds
@@ -341,7 +346,9 @@ def merge_pattern_files(
         source_learnings = source_data.get("learnings", [])
         dest_learnings = dest_data.get("learnings", [])
 
-        merged_learnings, stats = merger.merge_scout_learnings(source_learnings, dest_learnings)
+        merged_learnings, stats = merger.merge_scout_learnings(
+            source_learnings, dest_learnings
+        )
         dest_data["learnings"] = merged_learnings
     else:
         raise ValueError(f"Unknown pattern type: {pattern_type}")
@@ -365,31 +372,24 @@ def main():
         "--source",
         type=Path,
         required=True,
-        help="Source pattern file (e.g., ~/.context-foundry/patterns/common-issues.json)"
+        help="Source pattern file (e.g., ~/.context-foundry/patterns/common-issues.json)",
     )
     parser.add_argument(
         "--dest",
         type=Path,
         required=True,
-        help="Destination pattern file (e.g., .context-foundry/patterns/common-issues.json)"
+        help="Destination pattern file (e.g., .context-foundry/patterns/common-issues.json)",
     )
     parser.add_argument(
         "--type",
         choices=["common-issues", "scout-learnings"],
         required=True,
-        help="Type of pattern file"
+        help="Type of pattern file",
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        required=True,
-        help="Where to write merged output"
+        "--output", type=Path, required=True, help="Where to write merged output"
     )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose output"
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     args = parser.parse_args()
 
@@ -408,7 +408,7 @@ def main():
             source_file=args.source,
             dest_file=args.dest,
             pattern_type=args.type,
-            output_file=args.output
+            output_file=args.output,
         )
 
         # Print summary
@@ -420,7 +420,7 @@ def main():
         print(f"Existing patterns updated: {stats['updated_patterns']}")
         print(f"Conflicts resolved: {stats['conflicts_resolved']}")
 
-        if stats['validation_errors'] > 0:
+        if stats["validation_errors"] > 0:
             print(f"⚠️  Validation errors: {stats['validation_errors']}")
 
         print()
@@ -436,6 +436,7 @@ def main():
     except Exception as e:
         print(f"❌ Unexpected error: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return 1
 

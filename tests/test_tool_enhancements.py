@@ -14,7 +14,6 @@ import pytest
 import os
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -45,8 +44,6 @@ from tools.tool_helpers import (
     format_command_truncation,
     truncate_line,
     count_tokens,
-    TIKTOKEN_AVAILABLE,
-    # Response formatting
     ToolResponse,
     format_file_read_output,
     format_grep_output,
@@ -57,6 +54,7 @@ from tools.tool_helpers import (
 # ============================================================================
 # Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def temp_working_dir(tmp_path):
@@ -82,7 +80,7 @@ def clean_env():
     old_env = os.environ.copy()
     # Remove all CF_ variables
     for key in list(os.environ.keys()):
-        if key.startswith('CF_'):
+        if key.startswith("CF_"):
             del os.environ[key]
     yield
     # Restore
@@ -95,6 +93,7 @@ def clean_env():
 # ============================================================================
 # Test ToolLimits
 # ============================================================================
+
 
 class TestToolLimits:
     """Test limits configuration and validation."""
@@ -109,23 +108,23 @@ class TestToolLimits:
 
     def test_environment_override_int(self, clean_env):
         """Test environment variable overrides for integers."""
-        os.environ['CF_LIMIT_FILE_READ_CHARS'] = '100000'
+        os.environ["CF_LIMIT_FILE_READ_CHARS"] = "100000"
         limits = get_default_limits()
         assert limits.max_file_read_chars == 100000
 
     def test_environment_override_bool(self, clean_env):
         """Test environment variable overrides for booleans."""
-        os.environ['CF_USE_RELATIVE_PATHS'] = 'false'
+        os.environ["CF_USE_RELATIVE_PATHS"] = "false"
         limits = get_default_limits()
         assert limits.use_relative_paths is False
 
-        os.environ['CF_USE_RELATIVE_PATHS'] = 'true'
+        os.environ["CF_USE_RELATIVE_PATHS"] = "true"
         limits = get_default_limits()
         assert limits.use_relative_paths is True
 
     def test_environment_override_invalid(self, clean_env):
         """Test invalid environment variable values use defaults."""
-        os.environ['CF_LIMIT_FILE_READ_CHARS'] = 'invalid'
+        os.environ["CF_LIMIT_FILE_READ_CHARS"] = "invalid"
         limits = get_default_limits()
         assert limits.max_file_read_chars == 500000  # Default
 
@@ -149,36 +148,36 @@ class TestToolLimits:
     def test_validate_limits_invalid_strategy(self):
         """Test validation fails for invalid truncation strategy."""
         with pytest.raises(ValueError):
-            ToolLimits(truncation_strategy='invalid')
+            ToolLimits(truncation_strategy="invalid")
 
     def test_get_limit_for_operation_file_read(self):
         """Test getting limits for file_read operation."""
         limits = get_default_limits()
-        op_limits = get_limit_for_operation('file_read', limits)
-        assert 'max_chars' in op_limits
-        assert 'max_lines' in op_limits
-        assert op_limits['max_chars'] == 500000
+        op_limits = get_limit_for_operation("file_read", limits)
+        assert "max_chars" in op_limits
+        assert "max_lines" in op_limits
+        assert op_limits["max_chars"] == 500000
 
     def test_get_limit_for_operation_grep(self):
         """Test getting limits for grep operation."""
         limits = get_default_limits()
-        op_limits = get_limit_for_operation('grep', limits)
-        assert 'max_matches' in op_limits
-        assert 'max_chars' in op_limits
+        op_limits = get_limit_for_operation("grep", limits)
+        assert "max_matches" in op_limits
+        assert "max_chars" in op_limits
 
     def test_get_limit_for_operation_invalid(self):
         """Test getting limits for invalid operation raises error."""
         with pytest.raises(ValueError):
-            get_limit_for_operation('invalid_operation')
+            get_limit_for_operation("invalid_operation")
 
     def test_cached_default_limits(self, clean_env):
         """Test cached limits avoid repeated environment reads."""
-        os.environ['CF_LIMIT_FILE_READ_CHARS'] = '100000'
+        os.environ["CF_LIMIT_FILE_READ_CHARS"] = "100000"
         limits1 = get_cached_default_limits()
         assert limits1.max_file_read_chars == 100000
 
         # Change environment
-        os.environ['CF_LIMIT_FILE_READ_CHARS'] = '200000'
+        os.environ["CF_LIMIT_FILE_READ_CHARS"] = "200000"
         limits2 = get_cached_default_limits()
         # Should still be cached value
         assert limits2.max_file_read_chars == 100000
@@ -187,6 +186,7 @@ class TestToolLimits:
 # ============================================================================
 # Test Path Utilities
 # ============================================================================
+
 
 class TestPathUtils:
     """Test path conversion and formatting."""
@@ -272,7 +272,7 @@ class TestPathUtils:
         paths = [
             temp_working_dir / "tools" / "cache.py",
             temp_working_dir / "tools" / "metrics.py",
-            temp_working_dir / "tests" / "test.py"
+            temp_working_dir / "tests" / "test.py",
         ]
         common = get_common_path_prefix(paths)
         assert common == str(temp_working_dir)
@@ -283,29 +283,27 @@ class TestPathUtils:
 
     def test_relativize_paths_in_dict(self, temp_working_dir):
         """Test converting paths in dictionary."""
-        data = {
-            'file': str(temp_working_dir / "tools" / "cache.py"),
-            'line': 42
-        }
+        data = {"file": str(temp_working_dir / "tools" / "cache.py"), "line": 42}
         result = relativize_paths_in_dict(data, temp_working_dir)
-        assert result['file'] == "tools/cache.py"
-        assert result['line'] == 42
+        assert result["file"] == "tools/cache.py"
+        assert result["line"] == 42
 
     def test_relativize_paths_in_dict_nested(self, temp_working_dir):
         """Test converting paths in nested dictionary."""
         data = {
-            'error': {
-                'file': str(temp_working_dir / "tools" / "cache.py"),
-                'message': 'Error'
+            "error": {
+                "file": str(temp_working_dir / "tools" / "cache.py"),
+                "message": "Error",
             }
         }
         result = relativize_paths_in_dict(data, temp_working_dir)
-        assert result['error']['file'] == "tools/cache.py"
+        assert result["error"]["file"] == "tools/cache.py"
 
 
 # ============================================================================
 # Test Truncation
 # ============================================================================
+
 
 class TestTruncation:
     """Test smart truncation with recovery instructions."""
@@ -318,7 +316,7 @@ class TestTruncation:
         )
         assert truncated == content
         assert was_truncated is False
-        assert meta['truncation_reason'] is None
+        assert meta["truncation_reason"] is None
 
     def test_truncate_with_recovery_line_limit(self):
         """Test truncation by line limit."""
@@ -327,8 +325,8 @@ class TestTruncation:
             content, max_chars=100000, max_lines=50
         )
         assert was_truncated is True
-        assert meta['truncated_lines'] == 50
-        assert 'recovery_instructions' in meta
+        assert meta["truncated_lines"] == 50
+        assert "recovery_instructions" in meta
 
     def test_truncate_with_recovery_char_limit(self):
         """Test truncation by character limit."""
@@ -343,28 +341,25 @@ class TestTruncation:
         """Test truncation for file read operation."""
         content = "line\n" * 60000  # Exceeds default max_lines
         truncated, was_truncated, meta = truncate_with_recovery(
-            content,
-            file_path="tools/cache.py",
-            operation_type='file_read'
+            content, file_path="tools/cache.py", operation_type="file_read"
         )
         assert was_truncated is True
-        assert 'read_file' in meta['recovery_instructions']
+        assert "read_file" in meta["recovery_instructions"]
 
     def test_truncate_with_recovery_grep(self):
         """Test truncation for grep operation."""
         content = "match\n" * 20000
         truncated, was_truncated, meta = truncate_with_recovery(
-            content,
-            operation_type='grep'
+            content, operation_type="grep"
         )
         assert was_truncated is True
-        assert 'search pattern' in meta['recovery_instructions'].lower()
+        assert "search pattern" in meta["recovery_instructions"].lower()
 
     def test_format_file_truncation(self):
         """Test formatting truncated file content."""
         content = "line\n" * 60000
         formatted, meta = format_file_truncation(content, "tools/cache.py")
-        assert meta['was_truncated'] is True
+        assert meta["was_truncated"] is True
         assert "FILE TRUNCATED" in formatted
         assert "recovery" in formatted.lower()
 
@@ -372,16 +367,16 @@ class TestTruncation:
         """Test formatting truncated grep results."""
         results = "match\n" * 20000
         formatted, meta = format_grep_truncation(results, "test_pattern")
-        assert meta['was_truncated'] is True
+        assert meta["was_truncated"] is True
         assert "GREP RESULTS TRUNCATED" in formatted
 
     def test_format_command_truncation(self):
         """Test formatting truncated command output."""
         output = "output\n" * 30000
         formatted, meta = format_command_truncation(output, "npm test", exit_code=0)
-        assert meta['was_truncated'] is True
+        assert meta["was_truncated"] is True
         assert "COMMAND OUTPUT TRUNCATED" in formatted
-        assert meta['exit_code'] == 0
+        assert meta["exit_code"] == 0
 
     def test_truncate_line(self):
         """Test truncating a single very long line."""
@@ -415,6 +410,7 @@ class TestTruncation:
 # Test Response Formatter
 # ============================================================================
 
+
 class TestResponseFormatter:
     """Test standardized tool response formatting."""
 
@@ -423,7 +419,7 @@ class TestResponseFormatter:
         response = ToolResponse(
             success=True,
             data="file content",
-            metadata={'file_path': '/path/to/file.py', 'lines': 100}
+            metadata={"file_path": "/path/to/file.py", "lines": 100},
         )
         formatted = response.format_for_agent()
         assert "✅ Success" in formatted
@@ -431,11 +427,7 @@ class TestResponseFormatter:
 
     def test_tool_response_failure(self):
         """Test failure response formatting."""
-        response = ToolResponse(
-            success=False,
-            data=None,
-            error="File not found"
-        )
+        response = ToolResponse(success=False, data=None, error="File not found")
         formatted = response.format_for_agent()
         assert "❌ Failed" in formatted
         assert "File not found" in formatted
@@ -446,10 +438,10 @@ class TestResponseFormatter:
             success=True,
             data="content",
             metadata={
-                'file_path': str(temp_working_dir / "tools" / "cache.py"),
-                'lines': 150
+                "file_path": str(temp_working_dir / "tools" / "cache.py"),
+                "lines": 150,
             },
-            working_dir=temp_working_dir
+            working_dir=temp_working_dir,
         )
         formatted = response.format_for_agent()
         assert "tools/cache.py" in formatted  # Relative path
@@ -461,10 +453,10 @@ class TestResponseFormatter:
         response = ToolResponse.file_read_response(
             content=content,
             file_path=temp_working_dir / "test.py",
-            working_dir=temp_working_dir
+            working_dir=temp_working_dir,
         )
         assert response.success is True
-        assert response.metadata['file_path'] == temp_working_dir / "test.py"
+        assert response.metadata["file_path"] == temp_working_dir / "test.py"
 
     def test_file_read_response_truncated(self, temp_working_dir):
         """Test file read response with truncation."""
@@ -472,9 +464,9 @@ class TestResponseFormatter:
         response = ToolResponse.file_read_response(
             content=content,
             file_path=temp_working_dir / "large.py",
-            working_dir=temp_working_dir
+            working_dir=temp_working_dir,
         )
-        assert response.metadata['was_truncated'] is True
+        assert response.metadata["was_truncated"] is True
         formatted = response.format_for_agent()
         assert "TRUNCATED" in formatted
 
@@ -482,32 +474,26 @@ class TestResponseFormatter:
         """Test grep response creation."""
         results = "file1:match\nfile2:match\n"
         response = ToolResponse.grep_response(
-            results=results,
-            pattern="test",
-            num_matches=2
+            results=results, pattern="test", num_matches=2
         )
         assert response.success is True
-        assert response.metadata['matches'] == 2
-        assert response.metadata['pattern'] == "test"
+        assert response.metadata["matches"] == 2
+        assert response.metadata["pattern"] == "test"
 
     def test_subprocess_response_success(self):
         """Test subprocess response with success."""
         output = "All tests passed"
         response = ToolResponse.subprocess_response(
-            output=output,
-            command="npm test",
-            exit_code=0
+            output=output, command="npm test", exit_code=0
         )
         assert response.success is True
-        assert response.metadata['exit_code'] == 0
+        assert response.metadata["exit_code"] == 0
 
     def test_subprocess_response_failure(self):
         """Test subprocess response with failure."""
         output = "Error: tests failed"
         response = ToolResponse.subprocess_response(
-            output=output,
-            command="npm test",
-            exit_code=1
+            output=output, command="npm test", exit_code=1
         )
         assert response.success is False
         assert response.error is not None
@@ -517,19 +503,17 @@ class TestResponseFormatter:
         response = ToolResponse.error_response(
             error="File not found",
             operation="file_read",
-            details={'path': '/missing/file.txt'}
+            details={"path": "/missing/file.txt"},
         )
         assert response.success is False
         assert response.error == "File not found"
-        assert response.metadata['operation'] == "file_read"
+        assert response.metadata["operation"] == "file_read"
 
     def test_format_file_read_output(self, temp_working_dir):
         """Test convenience function for file read output."""
         content = "file content"
         output = format_file_read_output(
-            content,
-            temp_working_dir / "test.py",
-            temp_working_dir
+            content, temp_working_dir / "test.py", temp_working_dir
         )
         assert "✅ Success" in output
         assert "file content" in output
@@ -553,6 +537,7 @@ class TestResponseFormatter:
 # Test Configuration
 # ============================================================================
 
+
 class TestConfiguration:
     """Test configuration management."""
 
@@ -570,12 +555,12 @@ class TestConfiguration:
     def test_config_get_limit(self):
         """Test getting limit from configuration."""
         config = ToolHelpersConfig()
-        limit = config.get_limit('file_read', 'max_chars')
+        limit = config.get_limit("file_read", "max_chars")
         assert limit == 500000
 
     def test_config_debug_mode(self, clean_env):
         """Test debug mode configuration."""
-        os.environ['CF_DEBUG'] = 'true'
+        os.environ["CF_DEBUG"] = "true"
         config = ToolHelpersConfig.from_env()
         assert config.debug is True
 
@@ -597,6 +582,7 @@ class TestConfiguration:
 # Integration Tests
 # ============================================================================
 
+
 class TestIntegration:
     """Test integration between modules."""
 
@@ -609,9 +595,7 @@ class TestIntegration:
         # Read and format
         content = test_file.read_text()
         response = ToolResponse.file_read_response(
-            content=content,
-            file_path=test_file,
-            working_dir=temp_working_dir
+            content=content, file_path=test_file, working_dir=temp_working_dir
         )
 
         formatted = response.format_for_agent()
@@ -630,13 +614,13 @@ class TestIntegration:
             output=content,
             command="npm test",
             exit_code=1,
-            working_dir=temp_working_dir
+            working_dir=temp_working_dir,
         )
 
         formatted = response.format_for_agent()
 
         # Should be truncated
-        assert response.metadata['was_truncated'] is True
+        assert response.metadata["was_truncated"] is True
         # Paths should be relative
         assert "tools/cache.py" in formatted
         # Should not contain absolute paths
@@ -647,6 +631,7 @@ class TestIntegration:
 # Performance Tests
 # ============================================================================
 
+
 class TestPerformance:
     """Test performance characteristics."""
 
@@ -656,6 +641,7 @@ class TestPerformance:
 
         # Should be very fast (< 1ms for 1000 conversions)
         import time
+
         start = time.time()
         for _ in range(1000):
             to_relative_path(path, temp_working_dir)
@@ -668,6 +654,7 @@ class TestPerformance:
         content = "line\n" * 10000
 
         import time
+
         start = time.time()
         for _ in range(100):
             truncate_with_recovery(content, max_lines=5000)
@@ -679,6 +666,7 @@ class TestPerformance:
 # ============================================================================
 # Cross-Platform Tests
 # ============================================================================
+
 
 class TestCrossPlatform:
     """Test cross-platform compatibility."""
@@ -701,5 +689,5 @@ class TestCrossPlatform:
 # Run Tests
 # ============================================================================
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v', '--tb=short'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])

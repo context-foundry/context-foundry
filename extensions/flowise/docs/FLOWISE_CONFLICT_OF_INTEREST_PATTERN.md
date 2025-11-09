@@ -11,7 +11,7 @@ Our decision order is strict—first true condition wins:
 3. Parallel → ensemble branches
 4. Chaining → strict dependency ladder
 5. Iteration → quality-driven refinements
-6. Looping → validator-driven retries  
+6. Looping → validator-driven retries
 Tie-breakers pull Hierarchy ahead of Routing when both are true, and Parallel outranks Chaining when you need fan-out.
 
 ## What’s Inside the Conflict-of-Interest Flow?

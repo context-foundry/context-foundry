@@ -3,12 +3,10 @@ Project Detection Utility
 Detects and resolves project sources (GitHub URLs, local paths, project names)
 """
 
-import os
 import subprocess
 import re
 from pathlib import Path
 from typing import Optional, Tuple
-from urllib.parse import urlparse
 
 
 class ProjectDetector:
@@ -38,12 +36,12 @@ class ProjectDetector:
         # Check if it's a local path
         path = Path(project_input)
         if path.exists() and path.is_dir():
-            return (path.absolute(), 'local')
+            return (path.absolute(), "local")
 
         # Check if it's a project name in examples/
         examples_path = self.examples_dir / project_input
         if examples_path.exists() and examples_path.is_dir():
-            return (examples_path.absolute(), 'examples')
+            return (examples_path.absolute(), "examples")
 
         # Not found
         raise ValueError(
@@ -59,9 +57,9 @@ class ProjectDetector:
     def _is_github_url(self, url: str) -> bool:
         """Check if input is a GitHub URL."""
         patterns = [
-            r'github\.com',
-            r'git@github\.com',
-            r'https?://.*github',
+            r"github\.com",
+            r"git@github\.com",
+            r"https?://.*github",
         ]
         return any(re.search(pattern, url, re.IGNORECASE) for pattern in patterns)
 
@@ -88,9 +86,9 @@ class ProjectDetector:
                 subprocess.run(
                     ["git", "-C", str(clone_path), "pull"],
                     capture_output=True,
-                    timeout=30
+                    timeout=30,
                 )
-                print(f"   ✓ Updated to latest")
+                print("   ✓ Updated to latest")
             except Exception as e:
                 print(f"   ⚠️  Could not pull latest: {e}")
         else:
@@ -100,7 +98,7 @@ class ProjectDetector:
                     ["git", "clone", url, str(clone_path)],
                     capture_output=True,
                     text=True,
-                    timeout=60
+                    timeout=60,
                 )
 
                 if result.returncode != 0:
@@ -108,11 +106,11 @@ class ProjectDetector:
 
                 print(f"   ✓ Cloned to: {clone_path}")
             except subprocess.TimeoutExpired:
-                raise RuntimeError(f"Git clone timed out. Check your connection.")
+                raise RuntimeError("Git clone timed out. Check your connection.")
             except Exception as e:
                 raise RuntimeError(f"Failed to clone repository: {e}")
 
-        return (clone_path.absolute(), 'github')
+        return (clone_path.absolute(), "github")
 
     def _extract_repo_name(self, url: str) -> str:
         """Extract repository name from GitHub URL."""
@@ -122,26 +120,28 @@ class ProjectDetector:
         # - git@github.com:user/repo.git
 
         # Remove .git suffix if present
-        url = url.rstrip('/')
-        if url.endswith('.git'):
+        url = url.rstrip("/")
+        if url.endswith(".git"):
             url = url[:-4]
 
         # Extract the last path component
-        if 'github.com/' in url:
+        if "github.com/" in url:
             # HTTPS URL
-            parts = url.split('github.com/')[-1].split('/')
+            parts = url.split("github.com/")[-1].split("/")
             if len(parts) >= 2:
                 return parts[-1]  # Just the repo name
-        elif 'github.com:' in url:
+        elif "github.com:" in url:
             # SSH URL
-            parts = url.split('github.com:')[-1].split('/')
+            parts = url.split("github.com:")[-1].split("/")
             if len(parts) >= 2:
                 return parts[-1]
 
         # Fallback: use the last path component
         return Path(url).name
 
-    def find_session(self, project_name: str, session_id: Optional[str] = None) -> Optional[Path]:
+    def find_session(
+        self, project_name: str, session_id: Optional[str] = None
+    ) -> Optional[Path]:
         """
         Find a foundry session for a project.
 
@@ -189,10 +189,10 @@ class ProjectDetector:
 
         # Extract session ID from filename: project_name_TIMESTAMP.json
         filename = latest.stem  # Remove .json
-        parts = filename.split('_')
+        parts = filename.split("_")
         if len(parts) >= 2:
             # Session ID is everything after project_name_
-            session_id = '_'.join(parts[1:])
+            session_id = "_".join(parts[1:])
             return session_id
 
         return None

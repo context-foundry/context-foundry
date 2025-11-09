@@ -5,7 +5,6 @@ Communicates with the MCP server to poll task status
 """
 
 import json
-import requests
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -42,7 +41,9 @@ class MCPClient:
             Phase info dict with freshness metadata or None if not found
         """
         try:
-            phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
+            phase_file = (
+                Path(working_directory) / ".context-foundry" / "current-phase.json"
+            )
             if not phase_file.exists():
                 return None
 
@@ -50,12 +51,12 @@ class MCPClient:
             mtime = phase_file.stat().st_mtime
             age_seconds = time.time() - mtime
 
-            with open(phase_file, 'r') as f:
+            with open(phase_file, "r") as f:
                 data = json.load(f)
 
             # Add freshness metadata
-            data['_file_age_seconds'] = age_seconds
-            data['_is_fresh'] = age_seconds < 10  # Fresh if < 10s old
+            data["_file_age_seconds"] = age_seconds
+            data["_is_fresh"] = age_seconds < 10  # Fresh if < 10s old
 
             return data
         except Exception as e:
@@ -106,25 +107,25 @@ class MCPClient:
         live_paths = [
             Path.home() / "homelab" / task_id,
             Path.cwd() / task_id,
-            Path.cwd()  # Current directory itself
+            Path.cwd(),  # Current directory itself
         ]
 
         for live_path in live_paths:
             if live_path.exists():
                 phase_data = self._read_phase_file(str(live_path))
-                if phase_data and phase_data.get('_is_fresh'):
+                if phase_data and phase_data.get("_is_fresh"):
                     # Found fresh live data
                     result = {
                         "task_id": task_id,
-                        "status": phase_data.get('status', 'running'),
-                        "current_phase": phase_data.get('current_phase', 'Unknown'),
-                        "phase_number": phase_data.get('phase_number', '?/7'),
-                        "phases_completed": phase_data.get('phases_completed', []),
-                        "test_iteration": phase_data.get('test_iteration', 0),
-                        "started_at": phase_data.get('started_at'),
-                        "progress_detail": phase_data.get('progress_detail', ''),
+                        "status": phase_data.get("status", "running"),
+                        "current_phase": phase_data.get("current_phase", "Unknown"),
+                        "phase_number": phase_data.get("phase_number", "?/7"),
+                        "phases_completed": phase_data.get("phases_completed", []),
+                        "test_iteration": phase_data.get("test_iteration", 0),
+                        "started_at": phase_data.get("started_at"),
+                        "progress_detail": phase_data.get("progress_detail", ""),
                         "source": "live",
-                        "data_age_seconds": phase_data.get('_file_age_seconds', 0)
+                        "data_age_seconds": phase_data.get("_file_age_seconds", 0),
                     }
                     self.cache[cache_key] = (result, time.time())
                     return result
@@ -158,7 +159,7 @@ class MCPClient:
             "task_id": task_id,
             "status": "unknown",
             "error": "Task not found in checkpoints",
-            "elapsed_seconds": 0
+            "elapsed_seconds": 0,
         }
 
     def _read_checkpoint_data(self, checkpoint_dir: Path) -> Dict[str, Any]:
@@ -175,21 +176,21 @@ class MCPClient:
             "task_id": checkpoint_dir.name,
             "status": "running",
             "phases_completed": [],
-            "current_phase": "Unknown"
+            "current_phase": "Unknown",
         }
 
         try:
             # Read state.json
             state_file = checkpoint_dir / "state.json"
             if state_file.exists():
-                with open(state_file, 'r') as f:
+                with open(state_file, "r") as f:
                     state = json.load(f)
                 result.update(state)
 
             # Read progress.json
             progress_file = checkpoint_dir / "progress.json"
             if progress_file.exists():
-                with open(progress_file, 'r') as f:
+                with open(progress_file, "r") as f:
                     progress = json.load(f)
                 result["progress"] = progress
 
@@ -241,7 +242,9 @@ class MCPClient:
 
         return sorted(tasks, key=lambda x: x.get("start_time", ""), reverse=True)
 
-    def get_detailed_metrics(self, task_id: str, working_directory: Optional[str] = None) -> Dict[str, Any]:
+    def get_detailed_metrics(
+        self, task_id: str, working_directory: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get detailed metrics for a task.
 
@@ -266,7 +269,7 @@ class MCPClient:
             "agent_performance": {},
             "decisions": [],
             "test_iterations": [],
-            "patterns_applied": []
+            "patterns_applied": [],
         }
 
         if not working_directory:
@@ -275,7 +278,7 @@ class MCPClient:
             if checkpoint_dir.exists():
                 state_file = checkpoint_dir / "state.json"
                 if state_file.exists():
-                    with open(state_file, 'r') as f:
+                    with open(state_file, "r") as f:
                         state = json.load(f)
                         working_directory = state.get("working_directory")
 
@@ -293,10 +296,12 @@ class MCPClient:
         if feedback_dir.exists():
             for feedback_file in feedback_dir.glob("build-feedback-*.json"):
                 try:
-                    with open(feedback_file, 'r') as f:
+                    with open(feedback_file, "r") as f:
                         feedback = json.load(f)
                         metrics["decisions"].extend(feedback.get("issues_found", []))
-                        metrics["patterns_applied"].extend(feedback.get("successful_patterns", []))
+                        metrics["patterns_applied"].extend(
+                            feedback.get("successful_patterns", [])
+                        )
                 except Exception as e:
                     print(f"Error reading feedback file: {e}")
 
@@ -304,10 +309,9 @@ class MCPClient:
         for i in range(1, 10):  # Check up to 10 iterations
             test_file = context_dir / f"test-results-iteration-{i}.md"
             if test_file.exists():
-                metrics["test_iterations"].append({
-                    "iteration": i,
-                    "file": str(test_file)
-                })
+                metrics["test_iterations"].append(
+                    {"iteration": i, "file": str(test_file)}
+                )
 
         # Read pattern data
         patterns_dir = context_dir / "patterns"
@@ -315,7 +319,7 @@ class MCPClient:
             common_issues_file = patterns_dir / "common-issues.json"
             if common_issues_file.exists():
                 try:
-                    with open(common_issues_file, 'r') as f:
+                    with open(common_issues_file, "r") as f:
                         patterns = json.load(f)
                         metrics["patterns_applied"] = patterns.get("patterns", [])
                 except Exception:
@@ -329,32 +333,25 @@ class MCPClient:
             build_metrics = metrics_db.get_build_metrics(task_id)
 
             if build_metrics:
-                total_tokens = build_metrics.get('total_tokens', 0)
+                total_tokens = build_metrics.get("total_tokens", 0)
                 metrics["token_usage"] = {
                     "total": total_tokens,
-                    "input": build_metrics.get('total_tokens_input', 0),
-                    "output": build_metrics.get('total_tokens_output', 0),
-                    "cached": build_metrics.get('total_tokens_cached', 0),
+                    "input": build_metrics.get("total_tokens_input", 0),
+                    "output": build_metrics.get("total_tokens_output", 0),
+                    "cached": build_metrics.get("total_tokens_cached", 0),
                     "percentage": (total_tokens / 200000) * 100,
                     "by_phase": {
-                        phase['phase_name']: phase.get('tokens_input', 0) + phase.get('tokens_output', 0)
-                        for phase in build_metrics.get('phases', [])
-                    }
+                        phase["phase_name"]: phase.get("tokens_input", 0)
+                        + phase.get("tokens_output", 0)
+                        for phase in build_metrics.get("phases", [])
+                    },
                 }
             else:
                 # Fallback to zeros if no data
-                metrics["token_usage"] = {
-                    "total": 0,
-                    "percentage": 0.0,
-                    "by_phase": {}
-                }
+                metrics["token_usage"] = {"total": 0, "percentage": 0.0, "by_phase": {}}
         except ImportError:
             # Metrics module not available - use placeholder
-            metrics["token_usage"] = {
-                "total": 0,
-                "percentage": 0.0,
-                "by_phase": {}
-            }
+            metrics["token_usage"] = {"total": 0, "percentage": 0.0, "by_phase": {}}
 
         return metrics
 
@@ -377,11 +374,11 @@ class MCPClient:
 
         # Rough estimates (tokens per minute)
         phase_rates = {
-            "Scout": 500,      # Research phase - moderate usage
+            "Scout": 500,  # Research phase - moderate usage
             "Architect": 400,  # Design phase - moderate usage
-            "Builder": 800,    # Implementation - high usage
-            "Test": 600,       # Testing - high usage
-            "Deploy": 200,     # Deployment - low usage
+            "Builder": 800,  # Implementation - high usage
+            "Test": 600,  # Testing - high usage
+            "Deploy": 200,  # Deployment - low usage
         }
 
         rate = phase_rates.get(phase, 500)
@@ -393,7 +390,7 @@ class MCPClient:
             "percentage": (estimated_tokens / 200000) * 100,
             "current_phase": phase,
             "elapsed_minutes": int(minutes),
-            "warning": estimated_tokens > 150000
+            "warning": estimated_tokens > 150000,
         }
 
 
@@ -426,10 +423,12 @@ if __name__ == "__main__":
             print(f"   Elapsed: {task['elapsed_seconds']}s")
 
         # Get detailed metrics
-        metrics = client.get_detailed_metrics(task['task_id'])
+        metrics = client.get_detailed_metrics(task["task_id"])
         print(f"   Test Iterations: {len(metrics['test_iterations'])}")
         print(f"   Decisions: {len(metrics['decisions'])}")
 
         # Estimate tokens
-        token_estimate = client.estimate_token_usage(task['task_id'])
-        print(f"   Est. Tokens: {token_estimate['estimated_tokens']} ({token_estimate['percentage']:.1f}%)")
+        token_estimate = client.estimate_token_usage(task["task_id"])
+        print(
+            f"   Est. Tokens: {token_estimate['estimated_tokens']} ({token_estimate['percentage']:.1f}%)"
+        )

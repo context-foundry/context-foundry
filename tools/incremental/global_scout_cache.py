@@ -21,7 +21,7 @@ DEFAULT_GLOBAL_CACHE_TTL_HOURS = 168  # 7 days
 
 def hash_string(text: str) -> str:
     """Generate a SHA256 hash of a string."""
-    return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 def get_global_cache_dir() -> Path:
@@ -48,7 +48,7 @@ def normalize_task_description(task: str) -> str:
         Normalized task string (lowercase, sorted words)
     """
     # Convert to lowercase and remove extra whitespace
-    normalized = ' '.join(task.lower().split())
+    normalized = " ".join(task.lower().split())
     return normalized
 
 
@@ -64,14 +64,47 @@ def extract_tech_keywords(text: str) -> List[str]:
     """
     # Common tech keywords
     tech_keywords = {
-        'react', 'vue', 'angular', 'svelte', 'next', 'nuxt',
-        'python', 'javascript', 'typescript', 'rust', 'go', 'java',
-        'flask', 'django', 'fastapi', 'express', 'koa',
-        'postgresql', 'mysql', 'mongodb', 'redis', 'sqlite',
-        'docker', 'kubernetes', 'aws', 'gcp', 'azure',
-        'es6', 'es5', 'html5', 'css3', 'sass', 'tailwind',
-        'webpack', 'vite', 'rollup', 'parcel',
-        'jest', 'pytest', 'mocha', 'chai'
+        "react",
+        "vue",
+        "angular",
+        "svelte",
+        "next",
+        "nuxt",
+        "python",
+        "javascript",
+        "typescript",
+        "rust",
+        "go",
+        "java",
+        "flask",
+        "django",
+        "fastapi",
+        "express",
+        "koa",
+        "postgresql",
+        "mysql",
+        "mongodb",
+        "redis",
+        "sqlite",
+        "docker",
+        "kubernetes",
+        "aws",
+        "gcp",
+        "azure",
+        "es6",
+        "es5",
+        "html5",
+        "css3",
+        "sass",
+        "tailwind",
+        "webpack",
+        "vite",
+        "rollup",
+        "parcel",
+        "jest",
+        "pytest",
+        "mocha",
+        "chai",
     }
 
     text_lower = text.lower()
@@ -85,9 +118,7 @@ def extract_tech_keywords(text: str) -> List[str]:
 
 
 def generate_global_scout_key(
-    task: str,
-    project_type: str,
-    tech_stack: List[str]
+    task: str, project_type: str, tech_stack: List[str]
 ) -> str:
     """
     Generate global cache key from semantic components.
@@ -106,7 +137,9 @@ def generate_global_scout_key(
     normalized_tech = sorted([t.lower().strip() for t in tech_stack])
 
     # Create cache key input
-    cache_key_input = f"{normalized_task}|{normalized_project_type}|{','.join(normalized_tech)}"
+    cache_key_input = (
+        f"{normalized_task}|{normalized_project_type}|{','.join(normalized_tech)}"
+    )
 
     return hash_string(cache_key_input)
 
@@ -132,7 +165,7 @@ def get_cached_scout_report_global(
     task: str,
     project_type: str,
     tech_stack: List[str],
-    ttl_hours: int = DEFAULT_GLOBAL_CACHE_TTL_HOURS
+    ttl_hours: int = DEFAULT_GLOBAL_CACHE_TTL_HOURS,
 ) -> Optional[str]:
     """
     Retrieve cached Scout report from global cache.
@@ -159,19 +192,21 @@ def get_cached_scout_report_global(
         entry = json.loads(cache_file.read_text())
 
         # Update access stats
-        entry['accessed_count'] = entry.get('accessed_count', 0) + 1
-        entry['last_accessed'] = datetime.now().isoformat()
+        entry["accessed_count"] = entry.get("accessed_count", 0) + 1
+        entry["last_accessed"] = datetime.now().isoformat()
         cache_file.write_text(json.dumps(entry, indent=2))
 
         # Log cache hit
-        print(f"✅ Global Scout cache HIT! Reusing report from {entry.get('created_at', 'unknown')}")
+        print(
+            f"✅ Global Scout cache HIT! Reusing report from {entry.get('created_at', 'unknown')}"
+        )
         print(f"   Cache key: {cache_key}")
         print(f"   Original task: {entry.get('task', 'unknown')}")
         print(f"   Project type: {entry.get('project_type', 'unknown')}")
         print(f"   Tech stack: {', '.join(entry.get('tech_stack', []))}")
         print(f"   Access count: {entry['accessed_count']}")
 
-        return entry['scout_report']
+        return entry["scout_report"]
 
     except (json.JSONDecodeError, OSError, KeyError) as e:
         print(f"⚠️  Failed to read global Scout cache: {e}")
@@ -183,7 +218,7 @@ def save_scout_report_to_global_cache(
     project_type: str,
     tech_stack: List[str],
     scout_report: str,
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Save Scout report to global cache.
@@ -214,14 +249,14 @@ def save_scout_report_to_global_cache(
         "accessed_count": 0,
         "last_accessed": datetime.now().isoformat(),
         "scout_report": scout_report,
-        "metadata": metadata or {}
+        "metadata": metadata or {},
     }
 
     try:
         # Save entry
         cache_file.write_text(json.dumps(entry, indent=2))
 
-        print(f"💾 Scout report saved to global cache")
+        print("💾 Scout report saved to global cache")
         print(f"   Cache key: {cache_key}")
         print(f"   Location: {cache_file}")
         print(f"   Project type: {project_type}")
@@ -259,7 +294,7 @@ def find_similar_cached_reports(
     project_type: str,
     tech_stack: List[str],
     similarity_threshold: float = 0.85,
-    ttl_hours: int = DEFAULT_GLOBAL_CACHE_TTL_HOURS
+    ttl_hours: int = DEFAULT_GLOBAL_CACHE_TTL_HOURS,
 ) -> List[Tuple[str, float, Dict[str, Any]]]:
     """
     Find similar cached reports by semantic similarity.
@@ -287,27 +322,27 @@ def find_similar_cached_reports(
             entry = json.loads(cache_file.read_text())
 
             # Check project type match
-            if entry.get('project_type') != project_type:
+            if entry.get("project_type") != project_type:
                 continue
 
             # Calculate task similarity
-            cached_task = entry.get('normalized_task', '')
+            cached_task = entry.get("normalized_task", "")
             similarity = calculate_similarity(normalized_task, cached_task)
 
             # Check tech stack overlap
-            cached_tech = set(entry.get('tech_stack', []))
+            cached_tech = set(entry.get("tech_stack", []))
             query_tech = set(tech_stack)
-            tech_overlap = len(cached_tech.intersection(query_tech)) / len(query_tech) if query_tech else 0
+            tech_overlap = (
+                len(cached_tech.intersection(query_tech)) / len(query_tech)
+                if query_tech
+                else 0
+            )
 
             # Combined score (70% task similarity + 30% tech overlap)
             combined_score = (similarity * 0.7) + (tech_overlap * 0.3)
 
             if combined_score >= similarity_threshold:
-                similar_reports.append((
-                    entry['cache_key'],
-                    combined_score,
-                    entry
-                ))
+                similar_reports.append((entry["cache_key"], combined_score, entry))
 
         except (json.JSONDecodeError, KeyError):
             continue
@@ -354,7 +389,7 @@ def get_global_scout_cache_stats() -> Dict[str, Any]:
             "expired_entries": 0,
             "total_size_mb": 0,
             "project_types": {},
-            "most_popular_tech": []
+            "most_popular_tech": [],
         }
 
     total = 0
@@ -374,10 +409,10 @@ def get_global_scout_cache_stats() -> Dict[str, Any]:
             # Parse entry for stats
             try:
                 entry = json.loads(cache_file.read_text())
-                proj_type = entry.get('project_type', 'unknown')
+                proj_type = entry.get("project_type", "unknown")
                 project_types[proj_type] = project_types.get(proj_type, 0) + 1
 
-                for tech in entry.get('tech_stack', []):
+                for tech in entry.get("tech_stack", []):
                     tech_counter[tech] = tech_counter.get(tech, 0) + 1
             except (json.JSONDecodeError, OSError):
                 pass
@@ -385,7 +420,9 @@ def get_global_scout_cache_stats() -> Dict[str, Any]:
             expired += 1
 
     # Get most popular technologies
-    most_popular_tech = sorted(tech_counter.items(), key=lambda x: x[1], reverse=True)[:10]
+    most_popular_tech = sorted(tech_counter.items(), key=lambda x: x[1], reverse=True)[
+        :10
+    ]
 
     return {
         "total_entries": total,
@@ -393,16 +430,18 @@ def get_global_scout_cache_stats() -> Dict[str, Any]:
         "expired_entries": expired,
         "total_size_mb": round(total_size / (1024 * 1024), 3),
         "project_types": project_types,
-        "most_popular_tech": [{"tech": tech, "count": count} for tech, count in most_popular_tech]
+        "most_popular_tech": [
+            {"tech": tech, "count": count} for tech, count in most_popular_tech
+        ],
     }
 
 
 __all__ = [
-    'get_global_cache_dir',
-    'generate_global_scout_key',
-    'get_cached_scout_report_global',
-    'save_scout_report_to_global_cache',
-    'find_similar_cached_reports',
-    'clear_global_scout_cache',
-    'get_global_scout_cache_stats'
+    "get_global_cache_dir",
+    "generate_global_scout_key",
+    "get_cached_scout_report_global",
+    "save_scout_report_to_global_cache",
+    "find_similar_cached_reports",
+    "clear_global_scout_cache",
+    "get_global_scout_cache_stats",
 ]

@@ -3,12 +3,9 @@
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.containers import Container, Vertical
-from textual.widgets import Header, Footer, Static
+from textual.widgets import Header, Footer
 from textual.binding import Binding
 
-from ..widgets.build_table import BuildTable
-from ..widgets.phase_progress import PhaseProgressWidget
-from ..widgets.token_gauge import TokenGaugeWidget
 from ..widgets.phase_pipeline import PhasesPipelineWidget
 from ..data.provider import TUIDataProvider
 
@@ -64,8 +61,11 @@ class DashboardScreen(Screen):
 
                 # Get the actual build status object
                 from pathlib import Path
+
                 build_status = await self.provider.get_current_build(
-                    Path(self.provider._tracked_builds[0]) if self.provider._tracked_builds else None
+                    Path(self.provider._tracked_builds[0])
+                    if self.provider._tracked_builds
+                    else None
                 )
 
                 if build_status:
@@ -79,9 +79,8 @@ class DashboardScreen(Screen):
                 # No builds - show empty state
                 pipeline.update_from_build(None)
 
-        except Exception as e:
+        except Exception:
             # Log error but don't crash
-            import traceback
             # You can log to a file here if needed
             pass
 

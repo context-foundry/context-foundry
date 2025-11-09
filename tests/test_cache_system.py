@@ -9,39 +9,27 @@ Tests:
 
 import pytest
 import tempfile
-import shutil
 from pathlib import Path
-from datetime import datetime, timedelta
-import time
-import json
 
 # Import cache modules
 import sys
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.cache import (
-    get_cache_dir,
-    hash_string,
-    is_cache_valid,
-    save_cache_metadata,
-    load_cache_metadata,
-    get_cache_stats
-)
 from tools.cache.scout_cache import (
     normalize_task_description,
     generate_scout_cache_key,
     get_cached_scout_report,
     save_scout_report_to_cache,
     clear_scout_cache,
-    get_scout_cache_stats
+    get_scout_cache_stats,
 )
 from tools.cache.test_cache import (
     hash_file,
     compute_file_hashes,
     get_cached_test_results,
     save_test_results_to_cache,
-    clear_test_cache,
-    get_test_cache_stats
+    get_test_cache_stats,
 )
 from tools.cache.cache_manager import CacheManager
 
@@ -68,7 +56,9 @@ class TestScoutCache:
     def test_generate_cache_key_different_tasks(self):
         """Test that different tasks generate different keys."""
         key1 = generate_scout_cache_key("Build todo app", "new_project", "/tmp/project")
-        key2 = generate_scout_cache_key("Build weather app", "new_project", "/tmp/project")
+        key2 = generate_scout_cache_key(
+            "Build weather app", "new_project", "/tmp/project"
+        )
 
         assert key1 != key2
 
@@ -190,7 +180,9 @@ class TestTestCache:
             (Path(tmpdir) / "src").mkdir()
             (Path(tmpdir) / "src" / "main.py").write_text("print('hello')")
             (Path(tmpdir) / "src" / "utils.py").write_text("def func(): pass")
-            (Path(tmpdir) / "README.md").write_text("# Project")  # Should be ignored (not source)
+            (Path(tmpdir) / "README.md").write_text(
+                "# Project"
+            )  # Should be ignored (not source)
 
             hashes = compute_file_hashes(tmpdir)
 
@@ -213,7 +205,7 @@ class TestTestCache:
                 "passed": 25,
                 "total": 25,
                 "duration": 10.5,
-                "test_command": "npm test"
+                "test_command": "npm test",
             }
             save_test_results_to_cache(tmpdir, test_results)
 
@@ -238,7 +230,7 @@ class TestTestCache:
                 "success": True,
                 "passed": 25,
                 "total": 25,
-                "duration": 10.5
+                "duration": 10.5,
             }
             save_test_results_to_cache(tmpdir, test_results)
 
@@ -261,7 +253,12 @@ class TestTestCache:
             (Path(tmpdir) / "src").mkdir()
             (Path(tmpdir) / "src" / "main.py").write_text("print('hello')")
 
-            test_results = {"success": True, "passed": 25, "total": 25, "duration": 10.5}
+            test_results = {
+                "success": True,
+                "passed": 25,
+                "total": 25,
+                "duration": 10.5,
+            }
             save_test_results_to_cache(tmpdir, test_results)
 
             # Check stats after save
@@ -284,8 +281,12 @@ class TestCacheManager:
             (Path(tmpdir) / "src").mkdir()
             (Path(tmpdir) / "src" / "main.py").write_text("print('hello')")
 
-            save_scout_report_to_cache("Build app", "new_project", tmpdir, "# Scout Report")
-            save_test_results_to_cache(tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0})
+            save_scout_report_to_cache(
+                "Build app", "new_project", tmpdir, "# Scout Report"
+            )
+            save_test_results_to_cache(
+                tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0}
+            )
 
             # Get stats
             stats = manager.get_stats()
@@ -303,8 +304,12 @@ class TestCacheManager:
             (Path(tmpdir) / "src").mkdir()
             (Path(tmpdir) / "src" / "main.py").write_text("print('hello')")
 
-            save_scout_report_to_cache("Build app", "new_project", tmpdir, "# Scout Report")
-            save_test_results_to_cache(tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0})
+            save_scout_report_to_cache(
+                "Build app", "new_project", tmpdir, "# Scout Report"
+            )
+            save_test_results_to_cache(
+                tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0}
+            )
 
             # Clear all
             result = manager.clear_all()
@@ -322,8 +327,12 @@ class TestCacheManager:
             (Path(tmpdir) / "src").mkdir()
             (Path(tmpdir) / "src" / "main.py").write_text("print('hello')")
 
-            save_scout_report_to_cache("Build app", "new_project", tmpdir, "# Scout Report")
-            save_test_results_to_cache(tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0})
+            save_scout_report_to_cache(
+                "Build app", "new_project", tmpdir, "# Scout Report"
+            )
+            save_test_results_to_cache(
+                tmpdir, {"success": True, "passed": 10, "total": 10, "duration": 5.0}
+            )
 
             # Clear only scout cache
             deleted = manager.clear_by_type("scout")

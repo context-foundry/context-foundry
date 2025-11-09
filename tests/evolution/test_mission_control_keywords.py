@@ -53,7 +53,9 @@ class TestKeywordHandling:
     @pytest.mark.asyncio
     async def test_status_keyword(self, app):
         """Test status keyword invokes MCP status"""
-        with patch.object(app, '_get_mcp_status', new=AsyncMock(return_value="MCP Status Info")):
+        with patch.object(
+            app, "_get_mcp_status", new=AsyncMock(return_value="MCP Status Info")
+        ):
             result = await app._process_command("status")
             assert "MCP Status Info" in result or "Status" in result
 
@@ -72,10 +74,12 @@ class TestKeywordHandling:
             "fix the bug",
             "update the UI",
             "add dark mode",
-            "modify the layout"
+            "modify the layout",
         ]
 
-        with patch.object(app, '_start_autonomous_build', new=AsyncMock(return_value="Build started!")):
+        with patch.object(
+            app, "_start_autonomous_build", new=AsyncMock(return_value="Build started!")
+        ):
             for keyword_phrase in build_keywords:
                 result = await app._process_command(keyword_phrase)
                 assert result == "Build started!"
@@ -104,7 +108,9 @@ class TestKeywordHandling:
     @pytest.mark.asyncio
     async def test_case_insensitive_keywords(self, app):
         """Test that keyword detection is case-insensitive"""
-        with patch.object(app, '_start_autonomous_build', new=AsyncMock(return_value="Build started!")):
+        with patch.object(
+            app, "_start_autonomous_build", new=AsyncMock(return_value="Build started!")
+        ):
             variants = ["BUILD a calculator", "Create a TODO", "MAKE a game"]
             for variant in variants:
                 result = await app._process_command(variant)
@@ -114,7 +120,16 @@ class TestKeywordHandling:
     async def test_greeting_variants_not_triggering_builds(self, app):
         """Test various greeting styles don't start builds"""
         # Test exact greetings that should return welcome message
-        exact_greetings = ["hi", "hello", "hey", "yo", "sup", "good morning", "good afternoon", "good evening"]
+        exact_greetings = [
+            "hi",
+            "hello",
+            "hey",
+            "yo",
+            "sup",
+            "good morning",
+            "good afternoon",
+            "good evening",
+        ]
 
         for greeting in exact_greetings:
             result = await app._process_command(greeting)
@@ -130,5 +145,5 @@ class TestKeywordHandling:
             assert "Starting build" not in result
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

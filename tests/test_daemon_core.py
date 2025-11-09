@@ -18,16 +18,15 @@ import pytest
 import tempfile
 import shutil
 import json
-import time
-import signal
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock, call
+from datetime import datetime
+from unittest.mock import Mock, patch, MagicMock
 
 # Import daemon components
 import sys
-sys.path.insert(0, str(Path(__file__).parent.parent / 'tools' / 'evolution'))
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "tools" / "evolution"))
 
 from tools.evolution.daemon import EvolutionDaemon, setup_logging
 from tools.evolution.task_queue import TaskType, TaskStatus
@@ -41,7 +40,7 @@ class TestDaemonInitialization:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
@@ -53,10 +52,10 @@ class TestDaemonInitialization:
         daemon = EvolutionDaemon(config_path=str(self.config_path))
 
         assert daemon.config is not None
-        assert 'daemon' in daemon.config
-        assert daemon.config['daemon']['enabled'] is True
-        assert daemon.config['daemon']['poll_interval_seconds'] == 60
-        assert daemon.config['daemon']['max_concurrent_tasks'] == 1
+        assert "daemon" in daemon.config
+        assert daemon.config["daemon"]["enabled"] is True
+        assert daemon.config["daemon"]["poll_interval_seconds"] == 60
+        assert daemon.config["daemon"]["max_concurrent_tasks"] == 1
 
     def test_daemon_initialization_with_custom_config(self):
         """Test daemon loads custom configuration correctly"""
@@ -65,19 +64,17 @@ class TestDaemonInitialization:
                 "enabled": True,
                 "poll_interval_seconds": 30,
                 "max_concurrent_tasks": 2,
-                "log_level": "DEBUG"
+                "log_level": "DEBUG",
             },
-            "modes": {
-                "self_improvement": {"enabled": True, "priority": 10}
-            }
+            "modes": {"self_improvement": {"enabled": True, "priority": 10}},
         }
 
         self.config_path.write_text(json.dumps(custom_config))
         daemon = EvolutionDaemon(config_path=str(self.config_path))
 
-        assert daemon.config['daemon']['poll_interval_seconds'] == 30
-        assert daemon.config['daemon']['max_concurrent_tasks'] == 2
-        assert daemon.config['daemon']['log_level'] == 'DEBUG'
+        assert daemon.config["daemon"]["poll_interval_seconds"] == 30
+        assert daemon.config["daemon"]["max_concurrent_tasks"] == 2
+        assert daemon.config["daemon"]["log_level"] == "DEBUG"
 
     def test_daemon_components_initialized(self):
         """Test all daemon components are properly initialized"""
@@ -114,19 +111,19 @@ class TestDaemonPIDManagement:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
         # Override PID file location for testing
-        self.pid_dir = Path(self.temp_dir) / '.context-foundry' / 'evolution'
+        self.pid_dir = Path(self.temp_dir) / ".context-foundry" / "evolution"
         self.pid_dir.mkdir(parents=True, exist_ok=True)
-        self.pid_file = self.pid_dir / 'daemon.pid'
+        self.pid_file = self.pid_dir / "daemon.pid"
 
     def teardown_method(self):
         """Cleanup"""
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
-    @patch('tools.evolution.daemon.Path.home')
+    @patch("tools.evolution.daemon.Path.home")
     def test_pid_file_creation(self, mock_home):
         """Test daemon creates PID file on start"""
         mock_home.return_value = Path(self.temp_dir)
@@ -140,7 +137,7 @@ class TestDaemonPIDManagement:
         assert daemon.pid_file.exists()
         assert daemon.pid_file.read_text() == str(os.getpid())
 
-    @patch('tools.evolution.daemon.Path.home')
+    @patch("tools.evolution.daemon.Path.home")
     def test_pid_file_cleanup(self, mock_home):
         """Test daemon removes PID file on shutdown"""
         mock_home.return_value = Path(self.temp_dir)
@@ -164,23 +161,23 @@ class TestDaemonTaskPolling:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
-    @patch('tools.evolution.daemon.TaskQueueManager')
+    @patch("tools.evolution.daemon.TaskQueueManager")
     def test_daemon_polls_for_pending_tasks(self, mock_queue_manager):
         """Test daemon polls queue for pending tasks"""
         # Setup mock queue
         mock_queue = MagicMock()
         mock_task = Mock(
-            id='test-task-001',
+            id="test-task-001",
             type=TaskType.SELF_IMPROVEMENT.value,
             status=TaskStatus.PENDING.value,
-            priority=8
+            priority=8,
         )
         mock_queue.get_next_task.return_value = mock_task
         mock_queue_manager.return_value = mock_queue
@@ -190,7 +187,7 @@ class TestDaemonTaskPolling:
         # Verify task queue is available
         assert daemon.task_queue is not None
 
-    @patch('tools.evolution.daemon.ResourceManager')
+    @patch("tools.evolution.daemon.ResourceManager")
     def test_daemon_checks_resources_before_execution(self, mock_resource_mgr):
         """Test daemon checks resource availability before task execution"""
         mock_resources = MagicMock()
@@ -211,7 +208,7 @@ class TestDaemonSignalHandling:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
@@ -245,7 +242,7 @@ class TestDaemonModeExecution:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
@@ -266,7 +263,7 @@ class TestDaemonModeExecution:
         assert daemon.modes[TaskType.CHAOS_CREATIVE.value] is not None
         assert daemon.modes[TaskType.RESEARCH.value] is not None
 
-    @patch('tools.evolution.daemon.SelfImprovementMode')
+    @patch("tools.evolution.daemon.SelfImprovementMode")
     def test_daemon_executes_self_improvement_mode(self, mock_mode_class):
         """Test daemon can execute self-improvement mode"""
         mock_mode = MagicMock()
@@ -286,7 +283,7 @@ class TestDaemonErrorHandling:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
@@ -296,7 +293,7 @@ class TestDaemonErrorHandling:
     def test_daemon_handles_invalid_config(self):
         """Test daemon raises error with invalid configuration"""
         # Write invalid JSON
-        self.config_path.write_text('{invalid json}')
+        self.config_path.write_text("{invalid json}")
 
         # Should raise JSONDecodeError
         with pytest.raises(Exception):  # Will be JSONDecodeError
@@ -309,7 +306,7 @@ class TestDaemonErrorHandling:
 
         # Should use default config
         assert daemon.config is not None
-        assert daemon.config['daemon']['enabled'] is True
+        assert daemon.config["daemon"]["enabled"] is True
 
 
 @pytest.mark.unit
@@ -320,7 +317,7 @@ class TestLoggingSetup:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.log_dir = Path(self.temp_dir) / 'logs'
+        self.log_dir = Path(self.temp_dir) / "logs"
 
     def teardown_method(self):
         """Cleanup"""
@@ -332,7 +329,7 @@ class TestLoggingSetup:
         logger = setup_logging(self.log_dir)
 
         assert self.log_dir.exists()
-        assert (self.log_dir / 'daemon.log').exists()
+        assert (self.log_dir / "daemon.log").exists()
         assert logger is not None
 
     def test_logging_configuration(self):
@@ -340,7 +337,7 @@ class TestLoggingSetup:
         logger = setup_logging(self.log_dir)
 
         # Verify logger name
-        assert logger.name == 'tools.evolution.daemon'
+        assert logger.name == "tools.evolution.daemon"
 
         # Verify logger level
         assert logger.level <= 20  # INFO or lower
@@ -354,7 +351,7 @@ class TestDaemonTaskLifecycle:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
@@ -369,14 +366,14 @@ class TestDaemonTaskLifecycle:
         assert daemon.active_tasks == {}
 
         # Simulate adding active task
-        task_id = 'test-task-001'
+        task_id = "test-task-001"
         daemon.active_tasks[task_id] = {
-            'started_at': datetime.now(),
-            'type': TaskType.SELF_IMPROVEMENT.value
+            "started_at": datetime.now(),
+            "type": TaskType.SELF_IMPROVEMENT.value,
         }
 
         assert task_id in daemon.active_tasks
-        assert daemon.active_tasks[task_id]['type'] == TaskType.SELF_IMPROVEMENT.value
+        assert daemon.active_tasks[task_id]["type"] == TaskType.SELF_IMPROVEMENT.value
 
     def test_daemon_poll_count_increments(self):
         """Test daemon poll count increments"""
@@ -397,22 +394,19 @@ class TestDaemonResourceCoordination:
     def setup_method(self):
         """Setup test environment"""
         self.temp_dir = tempfile.mkdtemp()
-        self.config_path = Path(self.temp_dir) / 'config.json'
+        self.config_path = Path(self.temp_dir) / "config.json"
 
     def teardown_method(self):
         """Cleanup"""
         if Path(self.temp_dir).exists():
             shutil.rmtree(self.temp_dir)
 
-    @patch('tools.evolution.daemon.ResourceManager')
+    @patch("tools.evolution.daemon.ResourceManager")
     def test_daemon_uses_resource_manager_config(self, mock_resource_mgr):
         """Test daemon passes resource config to resource manager"""
         custom_config = {
             "daemon": {"enabled": True},
-            "resources": {
-                "max_concurrent_tasks": 2,
-                "max_tokens_per_day": 100000
-            }
+            "resources": {"max_concurrent_tasks": 2, "max_tokens_per_day": 100000},
         }
 
         self.config_path.write_text(json.dumps(custom_config))
@@ -420,8 +414,8 @@ class TestDaemonResourceCoordination:
         daemon = EvolutionDaemon(config_path=str(self.config_path))
 
         # Verify resource manager was initialized with config
-        mock_resource_mgr.assert_called_once_with(custom_config['resources'])
+        mock_resource_mgr.assert_called_once_with(custom_config["resources"])
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

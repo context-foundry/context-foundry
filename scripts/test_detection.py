@@ -19,6 +19,7 @@ from typing import Dict, Any
 # Detection Functions (copied from mcp_server.py for standalone testing)
 # ============================================================================
 
+
 def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
     """
     Detect if a directory contains an existing codebase and identify its characteristics.
@@ -30,7 +31,7 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
         "has_git": False,
         "git_clean": None,
         "project_files": [],
-        "confidence": "low"
+        "confidence": "low",
     }
 
     if not directory.exists():
@@ -46,7 +47,7 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
                 cwd=str(directory),
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             result["git_clean"] = len(status_result.stdout.strip()) == 0
         except:
@@ -54,12 +55,32 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
 
     # Define project indicator files
     project_indicators = {
-        "package.json": {"type": "nodejs", "language": "JavaScript", "confidence": "high"},
-        "package-lock.json": {"type": "nodejs", "language": "JavaScript", "confidence": "medium"},
-        "tsconfig.json": {"type": "nodejs", "language": "TypeScript", "confidence": "high"},
-        "requirements.txt": {"type": "python", "language": "Python", "confidence": "high"},
+        "package.json": {
+            "type": "nodejs",
+            "language": "JavaScript",
+            "confidence": "high",
+        },
+        "package-lock.json": {
+            "type": "nodejs",
+            "language": "JavaScript",
+            "confidence": "medium",
+        },
+        "tsconfig.json": {
+            "type": "nodejs",
+            "language": "TypeScript",
+            "confidence": "high",
+        },
+        "requirements.txt": {
+            "type": "python",
+            "language": "Python",
+            "confidence": "high",
+        },
         "setup.py": {"type": "python", "language": "Python", "confidence": "high"},
-        "pyproject.toml": {"type": "python", "language": "Python", "confidence": "high"},
+        "pyproject.toml": {
+            "type": "python",
+            "language": "Python",
+            "confidence": "high",
+        },
         "Cargo.toml": {"type": "rust", "language": "Rust", "confidence": "high"},
         "go.mod": {"type": "golang", "language": "Go", "confidence": "high"},
         "pom.xml": {"type": "maven", "language": "Java", "confidence": "high"},
@@ -84,7 +105,9 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
             proj_type = info["type"]
             language = info["language"]
             confidence = info["confidence"]
-            types[proj_type] = types.get(proj_type, 0) + (2 if confidence == "high" else 1)
+            types[proj_type] = types.get(proj_type, 0) + (
+                2 if confidence == "high" else 1
+            )
             languages.add(language)
             confidence_scores.append(confidence)
 
@@ -113,15 +136,44 @@ def _detect_task_intent(task: str) -> str:
     """
     task_lower = task.lower()
 
-    if any(word in task_lower for word in ["fix", "bug", "issue", "error", "broken", "repair"]):
+    if any(
+        word in task_lower
+        for word in ["fix", "bug", "issue", "error", "broken", "repair"]
+    ):
         return "fix_bug"
-    if any(word in task_lower for word in ["upgrade", "update dependencies", "update deps", "update packages", "update all", "migrate to"]):
+    if any(
+        word in task_lower
+        for word in [
+            "upgrade",
+            "update dependencies",
+            "update deps",
+            "update packages",
+            "update all",
+            "migrate to",
+        ]
+    ):
         return "upgrade_deps"
-    if any(word in task_lower for word in ["refactor", "restructure", "reorganize", "clean up"]):
+    if any(
+        word in task_lower
+        for word in ["refactor", "restructure", "reorganize", "clean up"]
+    ):
         return "refactor"
-    if any(word in task_lower for word in ["add tests", "write tests", "test coverage", "unit test"]):
+    if any(
+        word in task_lower
+        for word in ["add tests", "write tests", "test coverage", "unit test"]
+    ):
         return "add_tests"
-    if any(word in task_lower for word in ["add", "enhance", "improve", "implement", "create feature", "new feature"]):
+    if any(
+        word in task_lower
+        for word in [
+            "add",
+            "enhance",
+            "improve",
+            "implement",
+            "create feature",
+            "new feature",
+        ]
+    ):
         return "add_feature"
 
     return "new_project"
@@ -129,9 +181,9 @@ def _detect_task_intent(task: str) -> str:
 
 def print_section(title: str):
     """Print a formatted section header."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  {title}")
-    print('='*70)
+    print("=" * 70)
 
 
 def test_codebase_detection(directory: str):
@@ -151,22 +203,28 @@ def test_codebase_detection(directory: str):
     # Pretty print results
     print(f"\n   Has Code: {'✅ YES' if result['has_code'] else '❌ NO'}")
 
-    if result['has_code']:
+    if result["has_code"]:
         print(f"   Project Type: {result['project_type']}")
         print(f"   Languages: {', '.join(result['languages'])}")
         print(f"   Confidence: {result['confidence'].upper()}")
         print(f"   Project Files: {', '.join(result['project_files'][:5])}")
-        if len(result['project_files']) > 5:
+        if len(result["project_files"]) > 5:
             print(f"                  ... and {len(result['project_files']) - 5} more")
 
-    if result['has_git']:
-        git_status = "✅ Clean" if result['git_clean'] else "⚠️  Dirty" if result['git_clean'] is False else "❓ Unknown"
+    if result["has_git"]:
+        git_status = (
+            "✅ Clean"
+            if result["git_clean"]
+            else "⚠️  Dirty"
+            if result["git_clean"] is False
+            else "❓ Unknown"
+        )
         print(f"   Git Repo: ✅ YES ({git_status})")
     else:
-        print(f"   Git Repo: ❌ NO")
+        print("   Git Repo: ❌ NO")
 
     # Full JSON for debugging
-    print(f"\n   Full Result:")
+    print("\n   Full Result:")
     print(f"   {json.dumps(result, indent=6)}")
 
 
@@ -187,12 +245,12 @@ def test_intent_detection():
     ]
 
     print(f"\n{'Task Description':<55} → Mode")
-    print('-'*70)
+    print("-" * 70)
 
     for task in test_cases:
         mode = _detect_task_intent(task)
         # Format mode nicely
-        mode_display = mode.replace('_', ' ').title()
+        mode_display = mode.replace("_", " ").title()
         task_display = task[:52] + "..." if len(task) > 52 else task
         print(f"{task_display:<55} → {mode_display}")
 

@@ -13,5 +13,5 @@ sys.path.insert(0, str(project_root))
 
 from tools.evolution.backlog_generator import main
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

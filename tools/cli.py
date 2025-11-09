@@ -22,7 +22,8 @@ def main():
     """Main CLI entry point"""
     # Check Python version at runtime
     if sys.version_info < (3, 10):
-        print(f"""
+        print(
+            f"""
 ❌ Error: Python 3.10 or higher required
 
 Your current Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}
@@ -41,7 +42,9 @@ Solutions:
      cf
 
 For more help: https://github.com/context-foundry/context-foundry/blob/main/INSTALL.md
-""", file=sys.stderr)
+""",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
@@ -55,13 +58,11 @@ Examples:
   cf --help       Show this help message
 
 For more information, visit: https://github.com/context-foundry/context-foundry
-        """
+        """,
     )
 
     parser.add_argument(
-        "--version",
-        action="version",
-        version=f"Context Foundry {__version__}"
+        "--version", action="version", version=f"Context Foundry {__version__}"
     )
 
     args = parser.parse_args()
@@ -80,7 +81,8 @@ def launch_context_foundry():
         app.run()
 
     except ImportError as e:
-        print(f"""
+        print(
+            f"""
 ❌ Error: Missing dependencies
 
 Context Foundry requires additional Python packages to run.
@@ -90,7 +92,9 @@ Please install them:
     pip install -r requirements-mcp.txt
 
 Error details: {e}
-""", file=sys.stderr)
+""",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     except KeyboardInterrupt:
@@ -98,14 +102,17 @@ Error details: {e}
         sys.exit(0)
 
     except Exception as e:
-        print(f"""
+        print(
+            f"""
 ❌ Error launching Context Foundry
 
 {str(e)}
 
 Please report this issue at:
 https://github.com/context-foundry/context-foundry/issues
-""", file=sys.stderr)
+""",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
