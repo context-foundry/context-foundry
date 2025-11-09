@@ -2,19 +2,34 @@
   <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
 </div>
 
-<div align="center">
-  <img src="docs/assets/ContextFoundry.gif" alt="Context Foundry in Action" width="800">
-</div>
-
 # 🏭 Context Foundry
 
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.1.2 - November 2025**
+**Version 2.2.0 - November 2025** ✨ **Now with Mission Control TUI!**
 
 [![GitHub release](https://img.shields.io/github/v/release/context-foundry/context-foundry?style=for-the-badge)](https://github.com/context-foundry/context-foundry/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+
+---
+
+## 🎬 Watch It Build: From Prompt to Working App
+
+**New in v2.2.0:** Mission Control TUI - Your command center for autonomous builds
+
+<div align="center">
+  <img src="docs/assets/SatoshiChoreTracker.gif" alt="Building SatoshiChoreTracker - A kids' chores app teaching crypto and financial responsibility" width="100%">
+  <p><em>Full build demo: "Build a chores tracker for kids to learn crypto and financial responsibility" → Working app in minutes</em></p>
+</div>
+
+**What you just saw:**
+- 💬 **Natural language prompt** - Just describe what you want
+- 🎯 **Mission Control TUI** - Real-time build monitoring with interactive chat
+- 🏗️ **Autonomous execution** - Scout → Architect → Builder → Test → Deploy
+- ✅ **Production-ready result** - Complete app with tests, docs, and GitHub deployment
+
+Launch Mission Control: `cf mission-control`
 
 ---
 
@@ -37,6 +52,100 @@ User: "Build a Mario platformer game in JavaScript"
 [User walks away for 7 minutes]
 Result: ✅ Complete game deployed to GitHub, all tests passing
 ```
+
+---
+
+## 🎮 Mission Control TUI - New in v2.2.0!
+
+**Your command center for autonomous AI development**
+
+Mission Control is a full-featured Terminal User Interface that gives you real-time visibility and control over Context Foundry builds.
+
+### Key Features
+
+🎯 **Interactive Chat Interface**
+- Natural language commands: "Build a weather app", "Show active builds", "Check status"
+- Smart command parsing: Distinguishes build requests from status queries
+- Keyboard shortcuts: `Enter` to send, `Tab` to cycle views
+
+📊 **Real-Time Build Monitoring**
+- Live status updates for all running delegations
+- Phase progress tracking (Scout → Architect → Builder → Test → Deploy)
+- Duration tracking and ETA estimates
+- Multi-build support: Monitor multiple projects simultaneously
+
+🔍 **Three View Modes**
+1. **Conversation View** - Chat with Mission Control to start builds and query status
+2. **Builds View** - See all active and completed delegations with detailed status
+3. **Directory View** - Browse project files and build artifacts
+
+⌨️ **Keyboard Navigation**
+- `Tab` - Cycle between views (Conversation → Builds → Directory)
+- `↑` / `↓` - Navigate build list
+- `d` - View detailed build information
+- `x` - Cancel running build
+- `Enter` - Send chat message
+- `Ctrl+C` - Quit
+
+### Quick Start
+
+```bash
+# Launch Mission Control
+cf mission-control
+
+# Or via Claude Code
+claude
+> Start Mission Control
+
+# Then just chat naturally:
+> Build a todo app with React and localStorage
+> Show me active builds
+> What's the status of the weather app?
+```
+
+### Example Workflow
+
+```
+[Mission Control launches with Conversation view]
+
+You: Build a chores tracker for kids to learn about crypto and financial responsibility
+
+Mission Control: 🚀 Build started!
+                 Project: satoshi-chore-tracker
+                 Task ID: abc-123-def-456
+                 Location: /tmp/satoshi-chore-tracker
+
+[Press Tab to switch to Builds view]
+
+[Builds view shows live progress:]
+  ⏳ satoshi-chore-tracker
+     Phase: Architect → Builder
+     Duration: 2m 15s
+     Status: Implementing ChoreList component
+
+[Wait for completion...]
+
+[Builds view updates:]
+  ✅ satoshi-chore-tracker
+     Status: Completed
+     Duration: 8m 42s
+     GitHub: github.com/you/satoshi-chore-tracker
+     Tests: 15/15 passing
+```
+
+### Why Use Mission Control?
+
+**Before Mission Control:**
+- Build in background, manually check status with MCP tools
+- No real-time visibility into build progress
+- Hard to manage multiple concurrent builds
+
+**With Mission Control:**
+- ✅ Visual feedback at a glance
+- ✅ Natural language interaction
+- ✅ Easy multi-build management
+- ✅ Keyboard-driven workflow
+- ✅ Professional TUI experience
 
 ---
 
@@ -264,7 +373,7 @@ Context Foundry introduces **19 groundbreaking innovations** that transform AI s
 ### 🎨 User Experience Innovations
 
 13. **Screenshot Capture Phase** - Playwright-based visual documentation (Phase 4.5)
-14. **TUI Real-time Monitoring** - Textual framework terminal dashboard
+14. **Mission Control TUI** - Full-featured terminal interface with real-time monitoring, interactive chat, and multi-build management (New in v2.2.0!)
 15. **Livestream Integration** - WebSocket-based remote monitoring
 
 ### ⚡ Agent Quality Enhancements
