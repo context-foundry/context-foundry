@@ -7,7 +7,12 @@ Provides simple CLI access to MCP server functions without requiring direct impo
 import sys
 import json
 import argparse
+import os
 from pathlib import Path
+
+# Suppress diagnostic output to keep stdout clean for JSON
+# Redirect stdout temporarily to capture only the JSON result
+import io
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -15,36 +20,44 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 def call_autonomous_build(task: str, working_directory: str, github_repo_name: str, model: str = "sonnet"):
     """Call the autonomous build MCP function via async delegation"""
     try:
-        # Import here so errors are caught gracefully
-        from tools.mcp_server import autonomous_build_and_deploy
+        # Suppress stdout during import and call to avoid diagnostic output
+        original_stdout = sys.stdout
+        sys.stdout = io.StringIO()
 
-        # Build the full task description with all parameters
-        # This will be delegated to a background claude-code process
-        full_task = json.dumps({
-            "task": task,
-            "working_directory": working_directory,
-            "github_repo_name": github_repo_name,
-            "mode": "new_project",
-            "model": model
-        })
+        try:
+            # Import here so errors are caught gracefully
+            from tools.mcp_server import autonomous_build_and_deploy
 
-        # Call the MCP function directly - it uses async delegation internally
-        # This returns immediately with a task ID
-        # MCP-decorated functions need to be called via their fn attribute
-        if hasattr(autonomous_build_and_deploy, 'fn'):
-            result = autonomous_build_and_deploy.fn(
-                task=task,
-                working_directory=working_directory,
-                github_repo_name=github_repo_name,
-                mode="new_project"
-            )
-        else:
-            result = autonomous_build_and_deploy(
-                task=task,
-                working_directory=working_directory,
-                github_repo_name=github_repo_name,
-                mode="new_project"
-            )
+            # Build the full task description with all parameters
+            # This will be delegated to a background claude-code process
+            full_task = json.dumps({
+                "task": task,
+                "working_directory": working_directory,
+                "github_repo_name": github_repo_name,
+                "mode": "new_project",
+                "model": model
+            })
+
+            # Call the MCP function directly - it uses async delegation internally
+            # This returns immediately with a task ID
+            # MCP-decorated functions need to be called via their fn attribute
+            if hasattr(autonomous_build_and_deploy, 'fn'):
+                result = autonomous_build_and_deploy.fn(
+                    task=task,
+                    working_directory=working_directory,
+                    github_repo_name=github_repo_name,
+                    mode="new_project"
+                )
+            else:
+                result = autonomous_build_and_deploy(
+                    task=task,
+                    working_directory=working_directory,
+                    github_repo_name=github_repo_name,
+                    mode="new_project"
+                )
+        finally:
+            # Restore stdout
+            sys.stdout = original_stdout
 
         # Result is a JSON string with task_id, status, etc.
         print(result)

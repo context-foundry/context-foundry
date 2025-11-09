@@ -888,9 +888,30 @@ class MissionControlApp(App):
                     timeout=10.0  # 10 second timeout for initial response
                 )
 
-                if process.returncode == 0 and stdout:
-                    # Parse response to get task ID
-                    result = json.loads(stdout.decode())
+                # Check for errors first
+                stderr_text = stderr.decode() if stderr else ""
+                stdout_text = stdout.decode() if stdout else ""
+
+                if process.returncode != 0:
+                    # Non-zero return code = error
+                    return (
+                        f"❌ Failed to start build:\n\n"
+                        f"{stderr_text[:500]}\n\n"
+                        f"Return code: {process.returncode}"
+                    )
+
+                if not stdout_text.strip():
+                    # Empty stdout = something went wrong
+                    return (
+                        f"❌ No response from MCP wrapper:\n\n"
+                        f"Stdout: (empty)\n"
+                        f"Stderr: {stderr_text[:300]}\n\n"
+                        f"Debug: Check that FastMCP is installed in Python 3.13"
+                    )
+
+                # Try to parse JSON response
+                try:
+                    result = json.loads(stdout_text)
                     task_id = result.get("task_id", "unknown")
 
                     # Track this build
@@ -912,13 +933,12 @@ class MissionControlApp(App):
                         f"Watch System Status panel for live progress!\n\n"
                         f"💡 Tip: The build will auto-deploy to GitHub when complete!"
                     )
-                else:
-                    # Error occurred
-                    error_msg = stderr.decode() if stderr else "Unknown error"
+                except json.JSONDecodeError as je:
                     return (
-                        f"❌ Failed to start build:\n\n"
-                        f"{error_msg[:500]}\n\n"
-                        f"Check that MCP server is configured correctly."
+                        f"❌ Invalid JSON response:\n\n"
+                        f"Stdout: {stdout_text[:300]}\n"
+                        f"Stderr: {stderr_text[:300]}\n\n"
+                        f"JSON Error: {str(je)}"
                     )
 
             except asyncio.TimeoutError:
