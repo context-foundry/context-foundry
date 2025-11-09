@@ -311,17 +311,17 @@ def context_foundry_status() -> str:
 **Quick Commands - Just Say:**
 
 🚀 **Build & Deploy:**
-- "Build a [description] app"
-- "Create a [type] application"
+- "Build a <description> app"
+- "Create a <type> application"
 - "Deploy my app to GitHub"
-- "Start a new project for [purpose]"
+- "Start a new project for <purpose>"
 
 🔧 **Fix & Enhance:**
-- "Fix the [issue] in my app"
-- "Add [feature] to my project"
-- "Extend my app with [functionality]"
-- "Improve [aspect] of my code"
-- "Debug the [problem]"
+- "Fix the <issue> in my app"
+- "Add <feature> to my project"
+- "Extend my app with <functionality>"
+- "Improve <aspect> of my code"
+- "Debug the <problem>"
 
 📦 **Manage:**
 - "Show my active builds"

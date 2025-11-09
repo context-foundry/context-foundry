@@ -1481,13 +1481,13 @@ class MissionControlApp(App):
             return (
                 "Quick Commands - Just Say:\n\n"
                 "🚀 Build & Deploy:\n"
-                "  Build a [description] app\n"
-                "  Create a [type] application\n"
+                "  Build a <description> app\n"
+                "  Create a <type> application\n"
                 "  Deploy my app to GitHub\n\n"
                 "🔧 Fix & Enhance:\n"
-                "  Fix the [issue] in my app\n"
-                "  Add [feature] to my project\n"
-                "  Improve [aspect] of my code\n\n"
+                "  Fix the <issue> in my app\n"
+                "  Add <feature> to my project\n"
+                "  Improve <aspect> of my code\n\n"
                 "📦 Manage:\n"
                 "  Show active builds\n"
                 "  Check status\n\n"
@@ -1516,10 +1516,10 @@ class MissionControlApp(App):
 
         # Very short messages (1-2 words) that aren't commands - ask for clarification
         if len(message_lower.split()) <= 2:
-            return "Not sure what you mean. Try 'build a [description]' or type 'help'"
+            return "Not sure what you mean. Try 'build a <description>' or type 'help'"
 
         # Unclear intent - ask for clarification
-        return "Not sure what you mean. Try 'build a [description]' or type 'help'"
+        return "Not sure what you mean. Try 'build a <description>' or type 'help'"
 
     async def _start_autonomous_build(self, task_description: str) -> str:
         """Start an autonomous build via MCP wrapper"""
