@@ -6,6 +6,26 @@ Installs the 'cf' CLI command for easy access to Mission Control
 
 from setuptools import setup, find_packages
 from pathlib import Path
+import sys
+
+# Check Python version early with helpful error message
+if sys.version_info < (3, 10):
+    sys.stderr.write(
+        "ERROR: Context Foundry requires Python 3.10 or higher.\n\n"
+        f"Your current Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}\n\n"
+        "Why Python 3.10+?\n"
+        "  - Context Foundry uses structural pattern matching (match statements)\n"
+        "  - Advanced type hints (TypeAlias, ParamSpec, etc.)\n"
+        "  - These features are exclusive to Python 3.10+\n\n"
+        "Solutions:\n"
+        "  1. Upgrade Python: brew install python@3.11 (macOS) or use your package manager\n"
+        "  2. Use pyenv: pyenv install 3.11 && pyenv local 3.11\n"
+        "  3. Use a virtual environment with Python 3.10+:\n"
+        "     python3.11 -m venv venv\n"
+        "     source venv/bin/activate\n"
+        "     pip install -e .\n\n"
+    )
+    sys.exit(1)
 
 # Read version from __version__.py
 version_file = Path(__file__).parent / "__version__.py"

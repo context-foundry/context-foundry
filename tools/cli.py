@@ -20,6 +20,30 @@ from __version__ import __version__
 
 def main():
     """Main CLI entry point"""
+    # Check Python version at runtime
+    if sys.version_info < (3, 10):
+        print(f"""
+❌ Error: Python 3.10 or higher required
+
+Your current Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}
+Context Foundry requires: Python 3.10+
+
+Why? Context Foundry uses Python 3.10+ exclusive features:
+  • Structural pattern matching (match statements)
+  • Advanced type hints (TypeAlias, ParamSpec, etc.)
+
+Solutions:
+  1. Upgrade Python: brew install python@3.11 (macOS)
+  2. Use pyenv: pyenv install 3.11 && pyenv local 3.11
+  3. Use a virtual environment with Python 3.10+:
+     python3.11 -m venv venv
+     source venv/bin/activate
+     cf
+
+For more help: https://github.com/context-foundry/context-foundry/blob/main/INSTALL.md
+""", file=sys.stderr)
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         prog="cf",
         description="Context Foundry - The AI That Builds Itself",

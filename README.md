@@ -40,6 +40,39 @@ Result: ✅ Complete game deployed to GitHub, all tests passing
 
 ---
 
+## 🤔 What is MCP? (For Beginners)
+
+**New to MCP?** Don't worry! Here's what you need to know:
+
+**MCP = Model Context Protocol**
+
+Think of MCP as a "universal translator" that lets Claude (and other AI models) connect to external tools, services, and data sources in a standardized way.
+
+**Real-world analogy:**
+- Just like USB-C lets you plug any device into any port with one standard connector...
+- MCP lets AI models connect to any tool/service with one standard protocol
+
+**What MCP enables:**
+- 🗄️ **Data access**: Claude can read your databases, filesystems, APIs
+- 🛠️ **Tool usage**: Claude can control external tools (Git, Docker, web browsers)
+- 🔄 **Live updates**: Claude can monitor real-time data streams
+- 🤖 **Recursive AI**: AI can even spawn and orchestrate other AI instances (that's us!)
+
+**Why Context Foundry uses MCP:**
+
+Instead of just connecting to databases or APIs like most MCP servers, Context Foundry uses MCP to **recursively spawn Claude Code CLI instances**. This means:
+- Your Claude conversation → Spawns → Fresh Claude agent
+- That agent → Spawns → More specialized Claude agents
+- All coordinated through the MCP protocol
+
+This "Meta-MCP" approach is what enables autonomous builds with fresh 200K context windows.
+
+**Want to learn more about MCP?**
+- Official MCP docs: [modelcontextprotocol.io](https://modelcontextprotocol.io)
+- Anthropic's guide: [MCP Quickstart](https://docs.anthropic.com/en/docs/build-with-claude/mcp)
+
+---
+
 ## 🚀 The Breakthrough: Meta-MCP Innovation
 
 **What makes Context Foundry unique?** Most MCP servers call external tools. Context Foundry does something radical: **it uses MCP to recursively spawn Claude Code itself**.

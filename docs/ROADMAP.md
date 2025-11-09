@@ -658,7 +658,7 @@ After Phase 1 implementation, we should see:
 - ✅ Documentation updates
 - ⚠️ **Note:** Claude CLI mode removed in v1.2 - was misleading as it still charged API fees
 
-### v1.2 - MCP Server Mode (October 2025)
+### v1.2 - MCP Server Mode (Released October 2025)
 **Major Feature: Dual-Mode Architecture**
 
 Context Foundry now supports two execution modes, giving users flexibility based on their needs:
@@ -713,7 +713,7 @@ Context Foundry now supports two execution modes, giving users flexibility based
 
 **Completed:** October 4, 2025
 
-### v2.1.0 - Enhancement Mode (October 2025)
+### v2.1.0 - Enhancement Mode (Released October 2025)
 **Major Feature: Fix, Enhance, and Upgrade Existing Codebases**
 
 Context Foundry can now intelligently modify existing projects instead of only building from scratch:
@@ -819,7 +819,7 @@ autonomous_build_and_deploy(
 
 **Completed:** October 24, 2025
 
-### v2.2.0 - GitHub Agent (October 2025)
+### v2.2.0 - GitHub Agent (Released October 2025)
 **Major Feature: Comprehensive GitHub Integration & Automation**
 
 Context Foundry now sets up complete GitHub project infrastructure automatically:

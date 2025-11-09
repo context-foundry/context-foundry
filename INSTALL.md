@@ -1,5 +1,55 @@
 # Installing the `cf` Command
 
+## Prerequisites
+
+**⚠️ IMPORTANT: Python 3.10 or higher is required**
+
+Context Foundry uses Python 3.10+ exclusive features:
+- Structural pattern matching (`match` statements)
+- Advanced type hints (`TypeAlias`, `ParamSpec`, etc.)
+
+**Check your Python version:**
+```bash
+python3 --version
+```
+
+If you have Python 3.9 or earlier, you must upgrade:
+
+**Option 1: Use pyenv (recommended)**
+```bash
+# Install pyenv if you don't have it
+curl https://pyenv.run | bash
+
+# Install Python 3.11+
+pyenv install 3.11
+pyenv local 3.11
+```
+
+**Option 2: System-wide upgrade**
+```bash
+# macOS (Homebrew)
+brew install python@3.11
+
+# Ubuntu/Debian
+sudo apt update && sudo apt install python3.11
+
+# Fedora/RHEL
+sudo dnf install python3.11
+```
+
+**Option 3: Use a virtual environment** (doesn't require system upgrade)
+```bash
+# Create venv with Python 3.10+
+python3.11 -m venv venv
+
+# Activate it
+source venv/bin/activate  # On macOS/Linux
+# or
+venv\Scripts\activate     # On Windows
+
+# Now proceed with installation below
+```
+
 ## Quick Installation
 
 From the Context Foundry directory, run:
@@ -39,6 +89,15 @@ pip uninstall context-foundry
 ```
 
 ## Troubleshooting
+
+### Python version error
+
+If you see an error like:
+```
+ERROR: Package 'context-foundry' requires a different Python: 3.9.6 not in '>=3.10'
+```
+
+This means your Python version is too old. See the **Prerequisites** section above for upgrade instructions.
 
 ### Command not found
 
