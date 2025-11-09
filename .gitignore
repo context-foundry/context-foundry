@@ -69,6 +69,7 @@ NEXT_WEEK_PRIORITIES.md
 *_PRIORITIES.md
 *_ROADMAP.md
 INTERNAL_*.md
+SESSION_SUMMARY_*.md
 docs/proposals/
 test_results/
 smoke_test_*.txt
@@ -111,3 +112,4 @@ smoke_test_*.txt
 #
 # ═══════════════════════════════════════════════════════════
 # extensions/  # Commented out for private repo - extensions now committed
+docs/assets/SatoshiChoreTracker.gif

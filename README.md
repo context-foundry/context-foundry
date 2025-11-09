@@ -14,25 +14,6 @@
 
 ---
 
-## 🎬 Watch It Build: From Prompt to Working App
-
-**New in v2.2.0:** Mission Control TUI - Your command center for autonomous builds
-
-<div align="center">
-  <img src="docs/assets/SatoshiChoreTracker.gif" alt="Building SatoshiChoreTracker - A kids' chores app teaching crypto and financial responsibility" width="100%">
-  <p><em>Full build demo: "Build a chores tracker for kids to learn crypto and financial responsibility" → Working app in minutes</em></p>
-</div>
-
-**What you just saw:**
-- 💬 **Natural language prompt** - Just describe what you want
-- 🎯 **Mission Control TUI** - Real-time build monitoring with interactive chat
-- 🏗️ **Autonomous execution** - Scout → Architect → Builder → Test → Deploy
-- ✅ **Production-ready result** - Complete app with tests, docs, and GitHub deployment
-
-Launch Mission Control: `cf mission-control`
-
----
-
 ## What is Context Foundry?
 
 Context Foundry is an **MCP (Model Context Protocol) server** that empowers Claude Code CLI to build complete software projects autonomously with **self-healing test loops** and **automatic GitHub deployment**.
