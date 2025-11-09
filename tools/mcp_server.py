@@ -2748,12 +2748,11 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
             # Migrate common-issues.json if it exists
             common_issues_file = pattern_dir / "common-issues.json"
             if common_issues_file.exists():
-                result = merge_project_patterns(
+                result_data = _merge_project_patterns_impl(
                     str(common_issues_file),
                     "common-issues",
                     increment_build_count=False  # Don't increment for migration
                 )
-                result_data = json.loads(result)
                 if result_data["status"] == "success":
                     migration_results["total_patterns_merged"] += result_data["merge_stats"]["new_patterns"]
                     migration_results["total_patterns_merged"] += result_data["merge_stats"]["updated_patterns"]
@@ -2767,12 +2766,11 @@ def migrate_all_project_patterns(projects_base_dir: str) -> str:
             # Migrate scout-learnings.json if it exists
             scout_learnings_file = pattern_dir / "scout-learnings.json"
             if scout_learnings_file.exists():
-                result = merge_project_patterns(
+                result_data = _merge_project_patterns_impl(
                     str(scout_learnings_file),
                     "scout-learnings",
                     increment_build_count=False
                 )
-                result_data = json.loads(result)
                 if result_data["status"] == "success":
                     migration_results["total_patterns_merged"] += result_data["merge_stats"]["new_patterns"]
                     migration_results["total_patterns_merged"] += result_data["merge_stats"]["updated_patterns"]

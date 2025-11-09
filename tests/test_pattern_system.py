@@ -9,7 +9,40 @@ import json
 import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch, mock_open, MagicMock
+import sys
+
+# Mock FastMCP before importing tools.mcp_server
+class MockFastMCP:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def tool(self, *args, **kwargs):
+        """Decorator that returns the original function unchanged"""
+        def decorator(func):
+            return func
+        if args and callable(args[0]):
+            return args[0]
+        return decorator
+
+    def resource(self, *args, **kwargs):
+        """Decorator that returns the original function unchanged"""
+        def decorator(func):
+            return func
+        return decorator
+
+    def run(self):
+        """Mock run method"""
+        pass
+
+mock_module = MagicMock()
+mock_module.FastMCP = MockFastMCP
+mock_module.Context = MagicMock
+
+sys.modules['fastmcp'] = mock_module
+sys.modules['fastmcp.server'] = MagicMock()
+sys.modules['fastmcp.server.dependencies'] = MagicMock()
+sys.modules['fastmcp.server.dependencies'].get_context = MagicMock()
 
 
 # Test data
@@ -295,8 +328,8 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute bootstrap
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=tmp_path / "global"):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=tmp_path / "global"):
             bootstrap_patterns_on_startup()
 
         # Assert: Global patterns now contain project patterns
@@ -322,8 +355,8 @@ class TestBootstrapPatterns:
         (global_patterns / ".bootstrap-done").write_text("Already done")
 
         # Execute: Bootstrap should return early
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=tmp_path / "global"):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=tmp_path / "global"):
             bootstrap_patterns_on_startup()
 
         # Assert: No error raised (would fail if it tried to merge non-existent project dir)
@@ -340,8 +373,8 @@ class TestBootstrapPatterns:
         global_dir = tmp_path / "global"
 
         # Execute
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=global_dir):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=global_dir):
             bootstrap_patterns_on_startup()
 
         # Assert: No global patterns directory created
@@ -378,8 +411,8 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=tmp_path / "global"):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=tmp_path / "global"):
             bootstrap_patterns_on_startup()
 
         # Assert: Both pattern files merged
@@ -419,8 +452,8 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=tmp_path / "global"):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=tmp_path / "global"):
             bootstrap_patterns_on_startup()
 
         # Assert: Marker contains metadata
@@ -456,8 +489,8 @@ class TestBootstrapPatterns:
         global_patterns.mkdir(parents=True)
 
         # Execute: Should not crash
-        with patch("Path.cwd", return_value=project_dir), \
-             patch("Path.home", return_value=tmp_path / "global"):
+        with patch("pathlib.Path.cwd", return_value=project_dir), \
+             patch("pathlib.Path.home", return_value=tmp_path / "global"):
             bootstrap_patterns_on_startup()
 
         # Assert: Valid file was still merged
