@@ -203,74 +203,89 @@ class StatusPanel(Static):
             return {"available": False, "status": f"Error: {e}"}
 
     async def _get_build_status(self) -> dict:
-        """Get active build count and latest build info"""
+        """Get active build count and latest build info via MCP wrapper"""
         try:
-            # Check delegation task list from Context Foundry
-            delegation_dir = Path.home() / ".context-foundry" / "delegations"
+            # Use the MCP wrapper to query delegation status
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
 
-            if not delegation_dir.exists():
+            if not Path(python_cmd).exists():
                 return {"active": 0, "latest": None}
 
-            # Count running tasks
-            active_count = 0
-            latest_task = None
-            latest_time = None
+            # Call list_delegations command
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "list_delegations",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
 
-            for task_file in delegation_dir.glob("task-*.json"):
-                try:
-                    task_data = json.loads(task_file.read_text())
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=3.0
+            )
 
-                    if task_data.get("status") == "running":
-                        active_count += 1
+            if process.returncode == 0 and stdout:
+                # Parse delegation list
+                result = json.loads(stdout.decode())
+                delegations = result.get("delegations", [])
 
-                        # Track latest task
-                        task_time = task_data.get("start_time")
-                        if task_time and (latest_time is None or task_time > latest_time):
-                            latest_time = task_time
-                            # Extract project name from task or working_directory
-                            working_dir = task_data.get("working_directory", "")
-                            latest_task = Path(working_dir).name if working_dir else "build"
+                # Filter running builds
+                running_builds = [d for d in delegations if d.get("status") == "running"]
 
-                except Exception:
-                    continue
+                if running_builds:
+                    # Get most recent running build
+                    latest = running_builds[0]  # Already sorted by start time in list_delegations
+                    project_name = latest.get("project", "build")
 
-            return {
-                "active": active_count,
-                "latest": latest_task if active_count > 0 else None
-            }
+                    return {
+                        "active": len(running_builds),
+                        "latest": project_name
+                    }
+
+            return {"active": 0, "latest": None}
 
         except Exception as e:
             return {"active": 0, "latest": None}
 
     async def _get_delegation_info(self) -> dict:
-        """Get delegation/Claude instance information"""
+        """Get delegation/Claude instance information via MCP wrapper"""
         try:
-            delegation_dir = Path.home() / ".context-foundry" / "delegations"
+            # Use the MCP wrapper to query delegation status
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
 
-            if not delegation_dir.exists():
+            if not Path(python_cmd).exists():
                 return {"running": 0, "completed": 0, "total": 0}
 
-            running = 0
-            completed = 0
+            # Call list_delegations command
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "list_delegations",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
 
-            for task_file in delegation_dir.glob("task-*.json"):
-                try:
-                    task_data = json.loads(task_file.read_text())
-                    status = task_data.get("status", "")
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=3.0
+            )
 
-                    if status == "running":
-                        running += 1
-                    elif status == "completed":
-                        completed += 1
+            if process.returncode == 0 and stdout:
+                # Parse delegation list
+                result = json.loads(stdout.decode())
+                delegations = result.get("delegations", [])
 
-                except Exception:
-                    continue
+                running = sum(1 for d in delegations if d.get("status") == "running")
+                completed = sum(1 for d in delegations if d.get("status") == "completed")
 
-            return {
-                "running": running,
-                "completed": completed,
-                "total": running + completed
-            }
+                return {
+                    "running": running,
+                    "completed": completed,
+                    "total": len(delegations)
+                }
+
+            return {"running": 0, "completed": 0, "total": 0}
 
         except Exception:
             return {"running": 0, "completed": 0, "total": 0}
@@ -292,29 +307,41 @@ class FileTreePanel(Static):
     async def refresh_tree(self) -> None:
         """Refresh file tree from active build directory"""
         try:
-            # Get active build directory from app
-            app = self.app
+            # Query MCP delegations for active builds
             build_dir = None
 
-            if hasattr(app, 'active_builds') and app.active_builds:
-                # Get most recent active build
-                for build in app.active_builds:
-                    task_id = build.get("task_id")
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
 
-                    # Get working directory from delegation task
-                    delegation_dir = Path.home() / ".context-foundry" / "delegations"
-                    task_file = delegation_dir / f"task-{task_id}.json"
+            if Path(python_cmd).exists():
+                try:
+                    # Call list_delegations command
+                    process = await asyncio.create_subprocess_exec(
+                        python_cmd, str(wrapper_path),
+                        "list_delegations",
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
 
-                    if task_file.exists():
-                        try:
-                            task_data = json.loads(task_file.read_text())
-                            if task_data.get("status") == "running":
-                                working_dir = task_data.get("working_directory", "")
-                                if working_dir:
+                    stdout, stderr = await asyncio.wait_for(
+                        process.communicate(),
+                        timeout=2.0
+                    )
+
+                    if process.returncode == 0 and stdout:
+                        result = json.loads(stdout.decode())
+                        delegations = result.get("delegations", [])
+
+                        # Find first running delegation
+                        for delegation in delegations:
+                            if delegation.get("status") == "running":
+                                working_dir = delegation.get("working_directory", "")
+                                if working_dir and Path(working_dir).exists():
                                     build_dir = Path(working_dir)
                                     break
-                        except Exception:
-                            continue
+
+                except Exception:
+                    pass
 
             if build_dir and build_dir.exists():
                 self.current_dir = build_dir
