@@ -2237,27 +2237,23 @@ def autonomous_build_and_deploy(
 # ============================================================================
 
 
-@mcp.tool()
-def read_global_patterns(pattern_type: str = "common-issues") -> str:
+# ============================================================================
+# Internal Pattern Storage Implementations (callable from Python)
+# ============================================================================
+
+def _read_global_patterns_impl(pattern_type: str = "common-issues") -> dict:
     """
-    Read global patterns from ~/.context-foundry/patterns/
+    Internal implementation for reading global patterns.
+    This function can be called from Python code.
 
     Args:
-        pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics",
-                     "architecture-patterns", "test-patterns", "mcp-server-patterns")
+        pattern_type: Type of patterns to read
 
     Returns:
-        JSON string with patterns or error message
+        Dictionary with status, data, file_path, and last_updated
 
-    Examples:
-        # Read common issues
-        patterns = read_global_patterns("common-issues")
-
-        # Read scout learnings
-        learnings = read_global_patterns("scout-learnings")
-
-        # Read MCP server patterns
-        mcp_patterns = read_global_patterns("mcp-server-patterns")
+    Raises:
+        Exception: If pattern reading fails
     """
     try:
         # Global pattern directory
@@ -2274,11 +2270,11 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
         }
 
         if pattern_type not in pattern_files:
-            return json.dumps({
+            return {
                 "status": "error",
                 "error": f"Invalid pattern_type: {pattern_type}",
                 "valid_types": list(pattern_files.keys())
-            }, indent=2)
+            }
 
         pattern_file = global_pattern_dir / pattern_files[pattern_type]
 
@@ -2307,39 +2303,326 @@ def read_global_patterns(pattern_type: str = "common-issues") -> str:
                     "version": "1.0",
                     "last_updated": datetime.now().isoformat()
                 }
+            else:
+                default_data = {
+                    "patterns": [],
+                    "version": "1.0",
+                    "last_updated": datetime.now().isoformat()
+                }
 
-            return json.dumps({
+            return {
                 "status": "success",
                 "message": f"No existing {pattern_type} found, returning empty structure",
                 "data": default_data,
                 "file_path": str(pattern_file)
-            }, indent=2)
+            }
 
         # Read existing patterns
         with open(pattern_file, 'r') as f:
             data = json.load(f)
 
-        return json.dumps({
+        return {
             "status": "success",
             "data": data,
             "file_path": str(pattern_file),
             "last_updated": data.get("last_updated", "unknown")
-        }, indent=2)
+        }
 
     except json.JSONDecodeError as e:
-        return json.dumps({
+        return {
             "status": "error",
             "error": f"Invalid JSON in pattern file: {str(e)}",
             "file_path": str(pattern_file)
-        }, indent=2)
+        }
 
     except Exception as e:
         import traceback
-        return json.dumps({
+        return {
             "status": "error",
             "error": str(e),
             "traceback": traceback.format_exc()
-        }, indent=2)
+        }
+
+
+def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
+    """
+    Internal implementation for saving global patterns.
+    This function can be called from Python code.
+
+    Args:
+        pattern_type: Type of patterns
+        data: Pattern data as dictionary
+
+    Returns:
+        Dictionary with status, message, file_path, and last_updated
+
+    Raises:
+        Exception: If pattern saving fails
+    """
+    try:
+        # Global pattern directory
+        global_pattern_dir = Path.home() / ".context-foundry" / "patterns"
+        global_pattern_dir.mkdir(parents=True, exist_ok=True)
+
+        # Pattern file mapping
+        pattern_files = {
+            "common-issues": "common-issues.json",
+            "scout-learnings": "scout-learnings.json",
+            "build-metrics": "build-metrics.json"
+        }
+
+        if pattern_type not in pattern_files:
+            return {
+                "status": "error",
+                "error": f"Invalid pattern_type: {pattern_type}",
+                "valid_types": list(pattern_files.keys())
+            }
+
+        pattern_file = global_pattern_dir / pattern_files[pattern_type]
+
+        # Update last_updated timestamp
+        data["last_updated"] = datetime.now().isoformat()
+
+        # Write to file
+        with open(pattern_file, 'w') as f:
+            json.dump(data, f, indent=2)
+
+        # Get count of items
+        if pattern_type == "common-issues":
+            count = len(data.get("patterns", []))
+        elif pattern_type == "scout-learnings":
+            count = len(data.get("learnings", []))
+        elif pattern_type == "build-metrics":
+            count = len(data.get("metrics", []))
+        else:
+            count = 0
+
+        return {
+            "status": "success",
+            "message": f"Saved {count} {pattern_type} to global storage",
+            "file_path": str(pattern_file),
+            "last_updated": data["last_updated"]
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+def _merge_project_patterns_impl(
+    project_pattern_file: str,
+    pattern_type: str = "common-issues",
+    increment_build_count: bool = True
+) -> dict:
+    """
+    Internal implementation for merging project patterns into global storage.
+    This function can be called from Python code.
+
+    Args:
+        project_pattern_file: Path to project-specific pattern file
+        pattern_type: Type of patterns
+        increment_build_count: Whether to increment total_builds counter
+
+    Returns:
+        Dictionary with status, message, merge_stats, global_file, and project_file
+
+    Raises:
+        Exception: If merge fails
+    """
+    try:
+        # Read project patterns
+        project_file_path = Path(project_pattern_file)
+        if not project_file_path.exists():
+            return {
+                "status": "error",
+                "error": f"Project pattern file not found: {project_pattern_file}"
+            }
+
+        with open(project_file_path, 'r') as f:
+            project_data = json.load(f)
+
+        # Read global patterns using internal implementation
+        global_response = _read_global_patterns_impl(pattern_type)
+
+        if global_response["status"] != "success":
+            return {
+                "status": "error",
+                "error": "Failed to read global patterns",
+                "details": global_response
+            }
+
+        global_data = global_response["data"]
+
+        # Merge logic
+        merge_stats = {
+            "new_patterns": 0,
+            "updated_patterns": 0,
+            "total_project_patterns": 0
+        }
+
+        if pattern_type == "common-issues":
+            # Get patterns arrays
+            project_patterns = project_data.get("patterns", [])
+            global_patterns = global_data.get("patterns", [])
+            merge_stats["total_project_patterns"] = len(project_patterns)
+
+            # Create lookup by pattern_id or id
+            global_by_id = {}
+            for i, p in enumerate(global_patterns):
+                pid = p.get("pattern_id") or p.get("id")
+                if pid:
+                    global_by_id[pid] = i
+
+            # Merge each project pattern
+            for proj_pattern in project_patterns:
+                pattern_id = proj_pattern.get("pattern_id") or proj_pattern.get("id")
+                if not pattern_id:
+                    continue
+
+                if pattern_id in global_by_id:
+                    # Update existing pattern
+                    idx = global_by_id[pattern_id]
+                    existing = global_patterns[idx]
+
+                    # Increment frequency
+                    existing["frequency"] = existing.get("frequency", 1) + 1
+
+                    # Update last_seen
+                    existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+
+                    # Merge project_types (unique values)
+                    existing_types = set(existing.get("project_types", []))
+                    new_types = set(proj_pattern.get("project_types", []))
+                    existing["project_types"] = sorted(list(existing_types | new_types))
+
+                    # Preserve highest severity
+                    severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "critical": 4, "high": 3, "medium": 2, "low": 1}
+                    existing_severity = severity_order.get(existing.get("severity", "LOW"), 1)
+                    new_severity = severity_order.get(proj_pattern.get("severity", "LOW"), 1)
+                    if new_severity > existing_severity:
+                        existing["severity"] = proj_pattern["severity"]
+
+                    merge_stats["updated_patterns"] += 1
+                else:
+                    # Add new pattern
+                    new_pattern = proj_pattern.copy()
+                    new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
+                    new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+                    new_pattern["frequency"] = new_pattern.get("frequency", 1)
+                    global_patterns.append(new_pattern)
+                    merge_stats["new_patterns"] += 1
+
+            global_data["patterns"] = global_patterns
+
+            # Increment build count
+            if increment_build_count:
+                global_data["total_builds"] = global_data.get("total_builds", 0) + 1
+
+        elif pattern_type == "scout-learnings":
+            # Similar logic for scout learnings
+            project_learnings = project_data.get("learnings", [])
+            global_learnings = global_data.get("learnings", [])
+            merge_stats["total_project_patterns"] = len(project_learnings)
+
+            # Create lookup by learning_id
+            global_by_id = {l.get("learning_id"): i for i, l in enumerate(global_learnings) if l.get("learning_id")}
+
+            for proj_learning in project_learnings:
+                learning_id = proj_learning.get("learning_id")
+                if not learning_id:
+                    continue
+
+                if learning_id in global_by_id:
+                    # Update existing learning
+                    idx = global_by_id[learning_id]
+                    existing = global_learnings[idx]
+
+                    # Merge project types
+                    existing_types = set(existing.get("project_types", []))
+                    new_types = set(proj_learning.get("project_types", []))
+                    existing["project_types"] = sorted(list(existing_types | new_types))
+
+                    # Merge key points (unique values)
+                    existing_points = set(existing.get("key_points", []))
+                    new_points = set(proj_learning.get("key_points", []))
+                    existing["key_points"] = sorted(list(existing_points | new_points))
+
+                    merge_stats["updated_patterns"] += 1
+                else:
+                    # Add new learning
+                    new_learning = proj_learning.copy()
+                    new_learning["first_seen"] = datetime.now().strftime("%Y-%m-%d")
+                    global_learnings.append(new_learning)
+                    merge_stats["new_patterns"] += 1
+
+            global_data["learnings"] = global_learnings
+
+        # Save merged patterns using internal implementation
+        save_response = _save_global_patterns_impl(pattern_type, global_data)
+
+        if save_response["status"] != "success":
+            return {
+                "status": "error",
+                "error": "Failed to save merged patterns",
+                "details": save_response
+            }
+
+        return {
+            "status": "success",
+            "message": f"Successfully merged {pattern_type} from project",
+            "merge_stats": merge_stats,
+            "global_file": save_response["file_path"],
+            "project_file": str(project_file_path)
+        }
+
+    except json.JSONDecodeError as e:
+        return {
+            "status": "error",
+            "error": f"Invalid JSON in pattern file: {str(e)}",
+            "file_path": project_pattern_file
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
+# ============================================================================
+# MCP Tool Wrappers (external interface)
+# ============================================================================
+
+@mcp.tool()
+def read_global_patterns(pattern_type: str = "common-issues") -> str:
+    """
+    Read global patterns from ~/.context-foundry/patterns/
+
+    Args:
+        pattern_type: Type of patterns to read ("common-issues", "scout-learnings", "build-metrics",
+                     "architecture-patterns", "test-patterns", "mcp-server-patterns")
+
+    Returns:
+        JSON string with patterns or error message
+
+    Examples:
+        # Read common issues
+        patterns = read_global_patterns("common-issues")
+
+        # Read scout learnings
+        learnings = read_global_patterns("scout-learnings")
+
+        # Read MCP server patterns
+        mcp_patterns = read_global_patterns("mcp-server-patterns")
+    """
+    result = _read_global_patterns_impl(pattern_type)
+    return json.dumps(result, indent=2)
 
 
 @mcp.tool()
@@ -2361,63 +2644,16 @@ def save_global_patterns(pattern_type: str, patterns_data: str) -> str:
     """
     try:
         # Parse patterns data
-        try:
-            data = json.loads(patterns_data)
-        except json.JSONDecodeError as e:
-            return json.dumps({
-                "status": "error",
-                "error": f"Invalid JSON in patterns_data: {str(e)}"
-            }, indent=2)
-
-        # Global pattern directory
-        global_pattern_dir = Path.home() / ".context-foundry" / "patterns"
-        global_pattern_dir.mkdir(parents=True, exist_ok=True)
-
-        # Pattern file mapping
-        pattern_files = {
-            "common-issues": "common-issues.json",
-            "scout-learnings": "scout-learnings.json",
-            "build-metrics": "build-metrics.json"
-        }
-
-        if pattern_type not in pattern_files:
-            return json.dumps({
-                "status": "error",
-                "error": f"Invalid pattern_type: {pattern_type}",
-                "valid_types": list(pattern_files.keys())
-            }, indent=2)
-
-        pattern_file = global_pattern_dir / pattern_files[pattern_type]
-
-        # Update last_updated timestamp
-        data["last_updated"] = datetime.now().isoformat()
-
-        # Write to file
-        with open(pattern_file, 'w') as f:
-            json.dump(data, f, indent=2)
-
-        # Get count of items
-        if pattern_type == "common-issues":
-            count = len(data.get("patterns", []))
-        elif pattern_type == "scout-learnings":
-            count = len(data.get("learnings", []))
-        elif pattern_type == "build-metrics":
-            count = len(data.get("metrics", []))
-
-        return json.dumps({
-            "status": "success",
-            "message": f"Saved {count} {pattern_type} to global storage",
-            "file_path": str(pattern_file),
-            "last_updated": data["last_updated"]
-        }, indent=2)
-
-    except Exception as e:
-        import traceback
+        data = json.loads(patterns_data)
+    except json.JSONDecodeError as e:
         return json.dumps({
             "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
+            "error": f"Invalid JSON in patterns_data: {str(e)}"
         }, indent=2)
+
+    # Call internal implementation
+    result = _save_global_patterns_impl(pattern_type, data)
+    return json.dumps(result, indent=2)
 
 
 @mcp.tool()
@@ -2450,168 +2686,9 @@ def merge_project_patterns(
             "common-issues"
         )
     """
-    try:
-        # Read project patterns
-        project_file_path = Path(project_pattern_file)
-        if not project_file_path.exists():
-            return json.dumps({
-                "status": "error",
-                "error": f"Project pattern file not found: {project_pattern_file}"
-            }, indent=2)
-
-        with open(project_file_path, 'r') as f:
-            project_data = json.load(f)
-
-        # Read global patterns
-        global_result = read_global_patterns(pattern_type)
-        global_response = json.loads(global_result)
-
-        if global_response["status"] != "success":
-            return json.dumps({
-                "status": "error",
-                "error": "Failed to read global patterns",
-                "details": global_response
-            }, indent=2)
-
-        global_data = global_response["data"]
-
-        # Merge logic
-        merge_stats = {
-            "new_patterns": 0,
-            "updated_patterns": 0,
-            "total_project_patterns": 0
-        }
-
-        if pattern_type == "common-issues":
-            # Get patterns arrays
-            project_patterns = project_data.get("patterns", [])
-            global_patterns = global_data.get("patterns", [])
-            merge_stats["total_project_patterns"] = len(project_patterns)
-
-            # Create lookup by pattern_id
-            global_by_id = {p["pattern_id"]: i for i, p in enumerate(global_patterns)}
-
-            # Merge each project pattern
-            for proj_pattern in project_patterns:
-                pattern_id = proj_pattern.get("pattern_id")
-
-                if pattern_id in global_by_id:
-                    # Update existing pattern
-                    idx = global_by_id[pattern_id]
-                    existing = global_patterns[idx]
-
-                    # Increment frequency
-                    existing["frequency"] = existing.get("frequency", 1) + 1
-
-                    # Update last_seen
-                    existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-
-                    # Merge project_types (unique values)
-                    existing_types = set(existing.get("project_types", []))
-                    new_types = set(proj_pattern.get("project_types", []))
-                    existing["project_types"] = sorted(list(existing_types | new_types))
-
-                    # Preserve highest severity
-                    severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
-                    existing_severity = severity_order.get(existing.get("severity", "LOW"), 1)
-                    new_severity = severity_order.get(proj_pattern.get("severity", "LOW"), 1)
-                    if new_severity > existing_severity:
-                        existing["severity"] = proj_pattern["severity"]
-
-                    # Merge solutions (keep more comprehensive)
-                    existing_solution = existing.get("solution", {})
-                    new_solution = proj_pattern.get("solution", {})
-                    for key, value in new_solution.items():
-                        if key not in existing_solution or len(value) > len(existing_solution.get(key, "")):
-                            existing_solution[key] = value
-                    existing["solution"] = existing_solution
-
-                    merge_stats["updated_patterns"] += 1
-                else:
-                    # Add new pattern
-                    new_pattern = proj_pattern.copy()
-                    new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["frequency"] = 1
-                    global_patterns.append(new_pattern)
-                    merge_stats["new_patterns"] += 1
-
-            global_data["patterns"] = global_patterns
-
-            # Increment build count
-            if increment_build_count:
-                global_data["total_builds"] = global_data.get("total_builds", 0) + 1
-
-        elif pattern_type == "scout-learnings":
-            # Similar logic for scout learnings
-            project_learnings = project_data.get("learnings", [])
-            global_learnings = global_data.get("learnings", [])
-            merge_stats["total_project_patterns"] = len(project_learnings)
-
-            # Create lookup by learning_id
-            global_by_id = {l["learning_id"]: i for i, l in enumerate(global_learnings)}
-
-            for proj_learning in project_learnings:
-                learning_id = proj_learning.get("learning_id")
-
-                if learning_id in global_by_id:
-                    # Update existing learning
-                    idx = global_by_id[learning_id]
-                    existing = global_learnings[idx]
-
-                    # Merge project types
-                    existing_types = set(existing.get("project_types", []))
-                    new_types = set(proj_learning.get("project_types", []))
-                    existing["project_types"] = sorted(list(existing_types | new_types))
-
-                    # Merge key points (unique values)
-                    existing_points = set(existing.get("key_points", []))
-                    new_points = set(proj_learning.get("key_points", []))
-                    existing["key_points"] = sorted(list(existing_points | new_points))
-
-                    merge_stats["updated_patterns"] += 1
-                else:
-                    # Add new learning
-                    new_learning = proj_learning.copy()
-                    new_learning["first_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    global_learnings.append(new_learning)
-                    merge_stats["new_patterns"] += 1
-
-            global_data["learnings"] = global_learnings
-
-        # Save merged patterns
-        save_result = save_global_patterns(pattern_type, json.dumps(global_data))
-        save_response = json.loads(save_result)
-
-        if save_response["status"] != "success":
-            return json.dumps({
-                "status": "error",
-                "error": "Failed to save merged patterns",
-                "details": save_response
-            }, indent=2)
-
-        return json.dumps({
-            "status": "success",
-            "message": f"Successfully merged {pattern_type} from project",
-            "merge_stats": merge_stats,
-            "global_file": save_response["file_path"],
-            "project_file": str(project_file_path)
-        }, indent=2)
-
-    except json.JSONDecodeError as e:
-        return json.dumps({
-            "status": "error",
-            "error": f"Invalid JSON in pattern file: {str(e)}",
-            "file_path": project_pattern_file
-        }, indent=2)
-
-    except Exception as e:
-        import traceback
-        return json.dumps({
-            "status": "error",
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }, indent=2)
+    # Call internal implementation
+    result = _merge_project_patterns_impl(project_pattern_file, pattern_type, increment_build_count)
+    return json.dumps(result, indent=2)
 
 
 @mcp.tool()
@@ -3012,7 +3089,87 @@ def send_agent_message(target_agent: str, message_type: str, payload: Dict) -> s
     return send_agent_message_impl(target_agent, message_type, payload)
 
 
+def bootstrap_patterns_on_startup():
+    """
+    Bootstrap patterns from project directory into global storage on first run.
+
+    This function checks if the current directory contains a Context Foundry project
+    with pattern files in `.context-foundry/patterns/`. If found and not previously
+    bootstrapped, it merges all project patterns into global storage.
+
+    This ensures new users automatically benefit from community-contributed patterns
+    when they clone and run Context Foundry.
+    """
+    try:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Check if running from a Context Foundry project directory
+        project_pattern_dir = Path.cwd() / ".context-foundry" / "patterns"
+        if not project_pattern_dir.exists():
+            return  # Not a CF project, skip bootstrap
+
+        # Global pattern directory
+        global_pattern_dir = Path.home() / ".context-foundry" / "patterns"
+        global_pattern_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if bootstrap already done
+        bootstrap_marker = global_pattern_dir / ".bootstrap-done"
+        if bootstrap_marker.exists():
+            return  # Already bootstrapped, skip
+
+        logger.info(f"🔄 Bootstrapping patterns from {project_pattern_dir}")
+        print(f"🔄 Bootstrapping patterns from {project_pattern_dir}", file=sys.stderr)
+
+        # Merge all pattern files
+        pattern_files_merged = 0
+        total_patterns_added = 0
+
+        for pattern_file in project_pattern_dir.glob("*.json"):
+            pattern_type = pattern_file.stem  # e.g., "common-issues"
+
+            try:
+                result = _merge_project_patterns_impl(
+                    str(pattern_file),
+                    pattern_type,
+                    increment_build_count=False
+                )
+
+                if result["status"] == "success":
+                    pattern_files_merged += 1
+                    total_patterns_added += result["merge_stats"]["new_patterns"]
+                    logger.info(f"✓ Merged {pattern_file.name}: {result['merge_stats']}")
+                    print(f"  ✓ Merged {pattern_file.name}: +{result['merge_stats']['new_patterns']} new patterns", file=sys.stderr)
+                else:
+                    logger.warning(f"✗ Failed to merge {pattern_file.name}: {result.get('error')}")
+                    print(f"  ✗ Failed to merge {pattern_file.name}", file=sys.stderr)
+
+            except Exception as e:
+                logger.error(f"✗ Error merging {pattern_file}: {e}")
+                print(f"  ✗ Error merging {pattern_file}: {e}", file=sys.stderr)
+
+        # Mark as bootstrapped
+        bootstrap_marker.write_text(
+            f"Bootstrapped on {datetime.now().isoformat()}\n"
+            f"Files merged: {pattern_files_merged}\n"
+            f"New patterns added: {total_patterns_added}\n"
+        )
+
+        logger.info(f"✅ Bootstrap complete: {pattern_files_merged} files, {total_patterns_added} new patterns")
+        print(f"✅ Bootstrap complete: {pattern_files_merged} pattern files merged, {total_patterns_added} new patterns added\n", file=sys.stderr)
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Bootstrap failed: {e}", exc_info=True)
+        print(f"⚠️  Bootstrap warning: {e}", file=sys.stderr)
+        # Don't fail startup, just log the error
+
+
 if __name__ == "__main__":
+    # Bootstrap patterns from project directory on first run
+    bootstrap_patterns_on_startup()
+
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
     print_banner(version="1.0.0")

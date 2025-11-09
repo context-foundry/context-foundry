@@ -265,3 +265,202 @@ def sample_pattern():
 def sample_patterns_file():
     """Provide a sample patterns file for testing."""
     return SAMPLE_PATTERNS_FILE.copy()
+
+
+class TestBootstrapPatterns:
+    """Test bootstrap functionality for automatic pattern migration on startup."""
+
+    def test_bootstrap_merges_project_patterns(self, tmp_path):
+        """Test that bootstrap correctly merges project patterns into global storage."""
+        from tools.mcp_server import _merge_project_patterns_impl, bootstrap_patterns_on_startup
+
+        # Setup: Create fake project patterns directory
+        project_dir = tmp_path / "project"
+        project_patterns = project_dir / ".context-foundry" / "patterns"
+        project_patterns.mkdir(parents=True)
+
+        project_data = {
+            "patterns": [
+                {"pattern_id": "test-pattern-1", "frequency": 1, "issue": "Test 1", "project_types": ["test"]},
+                {"pattern_id": "test-pattern-2", "frequency": 1, "issue": "Test 2", "project_types": ["test"]}
+            ],
+            "version": "1.0",
+            "last_updated": "2025-11-09",
+            "total_builds": 1
+        }
+        (project_patterns / "common-issues.json").write_text(json.dumps(project_data))
+
+        # Setup: Create empty global patterns directory
+        global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
+        global_patterns.mkdir(parents=True)
+
+        # Execute bootstrap
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=tmp_path / "global"):
+            bootstrap_patterns_on_startup()
+
+        # Assert: Global patterns now contain project patterns
+        global_file = global_patterns / "common-issues.json"
+        assert global_file.exists()
+
+        global_data = json.loads(global_file.read_text())
+        pattern_ids = [p["pattern_id"] for p in global_data["patterns"]]
+        assert "test-pattern-1" in pattern_ids
+        assert "test-pattern-2" in pattern_ids
+
+        # Assert: Bootstrap marker created
+        assert (global_patterns / ".bootstrap-done").exists()
+
+    def test_bootstrap_only_runs_once(self, tmp_path):
+        """Test that bootstrap doesn't run if marker exists."""
+        from tools.mcp_server import bootstrap_patterns_on_startup
+
+        # Setup: Create bootstrap marker
+        project_dir = tmp_path / "project"
+        global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
+        global_patterns.mkdir(parents=True)
+        (global_patterns / ".bootstrap-done").write_text("Already done")
+
+        # Execute: Bootstrap should return early
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=tmp_path / "global"):
+            bootstrap_patterns_on_startup()
+
+        # Assert: No error raised (would fail if it tried to merge non-existent project dir)
+        assert (global_patterns / ".bootstrap-done").exists()
+
+    def test_bootstrap_skips_if_not_cf_project(self, tmp_path):
+        """Test that bootstrap skips if not in a Context Foundry project."""
+        from tools.mcp_server import bootstrap_patterns_on_startup
+
+        # Setup: Empty directory (not a CF project)
+        project_dir = tmp_path / "not-a-cf-project"
+        project_dir.mkdir()
+
+        global_dir = tmp_path / "global"
+
+        # Execute
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=global_dir):
+            bootstrap_patterns_on_startup()
+
+        # Assert: No global patterns directory created
+        assert not (global_dir / ".context-foundry").exists()
+
+    def test_bootstrap_handles_multiple_pattern_types(self, tmp_path):
+        """Test that bootstrap merges all pattern file types."""
+        from tools.mcp_server import bootstrap_patterns_on_startup
+
+        # Setup: Create multiple pattern files
+        project_dir = tmp_path / "project"
+        project_patterns = project_dir / ".context-foundry" / "patterns"
+        project_patterns.mkdir(parents=True)
+
+        # Common issues
+        common_issues = {
+            "patterns": [{"pattern_id": "issue-1", "frequency": 1, "project_types": ["test"]}],
+            "version": "1.0",
+            "last_updated": "2025-11-09",
+            "total_builds": 1
+        }
+        (project_patterns / "common-issues.json").write_text(json.dumps(common_issues))
+
+        # Scout learnings
+        scout_learnings = {
+            "learnings": [{"learning_id": "learning-1", "key_points": ["test"], "project_types": ["test"]}],
+            "version": "1.0",
+            "last_updated": "2025-11-09"
+        }
+        (project_patterns / "scout-learnings.json").write_text(json.dumps(scout_learnings))
+
+        # Setup global directory
+        global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
+        global_patterns.mkdir(parents=True)
+
+        # Execute
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=tmp_path / "global"):
+            bootstrap_patterns_on_startup()
+
+        # Assert: Both pattern files merged
+        assert (global_patterns / "common-issues.json").exists()
+        assert (global_patterns / "scout-learnings.json").exists()
+
+        # Verify contents
+        issues_data = json.loads((global_patterns / "common-issues.json").read_text())
+        assert len(issues_data["patterns"]) == 1
+        assert issues_data["patterns"][0]["pattern_id"] == "issue-1"
+
+        learnings_data = json.loads((global_patterns / "scout-learnings.json").read_text())
+        assert len(learnings_data["learnings"]) == 1
+        assert learnings_data["learnings"][0]["learning_id"] == "learning-1"
+
+    def test_bootstrap_marker_contains_metadata(self, tmp_path):
+        """Test that bootstrap marker contains useful metadata."""
+        from tools.mcp_server import bootstrap_patterns_on_startup
+
+        # Setup
+        project_dir = tmp_path / "project"
+        project_patterns = project_dir / ".context-foundry" / "patterns"
+        project_patterns.mkdir(parents=True)
+
+        project_data = {
+            "patterns": [
+                {"pattern_id": "p1", "frequency": 1, "project_types": ["test"]},
+                {"pattern_id": "p2", "frequency": 1, "project_types": ["test"]}
+            ],
+            "version": "1.0",
+            "last_updated": "2025-11-09",
+            "total_builds": 1
+        }
+        (project_patterns / "common-issues.json").write_text(json.dumps(project_data))
+
+        global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
+        global_patterns.mkdir(parents=True)
+
+        # Execute
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=tmp_path / "global"):
+            bootstrap_patterns_on_startup()
+
+        # Assert: Marker contains metadata
+        marker_file = global_patterns / ".bootstrap-done"
+        assert marker_file.exists()
+
+        marker_content = marker_file.read_text()
+        assert "Bootstrapped on" in marker_content
+        assert "Files merged: 1" in marker_content
+        assert "New patterns added: 2" in marker_content
+
+    def test_bootstrap_handles_invalid_json_gracefully(self, tmp_path):
+        """Test that bootstrap continues even if a pattern file has invalid JSON."""
+        from tools.mcp_server import bootstrap_patterns_on_startup
+
+        # Setup
+        project_dir = tmp_path / "project"
+        project_patterns = project_dir / ".context-foundry" / "patterns"
+        project_patterns.mkdir(parents=True)
+
+        # Create invalid JSON file
+        (project_patterns / "common-issues.json").write_text("{invalid json}")
+
+        # Create valid file
+        valid_data = {
+            "learnings": [{"learning_id": "l1", "key_points": ["test"], "project_types": ["test"]}],
+            "version": "1.0",
+            "last_updated": "2025-11-09"
+        }
+        (project_patterns / "scout-learnings.json").write_text(json.dumps(valid_data))
+
+        global_patterns = tmp_path / "global" / ".context-foundry" / "patterns"
+        global_patterns.mkdir(parents=True)
+
+        # Execute: Should not crash
+        with patch("Path.cwd", return_value=project_dir), \
+             patch("Path.home", return_value=tmp_path / "global"):
+            bootstrap_patterns_on_startup()
+
+        # Assert: Valid file was still merged
+        assert (global_patterns / "scout-learnings.json").exists()
+        # Bootstrap marker should exist even with partial failure
+        assert (global_patterns / ".bootstrap-done").exists()
