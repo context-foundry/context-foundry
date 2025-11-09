@@ -10,6 +10,7 @@ Beautiful terminal UI for managing Evolution System:
 
 import asyncio
 import json
+import sqlite3
 import subprocess
 import sys
 import uuid
@@ -34,6 +35,44 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
+
+
+# Helper function to query daemon monitoring status
+def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
+    """Query daemon task queue to get monitoring status for a delegation"""
+    try:
+        db_path = Path.home() / ".context-foundry" / "evolution" / "task_queue.db"
+        if not db_path.exists():
+            return None
+
+        conn = sqlite3.connect(str(db_path))
+        conn.row_factory = sqlite3.Row
+
+        # Find delegation monitoring task
+        cursor = conn.execute("""
+            SELECT status, json_extract(result_json, '$.pid') as pid,
+                   json_extract(params_json, '$.mcp_task_id') as mcp_id
+            FROM tasks
+            WHERE type = 'delegation_build'
+              AND json_extract(params_json, '$.mcp_task_id') = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (task_id,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if row:
+            return {
+                "monitored": True,
+                "task_status": row["status"],
+                "pid": row["pid"]
+            }
+
+        return None
+
+    except Exception:
+        return None
 
 
 class ViewMode(Enum):

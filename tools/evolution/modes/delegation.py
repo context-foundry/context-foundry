@@ -1,11 +1,14 @@
 """Delegation Mode - Monitor and manage user-initiated builds"""
 
 import json
+import logging
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from .base_mode import BaseEvolutionMode, TaskResult
+
+logger = logging.getLogger(__name__)
 
 
 class DelegationMode(BaseEvolutionMode):
@@ -17,9 +20,10 @@ class DelegationMode(BaseEvolutionMode):
     Mission Control TUI or direct MCP calls.
     """
 
-    def __init__(self, config: Dict = None):
+    def __init__(self, config: Dict = None, watchdog=None):
         super().__init__(config)
         self.delegations_dir = Path.home() / ".context-foundry" / "delegations"
+        self.watchdog = watchdog  # ProcessWatchdog instance (optional)
 
     def generate_tasks(self) -> List[Dict]:
         """
@@ -97,6 +101,12 @@ class DelegationMode(BaseEvolutionMode):
 
             # Check if delegation completed
             if status in ["completed", "failed", "cancelled", "timeout"]:
+                # Unregister from watchdog if we were monitoring
+                pid = metadata.get("pid")
+                if pid and self.watchdog:
+                    self.watchdog.unregister_process(pid)
+                    logger.info(f"Unregistered delegation PID {pid} from watchdog")
+
                 # Delegation finished
                 return TaskResult(
                     success=(status == "completed"),
@@ -111,7 +121,22 @@ class DelegationMode(BaseEvolutionMode):
                     error=None if status == "completed" else f"Build {status}"
                 )
 
-            # Still running - return success but indicate it's in progress
+            # Still running - register with watchdog if we have PID
+            pid = metadata.get("pid")
+            if pid and self.watchdog:
+                # Check if already registered
+                if pid not in self.watchdog.processes:
+                    # Determine log file path
+                    working_dir = params.get("working_directory", "")
+                    log_file = str(Path(working_dir) / ".context-foundry" / "build-output.txt")
+
+                    self.watchdog.register_process(
+                        pid=pid,
+                        task_id=mcp_task_id,
+                        log_file=log_file
+                    )
+                    logger.info(f"Registered delegation PID {pid} with watchdog (task: {mcp_task_id[:8]})")
+
             return TaskResult(
                 success=True,
                 output={
@@ -119,7 +144,8 @@ class DelegationMode(BaseEvolutionMode):
                     "mcp_task_id": mcp_task_id,
                     "project": params.get("project"),
                     "current_phase": metadata.get("current_phase"),
-                    "phase_status": metadata.get("phase_status")
+                    "phase_status": metadata.get("phase_status"),
+                    "pid": pid
                 }
             )
 

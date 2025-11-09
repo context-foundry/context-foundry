@@ -64,6 +64,14 @@ class CommandHandler(BaseHTTPRequestHandler):
         elif path == "/issues":
             self._handle_list_issues()
 
+        # Delegations
+        elif path == "/delegations":
+            self._handle_list_delegations()
+
+        elif path.startswith("/delegations/"):
+            task_id = path.split("/")[-1]
+            self._handle_get_delegation(task_id)
+
         else:
             self._error_response(f"Unknown endpoint: {path}", 404)
 
@@ -100,6 +108,11 @@ class CommandHandler(BaseHTTPRequestHandler):
         elif path.startswith("/sandbox/") and path.endswith("/cleanup"):
             task_id = path.split("/")[2]
             self._handle_cleanup_sandbox(task_id)
+
+        # Cancel delegation
+        elif path.startswith("/delegations/") and path.endswith("/cancel"):
+            task_id = path.split("/")[-2]
+            self._handle_cancel_delegation(task_id)
 
         else:
             self._error_response(f"Unknown endpoint: {path}", 404)
@@ -372,6 +385,107 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
 
         return 0
 
+    def _handle_list_delegations(self):
+        """List all user-initiated delegations"""
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
+                self._json_response({
+                    "success": True,
+                    "delegations": [],
+                    "count": 0
+                })
+                return
+
+            delegations = []
+            for task_file in delegations_dir.glob("task-*.json"):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    delegations.append(metadata)
+                except Exception:
+                    continue
+
+            # Sort by started time (newest first)
+            delegations.sort(key=lambda x: x.get("started", ""), reverse=True)
+
+            self._json_response({
+                "success": True,
+                "delegations": delegations,
+                "count": len(delegations)
+            })
+
+        except Exception as e:
+            self._error_response(f"Error listing delegations: {e}")
+
+    def _handle_get_delegation(self, task_id: str):
+        """Get specific delegation by task ID"""
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            task_file = delegations_dir / f"task-{task_id}.json"
+
+            if not task_file.exists():
+                self._error_response(f"Delegation {task_id} not found", 404)
+                return
+
+            metadata = json.loads(task_file.read_text())
+            self._json_response({
+                "success": True,
+                "delegation": metadata
+            })
+
+        except Exception as e:
+            self._error_response(f"Error getting delegation: {e}")
+
+    def _handle_cancel_delegation(self, task_id: str):
+        """Cancel a running delegation"""
+        try:
+            import psutil
+
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            task_file = delegations_dir / f"task-{task_id}.json"
+
+            if not task_file.exists():
+                self._error_response(f"Delegation {task_id} not found", 404)
+                return
+
+            metadata = json.loads(task_file.read_text())
+            pid = metadata.get("pid")
+
+            if not pid:
+                self._error_response("Delegation metadata does not contain PID")
+                return
+
+            # Kill process
+            try:
+                proc = psutil.Process(pid)
+                proc.kill()
+                proc.wait(timeout=5)
+
+                # Update metadata
+                metadata["status"] = "cancelled"
+                metadata["cancelled_at"] = json.loads(subprocess.run(
+                    ["python3", "-c", "from datetime import datetime; print(datetime.now().isoformat())"],
+                    capture_output=True, text=True, timeout=2
+                ).stdout.strip().replace("'", '"'))
+
+                task_file.write_text(json.dumps(metadata, indent=2))
+
+                self._json_response({
+                    "success": True,
+                    "message": f"Delegation {task_id} cancelled",
+                    "pid": pid
+                })
+
+            except psutil.NoSuchProcess:
+                self._json_response({
+                    "success": False,
+                    "error": f"Process with PID {pid} is not running",
+                    "message": "Delegation may have already completed"
+                })
+
+        except Exception as e:
+            self._error_response(f"Error cancelling delegation: {e}")
+
     def log_message(self, format, *args):
         """Suppress default logging"""
         pass  # Silent by default
@@ -393,9 +507,12 @@ def start_server(host="127.0.0.1", port=8765):
     print("  GET  /mcp/status - MCP status")
     print("  GET  /sandboxes - List sandboxes")
     print("  GET  /issues - List GitHub issues")
+    print("  GET  /delegations - List all delegations")
+    print("  GET  /delegations/{id} - Get delegation by ID")
     print("  POST /build - Start new build")
     print("  POST /daemon/start - Start daemon")
     print("  POST /daemon/stop - Stop daemon")
+    print("  POST /delegations/{id}/cancel - Cancel delegation")
     print("  POST /sandbox/{id}/cleanup - Cleanup sandbox")
     print()
 

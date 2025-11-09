@@ -102,14 +102,14 @@ class EvolutionDaemon:
             target_backlog_size=20
         )
 
-        # Initialize evolution modes
+        # Initialize evolution modes (pass watchdog to delegation modes)
         self.modes = {
             TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
             TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
             TaskType.RESEARCH.value: ResearchDiscoveryMode(),
-            TaskType.DELEGATION_BUILD.value: DelegationMode(),
-            TaskType.DELEGATION_DEPLOY.value: DelegationMode(),
-            TaskType.DELEGATION_TEST.value: DelegationMode()
+            TaskType.DELEGATION_BUILD.value: DelegationMode(watchdog=self.watchdog),
+            TaskType.DELEGATION_DEPLOY.value: DelegationMode(watchdog=self.watchdog),
+            TaskType.DELEGATION_TEST.value: DelegationMode(watchdog=self.watchdog)
         }
 
         # State
@@ -267,6 +267,87 @@ class EvolutionDaemon:
         else:
             self.logger.debug("No stuck RUNNING tasks found")
 
+    def _recover_delegations(self):
+        """
+        Recover orphaned delegations on daemon startup
+
+        Scans delegation files and creates monitoring tasks for any
+        delegations that are still marked as "running" but don't have
+        active monitoring tasks in the queue.
+        """
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
+                return
+
+            recovered_count = 0
+
+            for task_file in delegations_dir.glob("task-*.json"):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    task_id = metadata.get("task_id")
+                    status = metadata.get("status")
+                    pid = metadata.get("pid")
+
+                    # Only recover running delegations
+                    if status != "running":
+                        continue
+
+                    # Check if process is actually still running
+                    if pid:
+                        try:
+                            import psutil
+                            proc = psutil.Process(pid)
+                            # Process exists - check if we're monitoring it
+                            existing_tasks = self.task_queue.list_tasks(status=TaskStatus.PENDING.value)
+                            existing_tasks += self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
+
+                            already_monitoring = any(
+                                t.params.get('mcp_task_id') == task_id
+                                for t in existing_tasks
+                            )
+
+                            if not already_monitoring:
+                                # Create monitoring task
+                                working_dir = metadata.get("working_directory", "")
+                                project = metadata.get("github_repo_name") or metadata.get("project", "")
+
+                                if not project:
+                                    project = Path(working_dir).name if working_dir else "unknown"
+
+                                self.task_queue.create_task(
+                                    task_type=TaskType.DELEGATION_BUILD.value,
+                                    params={
+                                        "mcp_task_id": task_id,
+                                        "project": project,
+                                        "working_directory": working_dir,
+                                        "started": metadata.get("started") or metadata.get("start_time"),
+                                        "user_initiated": True,
+                                        "recovered": True
+                                    },
+                                    priority=7
+                                )
+
+                                recovered_count += 1
+                                self.logger.info(f"Recovered orphaned delegation: {project} ({task_id[:8]}, PID: {pid})")
+
+                        except psutil.NoSuchProcess:
+                            # Process is dead - update delegation metadata
+                            metadata["status"] = "failed"
+                            metadata["error"] = "Process died (recovered on daemon startup)"
+                            task_file.write_text(json.dumps(metadata, indent=2))
+                            self.logger.warning(f"Delegation {task_id[:8]} marked as failed (process not running)")
+
+                except Exception as e:
+                    self.logger.warning(f"Error recovering delegation from {task_file.name}: {e}")
+                    continue
+
+            if recovered_count > 0:
+                self.logger.info(f"Build recovery complete: {recovered_count} delegation(s) recovered")
+
+        except Exception as e:
+            self.logger.error(f"Error during delegation recovery: {e}", exc_info=True)
+
     def start(self, daemonize: bool = False):
         """
         Start daemon
@@ -283,7 +364,10 @@ class EvolutionDaemon:
         
         # Clean up any stuck tasks from previous crashes
         self._cleanup_stuck_tasks()
-        
+
+        # Recover any orphaned delegations
+        self._recover_delegations()
+
         self.logger.info(f"Starting Evolution Daemon (PID: {self.pid})")
         self.running = True
         
