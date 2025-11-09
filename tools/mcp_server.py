@@ -1063,6 +1063,22 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
         )
         task_info["output_file"] = output_file_path
 
+        # Update shared delegation metadata file so other processes see the cancellation
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            task_file = delegations_dir / f"task-{task_id}.json"
+            if task_file.exists():
+                metadata = json.loads(task_file.read_text())
+                metadata["status"] = "cancelled"
+                metadata["cancelled_at"] = datetime.now().isoformat()
+                metadata["cancellation_reason"] = reason or "Manual cancellation by user"
+                metadata["duration_seconds"] = elapsed
+                metadata["termination_method"] = termination_method
+                task_file.write_text(json.dumps(metadata, indent=2))
+        except Exception:
+            # Don't fail the cancellation if metadata update fails
+            pass
+
         return json.dumps({
             "status": "success",
             "message": f"Task cancelled successfully via {termination_method}",

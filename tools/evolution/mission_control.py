@@ -515,6 +515,9 @@ class DelegationsListPanel(Static):
             elif status == "completed":
                 icon = "✓"
                 status_display = Text("Done", style="blue")
+            elif status == "cancelled":
+                icon = "⊗"
+                status_display = Text("Cancelled", style="yellow")
             else:
                 icon = "✗"
                 status_display = Text("Failed", style="red")
@@ -912,6 +915,47 @@ class PatternsModal(ModalScreen):
         self.dismiss()
 
 
+class ConfirmCancelModal(ModalScreen):
+    """Confirmation dialog for canceling a build"""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Cancel"),
+        ("n", "dismiss", "No"),
+    ]
+
+    def __init__(self, task_id: str, project_name: str, **kwargs):
+        super().__init__(**kwargs)
+        self.task_id = task_id
+        self.project_name = project_name
+        self.confirmed = False
+
+    def compose(self) -> ComposeResult:
+        with Container(id="confirm_modal"):
+            yield Static("⚠️  Confirm Cancel Build", id="modal_title")
+            yield Static(
+                f"\n\nAre you sure you want to cancel this build?\n\n"
+                f"Project: {self.project_name}\n"
+                f"Task ID: {self.task_id[:8]}...\n\n"
+                f"This action cannot be undone.",
+                id="confirm_message"
+            )
+            with Horizontal(id="confirm_buttons"):
+                yield Button("Cancel Build", id="btn_confirm_yes", variant="error")
+                yield Button("Keep Building", id="btn_confirm_no", variant="primary")
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press"""
+        if event.button.id == "btn_confirm_yes":
+            self.confirmed = True
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+    def action_dismiss(self) -> None:
+        """Dismiss without confirming"""
+        self.dismiss(False)
+
+
 class MissionControlApp(App):
     """Main Mission Control TUI Application"""
 
@@ -976,6 +1020,11 @@ class MissionControlApp(App):
         align: center middle;
     }
 
+    ActionButtonsPanel Button {
+        min-width: 20;
+        margin: 0 1;
+    }
+
     ChatInput {
         column-span: 2;
         border: solid blue;
@@ -992,6 +1041,32 @@ class MissionControlApp(App):
         width: 80%;
         height: 80%;
         padding: 1;
+    }
+
+    #confirm_modal {
+        align: center middle;
+        background: $surface;
+        border: thick $error;
+        width: 60%;
+        height: 50%;
+        padding: 2;
+    }
+
+    #confirm_message {
+        text-align: center;
+        padding: 2;
+        margin: 2;
+    }
+
+    #confirm_buttons {
+        align: center middle;
+        height: auto;
+        padding: 1;
+    }
+
+    #confirm_buttons Button {
+        min-width: 20;
+        margin: 0 2;
     }
 
     #modal_title {
@@ -1435,46 +1510,66 @@ class MissionControlApp(App):
             pass
 
     async def action_cancel_build(self) -> None:
-        """Cancel selected delegation"""
+        """Cancel selected delegation with confirmation"""
         try:
             delegations_panel = self.query_one("#delegations", DelegationsListPanel)
             selected = delegations_panel.get_selected_delegation()
 
-            if selected:
-                task_id = selected.get("task_id")
-                if task_id:
-                    # Call cancel via MCP wrapper
-                    wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-                    python_cmd = "/opt/homebrew/bin/python3.13"
+            if not selected:
+                return
 
-                    if Path(python_cmd).exists():
-                        process = await asyncio.create_subprocess_exec(
-                            python_cmd, str(wrapper_path),
-                            "cancel",
-                            "--task-id", task_id,
-                            "--reason", "User cancelled via Mission Control",
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE
-                        )
+            task_id = selected.get("task_id")
+            if not task_id:
+                return
 
-                        stdout, stderr = await asyncio.wait_for(
-                            process.communicate(),
-                            timeout=5.0
-                        )
+            # Get project name
+            working_dir = selected.get("working_directory", "")
+            project_name = Path(working_dir).name if working_dir else "build"
 
-                        if process.returncode == 0:
-                            # Show success message
-                            chat_panel = self.query_one("#chat", ChatPanel)
-                            await chat_panel.add_message(
-                                "assistant",
-                                f"✅ Cancelled build: {task_id[:8]}..."
-                            )
-                        else:
-                            chat_panel = self.query_one("#chat", ChatPanel)
-                            await chat_panel.add_message(
-                                "assistant",
-                                f"❌ Failed to cancel build: {stderr.decode() if stderr else 'Unknown error'}"
-                            )
+            # Show confirmation modal
+            confirmed = await self.push_screen_wait(
+                ConfirmCancelModal(task_id, project_name)
+            )
+
+            # Only proceed if user confirmed
+            if not confirmed:
+                return
+
+            # Call cancel via MCP wrapper
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
+
+            if Path(python_cmd).exists():
+                process = await asyncio.create_subprocess_exec(
+                    python_cmd, str(wrapper_path),
+                    "cancel",
+                    "--task-id", task_id,
+                    "--reason", "User cancelled via Mission Control",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=5.0
+                )
+
+                if process.returncode == 0:
+                    # Show success message
+                    chat_panel = self.query_one("#chat", ChatPanel)
+                    await chat_panel.add_message(
+                        "assistant",
+                        f"✅ Cancelled build: {project_name} ({task_id[:8]}...)"
+                    )
+
+                    # Force immediate refresh of delegations list
+                    await delegations_panel.refresh_delegations()
+                else:
+                    chat_panel = self.query_one("#chat", ChatPanel)
+                    await chat_panel.add_message(
+                        "assistant",
+                        f"❌ Failed to cancel build: {stderr.decode() if stderr else 'Unknown error'}"
+                    )
         except Exception as e:
             pass
 
