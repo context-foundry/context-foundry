@@ -21,6 +21,7 @@ from .process_watchdog import ProcessWatchdog
 from .modes.self_improvement import SelfImprovementMode
 from .modes.chaos_creative import ChaosCreativeMode
 from .modes.research_discovery import ResearchDiscoveryMode
+from .modes.delegation import DelegationMode
 from .backlog_generator import BacklogGenerator
 from .mcp_support import get_mcp_capabilities
 
@@ -105,7 +106,10 @@ class EvolutionDaemon:
         self.modes = {
             TaskType.SELF_IMPROVEMENT.value: SelfImprovementMode(),
             TaskType.CHAOS_CREATIVE.value: ChaosCreativeMode(),
-            TaskType.RESEARCH.value: ResearchDiscoveryMode()
+            TaskType.RESEARCH.value: ResearchDiscoveryMode(),
+            TaskType.DELEGATION_BUILD.value: DelegationMode(),
+            TaskType.DELEGATION_DEPLOY.value: DelegationMode(),
+            TaskType.DELEGATION_TEST.value: DelegationMode()
         }
 
         # State
@@ -409,6 +413,9 @@ class EvolutionDaemon:
 
                 # MCP STATUS MONITORING: Check progress of MCP delegations
                 self._check_mcp_status()
+
+                # DELEGATION MONITORING: Poll delegation files and create monitoring tasks
+                self._poll_delegations()
 
                 # RACE CONDITION FIX: Detect PRs created by Claude and mark tasks as COMPLETED
                 # This allows daemon to pick up next task after PR is created
@@ -1017,6 +1024,58 @@ class EvolutionDaemon:
 
         except Exception as e:
             self.logger.error(f"Error checking MCP status: {e}", exc_info=True)
+
+    def _poll_delegations(self):
+        """
+        Poll delegation files and create tasks for user-initiated builds
+
+        Scans ~/.context-foundry/delegations/*.json and creates monitoring
+        tasks for any delegations that aren't already in the task queue.
+        """
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+
+            if not delegations_dir.exists():
+                return
+
+            # Use DelegationMode to generate tasks from delegation files
+            delegation_mode = self.modes.get(TaskType.DELEGATION_BUILD.value)
+            if not delegation_mode:
+                return
+
+            # Get list of tasks we should be monitoring
+            delegation_tasks = delegation_mode.generate_tasks()
+
+            for task_params in delegation_tasks:
+                mcp_task_id = task_params['params'].get('mcp_task_id')
+
+                if not mcp_task_id:
+                    continue
+
+                # Check if we already have a task for this delegation
+                existing_tasks = self.task_queue.list_tasks()
+                already_monitoring = any(
+                    t.params.get('mcp_task_id') == mcp_task_id
+                    for t in existing_tasks
+                )
+
+                if not already_monitoring:
+                    # Create new monitoring task
+                    task_type = task_params['type']
+                    params = task_params['params']
+                    priority = task_params.get('priority', 7)
+
+                    self.task_queue.create_task(
+                        task_type=task_type,
+                        params=params,
+                        priority=priority
+                    )
+
+                    project = params.get('project', 'unknown')
+                    self.logger.info(f"📋 Started monitoring delegation: {project} ({mcp_task_id[:8]})")
+
+        except Exception as e:
+            self.logger.error(f"Error polling delegations: {e}", exc_info=True)
 
     def _detect_prs_and_complete_tasks(self):
         """

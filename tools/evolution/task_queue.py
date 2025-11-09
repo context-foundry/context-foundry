@@ -30,6 +30,9 @@ class TaskType(str, Enum):
     RESEARCH = "research"
     APPLY_PATTERN = "apply_pattern"
     VALIDATE = "validate"
+    DELEGATION_BUILD = "delegation_build"
+    DELEGATION_DEPLOY = "delegation_deploy"
+    DELEGATION_TEST = "delegation_test"
 
 
 @dataclass
