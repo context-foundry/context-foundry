@@ -337,6 +337,12 @@ class EvolutionDaemon:
                             metadata["error"] = "Process died (recovered on daemon startup)"
                             task_file.write_text(json.dumps(metadata, indent=2))
                             self.logger.warning(f"Delegation {task_id[:8]} marked as failed (process not running)")
+                    else:
+                        # No PID recorded - mark as failed (orphaned)
+                        metadata["status"] = "failed"
+                        metadata["error"] = "Orphaned delegation (no PID recorded)"
+                        task_file.write_text(json.dumps(metadata, indent=2))
+                        self.logger.warning(f"Delegation {task_id[:8]} marked as failed (no PID recorded)")
 
                 except Exception as e:
                     self.logger.warning(f"Error recovering delegation from {task_file.name}: {e}")
