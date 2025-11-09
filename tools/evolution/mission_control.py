@@ -448,10 +448,10 @@ class DirectoryTabbedPanel(Static):
 
             # Create file tree widget for this build
             file_tree = FileTreeWidget(task_id, working_dir, project_name)
-            await pane.mount(file_tree)
 
-            # Add to tabbed content
+            # Add pane to tab container before mounting content so layout is available
             tabbed_content.add_pane(pane)
+            await pane.mount(file_tree)
 
             # Track it
             self.tracked_builds[task_id] = build_info
