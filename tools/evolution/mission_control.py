@@ -749,8 +749,15 @@ class MissionControlApp(App):
             # Use the MCP wrapper script
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
 
-            # Try python3.13 first (has MCP deps), fallback to python3
-            python_cmd = "/opt/homebrew/bin/python3.13" if Path("/opt/homebrew/bin/python3.13").exists() else "python3"
+            # Require python3.13 (has MCP deps installed)
+            python_cmd = "/opt/homebrew/bin/python3.13"
+            if not Path(python_cmd).exists():
+                return (
+                    "❌ Python 3.13 not found\n\n"
+                    "MCP features require Python 3.13+ with FastMCP installed.\n\n"
+                    "Install: brew install python@3.13\n"
+                    "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
+                )
 
             # Call status command
             process = await asyncio.create_subprocess_exec(
@@ -851,8 +858,15 @@ class MissionControlApp(App):
             # Use the MCP wrapper script
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
 
-            # Try python3.13 first (has MCP deps), fallback to python3
-            python_cmd = "/opt/homebrew/bin/python3.13" if Path("/opt/homebrew/bin/python3.13").exists() else "python3"
+            # Require python3.13 (has MCP deps installed)
+            python_cmd = "/opt/homebrew/bin/python3.13"
+            if not Path(python_cmd).exists():
+                return (
+                    "❌ Python 3.13 not found\n\n"
+                    "MCP features require Python 3.13+ with FastMCP installed.\n\n"
+                    "Install: brew install python@3.13\n"
+                    "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
+                )
 
             # Start the build and wait for task ID (fast - just returns delegation info)
             # The actual build runs in background via delegation system
