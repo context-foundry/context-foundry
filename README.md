@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/banner-1280x320-dark.png" alt="Context Foundry Banner" width="100%">
+  <img src="docs/assets/social-card-1280x640-dark.png" alt="Context Foundry Banner" width="100%">
 </div>
 
 # 🏭 Context Foundry
