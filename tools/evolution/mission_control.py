@@ -11,6 +11,7 @@ Beautiful terminal UI for managing Evolution System:
 import asyncio
 import json
 import subprocess
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,9 @@ class StatusPanel(Static):
             # Get MCP status
             mcp_status = self._get_mcp_status()
 
+            # Get active builds
+            build_info = await self._get_build_status()
+
             # Build status table
             table = Table(show_header=False, box=None, padding=(0, 1))
             table.add_column("Key", style="cyan")
@@ -81,9 +85,15 @@ class StatusPanel(Static):
             )
 
             # Active Builds
+            build_count = build_info["active"]
+            build_icon = "🚀" if build_count > 0 else "💤"
+            build_color = "green bold" if build_count > 0 else "dim"
+            build_text = f"{build_count} active"
+            if build_info["latest"]:
+                build_text += f" ({build_info['latest']})"
             table.add_row(
                 "Builds",
-                Text(f"0 active", style="dim")
+                Text(f"{build_icon} {build_text}", style=build_color)
             )
 
             self.update(Panel(table, border_style="cyan", title="[bold]System Status[/bold]"))
@@ -160,6 +170,46 @@ class StatusPanel(Static):
         except Exception as e:
             return {"available": False, "status": f"Error: {e}"}
 
+    async def _get_build_status(self) -> dict:
+        """Get active build count and latest build info"""
+        try:
+            # Check delegation task list from Context Foundry
+            delegation_dir = Path.home() / ".context-foundry" / "delegations"
+
+            if not delegation_dir.exists():
+                return {"active": 0, "latest": None}
+
+            # Count running tasks
+            active_count = 0
+            latest_task = None
+            latest_time = None
+
+            for task_file in delegation_dir.glob("task-*.json"):
+                try:
+                    task_data = json.loads(task_file.read_text())
+
+                    if task_data.get("status") == "running":
+                        active_count += 1
+
+                        # Track latest task
+                        task_time = task_data.get("start_time")
+                        if task_time and (latest_time is None or task_time > latest_time):
+                            latest_time = task_time
+                            # Extract project name from task or working_directory
+                            working_dir = task_data.get("working_directory", "")
+                            latest_task = Path(working_dir).name if working_dir else "build"
+
+                except Exception:
+                    continue
+
+            return {
+                "active": active_count,
+                "latest": latest_task if active_count > 0 else None
+            }
+
+        except Exception as e:
+            return {"active": 0, "latest": None}
+
 
 class ChatMessage(Static):
     """Individual chat message bubble"""
@@ -195,12 +245,17 @@ class ChatPanel(VerticalScroll):
         await self.add_message(
             "assistant",
             "Welcome to Context Foundry Mission Control! 🚀\n\n"
-            "I can help you:\n"
-            "• Start builds in isolated sandboxes\n"
-            "• Check Evolution daemon status\n"
-            "• Manage GitHub issues\n"
-            "• Monitor MCP health\n\n"
-            "What would you like to do?"
+            "**Just type what you want to build in natural language!**\n\n"
+            "Examples:\n"
+            "• 'build a gorilla tag fun math game web based'\n"
+            "• 'create a todo app with React'\n"
+            "• 'make a weather dashboard'\n\n"
+            "**Controls:**\n"
+            "• Enter or Ctrl+D to send\n"
+            "• Ctrl+M to cycle models (currently: Sonnet 4.5)\n"
+            "• Shift+Click to select and copy text\n"
+            "• Type 'help' for more options\n\n"
+            "I'll delegate your request to Claude and track the build!"
         )
 
     async def add_message(self, role: str, content: str) -> None:
@@ -213,7 +268,15 @@ class ChatInput(Input):
     """Chat input field"""
 
     def __init__(self, **kwargs):
-        super().__init__(placeholder="Type a message... (Ctrl+D to send)", **kwargs)
+        super().__init__(placeholder="Type a message... (Enter or Ctrl+D to send)", **kwargs)
+
+    async def on_key(self, event) -> None:
+        """Handle Enter key to submit message"""
+        if event.key == "enter":
+            # Trigger the send_message action
+            await self.app.action_send_message()
+            event.prevent_default()
+            event.stop()
 
 
 class ActivityLog(RichLog):
@@ -222,23 +285,35 @@ class ActivityLog(RichLog):
     def __init__(self, **kwargs):
         super().__init__(**kwargs, max_lines=100, highlight=True, markup=True)
         self.border_title = "Activity Log"
+        self.last_build_lines = {}  # Track last lines shown per build
 
     async def on_mount(self) -> None:
-        """Start tailing daemon log"""
+        """Start tailing build logs"""
         self.set_interval(2.0, self.refresh_log)
         await self.refresh_log()
 
     async def refresh_log(self) -> None:
-        """Tail daemon log"""
+        """Tail build logs and daemon log"""
         try:
+            # First, check for active builds and show their progress
+            app = self.app
+            if hasattr(app, 'active_builds') and app.active_builds:
+                for build in app.active_builds:
+                    task_id = build.get("task_id")
+                    project = build.get("project", "unknown")
+
+                    if task_id:
+                        await self._show_build_progress(task_id, project)
+
+            # Also show daemon log as fallback
             log_file = Path.home() / ".context-foundry" / "evolution" / "logs" / "daemon.log"
 
-            if log_file.exists():
-                # Read last 5 lines
-                lines = log_file.read_text().strip().split("\n")[-5:]
+            if log_file.exists() and (not hasattr(app, 'active_builds') or not app.active_builds):
+                # Only show daemon log if no active builds
+                lines = log_file.read_text().strip().split("\n")[-3:]
 
-                for line in lines[-3:]:  # Show last 3
-                    if line and not self._line_already_shown(line):
+                for line in lines:
+                    if line:
                         # Parse and colorize log line
                         if "INFO" in line:
                             self.write(Text(line, style="dim white"))
@@ -252,49 +327,99 @@ class ActivityLog(RichLog):
         except Exception as e:
             self.write(Text(f"Error reading log: {e}", style="red"))
 
-    def _line_already_shown(self, line: str) -> bool:
-        """Check if line was already displayed (simple dedup)"""
-        # Simple implementation - could be improved
-        return False
+    async def _show_build_progress(self, task_id: str, project: str) -> None:
+        """Show progress for a specific build"""
+        try:
+            # Read delegation output file
+            output_file = Path.home() / ".context-foundry" / "delegations" / f"task-{task_id}.log"
+
+            if output_file.exists():
+                # Read last few lines
+                all_lines = output_file.read_text().strip().split("\n")
+
+                # Track which line we last showed for this build
+                last_line_count = self.last_build_lines.get(task_id, 0)
+                new_lines = all_lines[last_line_count:]
+
+                # Show up to 3 new lines
+                for line in new_lines[-3:]:
+                    if line.strip():
+                        # Colorize based on content
+                        if "✓" in line or "success" in line.lower():
+                            self.write(Text(f"[{project}] {line}", style="green"))
+                        elif "error" in line.lower() or "failed" in line.lower():
+                            self.write(Text(f"[{project}] {line}", style="red"))
+                        elif "warning" in line.lower():
+                            self.write(Text(f"[{project}] {line}", style="yellow"))
+                        else:
+                            self.write(Text(f"[{project}] {line}", style="cyan"))
+
+                # Update last line count
+                self.last_build_lines[task_id] = len(all_lines)
+
+        except Exception:
+            pass
 
 
 class MissionControlApp(App):
     """Main Mission Control TUI Application"""
 
+    # Model selection (default to sonnet)
+    model = reactive("sonnet")
+
+    # Track active builds
+    active_builds = []
+
+    # Enable mouse support for text selection
+    # Users can select text with mouse and copy with their terminal's copy command
+    # (usually Cmd+C on Mac, Ctrl+Shift+C on Linux/Windows)
+
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 3;
-        grid-rows: auto 1fr auto;
+        grid-size: 2 5;
+        grid-rows: auto 1fr 1fr auto auto;
+        grid-gutter: 0;
+        padding: 0;
     }
 
     Header {
         column-span: 2;
+        dock: top;
     }
 
     Footer {
         column-span: 2;
+        dock: bottom;
     }
 
     StatusPanel {
         row-span: 2;
         border: solid cyan;
-        height: 100%;
+        max-height: 100%;
+        overflow-y: auto;
     }
 
     ChatPanel {
         border: solid green;
-        height: 1fr;
+        max-height: 100%;
+        overflow-y: auto;
     }
 
     ActivityLog {
         border: solid yellow;
-        height: 1fr;
+        max-height: 100%;
+        overflow-y: auto;
     }
 
     ChatInput {
+        column-span: 2;
         border: solid blue;
         height: 3;
+        min-height: 3;
+        max-height: 3;
+        display: block;
+        visibility: visible;
     }
 
     .user-message {
@@ -315,6 +440,7 @@ class MissionControlApp(App):
         Binding("ctrl+d", "send_message", "Send", show=True),
         Binding("ctrl+b", "start_build", "Build", show=True),
         Binding("ctrl+r", "refresh", "Refresh", show=True),
+        Binding("ctrl+m", "cycle_model", "Model", show=True),
     ]
 
     def compose(self) -> ComposeResult:
@@ -327,74 +453,249 @@ class MissionControlApp(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Set app title"""
+        """Set app title and focus input"""
         self.title = "Context Foundry Mission Control"
-        self.sub_title = "Evolution System Dashboard"
+        self.update_subtitle()
+
+        # Focus the input box so user can start typing immediately
+        try:
+            chat_input = self.query_one("#chat_input", ChatInput)
+            chat_input.focus()
+        except:
+            pass
+
+    def update_subtitle(self) -> None:
+        """Update subtitle with current model"""
+        model_display = {
+            "sonnet": "Sonnet 4.5",
+            "opus": "Opus 4",
+            "haiku": "Haiku 3.5"
+        }.get(self.model, self.model)
+        self.sub_title = f"Evolution System Dashboard | Model: {model_display}"
 
     async def action_send_message(self) -> None:
         """Send chat message"""
-        chat_input = self.query_one("#chat_input", ChatInput)
-        chat_panel = self.query_one("#chat", ChatPanel)
+        chat_input = None
+        chat_panel = None
 
-        message = chat_input.value.strip()
-        if not message:
-            return
+        try:
+            chat_input = self.query_one("#chat_input", ChatInput)
+            chat_panel = self.query_one("#chat", ChatPanel)
 
-        # Add user message
-        await chat_panel.add_message("user", message)
+            message = chat_input.value.strip()
+            if not message:
+                # Still refocus even if empty
+                self.call_later(lambda: chat_input.focus())
+                return
 
-        # Clear input
-        chat_input.value = ""
+            # Add user message
+            await chat_panel.add_message("user", message)
 
-        # Process message and respond
-        response = await self._process_command(message)
-        await chat_panel.add_message("assistant", response)
+            # Clear input
+            chat_input.value = ""
+
+            # Process message and respond
+            response = await self._process_command(message)
+            await chat_panel.add_message("assistant", response)
+
+        except Exception as e:
+            # Don't let errors break the UI
+            if chat_panel:
+                try:
+                    await chat_panel.add_message("assistant", f"❌ Error: {str(e)}")
+                except:
+                    pass
+
+        finally:
+            # ALWAYS refocus the input with a slight delay to ensure UI is stable
+            def refocus():
+                try:
+                    input_widget = self.query_one("#chat_input", ChatInput)
+                    input_widget.focus()
+                except Exception as e:
+                    # Log error but don't crash
+                    pass
+
+            # Use call_later to ensure refocus happens after UI updates
+            self.call_later(refocus)
+
+    async def _get_mcp_status(self) -> str:
+        """Get MCP status via wrapper"""
+        try:
+            # Use the MCP wrapper script
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+
+            # Try python3.13 first (has MCP deps), fallback to python3
+            python_cmd = "/opt/homebrew/bin/python3.13" if Path("/opt/homebrew/bin/python3.13").exists() else "python3"
+
+            # Call status command
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "status",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                return stdout.decode().strip()
+            else:
+                # Try to parse error JSON
+                try:
+                    import json
+                    error_data = json.loads(stderr.decode())
+                    return (
+                        f"❌ {error_data.get('error', 'MCP Error')}\n\n"
+                        f"{error_data.get('message', '')}\n\n"
+                        f"{error_data.get('help', '')}"
+                    )
+                except:
+                    return f"❌ MCP status error:\n{stderr.decode()}"
+
+        except Exception as e:
+            return f"❌ Error getting MCP status:\n{str(e)}"
 
     async def _process_command(self, message: str) -> str:
         """Process user command and return response"""
         message_lower = message.lower()
 
-        # Build commands
-        if any(word in message_lower for word in ["build", "start", "create"]):
-            return (
-                "🔧 To start a build, use Ctrl+B or type:\n"
-                "`build <project-name> <task-description>`\n\n"
-                "Example: `build my-app Add user authentication`"
-            )
+        # Build commands - delegate to autonomous build
+        if any(word in message_lower for word in ["build", "create", "make", "develop"]):
+            return await self._start_autonomous_build(message)
 
-        # Status commands
+        # Status commands - call MCP status via wrapper
         elif any(word in message_lower for word in ["status", "health", "check"]):
-            daemon = self.query_one(StatusPanel)._get_daemon_status()
-            return (
-                f"System Status:\n"
-                f"• Daemon: {daemon['status']}\n"
-                f"• Backlog: Maintained at 20 issues\n"
-                f"• MCP: {'Ready' if daemon['running'] else 'Waiting for Python 3.10+'}"
-            )
+            return await self._get_mcp_status()
 
         # Help commands
         elif any(word in message_lower for word in ["help", "what", "how"]):
             return (
                 "Available commands:\n\n"
                 "**Build Management:**\n"
-                "• `build <name> <task>` - Start new build in sandbox\n"
-                "• `list builds` - Show active builds\n\n"
+                "• Just describe what you want to build!\n"
+                "  Example: 'build a gorilla tag fun math game'\n"
+                "• Natural language - AI will understand\n\n"
                 "**System Control:**\n"
                 "• `status` - Show system health\n"
                 "• `restart daemon` - Restart Evolution daemon\n\n"
-                "**Shortcuts:**\n"
-                "• Ctrl+B - Quick build\n"
-                "• Ctrl+R - Refresh all panels\n"
-                "• Ctrl+C - Quit"
+                "**Keyboard Shortcuts:**\n"
+                "• Enter/Ctrl+D - Send message\n"
+                "• Ctrl+M - Cycle model (Sonnet/Opus/Haiku)\n"
+                "• Ctrl+R - Refresh panels\n"
+                "• Ctrl+C - Quit\n\n"
+                "**Copy Text:**\n"
+                "• Hold Shift + Click and drag to select text\n"
+                "• Then use your terminal's copy (Cmd+C / Ctrl+Shift+C)"
             )
 
         else:
+            # Default: treat as build request
+            return await self._start_autonomous_build(message)
+
+    async def _start_autonomous_build(self, task_description: str) -> str:
+        """Start an autonomous build via MCP wrapper"""
+        try:
+            # Import needed modules first
+            import re
+            import tempfile
+
+            # Extract project name from task if possible
+            words = task_description.split()
+            if "build" in task_description.lower():
+                # Try to extract name after "build"/"build a"
+                build_idx = next((i for i, w in enumerate(words) if w.lower() == "build"), 0)
+                # Skip articles
+                name_start = build_idx + 1
+                if name_start < len(words) and words[name_start].lower() in ["a", "an", "the"]:
+                    name_start += 1
+                # Take next 1-3 words as project name
+                name_words = words[name_start:min(name_start + 3, len(words))]
+                project_name = "-".join(name_words).lower().replace(",", "")
+            else:
+                # Use first few words
+                project_name = "-".join(words[:3]).lower().replace(",", "")
+
+            # Clean project name
+            project_name = re.sub(r'[^a-z0-9-]', '', project_name)[:30]
+            if not project_name:
+                project_name = "mission-control-build"
+
+            # Create working directory in temp
+            working_dir = Path(tempfile.gettempdir()) / project_name
+
+            # Use the MCP wrapper script
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+
+            # Try python3.13 first (has MCP deps), fallback to python3
+            python_cmd = "/opt/homebrew/bin/python3.13" if Path("/opt/homebrew/bin/python3.13").exists() else "python3"
+
+            # Start the build and wait for task ID (fast - just returns delegation info)
+            # The actual build runs in background via delegation system
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "autonomous_build",
+                "--task", task_description,
+                "--working-directory", str(working_dir),
+                "--github-repo-name", project_name,
+                "--model", self.model,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            # Wait for response (should be quick - just returns task ID)
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=10.0  # 10 second timeout for initial response
+                )
+
+                if process.returncode == 0 and stdout:
+                    # Parse response to get task ID
+                    result = json.loads(stdout.decode())
+                    task_id = result.get("task_id", "unknown")
+
+                    # Track this build
+                    self.active_builds.append({
+                        "task_id": task_id,
+                        "project": project_name,
+                        "started": datetime.now().isoformat()
+                    })
+
+                    return (
+                        f"🚀 Build started successfully!\n\n"
+                        f"**Project:** {project_name}\n"
+                        f"**Task:** {task_description}\n"
+                        f"**Model:** Claude {self.model.capitalize()}\n"
+                        f"**Location:** {working_dir}\n"
+                        f"**Task ID:** {task_id[:8]}...\n\n"
+                        f"✅ Build is running in the background.\n"
+                        f"✅ It will continue even if you close this TUI.\n\n"
+                        f"Watch System Status panel for live progress!\n\n"
+                        f"💡 Tip: The build will auto-deploy to GitHub when complete!"
+                    )
+                else:
+                    # Error occurred
+                    error_msg = stderr.decode() if stderr else "Unknown error"
+                    return (
+                        f"❌ Failed to start build:\n\n"
+                        f"{error_msg[:500]}\n\n"
+                        f"Check that MCP server is configured correctly."
+                    )
+
+            except asyncio.TimeoutError:
+                return (
+                    f"⚠️ Build start timeout\n\n"
+                    f"The build may still be starting in the background.\n"
+                    f"Check the delegation system with:\n"
+                    f"`claude-code 'list delegations'`"
+                )
+
+        except Exception as e:
             return (
-                f"I received: {message}\n\n"
-                "I'm still learning! Try:\n"
-                "• `help` - See available commands\n"
-                "• `status` - Check system health\n"
-                "• `build <name> <task>` - Start a new build"
+                f"❌ Error starting build:\n{str(e)}\n\n"
+                f"Make sure MCP server is available.\n"
+                f"Error details: {type(e).__name__}"
             )
 
     async def action_start_build(self) -> None:
@@ -413,6 +714,26 @@ class MissionControlApp(App):
         """Refresh all panels"""
         status_panel = self.query_one(StatusPanel)
         await status_panel.refresh_status()
+
+    async def action_cycle_model(self) -> None:
+        """Cycle through available models"""
+        models = ["sonnet", "opus", "haiku"]
+        current_index = models.index(self.model)
+        next_index = (current_index + 1) % len(models)
+        self.model = models[next_index]
+        self.update_subtitle()
+
+        # Show notification
+        chat_panel = self.query_one("#chat", ChatPanel)
+        model_names = {
+            "sonnet": "Claude Sonnet 4.5",
+            "opus": "Claude Opus 4",
+            "haiku": "Claude Haiku 3.5"
+        }
+        await chat_panel.add_message(
+            "assistant",
+            f"🔄 Model switched to: {model_names[self.model]}"
+        )
 
 
 def main():
