@@ -180,9 +180,14 @@ class FileTreeWidget(VerticalScroll):
         self.task_id = task_id
         self.working_dir = working_dir
         self.project_name = project_name
+        self.content_widget = None
 
     async def on_mount(self) -> None:
         """Start file tree updates"""
+        # Create the content widget once
+        self.content_widget = Static("")
+        await self.mount(self.content_widget)
+
         self.set_interval(1.5, self.refresh_tree)
         await self.refresh_tree()
 
@@ -195,8 +200,8 @@ class FileTreeWidget(VerticalScroll):
                 result = Text()
                 result.append("Build directory not found\n", style="dim red")
                 result.append(str(build_dir), style="dim")
-                await self.remove_children()
-                await self.mount(Static(result))
+                if self.content_widget:
+                    self.content_widget.update(result)
                 return
 
             # Get build status from metadata
@@ -338,12 +343,12 @@ class FileTreeWidget(VerticalScroll):
             add_tree_items(build_dir)
 
             # Update scrollable content
-            await self.remove_children()
-            await self.mount(Static(result))
+            if self.content_widget:
+                self.content_widget.update(result)
 
         except Exception:
-            await self.remove_children()
-            await self.mount(Static(Text(f"Error loading build directory", style="dim red")))
+            if self.content_widget:
+                self.content_widget.update(Text(f"Error loading build directory", style="dim red"))
 
 
 class DirectoryTabbedPanel(Static):
