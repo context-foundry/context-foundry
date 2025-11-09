@@ -2,6 +2,9 @@
 
 import json
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -24,6 +27,179 @@ class DelegationMode(BaseEvolutionMode):
         super().__init__(config)
         self.delegations_dir = Path.home() / ".context-foundry" / "delegations"
         self.watchdog = watchdog  # ProcessWatchdog instance (optional)
+        self.mcp_wrapper_path = Path(__file__).parent.parent.parent / "mcp_wrapper.py"
+
+    def _check_and_update_process_status(self, task_id: str, metadata: dict) -> dict:
+        """
+        Check if build process is still running and update metadata if completed
+
+        Uses PID from metadata to check process status directly.
+        If process finished, reads phase info and updates metadata file.
+
+        Args:
+            task_id: The delegation task ID
+            metadata: Current delegation metadata dict
+
+        Returns:
+            Updated metadata dict
+        """
+        try:
+            pid = metadata.get("pid")
+
+            if not pid:
+                # No PID means process info wasn't captured
+                # Check if build artifacts exist to infer completion
+                working_dir = metadata.get("working_directory", "")
+                if working_dir:
+                    phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+                    if phase_file.exists():
+                        try:
+                            phase_info = json.loads(phase_file.read_text())
+                            phase_status = phase_info.get("status", "")
+                            current_phase = phase_info.get("current_phase", "")
+
+                            # Determine final status based on phase info
+                            final_status = None
+                            if phase_status == "completed":
+                                # Check if Deploy is in completed phases (full success)
+                                phases_completed = phase_info.get("phases_completed", [])
+                                if "Deploy" in phases_completed or current_phase in ["Deploy", "Feedback"]:
+                                    # Deploy completed (with or without Feedback phase)
+                                    final_status = "completed"
+                                else:
+                                    # Completed some phase but not Deploy - partial success, mark as failed
+                                    final_status = "failed"
+                            elif phase_status == "failed":
+                                final_status = "failed"
+                            else:
+                                # Unknown/partial status - mark as failed
+                                final_status = "failed"
+
+                            if final_status:
+                                # Update metadata
+                                metadata["status"] = final_status
+                                metadata["end_time"] = datetime.now().isoformat()
+                                metadata["current_phase"] = phase_info.get("current_phase", "Unknown")
+                                metadata["phase_status"] = phase_status
+                                metadata["phases_completed"] = phase_info.get("phases_completed", [])
+                                metadata["progress_detail"] = phase_info.get("progress_detail", "")
+
+                                # Clear stale error message if marking as completed
+                                if final_status == "completed" and "error" in metadata:
+                                    del metadata["error"]
+
+                                # Calculate duration
+                                start_time_str = metadata.get("start_time") or metadata.get("started")
+                                if start_time_str:
+                                    try:
+                                        start_time = datetime.fromisoformat(start_time_str)
+                                        duration = (datetime.now() - start_time).total_seconds()
+                                        metadata["duration"] = round(duration, 2)
+                                    except:
+                                        pass
+
+                                # Write updated metadata
+                                task_file = self.delegations_dir / f"task-{task_id}.json"
+                                task_file.write_text(json.dumps(metadata, indent=2))
+                                logger.info(f"{'✅' if final_status == 'completed' else '❌'} Delegation {task_id[:8]} marked as {final_status} (no PID, inferred from phase)")
+
+                        except Exception as e:
+                            logger.debug(f"Could not read phase info for {task_id[:8]}: {e}")
+                    else:
+                        # No phase file - mark as failed
+                        metadata["status"] = "failed"
+                        metadata["end_time"] = datetime.now().isoformat()
+                        metadata["error"] = "Build failed (no PID, no phase file)"
+
+                        task_file = self.delegations_dir / f"task-{task_id}.json"
+                        task_file.write_text(json.dumps(metadata, indent=2))
+                        logger.warning(f"❌ Delegation {task_id[:8]} marked as failed (no PID, no phase file)")
+
+                return metadata
+
+            # Check if process is still running using PID
+            try:
+                # os.kill(pid, 0) doesn't kill, just checks if process exists
+                os.kill(pid, 0)
+                # Process still running
+                logger.debug(f"Process {pid} for delegation {task_id[:8]} is still running")
+                return metadata
+
+            except OSError:
+                # Process not running - it finished!
+                logger.info(f"Process {pid} for delegation {task_id[:8]} has finished")
+
+                # Read phase information to determine success/failure
+                working_dir = metadata.get("working_directory", "")
+                phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+
+                final_status = "completed"  # Assume success unless we find otherwise
+                phase_data = {}
+
+                if phase_file.exists():
+                    try:
+                        phase_data = json.loads(phase_file.read_text())
+                        phase_status = phase_data.get("status", "")
+                        current_phase = phase_data.get("current_phase", "")
+                        phases_completed = phase_data.get("phases_completed", [])
+
+                        # Check if Deploy is in completed phases (matches no-PID logic)
+                        if phase_status == "completed":
+                            if "Deploy" in phases_completed or current_phase in ["Deploy", "Feedback"]:
+                                # Deploy completed (with or without Feedback phase)
+                                final_status = "completed"
+                            else:
+                                # Completed some phase but not Deploy - partial success, mark as failed
+                                final_status = "failed"
+                        elif phase_status == "failed":
+                            final_status = "failed"
+                        else:
+                            # Unknown/partial status
+                            final_status = "failed"
+
+                    except Exception as e:
+                        logger.warning(f"Could not read phase info for {task_id[:8]}: {e}")
+                        final_status = "failed"
+                else:
+                    # No phase file - likely failed early
+                    final_status = "failed"
+
+                # Update metadata
+                metadata["status"] = final_status
+                metadata["end_time"] = datetime.now().isoformat()
+
+                # Clear stale error message if marking as completed
+                if final_status == "completed" and "error" in metadata:
+                    del metadata["error"]
+
+                # Add phase information if available
+                if phase_data:
+                    metadata["current_phase"] = phase_data.get("current_phase", "Unknown")
+                    metadata["phase_status"] = phase_data.get("status", "unknown")
+                    metadata["phases_completed"] = phase_data.get("phases_completed", [])
+                    metadata["progress_detail"] = phase_data.get("progress_detail", "")
+
+                # Calculate duration
+                start_time_str = metadata.get("start_time") or metadata.get("started")
+                if start_time_str:
+                    try:
+                        start_time = datetime.fromisoformat(start_time_str)
+                        duration = (datetime.now() - start_time).total_seconds()
+                        metadata["duration"] = round(duration, 2)
+                    except:
+                        pass
+
+                # Write updated metadata
+                task_file = self.delegations_dir / f"task-{task_id}.json"
+                task_file.write_text(json.dumps(metadata, indent=2))
+
+                logger.info(f"✅ Delegation {task_id[:8]} marked as {final_status}")
+
+                return metadata
+
+        except Exception as e:
+            logger.error(f"Error checking process status for {task_id[:8]}: {e}")
+            return metadata
 
     def generate_tasks(self) -> List[Dict]:
         """
@@ -96,7 +272,12 @@ class DelegationMode(BaseEvolutionMode):
                     error=f"Delegation file not found: {task_file}"
                 )
 
+            # Read current metadata
             metadata = json.loads(task_file.read_text())
+
+            # CRITICAL FIX: Check if process finished and update status
+            # This uses PID to check process status directly
+            metadata = self._check_and_update_process_status(mcp_task_id, metadata)
             status = metadata.get("status", "unknown")
 
             # Check if delegation completed

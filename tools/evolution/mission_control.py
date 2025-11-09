@@ -25,7 +25,7 @@ from __version__ import __version__
 from enum import Enum
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll, ScrollableContainer
-from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree, ListView, ListItem, TabbedContent, TabPane
+from textual.widgets import Header, Footer, Static, Button, Label, RichLog, Tree, ListView, ListItem, TabbedContent, TabPane, Input
 from textual.widgets.tree import TreeNode
 from textual.screen import Screen, ModalScreen
 from textual.binding import Binding
@@ -35,8 +35,6 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 from rich.syntax import Syntax
-
-
 # Helper function to query daemon monitoring status
 def get_daemon_monitoring_status(task_id: str) -> Optional[dict]:
     """Query daemon task queue to get monitoring status for a delegation"""
@@ -554,8 +552,8 @@ class DelegationsListPanel(Static, can_focus=True):
                 try:
                     metadata = json.loads(task_file.read_text())
 
-                    # Get start time
-                    start_time_str = metadata.get("start_time", "")
+                    # Get start time - check both 'start_time' and 'started' keys
+                    start_time_str = metadata.get("start_time") or metadata.get("started", "")
                     start_time = None
                     start_display = "unknown"
                     if start_time_str:
@@ -567,6 +565,8 @@ class DelegationsListPanel(Static, can_focus=True):
 
                     # Calculate duration
                     duration_display = "-"
+                    duration_secs = None
+
                     if start_time:
                         end_time_str = metadata.get("end_time")
                         if end_time_str:
@@ -579,8 +579,12 @@ class DelegationsListPanel(Static, can_focus=True):
                         else:
                             # Still running - use current time
                             duration_secs = (datetime.now() - start_time).total_seconds()
+                    else:
+                        # No start time - fall back to persisted duration if available
+                        duration_secs = metadata.get("duration")
 
-                        # Format duration
+                    # Format duration
+                    if duration_secs:
                         if duration_secs < 60:
                             duration_display = f"{int(duration_secs)}s"
                         elif duration_secs < 3600:
@@ -765,13 +769,24 @@ class ChatInput(Input, can_focus=True):
     """Chat input field"""
 
     def __init__(self, **kwargs):
-        super().__init__(placeholder="Type a message... (Enter to send, Tab to switch views)", **kwargs)
+        super().__init__(
+            placeholder="Type a message... (Enter to send, Tab to switch views)",
+            **kwargs
+        )
 
     async def on_key(self, event) -> None:
         """Handle Enter key to submit message"""
+        if getattr(self.app, "current_view", ViewMode.CONVERSATION) != ViewMode.CONVERSATION:
+            return
+
+        # Plain Enter sends the message
         if event.key == "enter":
-            # Trigger the send_message action
             await self.app.action_send_message()
+            event.prevent_default()
+            event.stop()
+        # Tab switches views
+        elif event.key == "tab":
+            await self.app.action_toggle_view()
             event.prevent_default()
             event.stop()
 
@@ -1189,12 +1204,22 @@ class MissionControlApp(App):
 
     ChatInput {
         height: 3;
-        min-height: 3;
-        max-height: 3;
         padding: 0 1;
         background: #1a1a2e;
         color: #e0e0e0;
         border: solid #8B5CF6;
+    }
+
+    ChatInput:focus {
+        border: solid #C4B5FD;
+    }
+
+    #chat_hint {
+        height: 1;
+        min-height: 1;
+        padding: 0 1;
+        background: #111125;
+        color: #9CA3AF;
     }
 
     /* Modal styles */
@@ -1277,7 +1302,7 @@ class MissionControlApp(App):
 
     BINDINGS = [
         Binding("ctrl+c", "quit", "Quit", show=True),
-        Binding("ctrl+d", "send_message", "Send", show=False),
+        Binding("enter", "send_message", "Send", show=True),
         Binding("ctrl+m", "cycle_model", "Model", show=True),
         Binding("tab", "toggle_view", "View", show=True, priority=True),
         Binding("up", "select_up", "Up", show=False),
@@ -1294,6 +1319,7 @@ class MissionControlApp(App):
         yield DirectoryTabbedPanel(id="file_tree")
         yield DelegationsListPanel(id="delegations")
         yield ChatInput(id="chat_input")
+        yield Static("Press Enter to send · Shift+Enter for new line · Tab cycles views", id="chat_hint")
         yield StatusBar(id="status_bar")
         yield Footer()
 
@@ -1318,6 +1344,8 @@ class MissionControlApp(App):
             chat = self.query_one("#chat", ChatPanel)
             delegations = self.query_one("#delegations", DelegationsListPanel)
             file_tree = self.query_one("#file_tree", DirectoryTabbedPanel)
+            chat_input = self.query_one("#chat_input", ChatInput)
+            chat_hint = self.query_one("#chat_hint", Static)
             tab_bar = self.query_one("#tab_bar", TabBar)
 
             # Sync tab bar
@@ -1331,6 +1359,8 @@ class MissionControlApp(App):
                 delegations.display = False
                 file_tree.display = False
                 chat.display = True
+                chat_input.display = True
+                chat_hint.display = True
             elif self.current_view == ViewMode.BUILDS:
                 chat.add_class("hidden")
                 delegations.add_class("visible")
@@ -1338,6 +1368,8 @@ class MissionControlApp(App):
                 chat.display = False
                 delegations.display = True
                 file_tree.display = False
+                chat_input.display = False
+                chat_hint.display = False
             elif self.current_view == ViewMode.DIRECTORY:
                 chat.add_class("hidden")
                 delegations.remove_class("visible")
@@ -1345,6 +1377,8 @@ class MissionControlApp(App):
                 chat.display = False
                 delegations.display = False
                 file_tree.display = True
+                chat_input.display = False
+                chat_hint.display = False
 
         except Exception:
             pass
@@ -1455,29 +1489,15 @@ class MissionControlApp(App):
     async def _process_command(self, message: str) -> str:
         """Process user command and return response"""
         message_lower = message.lower().strip()
+        word_count = len(message_lower.split())
 
-        # Status commands - check first before greeting filter
-        if any(word in message_lower for word in ["status", "health", "check", "delegation"]):
-            # Check if they want details for a specific build
-            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
-            selected = delegations_panel.get_selected_delegation()
+        # Greetings and casual messages first (exact matches only)
+        greeting_keywords = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo"]
+        if message_lower in greeting_keywords:
+            return "Hello! What would you like to build?"
 
-            if selected and "selected" in message_lower:
-                project = selected.get("github_repo", "build")
-                status = selected.get("status", "unknown")
-                start_time = selected.get("start_time", "unknown")
-
-                return (
-                    f"{project}\n"
-                    f"Status: {status}\n"
-                    f"Started: {start_time}\n\n"
-                    f"Press d for full details"
-                )
-            else:
-                return await self._get_mcp_status()
-
-        # Help commands - check before greeting filter
-        if any(word in message_lower for word in ["help", "what", "how", "?"]):
+        # Help commands - only for SHORT messages (1-3 words) with help keywords
+        if word_count <= 3 and any(word in message_lower.split() for word in ["help", "?", "how"]):
             return (
                 "Quick Commands - Just Say:\n\n"
                 "🚀 Build & Deploy:\n"
@@ -1492,33 +1512,37 @@ class MissionControlApp(App):
                 "  Show active builds\n"
                 "  Check status\n\n"
                 "Navigation:\n"
+                "  Ctrl+J or Ctrl+Enter - Send message\n"
                 "  Tab - Cycle views\n"
                 "  ↑↓ - Navigate builds\n"
                 "  x - Cancel build\n"
                 "  d - Build details"
             )
 
-        # Build commands - delegate to autonomous build
+        # Status commands - only for SHORT messages (1-3 words) with status keywords
+        if word_count <= 3 and any(word in message_lower.split() for word in ["status", "health"]):
+            return await self._get_mcp_status()
+
+        # Build commands - CHECK FIRST for any substantial message
         # Keywords: build, create, make, develop, implement, write, design, upgrade, fix, update
-        build_keywords = ["build", "create", "make", "develop", "implement", "write", "design", "upgrade", "fix", "update", "add", "modify"]
+        build_keywords = ["build", "create", "make", "develop", "implement", "write", "design", "upgrade", "fix", "update", "add", "modify", "deploy"]
         if any(word in message_lower for word in build_keywords):
             return await self._start_autonomous_build(message)
 
-        # Check for query/info commands that should NOT trigger builds
+        # For messages longer than 10 words, assume it's a build request even without keywords
+        if word_count > 10:
+            return await self._start_autonomous_build(message)
+
+        # Check for query/info commands that should NOT trigger builds (only for short messages)
         query_keywords = ["get", "show", "list", "view", "display", "details", "result", "info"]
-        if any(word in message_lower.split() for word in query_keywords):
+        if word_count <= 3 and any(word in message_lower.split() for word in query_keywords):
             return "Use Tab to switch views, or type 'help' for commands"
 
-        # Greetings and casual messages - don't start a build!
-        greeting_keywords = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo"]
-        if message_lower in greeting_keywords:
-            return "Hello! What would you like to build?"
-
         # Very short messages (1-2 words) that aren't commands - ask for clarification
-        if len(message_lower.split()) <= 2:
+        if word_count <= 2:
             return "Not sure what you mean. Try 'build a <description>' or type 'help'"
 
-        # Unclear intent - ask for clarification
+        # Default for medium-length unclear messages
         return "Not sure what you mean. Try 'build a <description>' or type 'help'"
 
     async def _start_autonomous_build(self, task_description: str) -> str:
@@ -1616,7 +1640,7 @@ class MissionControlApp(App):
                         "task_id": task_id,
                         "project": project_name,
                         "working_directory": str(working_dir),
-                        "started": datetime.now().isoformat(),
+                        "start_time": datetime.now().isoformat(),
                         "status": "running"
                     }
 
@@ -1697,9 +1721,14 @@ class MissionControlApp(App):
                 active_builds = []
                 for build in builds:
                     if build.get("status") == "running":
-                        started = datetime.fromisoformat(build["started"]).timestamp()
-                        if started > cutoff:
-                            active_builds.append(build)
+                        start_time_str = build.get("start_time") or build.get("started", "")
+                        if start_time_str:
+                            try:
+                                started = datetime.fromisoformat(start_time_str).timestamp()
+                                if started > cutoff:
+                                    active_builds.append(build)
+                            except:
+                                pass
                 return active_builds
             return []
         except:
@@ -1745,6 +1774,7 @@ class MissionControlApp(App):
             "  Click tabs at top to switch views\n"
             "  Tab key - Cycle through views\n\n"
             "Keyboard:\n"
+            "  Ctrl+J or Ctrl+Enter - Send message\n"
             "  d - View build details\n"
             "  ↑↓ - Navigate builds\n"
             "  x - Cancel build\n"

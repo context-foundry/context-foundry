@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -338,11 +339,61 @@ class EvolutionDaemon:
                             task_file.write_text(json.dumps(metadata, indent=2))
                             self.logger.warning(f"Delegation {task_id[:8]} marked as failed (process not running)")
                     else:
-                        # No PID recorded - mark as failed (orphaned)
-                        metadata["status"] = "failed"
-                        metadata["error"] = "Orphaned delegation (no PID recorded)"
-                        task_file.write_text(json.dumps(metadata, indent=2))
-                        self.logger.warning(f"Delegation {task_id[:8]} marked as failed (no PID recorded)")
+                        # No PID recorded - check if build actually completed by reading phase file
+                        working_dir = metadata.get("working_directory", "")
+                        phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+
+                        if phase_file.exists():
+                            try:
+                                phase_info = json.loads(phase_file.read_text())
+                                phase_status = phase_info.get("status", "")
+                                current_phase = phase_info.get("current_phase", "")
+
+                                # Check if Deploy is in completed phases
+                                phases_completed = phase_info.get("phases_completed", [])
+                                if phase_status == "completed" and ("Deploy" in phases_completed or current_phase in ["Deploy", "Feedback"]):
+                                    # Build completed successfully!
+                                    metadata["status"] = "completed"
+                                    metadata["end_time"] = datetime.now().isoformat()
+                                    metadata["current_phase"] = current_phase  # Preserve actual phase (Deploy or Feedback)
+                                    metadata["phase_status"] = "completed"
+                                    metadata["phases_completed"] = phase_info.get("phases_completed", [])
+                                    metadata["progress_detail"] = phase_info.get("progress_detail", "")
+
+                                    # Clear stale error message when marking as completed
+                                    if "error" in metadata:
+                                        del metadata["error"]
+
+                                    # Calculate duration
+                                    start_time_str = metadata.get("start_time") or metadata.get("started")
+                                    if start_time_str:
+                                        try:
+                                            start_time = datetime.fromisoformat(start_time_str)
+                                            duration = (datetime.now() - start_time).total_seconds()
+                                            metadata["duration"] = round(duration, 2)
+                                        except:
+                                            pass
+
+                                    task_file.write_text(json.dumps(metadata, indent=2))
+                                    self.logger.info(f"✅ Delegation {task_id[:8]} recovered as completed (inferred from phase)")
+                                else:
+                                    # Build did not complete successfully
+                                    metadata["status"] = "failed"
+                                    metadata["error"] = "Build incomplete (no PID recorded, phase not completed)"
+                                    task_file.write_text(json.dumps(metadata, indent=2))
+                                    self.logger.warning(f"Delegation {task_id[:8]} marked as failed (incomplete)")
+                            except Exception as e:
+                                # Could not read phase file
+                                metadata["status"] = "failed"
+                                metadata["error"] = "Orphaned delegation (no PID recorded, could not verify completion)"
+                                task_file.write_text(json.dumps(metadata, indent=2))
+                                self.logger.warning(f"Delegation {task_id[:8]} marked as failed (no PID, phase unreadable)")
+                        else:
+                            # No phase file - mark as failed (orphaned)
+                            metadata["status"] = "failed"
+                            metadata["error"] = "Orphaned delegation (no PID recorded, no phase file)"
+                            task_file.write_text(json.dumps(metadata, indent=2))
+                            self.logger.warning(f"Delegation {task_id[:8]} marked as failed (no PID, no phase file)")
 
                 except Exception as e:
                     self.logger.warning(f"Error recovering delegation from {task_file.name}: {e}")

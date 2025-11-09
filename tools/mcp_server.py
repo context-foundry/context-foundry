@@ -2368,7 +2368,10 @@ def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
         pattern_files = {
             "common-issues": "common-issues.json",
             "scout-learnings": "scout-learnings.json",
-            "build-metrics": "build-metrics.json"
+            "build-metrics": "build-metrics.json",
+            "architecture-patterns": "architecture-patterns.json",
+            "test-patterns": "test-patterns.json",
+            "mcp-server-patterns": "mcp-server-patterns.json"
         }
 
         if pattern_type not in pattern_files:
@@ -2560,6 +2563,61 @@ def _merge_project_patterns_impl(
                     merge_stats["new_patterns"] += 1
 
             global_data["learnings"] = global_learnings
+
+        elif pattern_type in ["architecture-patterns", "test-patterns", "mcp-server-patterns"]:
+            # These pattern types use the same structure as common-issues
+            project_patterns = project_data.get("patterns", [])
+            global_patterns = global_data.get("patterns", [])
+            merge_stats["total_project_patterns"] = len(project_patterns)
+
+            # Create lookup by pattern_id
+            global_by_id = {}
+            for i, p in enumerate(global_patterns):
+                pid = p.get("pattern_id")
+                if pid:
+                    global_by_id[pid] = i
+
+            # Merge each project pattern
+            for proj_pattern in project_patterns:
+                pattern_id = proj_pattern.get("pattern_id")
+                if not pattern_id:
+                    continue
+
+                if pattern_id in global_by_id:
+                    # Update existing pattern
+                    idx = global_by_id[pattern_id]
+                    existing = global_patterns[idx]
+
+                    # Increment frequency
+                    existing["frequency"] = existing.get("frequency", 1) + 1
+
+                    # Update last_seen
+                    existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+
+                    # Merge project_types (unique values)
+                    existing_types = set(existing.get("project_types", []))
+                    new_types = set(proj_pattern.get("project_types", []))
+                    existing["project_types"] = sorted(list(existing_types | new_types))
+
+                    # Preserve highest severity if present
+                    if "severity" in existing or "severity" in proj_pattern:
+                        severity_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "critical": 4, "high": 3, "medium": 2, "low": 1}
+                        existing_severity = severity_order.get(existing.get("severity", "LOW"), 1)
+                        new_severity = severity_order.get(proj_pattern.get("severity", "LOW"), 1)
+                        if new_severity > existing_severity:
+                            existing["severity"] = proj_pattern["severity"]
+
+                    merge_stats["updated_patterns"] += 1
+                else:
+                    # Add new pattern
+                    new_pattern = proj_pattern.copy()
+                    new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
+                    new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+                    new_pattern["frequency"] = new_pattern.get("frequency", 1)
+                    global_patterns.append(new_pattern)
+                    merge_stats["new_patterns"] += 1
+
+            global_data["patterns"] = global_patterns
 
         # Save merged patterns using internal implementation
         save_response = _save_global_patterns_impl(pattern_type, global_data)
