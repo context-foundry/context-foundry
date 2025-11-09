@@ -190,6 +190,28 @@ def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, d
     }
 
 
+def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
+    """
+    Write delegation metadata to shared disk location for cross-process visibility.
+
+    Args:
+        task_id: Unique task identifier
+        metadata: Dict containing task info (status, working_directory, start_time, etc.)
+    """
+    try:
+        # Create delegations directory in .context-foundry
+        delegations_dir = Path.home() / ".context-foundry" / "delegations"
+        delegations_dir.mkdir(parents=True, exist_ok=True)
+
+        # Write metadata to task-specific file
+        task_file = delegations_dir / f"task-{task_id}.json"
+        task_file.write_text(json.dumps(metadata, indent=2))
+
+    except Exception as e:
+        # Don't crash if writing fails - just log to stderr
+        print(f"Warning: Failed to write delegation metadata: {e}", file=sys.stderr)
+
+
 def _write_full_output_to_file(working_directory: str, stdout: str, stderr: str, task_id: str) -> str:
     """
     Write full stdout and stderr to a file in .context-foundry directory.
@@ -590,6 +612,16 @@ def delegate_to_claude_code_async(
             "duration": None,
         }
 
+        # Write delegation info to shared disk location for cross-process visibility
+        _write_delegation_metadata(task_id, {
+            "task_id": task_id,
+            "status": "running",
+            "task": task,
+            "working_directory": cwd,
+            "start_time": datetime.now().isoformat(),
+            "timeout_minutes": timeout_minutes,
+        })
+
         return json.dumps({
             "task_id": task_id,
             "status": "started",
@@ -841,14 +873,10 @@ def list_delegations() -> str:
         # Shows task IDs, status, elapsed time, etc.
     """
     try:
-        if not active_tasks:
-            return json.dumps({
-                "message": "No active delegation tasks",
-                "tasks": []
-            }, indent=2)
-
         tasks_list = []
+        seen_task_ids = set()
 
+        # First, add tasks from in-memory (current process)
         for task_id, task_info in active_tasks.items():
             process = task_info["process"]
             poll_result = process.poll()
@@ -872,10 +900,52 @@ def list_delegations() -> str:
                 "timeout_minutes": task_info["timeout_minutes"],
                 "working_directory": task_info["cwd"]
             })
+            seen_task_ids.add(task_id)
+
+        # Then, add tasks from disk (other processes / sessions)
+        delegations_dir = Path.home() / ".context-foundry" / "delegations"
+        if delegations_dir.exists():
+            for task_file in delegations_dir.glob("task-*.json"):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    task_id = metadata.get("task_id")
+
+                    # Skip if already in in-memory list
+                    if task_id in seen_task_ids:
+                        continue
+
+                    # Calculate elapsed time
+                    start_time_str = metadata.get("start_time", "")
+                    elapsed = 0
+                    if start_time_str:
+                        try:
+                            start_time = datetime.fromisoformat(start_time_str)
+                            elapsed = (datetime.now() - start_time).total_seconds()
+                        except:
+                            pass
+
+                    tasks_list.append({
+                        "task_id": task_id,
+                        "status": metadata.get("status", "unknown"),
+                        "task": metadata.get("task", "")[:80],
+                        "elapsed_seconds": round(elapsed, 2),
+                        "timeout_minutes": metadata.get("timeout_minutes", 0),
+                        "working_directory": metadata.get("working_directory", "")
+                    })
+                    seen_task_ids.add(task_id)
+
+                except Exception:
+                    continue
+
+        if not tasks_list:
+            return json.dumps({
+                "message": "No delegation tasks found",
+                "delegations": []
+            }, indent=2)
 
         return json.dumps({
             "total_tasks": len(tasks_list),
-            "tasks": tasks_list,
+            "delegations": tasks_list,
             "message": f"Use get_delegation_result(task_id) to retrieve results"
         }, indent=2)
 

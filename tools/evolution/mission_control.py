@@ -203,19 +203,34 @@ class StatusPanel(Static):
             return {"available": False, "status": f"Error: {e}"}
 
     async def _get_build_status(self) -> dict:
-        """Get active build count and latest build info from tracked builds"""
+        """Get active build count and latest build info from shared delegations"""
         try:
-            # Load builds from persistent storage
-            running_builds = self._load_tracked_builds()
+            # Read from shared delegations directory
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
+                return {"active": 0, "latest": None}
+
+            running_builds = []
+            for task_file in delegations_dir.glob("task-*.json"):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    if metadata.get("status") == "running":
+                        # Extract project name from working directory
+                        working_dir = metadata.get("working_directory", "")
+                        project = Path(working_dir).name if working_dir else "build"
+                        running_builds.append({
+                            "project": project,
+                            "working_directory": working_dir
+                        })
+                except:
+                    continue
 
             if running_builds:
-                # Get most recent running build
-                latest = running_builds[-1]  # Last one is most recent
-                project_name = latest.get("project", "build")
-
+                # Get most recent (last in list)
+                latest = running_builds[-1]
                 return {
                     "active": len(running_builds),
-                    "latest": project_name
+                    "latest": latest.get("project", "build")
                 }
 
             return {"active": 0, "latest": None}
@@ -224,22 +239,33 @@ class StatusPanel(Static):
             return {"active": 0, "latest": None}
 
     async def _get_delegation_info(self) -> dict:
-        """Get delegation/Claude instance information from tracked builds"""
+        """Get delegation/Claude instance information from shared delegations"""
         try:
-            # Load all builds from persistent storage
-            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
-            if not builds_file.exists():
+            # Read from shared delegations directory
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
                 return {"running": 0, "completed": 0, "total": 0}
 
-            all_builds = json.loads(builds_file.read_text())
+            running = 0
+            completed = 0
 
-            running = sum(1 for b in all_builds if b.get("status") == "running")
-            completed = sum(1 for b in all_builds if b.get("status") == "completed")
+            for task_file in delegations_dir.glob("task-*.json"):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    status = metadata.get("status", "")
+                    if status == "running":
+                        running += 1
+                    elif status == "completed":
+                        completed += 1
+                except:
+                    continue
+
+            total = running + completed
 
             return {
                 "running": running,
                 "completed": completed,
-                "total": len(all_builds)
+                "total": total
             }
 
         except Exception:
@@ -262,21 +288,23 @@ class FileTreePanel(Static):
     async def refresh_tree(self) -> None:
         """Refresh file tree from active build directory"""
         try:
-            # Load tracked builds from disk
+            # Read from shared delegations directory
             build_dir = None
 
-            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
-            if builds_file.exists():
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if delegations_dir.exists():
                 try:
-                    builds = json.loads(builds_file.read_text())
-
-                    # Find first running build
-                    for build in builds:
-                        if build.get("status") == "running":
-                            working_dir = build.get("working_directory", "")
-                            if working_dir and Path(working_dir).exists():
-                                build_dir = Path(working_dir)
-                                break
+                    # Find first running delegation
+                    for task_file in delegations_dir.glob("task-*.json"):
+                        try:
+                            metadata = json.loads(task_file.read_text())
+                            if metadata.get("status") == "running":
+                                working_dir = metadata.get("working_directory", "")
+                                if working_dir and Path(working_dir).exists():
+                                    build_dir = Path(working_dir)
+                                    break
+                        except:
+                            continue
 
                 except Exception:
                     pass
@@ -930,24 +958,16 @@ class MissionControlApp(App):
             )
 
     def _save_tracked_build(self, build_info: dict) -> None:
-        """Save build info to persistent storage"""
+        """Save build info to shared delegations directory"""
         try:
-            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
-            builds_file.parent.mkdir(parents=True, exist_ok=True)
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            delegations_dir.mkdir(parents=True, exist_ok=True)
 
-            # Load existing builds
-            builds = []
-            if builds_file.exists():
-                try:
-                    builds = json.loads(builds_file.read_text())
-                except:
-                    builds = []
+            task_id = build_info.get("task_id")
+            task_file = delegations_dir / f"task-{task_id}.json"
 
-            # Add new build
-            builds.append(build_info)
-
-            # Save back
-            builds_file.write_text(json.dumps(builds, indent=2))
+            # Write delegation metadata
+            task_file.write_text(json.dumps(build_info, indent=2))
 
         except Exception as e:
             pass  # Don't crash if saving fails
