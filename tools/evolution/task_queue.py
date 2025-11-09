@@ -80,20 +80,82 @@ class TaskQueueManager:
         self.db_path = db_path
         self.conn = None
         self._init_db()
-    
+
+    def _migrate_schema(self):
+        """Migrate existing database schema if needed"""
+        try:
+            # Check if tasks table exists
+            cursor = self.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'"
+            )
+            table_exists = cursor.fetchone() is not None
+
+            if not table_exists:
+                # New database, no migration needed
+                return
+
+            # Get current schema
+            cursor = self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'")
+            schema = cursor.fetchone()
+
+            if schema and schema[0]:
+                schema_sql = schema[0]
+
+                # Check if schema has old CHECK constraint (only 5 types)
+                if "delegation_build" not in schema_sql:
+                    # Need to migrate - recreate table with new constraint
+                    print("Migrating task_queue schema to support delegation tasks...")
+
+                    self.conn.executescript("""
+                        -- Create new table with updated schema
+                        CREATE TABLE tasks_new (
+                            id TEXT PRIMARY KEY,
+                            type TEXT NOT NULL CHECK(type IN ('self_improvement', 'chaos_creative', 'research', 'apply_pattern', 'validate', 'delegation_build', 'delegation_deploy', 'delegation_test')),
+                            status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+                            priority INTEGER NOT NULL DEFAULT 5 CHECK(priority BETWEEN 1 AND 10),
+                            params_json TEXT,
+                            created_at TEXT NOT NULL,
+                            started_at TEXT,
+                            completed_at TEXT,
+                            result_json TEXT,
+                            error_message TEXT,
+                            retry_count INTEGER DEFAULT 0,
+                            max_retries INTEGER DEFAULT 3
+                        );
+
+                        -- Copy existing data
+                        INSERT INTO tasks_new SELECT * FROM tasks;
+
+                        -- Drop old table
+                        DROP TABLE tasks;
+
+                        -- Rename new table
+                        ALTER TABLE tasks_new RENAME TO tasks;
+                    """)
+
+                    self.conn.commit()
+                    print("✅ Schema migration complete")
+
+        except Exception as e:
+            print(f"Warning: Schema migration check failed: {e}")
+            # Continue anyway - CREATE TABLE IF NOT EXISTS will handle new databases
+
     def _init_db(self):
         """Initialize database with schema"""
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        
+
         # Enable WAL mode for better concurrency
         self.conn.execute("PRAGMA journal_mode=WAL")
-        
+
+        # Check if we need to migrate the schema
+        self._migrate_schema()
+
         # Create tables
         self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
-                type TEXT NOT NULL CHECK(type IN ('self_improvement', 'chaos_creative', 'research', 'apply_pattern', 'validate')),
+                type TEXT NOT NULL CHECK(type IN ('self_improvement', 'chaos_creative', 'research', 'apply_pattern', 'validate', 'delegation_build', 'delegation_deploy', 'delegation_test')),
                 status TEXT NOT NULL CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
                 priority INTEGER NOT NULL DEFAULT 5 CHECK(priority BETWEEN 1 AND 10),
                 params_json TEXT,
