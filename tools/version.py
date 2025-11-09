@@ -32,6 +32,18 @@ def get_version_info() -> dict:
         Dict with version details
     """
     version = get_version()
+
+    # Handle "unknown" version gracefully
+    if version == "unknown":
+        return {
+            "version": version,
+            "major": 0,
+            "minor": 0,
+            "patch": 0,
+            "version_string": "v" + version,
+            "display_name": f"Context Foundry v{version}",
+        }
+
     parts = version.split(".")
 
     return {
