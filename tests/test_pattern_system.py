@@ -44,6 +44,9 @@ sys.modules['fastmcp.server'] = MagicMock()
 sys.modules['fastmcp.server.dependencies'] = MagicMock()
 sys.modules['fastmcp.server.dependencies'].get_context = MagicMock()
 
+# Add tools directory to sys.path so we can import tools.mcp_server
+sys.path.insert(0, str(Path(__file__).parent.parent / 'tools'))
+
 
 # Test data
 SAMPLE_PATTERN = {
