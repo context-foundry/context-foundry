@@ -17,15 +17,18 @@ from pathlib import Path
 from typing import Optional
 
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll, ScrollableContainer
+from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree, ListView, ListItem
 from textual.widgets.tree import TreeNode
+from textual.screen import Screen, ModalScreen
 from textual.binding import Binding
 from textual.reactive import reactive
+from textual.message import Message
 from rich.text import Text
 from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree as RichTree
+from rich.syntax import Syntax
 
 
 class StatusPanel(Static):
@@ -423,6 +426,153 @@ class FileTreePanel(Static):
         return f"{size:.1f}TB"
 
 
+class DelegationsListPanel(Static):
+    """List of all delegations with status"""
+
+    selected_index = reactive(0)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.border_title = "Active Builds"
+        self.delegations = []
+
+    async def on_mount(self) -> None:
+        """Start delegation list updates"""
+        self.set_interval(2.0, self.refresh_delegations)
+        await self.refresh_delegations()
+
+    async def refresh_delegations(self) -> None:
+        """Refresh delegation list"""
+        try:
+            # Read from shared delegations directory
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
+                self.delegations = []
+                self._render_list()
+                return
+
+            delegations = []
+            for task_file in sorted(delegations_dir.glob("task-*.json"), reverse=True):
+                try:
+                    metadata = json.loads(task_file.read_text())
+
+                    # Calculate elapsed time
+                    start_time_str = metadata.get("start_time", "")
+                    elapsed_str = "unknown"
+                    if start_time_str:
+                        try:
+                            start_time = datetime.fromisoformat(start_time_str)
+                            elapsed = (datetime.now() - start_time).total_seconds()
+                            if elapsed < 60:
+                                elapsed_str = f"{int(elapsed)}s"
+                            elif elapsed < 3600:
+                                elapsed_str = f"{int(elapsed/60)}m"
+                            else:
+                                elapsed_str = f"{int(elapsed/3600)}h{int((elapsed%3600)/60)}m"
+                        except:
+                            pass
+
+                    delegations.append({
+                        "task_id": metadata.get("task_id", "unknown"),
+                        "status": metadata.get("status", "unknown"),
+                        "task": metadata.get("task", "")[:40],
+                        "working_directory": metadata.get("working_directory", ""),
+                        "elapsed": elapsed_str
+                    })
+                except:
+                    continue
+
+            self.delegations = delegations
+            self._render_list()
+
+        except Exception as e:
+            self.delegations = []
+            self._render_list()
+
+    def _render_list(self) -> None:
+        """Render the delegation list"""
+        if not self.delegations:
+            self.update(Panel(
+                Text("No builds yet\n\nStart a build to see it here!", style="dim italic"),
+                border_style="yellow",
+                title="[bold]Active Builds[/bold]"
+            ))
+            return
+
+        # Build table
+        table = Table(show_header=True, box=None, padding=(0, 1))
+        table.add_column("", style="bold", width=2)
+        table.add_column("Project", style="cyan")
+        table.add_column("Status", justify="center")
+        table.add_column("Time", justify="right", style="dim")
+
+        for i, delegation in enumerate(self.delegations):
+            # Status icon
+            status = delegation["status"]
+            if status == "running":
+                icon = "🚀"
+                status_display = Text("Running", style="green bold")
+            elif status == "completed":
+                icon = "✓"
+                status_display = Text("Done", style="blue")
+            else:
+                icon = "✗"
+                status_display = Text("Failed", style="red")
+
+            # Extract project name from working directory
+            working_dir = delegation.get("working_directory", "")
+            project = Path(working_dir).name if working_dir else "build"
+
+            # Highlight selected row
+            if i == self.selected_index:
+                selector = "→"
+                style = "bold reverse"
+            else:
+                selector = ""
+                style = ""
+
+            table.add_row(
+                selector,
+                project,
+                status_display,
+                delegation["elapsed"]
+            )
+
+        self.update(Panel(
+            table,
+            border_style="yellow",
+            title="[bold]Builds[/bold]",
+            subtitle=f"[dim]{len(self.delegations)} total | Use ↑↓ to select, d=details, x=cancel[/dim]"
+        ))
+
+    def get_selected_delegation(self) -> Optional[dict]:
+        """Get the currently selected delegation"""
+        if 0 <= self.selected_index < len(self.delegations):
+            return self.delegations[self.selected_index]
+        return None
+
+    def move_selection_up(self) -> None:
+        """Move selection up"""
+        if self.selected_index > 0:
+            self.selected_index -= 1
+            self._render_list()
+
+    def move_selection_down(self) -> None:
+        """Move selection down"""
+        if self.selected_index < len(self.delegations) - 1:
+            self.selected_index += 1
+            self._render_list()
+
+
+class ActionButtonsPanel(Horizontal):
+    """Horizontal panel with action buttons"""
+
+    def compose(self) -> ComposeResult:
+        yield Button("View Details (d)", id="btn_details", variant="primary")
+        yield Button("Cancel Build (x)", id="btn_cancel", variant="error")
+        yield Button("Learnings (l)", id="btn_learnings", variant="success")
+
+
 class ChatMessage(Static):
     """Individual chat message bubble"""
 
@@ -573,6 +723,195 @@ class ActivityLog(RichLog):
             pass
 
 
+class DetailsModal(ModalScreen):
+    """Modal screen showing detailed build results"""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Close"),
+        ("q", "dismiss", "Close"),
+    ]
+
+    def __init__(self, task_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.task_id = task_id
+        self.result_text = "Loading..."
+
+    def compose(self) -> ComposeResult:
+        with Container(id="details_modal"):
+            yield Static(f"Build Details: {self.task_id[:8]}...", id="modal_title")
+            yield ScrollableContainer(
+                Static(self.result_text, id="details_content"),
+                id="details_scroll"
+            )
+            yield Button("Close (ESC)", id="btn_close_details", variant="primary")
+
+    async def on_mount(self) -> None:
+        """Load delegation result when modal opens"""
+        await self.load_result()
+
+    async def load_result(self) -> None:
+        """Load detailed results via MCP wrapper"""
+        try:
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
+
+            if not Path(python_cmd).exists():
+                self.result_text = "❌ Python 3.13 not found"
+                return
+
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "get_result",
+                "--task-id", self.task_id,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=5.0
+            )
+
+            if process.returncode == 0 and stdout:
+                result = json.loads(stdout.decode())
+
+                # Format the result nicely
+                formatted = []
+                formatted.append(f"[bold cyan]Task ID:[/bold cyan] {self.task_id}")
+                formatted.append(f"[bold cyan]Status:[/bold cyan] {result.get('status', 'unknown')}")
+                formatted.append(f"[bold cyan]Duration:[/bold cyan] {result.get('duration', 'unknown')}")
+                formatted.append("")
+
+                if result.get("stdout"):
+                    formatted.append("[bold green]Output:[/bold green]")
+                    formatted.append(result.get("stdout", "")[:2000])  # Limit to 2000 chars
+
+                if result.get("stderr"):
+                    formatted.append("")
+                    formatted.append("[bold red]Errors:[/bold red]")
+                    formatted.append(result.get("stderr", "")[:1000])
+
+                self.result_text = "\n".join(formatted)
+            else:
+                error = stderr.decode() if stderr else "Unknown error"
+                self.result_text = f"❌ Failed to load results:\n{error}"
+
+            # Update the content widget
+            content_widget = self.query_one("#details_content", Static)
+            content_widget.update(self.result_text)
+
+        except asyncio.TimeoutError:
+            self.result_text = "⏱️ Timeout loading results"
+            content_widget = self.query_one("#details_content", Static)
+            content_widget.update(self.result_text)
+        except Exception as e:
+            self.result_text = f"❌ Error: {str(e)}"
+            content_widget = self.query_one("#details_content", Static)
+            content_widget.update(self.result_text)
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press"""
+        if event.button.id == "btn_close_details":
+            self.dismiss()
+
+    def action_dismiss(self) -> None:
+        """Dismiss the modal"""
+        self.dismiss()
+
+
+class PatternsModal(ModalScreen):
+    """Modal screen showing global patterns and learnings"""
+
+    BINDINGS = [
+        ("escape", "dismiss", "Close"),
+        ("q", "dismiss", "Close"),
+    ]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.patterns_text = "Loading patterns..."
+
+    def compose(self) -> ComposeResult:
+        with Container(id="patterns_modal"):
+            yield Static("🎓 Global Learnings & Patterns", id="modal_title")
+            yield ScrollableContainer(
+                Static(self.patterns_text, id="patterns_content"),
+                id="patterns_scroll"
+            )
+            yield Button("Close (ESC)", id="btn_close_patterns", variant="primary")
+
+    async def on_mount(self) -> None:
+        """Load patterns when modal opens"""
+        await self.load_patterns()
+
+    async def load_patterns(self) -> None:
+        """Load global patterns via MCP wrapper"""
+        try:
+            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+            python_cmd = "/opt/homebrew/bin/python3.13"
+
+            if not Path(python_cmd).exists():
+                self.patterns_text = "❌ Python 3.13 not found"
+                return
+
+            process = await asyncio.create_subprocess_exec(
+                python_cmd, str(wrapper_path),
+                "patterns",
+                "--type", "common-issues",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=5.0
+            )
+
+            if process.returncode == 0 and stdout:
+                result = json.loads(stdout.decode())
+
+                # Format patterns nicely
+                formatted = []
+                formatted.append("[bold cyan]Common Issues & Solutions:[/bold cyan]\n")
+
+                patterns = result.get("patterns", [])
+                if patterns:
+                    for i, pattern in enumerate(patterns[:10], 1):  # Show top 10
+                        formatted.append(f"[bold yellow]{i}. {pattern.get('issue', 'Unknown')}[/bold yellow]")
+                        formatted.append(f"   Frequency: {pattern.get('frequency', 0)} times")
+                        formatted.append(f"   Solution: {pattern.get('solution', 'N/A')[:100]}")
+                        formatted.append("")
+                else:
+                    formatted.append("[dim]No patterns learned yet. Build more projects to accumulate learnings![/dim]")
+
+                self.patterns_text = "\n".join(formatted)
+            else:
+                error = stderr.decode() if stderr else "Unknown error"
+                self.patterns_text = f"❌ Failed to load patterns:\n{error}"
+
+            # Update the content widget
+            content_widget = self.query_one("#patterns_content", Static)
+            content_widget.update(self.patterns_text)
+
+        except asyncio.TimeoutError:
+            self.patterns_text = "⏱️ Timeout loading patterns"
+            content_widget = self.query_one("#patterns_content", Static)
+            content_widget.update(self.patterns_text)
+        except Exception as e:
+            self.patterns_text = f"❌ Error: {str(e)}"
+            content_widget = self.query_one("#patterns_content", Static)
+            content_widget.update(self.patterns_text)
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press"""
+        if event.button.id == "btn_close_patterns":
+            self.dismiss()
+
+    def action_dismiss(self) -> None:
+        """Dismiss the modal"""
+        self.dismiss()
+
+
 class MissionControlApp(App):
     """Main Mission Control TUI Application"""
 
@@ -589,8 +928,8 @@ class MissionControlApp(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 4;
-        grid-rows: auto 1fr 1fr auto;
+        grid-size: 2 5;
+        grid-rows: auto 1fr 1fr auto auto;
         grid-gutter: 0;
         padding: 0;
     }
@@ -623,11 +962,18 @@ class MissionControlApp(App):
         overflow-y: auto;
     }
 
-    ActivityLog {
-        column-span: 2;
+    DelegationsListPanel {
         border: solid yellow;
         max-height: 100%;
         overflow-y: auto;
+    }
+
+    ActionButtonsPanel {
+        border: solid blue;
+        height: 3;
+        min-height: 3;
+        max-height: 3;
+        align: center middle;
     }
 
     ChatInput {
@@ -636,6 +982,30 @@ class MissionControlApp(App):
         height: 3;
         min-height: 3;
         max-height: 3;
+    }
+
+    /* Modal styles */
+    #details_modal, #patterns_modal {
+        align: center middle;
+        background: $surface;
+        border: thick $primary;
+        width: 80%;
+        height: 80%;
+        padding: 1;
+    }
+
+    #modal_title {
+        text-align: center;
+        text-style: bold;
+        background: $primary;
+        color: $text;
+        padding: 1;
+        margin-bottom: 1;
+    }
+
+    #details_scroll, #patterns_scroll {
+        height: 100%;
+        border: solid $accent;
     }
 
     .user-message {
@@ -657,6 +1027,11 @@ class MissionControlApp(App):
         Binding("ctrl+b", "start_build", "Build", show=True),
         Binding("ctrl+r", "refresh", "Refresh", show=True),
         Binding("ctrl+m", "cycle_model", "Model", show=True),
+        Binding("up", "select_up", "Up", show=False),
+        Binding("down", "select_down", "Down", show=False),
+        Binding("d", "show_details", "Details", show=False),
+        Binding("x", "cancel_build", "Cancel", show=False),
+        Binding("l", "show_learnings", "Learnings", show=False),
     ]
 
     def compose(self) -> ComposeResult:
@@ -665,7 +1040,8 @@ class MissionControlApp(App):
         yield StatusPanel()
         yield ChatPanel(id="chat")
         yield FileTreePanel()
-        yield ActivityLog()
+        yield DelegationsListPanel(id="delegations")
+        yield ActionButtonsPanel(id="actions")
         yield ChatInput(id="chat_input")
         yield Footer()
 
@@ -1027,6 +1403,97 @@ class MissionControlApp(App):
             "assistant",
             f"🔄 Model switched to: {model_names[self.model]}"
         )
+
+    async def action_select_up(self) -> None:
+        """Move delegation selection up"""
+        try:
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            delegations_panel.move_selection_up()
+        except:
+            pass
+
+    async def action_select_down(self) -> None:
+        """Move delegation selection down"""
+        try:
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            delegations_panel.move_selection_down()
+        except:
+            pass
+
+    async def action_show_details(self) -> None:
+        """Show detailed results for selected delegation"""
+        try:
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            selected = delegations_panel.get_selected_delegation()
+
+            if selected:
+                task_id = selected.get("task_id")
+                if task_id:
+                    # Push the details modal screen
+                    await self.push_screen(DetailsModal(task_id))
+        except Exception as e:
+            pass
+
+    async def action_cancel_build(self) -> None:
+        """Cancel selected delegation"""
+        try:
+            delegations_panel = self.query_one("#delegations", DelegationsListPanel)
+            selected = delegations_panel.get_selected_delegation()
+
+            if selected:
+                task_id = selected.get("task_id")
+                if task_id:
+                    # Call cancel via MCP wrapper
+                    wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
+                    python_cmd = "/opt/homebrew/bin/python3.13"
+
+                    if Path(python_cmd).exists():
+                        process = await asyncio.create_subprocess_exec(
+                            python_cmd, str(wrapper_path),
+                            "cancel",
+                            "--task-id", task_id,
+                            "--reason", "User cancelled via Mission Control",
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE
+                        )
+
+                        stdout, stderr = await asyncio.wait_for(
+                            process.communicate(),
+                            timeout=5.0
+                        )
+
+                        if process.returncode == 0:
+                            # Show success message
+                            chat_panel = self.query_one("#chat", ChatPanel)
+                            await chat_panel.add_message(
+                                "assistant",
+                                f"✅ Cancelled build: {task_id[:8]}..."
+                            )
+                        else:
+                            chat_panel = self.query_one("#chat", ChatPanel)
+                            await chat_panel.add_message(
+                                "assistant",
+                                f"❌ Failed to cancel build: {stderr.decode() if stderr else 'Unknown error'}"
+                            )
+        except Exception as e:
+            pass
+
+    async def action_show_learnings(self) -> None:
+        """Show global patterns and learnings"""
+        try:
+            # Push the patterns modal screen
+            await self.push_screen(PatternsModal())
+        except Exception as e:
+            pass
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses"""
+        if event.button.id == "btn_details":
+            await self.action_show_details()
+        elif event.button.id == "btn_cancel":
+            await self.action_cancel_build()
+        elif event.button.id == "btn_learnings":
+            await self.action_show_learnings()
 
 
 def main():
