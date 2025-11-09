@@ -203,45 +203,20 @@ class StatusPanel(Static):
             return {"available": False, "status": f"Error: {e}"}
 
     async def _get_build_status(self) -> dict:
-        """Get active build count and latest build info via MCP wrapper"""
+        """Get active build count and latest build info from tracked builds"""
         try:
-            # Use the MCP wrapper to query delegation status
-            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
+            # Load builds from persistent storage
+            running_builds = self._load_tracked_builds()
 
-            if not Path(python_cmd).exists():
-                return {"active": 0, "latest": None}
+            if running_builds:
+                # Get most recent running build
+                latest = running_builds[-1]  # Last one is most recent
+                project_name = latest.get("project", "build")
 
-            # Call list_delegations command
-            process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
-                "list_delegations",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=3.0
-            )
-
-            if process.returncode == 0 and stdout:
-                # Parse delegation list
-                result = json.loads(stdout.decode())
-                delegations = result.get("delegations", [])
-
-                # Filter running builds
-                running_builds = [d for d in delegations if d.get("status") == "running"]
-
-                if running_builds:
-                    # Get most recent running build
-                    latest = running_builds[0]  # Already sorted by start time in list_delegations
-                    project_name = latest.get("project", "build")
-
-                    return {
-                        "active": len(running_builds),
-                        "latest": project_name
-                    }
+                return {
+                    "active": len(running_builds),
+                    "latest": project_name
+                }
 
             return {"active": 0, "latest": None}
 
@@ -249,43 +224,23 @@ class StatusPanel(Static):
             return {"active": 0, "latest": None}
 
     async def _get_delegation_info(self) -> dict:
-        """Get delegation/Claude instance information via MCP wrapper"""
+        """Get delegation/Claude instance information from tracked builds"""
         try:
-            # Use the MCP wrapper to query delegation status
-            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
-
-            if not Path(python_cmd).exists():
+            # Load all builds from persistent storage
+            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
+            if not builds_file.exists():
                 return {"running": 0, "completed": 0, "total": 0}
 
-            # Call list_delegations command
-            process = await asyncio.create_subprocess_exec(
-                python_cmd, str(wrapper_path),
-                "list_delegations",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
+            all_builds = json.loads(builds_file.read_text())
 
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=3.0
-            )
+            running = sum(1 for b in all_builds if b.get("status") == "running")
+            completed = sum(1 for b in all_builds if b.get("status") == "completed")
 
-            if process.returncode == 0 and stdout:
-                # Parse delegation list
-                result = json.loads(stdout.decode())
-                delegations = result.get("delegations", [])
-
-                running = sum(1 for d in delegations if d.get("status") == "running")
-                completed = sum(1 for d in delegations if d.get("status") == "completed")
-
-                return {
-                    "running": running,
-                    "completed": completed,
-                    "total": len(delegations)
-                }
-
-            return {"running": 0, "completed": 0, "total": 0}
+            return {
+                "running": running,
+                "completed": completed,
+                "total": len(all_builds)
+            }
 
         except Exception:
             return {"running": 0, "completed": 0, "total": 0}
@@ -307,38 +262,21 @@ class FileTreePanel(Static):
     async def refresh_tree(self) -> None:
         """Refresh file tree from active build directory"""
         try:
-            # Query MCP delegations for active builds
+            # Load tracked builds from disk
             build_dir = None
 
-            wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
-
-            if Path(python_cmd).exists():
+            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
+            if builds_file.exists():
                 try:
-                    # Call list_delegations command
-                    process = await asyncio.create_subprocess_exec(
-                        python_cmd, str(wrapper_path),
-                        "list_delegations",
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
+                    builds = json.loads(builds_file.read_text())
 
-                    stdout, stderr = await asyncio.wait_for(
-                        process.communicate(),
-                        timeout=2.0
-                    )
-
-                    if process.returncode == 0 and stdout:
-                        result = json.loads(stdout.decode())
-                        delegations = result.get("delegations", [])
-
-                        # Find first running delegation
-                        for delegation in delegations:
-                            if delegation.get("status") == "running":
-                                working_dir = delegation.get("working_directory", "")
-                                if working_dir and Path(working_dir).exists():
-                                    build_dir = Path(working_dir)
-                                    break
+                    # Find first running build
+                    for build in builds:
+                        if build.get("status") == "running":
+                            working_dir = build.get("working_directory", "")
+                            if working_dir and Path(working_dir).exists():
+                                build_dir = Path(working_dir)
+                                break
 
                 except Exception:
                     pass
@@ -879,8 +817,8 @@ class MissionControlApp(App):
             if not project_name:
                 project_name = "mission-control-build"
 
-            # Create working directory in temp
-            working_dir = Path(tempfile.gettempdir()) / project_name
+            # Create working directory in homelab (same level as context-foundry)
+            working_dir = Path.home() / "homelab" / project_name
 
             # Use the MCP wrapper script
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
@@ -941,12 +879,20 @@ class MissionControlApp(App):
                     result = json.loads(stdout_text)
                     task_id = result.get("task_id", "unknown")
 
-                    # Track this build
-                    self.active_builds.append({
+                    # Track this build persistently
+                    build_info = {
                         "task_id": task_id,
                         "project": project_name,
-                        "started": datetime.now().isoformat()
-                    })
+                        "working_directory": str(working_dir),
+                        "started": datetime.now().isoformat(),
+                        "status": "running"
+                    }
+
+                    # Save to disk for persistence
+                    self._save_tracked_build(build_info)
+
+                    # Also track in memory
+                    self.active_builds.append(build_info)
 
                     return (
                         f"🚀 Build started successfully!\n\n"
@@ -982,6 +928,48 @@ class MissionControlApp(App):
                 f"Make sure MCP server is available.\n"
                 f"Error details: {type(e).__name__}"
             )
+
+    def _save_tracked_build(self, build_info: dict) -> None:
+        """Save build info to persistent storage"""
+        try:
+            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
+            builds_file.parent.mkdir(parents=True, exist_ok=True)
+
+            # Load existing builds
+            builds = []
+            if builds_file.exists():
+                try:
+                    builds = json.loads(builds_file.read_text())
+                except:
+                    builds = []
+
+            # Add new build
+            builds.append(build_info)
+
+            # Save back
+            builds_file.write_text(json.dumps(builds, indent=2))
+
+        except Exception as e:
+            pass  # Don't crash if saving fails
+
+    def _load_tracked_builds(self) -> list:
+        """Load tracked builds from disk"""
+        try:
+            builds_file = Path.home() / ".context-foundry" / "tui-tracked-builds.json"
+            if builds_file.exists():
+                builds = json.loads(builds_file.read_text())
+                # Filter out completed builds older than 1 hour
+                cutoff = datetime.now().timestamp() - 3600
+                active_builds = []
+                for build in builds:
+                    if build.get("status") == "running":
+                        started = datetime.fromisoformat(build["started"]).timestamp()
+                        if started > cutoff:
+                            active_builds.append(build)
+                return active_builds
+            return []
+        except:
+            return []
 
     async def action_start_build(self) -> None:
         """Quick build action"""
