@@ -24,7 +24,7 @@ from __version__ import __version__
 from enum import Enum
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll, ScrollableContainer
-from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree, ListView, ListItem
+from textual.widgets import Header, Footer, Static, Input, Button, Label, RichLog, Tree, ListView, ListItem, TabbedContent, TabPane
 from textual.widgets.tree import TreeNode
 from textual.screen import Screen, ModalScreen
 from textual.binding import Binding
@@ -172,12 +172,14 @@ class StatusBar(Static):
             return {"available": False, "status": f"Error: {e}"}
 
 
-class FileTreePanel(VerticalScroll):
-    """Live file tree showing build directory contents"""
+class FileTreeWidget(VerticalScroll):
+    """File tree for a single build"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, task_id: str, working_dir: Path, project_name: str, **kwargs):
         super().__init__(**kwargs)
-        self.current_dir = None
+        self.task_id = task_id
+        self.working_dir = working_dir
+        self.project_name = project_name
 
     async def on_mount(self) -> None:
         """Start file tree updates"""
@@ -185,188 +187,278 @@ class FileTreePanel(VerticalScroll):
         await self.refresh_tree()
 
     async def refresh_tree(self) -> None:
-        """Refresh file tree from selected build directory"""
+        """Refresh file tree from build directory"""
         try:
-            # Get the selected build from the delegations panel
-            build_dir = None
+            build_dir = self.working_dir
 
-            # Try to get the currently selected delegation
-            app = self.app
-            if hasattr(app, 'query_one'):
-                try:
-                    delegations_panel = app.query_one("#delegations", DelegationsListPanel)
-                    selected = delegations_panel.get_selected_delegation()
+            if not build_dir.exists():
+                result = Text()
+                result.append("Build directory not found\n", style="dim red")
+                result.append(str(build_dir), style="dim")
+                await self.remove_children()
+                await self.mount(Static(result))
+                return
 
-                    if selected:
-                        working_dir = selected.get("working_directory", "")
-                        if working_dir and Path(working_dir).exists():
-                            build_dir = Path(working_dir)
-                except:
-                    pass
-
-            # Fallback: If no selection, find first running delegation
-            if not build_dir:
+            # Get build status from metadata
+            build_status = "Unknown"
+            try:
                 delegations_dir = Path.home() / ".context-foundry" / "delegations"
-                if delegations_dir.exists():
-                    try:
-                        for task_file in delegations_dir.glob("task-*.json"):
-                            try:
-                                metadata = json.loads(task_file.read_text())
-                                if metadata.get("status") == "running":
-                                    working_dir = metadata.get("working_directory", "")
-                                    if working_dir and Path(working_dir).exists():
-                                        build_dir = Path(working_dir)
-                                        break
-                            except:
-                                continue
-                    except Exception:
-                        pass
+                task_file = delegations_dir / f"task-{self.task_id}.json"
+                if task_file.exists():
+                    metadata = json.loads(task_file.read_text())
+                    status = metadata.get("status", "unknown")
+                    if status == "running":
+                        build_status = "Building..."
+                    elif status == "pending":
+                        build_status = "Pending"
+                    elif status == "completed":
+                        build_status = "Complete"
+                    elif status == "failed":
+                        build_status = "Failed"
+                    elif status == "cancelled":
+                        build_status = "Cancelled"
+                    elif status == "timeout":
+                        build_status = "Timeout"
+                    else:
+                        build_status = status.capitalize()
+            except:
+                pass
 
-            if build_dir and build_dir.exists():
-                self.current_dir = build_dir
+            # Count files and folders, find latest modification
+            file_count = 0
+            folder_count = 0
+            latest_mtime = 0
+            try:
+                for item in build_dir.rglob("*"):
+                    if item.name.startswith('.'):
+                        continue
+                    if item.is_file():
+                        file_count += 1
+                        try:
+                            mtime = item.stat().st_mtime
+                            if mtime > latest_mtime:
+                                latest_mtime = mtime
+                        except:
+                            pass
+                    elif item.is_dir():
+                        folder_count += 1
+            except:
+                pass
 
-                # Get status from selected delegation if available
-                build_status = "No build selected"
+            # Format last updated time
+            if latest_mtime > 0:
+                last_updated = datetime.fromtimestamp(latest_mtime)
+                last_updated_str = last_updated.strftime("%I:%M %p")
+            else:
+                last_updated_str = "Unknown"
+
+            # Build full file tree
+            result = Text()
+
+            # Colored header
+            result.append(self.project_name, style="bold #8B5CF6")
+            result.append("  •  ", style="dim")
+            if "building" in build_status.lower():
+                result.append(build_status, style="green")
+            elif "pending" in build_status.lower():
+                result.append(build_status, style="yellow")
+            elif "complete" in build_status.lower():
+                result.append(build_status, style="blue")
+            elif "failed" in build_status.lower() or "timeout" in build_status.lower():
+                result.append(build_status, style="red")
+            elif "cancelled" in build_status.lower():
+                result.append(build_status, style="yellow")
+            else:
+                result.append(build_status, style="dim")
+            result.append("\n")
+            result.append(str(build_dir), style="dim")
+            result.append("\n")
+
+            # Metadata line
+            result.append(str(file_count), style="#3B82F6")
+            result.append(" files, ", style="dim")
+            result.append(str(folder_count), style="#8B5CF6")
+            result.append(" folders  •  Last updated: ", style="dim")
+            result.append(last_updated_str, style="#A78BFA")
+            result.append("\n\n")
+
+            # Recursive file listing
+            def add_tree_items(directory: Path, prefix: str = ""):
+                """Recursively add directory contents to the tree"""
                 try:
-                    delegations_panel = app.query_one("#delegations", DelegationsListPanel)
-                    selected = delegations_panel.get_selected_delegation()
-                    if selected:
-                        status = selected.get("status", "unknown")
-                        if status == "running":
-                            build_status = "Building..."
-                        elif status == "pending":
-                            build_status = "Pending"
+                    # Get all items, sort directories first, then files
+                    items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+
+                    # Filter out hidden files/dirs
+                    items = [item for item in items if not item.name.startswith('.')]
+
+                    for i, item in enumerate(items):
+                        is_last_item = (i == len(items) - 1)
+
+                        # Tree structure characters
+                        if is_last_item:
+                            connector = "└── "
+                            extension = "    "
                         else:
-                            build_status = status.capitalize()
-                except:
-                    pass
+                            connector = "├── "
+                            extension = "│   "
 
-                # Count files and folders, find latest modification
-                file_count = 0
-                folder_count = 0
-                latest_mtime = 0
-                try:
-                    for item in build_dir.rglob("*"):
-                        if item.name.startswith('.'):
-                            continue
-                        if item.is_file():
-                            file_count += 1
+                        # Add the item
+                        result.append(prefix + connector, style="dim")
+
+                        if item.is_dir():
+                            # Directory in purple
+                            result.append(item.name + "/", style="#8B5CF6")
+                            result.append("\n")
+
+                            # Recurse into subdirectory
+                            add_tree_items(item, prefix + extension)
+                        else:
+                            # File in blue
+                            result.append(item.name, style="#3B82F6")
+
+                            # File size
                             try:
-                                mtime = item.stat().st_mtime
-                                if mtime > latest_mtime:
-                                    latest_mtime = mtime
+                                size = item.stat().st_size
+                                if size < 1024:
+                                    size_str = f"{size}B"
+                                elif size < 1024 * 1024:
+                                    size_str = f"{size / 1024:.1f}KB"
+                                else:
+                                    size_str = f"{size / (1024 * 1024):.1f}MB"
+                                result.append(f"  ({size_str})", style="dim")
                             except:
                                 pass
-                        elif item.is_dir():
-                            folder_count += 1
+
+                            result.append("\n")
+                except Exception:
+                    pass
+
+            # Start the tree
+            add_tree_items(build_dir)
+
+            # Update scrollable content
+            await self.remove_children()
+            await self.mount(Static(result))
+
+        except Exception:
+            await self.remove_children()
+            await self.mount(Static(Text(f"Error loading build directory", style="dim red")))
+
+
+class DirectoryTabbedPanel(Static):
+    """Tabbed interface showing directory trees for all builds"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.tracked_builds = {}  # task_id -> build_info mapping
+
+    def compose(self) -> ComposeResult:
+        """Create the tabbed content container"""
+        yield TabbedContent(id="directory_tabs")
+
+    async def on_mount(self) -> None:
+        """Start monitoring builds"""
+        self.set_interval(2.0, self.sync_build_tabs)
+        await self.sync_build_tabs()
+
+    async def sync_build_tabs(self) -> None:
+        """Synchronize tabs with active builds"""
+        try:
+            delegations_dir = Path.home() / ".context-foundry" / "delegations"
+            if not delegations_dir.exists():
+                return
+
+            # Get current builds
+            current_builds = {}
+            for task_file in sorted(delegations_dir.glob("task-*.json"), reverse=True):
+                try:
+                    metadata = json.loads(task_file.read_text())
+                    task_id = metadata.get("task_id")
+                    status = metadata.get("status")
+                    working_dir = metadata.get("working_directory", "")
+
+                    # Track running and recently completed builds
+                    if working_dir and Path(working_dir).exists():
+                        project_name = metadata.get("github_repo_name") or Path(working_dir).name
+                        current_builds[task_id] = {
+                            "working_dir": Path(working_dir),
+                            "project": project_name,
+                            "status": status
+                        }
+                except:
+                    continue
+
+            tabbed_content = self.query_one("#directory_tabs", TabbedContent)
+
+            # Add new builds
+            for task_id, build_info in current_builds.items():
+                if task_id not in self.tracked_builds:
+                    await self._add_build_tab(task_id, build_info, tabbed_content)
+
+            # Remove builds that no longer exist
+            for task_id in list(self.tracked_builds.keys()):
+                if task_id not in current_builds:
+                    await self._remove_build_tab(task_id, tabbed_content)
+
+            # If no builds, show placeholder
+            if not self.tracked_builds:
+                try:
+                    # Check if placeholder exists
+                    existing_panes = list(tabbed_content.query(TabPane))
+                    if not any(pane.id == "no-builds" for pane in existing_panes):
+                        pane = TabPane("No Builds", id="no-builds")
+                        placeholder = Static(Text("No active builds\n\nStart a build to see its directory tree here", style="dim italic"))
+                        await pane.mount(placeholder)
+                        tabbed_content.add_pane(pane)
+                except:
+                    pass
+            else:
+                # Remove placeholder if it exists
+                try:
+                    for pane in tabbed_content.query(TabPane):
+                        if pane.id == "no-builds":
+                            tabbed_content.remove_pane("no-builds")
+                            break
                 except:
                     pass
 
-                # Format last updated time
-                if latest_mtime > 0:
-                    last_updated = datetime.fromtimestamp(latest_mtime)
-                    last_updated_str = last_updated.strftime("%I:%M %p")
-                else:
-                    last_updated_str = "Unknown"
+        except Exception:
+            pass
 
-                # Build full file tree
-                result = Text()
+    async def _add_build_tab(self, task_id: str, build_info: dict, tabbed_content: TabbedContent) -> None:
+        """Add a new build tab"""
+        try:
+            project_name = build_info["project"]
+            working_dir = build_info["working_dir"]
 
-                # Colored header - show which build this is
-                result.append("Selected Build - Files:\n\n", style="bold #A78BFA")
+            # Create pane with project name as title
+            pane = TabPane(project_name[:20], id=f"build-{task_id}")
 
-                # Folder name and status
-                result.append(build_dir.name, style="bold #8B5CF6")
-                result.append("  •  ", style="dim")
-                if "building" in build_status.lower():
-                    result.append(build_status, style="green")
-                elif "pending" in build_status.lower():
-                    result.append(build_status, style="yellow")
-                else:
-                    result.append(build_status, style="dim")
-                result.append("\n")
-                result.append(str(build_dir), style="dim")
-                result.append("\n")
+            # Create file tree widget for this build
+            file_tree = FileTreeWidget(task_id, working_dir, project_name)
+            await pane.mount(file_tree)
 
-                # Metadata line
-                result.append(str(file_count), style="#3B82F6")
-                result.append(" files, ", style="dim")
-                result.append(str(folder_count), style="#8B5CF6")
-                result.append(" folders  •  Last updated: ", style="dim")
-                result.append(last_updated_str, style="#A78BFA")
-                result.append("\n\n")
+            # Add to tabbed content
+            tabbed_content.add_pane(pane)
 
-                # Recursive file listing
-                def add_tree_items(directory: Path, prefix: str = "", is_last: bool = True):
-                    """Recursively add directory contents to the tree"""
-                    try:
-                        # Get all items, sort directories first, then files
-                        items = sorted(directory.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+            # Track it
+            self.tracked_builds[task_id] = build_info
 
-                        # Filter out hidden files/dirs
-                        items = [item for item in items if not item.name.startswith('.')]
+            # Auto-switch to new build if it's the first one
+            if len(self.tracked_builds) == 1:
+                tabbed_content.active = pane.id
 
-                        for i, item in enumerate(items):
-                            is_last_item = (i == len(items) - 1)
+        except Exception:
+            pass
 
-                            # Tree structure characters
-                            if is_last_item:
-                                connector = "└── "
-                                extension = "    "
-                            else:
-                                connector = "├── "
-                                extension = "│   "
-
-                            # Add the item
-                            result.append(prefix + connector, style="dim")
-
-                            if item.is_dir():
-                                # Directory in purple
-                                result.append(item.name + "/", style="#8B5CF6")
-                                result.append("\n")
-
-                                # Recurse into subdirectory
-                                add_tree_items(item, prefix + extension, is_last_item)
-                            else:
-                                # File in blue
-                                result.append(item.name, style="#3B82F6")
-
-                                # File size
-                                try:
-                                    size = item.stat().st_size
-                                    if size < 1024:
-                                        size_str = f"{size}B"
-                                    elif size < 1024 * 1024:
-                                        size_str = f"{size / 1024:.1f}KB"
-                                    else:
-                                        size_str = f"{size / (1024 * 1024):.1f}MB"
-                                    result.append(f"  ({size_str})", style="dim")
-                                except:
-                                    pass
-
-                                result.append("\n")
-                    except Exception:
-                        pass
-
-                # Start the tree
-                add_tree_items(build_dir)
-
-                # Update scrollable content
-                await self.remove_children()
-                await self.mount(Static(result))
-            else:
-                # No active build with colored header
-                result = Text()
-                result.append("Selected Build - Files:\n\n", style="bold #A78BFA")
-                result.append("No build selected\n\nSelect a build from the Builds tab", style="dim italic")
-
-                # Update scrollable content
-                await self.remove_children()
-                await self.mount(Static(result))
-
-        except Exception as e:
-            await self.remove_children()
-            await self.mount(Static(Text(f"Error loading build directory", style="dim red")))
+    async def _remove_build_tab(self, task_id: str, tabbed_content: TabbedContent) -> None:
+        """Remove a build tab"""
+        try:
+            self.tracked_builds.pop(task_id, None)
+            tabbed_content.remove_pane(f"build-{task_id}")
+        except:
+            pass
 
 
 class DelegationsListPanel(Static, can_focus=True):
@@ -993,16 +1085,20 @@ class MissionControlApp(App):
         display: block;
     }
 
-    FileTreePanel {
+    DirectoryTabbedPanel {
         height: 1fr;
         overflow-y: auto;
-        padding: 1 2;
+        padding: 0;
         background: $background;
         display: none;
     }
 
-    FileTreePanel.visible {
+    DirectoryTabbedPanel.visible {
         display: block;
+    }
+
+    TabbedContent {
+        height: 100%;
     }
 
     ChatInput {
@@ -1109,7 +1205,7 @@ class MissionControlApp(App):
         """Create child widgets"""
         yield TabBar(id="tab_bar")
         yield ChatPanel(id="chat")
-        yield FileTreePanel(id="file_tree")
+        yield DirectoryTabbedPanel(id="file_tree")
         yield DelegationsListPanel(id="delegations")
         yield ChatInput(id="chat_input")
         yield StatusBar(id="status_bar")
@@ -1135,7 +1231,7 @@ class MissionControlApp(App):
         try:
             chat = self.query_one("#chat", ChatPanel)
             delegations = self.query_one("#delegations", DelegationsListPanel)
-            file_tree = self.query_one("#file_tree", FileTreePanel)
+            file_tree = self.query_one("#file_tree", DirectoryTabbedPanel)
             tab_bar = self.query_one("#tab_bar", TabBar)
 
             # Sync tab bar
