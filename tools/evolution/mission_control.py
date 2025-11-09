@@ -355,7 +355,9 @@ class DirectoryTabbedPanel(Static):
 
     def compose(self) -> ComposeResult:
         """Create the tabbed content container"""
-        yield TabbedContent(id="directory_tabs")
+        with TabbedContent(id="directory_tabs"):
+            with TabPane("Loading...", id="loading-pane"):
+                yield Static(Text("Discovering builds...", style="dim italic"))
 
     async def on_mount(self) -> None:
         """Start monitoring builds"""
@@ -390,6 +392,15 @@ class DirectoryTabbedPanel(Static):
                     continue
 
             tabbed_content = self.query_one("#directory_tabs", TabbedContent)
+
+            # Remove loading pane if it exists
+            try:
+                for pane in tabbed_content.query(TabPane):
+                    if pane.id == "loading-pane":
+                        tabbed_content.remove_pane("loading-pane")
+                        break
+            except:
+                pass
 
             # Add new builds
             for task_id, build_info in current_builds.items():
