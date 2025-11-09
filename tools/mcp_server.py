@@ -1517,7 +1517,7 @@ def _autonomous_build_and_deploy_impl(
     enable_test_loop: bool = True,
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
-    use_parallel: bool = True,
+    use_parallel: bool = False,
     incremental: bool = False,
     force_rebuild: bool = False
 ) -> str:
@@ -1569,7 +1569,7 @@ def _autonomous_build_and_deploy_impl(
         enable_test_loop: Enable self-healing test loop (default: True)
         max_test_iterations: Max test/fix cycles (default: 3)
         timeout_minutes: Max execution time (default: 90)
-        use_parallel: Use parallel execution (default: True, ~45% faster)
+        use_parallel: DEPRECATED - Auto-corrects to False (default: False)
         incremental: Enable incremental builds (default: False, 70-90% faster on rebuilds)
         force_rebuild: Force full rebuild even if incremental enabled (default: False)
 
@@ -1983,7 +1983,7 @@ def autonomous_build_and_deploy(
     enable_test_loop: bool = True,
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
-    use_parallel: bool = True,
+    use_parallel: bool = False,
     incremental: bool = False,
     force_rebuild: bool = False
 ) -> str:
