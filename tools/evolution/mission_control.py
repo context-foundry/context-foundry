@@ -530,7 +530,7 @@ class DelegationsListPanel(Static, can_focus=True):
 
         # Create and configure DataTable
         self.table = DataTable(show_header=True, show_cursor=True, zebra_stripes=True)
-        self.table.add_columns("Status", "Project", "Started", "Duration", "Phase", "Progress")
+        self.table.add_columns("Status", "Project", "Started", "Duration", "Phase", "Progress", "Daemon")
         await self.mount(self.table)
 
         # Start refresh interval
@@ -607,8 +607,26 @@ class DelegationsListPanel(Static, can_focus=True):
                     phase_status = metadata.get("phase_status", "")
                     progress = metadata.get("progress_detail", "")[:50] if metadata.get("progress_detail") else ""
 
+                    # Query daemon monitoring status
+                    task_id = metadata.get("task_id", "unknown")
+                    daemon_status = get_daemon_monitoring_status(task_id)
+
+                    # Format daemon monitoring info
+                    if daemon_status and daemon_status.get("monitored"):
+                        daemon_task_status = daemon_status.get("task_status", "unknown")
+                        if daemon_task_status == "pending":
+                            daemon_display = "Queued"
+                        elif daemon_task_status == "running":
+                            daemon_display = "Monitoring"
+                        elif daemon_task_status == "completed":
+                            daemon_display = "Checked"
+                        else:
+                            daemon_display = daemon_task_status
+                    else:
+                        daemon_display = "-"
+
                     delegations.append({
-                        "task_id": metadata.get("task_id", "unknown"),
+                        "task_id": task_id,
                         "status": status,
                         "status_display": status_display,
                         "project": github_repo[:20],
@@ -617,6 +635,7 @@ class DelegationsListPanel(Static, can_focus=True):
                         "phase": phase,
                         "progress": progress,
                         "working_directory": metadata.get("working_directory", ""),
+                        "daemon_status": daemon_display,
                     })
                 except Exception:
                     continue
@@ -657,6 +676,17 @@ class DelegationsListPanel(Static, can_focus=True):
             else:
                 status_text = Text(delegation["status_display"], style="dim")
 
+            # Format daemon monitoring status with color
+            daemon_status = delegation.get("daemon_status", "-")
+            if daemon_status == "Monitoring":
+                daemon_text = Text(daemon_status, style="green bold")
+            elif daemon_status == "Queued":
+                daemon_text = Text(daemon_status, style="yellow")
+            elif daemon_status == "Checked":
+                daemon_text = Text(daemon_status, style="blue")
+            else:
+                daemon_text = Text(daemon_status, style="dim")
+
             # Add row with styled cells
             self.table.add_row(
                 status_text,
@@ -665,6 +695,7 @@ class DelegationsListPanel(Static, can_focus=True):
                 Text(delegation["duration"], style="white"),
                 Text(delegation["phase"], style="#A78BFA"),
                 Text(delegation["progress"], style="dim"),
+                daemon_text,
             )
 
     def get_selected_delegation(self) -> Optional[dict]:
