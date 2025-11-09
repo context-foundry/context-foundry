@@ -1,298 +1,646 @@
-# Architecture: Test Suite for Context Budget System
+# Test Coverage Architecture: Critical Path Tests (Phase 1)
 
 ## System Architecture Overview
 
-This enhancement adds comprehensive test coverage for three critical, untested modules in the context budget monitoring system. The architecture follows the existing pytest patterns used throughout Context Foundry's test suite.
+This implementation adds comprehensive test coverage for 6 critical path modules in the Context Foundry build pipeline. These modules are currently untested and represent high-risk components that could cause build failures.
 
-## Module Specifications
-
-### Module 1: tests/test_context_budget_monitor_unit.py
-**Purpose:** Unit tests for ContextBudgetMonitor class  
-**Dependencies:** tools/context_budget/monitor.py  
-**Test Count:** 28 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (3 tests)
-   - Test default initialization with 200K context window
-   - Test custom context window size
-   - Test model parameter handling
-
-2. **Budget Calculation Tests** (5 tests)
-   - Test get_budget_for_phase() for each phase
-   - Test normalized phase names (spaces, hyphens, underscores)
-   - Test unknown phase defaults to 5%
-   - Test budget allocation percentages match BUDGETS dict
-   - Test edge case: 0 context window
-
-3. **Zone Detection Tests** (6 tests)
-   - Test SMART zone detection (0-40%)
-   - Test DUMB zone detection (40-80%)
-   - Test CRITICAL zone detection (80-100%)
-   - Test boundary conditions (exactly 40%, exactly 80%)
-   - Test is_in_smart_zone() method
-   - Test get_zone() return values
-
-4. **Phase Analysis Tests** (8 tests)
-   - Test check_phase() with typical usage
-   - Test phase analysis warnings generation
-   - Test phase analysis recommendations generation
-   - Test budget exceeded calculation
-   - Test budget remaining calculation
-   - Test phase history tracking
-   - Test percentage calculation accuracy
-   - Test PhaseAnalysis.to_dict() serialization
-
-5. **Historical Tracking Tests** (3 tests)
-   - Test get_phase_history() returns correct analyses
-   - Test multiple analyses for same phase
-   - Test empty history for new phase
-
-6. **Overall Statistics Tests** (3 tests)
-   - Test get_overall_stats() with multiple phases
-   - Test peak usage detection
-   - Test smart zone percentage calculation
-
-### Module 2: tests/test_context_budget_reporter_unit.py
-**Purpose:** Unit tests for ContextBudgetReporter class  
-**Dependencies:** tools/context_budget/report.py  
-**Test Count:** 22 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (1 test)
-   - Test reporter initialization
-
-2. **Context Report Generation Tests** (5 tests)
-   - Test generate_context_report() with full metrics
-   - Test report with empty metrics
-   - Test report with partial metrics
-   - Test report formatting and structure
-   - Test zone indicators in report
-
-3. **Phase Table Generation Tests** (4 tests)
-   - Test generate_phase_table() ASCII formatting
-   - Test table with multiple phases
-   - Test table column alignment
-   - Test phase name truncation
-
-4. **Visualization Tests** (4 tests)
-   - Test visualize_context_usage() bar chart generation
-   - Test bar chart with varying percentages
-   - Test bar chart zone emojis
-   - Test empty data handling
-
-5. **Optimization Suggestions Tests** (4 tests)
-   - Test get_optimization_suggestions() for critical zone
-   - Test suggestions for dumb zone
-   - Test suggestions for optimal usage
-   - Test phase-specific recommendations
-
-6. **Export Tests** (4 tests)
-   - Test generate_summary_json() format
-   - Test export_markdown_report() formatting
-   - Test markdown file output
-   - Test format_zone_indicator() mapping
-
-### Module 3: tests/test_context_budget_token_counter_unit.py
-**Purpose:** Unit tests for TokenCounter class  
-**Dependencies:** tools/context_budget/token_counter.py  
-**Test Count:** 18 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (2 tests)
-   - Test TokenCounter initialization with default model
-   - Test initialization with custom model
-
-2. **Token Estimation Tests (with tiktoken)** (5 tests)
-   - Test estimate_tokens() with tiktoken available
-   - Test accuracy against known token counts
-   - Test empty string handling
-   - Test unicode text handling
-   - Test very long text handling
-
-3. **Token Estimation Tests (fallback)** (3 tests)
-   - Test estimate_tokens() without tiktoken (mock unavailable)
-   - Test fallback heuristic accuracy (chars / 4)
-   - Test fallback with various text lengths
-
-4. **File Token Counting Tests** (4 tests)
-   - Test count_file_tokens() with temp file
-   - Test non-existent file handling
-   - Test binary file handling
-   - Test encoding error handling
-
-5. **Directory Token Counting Tests** (2 tests)
-   - Test count_directory_tokens() with pattern matching
-   - Test empty directory handling
-
-6. **Message Token Counting Tests** (2 tests)
-   - Test count_message_tokens() with message array
-   - Test multi-part content handling
+**Scope:** Phase 1 only (Critical Path Tests)
+**Goal:** Increase test coverage from 67% to 73% (+6 percentage points)
+**Modules:** 6 critical path modules
+**Test files:** 6 new test files (~150-200 tests total)
 
 ## Complete File Structure
 
 ```
-tests/
-├── test_context_budget_monitor_unit.py (NEW)
-├── test_context_budget_reporter_unit.py (NEW)
-└── test_context_budget_token_counter_unit.py (NEW)
+context-foundry/
+├── tests/
+│   ├── test_integration_pre_check.py          [NEW - 35-40 tests]
+│   ├── test_validate_architecture.py          [NEW - 25-30 tests]
+│   ├── test_validate_tech_stack.py            [NEW - 25-30 tests]
+│   ├── test_cli_entry_point.py                [NEW - 20-25 tests]
+│   ├── test_use_baml_cli.py                   [NEW - 30-35 tests]
+│   └── test_parallel_runner_execution.py      [NEW - 15-20 tests]
+├── tools/
+│   ├── back_pressure/
+│   │   ├── integration_pre_check.py           [TESTED BY: test_integration_pre_check.py]
+│   │   ├── validate_architecture.py           [TESTED BY: test_validate_architecture.py]
+│   │   └── validate_tech_stack.py             [TESTED BY: test_validate_tech_stack.py]
+│   ├── cli.py                                  [TESTED BY: test_cli_entry_point.py]
+│   ├── use_baml.py                            [TESTED BY: test_use_baml_cli.py]
+│   └── test_parallel_runner.py                [TESTED BY: test_parallel_runner_execution.py]
+└── pytest.ini                                  [NO CHANGES NEEDED - already configured]
 ```
 
-## Test Implementation Strategy
+## Module Specifications
 
-### Common Fixtures (Shared across all test files)
+### Module 1: test_integration_pre_check.py
 
+**Purpose:** Test fast pre-check validation system (Phase 3.5 back pressure)
+
+**Functions to test:**
+1. `integration_pre_check()` - Main entry point
+2. `detect_project_language()` - Language detection logic
+3. `run_syntax_check()` - Syntax validation per language
+4. `check_imports()` - Import resolution
+5. `check_required_files()` - File existence validation
+
+**Test categories (35-40 tests):**
+
+#### Language Detection (8 tests)
+- Python project (requirements.txt)
+- Python project (pyproject.toml)
+- Python project (.py files only)
+- TypeScript project (package.json + typescript dep)
+- JavaScript project (package.json, no typescript)
+- Rust project (Cargo.toml)
+- Go project (go.mod)
+- Unknown project (no markers)
+
+#### Python Syntax Checking (8 tests)
+- Valid Python file compilation
+- Invalid Python syntax error
+- Multiple files with one error
+- Timeout handling for slow compilation
+- Excluded directories (venv, __pycache__)
+- Empty project (no .py files)
+- File permission errors
+- Subprocess exception handling
+
+#### TypeScript/JavaScript Checking (6 tests)
+- TypeScript valid (tsc available)
+- TypeScript invalid syntax
+- TypeScript compiler not available (graceful skip)
+- TypeScript timeout
+- JavaScript project (no tsc check)
+- TypeScript parse errors
+
+#### Rust/Go Checking (4 tests)
+- Rust cargo check success
+- Rust cargo check failure
+- Go build success
+- Go build failure
+
+#### Import Checking (4 tests)
+- Python relative imports found
+- Python import errors (basic)
+- TypeScript imports (skipped for now)
+- Import check duration
+
+#### Required Files Checking (5 tests)
+- Python project missing .py files
+- TypeScript missing tsconfig.json
+- Rust missing Cargo.toml
+- Go missing go.mod
+- Valid projects pass
+
+#### CLI Integration (3 tests)
+- CLI with valid project
+- CLI with invalid project
+- CLI exit codes
+
+#### Edge Cases (2 tests)
+- Very large project (100+ files)
+- Unicode filenames
+
+**Fixtures:**
 ```python
-# Fixture: sample_phase_metrics
-# Returns dict with realistic phase metrics for testing
+@pytest.fixture
+def tmp_python_project(tmp_path):
+    """Create temporary Python project"""
+    (tmp_path / "main.py").write_text("print('hello')")
+    return tmp_path
 
-# Fixture: sample_context_metrics
-# Returns dict with full context metrics structure
-
-# Fixture: temp_file_with_content
-# Creates temp file with known content for token counting tests
+@pytest.fixture
+def tmp_invalid_python_project(tmp_path):
+    """Create Python project with syntax errors"""
+    (tmp_path / "bad.py").write_text("def broken(\nprint('unclosed')")
+    return tmp_path
 ```
 
-### Mocking Strategy
+**Mocking strategy:**
+- Mock `subprocess.run` for language compilers
+- Use real file creation (tmp_path)
+- Mock timeouts for speed
 
-1. **Tiktoken Mocking:**
-   - Mock `tiktoken.get_encoding()` to simulate availability
-   - Mock `ImportError` to simulate tiktoken unavailable
-   - Verify both code paths are tested
+---
 
-2. **File I/O Mocking:**
-   - Use `tempfile` for real file tests
-   - Mock `Path.read_text()` for error scenarios
-   - Mock `Path.exists()` for non-existent file tests
+### Module 2: test_validate_architecture.py
 
-3. **System Mocking:**
-   - Mock `sys.stderr` to capture warnings
-   - No need to mock datetime (tests don't rely on current time)
+**Purpose:** Test architecture validation (Architect phase back pressure)
 
-### Test Data Patterns
+**Functions to test:**
+1. `validate_architecture()` - Main validator
+2. `check_test_strategy_exists()` - Test section detection
+3. `check_file_structure_specified()` - File tree detection
+4. `find_duplicate_file_paths()` - Duplicate detection
+5. `check_implementation_steps_exist()` - Steps detection
 
-**Sample Phase Metrics:**
+**Test categories (25-30 tests):**
+
+#### Main Validation (5 tests)
+- Valid complete architecture
+- Missing architecture file
+- Empty architecture file
+- Malformed architecture (not markdown)
+- Architecture with all checks passing
+
+#### Test Strategy Checking (6 tests)
+- Architecture with "Testing Requirements" section
+- Architecture with "Test Plan" section
+- Architecture with "Test Strategy" section
+- Architecture missing test section (error)
+- Test framework mentioned (pytest, jest)
+- Test approach specified
+
+#### File Structure Checking (6 tests)
+- Architecture with "File Structure" section
+- Architecture with "Directory Structure" section
+- Architecture with "Project Structure" section
+- Architecture missing structure (error)
+- Valid file tree format
+- Missing structure section (error)
+
+#### Duplicate File Detection (5 tests)
+- No duplicates (pass)
+- Duplicate file paths (error)
+- Case-sensitive duplicates
+- Path normalization
+- Multiple duplicates reported
+
+#### Implementation Steps (4 tests)
+- Architecture with "Implementation Steps"
+- Architecture with "Build Plan"
+- Missing steps (warning, not error)
+- Steps with ordering
+
+#### Edge Cases (3 tests)
+- Very large architecture (10KB+)
+- Unicode in architecture
+- Performance (< 100ms for typical file)
+
+**Fixtures:**
 ```python
-{
-    'phase_name': 'Scout',
-    'tokens_used': 12000,
-    'percentage': 6.0,
-    'zone': 'smart',
-    'budget_allocated': 14000,
-    'budget_remaining': 2000,
-    'budget_exceeded_by': 0,
-    'warnings': [],
-    'recommendations': []
-}
+@pytest.fixture
+def valid_architecture(tmp_path):
+    """Create valid architecture.md"""
+    arch = """
+# Architecture
+
+## Testing Requirements
+- Use pytest
+- 90% coverage
+
+## File Structure
+```
+project/
+├── main.py
+└── tests/
 ```
 
-**Sample Context Metrics:**
+## Implementation Steps
+1. Create main.py
+2. Write tests
+"""
+    path = tmp_path / "architecture.md"
+    path.write_text(arch)
+    return str(path)
+```
+
+---
+
+### Module 3: test_validate_tech_stack.py
+
+**Purpose:** Test technology stack validation (Scout phase back pressure)
+
+**Functions to test:**
+1. `validate_tech_stack()` - Main validator
+2. `extract_tech_stack()` - Parse scout report for tech
+3. `check_language_available()` - Check language availability
+4. (Additional helper functions from file)
+
+**Test categories (25-30 tests):**
+
+#### Main Validation (5 tests)
+- Valid scout report with available tech
+- Missing scout report file
+- Scout report with unavailable tech
+- Scout report with no tech section
+- Multiple technologies validated
+
+#### Tech Stack Extraction (8 tests)
+- Extract from "Technology Stack" section
+- Extract language (Python 3.11+)
+- Extract framework (FastAPI)
+- Extract database (PostgreSQL)
+- Extract runtime (Node.js 18+)
+- Multiple technologies in list
+- No tech section (skip validation)
+- Malformed tech section
+
+#### Language Availability Checking (8 tests)
+- Python available (subprocess check)
+- Python unavailable (error)
+- Python version mismatch (warning)
+- Node.js available
+- Node.js unavailable
+- Rust available (cargo --version)
+- Go available (go version)
+- Unknown language (skip)
+
+#### Error Handling (4 tests)
+- Subprocess timeout
+- Subprocess exception
+- Permission errors
+- Command not found
+
+#### Edge Cases (3 tests)
+- Empty scout report
+- Very long tech list (20+ items)
+- Performance (< 200ms)
+
+**Mocking:**
 ```python
-{
-    'max_context_window': 200000,
-    'model': 'claude-sonnet-4',
-    'by_phase': {
-        'phase_scout': {...},
-        'phase_architect': {...}
-    },
-    'overall': {
-        'peak_usage_tokens': 40000,
-        'peak_usage_percentage': 20.0,
-        'peak_phase': 'Builder',
-        'avg_usage_percentage': 12.5,
-        'smart_zone_percentage': 100.0,
-        'total_phases': 4
+@pytest.fixture
+def mock_subprocess_python_available(monkeypatch):
+    """Mock subprocess to return Python as available"""
+    def mock_run(cmd, **kwargs):
+        result = Mock()
+        if 'python' in cmd[0]:
+            result.returncode = 0
+            result.stdout = "Python 3.11.0"
+        return result
+    monkeypatch.setattr(subprocess, 'run', mock_run)
+```
+
+---
+
+### Module 4: test_cli_entry_point.py
+
+**Purpose:** Test CLI entry point (`cf` command)
+
+**Functions to test:**
+1. `main()` - CLI entry point
+2. `launch_context_foundry()` - TUI launcher
+3. Python version checking (inline in main)
+4. Argument parsing
+
+**Test categories (20-25 tests):**
+
+#### Python Version Checking (5 tests)
+- Python 3.10 (pass)
+- Python 3.11 (pass)
+- Python 3.9 (fail with error message)
+- Python 3.8 (fail)
+- Version check message format
+
+#### Argument Parsing (6 tests)
+- --version flag
+- --help flag
+- No arguments (default: launch TUI)
+- Invalid arguments
+- Version output format
+- Help output format
+
+#### TUI Launch (5 tests)
+- Successful TUI launch (mocked)
+- Missing dependencies (ImportError)
+- Keyboard interrupt handling
+- General exception handling
+- Error message format
+
+#### Error Messages (4 tests)
+- Python version error message
+- Missing dependencies error message
+- General error message
+- Error message includes help URL
+
+#### Edge Cases (3 tests)
+- Multiple flags
+- Unknown flags
+- sys.exit() codes captured
+
+**Mocking:**
+```python
+@pytest.fixture
+def mock_python_39(monkeypatch):
+    """Mock Python 3.9 version"""
+    import sys
+    monkeypatch.setattr(sys, 'version_info', (3, 9, 0))
+
+@pytest.fixture
+def mock_missing_tui(monkeypatch):
+    """Mock missing TUI dependencies"""
+    def mock_import(*args, **kwargs):
+        raise ImportError("No module named 'tools.evolution.mission_control'")
+    monkeypatch.setitem(__builtins__, '__import__', mock_import)
+```
+
+**Special considerations:**
+- Use `pytest.raises(SystemExit)` to capture exit codes
+- Mock `sys.version_info` for version testing
+- Mock TUI import to avoid actual launch
+
+---
+
+### Module 5: test_use_baml_cli.py
+
+**Purpose:** Test BAML integration CLI wrapper
+
+**Functions to test:**
+1. `main()` - CLI entry point with subcommands
+2. Status command
+3. Update-phase command
+4. Scout-report command
+5. Architecture command
+6. Validate-build command
+
+**Test categories (30-35 tests):**
+
+#### Status Command (5 tests)
+- BAML available (success)
+- BAML unavailable (error with message)
+- API key set (reported in output)
+- API key not set (reported in output)
+- Exit codes (0 for success, 1 for unavailable)
+
+#### Update-Phase Command (8 tests)
+- Valid phase update
+- Status normalization (lowercase → Capitalized)
+- All status values mapped correctly
+- Session ID parameter
+- Iteration parameter
+- JSON output format
+- Error handling
+- Cache clearing
+
+#### Scout-Report Command (5 tests)
+- Successful report generation
+- BAML unavailable (graceful fallback message)
+- Required arguments
+- JSON output
+- Error handling
+
+#### Architecture Command (5 tests)
+- Successful architecture generation
+- JSON parsing for risks array
+- BAML unavailable fallback
+- Error handling
+- Output format
+
+#### Validate-Build Command (4 tests)
+- Successful validation
+- BAML unavailable fallback
+- JSON input parsing
+- Error handling
+
+#### Argument Parsing (5 tests)
+- No command (shows help)
+- Invalid command
+- Missing required arguments
+- Help flag
+- All commands listed
+
+#### Edge Cases (3 tests)
+- Unicode in arguments
+- Very long task descriptions
+- Special characters in session ID
+
+**Mocking:**
+```python
+@pytest.fixture
+def mock_baml_available(monkeypatch):
+    """Mock BAML as available"""
+    from tools import baml_integration
+    monkeypatch.setattr(baml_integration, 'is_baml_available', lambda: True)
+
+@pytest.fixture
+def mock_baml_unavailable(monkeypatch):
+    """Mock BAML as unavailable"""
+    from tools import baml_integration
+    monkeypatch.setattr(baml_integration, 'is_baml_available', lambda: False)
+    monkeypatch.setattr(baml_integration, 'get_baml_error', lambda: "BAML not installed")
+```
+
+---
+
+### Module 6: test_parallel_runner_execution.py
+
+**Purpose:** Test parallel build runner
+
+**Functions to test:**
+1. `test_runner()` - Main test function
+2. Subprocess spawning
+3. Config passing via stdin
+4. Output capture
+5. Timeout handling
+
+**Test categories (15-20 tests):**
+
+#### Main Runner Function (5 tests)
+- Successful run with valid config
+- Runner exits with 0 on success
+- Runner captures stdout
+- Runner captures stderr
+- Exit code propagation
+
+#### Config Handling (4 tests)
+- Config serialization to JSON
+- Config passed via stdin
+- Config deserialization in runner
+- Invalid config handling
+
+#### Subprocess Management (5 tests)
+- Subprocess spawned successfully
+- Working directory set correctly
+- stdin/stdout/stderr pipes configured
+- Timeout handling (30s default)
+- Process termination on timeout
+
+#### Output Validation (3 tests)
+- stdout captured correctly
+- stderr captured correctly
+- Output format validation
+
+#### Edge Cases (3 tests)
+- Missing runner script
+- Permission errors
+- Very long output
+
+**Fixtures:**
+```python
+@pytest.fixture
+def test_build_config():
+    """Sample build configuration"""
+    return {
+        "task": "Create a simple Hello World",
+        "working_directory": "/tmp/cf-test",
+        "project_name": "test-hello",
+        "github_repo_name": None,
+        "enable_test_loop": False,
+        "max_test_iterations": 1
     }
-}
 ```
+
+---
 
 ## Testing Requirements
 
+### Framework & Tools
+- **pytest** (already configured)
+- **pytest markers:**
+  - `@pytest.mark.unit` - Fast unit tests
+  - `@pytest.mark.integration` - Tests with filesystem/subprocess
+  - `@pytest.mark.tier1` - Critical tests (all Phase 1 tests)
+  - `@pytest.mark.slow` - Tests > 1 second
+
 ### Test Execution
-- All tests must run with: `pytest tests/test_context_budget_*.py -v`
-- Total execution time target: < 5 seconds
-- No external API calls or network dependencies
-- No file system pollution (clean up temp files)
+```bash
+# Run all Phase 1 tests
+pytest tests/test_integration_pre_check.py tests/test_validate_architecture.py \
+       tests/test_validate_tech_stack.py tests/test_cli_entry_point.py \
+       tests/test_use_baml_cli.py tests/test_parallel_runner_execution.py
 
-### Test Success Criteria
-1. **Coverage:** >90% line coverage for each module
-2. **Edge Cases:** All boundary conditions tested
-3. **Error Paths:** All exception handling tested
-4. **Serialization:** JSON output structure validated
-5. **Isolation:** Each test is fully independent
+# Run only tier1 critical tests
+pytest -m tier1
 
-### Assertion Patterns
-
-```python
-# Numeric assertions (use approximate for floats)
-assert analysis.percentage == pytest.approx(6.0, abs=0.1)
-
-# Zone assertions
-assert analysis.zone == ContextZone.SMART
-
-# String assertions (for reports)
-assert "Scout" in report
-assert "✅" in report  # Zone indicator
-
-# Structure assertions
-assert isinstance(result, dict)
-assert 'phase_name' in result
+# Run with coverage
+pytest --cov=tools/back_pressure --cov=tools --cov-report=term
 ```
 
-## Implementation Plan
+### Success Criteria
+- ✅ All 150-200 tests pass
+- ✅ Test execution time < 30 seconds (all tests)
+- ✅ Code coverage > 90% for each module
+- ✅ No test failures on existing test suite
+- ✅ All tests properly marked with pytest markers
 
-### Step 1: Create test_context_budget_monitor_unit.py
-**Tasks:**
-1. Import monitor module and dependencies
-2. Create fixtures for sample data
-3. Implement 28 unit tests covering all methods
-4. Add docstrings explaining each test
-5. Verify all tests pass independently
+## Implementation Steps
 
-### Step 2: Create test_context_budget_reporter_unit.py
-**Tasks:**
-1. Import reporter module and dependencies
-2. Create fixtures for metrics data
-3. Implement 22 unit tests covering all methods
-4. Test ASCII formatting and table generation
-5. Verify report output formatting
+### Step 1: Setup Test Infrastructure (15 min)
+- Verify pytest installed and working
+- Create test file stubs
+- Add pytest markers to new tests
 
-### Step 3: Create test_context_budget_token_counter_unit.py
-**Tasks:**
-1. Import token_counter module
-2. Mock tiktoken for availability/unavailability tests
-3. Implement 18 unit tests
-4. Create temp files for file counting tests
-5. Verify fallback heuristic accuracy
+### Step 2: Implement test_integration_pre_check.py (60-90 min)
+- Create fixtures for temp projects (Python, TypeScript, etc.)
+- Test language detection (8 tests)
+- Test Python syntax checking (8 tests)
+- Test other language checks (10 tests)
+- Test import/file checks (9 tests)
+- Test CLI and edge cases (5 tests)
 
-### Step 4: Validation
-**Tasks:**
-1. Run full test suite: `pytest tests/test_context_budget_*.py -v`
-2. Verify 100% pass rate
-3. Check coverage: `pytest --cov=tools/context_budget tests/test_context_budget_*.py`
-4. Ensure >90% coverage achieved
-5. Run existing tests to ensure no regressions
+### Step 3: Implement test_validate_architecture.py (45-60 min)
+- Create fixtures for architecture.md files
+- Test main validation (5 tests)
+- Test test strategy checking (6 tests)
+- Test file structure checking (6 tests)
+- Test duplicate detection (5 tests)
+- Test implementation steps (4 tests)
+- Edge cases (3 tests)
 
-## Success Criteria
+### Step 4: Implement test_validate_tech_stack.py (45-60 min)
+- Create fixtures for scout reports
+- Mock subprocess for language checks
+- Test main validation (5 tests)
+- Test tech extraction (8 tests)
+- Test language availability (8 tests)
+- Error handling + edge cases (7 tests)
 
-### Functional Requirements
-- [x] All 68 tests implement correctly
-- [x] All tests pass (100% pass rate)
-- [x] Coverage >90% for monitor.py, report.py, token_counter.py
-- [x] No regressions in existing tests
-- [x] Execution time < 5 seconds
+### Step 5: Implement test_cli_entry_point.py (30-45 min)
+- Mock Python version
+- Mock TUI import
+- Test version checking (5 tests)
+- Test argument parsing (6 tests)
+- Test TUI launch (5 tests)
+- Test error messages (4 tests)
+- Edge cases (3 tests)
 
-### Code Quality Requirements
-- [x] Clear, descriptive test names
-- [x] Comprehensive docstrings
-- [x] Proper fixture usage
-- [x] No code duplication (use fixtures/helpers)
-- [x] Follow existing test conventions
+### Step 6: Implement test_use_baml_cli.py (45-60 min)
+- Mock BAML availability
+- Test status command (5 tests)
+- Test update-phase (8 tests)
+- Test scout-report (5 tests)
+- Test architecture (5 tests)
+- Test validate-build (4 tests)
+- Test argument parsing + edge cases (8 tests)
 
-### Documentation Requirements
-- [x] Each test has docstring explaining what it tests
-- [x] Fixtures are documented
-- [x] Complex assertions have explanatory comments
-- [x] Module-level docstring explains test scope
+### Step 7: Implement test_parallel_runner_execution.py (30-45 min)
+- Create test config fixtures
+- Test main runner (5 tests)
+- Test config handling (4 tests)
+- Test subprocess management (5 tests)
+- Test output validation (3 tests)
+- Edge cases (3 tests)
+
+### Step 8: Run All Tests & Verify (15-30 min)
+- Execute full test suite
+- Check coverage reports
+- Fix any failures
+- Verify no regressions in existing tests
+
+### Step 9: Create PR (15 min)
+- Create feature branch: `self-improvement/test-coverage-critical-paths`
+- Commit changes with message template
+- Create PR with test results
+
+**Total estimated time:** 4-6 hours
+
+## Edge Cases & Error Handling
+
+### Subprocess Errors
+- Timeout: Mock with `subprocess.TimeoutExpired`
+- Command not found: Mock with `FileNotFoundError`
+- Permission denied: Create test files with no read permission
+
+### Filesystem Errors
+- Missing files: `FileNotFoundError`
+- Permission errors: Create unreadable files
+- Large files: Create files > 1MB
+
+### BAML Availability
+- BAML installed: Mock `is_baml_available() → True`
+- BAML not installed: Mock `is_baml_available() → False`
+- API key set/unset: Mock environment variables
+
+### CLI Testing
+- sys.exit(): Use `pytest.raises(SystemExit)`
+- stdin/stdout capture: Use `capsys` fixture
+- KeyboardInterrupt: Raise in mocked function
+
+## Preventive Measures
+
+### Known Risks (from pattern library)
+None applicable - This is a standard testing task.
+
+### Test Isolation
+- Use `tmp_path` fixture for all file operations
+- Mock subprocess calls to avoid external dependencies
+- Clean up after each test (pytest handles automatically with tmp_path)
+- No shared state between tests
+
+### Performance
+- Target: < 30 seconds for all 150-200 tests
+- Mock all subprocess calls
+- Use in-memory fixtures where possible
+- Mark slow tests (> 1s) with `@pytest.mark.slow`
+
+## Success Metrics
+
+- **Coverage increase:** 67% → 73% (+6 percentage points)
+- **Tests created:** 150-200 comprehensive tests
+- **Modules covered:** 6 critical path modules
+- **Test execution:** < 30 seconds total
+- **Code coverage:** > 90% per module
+- **Regressions:** 0 (all existing tests still pass)
+
+## Files Modified Summary
+
+**New test files (6):**
+1. tests/test_integration_pre_check.py
+2. tests/test_validate_architecture.py
+3. tests/test_validate_tech_stack.py
+4. tests/test_cli_entry_point.py
+5. tests/test_use_baml_cli.py
+6. tests/test_parallel_runner_execution.py
+
+**No changes to production code** - Tests only!

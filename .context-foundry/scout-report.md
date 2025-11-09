@@ -1,170 +1,273 @@
-# Scout Report: Test Coverage Analysis for Context Foundry Tools
+# Scout Report: Test Coverage Analysis & Missing Tests
 
 ## Executive Summary
 
-Analysis of the `tools/` directory revealed significant gaps in test coverage for critical path modules, particularly in the **context budget monitoring system**. While the project has 52 test files covering many modules, several critical components lack comprehensive test coverage:
+Context Foundry has strong test coverage (~67%) with 70 test files covering 104 Python modules. However, **6 critical path modules** lack test coverage, creating risk for the autonomous build pipeline. This task will add comprehensive test suites for these high-priority modules plus medium-priority integration tests.
 
-### High Priority Gaps (Critical Paths):
-1. **context_budget/monitor.py** - Core monitoring logic (NO TESTS)
-2. **context_budget/report.py** - Report generation (NO TESTS) 
-3. **context_budget/token_counter.py** - Token counting utilities (NO TESTS)
-4. **cli.py** - Main CLI entry point (NO TESTS)
-5. **use_baml.py** - BAML integration CLI (NO TESTS)
-6. **tui_monitor.py** - TUI entry point (NO TESTS)
+**Key Findings:**
+- 67% test coverage ratio (70 tests / 104 modules)
+- 6 HIGH PRIORITY modules without tests (critical build path)
+- 8 MEDIUM PRIORITY modules without tests (important integrations)
+- 19 LOW PRIORITY modules without tests (nice-to-have)
 
-### Coverage Status:
-- **Total Python modules in tools/**: ~80 modules
-- **Test files**: 52 test files
-- **Coverage estimate**: ~65% (missing critical path coverage)
-- **Risk**: HIGH - Core functionality lacks validation
+**Recommendation:** Focus on Phase 1 (Critical Path Tests) to increase coverage to 73%, then Phase 2 (Integration Tests) to reach 81%.
 
 ## Technology Stack
-- **Testing Framework**: pytest (already in use)
-- **Mocking**: unittest.mock
-- **Temp directories**: tempfile, pytest fixtures
-- **Token counting**: tiktoken (with fallback)
-- **Coverage analysis**: pytest-cov (optional but recommended)
 
-## Critical Architecture Recommendations
+**Testing Framework:**
+- pytest (already configured in pytest.ini)
+- pytest markers: unit, integration, tier1/2/3, slow
+- Existing test patterns well-established
 
-### 1. Context Budget Module Tests (HIGHEST PRIORITY)
-The context budget system is a **critical performance feature** that monitors token usage and prevents degraded model performance. This needs comprehensive testing:
+**Target Language:**
+- Python 3.10+
+- Type hints used extensively
+- Subprocess management for builds
+- JSON validation patterns
 
-**Required Test Coverage:**
-- `ContextBudgetMonitor` class:
-  - Budget allocation calculations
-  - Zone detection (SMART/DUMB/CRITICAL)
-  - Phase analysis and warnings
-  - Historical tracking
-  - Export to session summary format
-- `ContextBudgetReporter` class:
-  - Report generation (text, JSON, markdown)
-  - Phase table formatting
-  - ASCII visualization
-  - Optimization suggestions
-- `TokenCounter` class:
-  - Token estimation (with/without tiktoken)
-  - File token counting
-  - Directory token counting
-  - Message token counting
-  - Fallback heuristics
+## Requirements Analysis
 
-**Why Critical:**
-- Controls build quality and performance
-- Prevents "dumb zone" degradation (40-80% context)
-- Generates reports for user feedback
-- No existing tests = high regression risk
+### Critical Path Modules (MUST TEST - Phase 1)
 
-### 2. CLI Entry Points Tests
-- `cli.py` - Main Context Foundry entry point
-- `use_baml.py` - BAML integration CLI
-- `tui_monitor.py` - TUI launcher
+#### 1. tools/back_pressure/integration_pre_check.py
+**What it does:**
+- Fast validation before expensive test suite (Phase 3.5)
+- Catches syntax errors, import issues, missing files
+- Supports Python, TypeScript, JavaScript, Rust, Go
 
-**Testing Requirements:**
-- Argument parsing
-- Error handling (missing deps, wrong Python version)
-- Graceful degradation
-- Exit codes
+**Critical functions:**
+- `integration_pre_check()` - Main entry point
+- `detect_project_language()` - Language detection
+- `run_syntax_check()` - Syntax validation
+- `check_imports()` - Import resolution
+- `check_required_files()` - File existence checks
 
-### 3. Testing Approach
+**Test scenarios needed:**
+- ✅ Python syntax validation (valid + invalid)
+- ✅ TypeScript syntax validation
+- ✅ Language detection for all supported languages
+- ✅ Import checking logic
+- ✅ Required files validation
+- ✅ Timeout handling
+- ✅ Error aggregation
+- ✅ CLI interface (main)
 
-**Unit Tests (Isolated):**
-- Test each class method independently
-- Mock external dependencies (file I/O, tiktoken)
-- Verify calculation accuracy
-- Test edge cases and error handling
+**Why critical:** Prevents expensive test suite execution on broken builds (saves 30-40% time).
 
-**Integration Tests:**
-- Test full workflow (monitor → analyze → report)
-- Test with real session-summary.json data
-- Verify report formatting
-- Test CLI commands end-to-end
+#### 2. tools/back_pressure/validate_architecture.py
+**What it does:**
+- Validates architecture.md before building
+- Checks for completeness, test strategy, file structure
 
-**Test Data:**
-- Create fixtures with sample phase data
-- Mock session-summary.json structures
-- Test with/without tiktoken available
-- Test boundary conditions (0%, 40%, 80%, 100% usage)
+**Missing:** Need to read this file to understand validation logic
 
-## Main Challenges and Mitigations
+#### 3. tools/back_pressure/validate_tech_stack.py
+**What it does:**
+- Checks if selected technologies are available
+- Prevents unfeasible tech stack selections
 
-### Challenge 1: Tiktoken Optional Dependency
-**Issue:** TokenCounter has fallback logic when tiktoken is unavailable  
-**Mitigation:**
-- Test both code paths (with and without tiktoken)
-- Mock tiktoken import failure scenarios
-- Verify fallback heuristic accuracy
+**Missing:** Need to read this file to understand validation logic
 
-### Challenge 2: Session Summary Integration
-**Issue:** Monitor exports to session-summary.json format  
-**Mitigation:**
-- Create comprehensive fixtures
-- Validate JSON structure against actual outputs
-- Test deserialization and serialization
+#### 4. tools/cli.py
+**What it does:**
+- CLI entry point (`cf` command)
+- Python version checking (3.10+ required)
+- Launches Mission Control TUI
+- Error handling for missing dependencies
 
-### Challenge 3: CLI Testing
-**Issue:** CLI tools need argument parsing and error handling tests  
-**Mitigation:**
-- Use `subprocess` or mock `sys.argv`
-- Capture stdout/stderr
-- Test exit codes
-- Mock missing dependencies
+**Test scenarios needed:**
+- ✅ Python version checking (3.9 fails, 3.10+ passes)
+- ✅ --version flag
+- ✅ --help flag
+- ✅ Missing dependencies error handling
+- ✅ Mission Control launch
+- ✅ Keyboard interrupt handling
 
-## Testing Plan
+**Why critical:** User's first interaction with Context Foundry.
 
-### Phase 1: Context Budget Core (Priority 1)
+#### 5. tools/use_baml.py
+**What it does:**
+- BAML integration CLI wrapper
+- Type-safe LLM outputs
+- Graceful fallback to JSON mode
+
+**Test scenarios needed:**
+- ✅ Status command (BAML available/unavailable)
+- ✅ Update-phase command with status normalization
+- ✅ Scout report generation
+- ✅ Architecture generation
+- ✅ Build result validation
+- ✅ Graceful fallback when BAML unavailable
+- ✅ Error handling
+
+**Why critical:** Used in all phase transitions for type-safe outputs.
+
+#### 6. tools/test_parallel_runner.py
+**What it does:**
+- Parallel test execution (Phase 4.5)
+- Spawns concurrent test tasks
+- Aggregates results
+
+**Missing:** Need to read this file to understand execution logic
+
+### Medium Priority Modules (SHOULD TEST - Phase 2)
+
+#### 7. tools/evolution/backlog_generator.py
+- TODO extraction from codebase
+- Task prioritization
+- Self-improvement task generation
+
+#### 8. tools/evolution/command_server.py
+- Command processing for evolution system
+- REST API for remote control
+
+#### 9. tools/evolution/process_watchdog.py
+- Process monitoring and safety
+- Timeout enforcement
+- Process cleanup
+
+#### 10. tools/evolution/resource_manager.py
+- Resource allocation for parallel builds
+- Memory/CPU limits
+- Resource cleanup
+
+#### 11. tools/evolution/sandboxes.py
+- Isolated execution environments
+- Security boundaries
+
+#### 12-14. tools/evolution/communication/* (5 modules)
+- REST API, WebSocket, Web Dashboard
+- Agent-to-agent communication
+
+## Testing Strategy
+
+### Phase 1: Critical Path Tests (6 modules)
+
+**Estimated duration:** 4-6 hours  
+**Target coverage increase:** 67% → 73% (+6%)
+
+**Files to create:**
+1. `tests/test_integration_pre_check.py` (comprehensive)
+2. `tests/test_validate_architecture.py`
+3. `tests/test_validate_tech_stack.py`
+4. `tests/test_cli_entry_point.py`
+5. `tests/test_use_baml_cli.py`
+6. `tests/test_parallel_runner_execution.py`
+
+**Test patterns:**
+- Unit tests for individual functions
+- Integration tests for subprocess execution
+- Mock subprocess calls for fast testing
+- Edge case handling (timeouts, errors, missing files)
+- CLI argument parsing validation
+
+### Phase 2: Integration Tests (8 modules)
+
+**Estimated duration:** 6-8 hours  
+**Target coverage increase:** 73% → 81% (+8%)
+
+**Files to create:**
+7. `tests/test_backlog_generator.py`
+8. `tests/test_command_server.py`
+9. `tests/test_process_watchdog_unit.py`
+10. `tests/test_resource_manager_unit.py`
+11. `tests/test_sandboxes_unit.py`
+12. `tests/evolution/test_communication_rest_api.py`
+13. `tests/evolution/test_communication_websocket.py`
+14. `tests/evolution/test_communication_dashboard.py`
+
+### Test Markers
+
+**Use existing pytest markers:**
+- `@pytest.mark.unit` - Fast unit tests
+- `@pytest.mark.integration` - Integration with subprocess/filesystem
+- `@pytest.mark.tier1` - Critical functionality (Phase 1 tests)
+- `@pytest.mark.tier2` - Important functionality (Phase 2 tests)
+- `@pytest.mark.slow` - Tests that take >1 second
+
+**Example:**
 ```python
-tests/test_context_budget_monitor_unit.py
-tests/test_context_budget_reporter_unit.py
-tests/test_context_budget_token_counter_unit.py
+@pytest.mark.unit
+@pytest.mark.tier1
+def test_detect_project_language_python():
+    """Test Python project detection"""
+    # Test implementation
 ```
 
-**Coverage Target:** 90%+ for critical logic
+## Challenges & Mitigations
 
-**Test Count Estimate:** 60-80 tests
-- Monitor: 25-30 tests
-- Reporter: 20-25 tests  
-- TokenCounter: 15-20 tests
+### Challenge 1: Subprocess Testing
+**Issue:** Many modules spawn subprocesses (syntax checking, language compilers)  
+**Mitigation:** Use `unittest.mock.patch` to mock subprocess.run calls  
+**Example:** Mock Python compiler to avoid actual file compilation
 
-### Phase 2: CLI Tools (Priority 2)
-```python
-tests/test_cli_unit.py
-tests/test_use_baml_unit.py
-tests/test_tui_monitor_unit.py
-```
+### Challenge 2: Filesystem Dependencies
+**Issue:** Tests need temporary directories and files  
+**Mitigation:** Use `pytest.fixture` with `tmp_path` for isolated test environments  
+**Example:** Create temporary Python project for integration_pre_check tests
 
-**Coverage Target:** 80%+ (focus on error paths)
+### Challenge 3: BAML Optional Dependency
+**Issue:** BAML may not be installed in test environment  
+**Mitigation:** Mock BAML imports and test both available/unavailable paths  
+**Example:** Test graceful fallback when BAML not available
 
-**Test Count Estimate:** 20-25 tests
-
-### Phase 3: Integration Tests
-```python
-tests/test_context_budget_integration.py
-```
-
-**Coverage Target:** Full workflow validation
-
-**Test Count Estimate:** 10-15 tests
-
-## Timeline Estimate
-- **Phase 1 (Context Budget):** 90-120 minutes
-- **Phase 2 (CLI Tools):** 30-45 minutes
-- **Phase 3 (Integration):** 30 minutes
-- **Total:** ~3 hours
+### Challenge 4: CLI Testing
+**Issue:** CLI uses sys.exit() which terminates pytest  
+**Mitigation:** Use `pytest.raises(SystemExit)` to capture exit codes  
+**Example:** Test --version flag captures exit(0)
 
 ## Success Criteria
-- [ ] All critical path modules have >85% test coverage
-- [ ] All tests pass (100% pass rate)
-- [ ] No regressions in existing tests
-- [ ] Tests run in < 30 seconds total
-- [ ] Clear, maintainable test code with good documentation
 
-## Risk Mitigation from Pattern Library
-N/A - This is internal testing infrastructure, no external dependencies or CORS/browser issues apply.
+### Phase 1 Success Metrics
+- ✅ All 6 critical path modules have test coverage
+- ✅ At least 90% code coverage for each module
+- ✅ All tests pass in CI/CD pipeline
+- ✅ Test execution time < 30 seconds (fast unit tests)
+- ✅ Integration tests properly isolated (no side effects)
 
-## Known Issues to Watch For
-1. **Tiktoken availability:** Must test both import paths
-2. **File I/O:** Use temp directories for all file operations
-3. **JSON formatting:** Validate exact structure matches production
-4. **Timezone handling:** Ensure timestamps are consistent
-5. **Division by zero:** Test with 0 tokens edge cases
+### Phase 2 Success Metrics
+- ✅ 8 medium-priority modules have test coverage
+- ✅ At least 80% code coverage for each module
+- ✅ All tests pass with existing test suite
+- ✅ Total coverage increased to 81%+
+
+### Overall Success
+- ✅ Test coverage: 67% → 81% (+14 percentage points)
+- ✅ Critical path modules: 100% covered
+- ✅ All tests green (no regressions)
+- ✅ Documentation updated (README, pytest.ini markers)
+
+## Timeline Estimate
+
+**Phase 1 (Critical Path):** 4-6 hours
+- 1 hour: Read remaining modules, understand implementation
+- 3-4 hours: Write comprehensive tests for 6 modules
+- 1 hour: Debug, fix edge cases, ensure all pass
+
+**Phase 2 (Integration):** 6-8 hours
+- 2 hours: Read 8 modules, understand communication patterns
+- 4-5 hours: Write integration tests
+- 1 hour: Debug, integration testing
+
+**Total:** 10-14 hours (1-2 days of focused work)
+
+## Environment Checklist
+
+- ✅ pytest installed (check: `pytest --version`)
+- ✅ pytest.ini configured with markers
+- ✅ Python 3.10+ available
+- ✅ Existing test suite runs successfully
+- ✅ Coverage tools available (optional: pytest-cov)
+
+## Next Steps
+
+1. **Architecture Phase:** Design test structure, fixtures, mocks
+2. **Builder Phase:** Implement tests for Phase 1 (critical path)
+3. **Test Phase:** Run tests, ensure all pass, measure coverage
+4. **Documentation:** Update README with new test coverage stats
+
+## Risk Flags
+
+⚠️ **None from past patterns** - This is a standard testing task with established patterns
+✅ **Low risk:** Adding tests doesn't change production code
+✅ **Mitigation:** Run existing tests after each new test to catch regressions
