@@ -305,7 +305,7 @@ class EvolutionDaemon:
                         try:
                             import psutil
 
-                            proc = psutil.Process(pid)
+                            psutil.Process(pid)
                             # Process exists - check if we're monitoring it
                             existing_tasks = self.task_queue.list_tasks(
                                 status=TaskStatus.PENDING.value
@@ -416,7 +416,7 @@ class EvolutionDaemon:
                                                 datetime.now() - start_time
                                             ).total_seconds()
                                             metadata["duration"] = round(duration, 2)
-                                        except:
+                                        except (ValueError, TypeError):
                                             pass
 
                                     task_file.write_text(json.dumps(metadata, indent=2))
@@ -1098,7 +1098,7 @@ class EvolutionDaemon:
                         continue
 
                     # Create task for this approved issue
-                    task_id = self.task_queue.create_task(
+                    self.task_queue.create_task(
                         task_type=TaskType.SELF_IMPROVEMENT.value,
                         params={
                             "action": "implement_github_issue",
@@ -1264,7 +1264,7 @@ class EvolutionDaemon:
                         )
                         if closed_time.replace(tzinfo=None) < cutoff_time:
                             continue  # Too old, skip
-                    except:
+                    except (ValueError, TypeError):
                         pass  # If parsing fails, include it anyway
 
                 # Add to list (will be used to mark RUNNING tasks as COMPLETED)
@@ -1693,6 +1693,29 @@ class EvolutionDaemon:
             self.logger.error(f"❌ Failed to queue next task: {e}", exc_info=True)
 
 
+def check_daemon_status() -> tuple[bool, Optional[int]]:
+    """
+    Check daemon status without initializing logging (avoids PermissionError)
+
+    Returns:
+        Tuple of (is_running, pid)
+    """
+    pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
+
+    if not pid_file.exists():
+        return False, None
+
+    try:
+        with open(pid_file) as f:
+            pid = int(f.read().strip())
+
+        # Check if process exists
+        os.kill(pid, 0)
+        return True, pid
+    except (OSError, ValueError):
+        return False, None
+
+
 def main():
     """CLI entry point"""
     import argparse
@@ -1708,22 +1731,29 @@ def main():
 
     args = parser.parse_args()
 
-    daemon = EvolutionDaemon(config_path=args.config)
+    # For status and stop commands, avoid initializing the full daemon (prevents log file conflicts)
+    if args.command == "status":
+        is_running, pid = check_daemon_status()
+        if is_running:
+            print(f"Daemon is running (PID: {pid})")
+        else:
+            print("Daemon is not running")
+        return
 
-    if args.command == "start":
-        daemon.start(daemonize=not args.foreground)
     elif args.command == "stop":
-        if daemon.is_running():
-            pid = daemon.get_pid()
+        is_running, pid = check_daemon_status()
+        if is_running:
             os.kill(pid, signal.SIGTERM)
             print(f"Sent stop signal to daemon (PID: {pid})")
         else:
             print("Daemon is not running")
-    elif args.command == "status":
-        if daemon.is_running():
-            print(f"Daemon is running (PID: {daemon.get_pid()})")
-        else:
-            print("Daemon is not running")
+        return
+
+    # Only instantiate full daemon for "start" command
+    daemon = EvolutionDaemon(config_path=args.config)
+
+    if args.command == "start":
+        daemon.start(daemonize=not args.foreground)
 
 
 if __name__ == "__main__":
