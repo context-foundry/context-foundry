@@ -74,13 +74,13 @@ elif [ "$OPEN_PRS" -gt 0 ]; then
     STATUS_LINE+="${CYAN}⏸Waiting for PR${NC} │ "
 elif [ "$APPROVED" -gt 0 ]; then
     STATUS_LINE+="${GREEN}→Implementing${NC} │ "
-elif [ "$ISSUE_COUNT" -lt 18 ]; then
+elif [ "$ISSUE_COUNT" -lt 5 ]; then
     STATUS_LINE+="${YELLOW}→Scout creating issues${NC} │ "
 else
     STATUS_LINE+="${GRAY}○Idle${NC} │ "
 fi
 
-STATUS_LINE+="${GRAY}Backlog:$ISSUE_COUNT/20 │ Approved:$APPROVED │ PRs:$OPEN_PRS │ Active Build:"
+STATUS_LINE+="${GRAY}Backlog:$ISSUE_COUNT/5 │ Approved:$APPROVED │ PRs:$OPEN_PRS │ Active Build:"
 [ -n "$CLAUDE_WORKING" ] && STATUS_LINE+="Yes${NC}" || STATUS_LINE+="No${NC}"
 
 echo -e "STATUS: $STATUS_LINE"
