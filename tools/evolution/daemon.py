@@ -97,7 +97,7 @@ class EvolutionDaemon:
         # Initialize backlog generator
         cf_root = Path(__file__).parent.parent.parent
         self.backlog_generator = BacklogGenerator(
-            project_root=cf_root, target_backlog_size=20
+            project_root=cf_root, target_backlog_size=5
         )
 
         # Initialize evolution modes (pass watchdog to delegation modes)

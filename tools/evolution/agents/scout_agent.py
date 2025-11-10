@@ -69,6 +69,21 @@ class ScoutAgent:
     Complex ML = 10% improvement at 1000x cost
     """
 
+    TEST_PATH_KEYWORDS = {
+        "test",
+        "tests",
+        "__tests__",
+        "testdata",
+        "test_data",
+        "fixtures",
+        "fixture",
+        "samples",
+        "sample_data",
+        "mocks",
+        "stubs",
+        "snapshots",
+    }
+
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.findings: List[Finding] = []
@@ -121,7 +136,7 @@ class ScoutAgent:
 
         for py_file in py_files:
             # Skip test files themselves
-            if "test_" in py_file.name or py_file.name.startswith("test"):
+            if self._is_test_path(py_file):
                 continue
 
             # Skip __init__.py
@@ -153,11 +168,7 @@ class ScoutAgent:
 
         # Get all Python files but exclude test files (which contain intentional bad code for testing)
         all_py_files = list(self.project_root.glob("**/*.py"))
-        py_files = [
-            f
-            for f in all_py_files
-            if not any(part.startswith("test") for part in f.parts)
-        ]
+        py_files = [f for f in all_py_files if not self._is_test_path(f)]
 
         security_patterns = [
             (r"eval\s*\(", "Dangerous use of eval() - code injection risk"),
@@ -1116,6 +1127,28 @@ class ScoutAgent:
         """Get expected test file path for a source file"""
         test_name = f"test_{source_file.stem}.py"
         return self.project_root / "tests" / test_name
+
+    def _is_test_path(self, path: Path) -> bool:
+        """Return True if the path points to a test/fixture file that should be ignored"""
+
+        try:
+            relative_path = path.relative_to(self.project_root)
+        except ValueError:
+            relative_path = path
+
+        parts = [part.lower() for part in relative_path.parts]
+        filename = path.name.lower()
+
+        if filename.startswith("test") or filename.endswith("_test.py") or filename.endswith("_tests.py"):
+            return True
+
+        for part in parts:
+            if part.startswith("test"):
+                return True
+            if part in self.TEST_PATH_KEYWORDS:
+                return True
+
+        return False
 
     def _has_testable_code(self, py_file: Path) -> bool:
         """Check if file has code worth testing"""

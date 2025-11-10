@@ -21,7 +21,7 @@ from tools.evolution.agents.scout_agent import ScoutAgent, Finding
 class BacklogGenerator:
     """Generates GitHub issues from Scout findings using Context Foundry template"""
 
-    def __init__(self, project_root: Path, target_backlog_size: int = 20):
+    def __init__(self, project_root: Path, target_backlog_size: int = 5):
         self.project_root = project_root
         self.target_backlog_size = target_backlog_size
         self.template_path = (
@@ -254,7 +254,7 @@ def main():
     parser = argparse.ArgumentParser(description="Maintain GitHub issue backlog")
     parser.add_argument("action", choices=["maintain"], help="Action to perform")
     parser.add_argument(
-        "--target-size", type=int, default=20, help="Target backlog size"
+        "--target-size", type=int, default=5, help="Target backlog size"
     )
 
     args = parser.parse_args()

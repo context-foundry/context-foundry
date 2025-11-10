@@ -53,7 +53,7 @@ python3 -m tools.evolution.daemon restart
 
 ### 1. Backlog Management (Scout + AI)
 
-The system maintains a 20-issue backlog:
+The system maintains a 5-issue backlog:
 
 ```bash
 # Manually run backlog maintenance
@@ -71,7 +71,7 @@ python3 -m tools.evolution.autonomous maintain
    - 🏗️ Architect
 3. AI filters to 5-10 high-priority issues (scored 0-10)
 4. Issues created using Context Foundry template
-5. Backlog maintained at 20 open issues
+5. Backlog maintained at 5 open issues
 
 ### 2. Issue Approval Workflow
 
@@ -138,7 +138,7 @@ Creates GitHub issues:
 - Uses Context Foundry issue template
 - Includes AI analysis and expert perspectives
 - Validates labels before creation
-- Maintains 20-issue backlog
+- Maintains 5-issue backlog
 
 ### Task Queue (`tools/evolution/task_queue.py`)
 
@@ -344,7 +344,7 @@ Evolution System
 ├── Backlog Generator
 │   ├── Formats issues
 │   ├── Creates via gh CLI
-│   └── Maintains 20-issue backlog
+│   └── Maintains 5-issue backlog
 ├── MCP Integration
 │   ├── autonomous_build_and_deploy
 │   ├── Spawns Claude CLI
