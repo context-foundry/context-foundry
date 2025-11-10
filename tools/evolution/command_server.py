@@ -122,20 +122,20 @@ class CommandHandler(BaseHTTPRequestHandler):
         issue_count = self._get_issue_count()
         sandboxes = self.sandbox_manager.list_sandboxes()
 
-                self._json_response(
-                    {
-                        "success": True,
-                        "daemon": daemon_status,
-                        "mcp": mcp_status,
-                        "backlog": {
-                            "count": issue_count,
-                            "target": 5,
-                            "healthy": issue_count >= 5,
-                        },
-                        "sandboxes": {
-                            "active": len(sandboxes),
-                            "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"],
-                        },
+        self._json_response(
+            {
+                "success": True,
+                "daemon": daemon_status,
+                "mcp": mcp_status,
+                "backlog": {
+                    "count": issue_count,
+                    "target": 5,
+                    "healthy": issue_count >= 5,
+                },
+                "sandboxes": {
+                    "active": len(sandboxes),
+                    "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"],
+                },
             }
         )
 
@@ -197,6 +197,7 @@ class CommandHandler(BaseHTTPRequestHandler):
             self._error_response("Missing project_name or task")
             return
 
+        sandbox_path = None
         try:
             # Generate task ID
             import uuid
@@ -238,6 +239,21 @@ claude --headless --mcp "Please use the autonomous_build_and_deploy MCP tool to 
             )
 
         except Exception as e:
+            # Clean up sandbox if it was created before failure
+            if sandbox_path:
+                try:
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+                    logger.info(
+                        f"🧹 Cleaning up sandbox after build start failure: {sandbox_path}"
+                    )
+                    self.sandbox_manager.cleanup_sandbox(sandbox_path=sandbox_path)
+                    logger.info("✅ Sandbox cleanup complete")
+                except Exception as cleanup_err:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Failed to cleanup sandbox: {cleanup_err}")
+
             self._error_response(f"Failed to start build: {e}")
 
     def _handle_daemon_start(self):
