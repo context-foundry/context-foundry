@@ -57,6 +57,12 @@ CLAUDE_WORKING=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{p
     if [[ "$STATE" =~ N ]]; then echo $pid; fi
 done | head -1)
 
+# Also check for active MCP delegations in logs
+if [ -z "$CLAUDE_WORKING" ]; then
+    MCP_CHECK=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1)
+    [ -n "$MCP_CHECK" ] && CLAUDE_WORKING="mcp_active"
+fi
+
 # Build compact status line
 STATUS_LINE=""
 [ -n "$RECENT_MERGED" ] && STATUS_LINE+="${GREEN}✓Merged#$RECENT_MERGED${NC} │ "
@@ -74,7 +80,7 @@ else
     STATUS_LINE+="${GRAY}○Idle${NC} │ "
 fi
 
-STATUS_LINE+="${GRAY}Backlog:$ISSUE_COUNT/20 │ Approved:$APPROVED │ PRs:$OPEN_PRS │ Working:"
+STATUS_LINE+="${GRAY}Backlog:$ISSUE_COUNT/20 │ Approved:$APPROVED │ PRs:$OPEN_PRS │ Active Build:"
 [ -n "$CLAUDE_WORKING" ] && STATUS_LINE+="Yes${NC}" || STATUS_LINE+="No${NC}"
 
 echo -e "STATUS: $STATUS_LINE"
@@ -197,7 +203,36 @@ PYTHON
 )
 
 if [ -z "$ACTIVE_BUILDS" ]; then
-    echo -e "  ${GRAY}No active builds${NC}"
+    # Fallback: Check daemon logs for recently delegated tasks
+    MCP_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1 | sed -E 's/.*MCP Task ID: ([a-f0-9-]+).*/\1/')
+    TASK_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "delegated to Context Foundry MCP" | tail -1 | sed -E 's/.*Task ([a-f0-9-]+) delegated.*/\1/')
+    ISSUE_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "Task:" | tail -1 | sed -E 's/.*#([0-9]+).*/\1/')
+    SANDBOX_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "Path: /tmp/cf-sandboxes" | tail -1 | sed -E 's/.*Path: (.*)/\1/')
+
+    if [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ]; then
+        CLAUDE_PID=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
+            STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
+            if [[ "$STATE" =~ N ]]; then echo $pid; break; fi
+        done)
+
+        # Check if delegation is still running by looking at recent logs
+        RECENT_ACTIVITY=$(tail -20 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep -c "Started monitoring delegation")
+        if [ "$RECENT_ACTIVITY" -gt 0 ]; then
+            MCP_STATUS="running|active"
+        else
+            MCP_STATUS="running|delegated"
+        fi
+
+        BUILD_STATUS=$(echo "$MCP_STATUS" | cut -d'|' -f1)
+        BUILD_PHASE=$(echo "$MCP_STATUS" | cut -d'|' -f2)
+
+        echo -e "  ${GREEN}🎉Build${NC} │ PID:${YELLOW}${CLAUDE_PID:-N/A}${NC} │ Task:${TASK_FROM_LOGS:0:8} (MCP:${MCP_FROM_LOGS:0:8})"
+        [ -n "$ISSUE_FROM_LOGS" ] && echo -e "  ${GRAY}Issue:${NC} ${YELLOW}#$ISSUE_FROM_LOGS${NC}"
+        echo -e "  ${GRAY}Status:${NC} ${YELLOW}$BUILD_STATUS${NC} │ ${GRAY}Phase:${NC} $BUILD_PHASE"
+        [ -n "$SANDBOX_FROM_LOGS" ] && echo -e "  ${GRAY}Sandbox:${NC} ${CYAN}$SANDBOX_FROM_LOGS${NC}"
+    else
+        echo -e "  ${GRAY}No active builds${NC}"
+    fi
 else
     echo "$ACTIVE_BUILDS" | while IFS='|' read task_id description branch issue mcp_id spawn_time phase_number phase_str; do
         CLAUDE_PID=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
@@ -315,16 +350,25 @@ try:
             status = json.loads(status_json)
             print(f"{task.id[:8]}|{mcp_id[:8]}|{status.get('status')}|{status.get('current_phase', 'N/A')}")
         except:
-            print(f"{task.id[:8]}|{mcp_id[:8]}|checking|...")
+            print(f"{task.id[:8]}|{mcp_id[:8]}|running|active")
 except Exception:
     pass
 PYTHON
 )
 
 if [ -z "$MCP_TASKS" ]; then
-    MCP_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1 | sed -E 's/.*MCP Task ID: ([a-f0-9-]+).*/\1/')
-    TASK_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "Task [a-f0-9-]* delegated" | tail -1 | sed -E 's/.*Task ([a-f0-9-]+).*/\1/')
-    [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ] && MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|delegated"
+    MCP_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1 | sed -E 's/.*MCP Task ID: ([a-f0-9-]+).*/\1/')
+    TASK_FROM_LOGS=$(tail -100 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "delegated to Context Foundry MCP" | tail -1 | sed -E 's/.*Task ([a-f0-9-]+) delegated.*/\1/')
+
+    if [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ]; then
+        # Check recent activity to determine status
+        RECENT_ACTIVITY=$(tail -20 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep -c "Started monitoring delegation")
+        if [ "$RECENT_ACTIVITY" -gt 0 ]; then
+            MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|active"
+        else
+            MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|delegated"
+        fi
+    fi
 fi
 
 MCP_LINES=()
