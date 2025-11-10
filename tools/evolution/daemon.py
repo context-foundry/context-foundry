@@ -1768,27 +1768,45 @@ class EvolutionDaemon:
             self.logger.error(f"❌ Failed to queue next task: {e}", exc_info=True)
 
 
-def check_daemon_status() -> tuple[bool, Optional[int]]:
+def check_daemon_status(
+    verbose: bool = False,
+) -> tuple[bool, Optional[int], Optional[str]]:
     """
     Check daemon status without initializing logging (avoids PermissionError)
 
+    Args:
+        verbose: If True, return error details
+
     Returns:
-        Tuple of (is_running, pid)
+        Tuple of (is_running, pid, error_message)
     """
     pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
 
     if not pid_file.exists():
-        return False, None
+        return False, None, "PID file not found"
 
     try:
         with open(pid_file) as f:
-            pid = int(f.read().strip())
+            pid_str = f.read().strip()
+            pid = int(pid_str)
 
         # Check if process exists
         os.kill(pid, 0)
-        return True, pid
-    except (OSError, ValueError):
-        return False, None
+        return True, pid, None
+    except ValueError as e:
+        return False, None, f"Invalid PID in file: {e}"
+    except OSError as e:
+        # errno 3 = ESRCH (No such process)
+        # errno 1 = EPERM (Operation not permitted)
+        if e.errno == 3:
+            return False, None, f"Process {pid} not found"
+        elif e.errno == 1:
+            # Process exists but we don't have permission - still running
+            return True, pid, f"Process exists but permission denied (errno {e.errno})"
+        else:
+            return False, None, f"os.kill error: {e} (errno {e.errno})"
+    except Exception as e:
+        return False, None, f"Unexpected error: {e}"
 
 
 def main():
@@ -1803,20 +1821,30 @@ def main():
     parser.add_argument(
         "--foreground", action="store_true", help="Run in foreground (no daemonize)"
     )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Verbose output (for status command)",
+    )
 
     args = parser.parse_args()
 
     # For status and stop commands, avoid initializing the full daemon (prevents log file conflicts)
     if args.command == "status":
-        is_running, pid = check_daemon_status()
+        is_running, pid, error = check_daemon_status(verbose=args.verbose)
         if is_running:
             print(f"Daemon is running (PID: {pid})")
+            if args.verbose and error:
+                print(f"  Note: {error}")
         else:
             print("Daemon is not running")
+            if args.verbose and error:
+                print(f"  Reason: {error}")
         return
 
     elif args.command == "stop":
-        is_running, pid = check_daemon_status()
+        is_running, pid, error = check_daemon_status()
         if is_running:
             os.kill(pid, signal.SIGTERM)
             print(f"Sent stop signal to daemon (PID: {pid})")
