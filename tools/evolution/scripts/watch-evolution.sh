@@ -2,6 +2,9 @@
 # Evolution System Monitor - "Simplicity is the ultimate sophistication"
 # Shows all Claude instances and their activity in one clean view
 
+# Python command
+PYTHON_CMD=${PYTHON_CMD:-python3}
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -13,9 +16,7 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 clear
-echo -e "${BOLD}╔════════════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║                    CONTEXT FOUNDRY EVOLUTION MONITOR                       ║${NC}"
-echo -e "${BOLD}╚════════════════════════════════════════════════════════════════════════════╝${NC}"
+echo -e "${BOLD}${CYAN}════════════════ CONTEXT FOUNDRY EVOLUTION MONITOR ════════════════${NC}"
 echo ""
 
 # EXECUTIVE STATUS - The story of what's happening right now
@@ -136,7 +137,147 @@ else
 fi
 echo ""
 
-# 3. OPEN PULL REQUESTS
+# 3. ACTIVE AUTONOMOUS BUILDS
+echo -e "${CYAN}ACTIVE AUTONOMOUS BUILDS${NC}"
+echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# Query running tasks with full details including phase information
+ACTIVE_BUILDS=$($PYTHON_CMD << 'PYTHON'
+import sys
+sys.path.insert(0, '/Users/name/homelab/context-foundry')
+try:
+    from tools.evolution.task_queue import TaskQueueManager, TaskStatus
+    import json
+    import os
+    from datetime import datetime
+    from pathlib import Path
+
+    tq = TaskQueueManager()
+    running = tq.list_tasks(status=TaskStatus.RUNNING.value)
+
+    for task in running:
+        params = json.loads(task.params_json) if task.params_json else {}
+        result = task.result if task.result else {}
+
+        # Extract key information
+        task_id = task.id[:8]
+        description = params.get('description', params.get('action', 'Unknown task'))
+        sandbox = params.get('sandbox_dir', result.get('sandbox_dir', 'N/A'))
+        branch = params.get('branch', result.get('branch', 'N/A'))
+        issue = params.get('github_issue', result.get('github_issue', 'N/A'))
+        mcp_task_id = result.get('mcp_task_id', '')[:8] if result.get('mcp_task_id') else 'N/A'
+
+        # Format spawn time
+        created_time = task.created_at.strftime('%H:%M') if hasattr(task, 'created_at') else 'N/A'
+
+        # Read phase information from current-phase.json
+        phase_data = "N/A|N/A|N/A|N/A|N/A"
+        if sandbox != 'N/A':
+            phase_file = Path(sandbox) / '.context-foundry' / 'current-phase.json'
+            if phase_file.exists():
+                try:
+                    # Check staleness (file modified within last 10 minutes)
+                    file_age = datetime.now().timestamp() - phase_file.stat().st_mtime
+                    if file_age < 600:  # 10 minutes
+                        with open(phase_file, 'r') as f:
+                            phase_info = json.load(f)
+                            current_phase = phase_info.get('current_phase', 'N/A')
+                            phase_number = phase_info.get('phase_number', 'N/A')
+                            status = phase_info.get('status', 'N/A')
+                            progress_detail = phase_info.get('progress_detail', 'N/A')
+                            phases_completed = ','.join(phase_info.get('phases_completed', []))
+                            test_iteration = str(phase_info.get('test_iteration', 0))
+
+                            phase_data = f"{current_phase}|{phase_number}|{status}|{progress_detail}|{phases_completed}|{test_iteration}"
+                except Exception:
+                    pass
+
+        print(f"{task_id}|{description}|{sandbox}|{branch}|{issue}|{mcp_task_id}|{created_time}|{phase_data}")
+except Exception as e:
+    pass
+PYTHON
+)
+
+if [ -z "$ACTIVE_BUILDS" ]; then
+    echo -e "  ${GRAY}No active autonomous builds${NC}"
+else
+    echo "$ACTIVE_BUILDS" | while IFS='|' read task_id description sandbox branch issue mcp_id spawn_time current_phase phase_number phase_status progress_detail phases_completed test_iteration; do
+        # Find associated Claude process
+        CLAUDE_PID=""
+        for pid in $(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}'); do
+            STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
+            if [[ "$STATE" =~ N ]]; then
+                CLAUDE_PID=$pid
+                break
+            fi
+        done
+
+        echo -e "  ${GREEN}🎉 Autonomous Build Active${NC}"
+        if [ -n "$CLAUDE_PID" ]; then
+            echo -e "    ${GRAY}Claude Process:${NC} PID ${YELLOW}$CLAUDE_PID${NC} ${GRAY}(spawned at $spawn_time)${NC}"
+            echo -e "    ${GRAY}Status:${NC} ${GREEN}Running ✅${NC}"
+        fi
+        echo -e "    ${GRAY}Task ID:${NC} $task_id ${GRAY}(MCP: $mcp_id)${NC}"
+        echo -e "    ${GRAY}Task:${NC} $description"
+        if [ "$issue" != "N/A" ]; then
+            echo -e "    ${GRAY}Will fix:${NC} ${YELLOW}Issue #$issue${NC}"
+        fi
+        if [ "$branch" != "N/A" ]; then
+            echo -e "    ${GRAY}Branch:${NC} $branch"
+        fi
+        if [ "$sandbox" != "N/A" ]; then
+            # Shorten sandbox path for display
+            SANDBOX_SHORT=$(echo "$sandbox" | sed 's|/tmp/cf-sandboxes/||')
+            echo -e "    ${GRAY}Sandbox:${NC} $SANDBOX_SHORT"
+        fi
+
+        # Display orchestration progress if phase data available
+        if [ "$current_phase" != "N/A" ] && [ "$phase_number" != "N/A" ]; then
+            echo ""
+            echo -e "    ${CYAN}Orchestration Progress [$phase_number]:${NC}"
+
+            # Define all phases in order
+            ALL_PHASES=("Scout" "Architect" "Builder" "Test" "Screenshot" "Documentation" "Feedback")
+            PHASE_DESCRIPTIONS=("Research & analysis" "Design & planning" "Code implementation" "Validation & testing" "Visual validation" "README & docs" "Pattern learning")
+
+            # Split completed phases
+            IFS=',' read -ra COMPLETED <<< "$phases_completed"
+
+            # Display each phase
+            for i in "${!ALL_PHASES[@]}"; do
+                PHASE_NAME="${ALL_PHASES[$i]}"
+                PHASE_DESC="${PHASE_DESCRIPTIONS[$i]}"
+
+                # Check if this phase is completed
+                IS_COMPLETED=false
+                for comp in "${COMPLETED[@]}"; do
+                    if [ "$comp" = "$PHASE_NAME" ]; then
+                        IS_COMPLETED=true
+                        break
+                    fi
+                done
+
+                # Determine status symbol and color
+                if [ "$IS_COMPLETED" = true ]; then
+                    echo -e "      ${GREEN}✓${NC} ${PHASE_NAME} - ${GRAY}$PHASE_DESC${NC}"
+                elif [ "$PHASE_NAME" = "$current_phase" ]; then
+                    # Current phase
+                    if [ "$test_iteration" != "0" ] && [ "$PHASE_NAME" = "Test" ]; then
+                        echo -e "      ${YELLOW}🔄${NC} ${PHASE_NAME} - ${YELLOW}$PHASE_DESC (iteration $test_iteration/3)${NC}"
+                    else
+                        echo -e "      ${YELLOW}🔄${NC} ${PHASE_NAME} - ${YELLOW}$PHASE_DESC${NC}"
+                    fi
+                else
+                    # Pending phase
+                    echo -e "      ${GRAY}⏳${NC} ${PHASE_NAME} - ${GRAY}$PHASE_DESC${NC}"
+                fi
+            done
+        fi
+    done
+fi
+echo ""
+
+# 4. OPEN PULL REQUESTS
 echo -e "${CYAN}OPEN PULL REQUESTS${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 cd /Users/name/homelab/context-foundry 2>/dev/null
@@ -151,7 +292,7 @@ else
 fi
 echo ""
 
-# 4. GIT STATUS
+# 5. GIT STATUS
 echo -e "${CYAN}GIT STATUS${NC} ${GRAY}[M=Modified, A=Added, D=Deleted, ??=Untracked]${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 cd /Users/name/homelab/context-foundry 2>/dev/null
@@ -177,7 +318,7 @@ else
 fi
 echo ""
 
-# 5. RECENT FILE CHANGES
+# 6. RECENT FILE CHANGES
 echo -e "${CYAN}RECENT FILE CHANGES${NC} ${GRAY}(last 60 seconds)${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 RECENT=$(find . -type f -mmin -1 -not -path "*/.git/*" -not -path "*/.pytest_cache/*" -not -path "*/node_modules/*" 2>/dev/null)
@@ -194,7 +335,7 @@ else
 fi
 echo ""
 
-# 6. MCP DELEGATION STATUS
+# 7. MCP DELEGATION STATUS
 echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
@@ -226,6 +367,16 @@ except Exception as e:
 PYTHON
 )
 
+# Fallback: Extract MCP task IDs from daemon logs (last 10 lines)
+if [ -z "$MCP_TASKS" ]; then
+    MCP_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1 | sed -E 's/.*MCP Task ID: ([a-f0-9-]+).*/\1/')
+    TASK_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "Task [a-f0-9-]* delegated" | tail -1 | sed -E 's/.*Task ([a-f0-9-]+).*/\1/')
+
+    if [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ]; then
+        MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|delegated|active"
+    fi
+fi
+
 if [ -z "$MCP_TASKS" ]; then
     echo -e "  ${GRAY}No active MCP delegations${NC}"
 else
@@ -245,7 +396,7 @@ else
 fi
 echo ""
 
-# 7. NETWORK ACTIVITY
+# 8. NETWORK ACTIVITY
 echo -e "${CYAN}NETWORK ACTIVITY${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 

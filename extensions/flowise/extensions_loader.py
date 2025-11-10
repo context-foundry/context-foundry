@@ -121,7 +121,7 @@ def extension_exists(extension_name: str) -> bool:
 
     # Check if we can load the detector module
     try:
-        from . import detector
+        from . import detector  # noqa: F401 - testing module availability
 
         return True
     except ImportError:
