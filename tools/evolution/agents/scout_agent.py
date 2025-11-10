@@ -84,6 +84,42 @@ class ScoutAgent:
         "snapshots",
     }
 
+    DEPENDENCY_PATH_KEYWORDS = {
+        # Virtual environments
+        "venv",
+        ".venv",
+        "virtualenv",
+        ".virtualenv",
+        "site-packages",
+        "dist-packages",
+        "__pypackages__",
+        # Build/distribution directories
+        "build",
+        "dist",
+        ".egg",
+        ".eggs",
+        "*.egg-info",
+        # Cache directories
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".coverage",
+        ".tox",
+        ".nox",
+        # Third-party/vendored code
+        "vendor",
+        "vendors",
+        "third_party",
+        "node_modules",
+        # IDE directories
+        ".vscode",
+        ".idea",
+        ".vs",
+        # Git internals
+        ".git",
+    }
+
     def __init__(self, project_root: Path):
         self.project_root = project_root
         self.findings: List[Finding] = []
@@ -166,9 +202,13 @@ class ScoutAgent:
 
         print("  🔒 Scanning for security vulnerabilities...")
 
-        # Get all Python files but exclude test files (which contain intentional bad code for testing)
+        # Get all Python files but exclude test files and dependencies (third-party code we don't control)
         all_py_files = list(self.project_root.glob("**/*.py"))
-        py_files = [f for f in all_py_files if not self._is_test_path(f)]
+        py_files = [
+            f
+            for f in all_py_files
+            if not self._is_test_path(f) and not self._is_dependency_path(f)
+        ]
 
         security_patterns = [
             (r"eval\s*\(", "Dangerous use of eval() - code injection risk"),
@@ -1139,13 +1179,39 @@ class ScoutAgent:
         parts = [part.lower() for part in relative_path.parts]
         filename = path.name.lower()
 
-        if filename.startswith("test") or filename.endswith("_test.py") or filename.endswith("_tests.py"):
+        if (
+            filename.startswith("test")
+            or filename.endswith("_test.py")
+            or filename.endswith("_tests.py")
+        ):
             return True
 
         for part in parts:
             if part.startswith("test"):
                 return True
             if part in self.TEST_PATH_KEYWORDS:
+                return True
+
+        return False
+
+    def _is_dependency_path(self, path: Path) -> bool:
+        """Return True if the path points to a third-party dependency that should be ignored"""
+
+        try:
+            relative_path = path.relative_to(self.project_root)
+        except ValueError:
+            relative_path = path
+
+        parts = [part.lower() for part in relative_path.parts]
+
+        # Check if any path component matches dependency keywords
+        for part in parts:
+            if part in self.DEPENDENCY_PATH_KEYWORDS:
+                return True
+            # Also match .venv- prefix (like .venv-test, .venv-dev, etc.)
+            if part.startswith(".venv"):
+                return True
+            if part.startswith("venv"):
                 return True
 
         return False
