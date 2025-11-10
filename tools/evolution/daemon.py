@@ -363,6 +363,27 @@ class EvolutionDaemon:
                             self.logger.warning(
                                 f"Delegation {task_id[:8]} marked as failed (process not running)"
                             )
+
+                            # Cleanup sandbox if this was a sandboxed build
+                            sandbox_path = metadata.get("sandbox_path")
+                            if sandbox_path:
+                                try:
+                                    from .sandboxes import SandboxManager
+
+                                    self.logger.info(
+                                        f"🧹 Cleaning up sandbox: {sandbox_path}"
+                                    )
+                                    manager = SandboxManager()
+                                    manager.cleanup_sandbox(
+                                        sandbox_path=Path(sandbox_path)
+                                    )
+                                    self.logger.info(
+                                        f"✅ Sandbox cleanup complete for task {task_id[:8]}"
+                                    )
+                                except Exception as e:
+                                    self.logger.error(
+                                        f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}"
+                                    )
                     else:
                         # No PID recorded - check if build actually completed by reading phase file
                         working_dir = metadata.get("working_directory", "")
