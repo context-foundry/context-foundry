@@ -1,72 +1,15 @@
-[BAML] Explicitly added OPENAI_API_KEY
-[BAML] Creating BamlRuntime with 43 env vars
-[BAML] env_vars_for_baml keys: ['MANPATH', 'GHOSTTY_RESOURCES_DIR', 'TERM_PROGRAM', 'SHELL', 'TERM', 'TMPDIR', 'TERM_PROGRAM_VERSION', 'USER', 'COMMAND_MODE', 'SSH_AUTH_SOCK']...
-[BAML] BamlRuntime created successfully
-[BAML] Runtime type: <class 'baml_py.baml_py.BamlRuntime'>
-[BAML] Explicitly added OPENAI_API_KEY
-[BAML] Creating BamlRuntime with 43 env vars
-[BAML] env_vars_for_baml keys: ['MANPATH', 'GHOSTTY_RESOURCES_DIR', 'TERM_PROGRAM', 'SHELL', 'TERM', 'TMPDIR', 'TERM_PROGRAM_VERSION', 'USER', 'COMMAND_MODE', 'SSH_AUTH_SOCK']...
-[BAML] BamlRuntime created successfully
-[BAML] Runtime type: <class 'baml_py.baml_py.BamlRuntime'>
-[BAML DEBUG] Calling CreatePhaseInfo with session_id=sandbox_995b8dba, phase=Test, status=Completed
-2025-11-09T19:37:36.794 [BAML WARN] Function CreatePhaseInfo:
-    Client: GPT4oMini (gpt-4o-mini-2024-07-18) - 3668ms. StopReason: stop. Tokens(in/out): 76/190
-    ---PROMPT---
-    system: Create phase tracking information for Context Foundry build:
-    
-    Session ID: sandbox_995b8dba
-    Current Phase: Test
-    Status: completed
-    Progress Detail: All tests passing successfully
-    Test Iteration: 1
-    
-    Generate a complete PhaseInfo object with appropriate timestamps and phase completion tracking.
-    
-    Return as structured data matching the PhaseInfo schema.
-    
-    ---LLM REPLY---
-    ```json
-    {
-      "PhaseInfo": {
-        "sessionId": "sandbox_995b8dba",
-        "currentPhase": "Test",
-        "status": "completed",
-        "progressDetail": "All tests passing successfully",
-        "testIteration": 1,
-        "timestamps": {
-          "phaseStart": "2023-10-01T10:00:00Z",
-          "phaseEnd": "2023-10-01T10:30:00Z",
-          "createdAt": "2023-10-01T09:00:00Z",
-          "updatedAt": "2023-10-01T10:30:00Z"
-        },
-        "completionTracking": {
-          "totalTests": 100,
-          "passedTests": 100,
-          "failedTests": 0,
-          "skippedTests": 0
-        }
-      }
-    }
-    ```
-[BAML DEBUG] Successfully parsed BAML output
 {
-  "PhaseInfo": {
-    "sessionId": "sandbox_995b8dba",
-    "currentPhase": "Test",
-    "status": "completed",
-    "progressDetail": "All tests passing successfully",
-    "testIteration": 1,
-    "timestamps": {
-      "phaseStart": "2023-10-01T10:00:00Z",
-      "phaseEnd": "2023-10-01T10:30:00Z",
-      "createdAt": "2023-10-01T09:00:00Z",
-      "updatedAt": "2023-10-01T10:30:00Z"
-    },
-    "completionTracking": {
-      "totalTests": 100,
-      "passedTests": 100,
-      "failedTests": 0,
-      "skippedTests": 0
-    }
-  }
+  "current_phase": "Deploy",
+  "phase_number": "6/7",
+  "status": "deploying",
+  "progress_detail": "Creating PR with test coverage improvements",
+  "test_iteration": 1,
+  "phases_completed": [
+    "Scout",
+    "Architect",
+    "Builder",
+    "Test"
+  ],
+  "started_at": "2025-11-10T01:49:38.914019+00:00",
+  "last_updated": "2025-11-10T01:49:38.914135+00:00"
 }

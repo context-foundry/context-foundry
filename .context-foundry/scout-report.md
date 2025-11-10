@@ -1,155 +1,149 @@
-# Scout Report: Add Tests for Critical Paths
+# Scout Report: Test Coverage Analysis and Missing Tests
 
 ## Executive Summary
 
-This task focuses on improving test coverage for critical, untested code paths in Context Foundry. Current overall coverage is 25.3%, with several critical files having 0% coverage despite being essential to core functionality. We'll add comprehensive tests for 4 high-priority files that are CLI entry points and prompt building infrastructure.
+The Context Foundry codebase currently has **25.3% overall test coverage** with **8,288 missing lines** across critical paths. This task focuses on analyzing coverage gaps and implementing missing tests for the highest-priority critical paths.
 
-## Key Requirements
+### Key Findings
+- **76 existing test files** provide good foundation
+- **Critical gaps** in core infrastructure modules (MCP server, Evolution daemon, Flowise extensions)
+- **Self-improvement module** only 9.8% covered (166 missing lines)
+- **Evolution daemon** only 13.7% covered (484 missing lines)
+- **MCP server** 0% covered (947 missing lines) - highest risk
 
-### Primary Objectives
-1. **Add CLI tests for tools/use_baml.py** - Critical BAML integration entry point
-2. **Add tests for tools/prompts/phase_loader.py** - Modular prompt loading system
-3. **Add tests for tools/prompts/build_orchestrator_prompt.py** - Main prompt builder
-4. **Add tests for tools/prompts/cache_analysis.py** - Prompt cache analysis
+## Critical Paths Requiring Tests
+
+### Priority 1: MCP Server (tools/mcp_server.py)
+- **Coverage**: 0.0% (947 missing lines)
+- **Risk**: CRITICAL - core autonomous build orchestration
+- **Tests needed**:
+  - Autonomous build workflow integration
+  - Pattern management operations
+  - Error handling and timeouts
+  - Sandbox isolation validation
+
+### Priority 2: Evolution Daemon (tools/evolution/daemon.py)
+- **Coverage**: 13.7% (484 missing lines)
+- **Risk**: HIGH - autonomous evolution system
+- **Tests needed**:
+  - Task queue processing
+  - Delegation monitoring
+  - Error recovery and restart logic
+  - Resource limit enforcement
+
+### Priority 3: Self-Improvement Mode (tools/evolution/modes/self_improvement.py)
+- **Coverage**: 9.8% (166 missing lines)
+- **Risk**: HIGH - autonomous code modification
+- **Existing tests**: test_self_improvement_safety.py (covers protected files)
+- **Tests needed**:
+  - TODO prioritization logic
+  - Pattern detection and categorization
+  - MCP delegation workflow
+  - Sandbox creation and cleanup
+  - GitHub issue implementation
+
+### Priority 4: Flowise Extensions
+- **validate_workflow.py**: 0.0% (281 missing lines)
+- **mermaid_generator.py**: 0.0% (215 missing lines)
+- **Risk**: MEDIUM - user-facing features
+- **Tests needed**:
+  - Workflow validation logic
+  - Pattern detection (10+ patterns)
+  - Diagram generation
+  - Error reporting
+
+### Priority 5: Livestream Broadcaster (tools/livestream/broadcaster.py)
+- **Coverage**: 0.0% (135 missing lines)
+- **Risk**: MEDIUM - optional feature
+- **Tests needed**:
+  - Event streaming
+  - WebSocket handling
+  - Error recovery
+
+## Testing Strategy
+
+### Phase 1: Self-Improvement Module Tests
+Focus on completing test coverage for `tools/evolution/modes/self_improvement.py`:
+
+1. **TODO Discovery and Prioritization**
+   - Test `_find_todos()` with various grep outputs
+   - Test `_prioritize_todo()` with different keywords
+   - Test `_generate_improvement_tasks()` fallback
+   - Test search directory configuration loading
+
+2. **Task Generation**
+   - Test `generate_tasks()` with multiple TODOs
+   - Test priority sorting
+   - Test duplicate removal
+   - Test limit enforcement (5 tasks max)
+
+3. **Task Execution**
+   - Test `execute_task()` with implement_todo action
+   - Test `execute_task()` with implement_github_issue action
+   - Test MCP delegation workflow
+   - Test sandbox creation and safety checks
+   - Test error handling for MCP unavailable
+
+4. **Integration Tests**
+   - End-to-end task generation → execution
+   - Real MCP delegation (mocked)
+   - Sandbox isolation verification
+
+### Phase 2: MCP Server Critical Paths
+After self-improvement tests, add MCP server coverage:
+
+1. **Autonomous build workflow**
+2. **Pattern management operations**
+3. **Error handling and recovery**
 
 ### Success Criteria
-- All new tests pass
-- Existing tests continue to pass
-- Coverage for target files reaches >80%
-- Tests follow existing patterns (pytest, mocking, fixtures)
+- Self-improvement module: **>80% coverage** (from 9.8%)
+- All critical paths have unit tests
+- Integration tests validate end-to-end workflows
+- No regressions in existing test suite
 
 ## Technology Stack
+- **Testing Framework**: pytest
+- **Mocking**: unittest.mock
+- **Coverage**: pytest-cov
+- **Fixtures**: Existing patterns from test_self_improvement_safety.py
 
-**Language**: Python 3.8+  
-**Testing Framework**: pytest with pytest-asyncio  
-**Mocking**: unittest.mock  
-**Coverage**: pytest-cov  
+## Implementation Approach
 
-**Dependencies**:
-- BAML integration (optional, graceful fallback)
-- File I/O for prompt loading
-- argparse for CLI testing
-- subprocess for integration tests
-
-## Critical Architecture Recommendations
-
-### 1. Test Structure
-- Create `tests/test_use_baml_cli.py` for CLI testing
-- Create `tests/prompts/` directory for prompt-related tests
-- Follow existing test naming: `test_<module>_<aspect>.py`
-
-### 2. Testing Patterns (From Existing Codebase)
-```python
-# Pattern 1: Path handling with sys.path manipulation
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# Pattern 2: Mocking BAML availability
-@patch('tools.baml_integration.is_baml_available')
-def test_with_baml_unavailable(mock_baml):
-    mock_baml.return_value = False
-    # Test fallback behavior
-
-# Pattern 3: Temporary directories for file tests
-@pytest.fixture
-def temp_prompt_dir(tmp_path):
-    # Create test prompt files
-    return tmp_path
-
-# Pattern 4: Subprocess testing for CLI
-import subprocess
-result = subprocess.run(['python3', 'tools/use_baml.py', 'status'], 
-                       capture_output=True, text=True)
-assert result.returncode == 0
-```
-
-### 3. Mock Strategy
-- **Mock BAML**: Test both available and unavailable states
-- **Mock file I/O**: Use tmp_path fixture for prompt files
-- **Mock subprocess**: For CLI integration tests
-- **Real integration**: Test actual file loading where safe
-
-### 4. Coverage Strategy
-Focus on:
-- ✅ Argument parsing and validation
-- ✅ Error handling (missing files, invalid inputs)
-- ✅ BAML integration paths (both success and fallback)
-- ✅ File loading and path resolution
-- ✅ CLI command execution
-
-## Main Challenges and Mitigations
-
-### Challenge 1: BAML Dependency
-**Issue**: BAML requires OpenAI API key, may not be available in CI  
-**Mitigation**: Mock BAML calls, test fallback behavior  
-**Pattern**: Follow test_baml_integration.py patterns
-
-### Challenge 2: File System Dependencies
-**Issue**: Prompt loaders read from filesystem  
-**Mitigation**: Use pytest tmp_path fixture, create test files  
-**Pattern**: Create minimal test prompt files in fixtures
-
-### Challenge 3: CLI Testing Complexity
-**Issue**: Testing argparse and subprocess interactions  
-**Mitigation**: Unit test argparse separately, integration test with subprocess  
-**Pattern**: Test main() function with mocked sys.argv
-
-### Challenge 4: Path Resolution
-**Issue**: Relative path handling across different execution contexts  
-**Mitigation**: Use Path objects consistently, test from multiple directories  
-**Pattern**: Follow existing path resolution in test files
-
-## Testing Approach
-
-### Phase 1: Unit Tests (Core Functions)
-1. Test `get_phase_prompt()` with various inputs
-2. Test `list_available_phases()`
-3. Test argument parsing in main()
-4. Test status normalization logic
-
-### Phase 2: Integration Tests (CLI Commands)
-1. Test `python3 tools/use_baml.py status`
-2. Test `python3 tools/use_baml.py update-phase`
-3. Test prompt loading with real files
-4. Test error cases (missing files, invalid args)
-
-### Phase 3: Edge Cases
-1. Invalid phase identifiers
-2. Missing prompt files
-3. Flowise mode toggling
-4. BAML unavailable scenarios
-
-### Phase 4: Coverage Validation
-1. Run pytest with coverage
-2. Verify >80% coverage on target files
-3. Check for any missed branches
+1. **Read existing test patterns** from test_self_improvement_safety.py
+2. **Create comprehensive test file**: `test_self_improvement_comprehensive.py`
+3. **Add missing unit tests** for uncovered methods
+4. **Add integration tests** for end-to-end scenarios
+5. **Run coverage** to verify improvements
+6. **Document** test cases and coverage gains
 
 ## Timeline Estimate
+- Scout: 5 minutes ✅
+- Architect: 10 minutes
+- Builder: 30 minutes
+- Test: 15 minutes
+- Total: ~60 minutes
 
-**Total**: ~45 minutes
+## Risks and Mitigations
 
-- Scout phase: 10 min ✓
-- Architect phase: 10 min
-- Builder phase: 20 min (write tests)
-- Test phase: 5 min (run tests, verify)
+### Risk 1: MCP Dependency
+**Issue**: Tests may require MCP server running
+**Mitigation**: Mock MCP calls using unittest.mock
 
-## Files to Create
+### Risk 2: Sandbox Creation
+**Issue**: Tests may trigger actual sandbox creation
+**Mitigation**: Mock SandboxManager and enforce_sandbox_mode
 
-1. `tests/test_use_baml_cli.py` (~200 lines)
-2. `tests/prompts/__init__.py` (empty)
-3. `tests/prompts/test_phase_loader.py` (~150 lines)
-4. `tests/prompts/test_build_orchestrator_prompt.py` (~100 lines)
-5. `tests/prompts/test_cache_analysis.py` (~100 lines)
+### Risk 3: Git Operations
+**Issue**: Tests may attempt real git commits
+**Mitigation**: Mock subprocess.run for git commands
 
-**Total**: ~550 lines of test code
-
-## Risk Assessment
-
-**LOW RISK** - This is a test-only change:
-- No production code modifications
-- All changes are additive (new test files)
-- Existing tests must continue to pass
-- Easy to rollback if needed
+### Risk 4: Protected File Logic
+**Issue**: Critical to not break existing safety tests
+**Mitigation**: Extend test_self_improvement_safety.py patterns
 
 ## Next Steps
-
-Proceed to Architect phase to design the detailed test structure and fixtures.
+1. Architect phase: Design comprehensive test suite
+2. Builder phase: Implement missing tests
+3. Test phase: Validate coverage improvements
+4. Deploy phase: Create PR with test enhancements
