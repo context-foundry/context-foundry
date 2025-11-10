@@ -169,6 +169,43 @@ Required labels (auto-created if missing):
 - `security`, `bug`, `enhancement`, `performance`, `technical-debt`
 - `p0`, `p1`, `p2`, `p3`, `p4`
 
+### Active Hours & Resource Limits
+
+The daemon includes safety features to prevent runaway builds:
+
+**Active Hours** (default: 6 AM - 10 PM):
+- Tasks are only started during configured active hours
+- Prevents autonomous builds from consuming resources overnight
+- Default window: `[6, 22]` (6:00 AM to 10:00 PM)
+
+**Why?** Autonomous builds can take 30-60 minutes and consume significant resources. The active hours window ensures builds only run during business hours when you can monitor them.
+
+**To extend active hours**, create `~/.context-foundry/evolution/config.json`:
+
+```json
+{
+  "daemon": {
+    "max_concurrent_tasks": 1
+  },
+  "resources": {
+    "max_cpu_percent": 80,
+    "max_memory_gb": 16,
+    "active_hours": [0, 24]
+  }
+}
+```
+
+Then restart the daemon:
+```bash
+python3 -m tools.evolution.daemon stop
+python3 -m tools.evolution.daemon start
+```
+
+**Resource limits:**
+- `max_cpu_percent`: Daemon won't start tasks if CPU exceeds this (default: 80%)
+- `max_memory_gb`: Daemon won't start tasks if memory exceeds this (default: 16GB)
+- `active_hours`: Time window [start_hour, end_hour] in 24-hour format
+
 ## Monitoring & Debugging
 
 ### View Logs

@@ -122,20 +122,20 @@ class CommandHandler(BaseHTTPRequestHandler):
         issue_count = self._get_issue_count()
         sandboxes = self.sandbox_manager.list_sandboxes()
 
-        self._json_response(
-            {
-                "success": True,
-                "daemon": daemon_status,
-                "mcp": mcp_status,
-                "backlog": {
-                    "count": issue_count,
-                    "target": 20,
-                    "healthy": issue_count >= 18,
-                },
-                "sandboxes": {
-                    "active": len(sandboxes),
-                    "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"],
-                },
+                self._json_response(
+                    {
+                        "success": True,
+                        "daemon": daemon_status,
+                        "mcp": mcp_status,
+                        "backlog": {
+                            "count": issue_count,
+                            "target": 5,
+                            "healthy": issue_count >= 5,
+                        },
+                        "sandboxes": {
+                            "active": len(sandboxes),
+                            "total_size_mb": self.sandbox_manager.get_stats()["total_size_mb"],
+                        },
             }
         )
 
