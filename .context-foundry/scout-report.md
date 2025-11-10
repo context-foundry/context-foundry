@@ -1,155 +1,161 @@
-# Scout Report: Add Tests for Critical Paths
+# Scout Report: Security Fix for exec() in setup.py
 
 ## Executive Summary
+Fixing a HIGH severity security vulnerability in setup.py where exec() is used to read version information from __version__.py. This poses a code injection risk during package installation. The fix will replace exec() with safe regex-based parsing.
 
-This task focuses on improving test coverage for critical, untested code paths in Context Foundry. Current overall coverage is 25.3%, with several critical files having 0% coverage despite being essential to core functionality. We'll add comprehensive tests for 4 high-priority files that are CLI entry points and prompt building infrastructure.
-
-## Key Requirements
-
-### Primary Objectives
-1. **Add CLI tests for tools/use_baml.py** - Critical BAML integration entry point
-2. **Add tests for tools/prompts/phase_loader.py** - Modular prompt loading system
-3. **Add tests for tools/prompts/build_orchestrator_prompt.py** - Main prompt builder
-4. **Add tests for tools/prompts/cache_analysis.py** - Prompt cache analysis
-
-### Success Criteria
-- All new tests pass
-- Existing tests continue to pass
-- Coverage for target files reaches >80%
-- Tests follow existing patterns (pytest, mocking, fixtures)
+## Task Requirements
+- Remove dangerous exec() call from setup.py line 33
+- Implement safe version extraction without code execution
+- Maintain compatibility with current __version__.py format
+- Ensure installation process continues to work correctly
+- Pass all existing tests
 
 ## Technology Stack
+- **Language**: Python 3.10+
+- **Build System**: setuptools
+- **Current Version Source**: __version__.py module
+- **Testing**: pytest
+- **Dependencies**: No new dependencies required (using stdlib re module)
 
-**Language**: Python 3.8+  
-**Testing Framework**: pytest with pytest-asyncio  
-**Mocking**: unittest.mock  
-**Coverage**: pytest-cov  
+## Security Analysis
 
-**Dependencies**:
-- BAML integration (optional, graceful fallback)
-- File I/O for prompt loading
-- argparse for CLI testing
-- subprocess for integration tests
-
-## Critical Architecture Recommendations
-
-### 1. Test Structure
-- Create `tests/test_use_baml_cli.py` for CLI testing
-- Create `tests/prompts/` directory for prompt-related tests
-- Follow existing test naming: `test_<module>_<aspect>.py`
-
-### 2. Testing Patterns (From Existing Codebase)
+### Current Vulnerability
 ```python
-# Pattern 1: Path handling with sys.path manipulation
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-# Pattern 2: Mocking BAML availability
-@patch('tools.baml_integration.is_baml_available')
-def test_with_baml_unavailable(mock_baml):
-    mock_baml.return_value = False
-    # Test fallback behavior
-
-# Pattern 3: Temporary directories for file tests
-@pytest.fixture
-def temp_prompt_dir(tmp_path):
-    # Create test prompt files
-    return tmp_path
-
-# Pattern 4: Subprocess testing for CLI
-import subprocess
-result = subprocess.run(['python3', 'tools/use_baml.py', 'status'], 
-                       capture_output=True, text=True)
-assert result.returncode == 0
+# Line 33 in setup.py - DANGEROUS
+exec(version_file.read_text(), version_info)
 ```
 
-### 3. Mock Strategy
-- **Mock BAML**: Test both available and unavailable states
-- **Mock file I/O**: Use tmp_path fixture for prompt files
-- **Mock subprocess**: For CLI integration tests
-- **Real integration**: Test actual file loading where safe
+**Risk Assessment:**
+- **Severity**: HIGH
+- **Vector**: Supply chain attack, repository compromise
+- **Impact**: Arbitrary code execution during pip install
+- **Likelihood**: Low but consequences severe
+- **Industry Standard**: exec() in setup.py is considered anti-pattern
 
-### 4. Coverage Strategy
-Focus on:
-- ✅ Argument parsing and validation
-- ✅ Error handling (missing files, invalid inputs)
-- ✅ BAML integration paths (both success and fallback)
-- ✅ File loading and path resolution
-- ✅ CLI command execution
+### Industry Best Practices
+Research shows several standard approaches used by major Python projects:
 
-## Main Challenges and Mitigations
+1. **Regex Parsing** (Used by: requests, flask, django)
+   - Parse version string directly from file
+   - No code execution
+   - Simple and reliable
 
-### Challenge 1: BAML Dependency
-**Issue**: BAML requires OpenAI API key, may not be available in CI  
-**Mitigation**: Mock BAML calls, test fallback behavior  
-**Pattern**: Follow test_baml_integration.py patterns
+2. **AST Parsing** (Used by: pip, setuptools)
+   - Parse Python AST safely
+   - Extract literals without execution
+   - More complex but very safe
 
-### Challenge 2: File System Dependencies
-**Issue**: Prompt loaders read from filesystem  
-**Mitigation**: Use pytest tmp_path fixture, create test files  
-**Pattern**: Create minimal test prompt files in fixtures
+3. **importlib.metadata** (Modern approach)
+   - Only works post-installation
+   - Not suitable for setup.py reading
 
-### Challenge 3: CLI Testing Complexity
-**Issue**: Testing argparse and subprocess interactions  
-**Mitigation**: Unit test argparse separately, integration test with subprocess  
-**Pattern**: Test main() function with mocked sys.argv
+4. **Single-sourcing from pyproject.toml**
+   - Modern packaging standard
+   - Requires migration to pyproject.toml
 
-### Challenge 4: Path Resolution
-**Issue**: Relative path handling across different execution contexts  
-**Mitigation**: Use Path objects consistently, test from multiple directories  
-**Pattern**: Follow existing path resolution in test files
+## Recommended Solution
 
-## Testing Approach
+**Use regex parsing** - Best balance of simplicity, security, and compatibility.
 
-### Phase 1: Unit Tests (Core Functions)
-1. Test `get_phase_prompt()` with various inputs
-2. Test `list_available_phases()`
-3. Test argument parsing in main()
-4. Test status normalization logic
+### Implementation Pattern
+```python
+import re
+from pathlib import Path
 
-### Phase 2: Integration Tests (CLI Commands)
-1. Test `python3 tools/use_baml.py status`
-2. Test `python3 tools/use_baml.py update-phase`
-3. Test prompt loading with real files
-4. Test error cases (missing files, invalid args)
+# Read version from __version__.py safely
+version_file = Path(__file__).parent / "__version__.py"
+version_content = version_file.read_text(encoding='utf-8')
+version_match = re.search(
+    r'^__version__\s*=\s*["\']([^"\']+)["\']',
+    version_content,
+    re.MULTILINE
+)
+if not version_match:
+    raise RuntimeError("Unable to find version string in __version__.py")
+version = version_match.group(1)
+```
 
-### Phase 3: Edge Cases
-1. Invalid phase identifiers
-2. Missing prompt files
-3. Flowise mode toggling
-4. BAML unavailable scenarios
+### Why This Approach?
+- ✅ Zero code execution risk
+- ✅ Works with current __version__.py format
+- ✅ Standard library only (re module)
+- ✅ Clear error handling
+- ✅ Widely used pattern in Python ecosystem
+- ✅ Minimal code change
+- ✅ Easy to understand and maintain
 
-### Phase 4: Coverage Validation
-1. Run pytest with coverage
-2. Verify >80% coverage on target files
-3. Check for any missed branches
+## Critical Requirements
+
+1. **Version Extraction**
+   - Must correctly parse: `__version__ = "2.2.0"`
+   - Support both single and double quotes
+   - Handle whitespace variations
+   - Fail with clear error if format unexpected
+
+2. **Backward Compatibility**
+   - No changes to __version__.py format
+   - Installation process unchanged from user perspective
+   - All existing functionality preserved
+
+3. **Error Handling**
+   - Clear error message if version not found
+   - Fail fast during setup rather than runtime
+
+## Testing Requirements
+
+### Installation Tests
+1. **Local installation**: `pip install -e .`
+2. **Version verification**: Verify setup.py reads correct version
+3. **CLI functionality**: `cf --version` should work
+4. **Clean install**: `pip install .` from fresh environment
+
+### Regression Tests
+1. Run full test suite: `pytest`
+2. Verify no existing tests broken
+3. Check package metadata correct
+
+### Security Validation
+1. Confirm no exec() or eval() in setup.py
+2. Verify only string parsing used
+3. Code review for other potential risks
+
+## Implementation Plan
+
+**Phase 1: Code Modification**
+- Replace lines 30-33 in setup.py with safe regex parsing
+- Add proper error handling
+- Maintain code readability
+
+**Phase 2: Testing**
+- Test local installation
+- Run existing test suite
+- Verify CLI entry point works
+- Test in clean virtual environment
+
+**Phase 3: Documentation**
+- Update comments in setup.py if needed
+- Document security fix in commit message
+- Reference GitHub issue #108
+
+## Success Criteria
+- ✅ No exec() or eval() in setup.py
+- ✅ Version correctly extracted from __version__.py
+- ✅ `pip install -e .` succeeds
+- ✅ All existing tests pass
+- ✅ CLI command `cf` works correctly
+- ✅ Package metadata shows correct version
 
 ## Timeline Estimate
+- Implementation: 10-15 minutes
+- Testing: 10-15 minutes
+- Total: 20-30 minutes
 
-**Total**: ~45 minutes
+## Environment Checklist - GitHub Deployment
 
-- Scout phase: 10 min ✓
-- Architect phase: 10 min
-- Builder phase: 20 min (write tests)
-- Test phase: 5 min (run tests, verify)
+Checking deployment environment...
 
-## Files to Create
+- [✅] GitHub CLI (gh) installed
+- [✅] GitHub authentication verified
+- [✅] Git user configured
 
-1. `tests/test_use_baml_cli.py` (~200 lines)
-2. `tests/prompts/__init__.py` (empty)
-3. `tests/prompts/test_phase_loader.py` (~150 lines)
-4. `tests/prompts/test_build_orchestrator_prompt.py` (~100 lines)
-5. `tests/prompts/test_cache_analysis.py` (~100 lines)
-
-**Total**: ~550 lines of test code
-
-## Risk Assessment
-
-**LOW RISK** - This is a test-only change:
-- No production code modifications
-- All changes are additive (new test files)
-- Existing tests must continue to pass
-- Easy to rollback if needed
-
-## Next Steps
-
-Proceed to Architect phase to design the detailed test structure and fixtures.
+**Deployment Status:** ✅ Ready for GitHub PR creation

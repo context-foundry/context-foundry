@@ -7,6 +7,7 @@ Installs the 'cf' CLI command for easy access to Mission Control
 from setuptools import setup, find_packages
 from pathlib import Path
 import sys
+import re
 
 # Check Python version early with helpful error message
 if sys.version_info < (3, 10):
@@ -27,10 +28,20 @@ if sys.version_info < (3, 10):
     )
     sys.exit(1)
 
-# Read version from __version__.py
+# Read version from __version__.py safely without code execution
 version_file = Path(__file__).parent / "__version__.py"
-version_info = {}
-exec(version_file.read_text(), version_info)
+version_content = version_file.read_text(encoding='utf-8')
+version_match = re.search(
+    r'^__version__\s*=\s*["\']([^"\']+)["\']',
+    version_content,
+    re.MULTILINE
+)
+if not version_match:
+    raise RuntimeError(
+        "Unable to find version string in __version__.py. "
+        "Expected format: __version__ = \"x.y.z\""
+    )
+version = version_match.group(1)
 
 # Read README for long description
 readme_file = Path(__file__).parent / "README.md"
@@ -38,7 +49,7 @@ long_description = readme_file.read_text() if readme_file.exists() else ""
 
 setup(
     name="context-foundry",
-    version=version_info["__version__"],
+    version=version,
     description="The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP",
     long_description=long_description,
     long_description_content_type="text/markdown",

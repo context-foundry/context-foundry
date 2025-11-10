@@ -1,97 +1,87 @@
 # Codebase Analysis Report
 
 ## Project Overview
-- Type: Python automation framework
-- Languages: Python (primary), Shell scripts
-- Architecture: Multi-agent autonomous build system with MCP integration
+- Type: Python package/library
+- Languages: Python
+- Architecture: setuptools-based installation with CLI entry point
 
 ## Key Files
-- Entry point: claude (CLI wrapper)
-- Config: requirements.txt, setup.py, pytest.ini
-- Tests: tests/ directory (58 test files)
-- Coverage data: coverage.json (25.3% overall coverage)
+- Entry point: setup.py
+- Version source: __version__.py
+- Config: requirements.txt, pytest.ini
+- Tests: tests/ directory
 
 ## Dependencies
-- Core: Python 3.8+
-- BAML integration: baml-py (optional, type-safe LLM outputs)
-- MCP: Model Context Protocol server implementation
-- Testing: pytest, pytest-asyncio
-- Others: anthropic, openai (for BAML), various utilities
+- setuptools (build system)
+- fastmcp>=2.0.0
+- nest-asyncio>=1.5.0
+- tiktoken>=0.5.0
+- baml-py>=0.211.0
+- textual>=0.50.0
+- psutil>=5.9.0
 
-## Current Test Coverage Analysis
+## Security Vulnerability Analysis
 
-### Overall Statistics
-- Total files: 106
-- Overall coverage: 25.3%
-- Test files: 58 in tests/ directory
+### Issue: Dangerous use of exec() in setup.py (line 33)
 
-### Critical Gaps Identified
+**Current Code:**
+```python
+version_file = Path(__file__).parent / "__version__.py"
+version_info = {}
+exec(version_file.read_text(), version_info)
+```
 
-#### High Priority (0% coverage, significant code)
-1. **tools/use_baml.py** (70 statements, 0% coverage)
-   - CLI wrapper for BAML integration
-   - Entry point for orchestrator phase tracking
-   - Critical for type-safe LLM outputs
-   - Has related tests but use_baml.py CLI itself not tested
+**Security Risk:**
+- Code injection vulnerability during package installation
+- If an attacker can modify __version__.py, they can execute arbitrary code
+- This executes during `pip install`, potentially compromising the installation environment
+- Violates principle of least privilege
 
-2. **tools/prompts/cache_analysis.py** (133 statements, 0% coverage)
-   - Prompt cache analysis tooling
-   - No existing tests found
-
-3. **tools/prompts/build_orchestrator_prompt.py** (82 statements, 0% coverage)
-   - Builds the main orchestrator prompt
-   - Critical for system functionality
-   - No existing tests found
-
-4. **tools/prompts/phase_loader.py** (58 statements, 0% coverage)
-   - Loads phase-specific prompts
-   - No existing tests found
-
-#### Medium Priority (partial coverage or less critical)
-5. **tools/livestream/** (broadcaster.py, server.py - 0% coverage)
-   - Livestream functionality (604 statements total)
-   - Feature-specific, not core critical path
-
-6. **tools/tui/** widgets and screens (0% coverage)
-   - UI components (less critical for core automation)
-
-### Existing Test Coverage
-- BAML integration: Good coverage (test_baml_*.py files)
-- MCP server: Multiple test files exist
-- Context budget: Well tested
-- Cache system: Well tested
-- Evolution system: Multiple test files
+**Impact:**
+- Severity: HIGH (code execution during installation)
+- Attack vector: Supply chain attack, compromised repository
+- Scope: All users installing the package
 
 ## Code to Modify
-**Task**: Add tests for critical paths with missing coverage
+**Task**: Replace exec() with safe version reading
+**Files to change**: setup.py (line 31-33)
+**Approach**: Use safe parsing methods instead of exec()
 
-**Files to change/create**:
-1. Create `tests/test_use_baml_cli.py` - Test CLI interface
-2. Create `tests/prompts/test_cache_analysis.py` - Test cache analysis
-3. Create `tests/prompts/test_build_orchestrator_prompt.py` - Test prompt building
-4. Create `tests/prompts/test_phase_loader.py` - Test phase loading
+### Safe Alternatives:
+1. **Regular expression parsing** - Parse __version__ directly from file text
+2. **AST parsing** - Use ast.literal_eval for safe evaluation
+3. **importlib.metadata** - Use standard library metadata (post-install only)
+4. **Direct import** - Import __version__ module safely (requires package structure)
 
-**Approach**: 
-- Focus on critical paths first (use_baml.py CLI, prompt builders)
-- Write unit tests for pure functions
-- Write integration tests for CLI commands
-- Mock external dependencies (BAML, file I/O where appropriate)
-- Aim for >80% coverage on critical files
+### Recommended Solution:
+Use regex to extract version string directly from __version__.py without executing code:
+
+```python
+import re
+version_file = Path(__file__).parent / "__version__.py"
+version_content = version_file.read_text()
+version_match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', version_content, re.MULTILINE)
+if version_match:
+    version = version_match.group(1)
+else:
+    raise RuntimeError("Unable to find version string in __version__.py")
+```
+
+This approach:
+- ✅ No code execution
+- ✅ Reads only the version string
+- ✅ Fails safely if format is unexpected
+- ✅ Works with current __version__.py structure
+- ✅ Standard pattern used by many Python projects
 
 ## Risks
-1. **BAML dependency**: Tests need to handle BAML unavailable gracefully
-2. **File I/O**: Prompt builders read from filesystem - need temp dirs
-3. **CLI testing**: Need to test argparse interface and subprocess calls
-4. **Integration**: Some functions may require full integration testing
+- Regex must match __version__.py format exactly
+- Need to ensure backward compatibility
+- Should add test to verify version extraction works
 
 ## Testing Strategy
-1. **Unit tests**: Pure functions, argument parsing, validation
-2. **Integration tests**: Full CLI commands with mocked BAML
-3. **Edge cases**: Missing files, invalid inputs, BAML errors
-4. **Coverage goal**: Increase from 25.3% to >40% overall (focus on critical paths)
-
-## Branch Strategy
-- Create branch: `self-improvement/task-995b8dba`
-- Make targeted additions (tests only)
-- Ensure all existing tests still pass
-- Create PR for review
+1. Verify setup.py can read version correctly
+2. Test installation process: `pip install -e .`
+3. Verify CLI entry point works: `cf --version`
+4. Run existing test suite to ensure no regressions
+5. Add unit test for version extraction if applicable
