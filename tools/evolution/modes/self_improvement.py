@@ -1,6 +1,5 @@
 """Self-Improvement Mode - Analyze CF codebase and generate improvement tasks"""
 
-import json
 import logging
 import subprocess
 from pathlib import Path
@@ -276,7 +275,9 @@ This is an autonomous self-improvement task from the Evolution System."""
                     # Skip protected files (critical infrastructure that requires manual review)
                     if self._is_protected_file(file_path):
                         logger.info(f"⏭️  Skipping TODO in protected file: {file_path}")
-                        logger.info("   Protected files require manual review for changes")
+                        logger.info(
+                            "   Protected files require manual review for changes"
+                        )
                         continue
 
                     # Calculate priority and category using intelligent analysis
@@ -538,7 +539,9 @@ This is an autonomous self-improvement task from the Evolution System."""
 
             logger.info(f"✅ Sandbox created: {sandbox_path}")
             logger.info("   Production directory protected: ✅")
-            logger.info("🤖 Calling Context Foundry MCP autonomous_build_and_deploy()...")
+            logger.info(
+                "🤖 Calling Context Foundry MCP autonomous_build_and_deploy()..."
+            )
             logger.info(f"   Task: {prompt[:100]}...")
             logger.info(f"   Branch: {branch_name}")
 
@@ -560,7 +563,47 @@ This is an autonomous self-improvement task from the Evolution System."""
 
             # Parse MCP result
             result = json.loads(result_json)
+
+            # Check for errors in MCP response
+            if "error" in result:
+                error_msg = result["error"]
+                logger.error(f"❌ MCP returned error: {error_msg}")
+
+                # Clean up sandbox since MCP failed
+                try:
+                    logger.info(
+                        f"🧹 Cleaning up sandbox after MCP error: {sandbox_path}"
+                    )
+                    manager.cleanup_sandbox(sandbox_path=sandbox_path)
+                    logger.info("✅ Sandbox cleanup complete")
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to cleanup sandbox: {cleanup_err}")
+
+                return {
+                    "success": False,
+                    "error": f"MCP delegation failed: {error_msg}",
+                }
+
             mcp_task_id = result.get("task_id")
+
+            # Validate that task_id is present and not None
+            if not mcp_task_id:
+                logger.error(f"❌ MCP returned invalid response (no task_id): {result}")
+
+                # Clean up sandbox since MCP failed to start
+                try:
+                    logger.info(
+                        f"🧹 Cleaning up sandbox after null task_id: {sandbox_path}"
+                    )
+                    manager.cleanup_sandbox(sandbox_path=sandbox_path)
+                    logger.info("✅ Sandbox cleanup complete")
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to cleanup sandbox: {cleanup_err}")
+
+                return {
+                    "success": False,
+                    "error": f"MCP delegation failed: No task_id in response. MCP may have encountered an error. Response: {result}",
+                }
 
             logger.info("✅ MCP task started!")
             logger.info(f"   MCP Task ID: {mcp_task_id}")
@@ -581,5 +624,19 @@ This is an autonomous self-improvement task from the Evolution System."""
             }
 
         except Exception as e:
-            logger.error(f"❌ Failed to call MCP autonomous_build_and_deploy: {e}", exc_info=True)
+            logger.error(
+                f"❌ Failed to call MCP autonomous_build_and_deploy: {e}", exc_info=True
+            )
+
+            # Clean up sandbox on exception
+            if "sandbox_path" in locals():
+                try:
+                    logger.info(
+                        f"🧹 Cleaning up sandbox after exception: {sandbox_path}"
+                    )
+                    manager.cleanup_sandbox(sandbox_path=sandbox_path)
+                    logger.info("✅ Sandbox cleanup complete")
+                except Exception as cleanup_err:
+                    logger.warning(f"Failed to cleanup sandbox: {cleanup_err}")
+
             return {"success": False, "error": f"Failed to call MCP: {e}"}

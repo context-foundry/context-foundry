@@ -1579,18 +1579,22 @@ class EvolutionDaemon:
         - Claude crashes without creating PR
         - PR is created on wrong branch
         - Daemon misses PR detection
+        - MCP delegation fails to start (null task_id)
 
         Mark stuck tasks as FAILED to unblock the queue
         """
         try:
             from datetime import datetime, timedelta
+            import json
 
             running_tasks = self.task_queue.list_tasks(status=TaskStatus.RUNNING.value)
             if not running_tasks:
                 return
 
             timeout_hours = 2
+            quick_fail_minutes = 5  # Fail fast for null mcp_task_id
             cutoff_time = datetime.now() - timedelta(hours=timeout_hours)
+            quick_fail_cutoff = datetime.now() - timedelta(minutes=quick_fail_minutes)
 
             for task in running_tasks:
                 # Parse task started_at timestamp
@@ -1600,6 +1604,43 @@ class EvolutionDaemon:
                 try:
                     started_time = datetime.fromisoformat(task.started_at)
 
+                    # Check 1: Tasks with null mcp_task_id (MCP delegation failed)
+                    # These should fail FAST (5 minutes) since they'll never complete
+                    if task.result_json:
+                        try:
+                            result = json.loads(task.result_json)
+                            mcp_task_id = result.get("mcp_task_id")
+
+                            if mcp_task_id is None and started_time < quick_fail_cutoff:
+                                duration_minutes = (
+                                    datetime.now() - started_time
+                                ).total_seconds() / 60
+
+                                self.logger.error(
+                                    f"⚠️  STUCK TASK: {task.id} has null mcp_task_id (MCP delegation failed)"
+                                )
+                                self.logger.error(
+                                    f"   Running for {duration_minutes:.1f} minutes with no valid MCP task"
+                                )
+                                self.logger.error(
+                                    "   MCP delegation never started - marking as FAILED"
+                                )
+
+                                # Mark as FAILED
+                                self.task_queue.update_task_status(
+                                    task.id,
+                                    TaskStatus.FAILED.value,
+                                    error=f"MCP delegation failed (null task_id). Task stuck for {duration_minutes:.1f} minutes.",
+                                )
+
+                                self.logger.info(
+                                    f"✅ Marked stuck task {task.id} as FAILED - queue unblocked"
+                                )
+                                continue
+                        except json.JSONDecodeError:
+                            pass  # result_json might not be valid JSON yet
+
+                    # Check 2: Tasks running for > 2 hours (original check)
                     if started_time < cutoff_time:
                         # Task has been RUNNING for > 2 hours
                         duration_hours = (
