@@ -25,6 +25,9 @@ cd /Users/name/homelab/context-foundry 2>/dev/null
 # Check for recently merged PRs (last 5 minutes)
 RECENT_MERGED=$(gh pr list --state merged --limit 1 --json number,title,mergedAt 2>/dev/null | jq -r '.[0] | select(.mergedAt != null) | .number' 2>/dev/null)
 
+# Check for recently created issues (last 5 minutes)
+RECENT_ISSUES=$(gh issue list --state open --limit 10 --json number,title,createdAt 2>/dev/null | jq -r '.[] | select((now - (.createdAt | fromdateiso8601)) < 300) | "\(.number)|\(.title)"' 2>/dev/null)
+
 # Check current state
 DAEMON_PID=$(pgrep -f "tools.evolution.daemon" 2>/dev/null | head -1)
 OPEN_PRS=$(gh pr list --state open --json number 2>/dev/null | jq '. | length' 2>/dev/null)
@@ -60,7 +63,20 @@ else
     # Check backlog health
     if [ "$ISSUE_COUNT" -lt 18 ]; then
         NEEDED=$((20 - ISSUE_COUNT))
-        echo -e "  ${YELLOW}→${NC} Scout creating $NEEDED issues to maintain 20-issue backlog (currently $ISSUE_COUNT)"
+        if [ -n "$RECENT_ISSUES" ]; then
+            echo -e "  ${YELLOW}→${NC} Scout creating issues to maintain 20-issue backlog (currently $ISSUE_COUNT)"
+            # Show recently created issues
+            RECENT_COUNT=$(echo "$RECENT_ISSUES" | wc -l | tr -d ' ')
+            echo -e "  ${GREEN}✓${NC} Created $RECENT_COUNT issue(s) in last 5 minutes:"
+            echo "$RECENT_ISSUES" | head -3 | while IFS='|' read num title; do
+                echo -e "    ${GRAY}#$num:${NC} ${title:0:60}"
+            done
+            if [ "$RECENT_COUNT" -gt 3 ]; then
+                echo -e "    ${GRAY}... and $((RECENT_COUNT - 3)) more${NC}"
+            fi
+        else
+            echo -e "  ${YELLOW}→${NC} Scout creating $NEEDED issues to maintain 20-issue backlog (currently $ISSUE_COUNT)"
+        fi
     else
         echo -e "  ${GRAY}○${NC} Idle: Backlog healthy ($ISSUE_COUNT/20), awaiting issue approval"
     fi
