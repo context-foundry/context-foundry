@@ -1,298 +1,253 @@
-# Architecture: Test Suite for Context Budget System
+# Architecture: Unit Tests for tools/mcp_server.py Helper Functions
 
-## System Architecture Overview
+## System Overview
 
-This enhancement adds comprehensive test coverage for three critical, untested modules in the context budget monitoring system. The architecture follows the existing pytest patterns used throughout Context Foundry's test suite.
+Create comprehensive unit tests for 6 untested helper functions in `tools/mcp_server.py`. These functions are critical for MCP server operation but lack direct test coverage.
 
-## Module Specifications
-
-### Module 1: tests/test_context_budget_monitor_unit.py
-**Purpose:** Unit tests for ContextBudgetMonitor class
-**Dependencies:** tools/context_budget/monitor.py
-**Test Count:** 28 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (3 tests)
-   - Test default initialization with 200K context window
-   - Test custom context window size
-   - Test model parameter handling
-
-2. **Budget Calculation Tests** (5 tests)
-   - Test get_budget_for_phase() for each phase
-   - Test normalized phase names (spaces, hyphens, underscores)
-   - Test unknown phase defaults to 5%
-   - Test budget allocation percentages match BUDGETS dict
-   - Test edge case: 0 context window
-
-3. **Zone Detection Tests** (6 tests)
-   - Test SMART zone detection (0-40%)
-   - Test DUMB zone detection (40-80%)
-   - Test CRITICAL zone detection (80-100%)
-   - Test boundary conditions (exactly 40%, exactly 80%)
-   - Test is_in_smart_zone() method
-   - Test get_zone() return values
-
-4. **Phase Analysis Tests** (8 tests)
-   - Test check_phase() with typical usage
-   - Test phase analysis warnings generation
-   - Test phase analysis recommendations generation
-   - Test budget exceeded calculation
-   - Test budget remaining calculation
-   - Test phase history tracking
-   - Test percentage calculation accuracy
-   - Test PhaseAnalysis.to_dict() serialization
-
-5. **Historical Tracking Tests** (3 tests)
-   - Test get_phase_history() returns correct analyses
-   - Test multiple analyses for same phase
-   - Test empty history for new phase
-
-6. **Overall Statistics Tests** (3 tests)
-   - Test get_overall_stats() with multiple phases
-   - Test peak usage detection
-   - Test smart zone percentage calculation
-
-### Module 2: tests/test_context_budget_reporter_unit.py
-**Purpose:** Unit tests for ContextBudgetReporter class
-**Dependencies:** tools/context_budget/report.py
-**Test Count:** 22 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (1 test)
-   - Test reporter initialization
-
-2. **Context Report Generation Tests** (5 tests)
-   - Test generate_context_report() with full metrics
-   - Test report with empty metrics
-   - Test report with partial metrics
-   - Test report formatting and structure
-   - Test zone indicators in report
-
-3. **Phase Table Generation Tests** (4 tests)
-   - Test generate_phase_table() ASCII formatting
-   - Test table with multiple phases
-   - Test table column alignment
-   - Test phase name truncation
-
-4. **Visualization Tests** (4 tests)
-   - Test visualize_context_usage() bar chart generation
-   - Test bar chart with varying percentages
-   - Test bar chart zone emojis
-   - Test empty data handling
-
-5. **Optimization Suggestions Tests** (4 tests)
-   - Test get_optimization_suggestions() for critical zone
-   - Test suggestions for dumb zone
-   - Test suggestions for optimal usage
-   - Test phase-specific recommendations
-
-6. **Export Tests** (4 tests)
-   - Test generate_summary_json() format
-   - Test export_markdown_report() formatting
-   - Test markdown file output
-   - Test format_zone_indicator() mapping
-
-### Module 3: tests/test_context_budget_token_counter_unit.py
-**Purpose:** Unit tests for TokenCounter class
-**Dependencies:** tools/context_budget/token_counter.py
-**Test Count:** 18 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (2 tests)
-   - Test TokenCounter initialization with default model
-   - Test initialization with custom model
-
-2. **Token Estimation Tests (with tiktoken)** (5 tests)
-   - Test estimate_tokens() with tiktoken available
-   - Test accuracy against known token counts
-   - Test empty string handling
-   - Test unicode text handling
-   - Test very long text handling
-
-3. **Token Estimation Tests (fallback)** (3 tests)
-   - Test estimate_tokens() without tiktoken (mock unavailable)
-   - Test fallback heuristic accuracy (chars / 4)
-   - Test fallback with various text lengths
-
-4. **File Token Counting Tests** (4 tests)
-   - Test count_file_tokens() with temp file
-   - Test non-existent file handling
-   - Test binary file handling
-   - Test encoding error handling
-
-5. **Directory Token Counting Tests** (2 tests)
-   - Test count_directory_tokens() with pattern matching
-   - Test empty directory handling
-
-6. **Message Token Counting Tests** (2 tests)
-   - Test count_message_tokens() with message array
-   - Test multi-part content handling
-
-## Complete File Structure
+## File Structure
 
 ```
 tests/
-├── test_context_budget_monitor_unit.py (NEW)
-├── test_context_budget_reporter_unit.py (NEW)
-└── test_context_budget_token_counter_unit.py (NEW)
+├── test_mcp_server_helpers.py     (NEW - 400-500 lines)
+│   ├── FastMCP mock setup
+│   ├── Test fixtures
+│   ├── _read_phase_info tests (6 tests)
+│   ├── _truncate_output tests (5 tests)
+│   ├── _get_context_foundry_parent_dir tests (2 tests)
+│   ├── _write_delegation_metadata tests (3 tests)
+│   ├── _write_full_output_to_file tests (4 tests)
+│   └── _create_output_summary tests (4 tests)
 ```
 
-## Test Implementation Strategy
+## Module Specifications
 
-### Common Fixtures (Shared across all test files)
+### test_mcp_server_helpers.py
 
+**Purpose**: Unit tests for private helper functions in mcp_server.py
+
+**Key Components**:
+
+1. **Mock Setup** (lines 1-60)
+   - MockFastMCP class (tool and resource decorators)
+   - sys.modules mocking for fastmcp imports
+   - Import mcp_server after mocking
+
+2. **Fixtures** (lines 61-100)
+   - `temp_dir(tmp_path)` - Temporary directory for file operations
+   - `mock_phase_file(temp_dir)` - Creates test phase JSON file
+   - `sample_output()` - Returns sample output strings for truncation tests
+
+3. **_read_phase_info Tests** (lines 101-250)
+   ```python
+   def test_read_phase_info_file_exists_fresh()
+   def test_read_phase_info_file_not_exists()
+   def test_read_phase_info_invalid_json()
+   def test_read_phase_info_stale_file()
+   def test_read_phase_info_permission_error()
+   def test_read_phase_info_no_task_start_time()
+   ```
+
+4. **_truncate_output Tests** (lines 251-350)
+   ```python
+   def test_truncate_output_small_output()
+   def test_truncate_output_large_output()
+   def test_truncate_output_empty_string()
+   def test_truncate_output_at_boundary()
+   def test_truncate_output_custom_max_tokens()
+   ```
+
+5. **_get_context_foundry_parent_dir Tests** (lines 351-400)
+   ```python
+   def test_get_context_foundry_parent_dir_returns_parent()
+   def test_get_context_foundry_parent_dir_resolution()
+   ```
+
+6. **_write_delegation_metadata Tests** (lines 401-480)
+   ```python
+   def test_write_delegation_metadata_success()
+   def test_write_delegation_metadata_creates_directory()
+   def test_write_delegation_metadata_handles_errors()
+   ```
+
+7. **_write_full_output_to_file Tests** (lines 481-580)
+   ```python
+   def test_write_full_output_to_file_success()
+   def test_write_full_output_to_file_creates_directory()
+   def test_write_full_output_to_file_encoding()
+   def test_write_full_output_to_file_handles_errors()
+   ```
+
+8. **_create_output_summary Tests** (lines 581-680)
+   ```python
+   def test_create_output_summary_under_max_lines()
+   def test_create_output_summary_over_max_lines()
+   def test_create_output_summary_empty_output()
+   def test_create_output_summary_custom_max_lines()
+   ```
+
+## Implementation Steps
+
+### Step 1: Mock Setup and Imports
+- Create MockFastMCP class with tool() and resource() decorators
+- Mock sys.modules entries for fastmcp
+- Import functions from tools.mcp_server after mocking
+
+### Step 2: Test Fixtures
+- Create pytest fixtures for temporary directories
+- Create fixture for mock phase files
+- Create fixture for sample output strings
+
+### Step 3: Implement _read_phase_info Tests
+- Test successful read with fresh file
+- Test file not exists (returns empty dict)
+- Test invalid JSON (returns empty dict)
+- Test stale file detection (modified before task start)
+- Test permission errors (returns empty dict)
+- Test without task_start_time parameter
+
+### Step 4: Implement _truncate_output Tests
+- Test small output (no truncation)
+- Test large output (truncation occurs)
+- Test empty string handling
+- Test boundary case (exactly at limit)
+- Test custom max_tokens parameter
+
+### Step 5: Implement _get_context_foundry_parent_dir Tests
+- Test returns correct parent directory
+- Test path resolution works correctly
+
+### Step 6: Implement _write_delegation_metadata Tests
+- Test successful metadata write
+- Test directory creation
+- Test error handling
+
+### Step 7: Implement _write_full_output_to_file Tests
+- Test successful file write
+- Test directory creation
+- Test UTF-8 encoding
+- Test error handling
+
+### Step 8: Implement _create_output_summary Tests
+- Test output under max_lines (no truncation)
+- Test output over max_lines (truncation)
+- Test empty output
+- Test custom max_lines parameter
+
+## Testing Strategy
+
+### Unit Test Principles
+1. **Isolation**: Each function tested independently
+2. **Mocking**: Use unittest.mock for file I/O, datetime
+3. **Coverage**: Test happy path + error paths + edge cases
+4. **Speed**: All tests should complete in <2 seconds
+
+### Test Patterns
+
+**File I/O Testing**:
 ```python
-# Fixture: sample_phase_metrics
-# Returns dict with realistic phase metrics for testing
-
-# Fixture: sample_context_metrics
-# Returns dict with full context metrics structure
-
-# Fixture: temp_file_with_content
-# Creates temp file with known content for token counting tests
+def test_function_with_file_io(tmp_path):
+    test_file = tmp_path / "test.json"
+    # Test logic here
 ```
 
-### Mocking Strategy
-
-1. **Tiktoken Mocking:**
-   - Mock `tiktoken.get_encoding()` to simulate availability
-   - Mock `ImportError` to simulate tiktoken unavailable
-   - Verify both code paths are tested
-
-2. **File I/O Mocking:**
-   - Use `tempfile` for real file tests
-   - Mock `Path.read_text()` for error scenarios
-   - Mock `Path.exists()` for non-existent file tests
-
-3. **System Mocking:**
-   - Mock `sys.stderr` to capture warnings
-   - No need to mock datetime (tests don't rely on current time)
-
-### Test Data Patterns
-
-**Sample Phase Metrics:**
+**Error Handling Testing**:
 ```python
-{
-    'phase_name': 'Scout',
-    'tokens_used': 12000,
-    'percentage': 6.0,
-    'zone': 'smart',
-    'budget_allocated': 14000,
-    'budget_remaining': 2000,
-    'budget_exceeded_by': 0,
-    'warnings': [],
-    'recommendations': []
-}
+@patch('builtins.open', side_effect=PermissionError)
+def test_function_handles_permission_error(mock_open):
+    result = function_under_test()
+    assert result == expected_error_result
 ```
 
-**Sample Context Metrics:**
+**Staleness Testing**:
 ```python
-{
-    'max_context_window': 200000,
-    'model': 'claude-sonnet-4',
-    'by_phase': {
-        'phase_scout': {...},
-        'phase_architect': {...}
-    },
-    'overall': {
-        'peak_usage_tokens': 40000,
-        'peak_usage_percentage': 20.0,
-        'peak_phase': 'Builder',
-        'avg_usage_percentage': 12.5,
-        'smart_zone_percentage': 100.0,
-        'total_phases': 4
-    }
-}
+@patch('tools.mcp_server.datetime')
+def test_stale_file_detection(mock_datetime, tmp_path):
+    # Set up stale file
+    # Verify it's detected as stale
 ```
 
-## Testing Requirements
+### Success Criteria
 
-### Test Execution
-- All tests must run with: `pytest tests/test_context_budget_*.py -v`
-- Total execution time target: < 5 seconds
-- No external API calls or network dependencies
-- No file system pollution (clean up temp files)
+**Code Coverage**:
+- ✅ >80% coverage for helper functions
+- ✅ All branches tested (if/else, try/except)
 
-### Test Success Criteria
-1. **Coverage:** >90% line coverage for each module
-2. **Edge Cases:** All boundary conditions tested
-3. **Error Paths:** All exception handling tested
-4. **Serialization:** JSON output structure validated
-5. **Isolation:** Each test is fully independent
+**Test Quality**:
+- ✅ All tests pass with pytest
+- ✅ No test interdependencies
+- ✅ Fast execution (<2 seconds total)
+- ✅ Clear test names and assertions
 
-### Assertion Patterns
+**Code Quality**:
+- ✅ Follow existing test file patterns
+- ✅ Proper docstrings for test functions
+- ✅ Type hints where appropriate
+- ✅ Clear arrange-act-assert structure
 
-```python
-# Numeric assertions (use approximate for floats)
-assert analysis.percentage == pytest.approx(6.0, abs=0.1)
+## Edge Cases to Test
 
-# Zone assertions
-assert analysis.zone == ContextZone.SMART
+1. **_read_phase_info**:
+   - Empty JSON file
+   - Malformed JSON
+   - File deleted mid-operation
+   - Unicode characters in phase names
 
-# String assertions (for reports)
-assert "Scout" in report
-assert "✅" in report  # Zone indicator
+2. **_truncate_output**:
+   - Zero-length output
+   - Exactly at token boundary
+   - Multi-byte Unicode characters
+   - Very large output (100k+ lines)
 
-# Structure assertions
-assert isinstance(result, dict)
-assert 'phase_name' in result
+3. **_write_delegation_metadata**:
+   - Read-only filesystem
+   - Disk full scenarios
+   - Invalid metadata structure
+
+4. **_write_full_output_to_file**:
+   - Binary data in output
+   - Very large files (>100MB)
+   - Concurrent writes
+
+## Dependencies
+
+- pytest >= 7.0
+- unittest.mock (standard library)
+- pathlib (standard library)
+- json (standard library)
+- datetime (standard library)
+
+## Testing Commands
+
+```bash
+# Run new tests only
+pytest tests/test_mcp_server_helpers.py -v
+
+# Run with coverage
+pytest tests/test_mcp_server_helpers.py --cov=tools.mcp_server --cov-report=term-missing
+
+# Run all mcp_server tests
+pytest tests/test_mcp_server*.py -v
 ```
 
-## Implementation Plan
+## Preventive Measures
 
-### Step 1: Create test_context_budget_monitor_unit.py
-**Tasks:**
-1. Import monitor module and dependencies
-2. Create fixtures for sample data
-3. Implement 28 unit tests covering all methods
-4. Add docstrings explaining each test
-5. Verify all tests pass independently
+**Known Risk**: FastMCP import failure
+- **Prevention**: Mock FastMCP before any imports
+- **Pattern**: Use established MockFastMCP class from existing tests
 
-### Step 2: Create test_context_budget_reporter_unit.py
-**Tasks:**
-1. Import reporter module and dependencies
-2. Create fixtures for metrics data
-3. Implement 22 unit tests covering all methods
-4. Test ASCII formatting and table generation
-5. Verify report output formatting
+**Known Risk**: File I/O test flakiness
+- **Prevention**: Use pytest's tmp_path fixture
+- **Pattern**: Never write to actual directories, always use temp
 
-### Step 3: Create test_context_budget_token_counter_unit.py
-**Tasks:**
-1. Import token_counter module
-2. Mock tiktoken for availability/unavailability tests
-3. Implement 18 unit tests
-4. Create temp files for file counting tests
-5. Verify fallback heuristic accuracy
+**Known Risk**: Datetime mocking complexity
+- **Prevention**: Use patch decorator for datetime
+- **Pattern**: Mock at function call site, not module level
 
-### Step 4: Validation
-**Tasks:**
-1. Run full test suite: `pytest tests/test_context_budget_*.py -v`
-2. Verify 100% pass rate
-3. Check coverage: `pytest --cov=tools/context_budget tests/test_context_budget_*.py`
-4. Ensure >90% coverage achieved
-5. Run existing tests to ensure no regressions
+## Success Validation
 
-## Success Criteria
-
-### Functional Requirements
-- [x] All 68 tests implement correctly
-- [x] All tests pass (100% pass rate)
-- [x] Coverage >90% for monitor.py, report.py, token_counter.py
-- [x] No regressions in existing tests
-- [x] Execution time < 5 seconds
-
-### Code Quality Requirements
-- [x] Clear, descriptive test names
-- [x] Comprehensive docstrings
-- [x] Proper fixture usage
-- [x] No code duplication (use fixtures/helpers)
-- [x] Follow existing test conventions
-
-### Documentation Requirements
-- [x] Each test has docstring explaining what it tests
-- [x] Fixtures are documented
-- [x] Complex assertions have explanatory comments
-- [x] Module-level docstring explains test scope
+After implementation:
+1. Run `pytest tests/test_mcp_server_helpers.py -v` - all pass
+2. Run coverage: `pytest tests/test_mcp_server_helpers.py --cov=tools.mcp_server --cov-branch`
+3. Verify >80% coverage for helper functions
+4. Ensure no test takes >1 second individually
+5. Verify all edge cases covered

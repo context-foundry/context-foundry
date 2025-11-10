@@ -1,170 +1,138 @@
-# Scout Report: Test Coverage Analysis for Context Foundry Tools
+# Scout Report: Add Tests for tools/mcp_server.py
 
 ## Executive Summary
 
-Analysis of the `tools/` directory revealed significant gaps in test coverage for critical path modules, particularly in the **context budget monitoring system**. While the project has 52 test files covering many modules, several critical components lack comprehensive test coverage:
+GitHub Issue #86 requests test coverage for `tools/mcp_server.py`. Analysis reveals that while comprehensive integration tests exist (test_mcp_server_comprehensive.py, test_mcp_server_critical_paths.py, test_mcp_server_integration.py), **critical helper functions lack unit test coverage**:
 
-### High Priority Gaps (Critical Paths):
-1. **context_budget/monitor.py** - Core monitoring logic (NO TESTS)
-2. **context_budget/report.py** - Report generation (NO TESTS)
-3. **context_budget/token_counter.py** - Token counting utilities (NO TESTS)
-4. **cli.py** - Main CLI entry point (NO TESTS)
-5. **use_baml.py** - BAML integration CLI (NO TESTS)
-6. **tui_monitor.py** - TUI entry point (NO TESTS)
+**Untested Functions:**
+- `_read_phase_info()` - Phase tracking file reader with staleness validation
+- `_truncate_output()` - Large output truncation with token limits
+- `_get_context_foundry_parent_dir()` - Path resolution utility
+- `_write_delegation_metadata()` - Delegation metadata persistence
+- `_write_full_output_to_file()` - Full output file writer
+- `_create_output_summary()` - Output summarization utility
 
-### Coverage Status:
-- **Total Python modules in tools/**: ~80 modules
-- **Test files**: 52 test files
-- **Coverage estimate**: ~65% (missing critical path coverage)
-- **Risk**: HIGH - Core functionality lacks validation
+These are **testable, pure functions** with clear inputs/outputs - ideal candidates for unit testing.
+
+## Task Requirements
+
+1. **Create unit tests** for the 6 untested helper functions
+2. **Achieve >80% coverage** for helper function code paths
+3. **Follow existing test patterns** from test_mcp_server_comprehensive.py
+4. **Mock FastMCP properly** (required for import)
+5. **Test edge cases**: empty inputs, invalid JSON, file I/O errors, staleness checks
 
 ## Technology Stack
+
 - **Testing Framework**: pytest (already in use)
-- **Mocking**: unittest.mock
-- **Temp directories**: tempfile, pytest fixtures
-- **Token counting**: tiktoken (with fallback)
-- **Coverage analysis**: pytest-cov (optional but recommended)
+- **Mocking**: unittest.mock (existing pattern)
+- **Coverage**: pytest-cov (existing)
+- **Dependencies**: FastMCP mocking required (pattern established)
 
-## Critical Architecture Recommendations
+## Key Implementation Details
 
-### 1. Context Budget Module Tests (HIGHEST PRIORITY)
-The context budget system is a **critical performance feature** that monitors token usage and prevents degraded model performance. This needs comprehensive testing:
+### 1. Test File Location
+Create: `tests/test_mcp_server_helpers.py` (follows naming convention)
 
-**Required Test Coverage:**
-- `ContextBudgetMonitor` class:
-  - Budget allocation calculations
-  - Zone detection (SMART/DUMB/CRITICAL)
-  - Phase analysis and warnings
-  - Historical tracking
-  - Export to session summary format
-- `ContextBudgetReporter` class:
-  - Report generation (text, JSON, markdown)
-  - Phase table formatting
-  - ASCII visualization
-  - Optimization suggestions
-- `TokenCounter` class:
-  - Token estimation (with/without tiktoken)
-  - File token counting
-  - Directory token counting
-  - Message token counting
-  - Fallback heuristics
-
-**Why Critical:**
-- Controls build quality and performance
-- Prevents "dumb zone" degradation (40-80% context)
-- Generates reports for user feedback
-- No existing tests = high regression risk
-
-### 2. CLI Entry Points Tests
-- `cli.py` - Main Context Foundry entry point
-- `use_baml.py` - BAML integration CLI
-- `tui_monitor.py` - TUI launcher
-
-**Testing Requirements:**
-- Argument parsing
-- Error handling (missing deps, wrong Python version)
-- Graceful degradation
-- Exit codes
-
-### 3. Testing Approach
-
-**Unit Tests (Isolated):**
-- Test each class method independently
-- Mock external dependencies (file I/O, tiktoken)
-- Verify calculation accuracy
-- Test edge cases and error handling
-
-**Integration Tests:**
-- Test full workflow (monitor → analyze → report)
-- Test with real session-summary.json data
-- Verify report formatting
-- Test CLI commands end-to-end
-
-**Test Data:**
-- Create fixtures with sample phase data
-- Mock session-summary.json structures
-- Test with/without tiktoken available
-- Test boundary conditions (0%, 40%, 80%, 100% usage)
-
-## Main Challenges and Mitigations
-
-### Challenge 1: Tiktoken Optional Dependency
-**Issue:** TokenCounter has fallback logic when tiktoken is unavailable
-**Mitigation:**
-- Test both code paths (with and without tiktoken)
-- Mock tiktoken import failure scenarios
-- Verify fallback heuristic accuracy
-
-### Challenge 2: Session Summary Integration
-**Issue:** Monitor exports to session-summary.json format
-**Mitigation:**
-- Create comprehensive fixtures
-- Validate JSON structure against actual outputs
-- Test deserialization and serialization
-
-### Challenge 3: CLI Testing
-**Issue:** CLI tools need argument parsing and error handling tests
-**Mitigation:**
-- Use `subprocess` or mock `sys.argv`
-- Capture stdout/stderr
-- Test exit codes
-- Mock missing dependencies
-
-## Testing Plan
-
-### Phase 1: Context Budget Core (Priority 1)
+### 2. FastMCP Mock Pattern (Critical)
+Must mock FastMCP before importing mcp_server:
 ```python
-tests/test_context_budget_monitor_unit.py
-tests/test_context_budget_reporter_unit.py
-tests/test_context_budget_token_counter_unit.py
+class MockFastMCP:
+    def tool(self, *args, **kwargs):
+        def decorator(func): return func
+        return decorator if not args or callable(args[0]) else decorator
 ```
 
-**Coverage Target:** 90%+ for critical logic
+### 3. Test Coverage Requirements
 
-**Test Count Estimate:** 60-80 tests
-- Monitor: 25-30 tests
-- Reporter: 20-25 tests
-- TokenCounter: 15-20 tests
+**_read_phase_info()** - 6 test cases:
+- Valid phase file exists and is fresh
+- Phase file doesn't exist (returns {})
+- Phase file has invalid JSON (returns {})
+- Phase file is stale (modified before task start)
+- Phase file has permission error
+- Phase file exists but no task_start_time provided
 
-### Phase 2: CLI Tools (Priority 2)
-```python
-tests/test_cli_unit.py
-tests/test_use_baml_unit.py
-tests/test_tui_monitor_unit.py
-```
+**_truncate_output()** - 5 test cases:
+- Small output (no truncation needed)
+- Large output requiring truncation
+- Empty string input
+- Exact boundary case (at max_tokens limit)
+- Custom max_tokens parameter
 
-**Coverage Target:** 80%+ (focus on error paths)
+**_get_context_foundry_parent_dir()** - 2 test cases:
+- Returns parent of context-foundry directory
+- Verify path resolution is correct
 
-**Test Count Estimate:** 20-25 tests
+**_write_delegation_metadata()** - 3 test cases:
+- Successful write to shared directory
+- Directory creation if not exists
+- Handle write errors gracefully
 
-### Phase 3: Integration Tests
-```python
-tests/test_context_budget_integration.py
-```
+**_write_full_output_to_file()** - 4 test cases:
+- Successful file write with stdout/stderr
+- Directory creation
+- Encoding handling (UTF-8)
+- Handle write errors
 
-**Coverage Target:** Full workflow validation
+**_create_output_summary()** - 4 test cases:
+- Output under max_lines (no truncation)
+- Output over max_lines (truncation)
+- Empty output
+- Custom max_lines parameter
 
-**Test Count Estimate:** 10-15 tests
+### 4. Challenges & Mitigations
 
-## Timeline Estimate
-- **Phase 1 (Context Budget):** 90-120 minutes
-- **Phase 2 (CLI Tools):** 30-45 minutes
-- **Phase 3 (Integration):** 30 minutes
-- **Total:** ~3 hours
+**Challenge 1**: File I/O testing
+- **Mitigation**: Use pytest's tmp_path fixture (established pattern)
+
+**Challenge 2**: FastMCP import dependency
+- **Mitigation**: Use existing mock pattern from test_mcp_server_comprehensive.py
+
+**Challenge 3**: Path resolution testing
+- **Mitigation**: Use __file__ inspection and Path.resolve()
+
+**Challenge 4**: Staleness validation for _read_phase_info
+- **Mitigation**: Mock datetime and file mtime
+
+## Testing Approach
+
+1. **Unit tests only** - No integration testing needed (already exists)
+2. **Isolated function testing** - Each helper tested independently
+3. **Edge case focus** - Invalid inputs, errors, boundary conditions
+4. **Fast execution** - All tests should complete in <2 seconds total
+5. **No external dependencies** - Use mocks and fixtures
 
 ## Success Criteria
-- [ ] All critical path modules have >85% test coverage
-- [ ] All tests pass (100% pass rate)
-- [ ] No regressions in existing tests
-- [ ] Tests run in < 30 seconds total
-- [ ] Clear, maintainable test code with good documentation
 
-## Risk Mitigation from Pattern Library
-N/A - This is internal testing infrastructure, no external dependencies or CORS/browser issues apply.
+✅ All 6 helper functions have comprehensive unit tests
+✅ Test coverage >80% for helper function code
+✅ All tests pass with pytest
+✅ Tests follow existing conventions
+✅ Edge cases properly handled
+✅ Mock patterns consistent with existing tests
 
-## Known Issues to Watch For
-1. **Tiktoken availability:** Must test both import paths
-2. **File I/O:** Use temp directories for all file operations
-3. **JSON formatting:** Validate exact structure matches production
-4. **Timezone handling:** Ensure timestamps are consistent
-5. **Division by zero:** Test with 0 tokens edge cases
+## Timeline Estimate
+
+- Test implementation: 1-2 hours
+- Coverage validation: 15 minutes
+- **Total: 2 hours maximum**
+
+## Risk Assessment
+
+**LOW RISK** - Well-defined scope, established patterns, pure functions with clear contracts.
+
+**Potential Issues:**
+- None identified - straightforward unit testing task
+
+## Environment Checklist - GitHub Deployment
+
+Checking deployment environment...
+
+- [✅] GitHub CLI (gh) installed: Available
+- [✅] GitHub authentication: Authenticated
+- [✅] Git user configured: Configured
+
+**Deployment Status:** ✅ Ready for GitHub deployment
+
+Note: This is an existing_repo mode task, so PR will be created against the main branch.

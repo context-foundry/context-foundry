@@ -1,10 +1,90 @@
+2025-11-09T19:24:12.943 [BAML WARN] Function CreatePhaseInfo:
+    Client: GPT4oMini (gpt-4o-mini-2024-07-18) - 7525ms. StopReason: stop. Tokens(in/out): 78/312
+    ---PROMPT---
+    system: Create phase tracking information for Context Foundry build:
+    
+    Session ID: sandbox_f80e2a9b
+    Current Phase: Deploy
+    Status: deploying
+    Progress Detail: Creating PR for GitHub
+    Test Iteration: 1
+    
+    Generate a complete PhaseInfo object with appropriate timestamps and phase completion tracking.
+    
+    Return as structured data matching the PhaseInfo schema.
+    
+    ---LLM REPLY---
+    ```json
+    {
+      "sessionId": "sandbox_f80e2a9b",
+      "currentPhase": {
+        "name": "Deploy",
+        "status": "deploying",
+        "progressDetail": "Creating PR for GitHub",
+        "startTime": "2023-10-01T12:00:00Z",
+        "endTime": null,
+        "completionPercentage": 25,
+        "testIteration": 1,
+        "timestamp": "2023-10-01T12:05:00Z"
+      },
+      "phaseHistory": [
+        {
+          "phase": "Build",
+          "status": "completed",
+          "startTime": "2023-10-01T11:00:00Z",
+          "endTime": "2023-10-01T11:30:00Z",
+          "completionPercentage": 100
+        },
+        {
+          "phase": "Test",
+          "status": "completed",
+          "startTime": "2023-10-01T11:30:00Z",
+          "endTime": "2023-10-01T11:50:00Z",
+          "completionPercentage": 100
+        },
+        {
+          "phase": "Deploy",
+          "status": "deploying",
+          "startTime": "2023-10-01T12:00:00Z",
+          "endTime": null,
+          "completionPercentage": 25
+        }
+      ]
+    }
+    ```
 {
-  "current_phase": "Test",
-  "phase_number": "4/7",
-  "status": "testing",
-  "progress_detail": "Running comprehensive test suite",
-  "test_iteration": 1,
-  "phases_completed": ["Scout", "Architect", "Builder"],
-  "started_at": "2025-01-13T00:00:00Z",
-  "last_updated": "2025-01-13T00:03:00Z"
+  "sessionId": "sandbox_f80e2a9b",
+  "currentPhase": {
+    "name": "Deploy",
+    "status": "deploying",
+    "progressDetail": "Creating PR for GitHub",
+    "startTime": "2023-10-01T12:00:00Z",
+    "endTime": null,
+    "completionPercentage": 25,
+    "testIteration": 1,
+    "timestamp": "2023-10-01T12:05:00Z"
+  },
+  "phaseHistory": [
+    {
+      "phase": "Build",
+      "status": "completed",
+      "startTime": "2023-10-01T11:00:00Z",
+      "endTime": "2023-10-01T11:30:00Z",
+      "completionPercentage": 100
+    },
+    {
+      "phase": "Test",
+      "status": "completed",
+      "startTime": "2023-10-01T11:30:00Z",
+      "endTime": "2023-10-01T11:50:00Z",
+      "completionPercentage": 100
+    },
+    {
+      "phase": "Deploy",
+      "status": "deploying",
+      "startTime": "2023-10-01T12:00:00Z",
+      "endTime": null,
+      "completionPercentage": 25
+    }
+  ]
 }
