@@ -1,5 +1,7 @@
 """Self-Improvement Mode - Analyze CF codebase and generate improvement tasks"""
 
+import json
+import logging
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Tuple
@@ -8,6 +10,8 @@ from .base_mode import BaseEvolutionMode, TaskResult
 from ..mcp_support import get_mcp_capabilities
 from ..sandboxes import SandboxManager
 from ..safety import enforce_sandbox_mode, set_sandbox_mode
+
+logger = logging.getLogger(__name__)
 
 
 class SelfImprovementMode(BaseEvolutionMode):
@@ -140,14 +144,14 @@ This is an autonomous self-improvement task from the Evolution System."""
                 prompt = params.get("description", "Improve Context Foundry")
 
             # Delegate to Context Foundry via Claude CLI
-            print("🤖 Delegating to Context Foundry via Claude CLI...")
+            logger.info("🤖 Delegating to Context Foundry via Claude CLI...")
             result = self._delegate_to_context_foundry(prompt, branch_name)
 
             if result.get("success"):
                 # DO NOT queue next task immediately - wait for daemon to detect PR merge
                 # This ensures only 1 PR at a time
-                print("✅ Task completed! PR will be created by Claude.")
-                print("⏸️  Waiting for human review before continuing...")
+                logger.info("✅ Task completed! PR will be created by Claude.")
+                logger.info("⏸️  Waiting for human review before continuing...")
 
                 return TaskResult(success=True, output=result.get("output", {}))
             else:
@@ -271,8 +275,8 @@ This is an autonomous self-improvement task from the Evolution System."""
 
                     # Skip protected files (critical infrastructure that requires manual review)
                     if self._is_protected_file(file_path):
-                        print(f"⏭️  Skipping TODO in protected file: {file_path}")
-                        print("   Protected files require manual review for changes")
+                        logger.info(f"⏭️  Skipping TODO in protected file: {file_path}")
+                        logger.info("   Protected files require manual review for changes")
                         continue
 
                     # Calculate priority and category using intelligent analysis
@@ -521,7 +525,7 @@ This is an autonomous self-improvement task from the Evolution System."""
             task_id = getattr(self, "current_task_id", "unknown")
 
             # 🏗️ CREATE ISOLATED SANDBOX (protects production!)
-            print("🏗️  Creating isolated sandbox for autonomous build...")
+            logger.info("🏗️  Creating isolated sandbox for autonomous build...")
             manager = SandboxManager()
             sandbox_path = manager.create_sandbox(
                 repo_url="https://github.com/context-foundry/context-foundry.git",
@@ -532,11 +536,11 @@ This is an autonomous self-improvement task from the Evolution System."""
             enforce_sandbox_mode(sandbox_path, "autonomous build")
             set_sandbox_mode(sandbox_path)
 
-            print(f"✅ Sandbox created: {sandbox_path}")
-            print("   Production directory protected: ✅")
-            print("🤖 Calling Context Foundry MCP autonomous_build_and_deploy()...")
-            print(f"   Task: {prompt[:100]}...")
-            print(f"   Branch: {branch_name}")
+            logger.info(f"✅ Sandbox created: {sandbox_path}")
+            logger.info("   Production directory protected: ✅")
+            logger.info("🤖 Calling Context Foundry MCP autonomous_build_and_deploy()...")
+            logger.info(f"   Task: {prompt[:100]}...")
+            logger.info(f"   Branch: {branch_name}")
 
             # Call MCP implementation function directly (non-blocking, returns task_id immediately)
             # NOTE: Sandbox cleanup is deferred to delegation monitor when MCP process completes
@@ -558,10 +562,10 @@ This is an autonomous self-improvement task from the Evolution System."""
             result = json.loads(result_json)
             mcp_task_id = result.get("task_id")
 
-            print("✅ MCP task started!")
-            print(f"   MCP Task ID: {mcp_task_id}")
-            print(f"   Status: {result.get('status')}")
-            print(f"   Monitor progress: get_delegation_result('{mcp_task_id}')")
+            logger.info("✅ MCP task started!")
+            logger.info(f"   MCP Task ID: {mcp_task_id}")
+            logger.info(f"   Status: {result.get('status')}")
+            logger.info(f"   Monitor progress: get_delegation_result('{mcp_task_id}')")
 
             return {
                 "success": True,
@@ -577,8 +581,5 @@ This is an autonomous self-improvement task from the Evolution System."""
             }
 
         except Exception as e:
-            print(f"❌ Failed to call MCP autonomous_build_and_deploy: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error(f"❌ Failed to call MCP autonomous_build_and_deploy: {e}", exc_info=True)
             return {"success": False, "error": f"Failed to call MCP: {e}"}

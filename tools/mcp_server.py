@@ -833,6 +833,8 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 "exit_code": process.returncode,
                 "timeout_minutes": task_info["timeout_minutes"],
                 "output_file": output_file_path,
+                "sandbox_path": task_info.get("sandbox_path"),  # For sandbox cleanup
+                "sandbox_task_id": task_info.get("sandbox_task_id"),  # For sandbox cleanup
             }
 
             # Add phase information if available
@@ -2096,20 +2098,24 @@ def _autonomous_build_and_deploy_impl(
         # ═══════════════════════════════════════════════════════════════════════
         # SANDBOX SAFETY: Enforce sandbox-only execution for Evolution System
         # ═══════════════════════════════════════════════════════════════════════
-        # This prevents autonomous builds from modifying production code
-        try:
-            enforce_sandbox_mode(final_working_dir, "autonomous build")
-            print(f"✅ Sandbox safety check passed: {final_working_dir}", file=sys.stderr)
-        except (PermissionError, RuntimeError) as e:
-            # Safety violation - reject the request
-            return json.dumps(
-                {
-                    "error": str(e),
-                    "working_directory": final_working_dir_str,
-                    "safety_check": "failed",
-                },
-                indent=2,
-            )
+        # Only enforce sandbox mode when sandbox_path is provided (Evolution System builds).
+        # Manual builds from Mission Control or CLI are allowed in any directory.
+        if sandbox_path:
+            try:
+                enforce_sandbox_mode(final_working_dir, "autonomous build")
+                print(
+                    f"✅ Sandbox safety check passed: {final_working_dir}", file=sys.stderr
+                )
+            except (PermissionError, RuntimeError) as e:
+                # Safety violation - reject the request
+                return json.dumps(
+                    {
+                        "error": str(e),
+                        "working_directory": final_working_dir_str,
+                        "safety_check": "failed",
+                    },
+                    indent=2,
+                )
 
         # Validate/create working directory
         if not final_working_dir.exists():

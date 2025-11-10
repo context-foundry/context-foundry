@@ -99,34 +99,67 @@ class SandboxManager:
             return self.active_sandboxes[task_id]["path"]
         return None
 
-    def cleanup_sandbox(self, task_id: str) -> bool:
+    def cleanup_sandbox(self, task_id: str = None, sandbox_path: Path = None) -> bool:
         """
         Remove sandbox and free disk space
 
+        Can cleanup by task_id (if sandbox was created by this instance) or by
+        direct path (for cleanup across different SandboxManager instances).
+
         Args:
-            task_id: Task identifier
+            task_id: Task identifier (optional if sandbox_path provided)
+            sandbox_path: Direct path to sandbox (optional if task_id provided)
 
         Returns:
             True if cleaned up successfully
         """
-        if task_id not in self.active_sandboxes:
-            logger.warning(f"Sandbox cleanup requested for unknown task {task_id[:8]}")
-            return False
+        if task_id and task_id in self.active_sandboxes:
+            # Cleanup from active_sandboxes (sandbox created by this instance)
+            sandbox_path = self.active_sandboxes[task_id]["path"]
+            logger.info(f"🧹 Cleaning up sandbox for task {task_id[:8]}: {sandbox_path}")
 
-        sandbox_path = self.active_sandboxes[task_id]["path"]
-        logger.info(f"🧹 Cleaning up sandbox for task {task_id[:8]}: {sandbox_path}")
+            try:
+                if sandbox_path.exists():
+                    shutil.rmtree(sandbox_path)
+                    logger.info(f"✅ Sandbox directory removed: {sandbox_path}")
 
-        try:
-            if sandbox_path.exists():
-                shutil.rmtree(sandbox_path)
-                logger.info(f"✅ Sandbox directory removed: {sandbox_path}")
+                del self.active_sandboxes[task_id]
+                logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
+                return True
 
-            del self.active_sandboxes[task_id]
-            logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
-            return True
+            except Exception as e:
+                logger.error(f"❌ Failed to cleanup sandbox {task_id[:8]}: {e}")
+                return False
 
-        except Exception as e:
-            logger.error(f"❌ Failed to cleanup sandbox {task_id[:8]}: {e}")
+        elif sandbox_path:
+            # Direct path cleanup (for cross-instance cleanup)
+            sandbox_path = Path(sandbox_path)
+
+            # Verify it's a sandbox path for safety
+            if not sandbox_path.name.startswith("sandbox_"):
+                logger.error(f"❌ Refusing to delete non-sandbox path: {sandbox_path}")
+                return False
+
+            if not str(sandbox_path.resolve()).startswith(str(self.base_dir.resolve())):
+                logger.error(f"❌ Refusing to delete path outside sandbox base: {sandbox_path}")
+                return False
+
+            logger.info(f"🧹 Cleaning up sandbox by path: {sandbox_path}")
+
+            try:
+                if sandbox_path.exists():
+                    shutil.rmtree(sandbox_path)
+                    logger.info(f"✅ Sandbox directory removed: {sandbox_path}")
+                    return True
+                else:
+                    logger.warning(f"Sandbox path does not exist: {sandbox_path}")
+                    return False
+
+            except Exception as e:
+                logger.error(f"❌ Failed to cleanup sandbox at {sandbox_path}: {e}")
+                return False
+        else:
+            logger.error("cleanup_sandbox() requires either task_id or sandbox_path")
             return False
 
     def cleanup_old_sandboxes(self, max_age_hours: int = 24) -> int:
@@ -142,7 +175,6 @@ class SandboxManager:
         Returns:
             Number of sandboxes cleaned up
         """
-        from datetime import timedelta
         import time
 
         if not self.base_dir.exists():
@@ -176,7 +208,9 @@ class SandboxManager:
 
             except Exception as e:
                 # Log but continue with other sandboxes
-                logger.warning(f"Failed to check/cleanup sandbox {sandbox_dir.name}: {e}")
+                logger.warning(
+                    f"Failed to check/cleanup sandbox {sandbox_dir.name}: {e}"
+                )
 
         return cleaned_count
 

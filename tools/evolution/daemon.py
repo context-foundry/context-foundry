@@ -1179,7 +1179,7 @@ class EvolutionDaemon:
 
             current_time = time.time()
             # Check hourly (3600 seconds)
-            if not hasattr(self, 'last_sandbox_cleanup'):
+            if not hasattr(self, "last_sandbox_cleanup"):
                 self.last_sandbox_cleanup = 0
 
             if current_time - self.last_sandbox_cleanup < 3600:

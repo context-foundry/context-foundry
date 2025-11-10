@@ -127,15 +127,20 @@ class DelegationMode(BaseEvolutionMode):
 
                                 # Cleanup sandbox if this was a sandboxed build
                                 sandbox_path = metadata.get("sandbox_path")
-                                sandbox_task_id = metadata.get("sandbox_task_id")
-                                if sandbox_path and sandbox_task_id:
+                                if sandbox_path:
                                     try:
-                                        logger.info(f"🧹 Cleaning up sandbox: {sandbox_path}")
+                                        logger.info(
+                                            f"🧹 Cleaning up sandbox: {sandbox_path}"
+                                        )
                                         manager = SandboxManager()
-                                        manager.cleanup_sandbox(sandbox_task_id)
-                                        logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
+                                        manager.cleanup_sandbox(sandbox_path=Path(sandbox_path))
+                                        logger.info(
+                                            f"✅ Sandbox cleanup complete for task {task_id[:8]}"
+                                        )
                                     except Exception as e:
-                                        logger.error(f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}")
+                                        logger.error(
+                                            f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}"
+                                        )
 
                         except Exception as e:
                             logger.debug(
@@ -248,15 +253,18 @@ class DelegationMode(BaseEvolutionMode):
 
                 # Cleanup sandbox if this was a sandboxed build
                 sandbox_path = metadata.get("sandbox_path")
-                sandbox_task_id = metadata.get("sandbox_task_id")
-                if sandbox_path and sandbox_task_id:
+                if sandbox_path:
                     try:
                         logger.info(f"🧹 Cleaning up sandbox: {sandbox_path}")
                         manager = SandboxManager()
-                        manager.cleanup_sandbox(sandbox_task_id)
-                        logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
+                        manager.cleanup_sandbox(sandbox_path=Path(sandbox_path))
+                        logger.info(
+                            f"✅ Sandbox cleanup complete for task {task_id[:8]}"
+                        )
                     except Exception as e:
-                        logger.error(f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}")
+                        logger.error(
+                            f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}"
+                        )
 
                 return metadata
 
