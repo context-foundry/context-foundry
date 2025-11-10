@@ -649,18 +649,58 @@ class EvolutionDaemon:
                 # RACE CONDITION FIX: Don't pick up new tasks if there are RUNNING tasks
                 # Running tasks are being executed by background Claude processes
                 # We must wait for them to complete (PR created) before starting new ones
+                #
+                # EXCEPTION: Allow delegation monitoring tasks (delegation_build, delegation_deploy,
+                # delegation_test) to run concurrently since they just monitor and cleanup
+                delegation_task = None
                 if running_count > 0:
-                    self.logger.info(
-                        f"⏸️  Waiting for {running_count} running task(s) to complete before picking up new work"
+                    # When there are RUNNING tasks, only pick up delegation monitoring tasks
+                    # These are lightweight tasks that just monitor process status and cleanup
+                    pending_tasks = self.task_queue.list_tasks(
+                        status=TaskStatus.PENDING.value
                     )
-                    self._interruptible_sleep(poll_interval)
-                    continue
+                    delegation_tasks = [
+                        t
+                        for t in pending_tasks
+                        if t.type
+                        in [
+                            TaskType.DELEGATION_BUILD.value,
+                            TaskType.DELEGATION_DEPLOY.value,
+                            TaskType.DELEGATION_TEST.value,
+                        ]
+                    ]
 
-                # Get next task
-                task = self.task_queue.get_next_task()
+                    if not delegation_tasks:
+                        # No delegation tasks - wait for running tasks to complete
+                        self.logger.info(
+                            f"⏸️  Waiting for {running_count} running task(s) to complete before picking up new work"
+                        )
+                        self._interruptible_sleep(poll_interval)
+                        continue
+                    else:
+                        # Pick the highest priority delegation task
+                        delegation_task = max(
+                            delegation_tasks, key=lambda t: t.priority
+                        )
+                        self.logger.info(
+                            f"📋 Picking up delegation task {delegation_task.id} (type: {delegation_task.type}) "
+                            f"despite {running_count} running task(s)"
+                        )
+                        # Mark it as running
+                        self.task_queue.update_task_status(
+                            delegation_task.id, TaskStatus.RUNNING.value
+                        )
+                        task = delegation_task
+                else:
+                    # No running tasks - pick up next task normally
+                    task = self.task_queue.get_next_task()
 
                 if task:
-                    self.logger.info(f"Picked up task: {task.id} (type: {task.type})")
+                    # Only log if it wasn't already logged above (for delegation tasks)
+                    if not delegation_task:
+                        self.logger.info(
+                            f"Picked up task: {task.id} (type: {task.type})"
+                        )
                     self._execute_task(task)
                 else:
                     # Queue is empty - generate a new improvement task to keep the loop going
