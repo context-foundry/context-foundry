@@ -72,10 +72,7 @@ if [ -z "$DAEMON_PID" ]; then
 else
     echo -e "  ${GRAY}TL;DR: Backlog $ISSUE_COUNT/20 | Approved: $APPROVED | Open PRs: $OPEN_PRS | Working: $([ -n "$CLAUDE_WORKING" ] && echo "Yes" || echo "No")${NC}"
 fi
-
-echo ""
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
 
 # 1. CLAUDE INSTANCES
 echo -e "${CYAN}CLAUDE INSTANCES${NC}"
@@ -123,7 +120,65 @@ else
 fi
 echo ""
 
-# 3. MCP DELEGATION STATUS
+# 3. OPEN PULL REQUESTS
+echo -e "${CYAN}OPEN PULL REQUESTS${NC}"
+echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cd /Users/name/homelab/context-foundry 2>/dev/null
+PRS=$(gh pr list --state open --json number,title --limit 3 2>/dev/null)
+PR_COUNT=$(echo "$PRS" | jq '. | length' 2>/dev/null)
+if [ "$PR_COUNT" = "0" ] || [ -z "$PR_COUNT" ]; then
+    echo -e "  ${GRAY}No open PRs${NC}"
+else
+    echo "$PRS" | jq -r '.[] | "\(.number)|\(.title)"' 2>/dev/null | while IFS='|' read num title; do
+        echo -e "  ${YELLOW}PR #$num:${NC} $title"
+    done
+fi
+echo ""
+
+# 4. GIT STATUS
+echo -e "${CYAN}GIT STATUS${NC} ${GRAY}[M=Modified, A=Added, D=Deleted, ??=Untracked]${NC}"
+echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cd /Users/name/homelab/context-foundry 2>/dev/null
+GIT_STATUS=$(git status --short 2>/dev/null)
+if [ -z "$GIT_STATUS" ]; then
+    echo -e "  ${GREEN}Working tree clean${NC}"
+else
+    echo "$GIT_STATUS" | head -10 | while read line; do
+        if [[ $line =~ ^M ]]; then
+            echo -e "  ${YELLOW}$line${NC}"
+        elif [[ $line =~ ^\?\? ]]; then
+            echo -e "  ${GRAY}$line${NC}"
+        elif [[ $line =~ ^D ]]; then
+            echo -e "  ${RED}$line${NC}"
+        else
+            echo -e "  ${GREEN}$line${NC}"
+        fi
+    done
+    COUNT=$(echo "$GIT_STATUS" | wc -l | tr -d ' ')
+    if [ "$COUNT" -gt 10 ]; then
+        echo -e "  ${GRAY}... and $((COUNT - 10)) more files${NC}"
+    fi
+fi
+echo ""
+
+# 5. RECENT FILE CHANGES
+echo -e "${CYAN}RECENT FILE CHANGES${NC} ${GRAY}(last 60 seconds)${NC}"
+echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+RECENT=$(find . -type f -mmin -1 -not -path "*/.git/*" -not -path "*/.pytest_cache/*" -not -path "*/node_modules/*" 2>/dev/null)
+if [ -z "$RECENT" ]; then
+    echo -e "  ${GRAY}No recent changes${NC}"
+else
+    echo "$RECENT" | head -5 | while read file; do
+        echo -e "  ${YELLOW}✏${NC}  $file"
+    done
+    COUNT=$(echo "$RECENT" | wc -l | tr -d ' ')
+    if [ "$COUNT" -gt 5 ]; then
+        echo -e "  ${GRAY}... and $((COUNT - 5)) more files${NC}"
+    fi
+fi
+echo ""
+
+# 6. MCP DELEGATION STATUS
 echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
@@ -174,7 +229,7 @@ else
 fi
 echo ""
 
-# 4. ACTIVE NETWORK CONNECTIONS (for Claude processes)
+# 7. NETWORK ACTIVITY
 echo -e "${CYAN}NETWORK ACTIVITY${NC}"
 echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
@@ -198,64 +253,6 @@ else
         else
             echo -e "  ${GRAY}Claude (PID $pid) idle (no active connections)${NC}"
         fi
-    done
-fi
-echo ""
-
-# 4. RECENT FILE CHANGES
-echo -e "${CYAN}RECENT FILE CHANGES${NC} ${GRAY}(last 60 seconds)${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-RECENT=$(find . -type f -mmin -1 -not -path "*/.git/*" -not -path "*/.pytest_cache/*" -not -path "*/node_modules/*" 2>/dev/null)
-if [ -z "$RECENT" ]; then
-    echo -e "  ${GRAY}No recent changes${NC}"
-else
-    echo "$RECENT" | head -5 | while read file; do
-        echo -e "  ${YELLOW}✏${NC}  $file"
-    done
-    COUNT=$(echo "$RECENT" | wc -l | tr -d ' ')
-    if [ "$COUNT" -gt 5 ]; then
-        echo -e "  ${GRAY}... and $((COUNT - 5)) more files${NC}"
-    fi
-fi
-echo ""
-
-# 5. GIT STATUS
-echo -e "${CYAN}GIT STATUS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-cd /Users/name/homelab/context-foundry 2>/dev/null
-GIT_STATUS=$(git status --short 2>/dev/null)
-if [ -z "$GIT_STATUS" ]; then
-    echo -e "  ${GREEN}Working tree clean${NC}"
-else
-    echo "$GIT_STATUS" | head -10 | while read line; do
-        if [[ $line =~ ^M ]]; then
-            echo -e "  ${YELLOW}$line${NC}"
-        elif [[ $line =~ ^\?\? ]]; then
-            echo -e "  ${GRAY}$line${NC}"
-        elif [[ $line =~ ^D ]]; then
-            echo -e "  ${RED}$line${NC}"
-        else
-            echo -e "  ${GREEN}$line${NC}"
-        fi
-    done
-    COUNT=$(echo "$GIT_STATUS" | wc -l | tr -d ' ')
-    if [ "$COUNT" -gt 10 ]; then
-        echo -e "  ${GRAY}... and $((COUNT - 10)) more files${NC}"
-    fi
-fi
-echo ""
-
-# 6. OPEN PRS
-echo -e "${CYAN}OPEN PULL REQUESTS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-cd /Users/name/homelab/context-foundry 2>/dev/null
-PRS=$(gh pr list --state open --json number,title --limit 3 2>/dev/null)
-PR_COUNT=$(echo "$PRS" | jq '. | length' 2>/dev/null)
-if [ "$PR_COUNT" = "0" ] || [ -z "$PR_COUNT" ]; then
-    echo -e "  ${GRAY}No open PRs${NC}"
-else
-    echo "$PRS" | jq -r '.[] | "\(.number)|\(.title)"' 2>/dev/null | while IFS='|' read num title; do
-        echo -e "  ${YELLOW}PR #$num:${NC} $title"
     done
 fi
 echo ""

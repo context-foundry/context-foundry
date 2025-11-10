@@ -1779,6 +1779,17 @@ def check_daemon_status(
 
     Returns:
         Tuple of (is_running, pid, error_message)
+
+    Note:
+        In some shell environments (e.g., Homebrew-managed shells with restrictive
+        shellenv.sh), you may see "/bin/ps: Operation not permitted" errors printed
+        to stderr during shell initialization, even before Python runs. This is a
+        shell environment limitation, not a failure of this function.
+
+        Additionally, macOS security restrictions may cause os.kill(pid, 0) to
+        return errno 1 (EPERM) even for processes owned by the same user. This
+        function treats EPERM as "process exists" since the permission denial
+        itself confirms the process is running.
     """
     pid_file = Path.home() / ".context-foundry" / "evolution" / "daemon.pid"
 
@@ -1802,7 +1813,12 @@ def check_daemon_status(
             return False, None, f"Process {pid} not found"
         elif e.errno == 1:
             # Process exists but we don't have permission - still running
-            return True, pid, f"Process exists but permission denied (errno {e.errno})"
+            # This is common on macOS with security restrictions
+            return (
+                True,
+                pid,
+                "Process running (macOS denied signal permission - this is normal)",
+            )
         else:
             return False, None, f"os.kill error: {e} (errno {e.errno})"
     except Exception as e:
@@ -1825,7 +1841,9 @@ def main():
         "--verbose",
         "-v",
         action="store_true",
-        help="Verbose output (for status command)",
+        help="Verbose output (for status command). Note: In Homebrew-managed shells, "
+        "you may see '/bin/ps: Operation not permitted' errors from shellenv.sh - "
+        "these are harmless shell environment warnings, not daemon failures.",
     )
 
     args = parser.parse_args()

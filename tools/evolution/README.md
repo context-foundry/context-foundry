@@ -303,6 +303,32 @@ If not appearing:
 2. Verify MCP delegation status
 3. Check Claude CLI is installed: `which claude`
 
+### Status command shows permission errors
+
+**Symptom:** Running `python3 -m tools.evolution.daemon status` prints:
+```
+/bin/ps: Operation not permitted
+Daemon is running (PID: 73938)
+  Note: Process running (macOS denied signal permission - this is normal)
+```
+
+**Cause:** This occurs in Homebrew-managed shells where:
+1. Homebrew's `shellenv.sh` initialization script tries to run `/bin/ps` but lacks permission
+2. macOS security restrictions prevent signaling processes, even your own
+
+**Solution:** This is **expected behavior** in restricted shell environments. The command still works correctly - it reports the daemon status accurately. The permission errors are harmless warnings from shell initialization.
+
+**Workarounds:**
+```bash
+# Suppress stderr to hide the noise
+python3 -m tools.evolution.daemon status 2>/dev/null
+
+# Or use the verbose flag to see explanatory notes
+python3 -m tools.evolution.daemon status --verbose
+```
+
+The daemon itself runs fine; only the status check is noisy in these environments.
+
 ## Architecture
 
 ```
