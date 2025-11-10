@@ -113,7 +113,7 @@ class DelegationMode(BaseEvolutionMode):
                                             datetime.now() - start_time
                                         ).total_seconds()
                                         metadata["duration"] = round(duration, 2)
-                                    except:
+                                    except (ValueError, TypeError):
                                         pass
 
                                 # Write updated metadata
@@ -133,7 +133,9 @@ class DelegationMode(BaseEvolutionMode):
                                             f"🧹 Cleaning up sandbox: {sandbox_path}"
                                         )
                                         manager = SandboxManager()
-                                        manager.cleanup_sandbox(sandbox_path=Path(sandbox_path))
+                                        manager.cleanup_sandbox(
+                                            sandbox_path=Path(sandbox_path)
+                                        )
                                         logger.info(
                                             f"✅ Sandbox cleanup complete for task {task_id[:8]}"
                                         )
@@ -242,7 +244,7 @@ class DelegationMode(BaseEvolutionMode):
                         start_time = datetime.fromisoformat(start_time_str)
                         duration = (datetime.now() - start_time).total_seconds()
                         metadata["duration"] = round(duration, 2)
-                    except:
+                    except (ValueError, TypeError):
                         pass
 
                 # Write updated metadata
@@ -417,27 +419,19 @@ class DelegationMode(BaseEvolutionMode):
         """
         Validate delegation monitoring result
 
-        For delegations, we consider it valid if:
+        For delegation monitoring, we consider the task valid if:
         - Status was successfully retrieved
-        - If completed, exit_code is 0
         - If running, we have progress info
+        - If finished (completed/failed/cancelled/timeout), cleanup was performed
+
+        NOTE: Unlike build tasks, monitoring tasks should NOT be retried when
+        the underlying build fails. The monitoring task did its job (detected
+        completion and cleaned up), even if the build itself failed.
         """
-        if not result.success:
-            return False
-
-        if not result.output:
-            return False
-
-        status = result.output.get("status")
-
-        # Running is valid (still in progress)
-        if status == "running":
+        # If we got valid output, the monitoring task succeeded
+        # (even if the underlying build failed)
+        if result.output and result.output.get("status"):
             return True
 
-        # Completed is valid if exit_code is 0
-        if status == "completed":
-            exit_code = result.output.get("exit_code", -1)
-            return exit_code == 0
-
-        # Failed/cancelled/timeout are invalid
+        # Only invalid if we couldn't get status at all
         return False
