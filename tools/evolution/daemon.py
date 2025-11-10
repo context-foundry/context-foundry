@@ -584,6 +584,9 @@ class EvolutionDaemon:
                 # Uses lightweight Scout + Claude CLI (no MCP needed)
                 self._maintain_backlog()
 
+                # SANDBOX CLEANUP: Remove orphaned sandboxes (hourly)
+                self._cleanup_orphaned_sandboxes()
+
                 # HUMAN-IN-THE-LOOP: Check for open PRs FIRST
                 open_prs = self._check_open_prs()
 
@@ -1159,6 +1162,43 @@ class EvolutionDaemon:
 
         except Exception as e:
             self.logger.warning(f"Error maintaining backlog: {e}", exc_info=True)
+
+    def _cleanup_orphaned_sandboxes(self):
+        """
+        Clean up old sandboxes that haven't been used recently (24+ hours old).
+
+        This prevents /tmp from filling up with abandoned sandboxes from:
+        - Daemon crashes
+        - Process kills
+        - Failed cleanups
+
+        Runs hourly (3600 seconds).
+        """
+        try:
+            from .sandboxes import SandboxManager
+
+            current_time = time.time()
+            # Check hourly (3600 seconds)
+            if not hasattr(self, 'last_sandbox_cleanup'):
+                self.last_sandbox_cleanup = 0
+
+            if current_time - self.last_sandbox_cleanup < 3600:
+                return
+
+            self.last_sandbox_cleanup = current_time
+
+            self.logger.info("🧹 Running orphaned sandbox cleanup...")
+
+            manager = SandboxManager()
+            cleaned = manager.cleanup_old_sandboxes(max_age_hours=24)
+
+            if cleaned > 0:
+                self.logger.info(f"✅ Cleaned up {cleaned} orphaned sandbox(es)")
+            else:
+                self.logger.debug("No orphaned sandboxes found")
+
+        except Exception as e:
+            self.logger.warning(f"Error cleaning up sandboxes: {e}", exc_info=True)
 
     def _check_recently_closed_prs(self):
         """

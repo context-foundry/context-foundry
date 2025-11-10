@@ -5,11 +5,14 @@ Protects the Context Foundry repository by running all autonomous builds
 in temporary cloned sandboxes. Each build gets a fresh clone in /tmp.
 """
 
+import logging
 import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxManager:
@@ -44,6 +47,10 @@ class SandboxManager:
         sandbox_name = f"sandbox_{task_id[:8]}_{timestamp}"
         sandbox_path = self.base_dir / sandbox_name
 
+        logger.info(f"🏗️  Creating sandbox for task {task_id[:8]}")
+        logger.info(f"   Repository: {repo_url}")
+        logger.info(f"   Path: {sandbox_path}")
+
         try:
             # Clone repository
             result = subprocess.run(
@@ -54,6 +61,7 @@ class SandboxManager:
             )
 
             if result.returncode != 0:
+                logger.error(f"❌ Git clone failed for {task_id[:8]}: {result.stderr}")
                 raise RuntimeError(f"Git clone failed: {result.stderr}")
 
             # Track active sandbox
@@ -64,14 +72,17 @@ class SandboxManager:
                 "status": "active",
             }
 
+            logger.info(f"✅ Sandbox created successfully: {sandbox_path}")
             return sandbox_path
 
         except subprocess.TimeoutExpired:
+            logger.error(f"❌ Git clone timed out for {task_id[:8]} after 5 minutes")
             raise RuntimeError("Git clone timed out after 5 minutes")
         except Exception as e:
             # Cleanup on failure
             if sandbox_path.exists():
                 shutil.rmtree(sandbox_path, ignore_errors=True)
+            logger.error(f"❌ Failed to create sandbox for {task_id[:8]}: {e}")
             raise RuntimeError(f"Failed to create sandbox: {e}")
 
     def get_sandbox_path(self, task_id: str) -> Optional[Path]:
@@ -99,36 +110,75 @@ class SandboxManager:
             True if cleaned up successfully
         """
         if task_id not in self.active_sandboxes:
+            logger.warning(f"Sandbox cleanup requested for unknown task {task_id[:8]}")
             return False
 
         sandbox_path = self.active_sandboxes[task_id]["path"]
+        logger.info(f"🧹 Cleaning up sandbox for task {task_id[:8]}: {sandbox_path}")
 
         try:
             if sandbox_path.exists():
                 shutil.rmtree(sandbox_path)
+                logger.info(f"✅ Sandbox directory removed: {sandbox_path}")
 
             del self.active_sandboxes[task_id]
+            logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
             return True
 
         except Exception as e:
-            print(f"Warning: Failed to cleanup sandbox {task_id}: {e}")
+            logger.error(f"❌ Failed to cleanup sandbox {task_id[:8]}: {e}")
             return False
 
-    def cleanup_old_sandboxes(self, max_age_hours: int = 24):
+    def cleanup_old_sandboxes(self, max_age_hours: int = 24) -> int:
         """
         Remove sandboxes older than specified age
 
+        Scans the filesystem directly to find orphaned sandboxes that may have
+        been left behind by daemon crashes or process kills.
+
         Args:
             max_age_hours: Maximum age in hours before cleanup
+
+        Returns:
+            Number of sandboxes cleaned up
         """
         from datetime import timedelta
+        import time
 
-        cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
+        if not self.base_dir.exists():
+            return 0
 
-        for task_id, info in list(self.active_sandboxes.items()):
-            created_at = datetime.fromisoformat(info["created_at"])
-            if created_at < cutoff_time:
-                self.cleanup_sandbox(task_id)
+        cutoff_time = time.time() - (max_age_hours * 3600)
+        cleaned_count = 0
+
+        # Scan filesystem for sandbox directories
+        for sandbox_dir in self.base_dir.iterdir():
+            if not sandbox_dir.is_dir():
+                continue
+
+            if not sandbox_dir.name.startswith("sandbox_"):
+                continue
+
+            try:
+                # Check modification time (last time directory was modified)
+                mtime = sandbox_dir.stat().st_mtime
+
+                if mtime < cutoff_time:
+                    # Old sandbox - clean it up
+                    shutil.rmtree(sandbox_dir, ignore_errors=True)
+                    cleaned_count += 1
+
+                    # Also remove from active_sandboxes if present
+                    for task_id, info in list(self.active_sandboxes.items()):
+                        if info["path"] == sandbox_dir:
+                            del self.active_sandboxes[task_id]
+                            break
+
+            except Exception as e:
+                # Log but continue with other sandboxes
+                logger.warning(f"Failed to check/cleanup sandbox {sandbox_dir.name}: {e}")
+
+        return cleaned_count
 
     def list_sandboxes(self) -> Dict[str, Dict]:
         """

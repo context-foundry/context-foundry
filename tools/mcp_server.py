@@ -24,6 +24,9 @@ from tools.version import get_version
 # Import BAML integration for type-safe phase tracking
 from tools.baml_integration import is_baml_available, get_baml_error
 
+# Import safety mechanisms for sandbox enforcement
+from tools.evolution.safety import enforce_sandbox_mode
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context
@@ -1970,6 +1973,8 @@ def _autonomous_build_and_deploy_impl(
     use_parallel: bool = False,
     incremental: bool = False,
     force_rebuild: bool = False,
+    sandbox_path: Optional[str] = None,
+    sandbox_task_id: Optional[str] = None,
 ) -> str:
     """Internal implementation of autonomous_build_and_deploy (not decorated)"""
     """
@@ -2087,6 +2092,24 @@ def _autonomous_build_and_deploy_impl(
             final_working_dir = cf_parent / working_directory
 
         final_working_dir_str = str(final_working_dir)
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # SANDBOX SAFETY: Enforce sandbox-only execution for Evolution System
+        # ═══════════════════════════════════════════════════════════════════════
+        # This prevents autonomous builds from modifying production code
+        try:
+            enforce_sandbox_mode(final_working_dir, "autonomous build")
+            print(f"✅ Sandbox safety check passed: {final_working_dir}", file=sys.stderr)
+        except (PermissionError, RuntimeError) as e:
+            # Safety violation - reject the request
+            return json.dumps(
+                {
+                    "error": str(e),
+                    "working_directory": final_working_dir_str,
+                    "safety_check": "failed",
+                },
+                indent=2,
+            )
 
         # Validate/create working directory
         if not final_working_dir.exists():
@@ -2399,6 +2422,17 @@ BEGIN AUTONOMOUS EXECUTION NOW.
         # Generate unique task ID
         task_id = str(uuid.uuid4())
 
+        # Prepare environment variables
+        process_env = {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+        }
+
+        # Add sandbox mode markers if this is a sandboxed build
+        if sandbox_path:
+            process_env["CF_SANDBOX_MODE"] = "1"
+            process_env["CF_SANDBOX_PATH"] = str(sandbox_path)
+
         # Start the process (NON-BLOCKING)
         process = subprocess.Popen(
             cmd,
@@ -2407,10 +2441,7 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             text=True,
-            env={
-                **os.environ,
-                "PYTHONUNBUFFERED": "1",
-            },
+            env=process_env,
         )
 
         # Store task info
@@ -2428,6 +2459,8 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "duration": None,
             "task_config": task_config,
             "build_type": "autonomous",  # Mark as autonomous build for special handling
+            "sandbox_path": sandbox_path,  # For cleanup when task completes
+            "sandbox_task_id": sandbox_task_id,  # For SandboxManager.cleanup_sandbox()
         }
 
         return json.dumps(

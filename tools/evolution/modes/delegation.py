@@ -8,6 +8,7 @@ from typing import List, Dict
 from datetime import datetime
 
 from .base_mode import BaseEvolutionMode, TaskResult
+from ..sandboxes import SandboxManager
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,18 @@ class DelegationMode(BaseEvolutionMode):
                                     f"{'✅' if final_status == 'completed' else '❌'} Delegation {task_id[:8]} marked as {final_status} (no PID, inferred from phase)"
                                 )
 
+                                # Cleanup sandbox if this was a sandboxed build
+                                sandbox_path = metadata.get("sandbox_path")
+                                sandbox_task_id = metadata.get("sandbox_task_id")
+                                if sandbox_path and sandbox_task_id:
+                                    try:
+                                        logger.info(f"🧹 Cleaning up sandbox: {sandbox_path}")
+                                        manager = SandboxManager()
+                                        manager.cleanup_sandbox(sandbox_task_id)
+                                        logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
+                                    except Exception as e:
+                                        logger.error(f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}")
+
                         except Exception as e:
                             logger.debug(
                                 f"Could not read phase info for {task_id[:8]}: {e}"
@@ -232,6 +245,18 @@ class DelegationMode(BaseEvolutionMode):
                 task_file.write_text(json.dumps(metadata, indent=2))
 
                 logger.info(f"✅ Delegation {task_id[:8]} marked as {final_status}")
+
+                # Cleanup sandbox if this was a sandboxed build
+                sandbox_path = metadata.get("sandbox_path")
+                sandbox_task_id = metadata.get("sandbox_task_id")
+                if sandbox_path and sandbox_task_id:
+                    try:
+                        logger.info(f"🧹 Cleaning up sandbox: {sandbox_path}")
+                        manager = SandboxManager()
+                        manager.cleanup_sandbox(sandbox_task_id)
+                        logger.info(f"✅ Sandbox cleanup complete for task {task_id[:8]}")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to cleanup sandbox for {task_id[:8]}: {e}")
 
                 return metadata
 

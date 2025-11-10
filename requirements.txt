@@ -6,6 +6,7 @@
 # MCP Server SDK
 fastmcp>=2.0.0  # Model Context Protocol server framework
 nest-asyncio>=1.5.0  # Enable nested event loops for sync/async compatibility
+psutil>=5.9.0  # Process and system utilities (required for evolution daemon)
 
 # Context Budget Monitoring
 tiktoken>=0.5.0  # Accurate token counting (OpenAI's official library)

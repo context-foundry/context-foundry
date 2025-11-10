@@ -538,23 +538,21 @@ This is an autonomous self-improvement task from the Evolution System."""
             print(f"   Task: {prompt[:100]}...")
             print(f"   Branch: {branch_name}")
 
-            try:
-                # Call MCP implementation function directly (non-blocking, returns task_id immediately)
-                result_json = _autonomous_build_and_deploy_impl(
-                    task=prompt,
-                    working_directory=str(sandbox_path),  # ✅ SANDBOX (not production!)
-                    github_repo_name="context-foundry/context-foundry",
-                    existing_repo=str(sandbox_path),  # ✅ SANDBOX (not production!)
-                    mode="existing_repo",
-                    enable_test_loop=True,
-                    max_test_iterations=3,
-                    timeout_minutes=90.0,
-                    use_parallel=True,
-                )
-            finally:
-                # Always cleanup sandbox (success or failure)
-                print(f"🧹 Cleaning up sandbox: {sandbox_path}")
-                manager.cleanup_sandbox(task_id)
+            # Call MCP implementation function directly (non-blocking, returns task_id immediately)
+            # NOTE: Sandbox cleanup is deferred to delegation monitor when MCP process completes
+            result_json = _autonomous_build_and_deploy_impl(
+                task=prompt,
+                working_directory=str(sandbox_path),  # ✅ SANDBOX (not production!)
+                github_repo_name="context-foundry/context-foundry",
+                existing_repo=str(sandbox_path),  # ✅ SANDBOX (not production!)
+                mode="existing_repo",
+                enable_test_loop=True,
+                max_test_iterations=3,
+                timeout_minutes=90.0,
+                use_parallel=True,
+                sandbox_path=str(sandbox_path),  # For cleanup tracking
+                sandbox_task_id=task_id,  # For SandboxManager.cleanup_sandbox()
+            )
 
             # Parse MCP result
             result = json.loads(result_json)
@@ -573,6 +571,8 @@ This is an autonomous self-improvement task from the Evolution System."""
                     "status": "mcp_running",
                     "message": result.get("message", "MCP autonomous build started"),
                     "working_directory": str(sandbox_path),
+                    "sandbox_path": str(sandbox_path),  # For cleanup later
+                    "sandbox_task_id": task_id,  # For SandboxManager.cleanup_sandbox()
                 },
             }
 
