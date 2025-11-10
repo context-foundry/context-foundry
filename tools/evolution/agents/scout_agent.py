@@ -151,7 +151,13 @@ class ScoutAgent:
 
         print("  🔒 Scanning for security vulnerabilities...")
 
-        py_files = list(self.project_root.glob("**/*.py"))
+        # Get all Python files but exclude test files (which contain intentional bad code for testing)
+        all_py_files = list(self.project_root.glob("**/*.py"))
+        py_files = [
+            f
+            for f in all_py_files
+            if not any(part.startswith("test") for part in f.parts)
+        ]
 
         security_patterns = [
             (r"eval\s*\(", "Dangerous use of eval() - code injection risk"),
