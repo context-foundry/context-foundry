@@ -1,107 +1,97 @@
 # Codebase Analysis Report
 
 ## Project Overview
-- **Type**: Python development tooling/framework
-- **Languages**: Python (primary), Bash, JavaScript
-- **Architecture**: Multi-agent orchestrator system with modular tools
+- Type: Python automation framework
+- Languages: Python (primary), Shell scripts
+- Architecture: Multi-agent autonomous build system with MCP integration
 
-## Key Files and Structure
-
-### Entry Points
-- `tools/cli.py` - Command-line interface
-- `tools/mcp_server.py` - MCP server (947 statements, 0% coverage!)
-- `create_task.py` - Task creation
-
-### Test Infrastructure
-- **Test Framework**: pytest
-- **Test Files**: 61 test files
-- **Coverage Tool**: pytest-cov
-- **Current Coverage**: 25.3% overall
-  - Total Statements: 11,095
-  - Missing Lines: 8,288
-  - Files Covered: 106
-
-### Critical Modules with Low Coverage
-
-#### 1. **MCP Server** (`tools/mcp_server.py`)
-- **Coverage**: 0% (947 statements uncovered!)
-- **Priority**: CRITICAL
-- **Issue**: Core server functionality completely untested
-
-#### 2. **Prompt Building** (`tools/prompts/`)
-- `build_orchestrator_prompt.py`: 0% (82 statements)
-- `cache_analysis.py`: 0% (133 statements)
-- `phase_loader.py`: 0% (58 statements)
-
-#### 3. **TUI Components** (`tools/tui/`)
-- `app.py`: 0% (31 statements)
-- `screens/dashboard.py`: 0% (55 statements)
-- `screens/new_project.py`: 0% (88 statements)
-- `screens/metrics.py`: 0% (54 statements)
-
-#### 4. **Livestream** (`tools/livestream/`)
-- `server.py`: 0% (469 statements)
-- `broadcaster.py`: 0% (135 statements)
-
-#### 5. **Utilities**
-- `banner.py`: 0% (11 statements)
-- `test_parallel_runner.py`: 0% (39 statements)
-
-### Existing Test Coverage
-
-**Well-tested modules** (from test file names):
-- ✅ Evolution system (multiple test files)
-- ✅ BAML integration (comprehensive tests)
-- ✅ Context budget system
-- ✅ Cache system (scout_cache, test_cache)
-- ✅ Metrics collection
-- ✅ Config manager
-- ✅ Incremental build system
-
-**Missing or inadequate tests**:
-- ❌ MCP server (critical path!)
-- ❌ Prompt building system
-- ❌ TUI application
-- ❌ Livestream functionality
-- ❌ CLI entry points
-- ❌ Banner display
-- ❌ Parallel test runner
-
-## Code to Modify/Create
-
-**Task**: Analyze test coverage and add missing tests for critical paths
-
-**Files to create/modify**:
-1. `tests/test_mcp_server_extended.py` - Comprehensive MCP server tests
-2. `tests/test_prompt_building.py` - Prompt building system tests
-3. `tests/tui/test_app.py` - TUI application tests
-4. `tests/tui/test_screens.py` - TUI screen component tests
-5. `tests/test_cli.py` - CLI entry point tests
-6. `tests/test_parallel_runner.py` - Parallel test runner tests
-7. `.context-foundry/coverage-analysis-report.md` - Detailed coverage report
-
-**Approach**:
-- Focus on critical paths first (MCP server, prompt building)
-- Use existing test patterns from well-tested modules
-- Add integration tests for end-to-end flows
-- Target minimum 70% coverage for critical modules
-- Use pytest markers (tier1, tier2, tier3) to prioritize tests
-
-## Risks
-
-1. **High Complexity**: MCP server has 947 statements - will need substantial test effort
-2. **TUI Testing**: UI components may require mocking frameworks (Textual testing)
-3. **Integration Dependencies**: Some modules may require external dependencies
-4. **Time Investment**: Achieving 70% coverage could require 15-20 test files
-5. **Breaking Changes**: Adding tests may reveal existing bugs
+## Key Files
+- Entry point: claude (CLI wrapper)
+- Config: requirements.txt, setup.py, pytest.ini
+- Tests: tests/ directory (58 test files)
+- Coverage data: coverage.json (25.3% overall coverage)
 
 ## Dependencies
+- Core: Python 3.8+
+- BAML integration: baml-py (optional, type-safe LLM outputs)
+- MCP: Model Context Protocol server implementation
+- Testing: pytest, pytest-asyncio
+- Others: anthropic, openai (for BAML), various utilities
 
-**Test dependencies** (from pytest.ini):
-- pytest
-- pytest-cov
-- Existing markers: unit, integration, tier1, tier2, tier3, slow
+## Current Test Coverage Analysis
 
-**May need to add**:
-- pytest-mock (if not present)
-- pytest-asyncio (for async MCP server tests)
+### Overall Statistics
+- Total files: 106
+- Overall coverage: 25.3%
+- Test files: 58 in tests/ directory
+
+### Critical Gaps Identified
+
+#### High Priority (0% coverage, significant code)
+1. **tools/use_baml.py** (70 statements, 0% coverage)
+   - CLI wrapper for BAML integration
+   - Entry point for orchestrator phase tracking
+   - Critical for type-safe LLM outputs
+   - Has related tests but use_baml.py CLI itself not tested
+
+2. **tools/prompts/cache_analysis.py** (133 statements, 0% coverage)
+   - Prompt cache analysis tooling
+   - No existing tests found
+
+3. **tools/prompts/build_orchestrator_prompt.py** (82 statements, 0% coverage)
+   - Builds the main orchestrator prompt
+   - Critical for system functionality
+   - No existing tests found
+
+4. **tools/prompts/phase_loader.py** (58 statements, 0% coverage)
+   - Loads phase-specific prompts
+   - No existing tests found
+
+#### Medium Priority (partial coverage or less critical)
+5. **tools/livestream/** (broadcaster.py, server.py - 0% coverage)
+   - Livestream functionality (604 statements total)
+   - Feature-specific, not core critical path
+
+6. **tools/tui/** widgets and screens (0% coverage)
+   - UI components (less critical for core automation)
+
+### Existing Test Coverage
+- BAML integration: Good coverage (test_baml_*.py files)
+- MCP server: Multiple test files exist
+- Context budget: Well tested
+- Cache system: Well tested
+- Evolution system: Multiple test files
+
+## Code to Modify
+**Task**: Add tests for critical paths with missing coverage
+
+**Files to change/create**:
+1. Create `tests/test_use_baml_cli.py` - Test CLI interface
+2. Create `tests/prompts/test_cache_analysis.py` - Test cache analysis
+3. Create `tests/prompts/test_build_orchestrator_prompt.py` - Test prompt building
+4. Create `tests/prompts/test_phase_loader.py` - Test phase loading
+
+**Approach**: 
+- Focus on critical paths first (use_baml.py CLI, prompt builders)
+- Write unit tests for pure functions
+- Write integration tests for CLI commands
+- Mock external dependencies (BAML, file I/O where appropriate)
+- Aim for >80% coverage on critical files
+
+## Risks
+1. **BAML dependency**: Tests need to handle BAML unavailable gracefully
+2. **File I/O**: Prompt builders read from filesystem - need temp dirs
+3. **CLI testing**: Need to test argparse interface and subprocess calls
+4. **Integration**: Some functions may require full integration testing
+
+## Testing Strategy
+1. **Unit tests**: Pure functions, argument parsing, validation
+2. **Integration tests**: Full CLI commands with mocked BAML
+3. **Edge cases**: Missing files, invalid inputs, BAML errors
+4. **Coverage goal**: Increase from 25.3% to >40% overall (focus on critical paths)
+
+## Branch Strategy
+- Create branch: `self-improvement/task-995b8dba`
+- Make targeted additions (tests only)
+- Ensure all existing tests still pass
+- Create PR for review

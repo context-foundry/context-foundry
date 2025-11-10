@@ -1,170 +1,155 @@
-# Scout Report: Test Coverage Analysis for Context Foundry Tools
+# Scout Report: Add Tests for Critical Paths
 
 ## Executive Summary
 
-Analysis of the `tools/` directory revealed significant gaps in test coverage for critical path modules, particularly in the **context budget monitoring system**. While the project has 52 test files covering many modules, several critical components lack comprehensive test coverage:
+This task focuses on improving test coverage for critical, untested code paths in Context Foundry. Current overall coverage is 25.3%, with several critical files having 0% coverage despite being essential to core functionality. We'll add comprehensive tests for 4 high-priority files that are CLI entry points and prompt building infrastructure.
 
-### High Priority Gaps (Critical Paths):
-1. **context_budget/monitor.py** - Core monitoring logic (NO TESTS)
-2. **context_budget/report.py** - Report generation (NO TESTS)
-3. **context_budget/token_counter.py** - Token counting utilities (NO TESTS)
-4. **cli.py** - Main CLI entry point (NO TESTS)
-5. **use_baml.py** - BAML integration CLI (NO TESTS)
-6. **tui_monitor.py** - TUI entry point (NO TESTS)
+## Key Requirements
 
-### Coverage Status:
-- **Total Python modules in tools/**: ~80 modules
-- **Test files**: 52 test files
-- **Coverage estimate**: ~65% (missing critical path coverage)
-- **Risk**: HIGH - Core functionality lacks validation
+### Primary Objectives
+1. **Add CLI tests for tools/use_baml.py** - Critical BAML integration entry point
+2. **Add tests for tools/prompts/phase_loader.py** - Modular prompt loading system
+3. **Add tests for tools/prompts/build_orchestrator_prompt.py** - Main prompt builder
+4. **Add tests for tools/prompts/cache_analysis.py** - Prompt cache analysis
+
+### Success Criteria
+- All new tests pass
+- Existing tests continue to pass
+- Coverage for target files reaches >80%
+- Tests follow existing patterns (pytest, mocking, fixtures)
 
 ## Technology Stack
-- **Testing Framework**: pytest (already in use)
-- **Mocking**: unittest.mock
-- **Temp directories**: tempfile, pytest fixtures
-- **Token counting**: tiktoken (with fallback)
-- **Coverage analysis**: pytest-cov (optional but recommended)
+
+**Language**: Python 3.8+  
+**Testing Framework**: pytest with pytest-asyncio  
+**Mocking**: unittest.mock  
+**Coverage**: pytest-cov  
+
+**Dependencies**:
+- BAML integration (optional, graceful fallback)
+- File I/O for prompt loading
+- argparse for CLI testing
+- subprocess for integration tests
 
 ## Critical Architecture Recommendations
 
-### 1. Context Budget Module Tests (HIGHEST PRIORITY)
-The context budget system is a **critical performance feature** that monitors token usage and prevents degraded model performance. This needs comprehensive testing:
+### 1. Test Structure
+- Create `tests/test_use_baml_cli.py` for CLI testing
+- Create `tests/prompts/` directory for prompt-related tests
+- Follow existing test naming: `test_<module>_<aspect>.py`
 
-**Required Test Coverage:**
-- `ContextBudgetMonitor` class:
-  - Budget allocation calculations
-  - Zone detection (SMART/DUMB/CRITICAL)
-  - Phase analysis and warnings
-  - Historical tracking
-  - Export to session summary format
-- `ContextBudgetReporter` class:
-  - Report generation (text, JSON, markdown)
-  - Phase table formatting
-  - ASCII visualization
-  - Optimization suggestions
-- `TokenCounter` class:
-  - Token estimation (with/without tiktoken)
-  - File token counting
-  - Directory token counting
-  - Message token counting
-  - Fallback heuristics
+### 2. Testing Patterns (From Existing Codebase)
+```python
+# Pattern 1: Path handling with sys.path manipulation
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-**Why Critical:**
-- Controls build quality and performance
-- Prevents "dumb zone" degradation (40-80% context)
-- Generates reports for user feedback
-- No existing tests = high regression risk
+# Pattern 2: Mocking BAML availability
+@patch('tools.baml_integration.is_baml_available')
+def test_with_baml_unavailable(mock_baml):
+    mock_baml.return_value = False
+    # Test fallback behavior
 
-### 2. CLI Entry Points Tests
-- `cli.py` - Main Context Foundry entry point
-- `use_baml.py` - BAML integration CLI
-- `tui_monitor.py` - TUI launcher
+# Pattern 3: Temporary directories for file tests
+@pytest.fixture
+def temp_prompt_dir(tmp_path):
+    # Create test prompt files
+    return tmp_path
 
-**Testing Requirements:**
-- Argument parsing
-- Error handling (missing deps, wrong Python version)
-- Graceful degradation
-- Exit codes
+# Pattern 4: Subprocess testing for CLI
+import subprocess
+result = subprocess.run(['python3', 'tools/use_baml.py', 'status'], 
+                       capture_output=True, text=True)
+assert result.returncode == 0
+```
 
-### 3. Testing Approach
+### 3. Mock Strategy
+- **Mock BAML**: Test both available and unavailable states
+- **Mock file I/O**: Use tmp_path fixture for prompt files
+- **Mock subprocess**: For CLI integration tests
+- **Real integration**: Test actual file loading where safe
 
-**Unit Tests (Isolated):**
-- Test each class method independently
-- Mock external dependencies (file I/O, tiktoken)
-- Verify calculation accuracy
-- Test edge cases and error handling
-
-**Integration Tests:**
-- Test full workflow (monitor → analyze → report)
-- Test with real session-summary.json data
-- Verify report formatting
-- Test CLI commands end-to-end
-
-**Test Data:**
-- Create fixtures with sample phase data
-- Mock session-summary.json structures
-- Test with/without tiktoken available
-- Test boundary conditions (0%, 40%, 80%, 100% usage)
+### 4. Coverage Strategy
+Focus on:
+- ✅ Argument parsing and validation
+- ✅ Error handling (missing files, invalid inputs)
+- ✅ BAML integration paths (both success and fallback)
+- ✅ File loading and path resolution
+- ✅ CLI command execution
 
 ## Main Challenges and Mitigations
 
-### Challenge 1: Tiktoken Optional Dependency
-**Issue:** TokenCounter has fallback logic when tiktoken is unavailable
-**Mitigation:**
-- Test both code paths (with and without tiktoken)
-- Mock tiktoken import failure scenarios
-- Verify fallback heuristic accuracy
+### Challenge 1: BAML Dependency
+**Issue**: BAML requires OpenAI API key, may not be available in CI  
+**Mitigation**: Mock BAML calls, test fallback behavior  
+**Pattern**: Follow test_baml_integration.py patterns
 
-### Challenge 2: Session Summary Integration
-**Issue:** Monitor exports to session-summary.json format
-**Mitigation:**
-- Create comprehensive fixtures
-- Validate JSON structure against actual outputs
-- Test deserialization and serialization
+### Challenge 2: File System Dependencies
+**Issue**: Prompt loaders read from filesystem  
+**Mitigation**: Use pytest tmp_path fixture, create test files  
+**Pattern**: Create minimal test prompt files in fixtures
 
-### Challenge 3: CLI Testing
-**Issue:** CLI tools need argument parsing and error handling tests
-**Mitigation:**
-- Use `subprocess` or mock `sys.argv`
-- Capture stdout/stderr
-- Test exit codes
-- Mock missing dependencies
+### Challenge 3: CLI Testing Complexity
+**Issue**: Testing argparse and subprocess interactions  
+**Mitigation**: Unit test argparse separately, integration test with subprocess  
+**Pattern**: Test main() function with mocked sys.argv
 
-## Testing Plan
+### Challenge 4: Path Resolution
+**Issue**: Relative path handling across different execution contexts  
+**Mitigation**: Use Path objects consistently, test from multiple directories  
+**Pattern**: Follow existing path resolution in test files
 
-### Phase 1: Context Budget Core (Priority 1)
-```python
-tests/test_context_budget_monitor_unit.py
-tests/test_context_budget_reporter_unit.py
-tests/test_context_budget_token_counter_unit.py
-```
+## Testing Approach
 
-**Coverage Target:** 90%+ for critical logic
+### Phase 1: Unit Tests (Core Functions)
+1. Test `get_phase_prompt()` with various inputs
+2. Test `list_available_phases()`
+3. Test argument parsing in main()
+4. Test status normalization logic
 
-**Test Count Estimate:** 60-80 tests
-- Monitor: 25-30 tests
-- Reporter: 20-25 tests
-- TokenCounter: 15-20 tests
+### Phase 2: Integration Tests (CLI Commands)
+1. Test `python3 tools/use_baml.py status`
+2. Test `python3 tools/use_baml.py update-phase`
+3. Test prompt loading with real files
+4. Test error cases (missing files, invalid args)
 
-### Phase 2: CLI Tools (Priority 2)
-```python
-tests/test_cli_unit.py
-tests/test_use_baml_unit.py
-tests/test_tui_monitor_unit.py
-```
+### Phase 3: Edge Cases
+1. Invalid phase identifiers
+2. Missing prompt files
+3. Flowise mode toggling
+4. BAML unavailable scenarios
 
-**Coverage Target:** 80%+ (focus on error paths)
-
-**Test Count Estimate:** 20-25 tests
-
-### Phase 3: Integration Tests
-```python
-tests/test_context_budget_integration.py
-```
-
-**Coverage Target:** Full workflow validation
-
-**Test Count Estimate:** 10-15 tests
+### Phase 4: Coverage Validation
+1. Run pytest with coverage
+2. Verify >80% coverage on target files
+3. Check for any missed branches
 
 ## Timeline Estimate
-- **Phase 1 (Context Budget):** 90-120 minutes
-- **Phase 2 (CLI Tools):** 30-45 minutes
-- **Phase 3 (Integration):** 30 minutes
-- **Total:** ~3 hours
 
-## Success Criteria
-- [ ] All critical path modules have >85% test coverage
-- [ ] All tests pass (100% pass rate)
-- [ ] No regressions in existing tests
-- [ ] Tests run in < 30 seconds total
-- [ ] Clear, maintainable test code with good documentation
+**Total**: ~45 minutes
 
-## Risk Mitigation from Pattern Library
-N/A - This is internal testing infrastructure, no external dependencies or CORS/browser issues apply.
+- Scout phase: 10 min ✓
+- Architect phase: 10 min
+- Builder phase: 20 min (write tests)
+- Test phase: 5 min (run tests, verify)
 
-## Known Issues to Watch For
-1. **Tiktoken availability:** Must test both import paths
-2. **File I/O:** Use temp directories for all file operations
-3. **JSON formatting:** Validate exact structure matches production
-4. **Timezone handling:** Ensure timestamps are consistent
-5. **Division by zero:** Test with 0 tokens edge cases
+## Files to Create
+
+1. `tests/test_use_baml_cli.py` (~200 lines)
+2. `tests/prompts/__init__.py` (empty)
+3. `tests/prompts/test_phase_loader.py` (~150 lines)
+4. `tests/prompts/test_build_orchestrator_prompt.py` (~100 lines)
+5. `tests/prompts/test_cache_analysis.py` (~100 lines)
+
+**Total**: ~550 lines of test code
+
+## Risk Assessment
+
+**LOW RISK** - This is a test-only change:
+- No production code modifications
+- All changes are additive (new test files)
+- Existing tests must continue to pass
+- Easy to rollback if needed
+
+## Next Steps
+
+Proceed to Architect phase to design the detailed test structure and fixtures.

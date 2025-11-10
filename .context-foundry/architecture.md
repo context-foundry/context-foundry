@@ -1,298 +1,284 @@
-# Architecture: Test Suite for Context Budget System
+# Test Architecture Design
 
 ## System Architecture Overview
 
-This enhancement adds comprehensive test coverage for three critical, untested modules in the context budget monitoring system. The architecture follows the existing pytest patterns used throughout Context Foundry's test suite.
-
-## Module Specifications
-
-### Module 1: tests/test_context_budget_monitor_unit.py
-**Purpose:** Unit tests for ContextBudgetMonitor class
-**Dependencies:** tools/context_budget/monitor.py
-**Test Count:** 28 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (3 tests)
-   - Test default initialization with 200K context window
-   - Test custom context window size
-   - Test model parameter handling
-
-2. **Budget Calculation Tests** (5 tests)
-   - Test get_budget_for_phase() for each phase
-   - Test normalized phase names (spaces, hyphens, underscores)
-   - Test unknown phase defaults to 5%
-   - Test budget allocation percentages match BUDGETS dict
-   - Test edge case: 0 context window
-
-3. **Zone Detection Tests** (6 tests)
-   - Test SMART zone detection (0-40%)
-   - Test DUMB zone detection (40-80%)
-   - Test CRITICAL zone detection (80-100%)
-   - Test boundary conditions (exactly 40%, exactly 80%)
-   - Test is_in_smart_zone() method
-   - Test get_zone() return values
-
-4. **Phase Analysis Tests** (8 tests)
-   - Test check_phase() with typical usage
-   - Test phase analysis warnings generation
-   - Test phase analysis recommendations generation
-   - Test budget exceeded calculation
-   - Test budget remaining calculation
-   - Test phase history tracking
-   - Test percentage calculation accuracy
-   - Test PhaseAnalysis.to_dict() serialization
-
-5. **Historical Tracking Tests** (3 tests)
-   - Test get_phase_history() returns correct analyses
-   - Test multiple analyses for same phase
-   - Test empty history for new phase
-
-6. **Overall Statistics Tests** (3 tests)
-   - Test get_overall_stats() with multiple phases
-   - Test peak usage detection
-   - Test smart zone percentage calculation
-
-### Module 2: tests/test_context_budget_reporter_unit.py
-**Purpose:** Unit tests for ContextBudgetReporter class
-**Dependencies:** tools/context_budget/report.py
-**Test Count:** 22 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (1 test)
-   - Test reporter initialization
-
-2. **Context Report Generation Tests** (5 tests)
-   - Test generate_context_report() with full metrics
-   - Test report with empty metrics
-   - Test report with partial metrics
-   - Test report formatting and structure
-   - Test zone indicators in report
-
-3. **Phase Table Generation Tests** (4 tests)
-   - Test generate_phase_table() ASCII formatting
-   - Test table with multiple phases
-   - Test table column alignment
-   - Test phase name truncation
-
-4. **Visualization Tests** (4 tests)
-   - Test visualize_context_usage() bar chart generation
-   - Test bar chart with varying percentages
-   - Test bar chart zone emojis
-   - Test empty data handling
-
-5. **Optimization Suggestions Tests** (4 tests)
-   - Test get_optimization_suggestions() for critical zone
-   - Test suggestions for dumb zone
-   - Test suggestions for optimal usage
-   - Test phase-specific recommendations
-
-6. **Export Tests** (4 tests)
-   - Test generate_summary_json() format
-   - Test export_markdown_report() formatting
-   - Test markdown file output
-   - Test format_zone_indicator() mapping
-
-### Module 3: tests/test_context_budget_token_counter_unit.py
-**Purpose:** Unit tests for TokenCounter class
-**Dependencies:** tools/context_budget/token_counter.py
-**Test Count:** 18 tests
-
-**Test Coverage:**
-
-1. **Initialization Tests** (2 tests)
-   - Test TokenCounter initialization with default model
-   - Test initialization with custom model
-
-2. **Token Estimation Tests (with tiktoken)** (5 tests)
-   - Test estimate_tokens() with tiktoken available
-   - Test accuracy against known token counts
-   - Test empty string handling
-   - Test unicode text handling
-   - Test very long text handling
-
-3. **Token Estimation Tests (fallback)** (3 tests)
-   - Test estimate_tokens() without tiktoken (mock unavailable)
-   - Test fallback heuristic accuracy (chars / 4)
-   - Test fallback with various text lengths
-
-4. **File Token Counting Tests** (4 tests)
-   - Test count_file_tokens() with temp file
-   - Test non-existent file handling
-   - Test binary file handling
-   - Test encoding error handling
-
-5. **Directory Token Counting Tests** (2 tests)
-   - Test count_directory_tokens() with pattern matching
-   - Test empty directory handling
-
-6. **Message Token Counting Tests** (2 tests)
-   - Test count_message_tokens() with message array
-   - Test multi-part content handling
+This test suite adds comprehensive coverage for 4 critical untested modules:
+1. CLI interface for BAML integration (`use_baml.py`)
+2. Modular prompt loading system (`phase_loader.py`)
+3. Orchestrator prompt builder (`build_orchestrator_prompt.py`)
+4. Prompt cache analyzer (`cache_analysis.py`)
 
 ## Complete File Structure
 
 ```
 tests/
-├── test_context_budget_monitor_unit.py (NEW)
-├── test_context_budget_reporter_unit.py (NEW)
-└── test_context_budget_token_counter_unit.py (NEW)
+├── test_use_baml_cli.py           # NEW - CLI integration tests
+├── prompts/                        # NEW - Prompt system tests
+│   ├── __init__.py                # NEW - Empty init
+│   ├── test_phase_loader.py       # NEW - Phase loading tests
+│   ├── test_build_orchestrator_prompt.py  # NEW - Prompt builder tests
+│   └── test_cache_analysis.py     # NEW - Cache analysis tests
+└── [existing 58 test files]
 ```
 
-## Test Implementation Strategy
+## Module Specifications
 
-### Common Fixtures (Shared across all test files)
+### 1. test_use_baml_cli.py
 
+**Purpose**: Test CLI interface for BAML integration wrapper
+
+**Test Classes**:
+- `TestCLIStatus`: Test status command
+- `TestCLIUpdatePhase`: Test phase tracking updates
+- `TestCLIScoutReport`: Test scout report generation
+- `TestCLIArchitecture`: Test architecture generation
+- `TestCLIValidateBuild`: Test build validation
+- `TestCLIErrorHandling`: Test error cases
+
+**Key Test Cases**:
 ```python
-# Fixture: sample_phase_metrics
-# Returns dict with realistic phase metrics for testing
+# Status command
+def test_status_baml_available()
+def test_status_baml_unavailable()
+def test_status_no_api_key()
 
-# Fixture: sample_context_metrics
-# Returns dict with full context metrics structure
+# Update phase command
+def test_update_phase_success()
+def test_update_phase_status_normalization()
+def test_update_phase_with_iteration()
 
-# Fixture: temp_file_with_content
-# Creates temp file with known content for token counting tests
+# Error handling
+def test_no_command_shows_help()
+def test_invalid_command()
+def test_missing_required_args()
 ```
 
-### Mocking Strategy
+**Fixtures**:
+- `mock_baml_available`: Mock BAML availability checks
+- `mock_env_vars`: Mock environment variables
+- `cli_runner`: Helper to run CLI commands
 
-1. **Tiktoken Mocking:**
-   - Mock `tiktoken.get_encoding()` to simulate availability
-   - Mock `ImportError` to simulate tiktoken unavailable
-   - Verify both code paths are tested
+**Coverage Target**: >85% of use_baml.py
 
-2. **File I/O Mocking:**
-   - Use `tempfile` for real file tests
-   - Mock `Path.read_text()` for error scenarios
-   - Mock `Path.exists()` for non-existent file tests
+### 2. test_phase_loader.py
 
-3. **System Mocking:**
-   - Mock `sys.stderr` to capture warnings
-   - No need to mock datetime (tests don't rely on current time)
+**Purpose**: Test modular phase prompt loading
 
-### Test Data Patterns
+**Test Classes**:
+- `TestPhasePromptLoading`: Test individual phase loading
+- `TestPhasePromptCombined`: Test all phases loading
+- `TestPhasePromptFlowise`: Test Flowise mode
+- `TestPhasePromptErrors`: Test error handling
 
-**Sample Phase Metrics:**
+**Key Test Cases**:
 ```python
-{
-    'phase_name': 'Scout',
-    'tokens_used': 12000,
-    'percentage': 6.0,
-    'zone': 'smart',
-    'budget_allocated': 14000,
-    'budget_remaining': 2000,
-    'budget_exceeded_by': 0,
-    'warnings': [],
-    'recommendations': []
-}
+# Basic loading
+def test_get_phase_prompt_valid_phase()
+def test_get_phase_prompt_all_phases()
+def test_list_available_phases()
+
+# Flowise mode
+def test_get_phase_prompt_with_flowise()
+def test_get_phase_prompt_flowise_unavailable()
+
+# Error cases
+def test_get_phase_prompt_invalid_phase()
+def test_get_phase_prompt_missing_file()
 ```
 
-**Sample Context Metrics:**
+**Fixtures**:
+- `phase_files_exist`: Verify phase files present
+- `mock_flowise_available`: Mock Flowise extension
+- `temp_phase_dir`: Temporary phase files for testing
+
+**Coverage Target**: >90% of phase_loader.py
+
+### 3. test_build_orchestrator_prompt.py
+
+**Purpose**: Test orchestrator prompt building and assembly
+
+**Test Classes**:
+- `TestPromptBuilder`: Test prompt construction
+- `TestPromptIntegration`: Test full prompt assembly
+- `TestPromptCaching`: Test cache directives
+
+**Key Test Cases**:
 ```python
-{
-    'max_context_window': 200000,
-    'model': 'claude-sonnet-4',
-    'by_phase': {
-        'phase_scout': {...},
-        'phase_architect': {...}
-    },
-    'overall': {
-        'peak_usage_tokens': 40000,
-        'peak_usage_percentage': 20.0,
-        'peak_phase': 'Builder',
-        'avg_usage_percentage': 12.5,
-        'smart_zone_percentage': 100.0,
-        'total_phases': 4
-    }
-}
+def test_build_prompt_with_all_phases()
+def test_build_prompt_without_flowise()
+def test_build_prompt_with_flowise()
+def test_prompt_contains_critical_sections()
+def test_prompt_length_reasonable()
 ```
 
-## Testing Requirements
+**Fixtures**:
+- `expected_sections`: List of required prompt sections
+- `prompt_builder`: Builder instance for tests
 
-### Test Execution
-- All tests must run with: `pytest tests/test_context_budget_*.py -v`
-- Total execution time target: < 5 seconds
-- No external API calls or network dependencies
-- No file system pollution (clean up temp files)
+**Coverage Target**: >80% of build_orchestrator_prompt.py
 
-### Test Success Criteria
-1. **Coverage:** >90% line coverage for each module
-2. **Edge Cases:** All boundary conditions tested
-3. **Error Paths:** All exception handling tested
-4. **Serialization:** JSON output structure validated
-5. **Isolation:** Each test is fully independent
+### 4. test_cache_analysis.py
 
-### Assertion Patterns
+**Purpose**: Test prompt cache analysis and reporting
 
+**Test Classes**:
+- `TestCacheAnalysis`: Test cache analysis functions
+- `TestCacheReporting`: Test cache report generation
+
+**Key Test Cases**:
 ```python
-# Numeric assertions (use approximate for floats)
-assert analysis.percentage == pytest.approx(6.0, abs=0.1)
-
-# Zone assertions
-assert analysis.zone == ContextZone.SMART
-
-# String assertions (for reports)
-assert "Scout" in report
-assert "✅" in report  # Zone indicator
-
-# Structure assertions
-assert isinstance(result, dict)
-assert 'phase_name' in result
+def test_analyze_prompt_cache_usage()
+def test_generate_cache_report()
+def test_identify_cacheable_sections()
 ```
 
-## Implementation Plan
+**Fixtures**:
+- `sample_prompt`: Sample prompt for analysis
+- `cache_config`: Cache configuration for testing
 
-### Step 1: Create test_context_budget_monitor_unit.py
-**Tasks:**
-1. Import monitor module and dependencies
-2. Create fixtures for sample data
-3. Implement 28 unit tests covering all methods
-4. Add docstrings explaining each test
-5. Verify all tests pass independently
+**Coverage Target**: >75% of cache_analysis.py
 
-### Step 2: Create test_context_budget_reporter_unit.py
-**Tasks:**
-1. Import reporter module and dependencies
-2. Create fixtures for metrics data
-3. Implement 22 unit tests covering all methods
-4. Test ASCII formatting and table generation
-5. Verify report output formatting
+## Testing Strategy
 
-### Step 3: Create test_context_budget_token_counter_unit.py
-**Tasks:**
-1. Import token_counter module
-2. Mock tiktoken for availability/unavailability tests
-3. Implement 18 unit tests
-4. Create temp files for file counting tests
-5. Verify fallback heuristic accuracy
+### Unit Testing Approach
+1. **Isolated function tests**: Test pure functions independently
+2. **Mock external dependencies**: BAML, file I/O, subprocess
+3. **Fixture-based setup**: Reusable test data and configurations
+4. **Parameterized tests**: Test multiple inputs efficiently
 
-### Step 4: Validation
-**Tasks:**
-1. Run full test suite: `pytest tests/test_context_budget_*.py -v`
-2. Verify 100% pass rate
-3. Check coverage: `pytest --cov=tools/context_budget tests/test_context_budget_*.py`
-4. Ensure >90% coverage achieved
-5. Run existing tests to ensure no regressions
+### Integration Testing Approach
+1. **Real file loading**: Test actual prompt files exist and load
+2. **CLI subprocess tests**: Test actual CLI execution
+3. **End-to-end workflows**: Test complete command flows
+
+### Error Handling Tests
+1. **Missing files**: Test graceful handling
+2. **Invalid inputs**: Test argument validation
+3. **BAML unavailable**: Test fallback behavior
+4. **Permission errors**: Test file access issues
+
+## Implementation Steps
+
+### Step 1: Create Directory Structure
+```bash
+mkdir -p tests/prompts
+touch tests/prompts/__init__.py
+```
+
+### Step 2: Implement test_use_baml_cli.py
+1. Import use_baml module
+2. Create mock fixtures
+3. Write status command tests
+4. Write update-phase command tests
+5. Write other command tests
+6. Write error handling tests
+
+### Step 3: Implement test_phase_loader.py
+1. Import phase_loader module
+2. Create test fixtures
+3. Write basic loading tests
+4. Write Flowise mode tests
+5. Write error handling tests
+
+### Step 4: Implement test_build_orchestrator_prompt.py
+1. Import build_orchestrator_prompt module
+2. Write prompt building tests
+3. Write integration tests
+
+### Step 5: Implement test_cache_analysis.py
+1. Import cache_analysis module
+2. Write cache analysis tests
+3. Write reporting tests
+
+## Test Execution Plan
+
+### Run Individual Test Files
+```bash
+pytest tests/test_use_baml_cli.py -v
+pytest tests/prompts/test_phase_loader.py -v
+pytest tests/prompts/test_build_orchestrator_prompt.py -v
+pytest tests/prompts/test_cache_analysis.py -v
+```
+
+### Run All New Tests
+```bash
+pytest tests/test_use_baml_cli.py tests/prompts/ -v
+```
+
+### Run With Coverage
+```bash
+pytest tests/test_use_baml_cli.py tests/prompts/ \
+  --cov=tools.use_baml \
+  --cov=tools.prompts.phase_loader \
+  --cov=tools.prompts.build_orchestrator_prompt \
+  --cov=tools.prompts.cache_analysis \
+  --cov-report=term-missing
+```
+
+### Run All Tests (Verify No Regressions)
+```bash
+pytest tests/ -v
+```
 
 ## Success Criteria
 
-### Functional Requirements
-- [x] All 68 tests implement correctly
-- [x] All tests pass (100% pass rate)
-- [x] Coverage >90% for monitor.py, report.py, token_counter.py
-- [x] No regressions in existing tests
-- [x] Execution time < 5 seconds
+### Must Pass
+- ✅ All new tests pass
+- ✅ All existing tests still pass
+- ✅ No import errors
+- ✅ No syntax errors
 
-### Code Quality Requirements
-- [x] Clear, descriptive test names
-- [x] Comprehensive docstrings
-- [x] Proper fixture usage
-- [x] No code duplication (use fixtures/helpers)
-- [x] Follow existing test conventions
+### Coverage Goals
+- ✅ use_baml.py: >85% coverage
+- ✅ phase_loader.py: >90% coverage
+- ✅ build_orchestrator_prompt.py: >80% coverage
+- ✅ cache_analysis.py: >75% coverage
 
-### Documentation Requirements
-- [x] Each test has docstring explaining what it tests
-- [x] Fixtures are documented
-- [x] Complex assertions have explanatory comments
-- [x] Module-level docstring explains test scope
+### Code Quality
+- ✅ Follow existing test patterns
+- ✅ Use pytest fixtures appropriately
+- ✅ Mock external dependencies
+- ✅ Clear, descriptive test names
+- ✅ Docstrings for test classes
+
+## Git Workflow
+
+### Branch Creation
+```bash
+git checkout -b self-improvement/task-995b8dba
+```
+
+### Commit Strategy
+1. Commit after each test file is complete and passing
+2. Descriptive commit messages
+3. Final commit with all tests passing
+
+### PR Creation
+```bash
+git push -u origin self-improvement/task-995b8dba
+gh pr create --base main \
+  --title "Add comprehensive tests for critical untested paths" \
+  --body "Adds test coverage for use_baml.py, phase_loader.py, build_orchestrator_prompt.py, and cache_analysis.py. Improves overall coverage from 25.3% to target >30%."
+```
+
+## Risk Mitigation
+
+### Risk 1: Existing Tests Break
+**Mitigation**: Run full test suite before committing  
+**Rollback**: Easy - just delete new test files
+
+### Risk 2: BAML Integration Issues
+**Mitigation**: Mock all BAML calls, test fallback  
+**Verification**: Test with and without BAML available
+
+### Risk 3: File Path Issues
+**Mitigation**: Use Path objects, test from multiple directories  
+**Verification**: Run tests from project root and tests/ directory
+
+### Risk 4: Coverage Not Improving
+**Mitigation**: Check coverage after each test file  
+**Adjustment**: Add more test cases as needed
+
+## Next Steps
+
+Proceed to Builder phase to implement all test files according to this architecture.
