@@ -1,284 +1,232 @@
-# Test Architecture Design
+# Architecture: Security Fix for exec() Vulnerability
 
-## System Architecture Overview
+## System Overview
+This is a targeted security fix to eliminate code injection vulnerability in setup.py. The change is minimal and focused on replacing unsafe exec() with safe regex-based version extraction.
 
-This test suite adds comprehensive coverage for 4 critical untested modules:
-1. CLI interface for BAML integration (`use_baml.py`)
-2. Modular prompt loading system (`phase_loader.py`)
-3. Orchestrator prompt builder (`build_orchestrator_prompt.py`)
-4. Prompt cache analyzer (`cache_analysis.py`)
-
-## Complete File Structure
-
+## File Structure
 ```
-tests/
-├── test_use_baml_cli.py           # NEW - CLI integration tests
-├── prompts/                        # NEW - Prompt system tests
-│   ├── __init__.py                # NEW - Empty init
-│   ├── test_phase_loader.py       # NEW - Phase loading tests
-│   ├── test_build_orchestrator_prompt.py  # NEW - Prompt builder tests
-│   └── test_cache_analysis.py     # NEW - Cache analysis tests
-└── [existing 58 test files]
+context-foundry/
+├── setup.py              ← MODIFY (lines 30-33)
+├── __version__.py        ← NO CHANGE (read-only)
+├── tests/                ← Verify existing tests pass
+└── .context-foundry/     ← Build artifacts
 ```
 
-## Module Specifications
+## Component Specifications
 
-### 1. test_use_baml_cli.py
+### Modified Component: setup.py
 
-**Purpose**: Test CLI interface for BAML integration wrapper
-
-**Test Classes**:
-- `TestCLIStatus`: Test status command
-- `TestCLIUpdatePhase`: Test phase tracking updates
-- `TestCLIScoutReport`: Test scout report generation
-- `TestCLIArchitecture`: Test architecture generation
-- `TestCLIValidateBuild`: Test build validation
-- `TestCLIErrorHandling`: Test error cases
-
-**Key Test Cases**:
+**Current Implementation (VULNERABLE):**
 ```python
-# Status command
-def test_status_baml_available()
-def test_status_baml_unavailable()
-def test_status_no_api_key()
-
-# Update phase command
-def test_update_phase_success()
-def test_update_phase_status_normalization()
-def test_update_phase_with_iteration()
-
-# Error handling
-def test_no_command_shows_help()
-def test_invalid_command()
-def test_missing_required_args()
+# Lines 30-33 - BEFORE
+version_file = Path(__file__).parent / "__version__.py"
+version_info = {}
+exec(version_file.read_text(), version_info)
 ```
 
-**Fixtures**:
-- `mock_baml_available`: Mock BAML availability checks
-- `mock_env_vars`: Mock environment variables
-- `cli_runner`: Helper to run CLI commands
-
-**Coverage Target**: >85% of use_baml.py
-
-### 2. test_phase_loader.py
-
-**Purpose**: Test modular phase prompt loading
-
-**Test Classes**:
-- `TestPhasePromptLoading`: Test individual phase loading
-- `TestPhasePromptCombined`: Test all phases loading
-- `TestPhasePromptFlowise`: Test Flowise mode
-- `TestPhasePromptErrors`: Test error handling
-
-**Key Test Cases**:
+**New Implementation (SECURE):**
 ```python
-# Basic loading
-def test_get_phase_prompt_valid_phase()
-def test_get_phase_prompt_all_phases()
-def test_list_available_phases()
+# Lines 30-37 - AFTER
+import re
 
-# Flowise mode
-def test_get_phase_prompt_with_flowise()
-def test_get_phase_prompt_flowise_unavailable()
-
-# Error cases
-def test_get_phase_prompt_invalid_phase()
-def test_get_phase_prompt_missing_file()
+# Read version from __version__.py safely without code execution
+version_file = Path(__file__).parent / "__version__.py"
+version_content = version_file.read_text(encoding='utf-8')
+version_match = re.search(
+    r'^__version__\s*=\s*["\']([^"\']+)["\']',
+    version_content,
+    re.MULTILINE
+)
+if not version_match:
+    raise RuntimeError(
+        "Unable to find version string in __version__.py. "
+        "Expected format: __version__ = \"x.y.z\""
+    )
+version = version_match.group(1)
 ```
 
-**Fixtures**:
-- `phase_files_exist`: Verify phase files present
-- `mock_flowise_available`: Mock Flowise extension
-- `temp_phase_dir`: Temporary phase files for testing
-
-**Coverage Target**: >90% of phase_loader.py
-
-### 3. test_build_orchestrator_prompt.py
-
-**Purpose**: Test orchestrator prompt building and assembly
-
-**Test Classes**:
-- `TestPromptBuilder`: Test prompt construction
-- `TestPromptIntegration`: Test full prompt assembly
-- `TestPromptCaching`: Test cache directives
-
-**Key Test Cases**:
+**Then update setup() call:**
 ```python
-def test_build_prompt_with_all_phases()
-def test_build_prompt_without_flowise()
-def test_build_prompt_with_flowise()
-def test_prompt_contains_critical_sections()
-def test_prompt_length_reasonable()
+# Line 41 - CHANGE
+version=version,  # Changed from: version_info["__version__"]
 ```
 
-**Fixtures**:
-- `expected_sections`: List of required prompt sections
-- `prompt_builder`: Builder instance for tests
+### Security Improvements
 
-**Coverage Target**: >80% of build_orchestrator_prompt.py
+**Before:**
+- `exec()` executes arbitrary Python code from __version__.py
+- Attacker modifying __version__.py could execute code during pip install
+- No validation or sandboxing
 
-### 4. test_cache_analysis.py
+**After:**
+- Regex parsing extracts only the version string
+- No code execution at all
+- Clear validation with error message
+- Fails safely if format unexpected
 
-**Purpose**: Test prompt cache analysis and reporting
-
-**Test Classes**:
-- `TestCacheAnalysis`: Test cache analysis functions
-- `TestCacheReporting`: Test cache report generation
-
-**Key Test Cases**:
-```python
-def test_analyze_prompt_cache_usage()
-def test_generate_cache_report()
-def test_identify_cacheable_sections()
+### Regex Pattern Explanation
+```
+^__version__\s*=\s*["\']([^"\']+)["\']
+│           │  │ │    │         │
+│           │  │ │    │         └─ Closing quote (single or double)
+│           │  │ │    └─────────── Capture group: version string (anything except quotes)
+│           │  │ └──────────────── Opening quote (single or double)
+│           │  └─────────────────── Optional whitespace around =
+│           └────────────────────── __version__ identifier
+└────────────────────────────────── Start of line (re.MULTILINE)
 ```
 
-**Fixtures**:
-- `sample_prompt`: Sample prompt for analysis
-- `cache_config`: Cache configuration for testing
+**Supported Formats:**
+- `__version__ = "2.2.0"` ✅
+- `__version__ = '2.2.0'` ✅
+- `__version__="2.2.0"` ✅ (no spaces)
+- `__version__  =  "2.2.0"` ✅ (extra spaces)
 
-**Coverage Target**: >75% of cache_analysis.py
-
-## Testing Strategy
-
-### Unit Testing Approach
-1. **Isolated function tests**: Test pure functions independently
-2. **Mock external dependencies**: BAML, file I/O, subprocess
-3. **Fixture-based setup**: Reusable test data and configurations
-4. **Parameterized tests**: Test multiple inputs efficiently
-
-### Integration Testing Approach
-1. **Real file loading**: Test actual prompt files exist and load
-2. **CLI subprocess tests**: Test actual CLI execution
-3. **End-to-end workflows**: Test complete command flows
-
-### Error Handling Tests
-1. **Missing files**: Test graceful handling
-2. **Invalid inputs**: Test argument validation
-3. **BAML unavailable**: Test fallback behavior
-4. **Permission errors**: Test file access issues
+**Rejected Formats:**
+- `__version__ = variable` ❌ (not a string literal)
+- `# __version__ = "2.2.0"` ❌ (commented out)
+- Missing __version__ entirely ❌
 
 ## Implementation Steps
 
-### Step 1: Create Directory Structure
+### Step 1: Add re import
+- Location: Top of setup.py (line 7, after other imports)
+- Action: Add `import re` to imports section
+- Note: `re` is stdlib, no new dependencies
+
+### Step 2: Replace exec() block
+- Location: Lines 30-33 in setup.py
+- Action: Replace 4 lines with 13 lines of safe code
+- Preserve: Comments explaining purpose
+
+### Step 3: Update version reference
+- Location: Line 41 in setup.py (setup() call)
+- Action: Change `version_info["__version__"]` to `version`
+- Reason: New implementation stores in `version` variable
+
+### Step 4: Code formatting
+- Ensure consistent indentation
+- Maintain existing code style
+- Keep line lengths reasonable
+
+## Testing Strategy
+
+### Pre-Implementation Validation
+1. **Backup check**: Verify we're on feature branch
+2. **Working tree**: Ensure clean git status before changes
+
+### Post-Implementation Testing
+
+#### Phase 1: Installation Testing
 ```bash
-mkdir -p tests/prompts
-touch tests/prompts/__init__.py
+# Test 1: Local editable install
+pip install -e .
+
+# Test 2: Verify version extraction
+python3 -c "from setuptools import setup; exec(open('setup.py').read())"
+
+# Test 3: CLI command works
+cf --version
+
+# Test 4: Clean install
+pip uninstall -y context-foundry
+pip install .
 ```
 
-### Step 2: Implement test_use_baml_cli.py
-1. Import use_baml module
-2. Create mock fixtures
-3. Write status command tests
-4. Write update-phase command tests
-5. Write other command tests
-6. Write error handling tests
-
-### Step 3: Implement test_phase_loader.py
-1. Import phase_loader module
-2. Create test fixtures
-3. Write basic loading tests
-4. Write Flowise mode tests
-5. Write error handling tests
-
-### Step 4: Implement test_build_orchestrator_prompt.py
-1. Import build_orchestrator_prompt module
-2. Write prompt building tests
-3. Write integration tests
-
-### Step 5: Implement test_cache_analysis.py
-1. Import cache_analysis module
-2. Write cache analysis tests
-3. Write reporting tests
-
-## Test Execution Plan
-
-### Run Individual Test Files
+#### Phase 2: Regression Testing
 ```bash
-pytest tests/test_use_baml_cli.py -v
-pytest tests/prompts/test_phase_loader.py -v
-pytest tests/prompts/test_build_orchestrator_prompt.py -v
-pytest tests/prompts/test_cache_analysis.py -v
+# Test 5: Run full test suite
+pytest
+
+# Test 6: Check for any security warnings
+bandit -r . -ll
+
+# Test 7: Verify package metadata
+pip show context-foundry
 ```
 
-### Run All New Tests
+#### Phase 3: Security Validation
 ```bash
-pytest tests/test_use_baml_cli.py tests/prompts/ -v
+# Test 8: Confirm no exec/eval in setup.py
+grep -n "exec\|eval" setup.py
+
+# Test 9: Verify regex parsing works
+python3 -c "
+import re
+from pathlib import Path
+content = Path('__version__.py').read_text()
+match = re.search(r'^__version__\s*=\s*[\"']([^\"']+)[\"']', content, re.MULTILINE)
+print(f'Extracted version: {match.group(1)}')
+"
 ```
 
-### Run With Coverage
-```bash
-pytest tests/test_use_baml_cli.py tests/prompts/ \
-  --cov=tools.use_baml \
-  --cov=tools.prompts.phase_loader \
-  --cov=tools.prompts.build_orchestrator_prompt \
-  --cov=tools.prompts.cache_analysis \
-  --cov-report=term-missing
+### Success Criteria
+- ✅ `pip install -e .` completes successfully
+- ✅ Correct version extracted (2.2.0)
+- ✅ All existing tests pass
+- ✅ No exec() in setup.py
+- ✅ CLI command `cf` works
+- ✅ Package metadata correct
+
+### Edge Cases to Test
+1. **Missing __version__.py**: Should raise RuntimeError
+2. **Malformed version**: Should raise RuntimeError with clear message
+3. **Different quotes**: Should work with both ' and "
+4. **Extra whitespace**: Should handle variations
+
+## Error Handling
+
+### Clear Error Messages
+```python
+if not version_match:
+    raise RuntimeError(
+        "Unable to find version string in __version__.py. "
+        "Expected format: __version__ = \"x.y.z\""
+    )
 ```
 
-### Run All Tests (Verify No Regressions)
-```bash
-pytest tests/ -v
-```
+**Benefits:**
+- Developer-friendly error message
+- Shows expected format
+- Fails during setup, not runtime
+- Easy to debug if __version__.py format changes
 
-## Success Criteria
+## Rollback Plan
+If issues arise:
+1. Git branch already created: `self-improvement/task-f4c4a009`
+2. Can easily revert: `git checkout main`
+3. Original code preserved in git history
+4. No changes to __version__.py (only setup.py modified)
 
-### Must Pass
-- ✅ All new tests pass
-- ✅ All existing tests still pass
-- ✅ No import errors
-- ✅ No syntax errors
+## Documentation Updates
+- Commit message will reference issue #108
+- PR description will explain security fix
+- No user-facing docs need updating (internal change)
 
-### Coverage Goals
-- ✅ use_baml.py: >85% coverage
-- ✅ phase_loader.py: >90% coverage
-- ✅ build_orchestrator_prompt.py: >80% coverage
-- ✅ cache_analysis.py: >75% coverage
+## Security Checklist
+- [ ] No exec() or eval() in modified code
+- [ ] No dynamic code execution
+- [ ] Input validation (regex match check)
+- [ ] Clear error messages
+- [ ] Fails safely if input unexpected
+- [ ] Uses only standard library (re module)
+- [ ] No new dependencies introduced
+- [ ] Code is readable and maintainable
 
-### Code Quality
-- ✅ Follow existing test patterns
-- ✅ Use pytest fixtures appropriately
-- ✅ Mock external dependencies
-- ✅ Clear, descriptive test names
-- ✅ Docstrings for test classes
+## Deployment Process
+1. Commit changes with security-focused message
+2. Push to branch: `self-improvement/task-f4c4a009`
+3. Create PR with title: "Security: Fix code injection risk in setup.py exec()"
+4. PR description references: "Fixes #108"
+5. Request review from maintainers
+6. Merge after approval
 
-## Git Workflow
+## Impact Assessment
+- **Users**: No impact (internal change only)
+- **Installation**: No change in behavior
+- **Dependencies**: No new dependencies
+- **Performance**: Negligible (regex vs exec)
+- **Security**: HIGH improvement (removes code execution)
 
-### Branch Creation
-```bash
-git checkout -b self-improvement/task-995b8dba
-```
-
-### Commit Strategy
-1. Commit after each test file is complete and passing
-2. Descriptive commit messages
-3. Final commit with all tests passing
-
-### PR Creation
-```bash
-git push -u origin self-improvement/task-995b8dba
-gh pr create --base main \
-  --title "Add comprehensive tests for critical untested paths" \
-  --body "Adds test coverage for use_baml.py, phase_loader.py, build_orchestrator_prompt.py, and cache_analysis.py. Improves overall coverage from 25.3% to target >30%."
-```
-
-## Risk Mitigation
-
-### Risk 1: Existing Tests Break
-**Mitigation**: Run full test suite before committing  
-**Rollback**: Easy - just delete new test files
-
-### Risk 2: BAML Integration Issues
-**Mitigation**: Mock all BAML calls, test fallback  
-**Verification**: Test with and without BAML available
-
-### Risk 3: File Path Issues
-**Mitigation**: Use Path objects, test from multiple directories  
-**Verification**: Run tests from project root and tests/ directory
-
-### Risk 4: Coverage Not Improving
-**Mitigation**: Check coverage after each test file  
-**Adjustment**: Add more test cases as needed
-
-## Next Steps
-
-Proceed to Builder phase to implement all test files according to this architecture.
+## Architecture Complete
+This is a minimal, focused security fix that eliminates the exec() vulnerability while maintaining all existing functionality.
