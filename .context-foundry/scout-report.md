@@ -1,138 +1,155 @@
-# Scout Report: Add Tests for tools/mcp_server.py
+# Scout Report: Add Tests for Critical Paths
 
 ## Executive Summary
 
-GitHub Issue #86 requests test coverage for `tools/mcp_server.py`. Analysis reveals that while comprehensive integration tests exist (test_mcp_server_comprehensive.py, test_mcp_server_critical_paths.py, test_mcp_server_integration.py), **critical helper functions lack unit test coverage**:
+This task focuses on improving test coverage for critical, untested code paths in Context Foundry. Current overall coverage is 25.3%, with several critical files having 0% coverage despite being essential to core functionality. We'll add comprehensive tests for 4 high-priority files that are CLI entry points and prompt building infrastructure.
 
-**Untested Functions:**
-- `_read_phase_info()` - Phase tracking file reader with staleness validation
-- `_truncate_output()` - Large output truncation with token limits
-- `_get_context_foundry_parent_dir()` - Path resolution utility
-- `_write_delegation_metadata()` - Delegation metadata persistence
-- `_write_full_output_to_file()` - Full output file writer
-- `_create_output_summary()` - Output summarization utility
+## Key Requirements
 
-These are **testable, pure functions** with clear inputs/outputs - ideal candidates for unit testing.
+### Primary Objectives
+1. **Add CLI tests for tools/use_baml.py** - Critical BAML integration entry point
+2. **Add tests for tools/prompts/phase_loader.py** - Modular prompt loading system
+3. **Add tests for tools/prompts/build_orchestrator_prompt.py** - Main prompt builder
+4. **Add tests for tools/prompts/cache_analysis.py** - Prompt cache analysis
 
-## Task Requirements
-
-1. **Create unit tests** for the 6 untested helper functions
-2. **Achieve >80% coverage** for helper function code paths
-3. **Follow existing test patterns** from test_mcp_server_comprehensive.py
-4. **Mock FastMCP properly** (required for import)
-5. **Test edge cases**: empty inputs, invalid JSON, file I/O errors, staleness checks
+### Success Criteria
+- All new tests pass
+- Existing tests continue to pass
+- Coverage for target files reaches >80%
+- Tests follow existing patterns (pytest, mocking, fixtures)
 
 ## Technology Stack
 
-- **Testing Framework**: pytest (already in use)
-- **Mocking**: unittest.mock (existing pattern)
-- **Coverage**: pytest-cov (existing)
-- **Dependencies**: FastMCP mocking required (pattern established)
+**Language**: Python 3.8+  
+**Testing Framework**: pytest with pytest-asyncio  
+**Mocking**: unittest.mock  
+**Coverage**: pytest-cov  
 
-## Key Implementation Details
+**Dependencies**:
+- BAML integration (optional, graceful fallback)
+- File I/O for prompt loading
+- argparse for CLI testing
+- subprocess for integration tests
 
-### 1. Test File Location
-Create: `tests/test_mcp_server_helpers.py` (follows naming convention)
+## Critical Architecture Recommendations
 
-### 2. FastMCP Mock Pattern (Critical)
-Must mock FastMCP before importing mcp_server:
+### 1. Test Structure
+- Create `tests/test_use_baml_cli.py` for CLI testing
+- Create `tests/prompts/` directory for prompt-related tests
+- Follow existing test naming: `test_<module>_<aspect>.py`
+
+### 2. Testing Patterns (From Existing Codebase)
 ```python
-class MockFastMCP:
-    def tool(self, *args, **kwargs):
-        def decorator(func): return func
-        return decorator if not args or callable(args[0]) else decorator
+# Pattern 1: Path handling with sys.path manipulation
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Pattern 2: Mocking BAML availability
+@patch('tools.baml_integration.is_baml_available')
+def test_with_baml_unavailable(mock_baml):
+    mock_baml.return_value = False
+    # Test fallback behavior
+
+# Pattern 3: Temporary directories for file tests
+@pytest.fixture
+def temp_prompt_dir(tmp_path):
+    # Create test prompt files
+    return tmp_path
+
+# Pattern 4: Subprocess testing for CLI
+import subprocess
+result = subprocess.run(['python3', 'tools/use_baml.py', 'status'], 
+                       capture_output=True, text=True)
+assert result.returncode == 0
 ```
 
-### 3. Test Coverage Requirements
+### 3. Mock Strategy
+- **Mock BAML**: Test both available and unavailable states
+- **Mock file I/O**: Use tmp_path fixture for prompt files
+- **Mock subprocess**: For CLI integration tests
+- **Real integration**: Test actual file loading where safe
 
-**_read_phase_info()** - 6 test cases:
-- Valid phase file exists and is fresh
-- Phase file doesn't exist (returns {})
-- Phase file has invalid JSON (returns {})
-- Phase file is stale (modified before task start)
-- Phase file has permission error
-- Phase file exists but no task_start_time provided
+### 4. Coverage Strategy
+Focus on:
+- ✅ Argument parsing and validation
+- ✅ Error handling (missing files, invalid inputs)
+- ✅ BAML integration paths (both success and fallback)
+- ✅ File loading and path resolution
+- ✅ CLI command execution
 
-**_truncate_output()** - 5 test cases:
-- Small output (no truncation needed)
-- Large output requiring truncation
-- Empty string input
-- Exact boundary case (at max_tokens limit)
-- Custom max_tokens parameter
+## Main Challenges and Mitigations
 
-**_get_context_foundry_parent_dir()** - 2 test cases:
-- Returns parent of context-foundry directory
-- Verify path resolution is correct
+### Challenge 1: BAML Dependency
+**Issue**: BAML requires OpenAI API key, may not be available in CI  
+**Mitigation**: Mock BAML calls, test fallback behavior  
+**Pattern**: Follow test_baml_integration.py patterns
 
-**_write_delegation_metadata()** - 3 test cases:
-- Successful write to shared directory
-- Directory creation if not exists
-- Handle write errors gracefully
+### Challenge 2: File System Dependencies
+**Issue**: Prompt loaders read from filesystem  
+**Mitigation**: Use pytest tmp_path fixture, create test files  
+**Pattern**: Create minimal test prompt files in fixtures
 
-**_write_full_output_to_file()** - 4 test cases:
-- Successful file write with stdout/stderr
-- Directory creation
-- Encoding handling (UTF-8)
-- Handle write errors
+### Challenge 3: CLI Testing Complexity
+**Issue**: Testing argparse and subprocess interactions  
+**Mitigation**: Unit test argparse separately, integration test with subprocess  
+**Pattern**: Test main() function with mocked sys.argv
 
-**_create_output_summary()** - 4 test cases:
-- Output under max_lines (no truncation)
-- Output over max_lines (truncation)
-- Empty output
-- Custom max_lines parameter
-
-### 4. Challenges & Mitigations
-
-**Challenge 1**: File I/O testing
-- **Mitigation**: Use pytest's tmp_path fixture (established pattern)
-
-**Challenge 2**: FastMCP import dependency
-- **Mitigation**: Use existing mock pattern from test_mcp_server_comprehensive.py
-
-**Challenge 3**: Path resolution testing
-- **Mitigation**: Use __file__ inspection and Path.resolve()
-
-**Challenge 4**: Staleness validation for _read_phase_info
-- **Mitigation**: Mock datetime and file mtime
+### Challenge 4: Path Resolution
+**Issue**: Relative path handling across different execution contexts  
+**Mitigation**: Use Path objects consistently, test from multiple directories  
+**Pattern**: Follow existing path resolution in test files
 
 ## Testing Approach
 
-1. **Unit tests only** - No integration testing needed (already exists)
-2. **Isolated function testing** - Each helper tested independently
-3. **Edge case focus** - Invalid inputs, errors, boundary conditions
-4. **Fast execution** - All tests should complete in <2 seconds total
-5. **No external dependencies** - Use mocks and fixtures
+### Phase 1: Unit Tests (Core Functions)
+1. Test `get_phase_prompt()` with various inputs
+2. Test `list_available_phases()`
+3. Test argument parsing in main()
+4. Test status normalization logic
 
-## Success Criteria
+### Phase 2: Integration Tests (CLI Commands)
+1. Test `python3 tools/use_baml.py status`
+2. Test `python3 tools/use_baml.py update-phase`
+3. Test prompt loading with real files
+4. Test error cases (missing files, invalid args)
 
-✅ All 6 helper functions have comprehensive unit tests
-✅ Test coverage >80% for helper function code
-✅ All tests pass with pytest
-✅ Tests follow existing conventions
-✅ Edge cases properly handled
-✅ Mock patterns consistent with existing tests
+### Phase 3: Edge Cases
+1. Invalid phase identifiers
+2. Missing prompt files
+3. Flowise mode toggling
+4. BAML unavailable scenarios
+
+### Phase 4: Coverage Validation
+1. Run pytest with coverage
+2. Verify >80% coverage on target files
+3. Check for any missed branches
 
 ## Timeline Estimate
 
-- Test implementation: 1-2 hours
-- Coverage validation: 15 minutes
-- **Total: 2 hours maximum**
+**Total**: ~45 minutes
+
+- Scout phase: 10 min ✓
+- Architect phase: 10 min
+- Builder phase: 20 min (write tests)
+- Test phase: 5 min (run tests, verify)
+
+## Files to Create
+
+1. `tests/test_use_baml_cli.py` (~200 lines)
+2. `tests/prompts/__init__.py` (empty)
+3. `tests/prompts/test_phase_loader.py` (~150 lines)
+4. `tests/prompts/test_build_orchestrator_prompt.py` (~100 lines)
+5. `tests/prompts/test_cache_analysis.py` (~100 lines)
+
+**Total**: ~550 lines of test code
 
 ## Risk Assessment
 
-**LOW RISK** - Well-defined scope, established patterns, pure functions with clear contracts.
+**LOW RISK** - This is a test-only change:
+- No production code modifications
+- All changes are additive (new test files)
+- Existing tests must continue to pass
+- Easy to rollback if needed
 
-**Potential Issues:**
-- None identified - straightforward unit testing task
+## Next Steps
 
-## Environment Checklist - GitHub Deployment
-
-Checking deployment environment...
-
-- [✅] GitHub CLI (gh) installed: Available
-- [✅] GitHub authentication: Authenticated
-- [✅] Git user configured: Configured
-
-**Deployment Status:** ✅ Ready for GitHub deployment
-
-Note: This is an existing_repo mode task, so PR will be created against the main branch.
+Proceed to Architect phase to design the detailed test structure and fixtures.

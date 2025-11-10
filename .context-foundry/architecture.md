@@ -1,253 +1,284 @@
-# Architecture: Unit Tests for tools/mcp_server.py Helper Functions
+# Test Architecture Design
 
-## System Overview
+## System Architecture Overview
 
-Create comprehensive unit tests for 6 untested helper functions in `tools/mcp_server.py`. These functions are critical for MCP server operation but lack direct test coverage.
+This test suite adds comprehensive coverage for 4 critical untested modules:
+1. CLI interface for BAML integration (`use_baml.py`)
+2. Modular prompt loading system (`phase_loader.py`)
+3. Orchestrator prompt builder (`build_orchestrator_prompt.py`)
+4. Prompt cache analyzer (`cache_analysis.py`)
 
-## File Structure
+## Complete File Structure
 
 ```
 tests/
-├── test_mcp_server_helpers.py     (NEW - 400-500 lines)
-│   ├── FastMCP mock setup
-│   ├── Test fixtures
-│   ├── _read_phase_info tests (6 tests)
-│   ├── _truncate_output tests (5 tests)
-│   ├── _get_context_foundry_parent_dir tests (2 tests)
-│   ├── _write_delegation_metadata tests (3 tests)
-│   ├── _write_full_output_to_file tests (4 tests)
-│   └── _create_output_summary tests (4 tests)
+├── test_use_baml_cli.py           # NEW - CLI integration tests
+├── prompts/                        # NEW - Prompt system tests
+│   ├── __init__.py                # NEW - Empty init
+│   ├── test_phase_loader.py       # NEW - Phase loading tests
+│   ├── test_build_orchestrator_prompt.py  # NEW - Prompt builder tests
+│   └── test_cache_analysis.py     # NEW - Cache analysis tests
+└── [existing 58 test files]
 ```
 
 ## Module Specifications
 
-### test_mcp_server_helpers.py
+### 1. test_use_baml_cli.py
 
-**Purpose**: Unit tests for private helper functions in mcp_server.py
+**Purpose**: Test CLI interface for BAML integration wrapper
 
-**Key Components**:
+**Test Classes**:
+- `TestCLIStatus`: Test status command
+- `TestCLIUpdatePhase`: Test phase tracking updates
+- `TestCLIScoutReport`: Test scout report generation
+- `TestCLIArchitecture`: Test architecture generation
+- `TestCLIValidateBuild`: Test build validation
+- `TestCLIErrorHandling`: Test error cases
 
-1. **Mock Setup** (lines 1-60)
-   - MockFastMCP class (tool and resource decorators)
-   - sys.modules mocking for fastmcp imports
-   - Import mcp_server after mocking
+**Key Test Cases**:
+```python
+# Status command
+def test_status_baml_available()
+def test_status_baml_unavailable()
+def test_status_no_api_key()
 
-2. **Fixtures** (lines 61-100)
-   - `temp_dir(tmp_path)` - Temporary directory for file operations
-   - `mock_phase_file(temp_dir)` - Creates test phase JSON file
-   - `sample_output()` - Returns sample output strings for truncation tests
+# Update phase command
+def test_update_phase_success()
+def test_update_phase_status_normalization()
+def test_update_phase_with_iteration()
 
-3. **_read_phase_info Tests** (lines 101-250)
-   ```python
-   def test_read_phase_info_file_exists_fresh()
-   def test_read_phase_info_file_not_exists()
-   def test_read_phase_info_invalid_json()
-   def test_read_phase_info_stale_file()
-   def test_read_phase_info_permission_error()
-   def test_read_phase_info_no_task_start_time()
-   ```
+# Error handling
+def test_no_command_shows_help()
+def test_invalid_command()
+def test_missing_required_args()
+```
 
-4. **_truncate_output Tests** (lines 251-350)
-   ```python
-   def test_truncate_output_small_output()
-   def test_truncate_output_large_output()
-   def test_truncate_output_empty_string()
-   def test_truncate_output_at_boundary()
-   def test_truncate_output_custom_max_tokens()
-   ```
+**Fixtures**:
+- `mock_baml_available`: Mock BAML availability checks
+- `mock_env_vars`: Mock environment variables
+- `cli_runner`: Helper to run CLI commands
 
-5. **_get_context_foundry_parent_dir Tests** (lines 351-400)
-   ```python
-   def test_get_context_foundry_parent_dir_returns_parent()
-   def test_get_context_foundry_parent_dir_resolution()
-   ```
+**Coverage Target**: >85% of use_baml.py
 
-6. **_write_delegation_metadata Tests** (lines 401-480)
-   ```python
-   def test_write_delegation_metadata_success()
-   def test_write_delegation_metadata_creates_directory()
-   def test_write_delegation_metadata_handles_errors()
-   ```
+### 2. test_phase_loader.py
 
-7. **_write_full_output_to_file Tests** (lines 481-580)
-   ```python
-   def test_write_full_output_to_file_success()
-   def test_write_full_output_to_file_creates_directory()
-   def test_write_full_output_to_file_encoding()
-   def test_write_full_output_to_file_handles_errors()
-   ```
+**Purpose**: Test modular phase prompt loading
 
-8. **_create_output_summary Tests** (lines 581-680)
-   ```python
-   def test_create_output_summary_under_max_lines()
-   def test_create_output_summary_over_max_lines()
-   def test_create_output_summary_empty_output()
-   def test_create_output_summary_custom_max_lines()
-   ```
+**Test Classes**:
+- `TestPhasePromptLoading`: Test individual phase loading
+- `TestPhasePromptCombined`: Test all phases loading
+- `TestPhasePromptFlowise`: Test Flowise mode
+- `TestPhasePromptErrors`: Test error handling
 
-## Implementation Steps
+**Key Test Cases**:
+```python
+# Basic loading
+def test_get_phase_prompt_valid_phase()
+def test_get_phase_prompt_all_phases()
+def test_list_available_phases()
 
-### Step 1: Mock Setup and Imports
-- Create MockFastMCP class with tool() and resource() decorators
-- Mock sys.modules entries for fastmcp
-- Import functions from tools.mcp_server after mocking
+# Flowise mode
+def test_get_phase_prompt_with_flowise()
+def test_get_phase_prompt_flowise_unavailable()
 
-### Step 2: Test Fixtures
-- Create pytest fixtures for temporary directories
-- Create fixture for mock phase files
-- Create fixture for sample output strings
+# Error cases
+def test_get_phase_prompt_invalid_phase()
+def test_get_phase_prompt_missing_file()
+```
 
-### Step 3: Implement _read_phase_info Tests
-- Test successful read with fresh file
-- Test file not exists (returns empty dict)
-- Test invalid JSON (returns empty dict)
-- Test stale file detection (modified before task start)
-- Test permission errors (returns empty dict)
-- Test without task_start_time parameter
+**Fixtures**:
+- `phase_files_exist`: Verify phase files present
+- `mock_flowise_available`: Mock Flowise extension
+- `temp_phase_dir`: Temporary phase files for testing
 
-### Step 4: Implement _truncate_output Tests
-- Test small output (no truncation)
-- Test large output (truncation occurs)
-- Test empty string handling
-- Test boundary case (exactly at limit)
-- Test custom max_tokens parameter
+**Coverage Target**: >90% of phase_loader.py
 
-### Step 5: Implement _get_context_foundry_parent_dir Tests
-- Test returns correct parent directory
-- Test path resolution works correctly
+### 3. test_build_orchestrator_prompt.py
 
-### Step 6: Implement _write_delegation_metadata Tests
-- Test successful metadata write
-- Test directory creation
-- Test error handling
+**Purpose**: Test orchestrator prompt building and assembly
 
-### Step 7: Implement _write_full_output_to_file Tests
-- Test successful file write
-- Test directory creation
-- Test UTF-8 encoding
-- Test error handling
+**Test Classes**:
+- `TestPromptBuilder`: Test prompt construction
+- `TestPromptIntegration`: Test full prompt assembly
+- `TestPromptCaching`: Test cache directives
 
-### Step 8: Implement _create_output_summary Tests
-- Test output under max_lines (no truncation)
-- Test output over max_lines (truncation)
-- Test empty output
-- Test custom max_lines parameter
+**Key Test Cases**:
+```python
+def test_build_prompt_with_all_phases()
+def test_build_prompt_without_flowise()
+def test_build_prompt_with_flowise()
+def test_prompt_contains_critical_sections()
+def test_prompt_length_reasonable()
+```
+
+**Fixtures**:
+- `expected_sections`: List of required prompt sections
+- `prompt_builder`: Builder instance for tests
+
+**Coverage Target**: >80% of build_orchestrator_prompt.py
+
+### 4. test_cache_analysis.py
+
+**Purpose**: Test prompt cache analysis and reporting
+
+**Test Classes**:
+- `TestCacheAnalysis`: Test cache analysis functions
+- `TestCacheReporting`: Test cache report generation
+
+**Key Test Cases**:
+```python
+def test_analyze_prompt_cache_usage()
+def test_generate_cache_report()
+def test_identify_cacheable_sections()
+```
+
+**Fixtures**:
+- `sample_prompt`: Sample prompt for analysis
+- `cache_config`: Cache configuration for testing
+
+**Coverage Target**: >75% of cache_analysis.py
 
 ## Testing Strategy
 
-### Unit Test Principles
-1. **Isolation**: Each function tested independently
-2. **Mocking**: Use unittest.mock for file I/O, datetime
-3. **Coverage**: Test happy path + error paths + edge cases
-4. **Speed**: All tests should complete in <2 seconds
+### Unit Testing Approach
+1. **Isolated function tests**: Test pure functions independently
+2. **Mock external dependencies**: BAML, file I/O, subprocess
+3. **Fixture-based setup**: Reusable test data and configurations
+4. **Parameterized tests**: Test multiple inputs efficiently
 
-### Test Patterns
+### Integration Testing Approach
+1. **Real file loading**: Test actual prompt files exist and load
+2. **CLI subprocess tests**: Test actual CLI execution
+3. **End-to-end workflows**: Test complete command flows
 
-**File I/O Testing**:
-```python
-def test_function_with_file_io(tmp_path):
-    test_file = tmp_path / "test.json"
-    # Test logic here
-```
+### Error Handling Tests
+1. **Missing files**: Test graceful handling
+2. **Invalid inputs**: Test argument validation
+3. **BAML unavailable**: Test fallback behavior
+4. **Permission errors**: Test file access issues
 
-**Error Handling Testing**:
-```python
-@patch('builtins.open', side_effect=PermissionError)
-def test_function_handles_permission_error(mock_open):
-    result = function_under_test()
-    assert result == expected_error_result
-```
+## Implementation Steps
 
-**Staleness Testing**:
-```python
-@patch('tools.mcp_server.datetime')
-def test_stale_file_detection(mock_datetime, tmp_path):
-    # Set up stale file
-    # Verify it's detected as stale
-```
-
-### Success Criteria
-
-**Code Coverage**:
-- ✅ >80% coverage for helper functions
-- ✅ All branches tested (if/else, try/except)
-
-**Test Quality**:
-- ✅ All tests pass with pytest
-- ✅ No test interdependencies
-- ✅ Fast execution (<2 seconds total)
-- ✅ Clear test names and assertions
-
-**Code Quality**:
-- ✅ Follow existing test file patterns
-- ✅ Proper docstrings for test functions
-- ✅ Type hints where appropriate
-- ✅ Clear arrange-act-assert structure
-
-## Edge Cases to Test
-
-1. **_read_phase_info**:
-   - Empty JSON file
-   - Malformed JSON
-   - File deleted mid-operation
-   - Unicode characters in phase names
-
-2. **_truncate_output**:
-   - Zero-length output
-   - Exactly at token boundary
-   - Multi-byte Unicode characters
-   - Very large output (100k+ lines)
-
-3. **_write_delegation_metadata**:
-   - Read-only filesystem
-   - Disk full scenarios
-   - Invalid metadata structure
-
-4. **_write_full_output_to_file**:
-   - Binary data in output
-   - Very large files (>100MB)
-   - Concurrent writes
-
-## Dependencies
-
-- pytest >= 7.0
-- unittest.mock (standard library)
-- pathlib (standard library)
-- json (standard library)
-- datetime (standard library)
-
-## Testing Commands
-
+### Step 1: Create Directory Structure
 ```bash
-# Run new tests only
-pytest tests/test_mcp_server_helpers.py -v
-
-# Run with coverage
-pytest tests/test_mcp_server_helpers.py --cov=tools.mcp_server --cov-report=term-missing
-
-# Run all mcp_server tests
-pytest tests/test_mcp_server*.py -v
+mkdir -p tests/prompts
+touch tests/prompts/__init__.py
 ```
 
-## Preventive Measures
+### Step 2: Implement test_use_baml_cli.py
+1. Import use_baml module
+2. Create mock fixtures
+3. Write status command tests
+4. Write update-phase command tests
+5. Write other command tests
+6. Write error handling tests
 
-**Known Risk**: FastMCP import failure
-- **Prevention**: Mock FastMCP before any imports
-- **Pattern**: Use established MockFastMCP class from existing tests
+### Step 3: Implement test_phase_loader.py
+1. Import phase_loader module
+2. Create test fixtures
+3. Write basic loading tests
+4. Write Flowise mode tests
+5. Write error handling tests
 
-**Known Risk**: File I/O test flakiness
-- **Prevention**: Use pytest's tmp_path fixture
-- **Pattern**: Never write to actual directories, always use temp
+### Step 4: Implement test_build_orchestrator_prompt.py
+1. Import build_orchestrator_prompt module
+2. Write prompt building tests
+3. Write integration tests
 
-**Known Risk**: Datetime mocking complexity
-- **Prevention**: Use patch decorator for datetime
-- **Pattern**: Mock at function call site, not module level
+### Step 5: Implement test_cache_analysis.py
+1. Import cache_analysis module
+2. Write cache analysis tests
+3. Write reporting tests
 
-## Success Validation
+## Test Execution Plan
 
-After implementation:
-1. Run `pytest tests/test_mcp_server_helpers.py -v` - all pass
-2. Run coverage: `pytest tests/test_mcp_server_helpers.py --cov=tools.mcp_server --cov-branch`
-3. Verify >80% coverage for helper functions
-4. Ensure no test takes >1 second individually
-5. Verify all edge cases covered
+### Run Individual Test Files
+```bash
+pytest tests/test_use_baml_cli.py -v
+pytest tests/prompts/test_phase_loader.py -v
+pytest tests/prompts/test_build_orchestrator_prompt.py -v
+pytest tests/prompts/test_cache_analysis.py -v
+```
+
+### Run All New Tests
+```bash
+pytest tests/test_use_baml_cli.py tests/prompts/ -v
+```
+
+### Run With Coverage
+```bash
+pytest tests/test_use_baml_cli.py tests/prompts/ \
+  --cov=tools.use_baml \
+  --cov=tools.prompts.phase_loader \
+  --cov=tools.prompts.build_orchestrator_prompt \
+  --cov=tools.prompts.cache_analysis \
+  --cov-report=term-missing
+```
+
+### Run All Tests (Verify No Regressions)
+```bash
+pytest tests/ -v
+```
+
+## Success Criteria
+
+### Must Pass
+- ✅ All new tests pass
+- ✅ All existing tests still pass
+- ✅ No import errors
+- ✅ No syntax errors
+
+### Coverage Goals
+- ✅ use_baml.py: >85% coverage
+- ✅ phase_loader.py: >90% coverage
+- ✅ build_orchestrator_prompt.py: >80% coverage
+- ✅ cache_analysis.py: >75% coverage
+
+### Code Quality
+- ✅ Follow existing test patterns
+- ✅ Use pytest fixtures appropriately
+- ✅ Mock external dependencies
+- ✅ Clear, descriptive test names
+- ✅ Docstrings for test classes
+
+## Git Workflow
+
+### Branch Creation
+```bash
+git checkout -b self-improvement/task-995b8dba
+```
+
+### Commit Strategy
+1. Commit after each test file is complete and passing
+2. Descriptive commit messages
+3. Final commit with all tests passing
+
+### PR Creation
+```bash
+git push -u origin self-improvement/task-995b8dba
+gh pr create --base main \
+  --title "Add comprehensive tests for critical untested paths" \
+  --body "Adds test coverage for use_baml.py, phase_loader.py, build_orchestrator_prompt.py, and cache_analysis.py. Improves overall coverage from 25.3% to target >30%."
+```
+
+## Risk Mitigation
+
+### Risk 1: Existing Tests Break
+**Mitigation**: Run full test suite before committing  
+**Rollback**: Easy - just delete new test files
+
+### Risk 2: BAML Integration Issues
+**Mitigation**: Mock all BAML calls, test fallback  
+**Verification**: Test with and without BAML available
+
+### Risk 3: File Path Issues
+**Mitigation**: Use Path objects, test from multiple directories  
+**Verification**: Run tests from project root and tests/ directory
+
+### Risk 4: Coverage Not Improving
+**Mitigation**: Check coverage after each test file  
+**Adjustment**: Add more test cases as needed
+
+## Next Steps
+
+Proceed to Builder phase to implement all test files according to this architecture.
