@@ -2469,6 +2469,23 @@ BEGIN AUTONOMOUS EXECUTION NOW.
             "sandbox_task_id": sandbox_task_id,  # For SandboxManager.cleanup_sandbox()
         }
 
+        # Write delegation metadata so DelegationMode can monitor and cleanup
+        # CRITICAL: Must include sandbox fields at START so cleanup can work
+        _write_delegation_metadata(
+            task_id,
+            {
+                "task_id": task_id,
+                "status": "running",
+                "task": task,
+                "working_directory": final_working_dir_str,
+                "start_time": datetime.now().isoformat(),
+                "timeout_minutes": timeout_minutes,
+                "pid": process.pid,
+                "sandbox_path": sandbox_path,  # For cleanup when task completes
+                "sandbox_task_id": sandbox_task_id,  # For SandboxManager (legacy, not used)
+            },
+        )
+
         return json.dumps(
             {
                 "task_id": task_id,
