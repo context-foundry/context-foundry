@@ -1,236 +1,133 @@
-# Scout Report: Add Tests for tools/cache/cache_manager.py
+# Scout Report: Add Tests for tools/mcp_server.py
 
 ## Executive Summary
 
-**Task**: Implement comprehensive unit tests for `tools/cache/cache_manager.py` as requested in GitHub Issue #148 (approved, P1 priority).
-
-**Scope**: Create `tests/test_cache_manager_unit.py` with ~35-45 tests covering all 7 public methods of the `CacheManager` class, following established testing patterns in the codebase.
-
-**Approach**: Follow the existing test patterns from `test_scout_cache_unit.py` and `test_test_cache_unit.py`, using pytest with appropriate markers, isolated temporary directories, and comprehensive coverage of success/failure paths.
+The task is to add comprehensive unit tests for `tools/mcp_server.py`, a critical MCP server component with 3,752 lines of code containing 35+ functions. Current test coverage shows 0% actual code coverage because existing tests heavily mock the implementation. The file is well-structured but lacks true unit tests that verify actual function behavior.
 
 ## Key Requirements
 
-### Functional Requirements
-1. Test all 7 public methods of `CacheManager` class
-2. Cover both success and failure scenarios
-3. Test edge cases (empty cache, expired entries, size limits, invalid inputs)
-4. Verify integration with scout_cache and test_cache modules
-5. Ensure tests are isolated and repeatable
+### Primary Goal
+Add unit tests for `tools/mcp_server.py` to:
+1. Increase actual code coverage (currently 0%)
+2. Test individual function behavior with real implementations
+3. Cover error handling and edge cases
+4. Ensure reliability for this critical integration component
 
-### Testing Requirements
-- Use pytest framework with standard markers (`@pytest.mark.unit`, tier1/tier2)
-- Use `tempfile.TemporaryDirectory()` for test isolation
-- Follow existing test organization patterns (descriptive test classes)
-- Include comprehensive docstrings
-- No external dependencies or network calls
-- All tests must be deterministic and fast
+### Critical Functions Needing Tests
 
-### Quality Requirements
-- 100% coverage of CacheManager public methods
-- Clear, descriptive test names
-- Proper assertions with meaningful error messages
-- No test interdependencies
-- Clean up resources automatically
+**Helper Functions (High Priority):**
+- `_detect_existing_codebase()` - Detects project type and structure
+- `_detect_task_intent()` - Determines task intent from description
+- `_read_global_patterns_impl()` - Reads global pattern files
+- `_save_global_patterns_impl()` - Saves global patterns
+- `_merge_project_patterns_impl()` - Merges project patterns
 
-## Technology Stack
+**Public Tool Functions:**
+- Pattern management wrappers (need integration with real implementations)
+- Evolution system stubs (need basic functionality tests)
 
-### Core Technologies
-- **Python 3.x**: Primary language
-- **pytest**: Testing framework
-- **tempfile**: Temporary directory management
-- **pathlib**: Cross-platform path operations
+**Already Tested (But With Mocks):**
+- `_read_phase_info()` - Helper function tests exist
+- `_truncate_output()` - Helper function tests exist
+- `_write_delegation_metadata()` - Helper function tests exist
 
-### Project Dependencies
-- `tools.cache.cache_manager`: Module under test
-- `tools.cache.scout_cache`: Scout cache operations
-- `tools.cache.test_cache`: Test cache operations
-- `tools.cache.__init__`: Cache utilities (get_cache_dir, is_cache_valid, etc.)
+## Technology Stack Decision
 
-## Critical Architecture Recommendations
+**Testing Framework:** pytest (already in use)
+**Mocking Strategy:** Selective mocking (mock external I/O, test real logic)
+**Coverage Tool:** pytest-cov
 
-### 1. Test Organization
-Organize tests into logical classes matching the structure of existing test files:
-- `TestCacheManagerInit`: Initialization tests
-- `TestGetStats`: Statistics gathering tests
-- `TestCleanExpired`: TTL-based cleanup tests
-- `TestClearAll`: Full cache clearing tests
-- `TestClearByType`: Selective cache clearing tests
-- `TestEnforceSizeLimit`: Size limit enforcement tests
-- `TestPrintStats`: Output formatting tests
-- `TestCacheManagerIntegration`: End-to-end workflow tests
+**Justification:**
+- Project already uses pytest with established patterns
+- Need to balance real coverage with practical test execution
+- Mock only external dependencies (filesystem, subprocess, network)
+- Test actual business logic and data transformations
 
-### 2. Test Isolation Pattern
-```python
-with tempfile.TemporaryDirectory() as tmpdir:
-    manager = CacheManager(tmpdir)
-    # Test logic here
-    # Automatic cleanup on exit
-```
+## Architecture Recommendations
 
-### 3. Setup Helpers
-Create helper functions to populate cache with test data:
-- `_create_scout_cache_files()`: Add scout cache entries
-- `_create_test_cache_files()`: Add test cache entries
-- `_create_old_cache_files()`: Add expired cache entries
+### Test Structure
+1. Create focused test file: `tests/test_mcp_server_unit.py`
+2. Test real function implementations with minimal mocking
+3. Use fixtures for file system operations (tmp_path)
+4. Mock only true external dependencies (subprocess, network calls)
 
-### 4. Test Data Strategy
-- Use realistic but minimal test data
-- Create files with known sizes for size limit testing
-- Use predictable timestamps for TTL testing
-- Test with various cache type combinations
+### Testing Strategy
 
-## Main Challenges and Mitigations
+**Tier 1 (Critical - Must Test):**
+- `_detect_existing_codebase()` - Critical for build system
+- `_detect_task_intent()` - Critical for task routing
+- `_read_global_patterns_impl()` - Pattern system core
+- `_save_global_patterns_impl()` - Pattern persistence
+- `_merge_project_patterns_impl()` - Pattern merging logic
 
-### Challenge 1: TTL (Time-To-Live) Testing
-**Issue**: Testing time-based expiration without making tests slow or flaky
+**Tier 2 (Important):**
+- Evolution system tool stubs
+- Bootstrap functions
+- Error handling paths
 
-**Mitigation**:
-- Test TTL logic, not actual time passage
-- Use small TTL values (0 hours) to force expiration
-- Modify file timestamps if needed using `os.utime()`
-- Focus on the `is_cache_valid()` function behavior
+**Tier 3 (Nice to Have):**
+- Edge cases in already-tested functions
+- Performance testing
+- Integration scenarios
 
-### Challenge 2: File System Timing
-**Issue**: File modification times may have limited precision on some systems
+## Main Challenges
 
-**Mitigation**:
-- Use `time.sleep(0.1)` between file operations if needed
-- Test expiration logic with clear boundaries (expired vs valid)
-- Use large enough time differences to avoid edge cases
+### Technical Challenges
+1. **FastMCP Import Dependencies**: Must mock FastMCP before import
+2. **Global State**: `active_builds` and `active_tasks` dictionaries need cleanup
+3. **File System Operations**: Many functions read/write files
+4. **Subprocess Calls**: Delegation functions call external processes
 
-### Challenge 3: Cross-Platform Compatibility
-**Issue**: Path separators and file operations differ across OS
-
-**Mitigation**:
-- Use `pathlib.Path` exclusively (no string paths)
-- Use `Path.glob()` and `Path.rglob()` for file discovery
-- No assumptions about path separators or drive letters
-
-### Challenge 4: Integration Dependencies
-**Issue**: CacheManager depends on scout_cache and test_cache modules
-
-**Mitigation**:
-- Use real dependencies (not mocks) for integration testing
-- Create actual cache files using the same APIs CacheManager uses
-- Test the full integration stack to catch real issues
-
-### Challenge 5: Size Calculations
-**Issue**: File sizes may include metadata, vary by filesystem
-
-**Mitigation**:
-- Test relative sizes (bigger/smaller) not exact bytes
-- Use `round()` for MB calculations like the implementation
-- Test behavior (files deleted when over limit) not exact math
+### Mitigation Strategies
+1. Use existing MockFastMCP pattern from test_mcp_server_helpers.py
+2. Create fixtures for temporary directories
+3. Mock subprocess.run for delegation tests
+4. Use pytest's tmp_path fixture for file operations
+5. Clear global state in setup/teardown
 
 ## Testing Approach
 
-### Tier 1 Tests (Critical - Must Pass)
-**Priority**: Highest | **Count**: ~20 tests
+### Phase 1: Setup Test Infrastructure
+- Create test file with proper FastMCP mocking
+- Set up fixtures for file operations
+- Import real functions (not mocks)
 
-1. **Initialization**: CacheManager creates correct cache_dir
-2. **Empty Stats**: get_stats() works with no cache files
-3. **Stats with Files**: get_stats() counts all cache types correctly
-4. **Clear All**: clear_all() removes both scout and test caches
-5. **Clear Scout**: clear_by_type('scout') removes only scout cache
-6. **Clear Test**: clear_by_type('test') removes only test cache
-7. **Clear All Type**: clear_by_type('all') same as clear_all()
-8. **Invalid Type**: clear_by_type('invalid') raises ValueError
-9. **Size Limit Under**: enforce_size_limit() does nothing when under limit
-10. **Size Limit Over**: enforce_size_limit() deletes oldest files when over
+### Phase 2: Test Core Helper Functions
+- Test `_detect_existing_codebase()` with various project types
+- Test `_detect_task_intent()` with different task descriptions
+- Test pattern management functions with real file I/O
 
-### Tier 2 Tests (Important)
-**Priority**: Medium | **Count**: ~12 tests
+### Phase 3: Test Public Wrappers
+- Test evolution system stubs return appropriate responses
+- Verify error handling
 
-1. **Clean Expired**: clean_expired() removes expired entries
-2. **Clean Preserves Valid**: clean_expired() keeps valid entries
-3. **Clean Empty**: clean_expired() handles empty cache
-4. **Stats Total Size**: get_stats() calculates total_size_mb correctly
-5. **Stats File Count**: get_stats() counts total_files correctly
-6. **Print Stats**: print_stats() runs without errors (smoke test)
-7. **Enforce Size Deletes Correct Count**: Deletes exactly enough files
-8. **Enforce Size Oldest First**: Deletes oldest files first
+### Phase 4: Coverage Verification
+- Run pytest with coverage reporting
+- Verify coverage increase
+- Document remaining gaps
 
-### Integration Tests
-**Priority**: Medium | **Count**: ~3 tests
+## GitHub Deployment Readiness
 
-1. **Full Workflow**: Create cache → get stats → clean → verify
-2. **Mixed Cache Types**: Scout + test cache operations together
-3. **Size Limit Enforcement**: Fill cache → exceed limit → verify cleanup
+Checking deployment environment...
 
-### Edge Cases
-**Priority**: Low | **Count**: ~5 tests
+- [✅] GitHub CLI (gh) installed: PASS (already in sandbox)
+- [✅] GitHub authentication: PASS (already authenticated)
+- [✅] Git user configured: PASS (configured)
 
-1. **Nonexistent Directory**: CacheManager with non-existent working_dir
-2. **Empty String Type**: clear_by_type('') behavior
-3. **Negative TTL**: clean_expired(ttl_hours=-1) behavior
-4. **Zero Size Limit**: enforce_size_limit(max_size_mb=0) behavior
-5. **Very Large Cache**: Stress test with many files
+**Deployment Status:** ✅ Ready for GitHub deployment (PR creation)
 
 ## Timeline Estimate
 
-**Total Effort**: 2-3 hours
-
-- **Analysis & Setup**: 20 minutes (completed in Scout phase)
-- **Tier 1 Tests**: 60-80 minutes (20 tests × 3-4 min each)
-- **Tier 2 Tests**: 40-50 minutes (12 tests × 3-4 min each)
-- **Integration Tests**: 15-20 minutes (3 tests × 5-7 min each)
-- **Edge Cases**: 15-20 minutes (5 tests × 3-4 min each)
-- **Test Execution & Fixes**: 20-30 minutes
-
-**Sequential Build**: 150-200 minutes
-**Parallel Build** (recommended): Not applicable (single test file)
-
-## Deployment Readiness
-
-### GitHub Deployment Checklist
-
-- [✅] GitHub CLI (gh) installed and authenticated
-- [✅] Git user configured
-- [✅] Repository is existing: context-foundry/context-foundry
-- [✅] Working on issue #148 (approved)
-
-**Deployment Strategy**: 
-1. Create feature branch: `enhancement/add-cache-manager-tests`
-2. Commit tests with descriptive message
-3. Push branch to origin
-4. Create PR linking to issue #148
-5. Request review
-
-**Status**: ✅ Ready for GitHub deployment
+- Test infrastructure setup: 15 minutes
+- Core function tests: 30 minutes
+- Public wrapper tests: 15 minutes
+- Coverage verification and fixes: 15 minutes
+- **Total:** ~75 minutes
 
 ## Success Criteria
 
-### Must Have ✅
-1. All tests pass with `pytest tests/test_cache_manager_unit.py -v`
-2. All 7 CacheManager methods have test coverage
-3. Tests follow existing patterns (markers, structure, style)
-4. Tests are isolated (use temp directories)
-5. No test interdependencies
-6. Clear docstrings for all test classes and methods
-
-### Should Have 📋
-1. ~35-45 total tests (comprehensive coverage)
-2. Mix of tier1 and tier2 markers
-3. Integration tests for full workflows
-4. Edge case coverage
-5. Fast execution (< 10 seconds total)
-
-### Nice to Have 🎯
-1. Helper functions for test setup
-2. Comprehensive assertions with descriptive messages
-3. Test comments explaining non-obvious logic
-4. Coverage report showing 100% for cache_manager.py
-
-## Risk Assessment
-
-**Overall Risk**: LOW
-
-- ✅ Clear requirements from GitHub issue
-- ✅ Existing test patterns to follow
-- ✅ Well-documented code under test
-- ✅ Stable dependencies (no external APIs)
-- ✅ Isolated test environment
-- ⚠️ Minor: TTL testing may need careful handling
-- ⚠️ Minor: Cross-platform file operations
-
-**Confidence Level**: HIGH - This is straightforward unit testing with clear patterns to follow.
+1. ✅ Test coverage for critical helper functions > 70%
+2. ✅ All new tests pass
+3. ✅ Existing tests still pass (no regression)
+4. ✅ Tests follow project patterns (MockFastMCP, fixtures, markers)
+5. ✅ PR created linking to issue #151
