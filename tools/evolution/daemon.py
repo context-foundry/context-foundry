@@ -138,6 +138,7 @@ class EvolutionDaemon:
                     "poll_interval_seconds": 60,
                     "max_concurrent_tasks": 1,
                     "log_level": "INFO",
+                    "github_issues_only": False,  # If True, only work on approved GitHub issues
                 },
                 "modes": {
                     "self_improvement": {"enabled": True, "priority": 8},
@@ -1688,6 +1689,19 @@ class EvolutionDaemon:
                     f"✅ Queued {github_tasks_created} GitHub-approved issue(s)"
                 )
                 return  # GitHub tasks created, we're done
+
+            # Check if we should only work on GitHub issues
+            github_issues_only = self.config.get("daemon", {}).get(
+                "github_issues_only", False
+            )
+            if github_issues_only:
+                self.logger.info(
+                    "⏸️  No approved GitHub issues found - daemon configured for GitHub issues only"
+                )
+                self.logger.info(
+                    "   Add 'approved' label to GitHub issues to queue tasks"
+                )
+                return
 
             # PRIORITY 2 & 3: Fall back to TODO/self-generated tasks
             # Use self-improvement mode to find next task
