@@ -1,6 +1,6 @@
 #!/bin/bash
-# Evolution System Monitor - "Simplicity is the ultimate sophistication"
-# Shows all Claude instances and their activity in one clean view
+# Evolution System Monitor - Horizontal Dashboard Layout
+# Optimized for vertical screens with efficient horizontal space usage
 
 # Python command
 PYTHON_CMD=${PYTHON_CMD:-python3}
@@ -13,142 +13,133 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 GRAY='\033[0;90m'
 BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'
+
+# Function to calculate visible string length (excluding ANSI codes)
+visible_length() {
+    local str="$1"
+    # Remove ANSI escape sequences
+    local stripped=$(echo -e "$str" | sed 's/\x1b\[[0-9;]*m//g')
+    echo "${#stripped}"
+}
+
+# Function to pad string to width (accounting for ANSI codes)
+pad_string() {
+    local str="$1"
+    local width="$2"
+    local vis_len=$(visible_length "$str")
+    local padding=$((width - vis_len))
+
+    if [ $padding -gt 0 ]; then
+        printf "%b%*s" "$str" $padding ""
+    else
+        printf "%b" "$str"
+    fi
+}
+
+# Detect terminal width
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 120)
 
 clear
 echo -e "${BOLD}${CYAN}════════════════ CONTEXT FOUNDRY EVOLUTION MONITOR ════════════════${NC}"
-echo ""
 
-# EXECUTIVE STATUS - The story of what's happening right now
-echo -e "${BOLD}${CYAN}STATUS:${NC}"
 cd /Users/name/homelab/context-foundry 2>/dev/null
 
-# Check for recently merged PRs (last 5 minutes)
+# Gather all data first
 RECENT_MERGED=$(gh pr list --state merged --limit 1 --json number,title,mergedAt 2>/dev/null | jq -r '.[0] | select(.mergedAt != null) | .number' 2>/dev/null)
-
-# Check for recently created issues (last 5 minutes)
 RECENT_ISSUES=$(gh issue list --state open --limit 10 --json number,title,createdAt 2>/dev/null | jq -r '.[] | select((now - (.createdAt | fromdateiso8601)) < 300) | "\(.number)|\(.title)"' 2>/dev/null)
-
-# Check current state
 DAEMON_PID=$(pgrep -f "tools.evolution.daemon" 2>/dev/null | head -1)
 OPEN_PRS=$(gh pr list --state open --json number 2>/dev/null | jq '. | length' 2>/dev/null)
 APPROVED=$(gh issue list --label approved --state open --json number 2>/dev/null | jq '. | length' 2>/dev/null)
 ISSUE_COUNT=$(gh issue list --state open --json number 2>/dev/null | jq '. | length' 2>/dev/null)
 CLAUDE_WORKING=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
     STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
-    if [[ "$STATE" =~ N ]]; then
-        echo $pid
-    fi
+    if [[ "$STATE" =~ N ]]; then echo $pid; fi
 done | head -1)
 
-# Build status narrative
-if [ -n "$RECENT_MERGED" ]; then
-    echo -e "  ${GREEN}✓${NC} Just merged PR #$RECENT_MERGED"
-fi
-
+# Build compact status line
+STATUS_LINE=""
+[ -n "$RECENT_MERGED" ] && STATUS_LINE+="${GREEN}✓Merged#$RECENT_MERGED${NC} │ "
 if [ -n "$CLAUDE_WORKING" ]; then
-    # Get what Claude is working on
     TASK_DESC=$(sqlite3 ~/.context-foundry/evolution/task_queue.db "SELECT params_json FROM tasks WHERE status = 'running' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | jq -r '.description // .action' 2>/dev/null)
     GITHUB_ISSUE=$(sqlite3 ~/.context-foundry/evolution/task_queue.db "SELECT params_json FROM tasks WHERE status = 'running' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null | jq -r '.github_issue // empty' 2>/dev/null)
-
-    if [ -n "$GITHUB_ISSUE" ]; then
-        echo -e "  ${YELLOW}→${NC} Implementing approved issue #$GITHUB_ISSUE: ${TASK_DESC:0:60}"
-    else
-        echo -e "  ${YELLOW}→${NC} Working on: ${TASK_DESC:0:70}"
-    fi
+    [ -n "$GITHUB_ISSUE" ] && STATUS_LINE+="${YELLOW}→Issue#$GITHUB_ISSUE${NC} │ " || STATUS_LINE+="${YELLOW}→Working${NC} │ "
 elif [ "$OPEN_PRS" -gt 0 ]; then
-    echo -e "  ${CYAN}⏸${NC}  Waiting for PR review/merge"
+    STATUS_LINE+="${CYAN}⏸Waiting for PR${NC} │ "
 elif [ "$APPROVED" -gt 0 ]; then
-    echo -e "  ${GREEN}→${NC} Approved issue found, queuing for implementation..."
+    STATUS_LINE+="${GREEN}→Implementing${NC} │ "
+elif [ "$ISSUE_COUNT" -lt 18 ]; then
+    STATUS_LINE+="${YELLOW}→Scout creating issues${NC} │ "
 else
-    # Check backlog health
-    if [ "$ISSUE_COUNT" -lt 18 ]; then
-        NEEDED=$((20 - ISSUE_COUNT))
-        if [ -n "$RECENT_ISSUES" ]; then
-            echo -e "  ${YELLOW}→${NC} Scout creating issues to maintain 20-issue backlog (currently $ISSUE_COUNT)"
-            # Show recently created issues
-            RECENT_COUNT=$(echo "$RECENT_ISSUES" | wc -l | tr -d ' ')
-            echo -e "  ${GREEN}✓${NC} Created $RECENT_COUNT issue(s) in last 5 minutes:"
-            echo "$RECENT_ISSUES" | head -3 | while IFS='|' read num title; do
-                echo -e "    ${GRAY}#$num:${NC} ${title:0:60}"
-            done
-            if [ "$RECENT_COUNT" -gt 3 ]; then
-                echo -e "    ${GRAY}... and $((RECENT_COUNT - 3)) more${NC}"
-            fi
-        else
-            echo -e "  ${YELLOW}→${NC} Scout creating $NEEDED issues to maintain 20-issue backlog (currently $ISSUE_COUNT)"
-        fi
-    else
-        echo -e "  ${GRAY}○${NC} Idle: Backlog healthy ($ISSUE_COUNT/20), awaiting issue approval"
-    fi
+    STATUS_LINE+="${GRAY}○Idle${NC} │ "
 fi
 
-# TL;DR summary
-if [ -z "$DAEMON_PID" ]; then
-    echo -e "  ${RED}TL;DR:${NC} Daemon offline"
-else
-    echo -e "  ${GRAY}TL;DR: Backlog $ISSUE_COUNT/20 | Approved: $APPROVED | Open PRs: $OPEN_PRS | Working: $([ -n "$CLAUDE_WORKING" ] && echo "Yes" || echo "No")${NC}"
-fi
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+STATUS_LINE+="${GRAY}Backlog:$ISSUE_COUNT/20 │ Approved:$APPROVED │ PRs:$OPEN_PRS │ Working:"
+[ -n "$CLAUDE_WORKING" ] && STATUS_LINE+="Yes${NC}" || STATUS_LINE+="No${NC}"
 
-# 1. CLAUDE INSTANCES
-echo -e "${CYAN}CLAUDE INSTANCES${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "STATUS: $STATUS_LINE"
+echo ""
+
+# CLAUDE INSTANCES + DAEMON (side by side)
+COL1_WIDTH=$(( TERM_WIDTH * 60 / 100 ))
+COL2_WIDTH=$(( TERM_WIDTH - COL1_WIDTH - 4 ))
+
+echo -e "${GRAY}┌$(printf '─%.0s' $(seq 1 $COL1_WIDTH))┬$(printf '─%.0s' $(seq 1 $COL2_WIDTH))┐${NC}"
+printf "${CYAN}│ %-$((COL1_WIDTH-2))s ${NC}${GRAY}│${NC}${CYAN} %-$((COL2_WIDTH-2))s ${NC}${GRAY}│${NC}\n" "CLAUDE INSTANCES" "DAEMON"
+echo -e "${GRAY}├$(printf '─%.0s' $(seq 1 $COL1_WIDTH))┼$(printf '─%.0s' $(seq 1 $COL2_WIDTH))┤${NC}"
+
+# Collect Claude instances
 CLAUDE_PIDS=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}')
+CLAUDE_LINES=()
 if [ -z "$CLAUDE_PIDS" ]; then
-    echo -e "  ${GRAY}No Claude instances running${NC}"
+    CLAUDE_LINES+=("${GRAY}No instances running${NC}")
 else
-    echo -e "  ${GRAY}PID    CPU%   MEM(MB)  TIME     STATE    TYPE${NC}"
-    echo -e "  ${GRAY}────────────────────────────────────────────────────────────────${NC}"
     for pid in $CLAUDE_PIDS; do
-        # Check if it's the interactive session (has terminal) or daemon-spawned
         TTY=$(ps -p $pid -o tty= 2>/dev/null | tr -d ' ')
         STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
-
-        # Daemon processes have no TTY (??) and state contains N (nice/low priority)
         if [[ "$TTY" == "??" ]] || [[ "$STATE" =~ N ]]; then
-            TYPE_TEXT="daemon"
-            TYPE_COLOR="${BLUE}"
+            TYPE="${BLUE}daemon${NC}"
         else
-            TYPE_TEXT="interactive"
-            TYPE_COLOR="${GRAY}"
+            TYPE="${GRAY}interactive${NC}"
         fi
-
-        ps -p $pid -o pid=,pcpu=,rss=,etime=,state= 2>/dev/null | \
-        awk -v type_text="$TYPE_TEXT" -v type_color="$TYPE_COLOR" -v green="$GREEN" -v yellow="$YELLOW" -v red="$RED" -v nc="$NC" '{
-            cpu_color = ($2 > 50) ? red : ($2 > 20) ? yellow : green
-            printf "  %-6s " cpu_color "%-6s" nc " %-8.0f %-8s %-8s " type_color "%s" nc "\n", $1, $2"%", $3/1024, $4, $5, type_text
-        }'
+        INFO=$(ps -p $pid -o pid=,pcpu=,rss=,etime= 2>/dev/null | awk '{printf "%s %.1f%% %dMB %s", $1, $2, $3/1024, $4}')
+        CLAUDE_LINES+=("$INFO $(echo -e $TYPE)")
     done
 fi
-echo ""
 
-# 2. DAEMON STATUS
-echo -e "${CYAN}DAEMON STATUS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-DAEMON_PID=$(pgrep -f "tools.evolution.daemon" 2>/dev/null | head -1)
+# Collect daemon status
+DAEMON_LINES=()
 if [ -z "$DAEMON_PID" ]; then
-    echo -e "  ${RED}Daemon not running${NC}"
+    DAEMON_LINES+=("${RED}Not running${NC}")
 else
-    echo -e "  ${GREEN}Running${NC} ${GRAY}(PID: $DAEMON_PID)${NC}"
-    tail -3 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | while read line; do
-        echo -e "  ${GRAY}│${NC} $line"
-    done
+    DAEMON_LINES+=("${GREEN}Running${NC} ${GRAY}(PID: $DAEMON_PID)${NC}")
+    DAEMON_LOG=$(tail -1 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | cut -c1-$((COL2_WIDTH-2)))
+    [ -n "$DAEMON_LOG" ] && DAEMON_LINES+=("${GRAY}${DAEMON_LOG}${NC}")
 fi
+
+# Print side by side
+MAX_LINES=$(( ${#CLAUDE_LINES[@]} > ${#DAEMON_LINES[@]} ? ${#CLAUDE_LINES[@]} : ${#DAEMON_LINES[@]} ))
+for ((i=0; i<MAX_LINES; i++)); do
+    LEFT="${CLAUDE_LINES[$i]:-}"
+    RIGHT="${DAEMON_LINES[$i]:-}"
+    printf "${GRAY}│${NC} "
+    pad_string "$LEFT" $((COL1_WIDTH-2))
+    printf " ${GRAY}│${NC} "
+    pad_string "$RIGHT" $((COL2_WIDTH-2))
+    printf " ${GRAY}│${NC}\n"
+done
+
+echo -e "${GRAY}└$(printf '─%.0s' $(seq 1 $COL1_WIDTH))┴$(printf '─%.0s' $(seq 1 $COL2_WIDTH))┘${NC}"
 echo ""
 
-# 3. ACTIVE AUTONOMOUS BUILDS
-echo -e "${CYAN}ACTIVE AUTONOMOUS BUILDS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-# Query running tasks with full details including phase information
+# ACTIVE AUTONOMOUS BUILDS (compact)
+echo -e "${CYAN}ACTIVE BUILDS${NC}"
 ACTIVE_BUILDS=$($PYTHON_CMD << 'PYTHON'
 import sys
 sys.path.insert(0, '/Users/name/homelab/context-foundry')
 try:
     from tools.evolution.task_queue import TaskQueueManager, TaskStatus
     import json
-    import os
     from datetime import datetime
     from pathlib import Path
 
@@ -159,187 +150,153 @@ try:
         params = json.loads(task.params_json) if task.params_json else {}
         result = task.result if task.result else {}
 
-        # Extract key information
         task_id = task.id[:8]
-        description = params.get('description', params.get('action', 'Unknown task'))
-        sandbox = params.get('sandbox_dir', result.get('sandbox_dir', 'N/A'))
-        branch = params.get('branch', result.get('branch', 'N/A'))
-        issue = params.get('github_issue', result.get('github_issue', 'N/A'))
-        mcp_task_id = result.get('mcp_task_id', '')[:8] if result.get('mcp_task_id') else 'N/A'
+        description = params.get('description', params.get('action', ''))[:60]
+        sandbox = params.get('sandbox_dir', result.get('sandbox_dir', ''))
+        branch = params.get('branch', result.get('branch', ''))
+        issue = params.get('github_issue', result.get('github_issue', ''))
+        mcp_task_id = result.get('mcp_task_id', '')[:8] if result.get('mcp_task_id') else ''
+        created_time = task.created_at.strftime('%H:%M') if hasattr(task, 'created_at') else ''
 
-        # Format spawn time
-        created_time = task.created_at.strftime('%H:%M') if hasattr(task, 'created_at') else 'N/A'
-
-        # Read phase information from current-phase.json
-        phase_data = "N/A|N/A|N/A|N/A|N/A"
-        if sandbox != 'N/A':
+        # Read phase info
+        phase_data = ""
+        if sandbox:
             phase_file = Path(sandbox) / '.context-foundry' / 'current-phase.json'
             if phase_file.exists():
                 try:
-                    # Check staleness (file modified within last 10 minutes)
                     file_age = datetime.now().timestamp() - phase_file.stat().st_mtime
-                    if file_age < 600:  # 10 minutes
+                    if file_age < 600:
                         with open(phase_file, 'r') as f:
                             phase_info = json.load(f)
-                            current_phase = phase_info.get('current_phase', 'N/A')
-                            phase_number = phase_info.get('phase_number', 'N/A')
-                            status = phase_info.get('status', 'N/A')
-                            progress_detail = phase_info.get('progress_detail', 'N/A')
-                            phases_completed = ','.join(phase_info.get('phases_completed', []))
-                            test_iteration = str(phase_info.get('test_iteration', 0))
+                            current_phase = phase_info.get('current_phase', '')
+                            phase_number = phase_info.get('phase_number', '')
+                            phases_completed = phase_info.get('phases_completed', [])
+                            test_iter = phase_info.get('test_iteration', 0)
 
-                            phase_data = f"{current_phase}|{phase_number}|{status}|{progress_detail}|{phases_completed}|{test_iteration}"
+                            # Build inline phase string
+                            phases = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Feedback"]
+                            phase_str = ""
+                            for p in phases:
+                                if p in phases_completed:
+                                    phase_str += f"✓{p} "
+                                elif p == current_phase:
+                                    if p == "Test" and test_iter > 0:
+                                        phase_str += f"🔄{p}({test_iter}/3) "
+                                    else:
+                                        phase_str += f"🔄{p} "
+                                else:
+                                    phase_str += f"⏳{p} "
+                            phase_data = f"{phase_number}|{phase_str.strip()}"
                 except Exception:
                     pass
 
-        print(f"{task_id}|{description}|{sandbox}|{branch}|{issue}|{mcp_task_id}|{created_time}|{phase_data}")
+        print(f"{task_id}|{description}|{branch}|{issue}|{mcp_task_id}|{created_time}|{phase_data}")
 except Exception as e:
     pass
 PYTHON
 )
 
 if [ -z "$ACTIVE_BUILDS" ]; then
-    echo -e "  ${GRAY}No active autonomous builds${NC}"
+    echo -e "  ${GRAY}No active builds${NC}"
 else
-    echo "$ACTIVE_BUILDS" | while IFS='|' read task_id description sandbox branch issue mcp_id spawn_time current_phase phase_number phase_status progress_detail phases_completed test_iteration; do
-        # Find associated Claude process
-        CLAUDE_PID=""
-        for pid in $(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}'); do
+    echo "$ACTIVE_BUILDS" | while IFS='|' read task_id description branch issue mcp_id spawn_time phase_number phase_str; do
+        CLAUDE_PID=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
             STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
-            if [[ "$STATE" =~ N ]]; then
-                CLAUDE_PID=$pid
-                break
-            fi
-        done
+            if [[ "$STATE" =~ N ]]; then echo $pid; break; fi
+        done)
 
-        echo -e "  ${GREEN}🎉 Autonomous Build Active${NC}"
-        if [ -n "$CLAUDE_PID" ]; then
-            echo -e "    ${GRAY}Claude Process:${NC} PID ${YELLOW}$CLAUDE_PID${NC} ${GRAY}(spawned at $spawn_time)${NC}"
-            echo -e "    ${GRAY}Status:${NC} ${GREEN}Running ✅${NC}"
+        BUILD_LINE="${GREEN}🎉Build${NC} │ PID:${YELLOW}${CLAUDE_PID:-N/A}${NC}($spawn_time) │ Task:$task_id"
+        [ -n "$mcp_id" ] && BUILD_LINE+=" (MCP:$mcp_id)"
+        [ -n "$issue" ] && BUILD_LINE+=" │ ${YELLOW}Issue#$issue${NC}"
+        echo -e "  $BUILD_LINE"
+        echo -e "  ${GRAY}Task:${NC} $description"
+        [ -n "$branch" ] && echo -e "  ${GRAY}Branch:${NC} $branch"
+        if [ -n "$phase_str" ]; then
+            echo -e "  ${CYAN}Progress [$phase_number]:${NC} $phase_str"
         fi
-        echo -e "    ${GRAY}Task ID:${NC} $task_id ${GRAY}(MCP: $mcp_id)${NC}"
-        echo -e "    ${GRAY}Task:${NC} $description"
-        if [ "$issue" != "N/A" ]; then
-            echo -e "    ${GRAY}Will fix:${NC} ${YELLOW}Issue #$issue${NC}"
-        fi
-        if [ "$branch" != "N/A" ]; then
-            echo -e "    ${GRAY}Branch:${NC} $branch"
-        fi
-        if [ "$sandbox" != "N/A" ]; then
-            # Shorten sandbox path for display
-            SANDBOX_SHORT=$(echo "$sandbox" | sed 's|/tmp/cf-sandboxes/||')
-            echo -e "    ${GRAY}Sandbox:${NC} $SANDBOX_SHORT"
-        fi
-
-        # Display orchestration progress if phase data available
-        if [ "$current_phase" != "N/A" ] && [ "$phase_number" != "N/A" ]; then
-            echo ""
-            echo -e "    ${CYAN}Orchestration Progress [$phase_number]:${NC}"
-
-            # Define all phases in order
-            ALL_PHASES=("Scout" "Architect" "Builder" "Test" "Screenshot" "Documentation" "Feedback")
-            PHASE_DESCRIPTIONS=("Research & analysis" "Design & planning" "Code implementation" "Validation & testing" "Visual validation" "README & docs" "Pattern learning")
-
-            # Split completed phases
-            IFS=',' read -ra COMPLETED <<< "$phases_completed"
-
-            # Display each phase
-            for i in "${!ALL_PHASES[@]}"; do
-                PHASE_NAME="${ALL_PHASES[$i]}"
-                PHASE_DESC="${PHASE_DESCRIPTIONS[$i]}"
-
-                # Check if this phase is completed
-                IS_COMPLETED=false
-                for comp in "${COMPLETED[@]}"; do
-                    if [ "$comp" = "$PHASE_NAME" ]; then
-                        IS_COMPLETED=true
-                        break
-                    fi
-                done
-
-                # Determine status symbol and color
-                if [ "$IS_COMPLETED" = true ]; then
-                    echo -e "      ${GREEN}✓${NC} ${PHASE_NAME} - ${GRAY}$PHASE_DESC${NC}"
-                elif [ "$PHASE_NAME" = "$current_phase" ]; then
-                    # Current phase
-                    if [ "$test_iteration" != "0" ] && [ "$PHASE_NAME" = "Test" ]; then
-                        echo -e "      ${YELLOW}🔄${NC} ${PHASE_NAME} - ${YELLOW}$PHASE_DESC (iteration $test_iteration/3)${NC}"
-                    else
-                        echo -e "      ${YELLOW}🔄${NC} ${PHASE_NAME} - ${YELLOW}$PHASE_DESC${NC}"
-                    fi
-                else
-                    # Pending phase
-                    echo -e "      ${GRAY}⏳${NC} ${PHASE_NAME} - ${GRAY}$PHASE_DESC${NC}"
-                fi
-            done
-        fi
+        echo ""
     done
 fi
-echo ""
 
-# 4. OPEN PULL REQUESTS
-echo -e "${CYAN}OPEN PULL REQUESTS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-cd /Users/name/homelab/context-foundry 2>/dev/null
-PRS=$(gh pr list --state open --json number,title --limit 3 2>/dev/null)
+# OPEN PRS + GIT STATUS (side by side)
+PRS_WIDTH=$(( TERM_WIDTH * 35 / 100 ))
+GIT_WIDTH=$(( TERM_WIDTH - PRS_WIDTH - 4 ))
+
+echo -e "${GRAY}┌$(printf '─%.0s' $(seq 1 $PRS_WIDTH))┬$(printf '─%.0s' $(seq 1 $GIT_WIDTH))┐${NC}"
+printf "${CYAN}│ %-$((PRS_WIDTH-2))s ${NC}${GRAY}│${NC}${CYAN} %-$((GIT_WIDTH-2))s ${NC}${GRAY}│${NC}\n" "OPEN PRS" "GIT STATUS [M=Mod D=Del ??=Untracked]"
+echo -e "${GRAY}├$(printf '─%.0s' $(seq 1 $PRS_WIDTH))┼$(printf '─%.0s' $(seq 1 $GIT_WIDTH))┤${NC}"
+
+# Collect PRs
+PRS=$(gh pr list --state open --json number,title --limit 5 2>/dev/null)
+PR_LINES=()
 PR_COUNT=$(echo "$PRS" | jq '. | length' 2>/dev/null)
 if [ "$PR_COUNT" = "0" ] || [ -z "$PR_COUNT" ]; then
-    echo -e "  ${GRAY}No open PRs${NC}"
+    PR_LINES+=("${GRAY}No open PRs${NC}")
 else
-    echo "$PRS" | jq -r '.[] | "\(.number)|\(.title)"' 2>/dev/null | while IFS='|' read num title; do
-        echo -e "  ${YELLOW}PR #$num:${NC} $title"
-    done
+    while IFS='|' read num title; do
+        PR_LINES+=("#$num: ${title:0:$((PRS_WIDTH-8))}")
+    done < <(echo "$PRS" | jq -r '.[] | "\(.number)|\(.title)"' 2>/dev/null)
 fi
-echo ""
 
-# 5. GIT STATUS
-echo -e "${CYAN}GIT STATUS${NC} ${GRAY}[M=Modified, A=Added, D=Deleted, ??=Untracked]${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-cd /Users/name/homelab/context-foundry 2>/dev/null
+# Collect Git status
 GIT_STATUS=$(git status --short 2>/dev/null)
+GIT_LINES=()
 if [ -z "$GIT_STATUS" ]; then
-    echo -e "  ${GREEN}Working tree clean${NC}"
+    GIT_LINES+=("${GREEN}Working tree clean${NC}")
 else
-    echo "$GIT_STATUS" | head -10 | while read line; do
+    while read line; do
         if [[ $line =~ ^M ]]; then
-            echo -e "  ${YELLOW}$line${NC}"
+            GIT_LINES+=("${YELLOW}${line:0:$((GIT_WIDTH-4))}${NC}")
         elif [[ $line =~ ^\?\? ]]; then
-            echo -e "  ${GRAY}$line${NC}"
+            GIT_LINES+=("${GRAY}${line:0:$((GIT_WIDTH-4))}${NC}")
         elif [[ $line =~ ^D ]]; then
-            echo -e "  ${RED}$line${NC}"
+            GIT_LINES+=("${RED}${line:0:$((GIT_WIDTH-4))}${NC}")
         else
-            echo -e "  ${GREEN}$line${NC}"
+            GIT_LINES+=("${GREEN}${line:0:$((GIT_WIDTH-4))}${NC}")
         fi
-    done
+    done < <(echo "$GIT_STATUS" | head -5)
     COUNT=$(echo "$GIT_STATUS" | wc -l | tr -d ' ')
-    if [ "$COUNT" -gt 10 ]; then
-        echo -e "  ${GRAY}... and $((COUNT - 10)) more files${NC}"
-    fi
+    [ "$COUNT" -gt 5 ] && GIT_LINES+=("${GRAY}...+$((COUNT-5)) more${NC}")
 fi
+
+# Print side by side
+MAX_LINES=$(( ${#PR_LINES[@]} > ${#GIT_LINES[@]} ? ${#PR_LINES[@]} : ${#GIT_LINES[@]} ))
+for ((i=0; i<MAX_LINES; i++)); do
+    LEFT="${PR_LINES[$i]:-}"
+    RIGHT="${GIT_LINES[$i]:-}"
+    printf "${GRAY}│${NC} "
+    pad_string "$LEFT" $((PRS_WIDTH-2))
+    printf " ${GRAY}│${NC} "
+    pad_string "$RIGHT" $((GIT_WIDTH-2))
+    printf " ${GRAY}│${NC}\n"
+done
+
+echo -e "${GRAY}└$(printf '─%.0s' $(seq 1 $PRS_WIDTH))┴$(printf '─%.0s' $(seq 1 $GIT_WIDTH))┘${NC}"
 echo ""
 
-# 6. RECENT FILE CHANGES
-echo -e "${CYAN}RECENT FILE CHANGES${NC} ${GRAY}(last 60 seconds)${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# RECENT CHANGES + MCP DELEGATIONS + NETWORK (3 columns)
+COL1_W=$(( TERM_WIDTH * 30 / 100 ))
+COL2_W=$(( TERM_WIDTH * 45 / 100 ))
+COL3_W=$(( TERM_WIDTH - COL1_W - COL2_W - 6 ))
+
+echo -e "${GRAY}┌$(printf '─%.0s' $(seq 1 $COL1_W))┬$(printf '─%.0s' $(seq 1 $COL2_W))┬$(printf '─%.0s' $(seq 1 $COL3_W))┐${NC}"
+printf "${CYAN}│ %-$((COL1_W-2))s ${NC}${GRAY}│${NC}${CYAN} %-$((COL2_W-2))s ${NC}${GRAY}│${NC}${CYAN} %-$((COL3_W-2))s ${NC}${GRAY}│${NC}\n" "FILE CHANGES (60s)" "MCP DELEGATIONS" "NETWORK"
+echo -e "${GRAY}├$(printf '─%.0s' $(seq 1 $COL1_W))┼$(printf '─%.0s' $(seq 1 $COL2_W))┼$(printf '─%.0s' $(seq 1 $COL3_W))┤${NC}"
+
+# Collect recent file changes
 RECENT=$(find . -type f -mmin -1 -not -path "*/.git/*" -not -path "*/.pytest_cache/*" -not -path "*/node_modules/*" 2>/dev/null)
+RECENT_LINES=()
 if [ -z "$RECENT" ]; then
-    echo -e "  ${GRAY}No recent changes${NC}"
+    RECENT_LINES+=("${GRAY}No changes${NC}")
 else
-    echo "$RECENT" | head -5 | while read file; do
-        echo -e "  ${YELLOW}✏${NC}  $file"
-    done
+    while read file; do
+        RECENT_LINES+=("${YELLOW}${file:0:$((COL1_W-4))}${NC}")
+    done < <(echo "$RECENT" | head -3)
     COUNT=$(echo "$RECENT" | wc -l | tr -d ' ')
-    if [ "$COUNT" -gt 5 ]; then
-        echo -e "  ${GRAY}... and $((COUNT - 5)) more files${NC}"
-    fi
+    [ "$COUNT" -gt 3 ] && RECENT_LINES+=("${GRAY}+$((COUNT-3)) more${NC}")
 fi
-echo ""
 
-# 7. MCP DELEGATION STATUS
-echo -e "${CYAN}MCP DELEGATION STATUS${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-# Query running tasks with MCP task IDs
+# Collect MCP delegations
 MCP_TASKS=$($PYTHON_CMD << 'PYTHON'
 import sys
 sys.path.insert(0, '/Users/name/homelab/context-foundry')
@@ -347,82 +304,75 @@ try:
     from tools.evolution.task_queue import TaskQueueManager, TaskStatus
     from tools.mcp_server import get_delegation_result
     import json
-
     tq = TaskQueueManager()
     running = tq.list_tasks(status=TaskStatus.RUNNING.value)
-
     for task in running:
         if not task.result or 'mcp_task_id' not in task.result:
             continue
-
         mcp_id = task.result['mcp_task_id']
         try:
             status_json = get_delegation_result(mcp_id, include_full_output=False)
             status = json.loads(status_json)
-            print(f"{task.id[:8]}|{mcp_id[:8]}|{status.get('status')}|{status.get('current_phase', 'N/A')}|{status.get('progress', 'N/A')}")
+            print(f"{task.id[:8]}|{mcp_id[:8]}|{status.get('status')}|{status.get('current_phase', 'N/A')}")
         except:
-            print(f"{task.id[:8]}|{mcp_id[:8]}|checking|...|...")
-except Exception as e:
+            print(f"{task.id[:8]}|{mcp_id[:8]}|checking|...")
+except Exception:
     pass
 PYTHON
 )
 
-# Fallback: Extract MCP task IDs from daemon logs (last 10 lines)
 if [ -z "$MCP_TASKS" ]; then
     MCP_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "MCP Task ID:" | tail -1 | sed -E 's/.*MCP Task ID: ([a-f0-9-]+).*/\1/')
     TASK_FROM_LOGS=$(tail -10 ~/.context-foundry/evolution/logs/daemon.log 2>/dev/null | grep "Task [a-f0-9-]* delegated" | tail -1 | sed -E 's/.*Task ([a-f0-9-]+).*/\1/')
-
-    if [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ]; then
-        MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|delegated|active"
-    fi
+    [ -n "$MCP_FROM_LOGS" ] && [ -n "$TASK_FROM_LOGS" ] && MCP_TASKS="${TASK_FROM_LOGS:0:8}|${MCP_FROM_LOGS:0:8}|running|delegated"
 fi
 
+MCP_LINES=()
 if [ -z "$MCP_TASKS" ]; then
-    echo -e "  ${GRAY}No active MCP delegations${NC}"
+    MCP_LINES+=("${GRAY}No active delegations${NC}")
 else
-    echo -e "  ${GRAY}TASK     MCP-ID   STATUS      PHASE                PROGRESS${NC}"
-    echo -e "  ${GRAY}────────────────────────────────────────────────────────────────${NC}"
-    echo "$MCP_TASKS" | while IFS='|' read task_id mcp_id status phase progress; do
-        # Color code status
-        if [[ "$status" == "completed" ]]; then
-            STATUS_COLOR="${GREEN}"
-        elif [[ "$status" == "running" ]]; then
-            STATUS_COLOR="${YELLOW}"
-        else
-            STATUS_COLOR="${GRAY}"
-        fi
-        printf "  %-8s %-8s ${STATUS_COLOR}%-11s${NC} %-20s %s\n" "$task_id" "$mcp_id" "$status" "$phase" "$progress"
-    done
+    while IFS='|' read task_id mcp_id status phase; do
+        [[ "$status" == "completed" ]] && COLOR="${GREEN}" || COLOR="${YELLOW}"
+        MCP_LINES+=("$task_id|$mcp_id $(echo -e ${COLOR}$status${NC}) $phase")
+    done < <(echo "$MCP_TASKS")
 fi
-echo ""
 
-# 8. NETWORK ACTIVITY
-echo -e "${CYAN}NETWORK ACTIVITY${NC}"
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-# Find all daemon-spawned Claude processes (legacy - will be removed once MCP is stable)
+# Collect network status
 DAEMON_CLAUDES=$(ps aux | grep " claude " | grep -v "grep\|Claude.app" | awk '{print $2}' | while read pid; do
     STATE=$(ps -p $pid -o state= 2>/dev/null | tr -d ' ')
-    if [[ "$STATE" =~ N ]]; then
-        echo $pid
-    fi
+    [[ "$STATE" =~ N ]] && echo $pid
 done)
 
+NET_LINES=()
 if [ -z "$DAEMON_CLAUDES" ]; then
-    echo -e "  ${GRAY}No daemon-spawned Claude instances${NC}"
+    NET_LINES+=("${GRAY}No daemon PIDs${NC}")
 else
     for pid in $DAEMON_CLAUDES; do
-        # Check network connections
         CONN=$(lsof -p $pid -a -i 2>/dev/null | grep ESTABLISHED | wc -l | tr -d ' ')
-
         if [ "$CONN" -gt 0 ]; then
-            echo -e "  ${GREEN}Claude (PID $pid) connected to Anthropic API${NC} ${GRAY}($CONN connections)${NC}"
+            NET_LINES+=("${GREEN}PID $pid: ${CONN}conn${NC}")
         else
-            echo -e "  ${GRAY}Claude (PID $pid) idle (no active connections)${NC}"
+            NET_LINES+=("${GRAY}PID $pid: idle${NC}")
         fi
     done
 fi
-echo ""
 
-echo -e "${GRAY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+# Print 3 columns
+MAX_LINES=$(( ${#RECENT_LINES[@]} > ${#MCP_LINES[@]} ? ${#RECENT_LINES[@]} : ${#MCP_LINES[@]} ))
+MAX_LINES=$(( $MAX_LINES > ${#NET_LINES[@]} ? $MAX_LINES : ${#NET_LINES[@]} ))
+for ((i=0; i<MAX_LINES; i++)); do
+    COL1="${RECENT_LINES[$i]:-}"
+    COL2="${MCP_LINES[$i]:-}"
+    COL3="${NET_LINES[$i]:-}"
+    printf "${GRAY}│${NC} "
+    pad_string "$COL1" $((COL1_W-2))
+    printf " ${GRAY}│${NC} "
+    pad_string "$COL2" $((COL2_W-2))
+    printf " ${GRAY}│${NC} "
+    pad_string "$COL3" $((COL3_W-2))
+    printf " ${GRAY}│${NC}\n"
+done
+
+echo -e "${GRAY}└$(printf '─%.0s' $(seq 1 $COL1_W))┴$(printf '─%.0s' $(seq 1 $COL2_W))┴$(printf '─%.0s' $(seq 1 $COL3_W))┘${NC}"
+echo ""
 echo -e "${GRAY}Last updated: $(date '+%Y-%m-%d %H:%M:%S')${NC}"
