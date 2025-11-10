@@ -211,8 +211,8 @@ class ScoutAgent:
         ]
 
         security_patterns = [
-            (r"eval\s*\(", "Dangerous use of eval() - code injection risk"),
-            (r"exec\s*\(", "Dangerous use of exec() - code injection risk"),
+            (r"\beval\s*\(", "Dangerous use of eval() - code injection risk"),
+            (r"\bexec\s*\(", "Dangerous use of exec() - code injection risk"),
             (
                 r"pickle\.loads?\s*\(",
                 "Unsafe pickle usage - arbitrary code execution risk",
