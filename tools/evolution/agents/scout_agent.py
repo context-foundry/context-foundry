@@ -1247,8 +1247,31 @@ class ScoutAgent:
         if not findings:
             return []
 
-        # Limit to top 30 findings to avoid overwhelming Claude
-        findings_to_analyze = findings[:30]
+        # Ensure diverse sample for AI analysis
+        # Take top findings from each type to avoid one type dominating
+        findings_by_type = {}
+        for f in findings:
+            if f.finding_type not in findings_by_type:
+                findings_by_type[f.finding_type] = []
+            findings_by_type[f.finding_type].append(f)
+
+        # Build diverse sample: top 5 from each type, prioritizing critical types
+        critical_types = ["security", "bug", "performance"]
+        other_types = [t for t in findings_by_type.keys() if t not in critical_types]
+
+        findings_to_analyze = []
+
+        # Always include ALL security/bug/performance issues (they're rare and critical)
+        for ftype in critical_types:
+            if ftype in findings_by_type:
+                findings_to_analyze.extend(findings_by_type[ftype])
+
+        # Add top 5 from each other type
+        for ftype in other_types:
+            findings_to_analyze.extend(findings_by_type[ftype][:5])
+
+        # Cap at 30 total
+        findings_to_analyze = findings_to_analyze[:30]
 
         # Format findings as structured data for Claude
         findings_json = []
@@ -1293,7 +1316,12 @@ Your task: Evaluate each finding through 6 expert lenses and select the top 5-10
 1. Analyze each finding through ALL 6 perspectives
 2. Score each finding 0-10 for overall priority (considering all perspectives)
 3. Select the top 5-10 findings that should become GitHub issues
-4. For each selected finding, provide:
+4. **IMPORTANT**: Prioritize DIVERSITY of issue types:
+   - Prefer security, bug, and performance issues over enhancement
+   - If multiple "Add tests" issues exist, select at most 2-3
+   - Ensure variety: bugs, security, performance, debt, features
+   - "Add tests" issues are valuable but shouldn't dominate the backlog
+5. For each selected finding, provide:
    - Overall priority score (0-10)
    - Which expert perspectives rated it highly (and why)
    - Recommended GitHub labels
