@@ -12,7 +12,7 @@ Build an intelligent, context-aware learning system for Context Foundry that lea
 
 ## 📖 Documentation
 
-See the full architectural design: [`docs/enhancements/SELF_LEARNING_ARCHITECTURE.md`](./SELF_LEARNING_ARCHITECTURE.md)
+See the full architectural design: [`docs/enhancements/SELF_LEARNING_ARCHITECTURE.md`](https://github.com/context-foundry/context-foundry/blob/main/docs/enhancements/SELF_LEARNING_ARCHITECTURE.md)
 
 ## 🎨 Philosophy
 
