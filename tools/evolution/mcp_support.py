@@ -13,11 +13,18 @@ def _detect_mcp_capabilities() -> Tuple[bool, str]:
     if sys.version_info < (3, 10):
         return False, "Python 3.10+ required for MCP features"
 
-    fastmcp_spec = importlib.util.find_spec("fastmcp")
-    if fastmcp_spec is None:
+    try:
+        fastmcp_spec = importlib.util.find_spec("fastmcp")
+        if fastmcp_spec is None:
+            return (
+                False,
+                "fastmcp package not installed (pip install -r requirements-mcp.txt)",
+            )
+    except (ValueError, ImportError) as e:
+        # Handle cases where module exists but __spec__ is not set or other import issues
         return (
             False,
-            "fastmcp package not installed (pip install -r requirements-mcp.txt)",
+            f"fastmcp package detection failed: {e}",
         )
 
     return True, ""
