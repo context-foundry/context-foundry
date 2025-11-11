@@ -150,6 +150,7 @@ jobs:
         run: |
           cd /tmp
           cp $GITHUB_WORKSPACE/tools/screenshot_helpers/capture.js .
+          cp $GITHUB_WORKSPACE/tools/screenshot_helpers/package.json .
           node -c capture.js
           echo "✅ Screenshot capture script has valid syntax"
 

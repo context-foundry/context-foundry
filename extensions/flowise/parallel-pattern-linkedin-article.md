@@ -1,10 +1,5 @@
 # Running Parallel Workflows: The Concurrent Execution Pattern in Flowise
 
-**Silviu Nedea**
-Workday Extend Senior Engagement Manager II
-
-November 14, 2025
-
 ---
 
 Picture a Formula 1 pit stop. The car screams in at 200 mph. In 2.3 seconds, four tire specialists, two jack operators, and a front wing adjuster execute twenty-seven simultaneous actions.

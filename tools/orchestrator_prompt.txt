@@ -41,8 +41,6 @@ Status: Tests PASSED ({iterations} iteration(s))
 
 🤖 Generated with [Context Foundry](https://contextfoundry.dev)
 
-Co-Authored-By: Context Foundry <noreply@contextfoundry.dev>"
-
 gh repo create snedea/{repo} --private --description "{desc}"
 git remote add origin https://github.com/snedea/{repo}.git
 git branch -M main

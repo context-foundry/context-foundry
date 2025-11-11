@@ -17,6 +17,9 @@ baml-py>=0.211.0  # BAML runtime for structured LLM responses
 # TUI (Terminal User Interface) for Mission Control
 textual>=0.50.0  # Modern TUI framework for interactive terminal apps
 
+# File system monitoring for livestream metrics
+watchdog>=3.0.0  # Monitor file system events for metrics collection
+
 # Note: This is a MINIMAL installation (~80MB total with BAML + Textual)
 # Previous versions included ~3-4GB of ML libraries that are no longer needed
 # See requirements-legacy.txt for the old v1.x Python CLI dependencies (deprecated)

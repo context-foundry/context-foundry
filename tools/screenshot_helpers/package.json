@@ -1,0 +1,7 @@
+{
+  "name": "screenshot-helpers",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Screenshot capture helpers for Context Foundry",
+  "private": true
+}
