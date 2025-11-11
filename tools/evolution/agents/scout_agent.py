@@ -179,10 +179,10 @@ class ScoutAgent:
             if py_file.name == "__init__.py":
                 continue
 
-            # Check if corresponding test exists
-            test_file = self._get_test_file_path(py_file)
+            # Check if corresponding test exists (any matching test file)
+            test_files = self._get_test_file_path(py_file)
 
-            if not test_file.exists():
+            if not test_files:
                 # Check if file has meaningful code (>20 lines, has functions)
                 if self._has_testable_code(py_file):
                     self.findings.append(
@@ -275,7 +275,7 @@ class ScoutAgent:
                                 effort="small",
                             )
                         )
-            except:
+            except Exception:
                 pass
 
     def _scan_performance_issues(self):
@@ -317,7 +317,7 @@ class ScoutAgent:
                             effort="medium",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_error_handling(self):
@@ -330,10 +330,6 @@ class ScoutAgent:
         for py_file in py_files:
             try:
                 content = py_file.read_text()
-
-                # Check for functions without try/except
-                has_functions = "def " in content
-                has_try_except = "try:" in content
 
                 # Count subprocess calls without error handling
                 subprocess_calls = len(
@@ -353,7 +349,7 @@ class ScoutAgent:
                             effort="small",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_dependencies(self):
@@ -389,7 +385,7 @@ class ScoutAgent:
                             effort="small",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_code_quality(self):
@@ -434,7 +430,7 @@ class ScoutAgent:
                             effort="small",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_architectural_debt(self):
@@ -462,7 +458,7 @@ class ScoutAgent:
                     # Mark for architect review
                     finding.needs_architect = True
                     self.findings.append(finding)
-            except:
+            except Exception:
                 pass
 
     def _scan_feature_opportunities(self):
@@ -557,7 +553,7 @@ class ScoutAgent:
                             effort="small",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_api_enhancements(self):
@@ -642,7 +638,7 @@ class ScoutAgent:
                                 effort="medium",
                             )
                         )
-            except:
+            except Exception:
                 pass
 
     def _scan_developer_experience(self):
@@ -752,7 +748,7 @@ class ScoutAgent:
                             effort="medium",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_modern_language_features(self):
@@ -833,7 +829,7 @@ class ScoutAgent:
                             effort="small",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
     def _scan_observability(self):
@@ -905,7 +901,7 @@ class ScoutAgent:
                                 effort="medium",
                             )
                         )
-            except:
+            except Exception:
                 pass
 
     def _scan_user_experience(self):
@@ -988,7 +984,7 @@ class ScoutAgent:
                                 effort="small",
                             )
                         )
-            except:
+            except Exception:
                 pass
 
     def _scan_configuration(self):
@@ -1053,7 +1049,7 @@ class ScoutAgent:
                                 effort="small",
                             )
                         )
-            except:
+            except Exception:
                 pass
 
         # Check for .env.example
@@ -1160,13 +1156,22 @@ class ScoutAgent:
                             effort="large",
                         )
                     )
-            except:
+            except Exception:
                 pass
 
-    def _get_test_file_path(self, source_file: Path) -> Path:
-        """Get expected test file path for a source file"""
-        test_name = f"test_{source_file.stem}.py"
-        return self.project_root / "tests" / test_name
+    def _get_test_file_path(self, source_file: Path) -> list:
+        """Get all possible test file paths for a source file
+
+        Returns list of matching test files including:
+        - Exact match: test_<name>.py
+        - Pattern match: test_<name>_*.py (e.g., test_mcp_server_comprehensive.py)
+        """
+        test_name_base = f"test_{source_file.stem}"
+        tests_dir = self.project_root / "tests"
+
+        # Look for exact match AND files with suffixes
+        # e.g., test_mcp_server.py, test_mcp_server_unit.py, test_mcp_server_*.py
+        return list(tests_dir.glob(f"{test_name_base}*.py"))
 
     def _is_test_path(self, path: Path) -> bool:
         """Return True if the path points to a test/fixture file that should be ignored"""
@@ -1230,7 +1235,7 @@ class ScoutAgent:
                 return False
 
             return True
-        except:
+        except Exception:
             return False
 
     def _ai_analyze_findings(self, findings: List[Finding]) -> List[Finding]:

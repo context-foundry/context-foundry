@@ -79,6 +79,26 @@ class BacklogGenerator:
             print(f"  ⚠️  Error getting issue count: {e}")
             return 0
 
+    def get_existing_issue_titles(self) -> list:
+        """Get titles of all open issues to prevent duplicates"""
+        try:
+            result = subprocess.run(
+                ["gh", "issue", "list", "--state", "open", "--json", "title"],
+                capture_output=True,
+                text=True,
+                cwd=self.project_root,
+            )
+
+            if result.returncode == 0:
+                issues = json.loads(result.stdout)
+                return [issue["title"] for issue in issues]
+            else:
+                print(f"  ⚠️  Failed to get issue titles: {result.stderr}")
+                return []
+        except Exception as e:
+            print(f"  ⚠️  Error getting issue titles: {e}")
+            return []
+
     def format_issue_body(self, finding: Finding) -> str:
         """Format finding into GitHub issue using Context Foundry template"""
 
@@ -233,9 +253,20 @@ class BacklogGenerator:
             print("  ⚠️  Scout found no issues")
             return
 
-        # Create issues for top findings (up to needed amount)
+        # Filter out findings that already have open issues (deduplication)
+        existing_titles = self.get_existing_issue_titles()
+        new_findings = [f for f in findings if f.title not in existing_titles]
+
+        print(f"  📊 Found {len(findings)} total findings")
+        print(f"  📊 {len(new_findings)} new (after deduplication)")
+
+        if not new_findings:
+            print("  ⚠️  All findings already have open issues")
+            return
+
+        # Create issues for top new findings (up to needed amount)
         created = 0
-        for finding in findings[:needed]:
+        for finding in new_findings[:needed]:
             if self.create_github_issue(finding):
                 created += 1
 
