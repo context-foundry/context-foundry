@@ -1,0 +1,31 @@
+# MCP Log Monitor Configuration
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 5000
+
+# Log Sources
+log_sources:
+  - name: "context-foundry"
+    paths:
+      - "~/.context-foundry/*/build-output-*.txt"
+      - "~/.context-foundry/delegations/*.json"
+    enabled: true
+
+  - name: "claude-desktop"
+    paths:
+      - "~/Library/Logs/Claude/mcp*.log"
+    enabled: true
+
+# Performance
+performance:
+  max_buffer_size: 100
+  broadcast_batch_size: 50
+  file_read_chunk_size: 4096
+  debounce_ms: 100
+
+# Retention
+retention:
+  max_log_entries: 10000
+  history_days: 7
