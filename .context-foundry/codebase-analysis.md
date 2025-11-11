@@ -1,138 +1,103 @@
 # Codebase Analysis Report
 
 ## Project Overview
-- **Type**: python
-- **Languages**: Python
-- **Architecture**: Context Foundry - Autonomous build system with caching infrastructure
-- **Task**: Add unit tests for `tools/cache/cache_manager.py` (GitHub Issue #148)
+- **Type**: Python CLI/MCP Server Framework
+- **Languages**: Python 3.10+
+- **Architecture**: FastMCP-based server with delegation capabilities
 
 ## Key Files
-
-### Target File to Test
-- **File**: `tools/cache/cache_manager.py` (258 lines)
-- **Purpose**: Centralized cache operations including cleanup, statistics, and configuration
-- **Class**: `CacheManager` - Main class with 7 public methods
-
-### Related Cache Files
-- `tools/cache/__init__.py` - Cache system utilities and exports
-- `tools/cache/scout_cache.py` - Scout report caching
-- `tools/cache/test_cache.py` - Test result caching
-
-### Existing Test Files (Patterns to Follow)
-- `tests/test_scout_cache_unit.py` - 437 lines, comprehensive unit tests
-- `tests/test_test_cache_unit.py` - 321 lines, comprehensive unit tests
-- Both use pytest with markers: `@pytest.mark.unit`, `@pytest.mark.tier1/tier2`
-- Both use `tempfile.TemporaryDirectory()` for isolation
-- Both use descriptive test class organization
-
-## CacheManager Methods to Test
-
-1. **`__init__(self, working_directory: str)`**
-   - Initialize cache manager
-   - Sets working_directory and cache_dir
-
-2. **`get_stats(self) -> Dict[str, Any]`**
-   - Returns comprehensive cache statistics
-   - Includes scout_cache, test_cache, total_size_mb, total_files
-
-3. **`clean_expired(self, ttl_hours: int = DEFAULT_CACHE_TTL_HOURS) -> Dict[str, int]`**
-   - Remove expired cache entries
-   - Returns deletion counts per cache type
-
-4. **`clear_all(self) -> Dict[str, int]`**
-   - Clear all cache entries
-   - Returns deletion counts
-
-5. **`clear_by_type(self, cache_type: str) -> int`**
-   - Clear cache entries of specific type ('scout', 'test', or 'all')
-   - Returns number of files deleted
-   - Raises ValueError for unknown cache type
-
-6. **`enforce_size_limit(self, max_size_mb: int = DEFAULT_MAX_CACHE_SIZE_MB) -> Dict[str, Any]`**
-   - Enforce maximum cache size by deleting oldest entries
-   - Returns deletion statistics
-
-7. **`print_stats(self) -> None`**
-   - Print cache statistics in human-readable format
+- **Target file**: `tools/mcp_server.py` (3,752 lines)
+- **Entry point**: MCP server with FastMCP framework
+- **Config**: pytest.ini, requirements-mcp.txt
+- **Tests**: tests/ directory (60 test files)
 
 ## Dependencies
+- fastmcp (MCP server framework)
+- pytest (testing framework)
+- unittest.mock (mocking)
+- psutil (process utilities)
 
-### Direct Imports from cache_manager.py
-```python
-from . import (
-    get_cache_dir,
-    is_cache_valid,
-    DEFAULT_CACHE_TTL_HOURS,
-    DEFAULT_MAX_CACHE_SIZE_MB,
-)
-from .scout_cache import clear_scout_cache, get_scout_cache_stats
-from .test_cache import clear_test_cache, get_test_cache_stats
-```
+## Target File: tools/mcp_server.py
 
-### Test Dependencies
-- pytest
-- tempfile (for temporary directories)
-- pathlib (Path manipulation)
-- time (for TTL testing if needed)
+### File Structure
+The file contains approximately 35+ functions including:
 
-## Code to Test (Critical Paths)
+**Helper Functions (Private):**
+- `_read_phase_info()` - Read phase tracking info
+- `_get_context_foundry_parent_dir()` - Get parent directory
+- `_truncate_output()` - Truncate large outputs
+- `_write_delegation_metadata()` - Write delegation metadata
+- `_write_full_output_to_file()` - Write output to file
+- `_create_output_summary()` - Create output summary
+- `_detect_existing_codebase()` - Detect codebase
+- `_detect_task_intent()` - Detect task intent
+- `_autonomous_build_and_deploy_impl()` - Implementation of build/deploy
+- `_read_global_patterns_impl()` - Read global patterns
+- `_save_global_patterns_impl()` - Save global patterns
+- `_merge_project_patterns_impl()` - Merge patterns
 
-### Test Priority 1 (Tier 1 - MUST PASS)
-- `__init__`: Proper initialization
-- `get_stats()`: Returns correct structure with empty cache
-- `get_stats()`: Returns correct counts with cached files
-- `clear_all()`: Clears all caches correctly
-- `clear_by_type()`: Clears specific cache type
-- `clear_by_type()`: Raises ValueError for unknown type
+**Public MCP Tools (Decorated with @mcp.tool()):**
+- `context_foundry_status()` - Get status
+- `delegate_to_claude_code()` - Synchronous delegation
+- `delegate_to_claude_code_async()` - Async delegation
+- `get_delegation_result()` - Get delegation result
+- `list_delegations()` - List active delegations
+- `cancel_delegation()` - Cancel delegation
+- `stream_delegation_output()` - Stream output
+- `autonomous_build_and_deploy()` - Build and deploy
+- `read_global_patterns()` - Read patterns (public wrapper)
+- `save_global_patterns()` - Save patterns (public wrapper)
+- `merge_project_patterns()` - Merge patterns (public wrapper)
+- `migrate_all_project_patterns()` - Migrate patterns
+- `share_patterns_to_community()` - Share patterns
+- `get_latest_logs()` - Get logs
+- `create_evolution_task()` - Create evolution task
+- `get_evolution_tasks()` - Get evolution tasks
+- `start_evolution_daemon()` - Start daemon
+- `stop_evolution_daemon()` - Stop daemon
+- `get_daemon_status()` - Get daemon status
+- `register_project()` - Register project
+- `apply_pattern_to_project()` - Apply pattern
+- `validate_project_health()` - Validate health
+- `register_agent()` - Register agent
+- `send_agent_message()` - Send message
+- `bootstrap_patterns_on_startup()` - Bootstrap patterns
 
-### Test Priority 2 (Tier 2 - Important)
-- `clean_expired()`: Removes expired entries
-- `clean_expired()`: Preserves valid entries
-- `enforce_size_limit()`: Deletes oldest when over limit
-- `enforce_size_limit()`: Does nothing when under limit
-- `print_stats()`: Prints without crashing (basic smoke test)
+## Existing Test Coverage
 
-## Testing Approach
+### Current Tests for mcp_server.py:
+- `test_mcp_server_helpers.py` - Tests helper functions
+- `test_mcp_server_comprehensive.py` - Comprehensive tests
+- `test_mcp_server_critical_paths.py` - Critical path tests
+- `test_mcp_server_integration.py` - Integration tests
+- `test_mcp_autonomous_build_coverage.py` - Autonomous build tests
+- `test_mcp_pattern_management_coverage.py` - Pattern management tests
 
-### Test File Structure
-Create `tests/test_cache_manager_unit.py` following the pattern from existing tests
+### Testing Patterns Used:
+- **Pytest framework** with markers (unit, integration, tier1, tier2, tier3)
+- **MockFastMCP** class to mock FastMCP imports
+- **sys.modules mocking** for fastmcp dependencies
+- **Fixtures** for temp directories and mock data
+- **unittest.mock** for patching and MagicMock
 
-### Test Markers
-- `@pytest.mark.unit` - All tests are unit tests
-- `@pytest.mark.tier1` - Critical functionality
-- `@pytest.mark.tier2` - Important but not critical
-- `@pytest.mark.integration` - Full workflow tests
+## Task: Add Tests for tools/mcp_server.py
 
-### Test Isolation
-- Use `tempfile.TemporaryDirectory()` for each test
-- Clean up is automatic when context manager exits
-- No shared state between tests
+### Approach:
+1. Run coverage analysis to identify gaps
+2. Create targeted tests for uncovered functions
+3. Follow existing test patterns and conventions
+4. Use appropriate pytest markers (unit, tier1/tier2)
+5. Mock FastMCP and dependencies properly
 
 ## Risks
 
-1. **File System Operations**: Tests involve creating/deleting files
-   - Mitigation: Use temp directories, automatic cleanup
+- **Complex mocking required**: FastMCP framework must be mocked before import
+- **Large file**: 3,752 lines with many interdependent functions
+- **External dependencies**: psutil, subprocess, file I/O operations
+- **Async code**: Some functions use async patterns
 
-2. **Timing Sensitivity**: TTL tests may be flaky
-   - Mitigation: Use appropriate time margins, test TTL logic not exact timing
+## Testing Strategy
 
-3. **Cross-Platform**: File operations may differ on Windows/Linux/Mac
-   - Mitigation: Use pathlib, avoid platform-specific assumptions
-
-## Expected Test Count
-
-Based on similar test files and CacheManager methods:
-- **Tier 1 tests**: ~20-25 tests (critical paths)
-- **Tier 2 tests**: ~10-15 tests (important paths)
-- **Integration tests**: ~3-5 tests (full workflows)
-- **Total**: ~35-45 tests
-
-## Success Criteria
-
-1. ✅ All tests pass (`pytest tests/test_cache_manager_unit.py`)
-2. ✅ Test coverage for all 7 public methods
-3. ✅ Follow existing test patterns (scout_cache_unit, test_cache_unit)
-4. ✅ Use pytest markers appropriately
-5. ✅ Tests are isolated and repeatable
-6. ✅ No warnings or errors during test execution
-7. ✅ Tests are well-documented with clear docstrings
+1. Run coverage analysis to find gaps
+2. Add tests for uncovered functions
+3. Verify all tests pass
