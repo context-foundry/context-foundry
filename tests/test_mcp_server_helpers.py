@@ -157,7 +157,7 @@ def test_read_phase_info_stale_file(temp_dir, mock_phase_file):
     stat = file_path.stat()
 
     # Mock datetime to make task_start appear after file modification
-    with patch("tools.mcp_server.datetime") as mock_datetime:
+    with patch("tools.mcp.phase_tracking.datetime") as mock_datetime:
         mock_datetime.fromtimestamp.return_value = datetime.fromtimestamp(
             stat.st_mtime - 10
         )
