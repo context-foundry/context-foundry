@@ -11,6 +11,8 @@ Modules:
 - task_classification: Task intent detection
 - project_detection: Project type and language detection
 - pattern_management: Pattern storage and merging
+- delegation: Task delegation and monitoring
+- autonomous_build: Autonomous build/test/fix/deploy functionality
 """
 
 from tools.mcp.output_utils import truncate_output, create_output_summary
@@ -23,6 +25,7 @@ from tools.mcp.pattern_management import (
     save_global_patterns_impl,
     merge_project_patterns_impl,
 )
+from tools.mcp.autonomous_build import autonomous_build_and_deploy_impl
 
 __all__ = [
     # Re-exported for convenience
@@ -35,4 +38,5 @@ __all__ = [
     "read_global_patterns_impl",
     "save_global_patterns_impl",
     "merge_project_patterns_impl",
+    "autonomous_build_and_deploy_impl",
 ]
