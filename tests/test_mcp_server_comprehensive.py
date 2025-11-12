@@ -55,7 +55,7 @@ sys.modules["fastmcp.server.dependencies"].get_context = MagicMock()
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
 # Import after mocking
-from mcp_server import (
+from mcp_server import (  # noqa: E402
     read_global_patterns,
     save_global_patterns,
     merge_project_patterns,
@@ -241,8 +241,8 @@ class TestMergeProjectPatterns:
         data = json.loads(result)
 
         assert data["status"] == "success"
-        assert data["new_patterns"] == 1
-        assert data["updated_patterns"] == 0
+        assert data["merge_stats"]["new_patterns"] == 1
+        assert data["merge_stats"]["updated_patterns"] == 0
 
     def test_merge_existing_pattern_increments_frequency(self, temp_home, tmp_path):
         """Test merging existing pattern increments frequency"""
@@ -294,8 +294,8 @@ class TestMergeProjectPatterns:
         data = json.loads(result)
 
         assert data["status"] == "success"
-        assert data["new_patterns"] == 0
-        assert data["updated_patterns"] == 1
+        assert data["merge_stats"]["new_patterns"] == 0
+        assert data["merge_stats"]["updated_patterns"] == 1
 
         # Read global patterns and verify frequency incremented
         result = read_global_patterns("common-issues")
