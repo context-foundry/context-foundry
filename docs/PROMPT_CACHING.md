@@ -139,7 +139,7 @@ config.enable_caching()   # Re-enable
 - `tools/orchestrator_prompt.txt` - Added cache boundary marker
 
 ### Integration Points
-- **MCP Server** (`mcp_server.py:1269-1307`) - Builds cached prompts
+- **MCP Server** (`mcp_server.py` - prompt caching section) - Builds cached prompts
 - **Cost Calculator** (already supported) - Calculates cache savings
 - **Metrics DB** (already supported) - Tracks cache hits/misses
 

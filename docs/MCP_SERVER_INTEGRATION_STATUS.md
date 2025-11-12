@@ -35,7 +35,7 @@ Context Foundry can now **autonomously build production-ready MCP servers** with
 - **Status**: ✅ **Used as reference by Builder**
 
 ### 3. MCP Server Tool ✅ FIXED
-- **File**: `tools/mcp_server.py:2014`
+- **File**: `tools/mcp_server.py` (pattern management section)
 - **Change**: Added to `pattern_files` mapping:
   ```python
   "architecture-patterns": "architecture-patterns.json",
@@ -65,7 +65,7 @@ Context Foundry can now **autonomously build production-ready MCP servers** with
 
 ## Integration Changes Made
 
-### 1. Pattern Accessibility (tools/mcp_server.py:2014) ✅
+### 1. Pattern Accessibility (tools/mcp_server.py - pattern management) ✅
 
 **Before**:
 ```python

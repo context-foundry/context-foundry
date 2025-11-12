@@ -26,7 +26,7 @@ python3 tools/evolution/safety.py
 
 **File:** `tools/evolution/modes/self_improvement.py`
 
-**Find this code (around line 486):**
+**Find the `_delegate_to_context_foundry` method:**
 ```python
 def _delegate_to_context_foundry(self, prompt: str, branch_name: str) -> Dict:
     """Delegate task to Context Foundry MCP server directly"""
@@ -111,7 +111,7 @@ def _delegate_to_context_foundry(self, prompt: str, branch_name: str) -> Dict:
 
 **File:** `tools/evolution/modes/self_improvement.py`
 
-**Find `execute_task` method (around line 77):**
+**Find the `execute_task` method:**
 ```python
 def execute_task(self, task) -> TaskResult:
     """Execute improvement task via CF delegation"""

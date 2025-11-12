@@ -7,14 +7,16 @@ Tests both:
 2. Keyword-based detection (task description)
 """
 
+# Add context-foundry repo root to path
+# __file__ is tests/test_flowise_detection.py
+# parent = tests/, parent.parent = repo root
 import sys
 from pathlib import Path
 
-# Add context-foundry to path
-cf_root = Path(__file__).parent
+cf_root = Path(__file__).parent.parent
 sys.path.insert(0, str(cf_root))
 
-from tools.mcp_server import _detect_existing_codebase
+from tools.mcp_server import _detect_existing_codebase  # noqa: E402
 
 
 def test_file_based_detection():

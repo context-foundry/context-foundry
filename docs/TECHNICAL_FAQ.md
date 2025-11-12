@@ -2177,7 +2177,7 @@ Your Shell
 
 **1. FastMCP Server Initialization:**
 ```python
-# tools/mcp_server.py:44
+# tools/mcp_server.py (top of file)
 from fastmcp import FastMCP
 
 mcp = FastMCP("Context Foundry")
@@ -2398,7 +2398,7 @@ PID_1=$!
 **How MCP server loads it:**
 
 ```python
-# tools/mcp_server.py:969
+# tools/mcp_server.py (autonomous build section)
 orchestrator_prompt_path = Path(__file__).parent / "orchestrator_prompt.txt"
 with open(orchestrator_prompt_path) as f:
     system_prompt = f.read()  # ~1200 lines loaded

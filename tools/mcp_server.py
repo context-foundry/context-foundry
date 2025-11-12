@@ -29,8 +29,8 @@ from tools.evolution.safety import enforce_sandbox_mode
 
 # Check if FastMCP is available
 try:
-    from fastmcp import FastMCP, Context
-    from fastmcp.server.dependencies import get_context
+    from fastmcp import FastMCP, Context  # noqa: F401
+    from fastmcp.server.dependencies import get_context  # noqa: F401
 except ImportError:
     print("❌ Error: FastMCP not installed", file=sys.stderr)
     print("", file=sys.stderr)
@@ -51,6 +51,23 @@ except ImportError:
 
 from tools.banner import print_banner
 
+# Import modularized utilities (Phase 2 refactoring - Phases 1-2 complete)
+# These maintain backward compatibility via re-exports below
+from tools.mcp.output_utils import truncate_output, create_output_summary
+from tools.mcp.phase_tracking import read_phase_info
+from tools.mcp.path_utils import get_context_foundry_parent_dir
+from tools.mcp.project_detection import detect_existing_codebase
+from tools.mcp.task_classification import detect_task_intent
+
+# Re-export with underscore-prefixed names for backward compatibility
+# Tests and external code may import these directly
+_truncate_output = truncate_output
+_create_output_summary = create_output_summary
+_read_phase_info = read_phase_info
+_get_context_foundry_parent_dir = get_context_foundry_parent_dir
+_detect_existing_codebase = detect_existing_codebase
+_detect_task_intent = detect_task_intent
+
 # Create MCP server
 mcp = FastMCP("Context Foundry")
 
@@ -62,135 +79,14 @@ active_builds = {}
 active_tasks: Dict[str, Dict[str, Any]] = {}
 
 
-def _read_phase_info(
-    working_directory: str, task_start_time: Optional[datetime] = None
-) -> Dict[str, Any]:
-    """
-    Read phase tracking information from .context-foundry/current-phase.json with staleness validation.
+# ANCHOR: read_phase_info
+# Moved to tools/mcp/phase_tracking.py - imported above with re-export as _read_phase_info
 
-    Args:
-        working_directory: Path to project working directory
-        task_start_time: Optional datetime when task started (for staleness check)
+# ANCHOR: get_context_foundry_parent_dir
+# Moved to tools/mcp/path_utils.py - imported above with re-export as _get_context_foundry_parent_dir
 
-    Returns:
-        Dict with phase info, or empty dict if file doesn't exist, is invalid, or is stale.
-    """
-    try:
-        phase_file = Path(working_directory) / ".context-foundry" / "current-phase.json"
-        if not phase_file.exists():
-            return {}
-
-        # Validate file isn't stale from previous build
-        if task_start_time:
-            file_mtime = datetime.fromtimestamp(phase_file.stat().st_mtime)
-            if file_mtime < task_start_time:
-                # File was modified before this task started - it's stale!
-                # Return empty dict to avoid showing old phase data
-                return {}
-
-        with open(phase_file, "r") as f:
-            phase_data = json.load(f)
-
-        return phase_data
-    except (json.JSONDecodeError, FileNotFoundError, PermissionError):
-        # File doesn't exist yet, is invalid JSON, or can't be read
-        return {}
-    except Exception:
-        # Any other error - return empty dict
-        return {}
-
-
-def _get_context_foundry_parent_dir() -> Path:
-    """
-    Get the parent directory of Context Foundry installation.
-
-    This allows projects to be created as siblings of Context Foundry itself.
-
-    Example:
-        If Context Foundry is at: /Users/name/homelab/context-foundry
-        This returns: /Users/name/homelab
-
-        So new projects get created at: /Users/name/homelab/project-name
-
-    Returns:
-        Path to Context Foundry's parent directory
-    """
-    # __file__ is tools/mcp_server.py
-    # Parent of tools/ is context-foundry/
-    # Parent of context-foundry/ is what we want
-    cf_dir = Path(__file__).parent.parent.resolve()
-    return cf_dir.parent
-
-
-def _truncate_output(output: str, max_tokens: int = 20000) -> tuple[str, bool, dict]:
-    """
-    Truncate large output to fit within token limits while preserving critical info.
-
-    Args:
-        output: The stdout or stderr string to potentially truncate
-        max_tokens: Maximum tokens allowed (default 20000 to leave room for JSON structure)
-
-    Returns:
-        Tuple of (truncated_output, was_truncated, stats_dict)
-        - truncated_output: The output string (truncated if needed)
-        - was_truncated: Boolean indicating if truncation occurred
-        - stats_dict: Dictionary with total_lines, total_chars, etc.
-    """
-    if not output:
-        return output, False, {"total_lines": 0, "total_chars": 0}
-
-    # Rough heuristic: ~4 chars per token
-    max_chars = max_tokens * 4
-
-    lines = output.split("\n")
-    total_lines = len(lines)
-    total_chars = len(output)
-
-    # If output is small enough, return as-is
-    if total_chars <= max_chars:
-        return output, False, {"total_lines": total_lines, "total_chars": total_chars}
-
-    # Calculate how many characters to keep from start and end
-    # Keep 45% from start, 45% from end, 10% for truncation message
-    chars_per_section = int(max_chars * 0.45)
-
-    # Find split points by character count
-    start_chars = 0
-    start_line_idx = 0
-    for i, line in enumerate(lines):
-        start_chars += len(line) + 1  # +1 for newline
-        if start_chars >= chars_per_section:
-            start_line_idx = i
-            break
-
-    end_chars = 0
-    end_line_idx = len(lines)
-    for i in range(len(lines) - 1, -1, -1):
-        end_chars += len(lines[i]) + 1  # +1 for newline
-        if end_chars >= chars_per_section:
-            end_line_idx = i
-            break
-
-    # Build truncated output
-    start_section = "\n".join(lines[:start_line_idx])
-    end_section = "\n".join(lines[end_line_idx:])
-
-    truncated_lines = end_line_idx - start_line_idx
-    truncation_message = f"\n\n{'=' * 60}\n[OUTPUT TRUNCATED]\nShowing: First {start_line_idx} lines + Last {len(lines) - end_line_idx} lines\nHidden: {truncated_lines} lines ({total_chars - len(start_section) - len(end_section):,} chars)\nTotal: {total_lines:,} lines ({total_chars:,} chars)\n{'=' * 60}\n\n"
-
-    truncated_output = start_section + truncation_message + end_section
-
-    return (
-        truncated_output,
-        True,
-        {
-            "total_lines": total_lines,
-            "total_chars": total_chars,
-            "truncated_lines": truncated_lines,
-            "kept_start_lines": start_line_idx,
-            "kept_end_lines": len(lines) - end_line_idx,
-        },
-    )
+# ANCHOR: truncate_output
+# Moved to tools/mcp/output_utils.py - imported above with re-export as _truncate_output
 
 
 def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
@@ -256,49 +152,11 @@ def _write_full_output_to_file(
         return f"Error writing output file: {e}"
 
 
-def _create_output_summary(output: str, max_lines: int = 50) -> tuple[str, dict]:
-    """
-    Create a smart summary of output showing first and last N lines.
-
-    Args:
-        output: Full output string
-        max_lines: Number of lines to show from start and end (default 50)
-
-    Returns:
-        Tuple of (summary_output, stats_dict)
-        - summary_output: Summarized output string
-        - stats_dict: Dictionary with total_lines, shown_lines, hidden_lines
-    """
-    if not output:
-        return "(empty)", {"total_lines": 0, "shown_lines": 0, "hidden_lines": 0}
-
-    lines = output.split("\n")
-    total_lines = len(lines)
-
-    # If output is small enough, return as-is
-    if total_lines <= (max_lines * 2):
-        return output, {
-            "total_lines": total_lines,
-            "shown_lines": total_lines,
-            "hidden_lines": 0,
-        }
-
-    # Get first and last N lines
-    first_lines = lines[:max_lines]
-    last_lines = lines[-max_lines:]
-    hidden_lines = total_lines - (max_lines * 2)
-
-    # Build summary
-    separator = f"\n\n{'=' * 60}\n[{hidden_lines:,} lines hidden - see output_file for full content]\n{'=' * 60}\n\n"
-    summary = "\n".join(first_lines) + separator + "\n".join(last_lines)
-
-    return summary, {
-        "total_lines": total_lines,
-        "shown_lines": max_lines * 2,
-        "hidden_lines": hidden_lines,
-    }
+# ANCHOR: create_output_summary
+# Moved to tools/mcp/output_utils.py - imported above with re-export as _create_output_summary
 
 
+# ANCHOR: context_foundry_status
 @mcp.tool()
 def context_foundry_status() -> str:
     """
@@ -339,6 +197,7 @@ No commands to memorize, no syntax to learn.
 """
 
 
+# ANCHOR: delegate_to_claude_code
 @mcp.tool()
 def delegate_to_claude_code(
     task: str,
@@ -834,7 +693,9 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
                 "timeout_minutes": task_info["timeout_minutes"],
                 "output_file": output_file_path,
                 "sandbox_path": task_info.get("sandbox_path"),  # For sandbox cleanup
-                "sandbox_task_id": task_info.get("sandbox_task_id"),  # For sandbox cleanup
+                "sandbox_task_id": task_info.get(
+                    "sandbox_task_id"
+                ),  # For sandbox cleanup
             }
 
             # Add phase information if available
@@ -1050,7 +911,7 @@ def list_delegations() -> str:
                         try:
                             start_time = datetime.fromisoformat(start_time_str)
                             elapsed = (datetime.now() - start_time).total_seconds()
-                        except:
+                        except Exception:
                             pass
 
                     tasks_list.append(
@@ -1307,7 +1168,7 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
         try:
             stdout = process.stdout.read() if process.stdout else ""
             stderr = process.stderr.read() if process.stderr else ""
-        except:
+        except Exception:
             stdout = "(could not read stdout)"
             stderr = "(could not read stderr)"
 
@@ -1488,7 +1349,7 @@ def stream_delegation_output(
                             if new_data:
                                 stderr_data += new_data
                                 task_info["stderr"] = stderr_data
-                except:
+                except Exception:
                     # If select doesn't work (Windows or other issues), use stored data
                     pass
             else:
@@ -1499,7 +1360,7 @@ def stream_delegation_output(
                     try:
                         stdout_data = process.stdout.read() if process.stdout else ""
                         task_info["stdout"] = stdout_data
-                    except:
+                    except Exception:
                         stdout_data = "(could not read stdout)"
 
                 if task_info.get("stderr"):
@@ -1508,7 +1369,7 @@ def stream_delegation_output(
                     try:
                         stderr_data = process.stderr.read() if process.stderr else ""
                         task_info["stderr"] = stderr_data
-                    except:
+                    except Exception:
                         stderr_data = "(could not read stderr)"
         except Exception as read_error:
             stdout_data = f"(error reading output: {read_error})"
@@ -1573,7 +1434,7 @@ def stream_delegation_output(
                         "test_iteration": phase_data.get("test_iteration", 0),
                         "phases_completed": phase_data.get("phases_completed", []),
                     }
-            except:
+            except Exception:
                 phase_info = {"error": "Could not read phase info"}
 
         # Build response
@@ -1626,343 +1487,14 @@ def stream_delegation_output(
         )
 
 
-def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
-    """
-    Detect if a directory contains an existing codebase and identify its characteristics.
+# ANCHOR: detect_existing_codebase
+# Moved to tools/mcp/project_detection.py - imported above with re-export as _detect_existing_codebase
 
-    Args:
-        directory: Path to the directory to analyze
-
-    Returns:
-        Dict with detection results:
-        {
-            "has_code": bool,
-            "project_type": str or None,
-            "languages": list[str],
-            "has_git": bool,
-            "git_clean": bool or None,
-            "project_files": list[str],
-            "confidence": str ("high", "medium", "low")
-        }
-    """
-    result = {
-        "has_code": False,
-        "project_type": None,
-        "languages": [],
-        "has_git": False,
-        "git_clean": None,
-        "project_files": [],
-        "confidence": "low",
-    }
-
-    if not directory.exists():
-        return result
-
-    # Check for git repository
-    git_dir = directory / ".git"
-    if git_dir.exists():
-        result["has_git"] = True
-        # Check if git repo is clean
-        try:
-            import subprocess
-
-            status_result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                cwd=str(directory),
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            # Empty output means clean repo
-            result["git_clean"] = len(status_result.stdout.strip()) == 0
-        except:
-            result["git_clean"] = None
-
-    # Define project indicator files
-    project_indicators = {
-        # JavaScript/TypeScript
-        "package.json": {
-            "type": "nodejs",
-            "language": "JavaScript",
-            "confidence": "high",
-        },
-        "package-lock.json": {
-            "type": "nodejs",
-            "language": "JavaScript",
-            "confidence": "medium",
-        },
-        "yarn.lock": {
-            "type": "nodejs",
-            "language": "JavaScript",
-            "confidence": "medium",
-        },
-        "tsconfig.json": {
-            "type": "nodejs",
-            "language": "TypeScript",
-            "confidence": "high",
-        },
-        # Python
-        "requirements.txt": {
-            "type": "python",
-            "language": "Python",
-            "confidence": "high",
-        },
-        "setup.py": {"type": "python", "language": "Python", "confidence": "high"},
-        "pyproject.toml": {
-            "type": "python",
-            "language": "Python",
-            "confidence": "high",
-        },
-        "Pipfile": {"type": "python", "language": "Python", "confidence": "high"},
-        "poetry.lock": {"type": "python", "language": "Python", "confidence": "medium"},
-        # Rust
-        "Cargo.toml": {"type": "rust", "language": "Rust", "confidence": "high"},
-        "Cargo.lock": {"type": "rust", "language": "Rust", "confidence": "medium"},
-        # Go
-        "go.mod": {"type": "golang", "language": "Go", "confidence": "high"},
-        "go.sum": {"type": "golang", "language": "Go", "confidence": "medium"},
-        # Java
-        "pom.xml": {"type": "maven", "language": "Java", "confidence": "high"},
-        "build.gradle": {"type": "gradle", "language": "Java", "confidence": "high"},
-        "build.gradle.kts": {
-            "type": "gradle",
-            "language": "Kotlin",
-            "confidence": "high",
-        },
-        # Ruby
-        "Gemfile": {"type": "ruby", "language": "Ruby", "confidence": "high"},
-        "Gemfile.lock": {"type": "ruby", "language": "Ruby", "confidence": "medium"},
-        # PHP
-        "composer.json": {"type": "php", "language": "PHP", "confidence": "high"},
-        # C/C++
-        "CMakeLists.txt": {"type": "cmake", "language": "C/C++", "confidence": "high"},
-        "Makefile": {"type": "make", "language": "C/C++", "confidence": "medium"},
-        # .NET
-        ".csproj": {"type": "dotnet", "language": "C#", "confidence": "high"},
-        ".sln": {"type": "dotnet", "language": "C#", "confidence": "high"},
-    }
-
-    # Check for project files
-    found_indicators = []
-    confidence_scores = []
-
-    for file_pattern, info in project_indicators.items():
-        # Handle glob patterns (like .csproj)
-        if file_pattern.startswith("."):
-            matches = list(directory.glob(f"*{file_pattern}"))
-            if matches:
-                found_indicators.append((file_pattern, info))
-                result["project_files"].extend([m.name for m in matches])
-        else:
-            file_path = directory / file_pattern
-            if file_path.exists():
-                found_indicators.append((file_pattern, info))
-                result["project_files"].append(file_pattern)
-
-    if found_indicators:
-        result["has_code"] = True
-
-        # Determine primary project type and languages
-        types = {}
-        languages = set()
-
-        for _, info in found_indicators:
-            proj_type = info["type"]
-            language = info["language"]
-            confidence = info["confidence"]
-
-            types[proj_type] = types.get(proj_type, 0) + (
-                2 if confidence == "high" else 1
-            )
-            languages.add(language)
-            confidence_scores.append(confidence)
-
-        # Primary type is the one with highest score
-        if types:
-            result["project_type"] = max(types.items(), key=lambda x: x[1])[0]
-
-        result["languages"] = sorted(list(languages))
-
-        # Overall confidence
-        if "high" in confidence_scores:
-            result["confidence"] = "high"
-        elif "medium" in confidence_scores:
-            result["confidence"] = "medium"
-
-    # Check for common source directories (increases confidence if project files found)
-    if result["has_code"]:
-        source_dirs = ["src", "lib", "app", "pkg", "cmd", "internal"]
-        for dir_name in source_dirs:
-            if (directory / dir_name).is_dir():
-                result["confidence"] = "high"
-                break
-
-    # ═══════════════════════════════════════════════════════════════════
-    # FLOWISE EXTENSION HOOK
-    # ═══════════════════════════════════════════════════════════════════
-    try:
-        # Try to import Flowise extension loader
-        import sys
-        from pathlib import Path
-
-        # Get Context Foundry installation path
-        cf_base = Path(__file__).parent.parent
-
-        # Check if extensions/flowise exists
-        flowise_ext_path = cf_base / "extensions" / "flowise"
-
-        if flowise_ext_path.exists():
-            # Add to sys.path if not already there
-            ext_parent = str(flowise_ext_path.parent)
-            if ext_parent not in sys.path:
-                sys.path.insert(0, ext_parent)
-
-            # Import the extension
-            from flowise import extensions_loader
-
-            # Load Flowise detectors
-            flowise_detectors = extensions_loader.load_extension_detectors()
-
-            if flowise_detectors and "flowise" in flowise_detectors:
-                # Check for Flowise JSON files in project directory
-                json_files = list(directory.glob("*.json"))
-
-                # Sample first 10 JSON files to avoid performance issues
-                for json_file in json_files[:10]:
-                    try:
-                        detection = flowise_detectors["flowise"].detect_flowise_flow(
-                            json_file
-                        )
-
-                        if detection.get("is_flowise"):
-                            # Flowise flow detected!
-                            print(
-                                f"🔍 Flowise Extension: Detected {detection.get('flow_type')} flow in {json_file}"
-                            )
-                            print(f"   - Complexity: {detection.get('complexity')}")
-                            print(f"   - Nodes: {detection.get('node_count', 0)}")
-                            print(f"   - Agents: {detection.get('agent_count', 0)}")
-                            print(
-                                f"   - Has Memory: {detection.get('has_memory', False)}"
-                            )
-                            print(
-                                f"   - Has Tools: {detection.get('has_tools', False)}"
-                            )
-
-                            result["flowise_flow"] = True
-                            result["flowise_flow_type"] = detection.get("flow_type")
-                            result["flowise_complexity"] = detection.get("complexity")
-                            result["flowise_node_count"] = detection.get(
-                                "node_count", 0
-                            )
-                            result["flowise_agent_count"] = detection.get(
-                                "agent_count", 0
-                            )
-                            result["flowise_has_memory"] = detection.get(
-                                "has_memory", False
-                            )
-                            result["flowise_has_tools"] = detection.get(
-                                "has_tools", False
-                            )
-
-                            # Update project classification
-                            if (
-                                result["project_type"] is None
-                                or result["confidence"] != "high"
-                            ):
-                                result["project_type"] = "flowise-workflow"
-                                result["confidence"] = "high"
-
-                            # Add to languages list
-                            if "flowise" not in result["languages"]:
-                                result["languages"].append("flowise")
-
-                            # Add the detected flow file
-                            result["project_files"].append(str(json_file))
-
-                            print(
-                                "✅ Flowise Extension: Setting flowise_flow=True in CONFIGURATION"
-                            )
-
-                            # Stop after first detection (optimization)
-                            break
-
-                    except Exception as e:
-                        # Don't fail entire detection if one file has issues
-                        print(f"⚠️  Flowise Extension: Error checking {json_file}: {e}")
-                        continue
-
-    except (ImportError, Exception):
-        # Flowise extension not installed or error - continue without it
-        pass
-    # ═══════════════════════════════════════════════════════════════════
-    # END FLOWISE EXTENSION HOOK
-    # ═══════════════════════════════════════════════════════════════════
-
-    return result
+# ANCHOR: detect_task_intent
+# Moved to tools/mcp/task_classification.py - imported above with re-export as _detect_task_intent
 
 
-def _detect_task_intent(task: str) -> str:
-    """
-    Detect the user's intent from the task description.
-
-    Returns mode: "new_project", "fix_bug", "add_feature", "upgrade_deps", "refactor", "add_tests"
-    """
-    task_lower = task.lower()
-
-    # Fix/bug keywords
-    if any(
-        word in task_lower
-        for word in ["fix", "bug", "issue", "error", "broken", "repair"]
-    ):
-        return "fix_bug"
-
-    # Upgrade/dependency keywords
-    if any(
-        word in task_lower
-        for word in [
-            "upgrade",
-            "update dependencies",
-            "update deps",
-            "update packages",
-            "update all",
-            "migrate to",
-        ]
-    ):
-        return "upgrade_deps"
-
-    # Refactor keywords
-    if any(
-        word in task_lower
-        for word in ["refactor", "restructure", "reorganize", "clean up"]
-    ):
-        return "refactor"
-
-    # Test keywords
-    if any(
-        word in task_lower
-        for word in ["add tests", "write tests", "test coverage", "unit test"]
-    ):
-        return "add_tests"
-
-    # Add feature/enhance keywords
-    if any(
-        word in task_lower
-        for word in [
-            "add",
-            "enhance",
-            "improve",
-            "implement",
-            "create feature",
-            "new feature",
-        ]
-    ):
-        return "add_feature"
-
-    # Default to new project if no enhancement keywords found
-    return "new_project"
-
-
+# ANCHOR: autonomous_build_and_deploy_impl
 def _autonomous_build_and_deploy_impl(
     task: str,
     working_directory: str,
@@ -2104,7 +1636,8 @@ def _autonomous_build_and_deploy_impl(
             try:
                 enforce_sandbox_mode(final_working_dir, "autonomous build")
                 print(
-                    f"✅ Sandbox safety check passed: {final_working_dir}", file=sys.stderr
+                    f"✅ Sandbox safety check passed: {final_working_dir}",
+                    file=sys.stderr,
                 )
             except (PermissionError, RuntimeError) as e:
                 # Safety violation - reject the request
@@ -2287,7 +1820,7 @@ Auto-correcting to use_parallel=False...
             )
             warnings.append("   Recommendation: Use mode='new_project' instead")
 
-        if codebase_info["has_git"] and codebase_info["git_clean"] == False:
+        if codebase_info["has_git"] and not codebase_info["git_clean"]:
             warnings.append("⚠️  WARNING: Git repository has uncommitted changes")
             warnings.append(
                 "   Recommendation: Commit or stash changes before enhancement"
@@ -2887,9 +2420,9 @@ def _merge_project_patterns_impl(
 
             # Create lookup by learning_id
             global_by_id = {
-                l.get("learning_id"): i
-                for i, l in enumerate(global_learnings)
-                if l.get("learning_id")
+                learning.get("learning_id"): i
+                for i, learning in enumerate(global_learnings)
+                if learning.get("learning_id")
             }
 
             for proj_learning in project_learnings:
@@ -3498,7 +3031,7 @@ def get_latest_logs() -> str:
 # ═══════════════════════════════════════════════════════════
 
 # Import evolution tool implementations
-from tools.evolution_mcp_tools import (
+from tools.evolution_mcp_tools import (  # noqa: E402
     create_evolution_task_impl,
     get_evolution_tasks_impl,
     start_evolution_daemon_impl,

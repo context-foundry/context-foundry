@@ -4,8 +4,12 @@ MCP Server Integration Hook
 Code to add to mcp_server.py _detect_existing_codebase() method.
 
 INTEGRATION INSTRUCTIONS:
-Add this code block after existing project detectors (around line 250-300).
+Add this code block inside the _detect_existing_codebase() function (search for `# ANCHOR: detect_existing_codebase`).
 """
+
+# ruff: noqa
+# This file contains template code meant to be inserted into mcp_server.py
+# Variables like 'directory', 'project_indicators', etc. exist in that context
 
 # ═══════════════════════════════════════════════════════════════════
 # FLOWISE EXTENSION HOOK

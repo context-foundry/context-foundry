@@ -20,7 +20,7 @@ Implemented parallel execution for `autonomous_build_and_deploy()` MCP tool, ena
 
 ### 1. New Helper Function: `_run_parallel_autonomous_build()`
 
-**File:** `tools/mcp_server.py:906-962`
+**File:** `tools/mcp_server.py` (search for `_run_parallel_autonomous_build`)
 
 **What it does:**
 - Calls Python `AutonomousOrchestrator` directly with `use_multi_agent=True`
@@ -46,7 +46,7 @@ def _run_parallel_autonomous_build(...):
 
 ### 2. Updated `autonomous_build_and_deploy()` Function
 
-**File:** `tools/mcp_server.py:966-1079`
+**File:** `tools/mcp_server.py` (search for `# ANCHOR: autonomous_build_and_deploy_impl`)
 
 **New parameter:**
 - `use_parallel: bool = True` (defaults to parallel mode)
@@ -90,7 +90,7 @@ except Exception as e:
 
 ### 4. Updated Documentation
 
-**File:** `tools/mcp_server.py:977-1019`
+**File:** `tools/mcp_server.py` (function docstrings in build section)
 
 **Docstring now explains:**
 - Parallel mode (default, 30-45% faster)

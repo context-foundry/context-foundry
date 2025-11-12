@@ -149,7 +149,7 @@ sandbox_path = manager.create_sandbox(
 **Location:** `tools/evolution/modes/self_improvement.py`
 **Status:** WORKS IN PRODUCTION (DANGEROUS!)
 
-**Current Code (Line 524):**
+**Current Code (in `_delegate_to_context_foundry` method):**
 ```python
 # ❌ PROBLEM: Uses production directory
 result_json = _autonomous_build_and_deploy_impl(

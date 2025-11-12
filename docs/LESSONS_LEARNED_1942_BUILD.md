@@ -193,7 +193,7 @@ Build → Feedback phase → Generate feedback JSON ✅
 
 ### Fix Implemented
 
-**Location:** `tools/mcp_server.py`, lines 743-788
+**Location:** `tools/mcp_server.py`, search for `# ANCHOR: detect_existing_codebase`
 
 **What it does:**
 - Detects when autonomous build completes successfully

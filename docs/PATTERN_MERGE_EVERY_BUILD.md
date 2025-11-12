@@ -38,7 +38,7 @@ get_delegation_result() detects:
 ```
 
 **Reliability:** Only works if someone checks the result
-**File:** `tools/mcp_server.py:743-788`
+**File:** `tools/mcp_server.py` (search for `# ANCHOR: detect_existing_codebase`)
 
 ---
 

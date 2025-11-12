@@ -9,7 +9,7 @@
 ## Integration Changes Made
 
 ### 1. ✅ MCP Server Tool Updated
-**File**: `tools/mcp_server.py:2007-2014`
+**File**: `tools/mcp_server.py` (pattern management section)
 **Change**: Added pattern mappings:
 ```python
 "architecture-patterns": "architecture-patterns.json",

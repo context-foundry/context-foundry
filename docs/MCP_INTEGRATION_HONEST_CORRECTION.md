@@ -9,9 +9,9 @@ The user identified critical errors in my validation claims:
 
 ### ❌ False Claims I Made
 
-1. **Pattern access broken** - FALSE. Pattern mapping IS fixed at tools/mcp_server.py:2007-2014
-   - User said: "tools/mcp_server.py:1981 only maps common-issues, scout-learnings, build-metrics"
-   - **TRUTH**: Line 1981 is the function definition. Mapping is at 2007-2014 and DOES include mcp-server-patterns
+1. **Pattern access broken** - FALSE. Pattern mapping IS fixed in tools/mcp_server.py (pattern management section)
+   - User said: "tools/mcp_server.py only maps common-issues, scout-learnings, build-metrics"
+   - **TRUTH**: The pattern_files mapping DOES include mcp-server-patterns
    - **STATUS**: ✅ Pattern access WORKS
 
 2. **Documentation files don't exist** - FALSE. Files DO exist
@@ -45,7 +45,7 @@ The user identified critical errors in my validation claims:
    - ✅ 2 patterns (Python FastMCP, Node.js MCP SDK)
    - ✅ EXISTS and is accessible
 
-2. **Pattern Mapping** - `tools/mcp_server.py:2007-2014`
+2. **Pattern Mapping** - `tools/mcp_server.py` (pattern management section)
    ```python
    pattern_files = {
        "common-issues": "common-issues.json",
@@ -101,7 +101,7 @@ This is where the 31 tests, 232-line test file, and lines 140-143 citations come
 | Component | Status | Evidence |
 |-----------|--------|----------|
 | Pattern library | ✅ Complete | .context-foundry/patterns/mcp-server-patterns.json (305 lines) |
-| Pattern mapping | ✅ Fixed | tools/mcp_server.py:2007-2014 |
+| Pattern mapping | ✅ Fixed | tools/mcp_server.py (pattern management) |
 | Orchestrator detection | ✅ Complete | tools/orchestrator_prompt.txt:508-533 |
 | Scout recognition | ✅ Complete | tools/prompts/phase_1_scout.md:79-125 |
 | Template | ✅ Complete | templates/mcp-server-template/ (196 lines, 4 tools) |
@@ -137,7 +137,7 @@ This is where the 31 tests, 232-line test file, and lines 140-143 citations come
 
 3. **Pattern access works**
    - `read_global_patterns("mcp-server-patterns")` functional
-   - Verified at tools/mcp_server.py:2007-2014
+   - Verified in tools/mcp_server.py (pattern management section)
 
 ### What Was MISLEADING ❌
 
@@ -164,9 +164,9 @@ This is where the 31 tests, 232-line test file, and lines 140-143 citations come
 **TRUE**: "The MCP server integration is complete within the context-foundry repository. All prompts updated, pattern mapping fixed, template ready."
 
 **EVIDENCE**:
-- tools/mcp_server.py:2007-2014 (pattern mapping)
-- tools/orchestrator_prompt.txt:508-533 (detection)
-- tools/prompts/phase_1_scout.md:79-125 (recognition)
+- tools/mcp_server.py (pattern management - search for pattern_files mapping)
+- tools/orchestrator_prompt.txt (MCP SERVER DETECTION section)
+- tools/prompts/phase_1_scout.md (MCP SERVER PROJECT CHECK section)
 - templates/mcp-server-template/ (working template)
 
 ### About the Testing ✅
