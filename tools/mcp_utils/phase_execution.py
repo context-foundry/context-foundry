@@ -197,12 +197,29 @@ class PhaseValidator:
                     break
 
         if not found_sources:
-            # Fallback: check if ANY code files exist in project root
+            # Fallback: recursively check ENTIRE project for code files
             code_files = (
-                list(working_dir.glob("*.py"))
-                + list(working_dir.glob("*.js"))
-                + list(working_dir.glob("*.ts"))
+                list(working_dir.rglob("*.py"))
+                + list(working_dir.rglob("*.js"))
+                + list(working_dir.rglob("*.ts"))
+                + list(working_dir.rglob("*.tsx"))
             )
+            # Exclude common non-source directories
+            code_files = [
+                f
+                for f in code_files
+                if not any(
+                    part in f.parts
+                    for part in [
+                        ".context-foundry",
+                        "__pycache__",
+                        "node_modules",
+                        ".git",
+                        "venv",
+                        ".venv",
+                    ]
+                )
+            ]
             if not code_files:
                 raise FileNotFoundError("Builder created no source files")
 

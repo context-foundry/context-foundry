@@ -44,7 +44,6 @@ def autonomous_build_and_deploy_impl(
     github_repo_name: Optional[str] = None,
     existing_repo: Optional[str] = None,
     mode: str = "new_project",
-    enable_test_loop: bool = True,
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
     use_parallel: bool = False,  # For parallel builders within Builder phase
@@ -53,6 +52,7 @@ def autonomous_build_and_deploy_impl(
     sandbox_path: Optional[str] = None,
     sandbox_task_id: Optional[str] = None,
     active_tasks: Optional[Dict[str, Dict[str, Any]]] = None,
+    # REMOVED: enable_test_loop - testing is now automatic based on project detection
 ) -> str:
     """
     Autonomous build with per-phase process spawning.
@@ -148,12 +148,17 @@ def autonomous_build_and_deploy_impl(
         # ═══════════════════════════════════════════════════════════════════════
         # TASK CONFIGURATION
         # ═══════════════════════════════════════════════════════════════════════
+        # Auto-detect if tests should run based on project type
+        # Tests run automatically unless it's a docs-only or config-only project
+        has_code = codebase_info.get("has_code", True)
+        enable_test_loop = has_code  # Automatic decision
+
         task_config = {
             "task": task,
             "working_directory": final_working_dir_str,
             "github_repo_name": github_repo_name,
             "mode": mode,
-            "enable_test_loop": enable_test_loop,
+            "enable_test_loop": enable_test_loop,  # Auto-detected, not user-controlled
             "max_test_iterations": max_test_iterations,
             "incremental": incremental and not force_rebuild,
             "flowise_flow": flowise_mode,

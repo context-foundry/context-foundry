@@ -418,7 +418,6 @@ def _autonomous_build_and_deploy_impl(
     github_repo_name: Optional[str] = None,
     existing_repo: Optional[str] = None,
     mode: str = "new_project",
-    enable_test_loop: bool = True,
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
     use_parallel: bool = False,
@@ -430,13 +429,13 @@ def _autonomous_build_and_deploy_impl(
     """Internal implementation of autonomous_build_and_deploy (not decorated)"""
     # ANCHOR: autonomous_build_and_deploy_impl
     # Moved to tools/mcp_utils/autonomous_build.py - imported above with re-export as _autonomous_build_and_deploy_impl
+    # NOTE: enable_test_loop removed - testing is now automatic
     return autonomous_build_and_deploy_impl(
         task=task,
         working_directory=working_directory,
         github_repo_name=github_repo_name,
         existing_repo=existing_repo,
         mode=mode,
-        enable_test_loop=enable_test_loop,
         max_test_iterations=max_test_iterations,
         timeout_minutes=timeout_minutes,
         use_parallel=use_parallel,
@@ -456,7 +455,6 @@ def autonomous_build_and_deploy(
     github_repo_name: Optional[str] = None,
     existing_repo: Optional[str] = None,
     mode: str = "new_project",
-    enable_test_loop: bool = True,
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
     use_parallel: bool = False,
@@ -466,6 +464,7 @@ def autonomous_build_and_deploy(
     """
     MCP tool wrapper for autonomous_build_and_deploy.
 
+    Testing is automatic - runs whenever code is detected in the project.
     Delegates to the internal implementation function.
     """
     return _autonomous_build_and_deploy_impl(
@@ -474,7 +473,6 @@ def autonomous_build_and_deploy(
         github_repo_name=github_repo_name,
         existing_repo=existing_repo,
         mode=mode,
-        enable_test_loop=enable_test_loop,
         max_test_iterations=max_test_iterations,
         timeout_minutes=timeout_minutes,
         use_parallel=use_parallel,
