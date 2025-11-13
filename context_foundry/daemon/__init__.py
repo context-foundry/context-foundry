@@ -8,8 +8,10 @@ Manages job lifecycle, phase tracking, and build execution.
 from .models import Job, JobStatus, JobType, PhaseEvent, LogEntry
 from .config import Config
 from .store import Store
-from .jobs import JobManager
-from .runner import Runner
+
+# Import jobs and runner when they're implemented
+# from .jobs import JobManager
+# from .runner import Runner
 
 __all__ = [
     "Job",
@@ -19,6 +21,6 @@ __all__ = [
     "LogEntry",
     "Config",
     "Store",
-    "JobManager",
-    "Runner",
+    # "JobManager",  # TODO: Uncomment when implemented
+    # "Runner",      # TODO: Uncomment when implemented
 ]
