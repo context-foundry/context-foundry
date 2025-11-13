@@ -102,7 +102,6 @@ class CFDaemon:
             True if another instance is running, False otherwise
         """
         import errno
-        import subprocess
 
         if not self.config.pid_file.exists():
             return False
@@ -116,26 +115,17 @@ class CFDaemon:
                 logger.error(f"Daemon already running with PID {pid}")
                 return True
             except OSError as e:
-                # EPERM means process exists but we can't signal it
+                # EPERM (errno 1) means process exists but we can't signal it
+                # This happens in sandboxed/restricted environments
+                # EPERM is sufficient proof the process exists
                 if e.errno == errno.EPERM:
                     logger.debug(
-                        f"Permission denied checking PID {pid}, falling back to ps"
+                        f"Permission denied signaling PID {pid}, but process exists"
                     )
-                    # Use ps as fallback
-                    try:
-                        result = subprocess.run(
-                            ["ps", "-p", str(pid), "-o", "comm="],
-                            capture_output=True,
-                            text=True,
-                            timeout=2,
-                        )
-                        if result.returncode == 0 and result.stdout.strip():
-                            logger.error(f"Daemon already running with PID {pid}")
-                            return True
-                    except (subprocess.TimeoutExpired, FileNotFoundError):
-                        pass
+                    logger.error(f"Daemon already running with PID {pid}")
+                    return True
 
-                # Process doesn't exist, stale PID file
+                # ESRCH (errno 3) means no such process - stale PID file
                 logger.warning(f"Removing stale PID file (PID {pid})")
                 self.config.pid_file.unlink()
                 return False
@@ -305,7 +295,6 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
         PID if daemon is running, None otherwise
     """
     import errno
-    import subprocess
 
     config = config or Config.load()
 
@@ -320,25 +309,14 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
             os.kill(pid, 0)
             return pid
         except OSError as e:
-            # EPERM (errno 1) means process exists but we can't signal it (permission denied)
-            # This can happen in sandboxed environments - use ps as fallback
+            # EPERM (errno 1) means process exists but we can't signal it
+            # This happens in sandboxed/restricted environments
+            # EPERM is sufficient proof the process exists
             if e.errno == errno.EPERM:
                 logger.debug(
-                    f"Permission denied checking PID {pid}, falling back to ps"
+                    f"Permission denied signaling PID {pid}, but process exists"
                 )
-                # Use ps to check if process exists
-                try:
-                    result = subprocess.run(
-                        ["ps", "-p", str(pid), "-o", "comm="],
-                        capture_output=True,
-                        text=True,
-                        timeout=2,
-                    )
-                    if result.returncode == 0 and result.stdout.strip():
-                        # Process exists
-                        return pid
-                except (subprocess.TimeoutExpired, FileNotFoundError):
-                    pass
+                return pid
 
             # ESRCH (errno 3) means no such process - PID file is stale
             return None
