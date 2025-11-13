@@ -132,7 +132,32 @@ class CFDaemon:
             """Handle reload signal"""
             logger.info("Received SIGHUP, reloading configuration...")
             try:
+                old_worker_count = self.config.max_concurrent_jobs
+                old_log_level = self.config.log_level
+
+                # Reload configuration from file/env
                 self.config = Config.load()
+
+                # Update logging level if changed
+                if old_log_level != self.config.log_level:
+                    new_level = getattr(
+                        logging, self.config.log_level.upper(), logging.INFO
+                    )
+                    logging.getLogger().setLevel(new_level)
+                    logger.info(
+                        f"Log level updated: {old_log_level} → {self.config.log_level}"
+                    )
+
+                # Update JobManager config reference
+                # Note: Worker count changes require daemon restart
+                self.job_manager.config = self.config
+
+                if old_worker_count != self.config.max_concurrent_jobs:
+                    logger.warning(
+                        f"Worker count changed ({old_worker_count} → {self.config.max_concurrent_jobs}), "
+                        "but requires daemon restart to take effect"
+                    )
+
                 logger.info("Configuration reloaded successfully")
             except Exception as e:
                 logger.error(f"Failed to reload configuration: {e}")
@@ -149,7 +174,8 @@ class CFDaemon:
         Start the daemon
 
         Args:
-            foreground: If True, run in foreground instead of daemonizing
+            foreground: Currently ignored - daemon always runs in foreground.
+                       Background daemonization is not yet implemented.
         """
         # Check if already running
         if self._check_pid_file():
@@ -173,14 +199,17 @@ class CFDaemon:
             f"{self.config.max_concurrent_jobs} workers)"
         )
 
-        if foreground:
-            logger.info("Running in foreground mode (Ctrl+C to stop)")
-            self._run_foreground()
+        # NOTE: Background daemonization not yet implemented
+        # Daemon always runs in foreground regardless of 'foreground' parameter
+        if not foreground:
+            logger.warning(
+                "Background mode requested but not implemented - running in foreground. "
+                "Use Ctrl+C to stop or run in a terminal multiplexer (screen/tmux)."
+            )
         else:
-            logger.info("Running in background mode")
-            # In production, you'd implement proper daemonization here
-            # For now, just run in foreground
-            self._run_foreground()
+            logger.info("Running in foreground mode (Ctrl+C to stop)")
+
+        self._run_foreground()
 
     def _run_foreground(self):
         """Run daemon in foreground"""

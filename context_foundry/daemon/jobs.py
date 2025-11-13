@@ -276,15 +276,17 @@ class JobManager:
 
         while not self._stop_event.is_set():
             try:
-                # Try to get job ID from queue (with timeout)
+                # Try to get job ID from queue (with short timeout for responsiveness)
                 try:
-                    job_id = self._job_queue.get(timeout=5.0)
+                    job_id = self._job_queue.get(timeout=0.5)
                     if job_id is None:  # Shutdown signal
                         break
                 except Empty:
                     # No jobs in queue, poll database for QUEUED jobs
                     job_id = self._poll_for_job()
                     if job_id is None:
+                        # No jobs found, sleep briefly to avoid busy-waiting
+                        time.sleep(1.0)
                         continue
 
                 # Execute the job

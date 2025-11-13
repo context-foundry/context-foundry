@@ -11,7 +11,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Optional
 
 
 @dataclass
@@ -35,10 +35,18 @@ class Config:
     default_max_retries: int = 3
 
     # Paths
-    data_dir: Path = field(default_factory=lambda: Path.home() / ".context-foundry" / "cfd")
-    log_dir: Path = field(default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "logs")
-    db_path: Path = field(default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "jobs.db")
-    pid_file: Path = field(default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "daemon.pid")
+    data_dir: Path = field(
+        default_factory=lambda: Path.home() / ".context-foundry" / "cfd"
+    )
+    log_dir: Path = field(
+        default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "logs"
+    )
+    db_path: Path = field(
+        default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "jobs.db"
+    )
+    pid_file: Path = field(
+        default_factory=lambda: Path.home() / ".context-foundry" / "cfd" / "daemon.pid"
+    )
 
     # GitHub (optional)
     github_token: Optional[str] = None
@@ -76,9 +84,9 @@ class Config:
             if env_var in os.environ:
                 value = os.environ[env_var]
                 # Type conversion
-                if config_key.endswith("_seconds") or config_key.endswith("_concurrent"):
+                if config_key.endswith(("_seconds", "_jobs", "_minutes", "_retries")):
                     value = int(value)
-                elif config_key.endswith("_percent") or config_key.endswith("_gb"):
+                elif config_key.endswith(("_percent", "_gb")):
                     value = float(value)
                 config_data[config_key] = value
 
@@ -107,7 +115,7 @@ class Config:
                 data[key] = value
 
         with open(config_path, "w") as f:
-            json.dumps(data, f, indent=2)
+            json.dump(data, f, indent=2)
 
     def ensure_directories(self):
         """Ensure all required directories exist"""

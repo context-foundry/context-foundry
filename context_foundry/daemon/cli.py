@@ -360,7 +360,7 @@ def main():
         "--foreground",
         "-f",
         action="store_true",
-        help="Run in foreground (default: background)",
+        help="Run in foreground (NOTE: background daemonization not yet implemented, always runs in foreground)",
     )
 
     # Stop command
