@@ -195,6 +195,53 @@ class TestPhaseTracking:
             assert "started_at" in phase_info
             assert "last_updated" in phase_info
 
+    def test_update_phase_with_baml_redirects_stdout(self, capsys):
+        """Ensure stdout noise from BAML is redirected to stderr"""
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+
+            mock_response = {
+                "session_id": "test-session",
+                "current_phase": "Builder",
+                "phase_number": "3/7",
+                "status": "building",
+                "progress_detail": "Planning parallel build tasks",
+                "test_iteration": 0,
+                "phases_completed": ["Scout", "Architect"],
+                "started_at": "2025-01-13T00:00:00Z",
+                "last_updated": "2025-01-13T00:00:00Z",
+            }
+
+            mock_result = MagicMock()
+            mock_result.parsed.return_value = mock_response
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps(mock_response)}}
+            )
+            mock_client.create_context_manager.return_value = MagicMock()
+
+            def _mock_call_function_sync(*args, **kwargs):
+                print("2025-11-11T21:15:33.558 [BAML WARN] Something noisy")
+                return mock_result
+
+            mock_client.call_function_sync.side_effect = _mock_call_function_sync
+
+            phase_info = update_phase_with_baml(
+                phase="Builder",
+                status="building",
+                detail="Planning parallel build tasks",
+                session_id="test-session",
+                iteration=0,
+            )
+
+            captured = capsys.readouterr()
+            assert captured.out.strip() == ""
+            assert (
+                "[BAML LOG] 2025-11-11T21:15:33.558 [BAML WARN] Something noisy"
+                in captured.err
+            )
+            assert phase_info["current_phase"] == "Builder"
+
     def test_validate_phase_info_valid(self):
         """Test validating valid phase info JSON with BAML"""
         valid_json = json.dumps(

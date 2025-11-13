@@ -653,7 +653,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # This is a minimal installation - only ~50MB, installs in 15-20 seconds
 pip install -r requirements-mcp.txt
 
-# 3a. [Optional] Install BAML for type-safe LLM outputs
+# 3a. Install BAML dependencies (included in requirements.txt)
 pip install -r requirements-baml.txt
 
 # 4. Configure Claude Code to connect to MCP server

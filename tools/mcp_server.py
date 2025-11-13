@@ -45,12 +45,12 @@ from tools.banner import print_banner
 
 # Import modularized utilities (Phase 2 refactoring - Phases 1-5 complete)
 # These maintain backward compatibility via re-exports below
-from tools.mcp.output_utils import truncate_output, create_output_summary
-from tools.mcp.phase_tracking import read_phase_info
-from tools.mcp.path_utils import get_context_foundry_parent_dir
-from tools.mcp.project_detection import detect_existing_codebase
-from tools.mcp.task_classification import detect_task_intent
-from tools.mcp.pattern_management import (
+from tools.mcp_utils.output_utils import truncate_output, create_output_summary
+from tools.mcp_utils.phase_tracking import read_phase_info
+from tools.mcp_utils.path_utils import get_context_foundry_parent_dir
+from tools.mcp_utils.project_detection import detect_existing_codebase
+from tools.mcp_utils.task_classification import detect_task_intent
+from tools.mcp_utils.pattern_management import (
     read_global_patterns_impl,
     save_global_patterns_impl,
     merge_project_patterns_impl,
@@ -58,7 +58,7 @@ from tools.mcp.pattern_management import (
     share_patterns_to_community_impl,
     bootstrap_patterns_on_startup_impl,
 )
-from tools.mcp.delegation import (
+from tools.mcp_utils.delegation import (
     _write_delegation_metadata,  # noqa: F401
     _write_full_output_to_file,  # noqa: F401
     delegate_to_claude_code_impl,
@@ -68,7 +68,7 @@ from tools.mcp.delegation import (
     cancel_delegation_impl,
     stream_delegation_output_impl,
 )
-from tools.mcp.autonomous_build import autonomous_build_and_deploy_impl
+from tools.mcp_utils.autonomous_build import autonomous_build_and_deploy_impl
 
 # Re-export with underscore-prefixed names for backward compatibility
 # Tests and external code may import these directly
@@ -104,23 +104,23 @@ active_tasks: Dict[str, Dict[str, Any]] = {}
 
 
 # ANCHOR: read_phase_info
-# Moved to tools/mcp/phase_tracking.py - imported above with re-export as _read_phase_info
+# Moved to tools/mcp_utils/phase_tracking.py - imported above with re-export as _read_phase_info
 
 # ANCHOR: get_context_foundry_parent_dir
-# Moved to tools/mcp/path_utils.py - imported above with re-export as _get_context_foundry_parent_dir
+# Moved to tools/mcp_utils/path_utils.py - imported above with re-export as _get_context_foundry_parent_dir
 
 # ANCHOR: truncate_output
-# Moved to tools/mcp/output_utils.py - imported above with re-export as _truncate_output
+# Moved to tools/mcp_utils/output_utils.py - imported above with re-export as _truncate_output
 
 # ANCHOR: write_delegation_metadata
-# Moved to tools/mcp/delegation.py - imported above
+# Moved to tools/mcp_utils/delegation.py - imported above
 
 # ANCHOR: write_full_output_to_file
-# Moved to tools/mcp/delegation.py - imported above
+# Moved to tools/mcp_utils/delegation.py - imported above
 
 
 # ANCHOR: create_output_summary
-# Moved to tools/mcp/output_utils.py - imported above with re-export as _create_output_summary
+# Moved to tools/mcp_utils/output_utils.py - imported above with re-export as _create_output_summary
 
 
 # ANCHOR: context_foundry_status
@@ -165,7 +165,7 @@ No commands to memorize, no syntax to learn.
 
 
 # ANCHOR: delegate_to_claude_code
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def delegate_to_claude_code(
     task: str,
@@ -220,7 +220,7 @@ def delegate_to_claude_code(
 
 
 # ANCHOR: delegate_to_claude_code_async
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def delegate_to_claude_code_async(
     task: str,
@@ -261,7 +261,7 @@ def delegate_to_claude_code_async(
 
 
 # ANCHOR: get_delegation_result
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def get_delegation_result(task_id: str, include_full_output: bool = False) -> str:
     """
@@ -301,7 +301,7 @@ def get_delegation_result(task_id: str, include_full_output: bool = False) -> st
 
 
 # ANCHOR: list_delegations
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def list_delegations() -> str:
     """
@@ -320,7 +320,7 @@ def list_delegations() -> str:
 
 
 # ANCHOR: cancel_delegation
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
     """
@@ -352,7 +352,7 @@ def cancel_delegation(task_id: str, reason: Optional[str] = None) -> str:
 
 
 # ANCHOR: stream_delegation_output
-# Moved to tools/mcp/delegation.py
+# Moved to tools/mcp_utils/delegation.py
 @mcp.tool()
 def stream_delegation_output(
     task_id: str,
@@ -406,10 +406,10 @@ def stream_delegation_output(
 
 
 # ANCHOR: detect_existing_codebase
-# Moved to tools/mcp/project_detection.py - imported above with re-export as _detect_existing_codebase
+# Moved to tools/mcp_utils/project_detection.py - imported above with re-export as _detect_existing_codebase
 
 # ANCHOR: detect_task_intent
-# Moved to tools/mcp/task_classification.py - imported above with re-export as _detect_task_intent
+# Moved to tools/mcp_utils/task_classification.py - imported above with re-export as _detect_task_intent
 
 
 def _autonomous_build_and_deploy_impl(
@@ -429,7 +429,7 @@ def _autonomous_build_and_deploy_impl(
 ) -> str:
     """Internal implementation of autonomous_build_and_deploy (not decorated)"""
     # ANCHOR: autonomous_build_and_deploy_impl
-    # Moved to tools/mcp/autonomous_build.py - imported above with re-export as _autonomous_build_and_deploy_impl
+    # Moved to tools/mcp_utils/autonomous_build.py - imported above with re-export as _autonomous_build_and_deploy_impl
     return autonomous_build_and_deploy_impl(
         task=task,
         working_directory=working_directory,
@@ -495,13 +495,13 @@ def autonomous_build_and_deploy(
 
 def _read_global_patterns_impl(pattern_type: str = "common-issues") -> dict:
     # ANCHOR: read_global_patterns
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _read_global_patterns_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _read_global_patterns_impl
     return read_global_patterns_impl(pattern_type)
 
 
 def _save_global_patterns_impl(pattern_type: str, data: dict) -> dict:
     # ANCHOR: save_global_patterns
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _save_global_patterns_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _save_global_patterns_impl
     return save_global_patterns_impl(pattern_type, data)
 
 
@@ -511,7 +511,7 @@ def _merge_project_patterns_impl(
     increment_build_count: bool = True,
 ) -> dict:
     # ANCHOR: merge_project_patterns
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _merge_project_patterns_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _merge_project_patterns_impl
     return merge_project_patterns_impl(
         project_pattern_file, pattern_type, increment_build_count
     )
@@ -655,7 +655,7 @@ def migrate_all_project_patterns(
         result = migrate_all_project_patterns("/Users/name/homelab")
     """
     # ANCHOR: migrate_all_project_patterns
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _migrate_all_project_patterns_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _migrate_all_project_patterns_impl
     return migrate_all_project_patterns_impl(
         projects_base_dir=projects_base_dir,
         projects_dir=projects_dir,
@@ -691,7 +691,7 @@ def share_patterns_to_community(
         result = share_patterns_to_community(skip_if_no_changes=False)
     """
     # ANCHOR: share_patterns_to_community
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _share_patterns_to_community_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _share_patterns_to_community_impl
     return share_patterns_to_community_impl(
         auto_confirm=auto_confirm,
         skip_if_no_changes=skip_if_no_changes,
@@ -829,7 +829,7 @@ def bootstrap_patterns_on_startup():
     when they clone and run Context Foundry.
     """
     # ANCHOR: bootstrap_patterns_on_startup
-    # Moved to tools/mcp/pattern_management.py - imported above with re-export as _bootstrap_patterns_on_startup_impl
+    # Moved to tools/mcp_utils/pattern_management.py - imported above with re-export as _bootstrap_patterns_on_startup_impl
     return bootstrap_patterns_on_startup_impl()
 
 

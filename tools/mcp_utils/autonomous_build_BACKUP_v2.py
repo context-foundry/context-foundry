@@ -21,10 +21,10 @@ from tools.baml_integration import is_baml_available, get_baml_error
 from tools.evolution.safety import enforce_sandbox_mode
 
 # Import helper functions from other mcp modules
-from tools.mcp.path_utils import get_context_foundry_parent_dir
-from tools.mcp.project_detection import detect_existing_codebase
-from tools.mcp.task_classification import detect_task_intent
-from tools.mcp.delegation import _write_delegation_metadata
+from tools.mcp_utils.path_utils import get_context_foundry_parent_dir
+from tools.mcp_utils.project_detection import detect_existing_codebase
+from tools.mcp_utils.task_classification import detect_task_intent
+from tools.mcp_utils.delegation import _write_delegation_metadata
 
 
 def autonomous_build_and_deploy_impl(

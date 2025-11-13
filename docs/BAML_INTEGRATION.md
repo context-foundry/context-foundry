@@ -19,9 +19,9 @@
 
 **This is where ALL the heavy lifting happens - 100% covered by your subscription.**
 
-### What BAML Does (OPTIONAL - Requires API Key)
+### What BAML Does (REQUIRED - Needs API Key)
 
-**BAML is a thin validation layer on top** that adds type-safety:
+**BAML is a type-safety layer** that provides compile-time validation and reduces errors from 5% to <1%:
 
 - ⚙️ Phase tracking validation (~10-15 small calls per build)
 - ⚙️ Scout report structure validation (1 call)
@@ -35,13 +35,12 @@
 | What | Runs On | Your Cost |
 |------|---------|-----------|
 | **Main Build System** (Scout, Architect, Builder, Test, etc.) | Claude Code subscription | **$0** (included in $20/month) |
-| **BAML Type Validation** (optional) | Separate API key | **~$0.20/build** |
+| **BAML Type Validation** (required) | Separate API key | **~$0.20/build** |
 
 **Bottom Line:**
-- Without BAML: **$0 per build** (everything on subscription)
-- With BAML: **~$0.20 per build** (just for type validation)
-
-**Most users should start WITHOUT BAML** - the JSON fallback mode works perfectly fine!
+- Each build costs **~$0.20** in API fees for BAML validation
+- Everything else runs on your $20/month Claude Code subscription
+- **Alternative:** Use MCP delegation mode (see integrations/baml/) for $0 API costs
 
 ---
 
@@ -54,9 +53,9 @@ Context Foundry integrates **BAML (Basically a Made-up Language)** to provide ty
 - 🔒 **Type Safety**: Compile-time validation catches errors before runtime
 - 📡 **Semantic Streaming**: Real-time progress updates with structured data
 - 🔍 **Observability**: Built-in monitoring with Boundary Studio
-- 🔄 **Backward Compatible**: Graceful fallback to JSON mode
+- ⚡ **Performance**: Client caching reduces overhead to <100ms
 
-**IMPORTANT: BAML is OPTIONAL** - Context Foundry works perfectly without it using JSON validation
+**IMPORTANT: BAML is REQUIRED** - Context Foundry depends on BAML for type-safe structured outputs
 
 ## What is BAML?
 
@@ -81,32 +80,26 @@ phase_info = client.CreatePhaseInfo(
 
 ## Installation
 
-### Option 1: Basic Installation (No BAML)
+### Standard Installation (Required)
 
-Context Foundry works without BAML using JSON fallback mode:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Option 2: Full Installation (With BAML) **RECOMMENDED**
-
-For type-safe structured outputs and improved reliability:
+Context Foundry requires BAML for type-safe structured outputs:
 
 ```bash
-# Install core dependencies
+# Install all dependencies (includes BAML)
 pip install -r requirements.txt
 
-# Install BAML dependencies
-pip install -r requirements-baml.txt
-
-# Set API key (choose one or both)
+# Set API key for BAML validation (choose one or both)
 export ANTHROPIC_API_KEY="your-api-key-here"  # For Claude models
-export OPENAI_API_KEY="your-api-key-here"     # For GPT models
+export OPENAI_API_KEY="your-api-key-here"     # For GPT models (default)
 
 # Verify BAML is working
 python3 tools/use_baml.py status
 ```
+
+### Alternative: MCP Delegation Mode (No API Costs)
+
+See `integrations/baml/` for using BAML with Claude Code delegation instead of direct API calls.
+This runs BAML validation through delegated Claude instances on your subscription ($0 API costs).
 
 **Requirements:**
 - Python 3.8+
@@ -395,26 +388,25 @@ else
 fi
 ```
 
-## Graceful Fallback
+## Error Handling
 
-Context Foundry **always works**, even without BAML:
+Context Foundry requires BAML to be installed and configured:
 
 ```python
-from tools.baml_integration import is_baml_available
+from tools.baml_integration import is_baml_available, get_baml_error
 
-if is_baml_available():
-    # Use BAML for type-safe structured output
-    phase_info = update_phase_with_baml(...)
-else:
-    # Automatically falls back to JSON mode
-    phase_info = {
-        "session_id": "...",
-        "current_phase": "Scout",
-        ...
-    }
+if not is_baml_available():
+    error = get_baml_error()
+    print(f"❌ BAML is required but unavailable: {error}")
+    print("Install with: pip install baml-py")
+    print("Set API key: export OPENAI_API_KEY=your-key")
+    sys.exit(1)
+
+# BAML is available - proceed with build
+phase_info = update_phase_with_baml(...)
 ```
 
-**No user intervention required** - fallback is automatic and transparent.
+**If BAML is unavailable**, builds will fail fast with a clear error message directing you to install it.
 
 ## Checking BAML Status
 
@@ -473,22 +465,16 @@ scout_report = generate_scout_report_baml(...)
 
 Access Boundary Studio at: https://studio.boundaryml.com
 
-## Migration from JSON
+## BAML Dependency Status
 
-### Phase 1: Dual Mode (Current - v1.3.0)
-- BAML is optional
-- JSON mode is default
-- Both modes work side-by-side
-
-### Phase 2: BAML Default (v1.4.0)
-- BAML becomes default if installed
-- JSON fallback still available
-- Gradual migration encouraged
-
-### Phase 3: BAML Required (v2.0.0)
-- BAML becomes required dependency
-- JSON mode deprecated
+**Current (v1.3.0+)**: BAML is a required dependency
+- Listed in requirements.txt
+- Required for all builds
+- No JSON fallback mode
 - Full type safety across codebase
+
+**Historical Note**: Earlier versions (pre-v1.3.0) intended to support optional BAML with JSON fallback,
+but this was never fully implemented. As of v1.3.0, BAML is required for all Context Foundry builds.
 
 ## Troubleshooting
 

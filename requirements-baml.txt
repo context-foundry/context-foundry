@@ -1,9 +1,16 @@
 # BAML Integration Dependencies for Context Foundry
 #
-# Install these if you want type-safe LLM outputs and structured responses
+# BAML is REQUIRED for Context Foundry builds (also included in requirements.txt)
+#
+# This file exists for:
+#   1. Explicit documentation of BAML dependencies
+#   2. Isolated BAML upgrades (pip install -U -r requirements-baml.txt)
+#   3. Reference for MCP delegation mode setup
 #
 # Installation:
-#   pip install -r requirements-baml.txt
+#   pip install -r requirements.txt  # Includes BAML
+#   OR
+#   pip install -r requirements-baml.txt  # Just BAML
 #
 # Benefits:
 #   - Type-safe phase tracking (compile-time validation)
@@ -12,7 +19,7 @@
 #   - Semantic streaming for real-time progress
 #   - Built-in observability with Boundary Studio
 #
-# Note: BAML is optional. Context Foundry works without it (JSON fallback mode)
+# Cost: ~$0.20/build in API fees (or $0 with MCP delegation mode)
 
 # BAML Core
 baml-py>=0.211.0  # BAML Python bindings

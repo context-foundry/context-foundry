@@ -15,17 +15,17 @@ Modules:
 - autonomous_build: Autonomous build/test/fix/deploy functionality
 """
 
-from tools.mcp.output_utils import truncate_output, create_output_summary
-from tools.mcp.phase_tracking import read_phase_info
-from tools.mcp.path_utils import get_context_foundry_parent_dir
-from tools.mcp.task_classification import detect_task_intent
-from tools.mcp.project_detection import detect_existing_codebase
-from tools.mcp.pattern_management import (
+from tools.mcp_utils.output_utils import truncate_output, create_output_summary
+from tools.mcp_utils.phase_tracking import read_phase_info
+from tools.mcp_utils.path_utils import get_context_foundry_parent_dir
+from tools.mcp_utils.task_classification import detect_task_intent
+from tools.mcp_utils.project_detection import detect_existing_codebase
+from tools.mcp_utils.pattern_management import (
     read_global_patterns_impl,
     save_global_patterns_impl,
     merge_project_patterns_impl,
 )
-from tools.mcp.autonomous_build import autonomous_build_and_deploy_impl
+from tools.mcp_utils.autonomous_build import autonomous_build_and_deploy_impl
 
 __all__ = [
     # Re-exported for convenience

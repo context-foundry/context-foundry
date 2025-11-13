@@ -23,15 +23,24 @@ fi
 # 2. Check API keys
 echo ""
 echo "2️⃣ Checking API keys..."
+HAS_API_KEY=0
 if [ -n "$ANTHROPIC_API_KEY" ]; then
     echo "   ✅ ANTHROPIC_API_KEY is set (${ANTHROPIC_API_KEY:0:10}...)"
-elif [ -n "$OPENAI_API_KEY" ]; then
+    HAS_API_KEY=1
+fi
+if [ -n "$OPENAI_API_KEY" ]; then
     echo "   ✅ OPENAI_API_KEY is set (${OPENAI_API_KEY:0:10}...)"
-else
-    echo "   ⚠️  No API keys set. BAML will use JSON fallback mode."
+    HAS_API_KEY=1
+fi
+
+if [ $HAS_API_KEY -eq 0 ]; then
+    echo "   ❌ No API keys set. BAML requires at least one API key."
     echo "   Set at least one:"
     echo "     export ANTHROPIC_API_KEY='your-key'"
     echo "     export OPENAI_API_KEY='your-key'"
+    echo ""
+    echo "   Alternative: Use MCP delegation mode (see integrations/baml/) for $0 API costs"
+    exit 1
 fi
 
 # 3. Check BAML status
