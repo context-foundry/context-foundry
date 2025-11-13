@@ -112,10 +112,16 @@ class PhaseValidator:
 
         # Verify contains key sections
         content = required.read_text()
-        required_sections = ["## Technology Stack", "## Architecture"]
-        for section in required_sections:
-            if section not in content:
-                raise ValueError(f"architecture.md missing section: {section}")
+
+        # Check for Technology Stack (required)
+        if "## Technology Stack" not in content:
+            raise ValueError("architecture.md missing section: ## Technology Stack")
+
+        # Check for Architecture section (accept variations)
+        if "## Architecture" not in content and "## System Architecture" not in content:
+            raise ValueError(
+                "architecture.md missing section: ## Architecture or ## System Architecture"
+            )
 
         return True
 

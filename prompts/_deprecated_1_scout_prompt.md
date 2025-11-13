@@ -1,3 +1,6 @@
+> **Deprecated Prompt**
+> This legacy scaffold isn’t referenced by the current autonomous build. Safe to delete once migrations confirm no external tooling depends on it.
+
 You are the Scout agent in Context Foundry - a spec-first development system.
 
 # Your Role
