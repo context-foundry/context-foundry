@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""
+Context Foundry Daemon (cfd) - Executable entry point
+
+Tiny wrapper that calls the main CLI module.
+"""
+
+import sys
+from pathlib import Path
+
+# Add context_foundry to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from context_foundry.daemon.cli import main
+
+if __name__ == "__main__":
+    sys.exit(main())

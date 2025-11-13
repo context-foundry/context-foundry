@@ -9,9 +9,7 @@ from .models import Job, JobStatus, JobType, PhaseEvent, LogEntry
 from .config import Config
 from .store import Store
 from .jobs import JobManager
-
-# Import runner when implemented
-# from .runner import Runner
+from .runner import Runner, create_runner
 
 __all__ = [
     "Job",
@@ -22,5 +20,6 @@ __all__ = [
     "Config",
     "Store",
     "JobManager",
-    # "Runner",  # TODO: Uncomment when implemented
+    "Runner",
+    "create_runner",
 ]
