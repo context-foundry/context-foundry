@@ -29,7 +29,7 @@ def cmd_start(args):
         return 1
 
     try:
-        daemon = CFDaemon(config)
+        daemon = CFDaemon(config, config_path=args.config)
         daemon.start(foreground=args.foreground)
         return 0
     except Exception as e:

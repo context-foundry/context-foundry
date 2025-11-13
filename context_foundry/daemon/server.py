@@ -9,6 +9,7 @@ import os
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import Optional
 
 from .config import Config
@@ -31,14 +32,18 @@ class CFDaemon:
     - Provides graceful shutdown
     """
 
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(
+        self, config: Optional[Config] = None, config_path: Optional[Path] = None
+    ):
         """
         Initialize CF Daemon
 
         Args:
             config: Configuration instance (loads default if not provided)
+            config_path: Path to config file (for reload via SIGHUP)
         """
-        self.config = config or Config.load()
+        self.config = config or Config.load(config_path)
+        self.config_path = config_path  # Store for SIGHUP reload
         self.config.ensure_directories()
 
         # Initialize components
@@ -96,6 +101,9 @@ class CFDaemon:
         Returns:
             True if another instance is running, False otherwise
         """
+        import errno
+        import subprocess
+
         if not self.config.pid_file.exists():
             return False
 
@@ -107,7 +115,26 @@ class CFDaemon:
                 os.kill(pid, 0)  # Signal 0 checks if process exists
                 logger.error(f"Daemon already running with PID {pid}")
                 return True
-            except OSError:
+            except OSError as e:
+                # EPERM means process exists but we can't signal it
+                if e.errno == errno.EPERM:
+                    logger.debug(
+                        f"Permission denied checking PID {pid}, falling back to ps"
+                    )
+                    # Use ps as fallback
+                    try:
+                        result = subprocess.run(
+                            ["ps", "-p", str(pid), "-o", "comm="],
+                            capture_output=True,
+                            text=True,
+                            timeout=2,
+                        )
+                        if result.returncode == 0 and result.stdout.strip():
+                            logger.error(f"Daemon already running with PID {pid}")
+                            return True
+                    except (subprocess.TimeoutExpired, FileNotFoundError):
+                        pass
+
                 # Process doesn't exist, stale PID file
                 logger.warning(f"Removing stale PID file (PID {pid})")
                 self.config.pid_file.unlink()
@@ -135,8 +162,8 @@ class CFDaemon:
                 old_worker_count = self.config.max_concurrent_jobs
                 old_log_level = self.config.log_level
 
-                # Reload configuration from file/env
-                self.config = Config.load()
+                # Reload configuration from original config path
+                self.config = Config.load(self.config_path)
 
                 # Update logging level if changed
                 if old_log_level != self.config.log_level:
@@ -277,6 +304,9 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
     Returns:
         PID if daemon is running, None otherwise
     """
+    import errno
+    import subprocess
+
     config = config or Config.load()
 
     if not config.pid_file.exists():
@@ -285,11 +315,32 @@ def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:
     try:
         pid = int(config.pid_file.read_text().strip())
 
-        # Verify process exists
+        # Verify process exists using os.kill(pid, 0)
         try:
             os.kill(pid, 0)
             return pid
-        except OSError:
+        except OSError as e:
+            # EPERM (errno 1) means process exists but we can't signal it (permission denied)
+            # This can happen in sandboxed environments - use ps as fallback
+            if e.errno == errno.EPERM:
+                logger.debug(
+                    f"Permission denied checking PID {pid}, falling back to ps"
+                )
+                # Use ps to check if process exists
+                try:
+                    result = subprocess.run(
+                        ["ps", "-p", str(pid), "-o", "comm="],
+                        capture_output=True,
+                        text=True,
+                        timeout=2,
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        # Process exists
+                        return pid
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+
+            # ESRCH (errno 3) means no such process - PID file is stale
             return None
 
     except (ValueError, FileNotFoundError):
