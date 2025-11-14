@@ -539,7 +539,7 @@ def _autonomous_build_and_deploy_impl(
     )
 
 
-# MCP tool wrapper (calls the implementation function above)
+# MCP tool wrapper (submits to CF Daemon)
 @mcp.tool()
 def autonomous_build_and_deploy(
     task: str,
@@ -554,16 +554,31 @@ def autonomous_build_and_deploy(
     force_rebuild: bool = False,
 ) -> str:
     """
-    MCP tool wrapper for autonomous_build_and_deploy.
+    Submit autonomous build job to CF Daemon queue.
+
+    This tool now delegates to the Context Foundry Daemon instead of spawning
+    processes directly. The daemon provides:
+    - Job persistence (survives disconnections)
+    - Working directory locking (prevents conflicts)
+    - Progress monitoring via CLI (cfd logs <job-id> --follow)
+    - Automatic retry on failures
+    - Pattern merging and self-improvement
 
     Testing is automatic - runs whenever code is detected in the project.
-    Delegates to the internal implementation function.
+
+    Prerequisites:
+    - CF Daemon must be running: `cfd start`
+    - Check daemon status: `cfd status`
+
+    Returns:
+        JSON with job_id and monitoring instructions
     """
-    return _autonomous_build_and_deploy_impl(
+    from tools.mcp_utils.daemon_integration import submit_autonomous_build_to_daemon
+
+    return submit_autonomous_build_to_daemon(
         task=task,
         working_directory=working_directory,
         github_repo_name=github_repo_name,
-        existing_repo=existing_repo,
         mode=mode,
         max_test_iterations=max_test_iterations,
         timeout_minutes=timeout_minutes,

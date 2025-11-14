@@ -29,6 +29,18 @@ Context Foundry is designed to support two modes:
   pip install -r requirements.txt          # Base installation
   pip install -r requirements-mcp.txt      # MCP mode dependencies
   ```
+- **CF Daemon running** (required for autonomous builds):
+  ```bash
+  cfd start                                # Start the daemon
+  cfd status                               # Verify it's running
+  ```
+
+  The daemon is required for MCP autonomous builds and provides:
+  - Job persistence (survives Claude Desktop disconnections)
+  - Working directory locking (prevents build conflicts)
+  - Progress monitoring via CLI (`cfd logs <job-id> --follow`)
+  - Automatic retry on failures
+  - Pattern merging and self-improvement
 
 **Check your Python version:**
 ```bash

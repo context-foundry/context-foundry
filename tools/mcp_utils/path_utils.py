@@ -29,3 +29,30 @@ def get_context_foundry_parent_dir() -> Path:
     # Parent of context-foundry/ is what we want
     cf_dir = Path(__file__).parent.parent.parent.resolve()
     return cf_dir.parent
+
+
+def get_projects_root() -> Path:
+    """
+    Get the root directory where new projects should be created.
+
+    By default, projects are created as siblings to the Context Foundry
+    installation directory. This keeps all projects organized in one place
+    and avoids polluting system directories like /tmp.
+
+    Example:
+        If Context Foundry is installed at: /Users/name/homelab/context-foundry
+        New projects will be created at: /Users/name/homelab/project-name
+
+    Pattern:
+        context-foundry/          (this repo)
+        project-1/                (created project)
+        project-2/                (created project)
+        weather-app/              (created project)
+
+    Returns:
+        Path to the root directory for new projects (same as Context Foundry parent)
+
+    See Also:
+        get_context_foundry_parent_dir() - Alias for backward compatibility
+    """
+    return get_context_foundry_parent_dir()

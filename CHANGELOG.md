@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - Phase Process Spawning Fix + Phases 1-7 Refactoring + Context Codex Phases 1-2
+## [Unreleased] - MCP Daemon Integration + Phase Process Spawning Fix + Context Codex Phases 1-2
+
+**🔧 BREAKING CHANGE: MCP Daemon Integration** - MCP autonomous builds now require CF Daemon running.
 
 **🚨 CRITICAL ARCHITECTURAL FIX:** Implemented true per-phase process spawning with fresh contexts.
 
@@ -16,6 +18,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **📚 Context Codex Phase 1 COMPLETE:** Database-backed knowledge system with comprehensive test coverage.
 
 **🔌 Context Codex Phase 2 COMPLETE:** MCP integration enables querying and managing knowledge via Claude Code/Desktop.
+
+### ⚠️ BREAKING CHANGE - MCP Daemon Integration
+
+**Problem**: MCP server's `autonomous_build_and_deploy` tool was bypassing the CF Daemon completely, spawning subprocess.Popen directly.
+
+**Impact**:
+- Jobs not tracked in daemon database
+- No working directory locking (could cause build conflicts)
+- No job persistence (jobs lost if MCP disconnects)
+- No progress monitoring via CLI (`cfd logs` didn't work)
+- Pattern merging might fail
+- Daemon features (retry, priority, concurrency limits) not used
+
+**Root Cause**: Daemon was built AFTER MCP server integration was complete. The two systems were never properly integrated.
+
+**Fix**: Completely refactored MCP tool to submit jobs to daemon queue instead of spawning directly.
+
+**New Architecture**:
+```
+MCP Tool → Daemon API → Job Queue → Worker Thread → execute_build_with_phase_spawning
+                                       ↓
+                             Working Directory Lock
+                                       ↓
+                              Scout → Architect → Builder → Test
+```
+
+**Changes**:
+- **New**: `tools/mcp_utils/daemon_integration.py` (200 lines)
+  - `ensure_daemon_running()` - Check daemon status
+  - `submit_autonomous_build_to_daemon()` - Submit job to queue
+  - `get_job_status_from_daemon()` - Query job status
+- **Modified**: `tools/mcp_server.py`
+  - `autonomous_build_and_deploy()` now calls `submit_autonomous_build_to_daemon()` instead of `_autonomous_build_and_deploy_impl()`
+- **Modified**: `context_foundry/daemon/models.py`
+  - Added `JobType.AUTONOMOUS_BUILD` enum value
+- **Modified**: `context_foundry/daemon/runner.py`
+  - Added `_run_autonomous_build()` method to handle AUTONOMOUS_BUILD jobs
+  - Modified `run()` to dispatch AUTONOMOUS_BUILD jobs specially
+- **Modified**: `tools/mcp_utils/path_utils.py`
+  - Added `get_projects_root()` function for smart working directory defaults
+- **Modified**: `tools/mcp_utils/autonomous_build.py`
+  - Enhanced working directory logic with smart defaults
+  - Prints helpful messages about project location
+
+**Smart Working Directory Defaults**:
+- Relative paths (e.g., "weather-app") → Created as sibling to context-foundry
+  - Example: `/Users/name/homelab/weather-app` (alongside `/Users/name/homelab/context-foundry`)
+- Absolute paths (e.g., "/tmp/test") → Used as-is (explicit override)
+
+**Benefits**:
+- ✅ Job persistence: Jobs survive MCP disconnections
+- ✅ Working directory locking: Prevents concurrent builds in same directory
+- ✅ Progress monitoring: `cfd logs <job-id> --follow` works
+- ✅ Automatic retry: Up to 3 attempts on failure
+- ✅ Pattern merging: Guaranteed to run after successful builds
+- ✅ Job history: All builds tracked in SQLite database (`~/.context-foundry/cfd/jobs.db`)
+- ✅ Priority scheduling: Jobs queued with priority 5 by default
+- ✅ Concurrency control: Max 3 concurrent jobs (daemon config)
+
+**Migration Guide**:
+- **Before**: MCP tool worked without daemon
+- **After**: Daemon must be running (`cfd start`)
+
+**User Impact**:
+- **Required**: Run `cfd start` before using autonomous builds in Claude Desktop
+- **Recommended**: Add `cfd start` to system startup scripts
+- **Monitoring**: Use `cfd logs <job-id> --follow` to monitor builds from CLI while Claude Desktop is building
+
+**Documentation Updates**:
+- Updated `docs/MCP_SETUP.md` - Added daemon prerequisite to setup instructions
+- Updated `README.md` - Added daemon startup step to Quick Start
+- Updated `tools/mcp_server.py` docstring - Documents daemon requirement
+
+**Bug Fix - Working Directory Resolution**:
+- **Problem**: Smart working directory resolution logic was in `autonomous_build_and_deploy_impl()` which is no longer called by MCP tool. Daemon received relative paths as-is and resolved them to `/` (daemon runs with `chdir("/")`).
+- **Impact**: Relative paths like "weather-app" would resolve to `/weather-app` (root directory) instead of `/Users/name/homelab/weather-app` (sibling to context-foundry).
+- **Fix**: Moved working directory resolution from `autonomous_build_and_deploy_impl()` to `submit_autonomous_build_to_daemon()` so paths are converted to absolute before daemon submission.
+- **File Modified**: `tools/mcp_utils/daemon_integration.py:107-135`
+- **Now Works**: Relative paths correctly resolve to sibling of context-foundry before being submitted to daemon queue.
 
 ### 🐛 Fixed - CRITICAL: Per-Phase Process Spawning (v3.0 Architecture)
 

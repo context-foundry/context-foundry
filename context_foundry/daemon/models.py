@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 
 class JobStatus(str, Enum):
@@ -31,6 +31,7 @@ class JobType(str, Enum):
     PATTERN_APPLICATION = "pattern_application"  # Apply learned patterns
     VALIDATION = "validation"  # Validate existing code
     DELEGATION = "delegation"  # Monitor external delegation task
+    AUTONOMOUS_BUILD = "autonomous_build"  # Full Scout→Architect→Builder→Test flow
 
 
 @dataclass

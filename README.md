@@ -670,7 +670,20 @@ cat .mcp.json
 # Note: Project-scoped servers don't appear in `claude mcp list` (that shows global config)
 # They're automatically detected when you run `claude` in this directory
 
-# 6. Authenticate with GitHub (for deployment)
+# 6. Start the CF Daemon (required for autonomous builds)
+./tools/cfd start
+
+# Verify daemon is running
+./tools/cfd status
+# Should show "CF Daemon is running"
+
+# The daemon provides:
+#  - Job persistence (survives disconnections)
+#  - Working directory locking (prevents conflicts)
+#  - Progress monitoring (cfd logs <job-id> --follow)
+#  - Automatic retry on failures
+
+# 7. Authenticate with GitHub (for deployment)
 gh auth login
 ```
 

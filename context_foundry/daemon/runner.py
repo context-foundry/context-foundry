@@ -87,42 +87,67 @@ class Runner:
         additional_flags = job.params.get("additional_flags", None)
 
         try:
-            # Start async delegation
-            delegation_result = self._start_delegation(
-                task=task,
-                working_directory=working_dir,
-                timeout_minutes=timeout_minutes,
-                additional_flags=additional_flags,
-            )
+            # Handle autonomous builds differently from simple delegations
+            from context_foundry.daemon.models import JobType
 
-            task_id = delegation_result.get("task_id")
-            if not task_id:
-                raise RuntimeError(
-                    f"Failed to start delegation: {delegation_result.get('error')}"
-                )
+            if job.type == JobType.AUTONOMOUS_BUILD:
+                # Full Scout→Architect→Builder→Test flow
+                self._emit_log(job.id, "INFO", "Starting autonomous build", None)
+                result = self._run_autonomous_build(job, working_dir)
 
-            self._emit_log(job.id, "INFO", f"Delegation started: {task_id}", None)
+                # If successful, trigger pattern merge
+                if result.get("status") == "completed":
+                    self._emit_log(job.id, "INFO", "Autonomous build completed", None)
+                    self._merge_patterns(job.id, working_dir)
 
-            # Poll for completion and track progress
-            result = self._poll_for_completion(job.id, task_id, working_dir)
-
-            # If successful, trigger pattern merge
-            if result.get("exit_code") == 0:
-                self._emit_log(job.id, "INFO", "Job completed successfully", None)
-                self._merge_patterns(job.id, working_dir)
-
-                return {
-                    "success": True,
-                    "task_id": task_id,
-                    "exit_code": 0,
-                    "output_summary": result.get("output_summary", ""),
-                }
+                    return {
+                        "success": True,
+                        "exit_code": 0,
+                        "phases_completed": result.get("phases_completed", []),
+                        "test_iterations": result.get("test_iterations", 0),
+                        "duration_seconds": result.get("duration_seconds", 0),
+                    }
+                else:
+                    error_msg = result.get("error", "Autonomous build failed")
+                    self._emit_log(job.id, "ERROR", error_msg, None)
+                    raise RuntimeError(error_msg)
             else:
-                error_msg = result.get(
-                    "error", f"Job failed with exit code {result.get('exit_code')}"
+                # Standard delegation flow (for DELEGATION, ENHANCEMENT, etc.)
+                delegation_result = self._start_delegation(
+                    task=task,
+                    working_directory=working_dir,
+                    timeout_minutes=timeout_minutes,
+                    additional_flags=additional_flags,
                 )
-                self._emit_log(job.id, "ERROR", error_msg, None)
-                raise RuntimeError(error_msg)
+
+                task_id = delegation_result.get("task_id")
+                if not task_id:
+                    raise RuntimeError(
+                        f"Failed to start delegation: {delegation_result.get('error')}"
+                    )
+
+                self._emit_log(job.id, "INFO", f"Delegation started: {task_id}", None)
+
+                # Poll for completion and track progress
+                result = self._poll_for_completion(job.id, task_id, working_dir)
+
+                # If successful, trigger pattern merge
+                if result.get("exit_code") == 0:
+                    self._emit_log(job.id, "INFO", "Job completed successfully", None)
+                    self._merge_patterns(job.id, working_dir)
+
+                    return {
+                        "success": True,
+                        "task_id": task_id,
+                        "exit_code": 0,
+                        "output_summary": result.get("output_summary", ""),
+                    }
+                else:
+                    error_msg = result.get(
+                        "error", f"Job failed with exit code {result.get('exit_code')}"
+                    )
+                    self._emit_log(job.id, "ERROR", error_msg, None)
+                    raise RuntimeError(error_msg)
 
         except Exception as e:
             logger.error(f"Job {job.id} execution failed: {e}", exc_info=True)
@@ -280,6 +305,98 @@ class Runner:
 
         except Exception as e:
             logger.error(f"Failed to emit log: {e}", exc_info=True)
+
+    def _run_autonomous_build(self, job: Job, working_dir: str) -> Dict[str, Any]:
+        """
+        Execute full autonomous build with Scout→Architect→Builder→Test flow.
+
+        This is called for AUTONOMOUS_BUILD job types and runs the complete
+        build pipeline synchronously in the worker thread.
+
+        Args:
+            job: Job instance with autonomous build parameters
+            working_dir: Working directory for the build
+
+        Returns:
+            Build result dict with status, phases_completed, etc.
+        """
+        import sys
+        from pathlib import Path
+
+        # Add context-foundry to path to import autonomous_build module
+        sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+        from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
+        from tools.mcp_utils.project_detection import detect_existing_codebase
+        from tools.mcp_utils.task_classification import detect_task_intent
+
+        # Extract parameters from job
+        task = job.params.get("task", "Build project")
+        mode = job.params.get("mode", "new_project")
+        max_test_iterations = job.params.get("max_test_iterations", 3)
+        incremental = job.params.get("incremental", False)
+        force_rebuild = job.params.get("force_rebuild", False)
+
+        # Detect project info
+        working_path = Path(working_dir)
+        codebase_info = detect_existing_codebase(working_path)
+
+        # Auto-adjust mode based on task intent
+        if mode == "new_project" and codebase_info["has_code"]:
+            detected_intent = detect_task_intent(task)
+            mode = detected_intent
+            self._emit_log(
+                job.id, "INFO", f"Auto-adjusted mode: new_project → {mode}", None
+            )
+
+        # Check for Flowise mode
+        flowise_mode = codebase_info.get("flowise_flow", False)
+        if not flowise_mode:
+            task_lower = task.lower()
+            flowise_keywords = ["flowise", "agent flow", "chatflow"]
+            if any(kw in task_lower for kw in flowise_keywords):
+                flowise_mode = True
+                self._emit_log(job.id, "INFO", "Flowise mode enabled", None)
+
+        project_type = codebase_info.get("project_type", "unknown")
+        has_code = codebase_info.get("has_code", True)
+        enable_test_loop = has_code  # Auto-detect testing
+
+        # Build task config
+        task_config = {
+            "task": task,
+            "working_directory": working_dir,
+            "github_repo_name": job.params.get("github_repo_name"),
+            "mode": mode,
+            "enable_test_loop": enable_test_loop,
+            "max_test_iterations": max_test_iterations,
+            "incremental": incremental and not force_rebuild,
+            "flowise_flow": flowise_mode,
+            "project_type": project_type,
+            "codebase_detection": codebase_info,
+        }
+
+        # Emit phases info
+        self._emit_log(
+            job.id,
+            "INFO",
+            f"Build config: mode={mode}, project_type={project_type}, test_loop={enable_test_loop}",
+            None,
+        )
+
+        # Execute build
+        result = execute_build_with_phase_spawning(
+            task=task,
+            working_directory=working_path,
+            task_config=task_config,
+            enable_test_loop=enable_test_loop,
+            max_test_iterations=max_test_iterations,
+            flowise_mode=flowise_mode,
+            project_type=project_type,
+            incremental=incremental and not force_rebuild,
+        )
+
+        return result
 
     def _merge_patterns(self, job_id: str, working_dir: str):
         """

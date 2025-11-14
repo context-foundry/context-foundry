@@ -29,7 +29,6 @@ from tools.baml_integration import is_baml_available, get_baml_error
 from tools.evolution.safety import enforce_sandbox_mode
 
 # Import helper functions
-from tools.mcp_utils.path_utils import get_context_foundry_parent_dir
 from tools.mcp_utils.project_detection import detect_existing_codebase
 from tools.mcp_utils.task_classification import detect_task_intent
 from tools.mcp_utils.delegation import _write_delegation_metadata
@@ -91,12 +90,28 @@ def autonomous_build_and_deploy_impl(
         print("✅ BAML is available", file=sys.stderr)
 
         # Determine final working directory
+        # Smart defaults: relative paths use projects root (sibling to context-foundry)
+        # Absolute paths are used as-is (explicit override)
+        #
+        # Examples:
+        #   "weather-app" → /Users/name/homelab/weather-app (recommended)
+        #   "/tmp/test" → /tmp/test (explicit override)
         working_dir_input = Path(working_directory)
         if working_dir_input.is_absolute():
             final_working_dir = working_dir_input
+            print(
+                f"📍 Using explicit working directory: {working_dir_input}",
+                file=sys.stderr,
+            )
         else:
-            cf_parent = get_context_foundry_parent_dir()
-            final_working_dir = cf_parent / working_directory
+            from tools.mcp_utils.path_utils import get_projects_root
+
+            projects_root = get_projects_root()
+            final_working_dir = projects_root / working_directory
+            print(
+                f"📍 Creating project in: {final_working_dir} (sibling to context-foundry)",
+                file=sys.stderr,
+            )
 
         final_working_dir_str = str(final_working_dir)
 
