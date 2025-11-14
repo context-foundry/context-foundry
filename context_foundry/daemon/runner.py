@@ -400,7 +400,9 @@ class Runner:
 
         project_type = codebase_info.get("project_type", "unknown")
         has_code = codebase_info.get("has_code", True)
-        enable_test_loop = has_code  # Auto-detect testing
+        # For new projects, always enable test loop since we'll generate code
+        # For existing projects, only enable if code already exists
+        enable_test_loop = (mode == "new_project") or has_code
 
         # Build task config
         task_config = {
