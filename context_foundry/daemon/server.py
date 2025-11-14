@@ -43,7 +43,14 @@ class CFDaemon:
             config_path: Path to config file (for reload via SIGHUP)
         """
         self.config = config or Config.load(config_path)
-        self.config_path = config_path  # Store for SIGHUP reload
+
+        # Convert config_path to absolute path before daemonization (which does chdir("/"))
+        # This ensures SIGHUP reload works even after changing working directory
+        if config_path is not None:
+            self.config_path = Path(config_path).resolve()
+        else:
+            self.config_path = None
+
         self.config.ensure_directories()
 
         # Initialize components
@@ -58,22 +65,49 @@ class CFDaemon:
         )
 
         self.running = False
-        self._setup_logging()
+        self._logging_configured = False
 
-    def _setup_logging(self):
-        """Configure logging"""
+    def _setup_logging(self, background_mode: bool = False):
+        """
+        Configure logging
+
+        Args:
+            background_mode: If True, only log to file (no stdout).
+                           If False, log to both file and stdout.
+        """
         log_file = self.config.log_dir / "cfd.log"
         self.config.log_dir.mkdir(parents=True, exist_ok=True)
 
-        # Configure root logger
-        logging.basicConfig(
-            level=getattr(logging, self.config.log_level.upper(), logging.INFO),
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(sys.stdout),
-            ],
+        # Get root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(
+            getattr(logging, self.config.log_level.upper(), logging.INFO)
         )
+
+        # Properly close and flush existing handlers before clearing
+        for handler in root_logger.handlers[:]:
+            try:
+                handler.flush()
+                handler.close()
+            except Exception:
+                pass  # Ignore errors closing handlers (may already be closed)
+        root_logger.handlers.clear()
+
+        # Add file handler (always present)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+
+        # Add stream handler only in foreground mode
+        if not background_mode:
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setFormatter(formatter)
+            root_logger.addHandler(stream_handler)
+
+        self._logging_configured = True
 
     def _write_pid_file(self):
         """Write PID file"""
@@ -112,27 +146,30 @@ class CFDaemon:
             # Check if process with this PID exists
             try:
                 os.kill(pid, 0)  # Signal 0 checks if process exists
-                logger.error(f"Daemon already running with PID {pid}")
+                # Use print since logging may not be configured yet
+                if self._logging_configured:
+                    logger.error(f"Daemon already running with PID {pid}")
                 return True
             except OSError as e:
                 # EPERM (errno 1) means process exists but we can't signal it
                 # This happens in sandboxed/restricted environments
                 # EPERM is sufficient proof the process exists
                 if e.errno == errno.EPERM:
-                    logger.debug(
-                        f"Permission denied signaling PID {pid}, but process exists"
-                    )
-                    logger.error(f"Daemon already running with PID {pid}")
+                    if self._logging_configured:
+                        logger.error(f"Daemon already running with PID {pid}")
                     return True
 
                 # ESRCH (errno 3) means no such process - stale PID file
-                logger.warning(f"Removing stale PID file (PID {pid})")
+                # Use print since logging may not be configured yet
+                if self._logging_configured:
+                    logger.warning(f"Removing stale PID file (PID {pid})")
                 self.config.pid_file.unlink()
                 return False
 
         except (ValueError, FileNotFoundError):
-            # Invalid PID file
-            logger.warning("Invalid PID file, removing")
+            # Invalid PID file - silently remove (logging may not be configured)
+            if self._logging_configured:
+                logger.warning("Invalid PID file, removing")
             self.config.pid_file.unlink()
             return False
 
@@ -186,28 +223,165 @@ class CFDaemon:
 
         logger.info("Signal handlers registered")
 
-    def start(self, foreground: bool = False):
+    def _daemonize(self) -> Optional[int]:
+        """
+        Daemonize the process using the Unix double-fork technique
+
+        This detaches the process from the controlling terminal and runs it in the background.
+
+        Returns:
+            Pipe read fd for parent to check child status, or None if we're the child
+        """
+        # Create a pipe for child status communication
+        # Parent reads from pipe_r, child writes to pipe_w
+        pipe_r, pipe_w = os.pipe()
+
+        try:
+            # First fork
+            pid = os.fork()
+            if pid > 0:
+                # Parent process - close write end and return read end
+                os.close(pipe_w)
+                return pipe_r
+        except OSError as e:
+            os.close(pipe_r)
+            os.close(pipe_w)
+            print(f"First fork failed: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # First child process - close read end
+        os.close(pipe_r)
+
+        # Decouple from parent environment
+        os.chdir("/")
+        os.setsid()
+        os.umask(0)
+
+        # Second fork
+        try:
+            pid = os.fork()
+            if pid > 0:
+                # First child exits - second child continues
+                sys.exit(0)
+        except OSError as e:
+            # Write error to pipe before exiting
+            try:
+                error_msg = f"Second fork failed: {e}\n"
+                os.write(pipe_w, error_msg.encode())
+            except Exception:
+                pass
+            finally:
+                os.close(pipe_w)
+            sys.exit(1)
+
+        # Second child (daemon process) - redirect all file descriptors
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Open /dev/null for reading and writing
+        devnull = os.open(os.devnull, os.O_RDWR)
+
+        # Redirect stdin, stdout, stderr to /dev/null
+        os.dup2(devnull, sys.stdin.fileno())
+        os.dup2(devnull, sys.stdout.fileno())
+        os.dup2(devnull, sys.stderr.fileno())
+
+        # Close the original /dev/null fd if it's not one of the standard fds
+        if devnull > 2:
+            os.close(devnull)
+
+        # Store the status pipe for later use
+        self._status_pipe = pipe_w
+        return None  # We're the child
+
+    def _report_status(self, success: bool, error_msg: str = ""):
+        """Report status to parent process via status pipe"""
+        if hasattr(self, "_status_pipe"):
+            try:
+                status = "OK\n" if success else f"ERROR: {error_msg}\n"
+                os.write(self._status_pipe, status.encode())
+                os.close(self._status_pipe)
+                delattr(self, "_status_pipe")
+            except Exception:
+                pass  # Pipe may already be closed
+
+    def start(self, foreground: bool = False) -> bool:
         """
         Start the daemon
 
         Args:
-            foreground: Currently ignored - daemon always runs in foreground.
-                       Background daemonization is not yet implemented.
+            foreground: If False, daemonize and run in background. If True, run in foreground.
+
+        Returns:
+            True if daemon started successfully, False otherwise.
+            In background mode, this returns in the parent after verifying child started.
         """
-        # Check if already running
+        # Check if already running (before fork)
         if self._check_pid_file():
-            raise RuntimeError("Daemon is already running")
+            print("Daemon is already running", file=sys.stderr)
+            return False
+
+        status_pipe_r = None
+
+        # Daemonize before setting up logging if running in background
+        if not foreground:
+            # Print to console before daemonizing
+            print("Starting Context Foundry Daemon in background...")
+            sys.stdout.flush()  # Flush to prevent duplicate output across forks
+
+            status_pipe_r = self._daemonize()
+
+            if status_pipe_r is not None:
+                # We're the parent - wait for child status
+                return self._wait_for_child_status(status_pipe_r)
+
+        # We're the child (or in foreground mode)
+        # Setup logging after fork (background_mode=True in daemon, False in foreground)
+        try:
+            self._setup_logging(background_mode=not foreground)
+        except Exception as e:
+            error_msg = f"Failed to setup logging: {e}"
+            # In foreground mode, print to stderr so user sees the error
+            if foreground:
+                print(error_msg, file=sys.stderr)
+            self._report_status(False, error_msg)
+            return False
 
         logger.info("Starting Context Foundry Daemon...")
 
-        # Write PID file
-        self._write_pid_file()
+        # Write PID file (with the child process PID after fork)
+        try:
+            self._write_pid_file()
+        except Exception as e:
+            error_msg = f"Failed to write PID file: {e}"
+            if self._logging_configured:
+                logger.error(error_msg)
+            if foreground:
+                print(error_msg, file=sys.stderr)
+            self._report_status(False, error_msg)
+            return False
 
         # Setup signal handlers
-        self._setup_signal_handlers()
+        try:
+            self._setup_signal_handlers()
+        except Exception as e:
+            error_msg = f"Failed to setup signal handlers: {e}"
+            logger.error(error_msg)
+            if foreground:
+                print(error_msg, file=sys.stderr)
+            self._report_status(False, error_msg)
+            return False
 
         # Start JobManager
-        self.job_manager.start(num_workers=self.config.max_concurrent_jobs)
+        try:
+            self.job_manager.start(num_workers=self.config.max_concurrent_jobs)
+        except Exception as e:
+            error_msg = f"Failed to start JobManager: {e}"
+            logger.error(error_msg)
+            if foreground:
+                print(error_msg, file=sys.stderr)
+            self._report_status(False, error_msg)
+            return False
 
         self.running = True
 
@@ -216,17 +390,64 @@ class CFDaemon:
             f"{self.config.max_concurrent_jobs} workers)"
         )
 
-        # NOTE: Background daemonization not yet implemented
-        # Daemon always runs in foreground regardless of 'foreground' parameter
-        if not foreground:
-            logger.warning(
-                "Background mode requested but not implemented - running in foreground. "
-                "Use Ctrl+C to stop or run in a terminal multiplexer (screen/tmux)."
-            )
-        else:
+        if foreground:
             logger.info("Running in foreground mode (Ctrl+C to stop)")
+        else:
+            logger.info("Running in background mode")
+
+        # Report success to parent
+        self._report_status(True)
 
         self._run_foreground()
+        return True
+
+    def _wait_for_child_status(self, pipe_fd: int) -> bool:
+        """
+        Wait for child process status via pipe
+
+        Args:
+            pipe_fd: Read end of status pipe
+
+        Returns:
+            True if child started successfully, False otherwise
+        """
+        import select
+
+        try:
+            # Wait up to 5 seconds for child to report status
+            ready, _, _ = select.select([pipe_fd], [], [], 5.0)
+
+            if ready:
+                # Read status from pipe
+                status = os.read(pipe_fd, 1024).decode().strip()
+                os.close(pipe_fd)
+
+                if status.startswith("OK"):
+                    print("Daemon started successfully")
+                    return True
+                else:
+                    print(f"Daemon failed to start: {status}", file=sys.stderr)
+                    return False
+            else:
+                # Timeout - child failed to report status (likely hung during init)
+                os.close(pipe_fd)
+                print(
+                    "Daemon failed to start: timed out waiting for status confirmation",
+                    file=sys.stderr,
+                )
+                print(
+                    "(Child process may have hung during initialization)",
+                    file=sys.stderr,
+                )
+                return False
+
+        except Exception as e:
+            print(f"Error waiting for daemon status: {e}", file=sys.stderr)
+            try:
+                os.close(pipe_fd)
+            except Exception:
+                pass
+            return False
 
     def _run_foreground(self):
         """Run daemon in foreground"""

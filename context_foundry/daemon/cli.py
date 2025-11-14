@@ -30,8 +30,8 @@ def cmd_start(args):
 
     try:
         daemon = CFDaemon(config, config_path=args.config)
-        daemon.start(foreground=args.foreground)
-        return 0
+        success = daemon.start(foreground=args.foreground)
+        return 0 if success else 1
     except Exception as e:
         print(f"Failed to start daemon: {e}", file=sys.stderr)
         return 1
@@ -360,7 +360,7 @@ def main():
         "--foreground",
         "-f",
         action="store_true",
-        help="Run in foreground (NOTE: background daemonization not yet implemented, always runs in foreground)",
+        help="Run in foreground mode instead of daemonizing to background",
     )
 
     # Stop command
