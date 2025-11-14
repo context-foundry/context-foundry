@@ -309,14 +309,11 @@ class Runner:
                 return
 
             # Merge patterns
-            result_json = merge_project_patterns_impl(
+            result = merge_project_patterns_impl(
                 project_pattern_file=str(pattern_file),
                 pattern_type="common-issues",
                 increment_build_count=True,
-                project_path=working_dir,
             )
-
-            result = json.loads(result_json)
 
             if result.get("status") == "success":
                 patterns_merged = result.get("patterns_merged", 0)
