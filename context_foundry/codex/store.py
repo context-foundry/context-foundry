@@ -738,7 +738,7 @@ class KnowledgeStore:
 
         return results
 
-    def get_projects_for_entry(self, entry_id: str) -> List[str]:
+    def get_projects_for_entry(self, entry_id: str) -> List["KnowledgeProject"]:
         """
         Get all projects that have encountered a knowledge entry.
 
@@ -746,13 +746,13 @@ class KnowledgeStore:
             entry_id: Knowledge entry ID
 
         Returns:
-            List of project paths
+            List of KnowledgeProject objects with full details
         """
         cursor = self.conn.cursor()
 
         cursor.execute(
             """
-            SELECT project_path, occurrence_count
+            SELECT *
             FROM knowledge_projects
             WHERE entry_id = ?
             ORDER BY occurrence_count DESC
@@ -760,7 +760,9 @@ class KnowledgeStore:
             (entry_id,),
         )
 
-        return [row["project_path"] for row in cursor.fetchall()]
+        from .models import KnowledgeProject
+
+        return [KnowledgeProject.from_dict(dict(row)) for row in cursor.fetchall()]
 
     # ========== Build Metrics ==========
 
@@ -894,16 +896,19 @@ class KnowledgeStore:
         }
 
 
-def generate_entry_id(entry_type: str) -> str:
+def generate_entry_id(entry_type: str, title: Optional[str] = None) -> str:
     """
-    Generate a unique entry ID.
+    Generate a unique, human-readable entry ID.
 
     Args:
         entry_type: Type of entry (issue, pattern, learning, etc.)
+        title: Optional title to generate slug from
 
     Returns:
-        Unique ID string
+        Unique ID string (e.g., "iss-docker-volume-001" or "pat-env-config-002")
     """
+    import re
+
     prefix_map = {
         "issue": "iss",
         "pattern": "pat",
@@ -913,6 +918,18 @@ def generate_entry_id(entry_type: str) -> str:
     }
 
     prefix = prefix_map.get(entry_type, "ent")
-    unique_id = str(uuid.uuid4())[:8]
 
-    return f"{prefix}-{unique_id}"
+    if title:
+        # Create slug from title: lowercase, replace spaces/special chars with hyphens
+        slug = re.sub(r"[^\w\s-]", "", title.lower())
+        slug = re.sub(r"[-\s]+", "-", slug).strip("-")
+        # Limit to first 3-4 words (roughly 30 chars)
+        slug_parts = slug.split("-")[:4]
+        slug = "-".join(slug_parts)[:30]
+        # Add 3-digit counter for uniqueness (will increment if collision)
+        unique_suffix = str(uuid.uuid4().int)[:3].zfill(3)
+        return f"{prefix}-{slug}-{unique_suffix}"
+    else:
+        # Fallback to UUID-based ID if no title provided
+        unique_id = str(uuid.uuid4())[:8]
+        return f"{prefix}-{unique_id}"

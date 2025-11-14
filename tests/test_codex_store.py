@@ -350,7 +350,8 @@ class TestProjectTracking:
         # Get projects for this entry
         projects = temp_db.get_projects_for_entry(entry.id)
         assert len(projects) == 1
-        assert projects[0] == "/path/to/project1"
+        assert projects[0].project_path == "/path/to/project1"
+        assert projects[0].occurrence_count >= 2  # Tracked twice
 
     def test_get_project_history(self, temp_db):
         """Test retrieving all knowledge encountered by a project."""

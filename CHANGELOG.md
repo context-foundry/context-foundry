@@ -268,17 +268,17 @@ Integrated Context Codex with MCP server, enabling Claude Code and Claude Deskto
 
 2. **`codex_get_entry(entry_id)`** - Get detailed information about a specific entry
    - Returns complete entry details including solutions and evidence
-   - Returns list of project paths that encountered this knowledge
+   - Returns detailed per-project stats (path, type, occurrence count, first/last seen dates)
 
 3. **`codex_add_issue(title, description, severity?, tags?, project_types?, solution?)`** - Add new issue to knowledge base
    - Records problems and solutions
-   - Auto-generates unique ID (e.g., "iss-3b1e6d0a" - prefix + 8 char UUID)
+   - Auto-generates human-readable slug-based ID (e.g., "iss-docker-volume-123")
    - Optional solution description
 
 4. **`codex_add_pattern(title, description, category, tags?, project_types?)`** - Add new pattern/best practice
    - Captures architectural patterns and best practices
    - Categorized for easy discovery
-   - Auto-generates unique ID (e.g., "pat-2f4a8c9d" - prefix + 8 char UUID)
+   - Auto-generates human-readable slug-based ID (e.g., "pat-env-config-456")
 
 5. **`codex_stats()`** - Get knowledge base statistics
    - Total entries count
@@ -302,8 +302,8 @@ Integrated Context Codex with MCP server, enabling Claude Code and Claude Deskto
 # Search for Docker-related knowledge
 codex_search("docker volume", entry_type="issue")
 
-# Get details about a specific issue (using actual UUID-based ID)
-codex_get_entry("iss-3b1e6d0a")
+# Get details about a specific issue (using slug-based ID)
+codex_get_entry("iss-docker-volume-123")
 
 # Add a new issue
 codex_add_issue(

@@ -960,7 +960,17 @@ def codex_get_entry(entry_id: str) -> str:
             }
             for ev in evidence
         ],
-        "encountered_by_projects": len(projects),
+        "projects": [
+            {
+                "project_path": proj.project_path,
+                "project_type": proj.project_type,
+                "occurrence_count": proj.occurrence_count,
+                "first_seen": proj.first_seen.isoformat(),
+                "last_seen": proj.last_seen.isoformat(),
+            }
+            for proj in projects
+        ],
+        "total_projects": len(projects),
     }
 
     return json.dumps(result, indent=2)
@@ -1011,7 +1021,7 @@ def codex_add_issue(
 
     # Create entry
     entry = KnowledgeEntry(
-        id=generate_entry_id("issue"),
+        id=generate_entry_id("issue", title),
         type=KnowledgeType.ISSUE,
         category="common-issue",
         title=title,
@@ -1081,7 +1091,7 @@ def codex_add_pattern(
     store = _get_codex_store()
 
     entry = KnowledgeEntry(
-        id=generate_entry_id("pattern"),
+        id=generate_entry_id("pattern", title),
         type=KnowledgeType.PATTERN,
         category=category,
         title=title,
