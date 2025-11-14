@@ -538,13 +538,14 @@ class ToolExecutor:
         logger.info(f"Executing tool: {tool.name} with params: {list(params.keys())}")
 
         try:
+            # Note: input= parameter automatically sets stdin=PIPE
+            # Do NOT explicitly set stdin=PIPE as it causes ValueError in Python ≤3.10
             result = subprocess.run(
                 [sys.executable, str(tool.file_path)],
                 input=json.dumps(params),
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                stdin=subprocess.PIPE,
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
 
@@ -609,14 +610,50 @@ def search_tools_by_query(
 
 
 def execute_tool_by_name(
-    tool_name: str, params: Dict[str, Any], timeout: Optional[int] = None
+    tool_name: str,
+    params: Dict[str, Any],
+    category: Optional[str] = None,
+    timeout: Optional[int] = None,
 ) -> str:
-    """Execute a tool by name"""
+    """
+    Execute a tool by name
+
+    Args:
+        tool_name: Name of the tool to execute
+        params: Parameters to pass to the tool
+        category: Optional category to disambiguate tools with same name
+        timeout: Optional timeout in seconds
+
+    Returns:
+        Tool output as string
+
+    Raises:
+        ValueError: If tool not found or ambiguous without category
+    """
     scanner = get_scanner()
-    tool = scanner.get_tool(tool_name)
+
+    # Check for ambiguity BEFORE trying to get tool
+    if not category:
+        matching_tools = [
+            t for t in scanner._tool_cache.values() if t.name == tool_name
+        ]
+        if len(matching_tools) > 1:
+            categories = [t.category for t in matching_tools]
+            raise ValueError(
+                f"Ambiguous tool name '{tool_name}' found in multiple categories: {categories}. "
+                f"Please specify category parameter."
+            )
+        elif len(matching_tools) == 0:
+            raise ValueError(f"Tool not found: {tool_name}")
+
+    # Get the tool (will be unambiguous at this point)
+    tool = scanner.get_tool(tool_name, category=category)
 
     if not tool:
-        raise ValueError(f"Tool not found: {tool_name}")
+        if category:
+            raise ValueError(f"Tool not found: {category}/{tool_name}")
+        else:
+            raise ValueError(f"Tool not found: {tool_name}")
 
     executor = ToolExecutor(timeout_seconds=timeout or 300)
     return executor.execute_tool(tool, params, timeout)

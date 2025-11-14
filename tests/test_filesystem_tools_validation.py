@@ -8,6 +8,7 @@ Tests the fixes for:
 """
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -248,6 +249,88 @@ class TestCachePersistence:
             for cache_key, tool in scanner2._tool_cache.items():
                 expected_key = f"{tool.category}/{tool.name}"
                 assert cache_key == expected_key
+
+
+class TestExecutionDisambiguation:
+    """Test execution disambiguation with category parameter"""
+
+    def test_execute_tool_by_name_with_category(self):
+        """Test that execute_tool_by_name accepts category parameter"""
+        from tools.mcp_utils.filesystem_tools import execute_tool_by_name, get_scanner
+
+        # Get global scanner instance
+        scanner = get_scanner()
+        scanner.discover_tools(force_refresh=True)
+
+        # Create two tools with same name in different categories
+        tool1 = ToolMetadata(
+            name="ambiguous_tool",
+            category="category1",
+            file_path=Path("/tmp/cat1/ambiguous_tool.py"),
+            description="Tool 1",
+            parameters=[ToolParameter(name="param1", type="str", required=True)],
+        )
+
+        tool2 = ToolMetadata(
+            name="ambiguous_tool",
+            category="category2",
+            file_path=Path("/tmp/cat2/ambiguous_tool.py"),
+            description="Tool 2",
+            parameters=[ToolParameter(name="param1", type="str", required=True)],
+        )
+
+        # Add to global scanner cache
+        scanner._tool_cache["category1/ambiguous_tool"] = tool1
+        scanner._tool_cache["category2/ambiguous_tool"] = tool2
+
+        # Should raise ValueError for ambiguous name without category
+        with pytest.raises(ValueError, match="Ambiguous tool name"):
+            execute_tool_by_name("ambiguous_tool", {"param1": "value"})
+
+        # Category parameter should work (even though file doesn't exist, we're testing the lookup)
+        # We expect it to fail later due to file not existing, but not during lookup
+        try:
+            execute_tool_by_name(
+                "ambiguous_tool",
+                {"param1": "value"},
+                category="category1",
+            )
+            # If we get here without exception, that's also fine (unlikely but possible)
+            pytest.fail("Expected FileNotFoundError or CalledProcessError")
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            # Expected - file doesn't exist or execution failed
+            # The key is that we didn't get a "Tool not found" ValueError
+            # which would mean the category lookup failed
+            pass
+
+    def test_execute_tool_by_name_unambiguous(self):
+        """Test that execute_tool_by_name works without category when unambiguous"""
+        from tools.mcp_utils.filesystem_tools import execute_tool_by_name, get_scanner
+
+        # Get global scanner instance
+        scanner = get_scanner()
+        scanner.discover_tools(force_refresh=True)
+
+        # Create a single tool with unique name
+        tool = ToolMetadata(
+            name="unique_tool",
+            category="category1",
+            file_path=Path("/tmp/unique_tool.py"),
+            description="Unique tool",
+            parameters=[ToolParameter(name="param1", type="str", required=True)],
+        )
+
+        # Add to global scanner cache
+        scanner._tool_cache["category1/unique_tool"] = tool
+
+        # Should work without category since it's unambiguous
+        # (Will fail at execution, but lookup should work)
+        try:
+            execute_tool_by_name("unique_tool", {"param1": "value"})
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            # Expected - file doesn't exist
+            # We're just testing the lookup worked
+            pass
 
 
 if __name__ == "__main__":
