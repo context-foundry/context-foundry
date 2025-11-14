@@ -155,8 +155,18 @@ class ToolMetadataParser:
             if category == "tools":  # Root level
                 category = "core"
 
-            # Parse function signature if main() exists
-            parameters = ToolMetadataParser._extract_parameters(tree, source)
+            # Convert docstring parameters to ToolParameter objects
+            # Use docstring params as source of truth (not main() signature)
+            parameters = [
+                ToolParameter(
+                    name=p["name"],
+                    type=p["type"],
+                    required=p["required"],
+                    default=p.get("default"),
+                    description=p.get("description", ""),
+                )
+                for p in metadata.get("parameters", [])
+            ]
 
             return ToolMetadata(
                 name=name,
@@ -225,13 +235,13 @@ class ToolMetadataParser:
                 if current_section == "description":
                     description_lines.append(line)
                 elif current_section == "parameters":
-                    if line.startswith("-") or line.startswith("*"):
-                        # Parse parameter line
-                        param_info = ToolMetadataParser._parse_parameter_line(
-                            line.lstrip("- *")
-                        )
-                        if param_info:
-                            metadata["parameters"].append(param_info)
+                    # Parameters can be indented with or without leading dash/asterisk
+                    # Strip leading dash/asterisk if present
+                    param_line = line.lstrip("- *")
+                    # Try to parse as parameter (has format: name: type (...) - description)
+                    param_info = ToolMetadataParser._parse_parameter_line(param_line)
+                    if param_info:
+                        metadata["parameters"].append(param_info)
                 elif current_section == "returns":
                     metadata["return_type"] = line.split("-")[0].strip()
                 elif current_section == "examples":
@@ -347,14 +357,18 @@ class ToolDiscoveryScanner:
         Returns:
             List of discovered ToolMetadata objects
         """
-        if not self.base_path.exists():
-            logger.info(f"Tools directory {self.base_path} does not exist")
-            return []
-
-        # Load cache if available
+        # Load cache if available (skip if force_refresh)
         if not force_refresh and self._load_cache():
             logger.info(f"Loaded {len(self._tool_cache)} tools from cache")
             return list(self._tool_cache.values())
+
+        # Clear cache before repopulating (handles deleted/renamed files)
+        # Do this even if base_path doesn't exist to remove stale entries
+        self._tool_cache.clear()
+
+        if not self.base_path.exists():
+            logger.info(f"Tools directory {self.base_path} does not exist")
+            return []
 
         # Scan filesystem
         logger.info(f"Scanning {self.base_path} for tools...")
@@ -368,7 +382,9 @@ class ToolDiscoveryScanner:
             metadata = ToolMetadataParser.parse_tool_file(tool_file)
             if metadata:
                 discovered.append(metadata)
-                self._tool_cache[metadata.name] = metadata
+                # Use category/name as key to prevent collisions
+                cache_key = f"{metadata.category}/{metadata.name}"
+                self._tool_cache[cache_key] = metadata
                 logger.debug(f"Discovered tool: {metadata.name} ({metadata.category})")
 
         logger.info(
@@ -411,9 +427,29 @@ class ToolDiscoveryScanner:
 
         return results
 
-    def get_tool(self, name: str) -> Optional[ToolMetadata]:
-        """Get tool metadata by name"""
-        return self._tool_cache.get(name)
+    def get_tool(
+        self, name: str, category: Optional[str] = None
+    ) -> Optional[ToolMetadata]:
+        """
+        Get tool metadata by name
+
+        Args:
+            name: Tool name
+            category: Optional category to narrow search
+
+        Returns:
+            ToolMetadata if found, None otherwise
+        """
+        if category:
+            # Direct lookup with category
+            cache_key = f"{category}/{name}"
+            return self._tool_cache.get(cache_key)
+        else:
+            # Search across all categories
+            for cache_key, tool in self._tool_cache.items():
+                if tool.name == name:
+                    return tool
+            return None
 
     def get_categories(self) -> List[str]:
         """Get list of all tool categories"""
@@ -430,7 +466,7 @@ class ToolDiscoveryScanner:
 
         try:
             cache_data = json.loads(self._cache_file.read_text())
-            for name, data in cache_data.items():
+            for cache_key, data in cache_data.items():
                 # Reconstruct ToolMetadata
                 params = [ToolParameter(**p) for p in data.get("parameters", [])]
                 metadata = ToolMetadata(
@@ -443,7 +479,8 @@ class ToolDiscoveryScanner:
                     examples=data.get("examples", []),
                     file_hash=data.get("file_hash", ""),
                 )
-                self._tool_cache[name] = metadata
+                # Use same cache_key format as when saving
+                self._tool_cache[cache_key] = metadata
             return True
         except Exception as e:
             logger.warning(f"Failed to load tool cache: {e}")
