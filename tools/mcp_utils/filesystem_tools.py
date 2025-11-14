@@ -345,7 +345,8 @@ class ToolDiscoveryScanner:
 
         self.base_path = base_path
         self._tool_cache: Dict[str, ToolMetadata] = {}
-        self._cache_file = base_path.parent / "tool_discovery_cache.json"
+        # Place cache in dedicated subdirectory for better permissions
+        self._cache_file = base_path.parent / "cache" / "tool_discovery.json"
 
     def discover_tools(self, force_refresh: bool = False) -> List[ToolMetadata]:
         """
@@ -495,8 +496,13 @@ class ToolDiscoveryScanner:
             }
             self._cache_file.write_text(json.dumps(cache_data, indent=2))
             logger.debug(f"Saved tool cache to {self._cache_file}")
+        except PermissionError as e:
+            logger.warning(
+                f"Permission denied writing cache to {self._cache_file}. "
+                f"Tool discovery will work but won't be cached. Error: {e}"
+            )
         except Exception as e:
-            logger.warning(f"Failed to save tool cache: {e}")
+            logger.warning(f"Failed to save tool cache to {self._cache_file}: {e}")
 
 
 class ToolExecutor:
