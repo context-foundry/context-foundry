@@ -72,6 +72,11 @@ from tools.mcp_utils.delegation import (
     stream_delegation_output_impl,
 )
 from tools.mcp_utils.autonomous_build import autonomous_build_and_deploy_impl
+from tools.mcp_utils.filesystem_tools import (
+    discover_all_tools,
+    search_tools_by_query,
+    get_scanner,
+)
 
 # Re-export with underscore-prefixed names for backward compatibility
 # Tests and external code may import these directly
@@ -179,6 +184,76 @@ def context_foundry_status() -> str:
 Just describe what you want in plain English. Context Foundry handles the rest.
 No commands to memorize, no syntax to learn.
 """
+
+
+# ANCHOR: search_tools
+@mcp.tool()
+def search_tools(
+    query: str,
+    category: Optional[str] = None,
+    detail_level: str = "standard",
+) -> str:
+    """
+    Search for filesystem-based tools using progressive discovery.
+
+    This implements the progressive tool discovery pattern from Anthropic's
+    code execution guide. Instead of loading all tool definitions into context,
+    agents can search for tools on-demand, dramatically reducing token usage.
+
+    Args:
+        query: Search query (matches tool name and description)
+        category: Optional category filter (e.g., "delegation", "codex", "patterns")
+        detail_level: Level of detail in results
+            - "minimal": Just names and brief descriptions
+            - "standard": Includes function signatures (default)
+            - "full": Complete details with examples
+
+    Returns:
+        JSON string with search results
+
+    Examples:
+        # Find delegation tools
+        search_tools("delegate", category="delegation")
+
+        # Search for codex tools with full details
+        search_tools("codex", detail_level="full")
+
+        # Find all pattern management tools
+        search_tools("pattern", category="patterns")
+    """
+    try:
+        results = search_tools_by_query(query, category, detail_level)
+
+        if not results:
+            return json.dumps(
+                {
+                    "found": 0,
+                    "message": f"No tools found matching '{query}'",
+                    "suggestions": [
+                        "Try broader search terms",
+                        "Check available categories with context_foundry_status",
+                        "Browse ~/.context-foundry/tools/ directory",
+                    ],
+                }
+            )
+
+        scanner = get_scanner()
+        categories = scanner.get_categories()
+
+        return json.dumps(
+            {
+                "found": len(results),
+                "query": query,
+                "category_filter": category,
+                "detail_level": detail_level,
+                "results": results,
+                "available_categories": list(categories),
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        return json.dumps({"error": f"Search failed: {str(e)}"})
 
 
 # ANCHOR: delegate_to_claude_code
@@ -1146,9 +1221,48 @@ def bootstrap_patterns_on_startup():
     return bootstrap_patterns_on_startup_impl()
 
 
+def bootstrap_filesystem_tools():
+    """
+    Bootstrap filesystem-based tool discovery on startup.
+
+    Discovers all tools in ~/.context-foundry/tools/ directory and makes them
+    available for progressive discovery. This implements the filesystem-based
+    tool discovery pattern from:
+    https://www.anthropic.com/engineering/code-execution-with-mcp
+
+    Tools are loaded on-demand rather than all at once, reducing context usage.
+    """
+    import sys
+
+    try:
+        tools = discover_all_tools(force_refresh=False)
+        if tools:
+            categories = get_scanner().get_categories()
+            print(
+                f"🔧 Discovered {len(tools)} filesystem tools in {len(categories)} categories",
+                file=sys.stderr,
+            )
+            for category in categories:
+                category_tools = [t for t in tools if t.category == category]
+                print(f"   - {category}: {len(category_tools)} tools", file=sys.stderr)
+        else:
+            print(
+                "ℹ️  No filesystem tools found in ~/.context-foundry/tools/",
+                file=sys.stderr,
+            )
+            print(
+                "   Create tools following: docs/FILESYSTEM_TOOLS.md", file=sys.stderr
+            )
+    except Exception as e:
+        print(f"⚠️  Failed to bootstrap filesystem tools: {e}", file=sys.stderr)
+
+
 if __name__ == "__main__":
     # Bootstrap patterns from project directory on first run
     bootstrap_patterns_on_startup()
+
+    # Bootstrap filesystem-based tool discovery
+    bootstrap_filesystem_tools()
 
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
