@@ -7,13 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - Phase Process Spawning Fix + Phases 1-7 Refactoring + Context Codex Phase 1
+## [Unreleased] - Phase Process Spawning Fix + Phases 1-7 Refactoring + Context Codex Phases 1-2
 
 **🚨 CRITICAL ARCHITECTURAL FIX:** Implemented true per-phase process spawning with fresh contexts.
 
 **🏗️ Code Organization & Technical Debt Reduction:** Progressive refactoring of `tools/mcp_server.py` to improve maintainability and reduce file complexity.
 
 **📚 Context Codex Phase 1 COMPLETE:** Database-backed knowledge system with comprehensive test coverage.
+
+**🔌 Context Codex Phase 2 COMPLETE:** MCP integration enables querying and managing knowledge via Claude Code/Desktop.
 
 ### 🐛 Fixed - CRITICAL: Per-Phase Process Spawning (v3.0 Architecture)
 
@@ -250,6 +252,100 @@ Implemented a SQLite-based knowledge management system to replace file-based pat
 **Total**: 2,074 lines (codex module: 1,580 lines + tests: 494 lines)
 **Previous codex module size**: 1,201 lines (before Phase 1 completion)
 **Lines added in this commit**: +379 lines (codex code) + 494 lines (tests) = +873 net lines
+
+### ✅ Added - Context Codex Phase 2 (MCP Integration)
+
+**Completion Date**: 2025-11-13 | **Status**: Phase 2 COMPLETE - Knowledge accessible via MCP
+
+Integrated Context Codex with MCP server, enabling Claude Code and Claude Desktop to query and manage the knowledge base.
+
+**MCP Tools Added** (`tools/mcp_server.py`):
+
+1. **`codex_search(query, entry_type?, category?, limit?)`** - Full-text search across knowledge base
+   - Searches title, description, and tags
+   - Optional filters by type (issue, pattern, learning) and category
+   - Returns JSON with matching entries
+
+2. **`codex_get_entry(entry_id)`** - Get detailed information about a specific entry
+   - Returns complete entry details including solutions and evidence
+   - Returns list of project paths that encountered this knowledge
+
+3. **`codex_add_issue(title, description, severity?, tags?, project_types?, solution?)`** - Add new issue to knowledge base
+   - Records problems and solutions
+   - Auto-generates unique ID (e.g., "iss-3b1e6d0a" - prefix + 8 char UUID)
+   - Optional solution description
+
+4. **`codex_add_pattern(title, description, category, tags?, project_types?)`** - Add new pattern/best practice
+   - Captures architectural patterns and best practices
+   - Categorized for easy discovery
+   - Auto-generates unique ID (e.g., "pat-2f4a8c9d" - prefix + 8 char UUID)
+
+5. **`codex_stats()`** - Get knowledge base statistics
+   - Total entries count
+   - Breakdown by type (issues, patterns, learnings)
+   - Top issues by frequency
+   - Useful for understanding knowledge base growth
+
+**Implementation Details**:
+- Global KnowledgeStore instance: `~/.context-foundry/codex.db`
+- Lazy initialization on first tool call
+- JSON responses for easy parsing
+- Integrated into MCP server help text
+
+**Database Location**:
+- Path: `~/.context-foundry/codex.db`
+- Created automatically on first use
+- Persistent across MCP server restarts
+
+**Usage Examples**:
+```python
+# Search for Docker-related knowledge
+codex_search("docker volume", entry_type="issue")
+
+# Get details about a specific issue (using actual UUID-based ID)
+codex_get_entry("iss-3b1e6d0a")
+
+# Add a new issue
+codex_add_issue(
+    "Docker compose fails after config change",
+    "docker-compose up shows old environment variables",
+    severity="MEDIUM",
+    tags=["docker", "docker-compose"],
+    solution="Run: docker-compose down && docker-compose up"
+)
+
+# Add a best practice
+codex_add_pattern(
+    "Use environment files for config",
+    "Store configuration in .env files instead of hardcoding",
+    category="architecture",
+    tags=["best-practice", "configuration"]
+)
+
+# View statistics
+codex_stats()
+```
+
+**Phase 2 Deliverables**:
+- ✅ 5 MCP tools for knowledge management
+- ✅ Full-text search capability via MCP
+- ✅ CRUD operations via MCP
+- ✅ JSON responses for programmatic access
+- ✅ Integrated help text
+- ✅ Global KnowledgeStore instance
+
+**Test Coverage**:
+- ✅ KnowledgeStore API fully tested (16 tests in `tests/test_codex_store.py`)
+- ⚠️ MCP tool wiring not yet tested (no tests for MCP layer in `tools/mcp_server.py`)
+- Note: The underlying KnowledgeStore methods called by MCP tools are fully covered
+
+**Not Yet Implemented** (Phase 3):
+- ⏳ Migration script from JSON pattern files to database
+- ⏳ Integration with autonomous_build.py to auto-track builds
+- ⏳ Auto-apply patterns during builds
+
+**Files Changed**:
+- `tools/mcp_server.py`: Added 5 MCP tools (+290 lines)
 
 ### 🐛 Fixed - Critical MCP Server Connection Issue
 - **Module Name Collision**: Renamed `tools/mcp` directory to `tools/mcp_utils` to avoid shadowing the `mcp` package dependency

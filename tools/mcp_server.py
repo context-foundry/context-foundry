@@ -19,6 +19,9 @@ from tools.version import get_version
 
 # Import safety mechanisms for sandbox enforcement
 
+# Import Context Codex for knowledge management
+from context_foundry.codex import KnowledgeStore
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context  # noqa: F401
@@ -97,6 +100,20 @@ mcp = FastMCP("Context Foundry")
 
 # Track active builds
 active_builds = {}
+
+# Initialize Context Codex (global knowledge store)
+# Database location: ~/.context-foundry/codex.db
+_codex_db_path = Path.home() / ".context-foundry" / "codex.db"
+_codex_store = None
+
+
+def _get_codex_store() -> KnowledgeStore:
+    """Get or create the global KnowledgeStore instance."""
+    global _codex_store
+    if _codex_store is None:
+        _codex_store = KnowledgeStore(_codex_db_path)
+    return _codex_store
+
 
 # Track async delegation tasks
 # Structure: {task_id: {process, cmd, cwd, start_time, status, result, stdout, stderr, duration}}
@@ -815,6 +832,294 @@ def send_agent_message(target_agent: str, message_type: str, payload: Dict) -> s
     return send_agent_message_impl(target_agent, message_type, payload)
 
 
+# ========== Context Codex Tools ==========
+
+
+@mcp.tool()
+def codex_search(
+    query: str,
+    entry_type: Optional[str] = None,
+    category: Optional[str] = None,
+    limit: int = 10,
+) -> str:
+    """
+    Search the Context Codex knowledge base using full-text search.
+
+    Args:
+        query: Search query (searches title, description, and tags)
+        entry_type: Optional filter by type (issue, pattern, learning, etc.)
+        category: Optional filter by category
+        limit: Maximum results to return (default: 10)
+
+    Returns:
+        JSON string with search results including entry ID, title, type, and description
+
+    Examples:
+        - codex_search("docker volume") - Find all knowledge about docker volumes
+        - codex_search("authentication", entry_type="issue") - Find auth issues
+        - codex_search("test patterns", category="test-pattern") - Find test patterns
+    """
+    store = _get_codex_store()
+
+    # Build filters
+    filters = {}
+    if entry_type:
+        filters["type"] = entry_type
+    if category:
+        filters["category"] = category
+
+    # Search
+    results = store.search(query, filters=filters if filters else None)[:limit]
+
+    if not results:
+        return json.dumps(
+            {"found": 0, "query": query, "message": "No results found"}, indent=2
+        )
+
+    # Format results
+    formatted_results = []
+    for entry in results:
+        formatted_results.append(
+            {
+                "id": entry.id,
+                "type": entry.type.value,
+                "category": entry.category,
+                "title": entry.title,
+                "description": entry.description or "",
+                "severity": entry.severity.value if entry.severity else None,
+                "frequency": entry.frequency,
+                "tags": entry.tags,
+            }
+        )
+
+    return json.dumps(
+        {"found": len(results), "query": query, "results": formatted_results}, indent=2
+    )
+
+
+@mcp.tool()
+def codex_get_entry(entry_id: str) -> str:
+    """
+    Get detailed information about a specific knowledge entry.
+
+    Args:
+        entry_id: Entry ID (e.g., "iss-123", "pat-456")
+
+    Returns:
+        JSON string with complete entry details including solutions and evidence
+
+    Example:
+        codex_get_entry("iss-docker-volume-001")
+    """
+    store = _get_codex_store()
+
+    entry = store.get_entry(entry_id)
+    if not entry:
+        return json.dumps({"error": f"Entry '{entry_id}' not found"}, indent=2)
+
+    # Get related data
+    solutions = store.get_solutions(entry_id)
+    evidence = store.get_evidence(entry_id)
+    projects = store.get_projects_for_entry(entry_id)
+
+    result = {
+        "entry": {
+            "id": entry.id,
+            "type": entry.type.value,
+            "category": entry.category,
+            "title": entry.title,
+            "description": entry.description,
+            "severity": entry.severity.value if entry.severity else None,
+            "confidence": entry.confidence,
+            "frequency": entry.frequency,
+            "tags": entry.tags,
+            "project_types": entry.project_types,
+            "status": entry.status.value,
+            "created_at": entry.created_at.isoformat(),
+            "updated_at": entry.updated_at.isoformat(),
+            "last_seen_at": entry.last_seen_at.isoformat()
+            if entry.last_seen_at
+            else None,
+        },
+        "solutions": [
+            {
+                "id": sol.id,
+                "phase": sol.phase,
+                "description": sol.description,
+                "auto_apply": sol.auto_apply,
+                "success_rate": sol.success_rate,
+            }
+            for sol in solutions
+        ],
+        "evidence": [
+            {
+                "id": ev.id,
+                "type": ev.evidence_type,
+                "description": ev.description,
+                "code_snippet": ev.code_snippet,
+            }
+            for ev in evidence
+        ],
+        "encountered_by_projects": len(projects),
+    }
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def codex_add_issue(
+    title: str,
+    description: str,
+    severity: str = "MEDIUM",
+    tags: Optional[List[str]] = None,
+    project_types: Optional[List[str]] = None,
+    solution_description: Optional[str] = None,
+) -> str:
+    """
+    Add a new issue to the Context Codex.
+
+    Args:
+        title: Short title for the issue
+        description: Detailed description of the issue
+        severity: Severity level (LOW, MEDIUM, HIGH, CRITICAL)
+        tags: Optional list of tags (e.g., ["docker", "volumes"])
+        project_types: Optional list of project types (e.g., ["python", "nodejs"])
+        solution_description: Optional solution/workaround description
+
+    Returns:
+        JSON string with the created entry ID
+
+    Example:
+        codex_add_issue(
+            "Docker volume persists old config",
+            "After changing config, volumes keep old data",
+            severity="MEDIUM",
+            tags=["docker", "volumes"],
+            solution_description="Remove volume before rebuild: docker-compose down -v"
+        )
+    """
+    from context_foundry.codex import (
+        KnowledgeEntry,
+        KnowledgeType,
+        Severity,
+        Solution,
+        generate_entry_id,
+    )
+    import uuid
+
+    store = _get_codex_store()
+
+    # Create entry
+    entry = KnowledgeEntry(
+        id=generate_entry_id("issue"),
+        type=KnowledgeType.ISSUE,
+        category="common-issue",
+        title=title,
+        description=description,
+        severity=Severity(severity.upper()),
+        tags=tags or [],
+        project_types=project_types or [],
+    )
+
+    entry_id = store.add_entry(entry)
+
+    # Add solution if provided
+    if solution_description:
+        solution = Solution(
+            id=str(uuid.uuid4()),
+            entry_id=entry_id,
+            description=solution_description,
+            auto_apply=False,
+        )
+        store.add_solution(solution)
+
+    return json.dumps(
+        {
+            "success": True,
+            "entry_id": entry_id,
+            "message": f"Issue '{title}' added to Context Codex",
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()
+def codex_add_pattern(
+    title: str,
+    description: str,
+    category: str,
+    tags: Optional[List[str]] = None,
+    project_types: Optional[List[str]] = None,
+) -> str:
+    """
+    Add a new pattern/best practice to the Context Codex.
+
+    Args:
+        title: Short title for the pattern
+        description: Detailed description of the pattern
+        category: Pattern category (e.g., "architecture", "test-pattern")
+        tags: Optional list of tags
+        project_types: Optional list of applicable project types
+
+    Returns:
+        JSON string with the created entry ID
+
+    Example:
+        codex_add_pattern(
+            "Use named volumes for persistence",
+            "Named volumes provide better data persistence than bind mounts",
+            category="architecture",
+            tags=["docker", "best-practice"]
+        )
+    """
+    from context_foundry.codex import (
+        KnowledgeEntry,
+        KnowledgeType,
+        generate_entry_id,
+    )
+
+    store = _get_codex_store()
+
+    entry = KnowledgeEntry(
+        id=generate_entry_id("pattern"),
+        type=KnowledgeType.PATTERN,
+        category=category,
+        title=title,
+        description=description,
+        tags=tags or [],
+        project_types=project_types or [],
+    )
+
+    entry_id = store.add_entry(entry)
+
+    return json.dumps(
+        {
+            "success": True,
+            "entry_id": entry_id,
+            "message": f"Pattern '{title}' added to Context Codex",
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()
+def codex_stats() -> str:
+    """
+    Get Context Codex statistics.
+
+    Returns:
+        JSON string with statistics about the knowledge base including
+        total entries, entries by type, and top issues
+
+    Example:
+        codex_stats()
+    """
+    store = _get_codex_store()
+    stats = store.get_stats()
+
+    return json.dumps(stats, indent=2)
+
+
 def bootstrap_patterns_on_startup():
     """
     Bootstrap patterns from project directory into global storage on first run.
@@ -888,6 +1193,21 @@ if __name__ == "__main__":
         "   - share_patterns_to_community: Automatically share patterns to community (creates PR)",
         file=sys.stderr,
     )
+    print("", file=sys.stderr)
+    print("📚 Context Codex Tools (Knowledge Management):", file=sys.stderr)
+    print(
+        "   - codex_search: Search knowledge base with full-text search",
+        file=sys.stderr,
+    )
+    print(
+        "   - codex_get_entry: Get detailed info about a knowledge entry",
+        file=sys.stderr,
+    )
+    print(
+        "   - codex_add_issue: Add new issue/problem to knowledge base", file=sys.stderr
+    )
+    print("   - codex_add_pattern: Add new pattern/best practice", file=sys.stderr)
+    print("   - codex_stats: Get knowledge base statistics", file=sys.stderr)
     print("", file=sys.stderr)
     print("🔄 Evolution System Tools (CFES):", file=sys.stderr)
     print("   - create_evolution_task: Create new evolution task", file=sys.stderr)
