@@ -438,11 +438,54 @@ class JobManager:
 
             logger.info(f"Executing job {job_id} (type={job.type.value})")
 
-            # Execute via runner
+            # Execute via runner with timeout enforcement
             if self.runner is None:
                 raise RuntimeError("No runner configured for JobManager")
 
-            result = self.runner(job, self.store)
+            # Get timeout from job params (default to 120 minutes)
+            timeout_minutes = job.params.get("timeout_minutes", 120)
+            timeout_seconds = timeout_minutes * 60
+
+            # Execute runner in a thread with timeout
+            import queue
+
+            result_queue = queue.Queue()
+            error_queue = queue.Queue()
+
+            def runner_thread():
+                try:
+                    result = self.runner(job, self.store)
+                    result_queue.put(result)
+                except Exception as e:
+                    error_queue.put(e)
+
+            thread = threading.Thread(target=runner_thread, name=f"Runner-{job_id}")
+            thread.daemon = True
+            thread.start()
+
+            # Wait for result with timeout
+            thread.join(timeout=timeout_seconds)
+
+            if thread.is_alive():
+                # Thread still running - timeout exceeded
+                logger.error(
+                    f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
+                )
+                # Note: Can't forcefully kill the thread, but it's daemon so it will die when process exits
+                # The worker will be freed to process other jobs
+                raise RuntimeError(
+                    f"Job execution exceeded timeout of {timeout_minutes} minutes"
+                )
+
+            # Check if error occurred
+            if not error_queue.empty():
+                raise error_queue.get()
+
+            # Get result
+            if not result_queue.empty():
+                result = result_queue.get()
+            else:
+                raise RuntimeError("Job execution completed but no result returned")
 
             # Mark as succeeded
             self.store.update_job_status(

@@ -344,11 +344,15 @@ def execute_build_with_phase_spawning(
     flowise_mode: bool,
     project_type: str,
     incremental: bool,
+    timeout_minutes: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Execute autonomous build with per-phase process spawning.
 
     This runs in a BACKGROUND process. Each phase spawns as NEW subprocess.
+
+    Args:
+        timeout_minutes: Maximum execution time in minutes. Build will terminate if exceeded.
 
     Returns:
         Build result dict with status, phases_completed, etc.
@@ -366,10 +370,33 @@ def execute_build_with_phase_spawning(
     results = {}
     test_iteration = 0  # FIX #2: Initialize before conditional
 
+    def check_timeout(phase_name: str) -> Optional[Dict[str, Any]]:
+        """Check if timeout has been exceeded. Returns error dict if timed out, None otherwise."""
+        if timeout_minutes is not None:
+            elapsed_minutes = (datetime.now() - start_time).total_seconds() / 60
+            if elapsed_minutes > timeout_minutes:
+                error_msg = f"Build exceeded timeout of {timeout_minutes} minutes (elapsed: {elapsed_minutes:.1f} min)"
+                print(f"\n⏱️  TIMEOUT: {error_msg}", file=sys.stderr)
+                return {
+                    "status": "failed",
+                    "phase_failed": phase_name,
+                    "error": error_msg,
+                    "start_time": start_time.isoformat(),
+                    "duration_seconds": (datetime.now() - start_time).total_seconds(),
+                    "phases_completed": phases_completed,
+                    "test_iterations": test_iteration,
+                }
+        return None
+
     try:
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
         # ═══════════════════════════════════════════════════════════════════════
+        # Check timeout before starting phase
+        timeout_result = check_timeout("Scout")
+        if timeout_result:
+            return timeout_result
+
         print("\n" + "=" * 60, file=sys.stderr)
         print("PHASE 1: SCOUT", file=sys.stderr)
         print("=" * 60, file=sys.stderr)
@@ -417,6 +444,11 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 2: ARCHITECT
         # ═══════════════════════════════════════════════════════════════════════
+        # Check timeout before starting phase
+        timeout_result = check_timeout("Architect")
+        if timeout_result:
+            return timeout_result
+
         print("\n" + "=" * 60, file=sys.stderr)
         print("PHASE 2: ARCHITECT", file=sys.stderr)
         print("=" * 60, file=sys.stderr)
@@ -452,6 +484,11 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
         # ═══════════════════════════════════════════════════════════════════════
+        # Check timeout before starting phase
+        timeout_result = check_timeout("Builder")
+        if timeout_result:
+            return timeout_result
+
         print("\n" + "=" * 60, file=sys.stderr)
         print("PHASE 3: BUILDER", file=sys.stderr)
         print("=" * 60, file=sys.stderr)
@@ -486,6 +523,11 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4: TEST (with self-healing loop)
         # ═══════════════════════════════════════════════════════════════════════
+        # Check timeout before starting test phase
+        timeout_result = check_timeout("Test")
+        if timeout_result:
+            return timeout_result
+
         if enable_test_loop:
             test_passed = False
             architect_file = ".context-foundry/architecture.md"
@@ -494,6 +536,11 @@ def execute_build_with_phase_spawning(
             test_prompt = MODULE_DIR / "prompts" / "phases" / "phase_test.txt"
 
             while test_iteration <= max_test_iterations:
+                # Check timeout at start of each test iteration
+                timeout_result = check_timeout(f"Test-Iteration-{test_iteration}")
+                if timeout_result:
+                    return timeout_result
+
                 print("\n" + "=" * 60, file=sys.stderr)
                 print(f"PHASE 4: TEST (Iteration {test_iteration})", file=sys.stderr)
                 print("=" * 60, file=sys.stderr)

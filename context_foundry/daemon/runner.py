@@ -93,7 +93,7 @@ class Runner:
             if job.type == JobType.AUTONOMOUS_BUILD:
                 # Full Scout→Architect→Builder→Test flow
                 self._emit_log(job.id, "INFO", "Starting autonomous build", None)
-                result = self._run_autonomous_build(job, working_dir)
+                result = self._run_autonomous_build(job, working_dir, timeout_minutes)
 
                 # If successful, trigger pattern merge
                 if result.get("status") == "completed":
@@ -129,7 +129,9 @@ class Runner:
                 self._emit_log(job.id, "INFO", f"Delegation started: {task_id}", None)
 
                 # Poll for completion and track progress
-                result = self._poll_for_completion(job.id, task_id, working_dir)
+                result = self._poll_for_completion(
+                    job.id, task_id, working_dir, timeout_minutes
+                )
 
                 # If successful, trigger pattern merge
                 if result.get("exit_code") == 0:
@@ -177,6 +179,7 @@ class Runner:
         job_id: str,
         task_id: str,
         working_dir: str,
+        timeout_minutes: float = 120,
     ) -> Dict[str, Any]:
         """
         Poll for delegation completion and track phase progress
@@ -185,6 +188,7 @@ class Runner:
             job_id: Job ID
             task_id: Delegation task ID
             working_dir: Working directory
+            timeout_minutes: Maximum time to wait (default: 120 minutes)
 
         Returns:
             Dict with final results
@@ -193,8 +197,41 @@ class Runner:
         poll_interval = 5  # seconds
 
         start_time = datetime.now()
+        timeout_seconds = timeout_minutes * 60
 
         while True:
+            # Check timeout
+            elapsed_seconds = (datetime.now() - start_time).total_seconds()
+            if elapsed_seconds > timeout_seconds:
+                # Timeout exceeded - kill the process
+                logger.warning(
+                    f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
+                )
+
+                if task_id in self.active_tasks:
+                    task_info = self.active_tasks[task_id]
+                    process = task_info.get("process")
+                    if process and process.poll() is None:
+                        # Process still running - kill it
+                        logger.warning(f"Killing hung process for job {job_id}")
+                        try:
+                            process.kill()
+                            process.wait(timeout=10)
+                        except Exception as e:
+                            logger.error(f"Failed to kill process: {e}")
+
+                    # Remove from active tasks
+                    del self.active_tasks[task_id]
+
+                self._emit_log(
+                    job_id,
+                    "ERROR",
+                    f"Job exceeded timeout of {timeout_minutes} minutes and was terminated",
+                    None,
+                )
+
+                raise RuntimeError(f"Job exceeded timeout of {timeout_minutes} minutes")
+
             # Check if task is still active
             if task_id not in self.active_tasks:
                 # Task completed or failed
@@ -306,7 +343,9 @@ class Runner:
         except Exception as e:
             logger.error(f"Failed to emit log: {e}", exc_info=True)
 
-    def _run_autonomous_build(self, job: Job, working_dir: str) -> Dict[str, Any]:
+    def _run_autonomous_build(
+        self, job: Job, working_dir: str, timeout_minutes: float
+    ) -> Dict[str, Any]:
         """
         Execute full autonomous build with Scout→Architect→Builder→Test flow.
 
@@ -316,6 +355,7 @@ class Runner:
         Args:
             job: Job instance with autonomous build parameters
             working_dir: Working directory for the build
+            timeout_minutes: Maximum execution time in minutes
 
         Returns:
             Build result dict with status, phases_completed, etc.
@@ -394,6 +434,7 @@ class Runner:
             flowise_mode=flowise_mode,
             project_type=project_type,
             incremental=incremental and not force_rebuild,
+            timeout_minutes=timeout_minutes,
         )
 
         return result
