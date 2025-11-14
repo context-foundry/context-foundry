@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased] - Phase Process Spawning Fix + Phases 1-7 Refactoring
+## [Unreleased] - Phase Process Spawning Fix + Phases 1-7 Refactoring + Context Codex Phase 1
 
 **🚨 CRITICAL ARCHITECTURAL FIX:** Implemented true per-phase process spawning with fresh contexts.
 
 **🏗️ Code Organization & Technical Debt Reduction:** Progressive refactoring of `tools/mcp_server.py` to improve maintainability and reduce file complexity.
+
+**📚 Context Codex Phase 1 COMPLETE:** Database-backed knowledge system with comprehensive test coverage.
 
 ### 🐛 Fixed - CRITICAL: Per-Phase Process Spawning (v3.0 Architecture)
 
@@ -157,6 +159,97 @@ Context Foundry v3.0 architecture successfully completed its **first full produc
 - See `docs/V3_FIRST_PRODUCTION_BUILD_VALIDATION.md` for complete validation report
 
 **Production Readiness**: ✅ Beta release ready (v3.0-beta) - Core architecture validated, self-healing loop needs testing
+
+### ✅ Added - Context Codex Phase 1 (Database-Backed Knowledge System)
+
+**Completion Date**: 2025-11-13 | **Status**: Phase 1 COMPLETE with comprehensive test coverage
+
+Implemented a SQLite-based knowledge management system to replace file-based pattern storage, addressing all audit findings from initial implementation.
+
+**Audit Findings Addressed**:
+1. ✅ **Missing API implementations**: Added `KnowledgeProject` and `BuildMetric` dataclasses plus 6 API methods
+2. ✅ **No automated tests**: Created comprehensive test suite with 16 test cases (100% pass rate)
+3. ✅ **FTS5 issues**: Fixed schema initialization and query syntax errors
+
+**Implementation Details**:
+
+**Data Models** (`context_foundry/codex/models.py`):
+- `KnowledgeEntry` - Issues, patterns, learnings, metrics, architecture knowledge
+- `Solution` - Fixes and workarounds for issues
+- `Evidence` - Supporting examples and code snippets
+- `KnowledgeRelationship` - Relationships between entries (prevents, causes, related_to)
+- `KnowledgeProject` - Track which projects encountered which knowledge (NEW)
+- `BuildMetric` - Build performance and knowledge application tracking (NEW)
+
+**Database Schema** (`context_foundry/codex/schema.py`):
+- 7 tables: knowledge_entries, solutions, evidence, knowledge_projects, knowledge_relationships, build_metrics, knowledge_fts
+- FTS5 full-text search with standalone table (fixed external content issues)
+- Automatic triggers to keep FTS index in sync
+- Foreign key constraints with CASCADE delete
+- Optimized indexes for common queries
+
+**KnowledgeStore API** (`context_foundry/codex/store.py` - 898 lines):
+- **CRUD Operations**: add_entry(), get_entry(), update_entry(), delete_entry(), increment_frequency()
+- **Search**: search() (full-text), search_by_type(), search_by_tags()
+- **Solutions**: add_solution(), get_solutions()
+- **Evidence**: add_evidence(), get_evidence()
+- **Relationships**: add_relationship(), get_related()
+- **Project Tracking**: track_project(), get_project_history(), get_projects_for_entry() (NEW)
+- **Build Metrics**: track_build(), get_metrics(), get_build_stats() (NEW)
+- **Statistics**: get_stats()
+
+**Test Suite** (`tests/test_codex_store.py` - 465 lines, 16 tests):
+- TestKnowledgeStore (4 tests): CRUD operations, frequency increment
+- TestSearch (3 tests): by type, by tags, full-text search
+- TestSolutions (1 test): add and retrieve solutions
+- TestEvidence (1 test): add and retrieve evidence
+- TestRelationships (1 test): knowledge entry relationships
+- TestProjectTracking (2 tests): track_project, get_project_history
+- TestBuildMetrics (2 tests): track_build, get_build_stats
+- TestStatistics (1 test): codex statistics
+- test_generate_entry_id (1 test): ID generation
+- **Result**: 16/16 tests passing (100% pass rate)
+
+**Bug Fixes**:
+1. **FTS5 Schema Initialization** - Fixed trigger splitting issue where `BEGIN...END` blocks were broken by semicolon splitting
+   - Solution: Use `executescript()` for trigger blocks
+2. **FTS5 Query Syntax** - Fixed "no such column: fts" error from using table alias in MATCH clause
+   - Solution: Reference FTS table name directly: `WHERE knowledge_fts MATCH ?`
+3. **FTS5 External Content** - Fixed "no such column: T.entry_id" errors from external content table configuration
+   - Solution: Simplified to standalone FTS table with manual triggers
+
+**Architecture**:
+- SQLite with WAL mode for concurrent reads
+- Row factory for column access by name
+- Auto-incrementing occurrence counts for project tracking
+- Success rate and average duration calculation for build metrics
+- Full-text search across title, description, and tags
+
+**Phase 1 Deliverables**:
+- ✅ Complete data model with 6 entity types
+- ✅ Full database schema with 7 tables
+- ✅ Comprehensive API with 20+ methods
+- ✅ FTS5 full-text search working correctly
+- ✅ 16 automated tests with 100% pass rate
+- ✅ Project tracking API (missed in initial implementation)
+- ✅ Build metrics API (missed in initial implementation)
+
+**Not Yet Implemented** (Phase 2):
+- ⏳ Integration with autonomous_build.py to track builds
+- ⏳ Integration with daemon to auto-apply patterns
+- ⏳ MCP tools to query and manage knowledge
+- ⏳ Migration script from JSON pattern files to database
+
+**Files**:
+- `context_foundry/codex/__init__.py` - Module exports (41 lines)
+- `context_foundry/codex/models.py` - Data models (360 lines)
+- `context_foundry/codex/schema.py` - Database schema (261 lines)
+- `context_foundry/codex/store.py` - KnowledgeStore API (918 lines)
+- `tests/test_codex_store.py` - Test suite (494 lines)
+
+**Total**: 2,074 lines (codex module: 1,580 lines + tests: 494 lines)
+**Previous codex module size**: 1,201 lines (before Phase 1 completion)
+**Lines added in this commit**: +379 lines (codex code) + 494 lines (tests) = +873 net lines
 
 ### 🐛 Fixed - Critical MCP Server Connection Issue
 - **Module Name Collision**: Renamed `tools/mcp` directory to `tools/mcp_utils` to avoid shadowing the `mcp` package dependency

@@ -253,3 +253,108 @@ class KnowledgeRelationship:
             description=data.get("description"),
             created_at=datetime.fromisoformat(data["created_at"]),
         )
+
+
+@dataclass
+class KnowledgeProject:
+    """Track which projects encountered which knowledge entries."""
+
+    id: str
+    entry_id: str
+
+    project_path: str
+    project_type: Optional[str] = None
+
+    first_seen: datetime = field(default_factory=datetime.now)
+    last_seen: datetime = field(default_factory=datetime.now)
+    occurrence_count: int = 1
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage."""
+        return {
+            "id": self.id,
+            "entry_id": self.entry_id,
+            "project_path": self.project_path,
+            "project_type": self.project_type,
+            "first_seen": self.first_seen.isoformat(),
+            "last_seen": self.last_seen.isoformat(),
+            "occurrence_count": self.occurrence_count,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KnowledgeProject":
+        """Create from dictionary loaded from database."""
+        return cls(
+            id=data["id"],
+            entry_id=data["entry_id"],
+            project_path=data["project_path"],
+            project_type=data.get("project_type"),
+            first_seen=datetime.fromisoformat(data["first_seen"]),
+            last_seen=datetime.fromisoformat(data["last_seen"]),
+            occurrence_count=data.get("occurrence_count", 1),
+        )
+
+
+@dataclass
+class BuildMetric:
+    """Track build performance and knowledge application."""
+
+    id: str
+    job_id: Optional[str] = None
+
+    project_path: str = ""
+    project_type: Optional[str] = None
+
+    duration_seconds: Optional[float] = None
+    phase_durations: Dict[str, float] = field(default_factory=dict)
+
+    success: bool = True
+    exit_code: int = 0
+
+    # Knowledge tracking
+    patterns_applied: List[str] = field(default_factory=list)
+    issues_encountered: List[str] = field(default_factory=list)
+    new_learnings: List[str] = field(default_factory=list)
+
+    created_at: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for database storage."""
+        return {
+            "id": self.id,
+            "job_id": self.job_id,
+            "project_path": self.project_path,
+            "project_type": self.project_type,
+            "duration_seconds": self.duration_seconds,
+            "phase_durations_json": json.dumps(self.phase_durations),
+            "success": self.success,
+            "exit_code": self.exit_code,
+            "patterns_applied": ",".join(self.patterns_applied),
+            "issues_encountered": ",".join(self.issues_encountered),
+            "new_learnings": ",".join(self.new_learnings),
+            "created_at": self.created_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BuildMetric":
+        """Create from dictionary loaded from database."""
+        return cls(
+            id=data["id"],
+            job_id=data.get("job_id"),
+            project_path=data.get("project_path", ""),
+            project_type=data.get("project_type"),
+            duration_seconds=data.get("duration_seconds"),
+            phase_durations=json.loads(data.get("phase_durations_json", "{}")),
+            success=bool(data.get("success", True)),
+            exit_code=data.get("exit_code", 0),
+            patterns_applied=data.get("patterns_applied", "").split(",")
+            if data.get("patterns_applied")
+            else [],
+            issues_encountered=data.get("issues_encountered", "").split(",")
+            if data.get("issues_encountered")
+            else [],
+            new_learnings=data.get("new_learnings", "").split(",")
+            if data.get("new_learnings")
+            else [],
+            created_at=datetime.fromisoformat(data["created_at"]),
+        )

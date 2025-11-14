@@ -175,33 +175,33 @@ CREATE INDEX IF NOT EXISTS idx_metrics_created ON build_metrics(created_at DESC)
 CREATE INDEX IF NOT EXISTS idx_metrics_job ON build_metrics(job_id);
 """
 
-# Full-text search table
+# Full-text search table (standalone, not external content)
 KNOWLEDGE_FTS_SCHEMA = """
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
     entry_id UNINDEXED,
     title,
     description,
-    tags,
-    content='knowledge_entries',
-    content_rowid='rowid'
+    tags
 );
 """
 
-# FTS triggers to keep in sync
+# FTS triggers to keep in sync with knowledge_entries
 KNOWLEDGE_FTS_TRIGGERS = """
 CREATE TRIGGER IF NOT EXISTS knowledge_fts_insert AFTER INSERT ON knowledge_entries BEGIN
-  INSERT INTO knowledge_fts(rowid, entry_id, title, description, tags)
-  VALUES (new.rowid, new.id, new.title, new.description, new.tags);
+  INSERT INTO knowledge_fts(entry_id, title, description, tags)
+  VALUES (new.id, new.title, new.description, new.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_fts_delete AFTER DELETE ON knowledge_entries BEGIN
-  DELETE FROM knowledge_fts WHERE rowid = old.rowid;
+  DELETE FROM knowledge_fts WHERE entry_id = old.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS knowledge_fts_update AFTER UPDATE ON knowledge_entries BEGIN
-  DELETE FROM knowledge_fts WHERE rowid = old.rowid;
-  INSERT INTO knowledge_fts(rowid, entry_id, title, description, tags)
-  VALUES (new.rowid, new.id, new.title, new.description, new.tags);
+  UPDATE knowledge_fts
+  SET title = new.title,
+      description = new.description,
+      tags = new.tags
+  WHERE entry_id = new.id;
 END;
 """
 
@@ -242,11 +242,15 @@ def initialize_database(conn):
 
         # Execute all schema statements
         for schema in ALL_SCHEMAS:
-            # Split multiple statements if present
-            for statement in schema.split(";"):
-                statement = statement.strip()
-                if statement:
-                    cursor.execute(statement)
+            # Use executescript for trigger blocks (they contain semicolons inside BEGIN...END)
+            if "CREATE TRIGGER" in schema:
+                cursor.executescript(schema)
+            else:
+                # Split multiple statements if present
+                for statement in schema.split(";"):
+                    statement = statement.strip()
+                    if statement:
+                        cursor.execute(statement)
 
         conn.commit()
         return True

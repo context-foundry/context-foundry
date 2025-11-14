@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 
 from .models import (
-    KnowledgeEntry,
-    Solution,
+    BuildMetric,
     Evidence,
+    KnowledgeEntry,
+    KnowledgeProject,
+    Solution,
 )
 from .schema import initialize_database
 
@@ -220,8 +222,8 @@ class KnowledgeStore:
             """
             SELECT ke.*
             FROM knowledge_entries ke
-            JOIN knowledge_fts fts ON fts.entry_id = ke.id
-            WHERE fts MATCH ?
+            JOIN knowledge_fts ON knowledge_fts.entry_id = ke.id
+            WHERE knowledge_fts MATCH ?
             """
         ]
         params = [query]
@@ -625,6 +627,270 @@ class KnowledgeStore:
             "entries_by_type": entries_by_type,
             "total_solutions": total_solutions,
             "top_issues": top_issues,
+        }
+
+    # ========== Project Tracking ==========
+
+    def track_project(
+        self, entry_id: str, project_path: str, project_type: Optional[str] = None
+    ) -> str:
+        """
+        Track that a project encountered a knowledge entry.
+
+        If this is the first time, creates a new record.
+        If the project has seen this entry before, increments the occurrence count.
+
+        Args:
+            entry_id: Knowledge entry ID
+            project_path: Path to the project
+            project_type: Type of project (python, nodejs, etc.)
+
+        Returns:
+            KnowledgeProject ID
+        """
+
+        cursor = self.conn.cursor()
+
+        # Check if this project-entry combo exists
+        cursor.execute(
+            """
+            SELECT * FROM knowledge_projects
+            WHERE entry_id = ? AND project_path = ?
+            """,
+            (entry_id, project_path),
+        )
+
+        row = cursor.fetchone()
+
+        if row:
+            # Update existing record
+            cursor.execute(
+                """
+                UPDATE knowledge_projects
+                SET last_seen = ?,
+                    occurrence_count = occurrence_count + 1
+                WHERE id = ?
+                """,
+                (datetime.now().isoformat(), row["id"]),
+            )
+            self.conn.commit()
+            return row["id"]
+        else:
+            # Create new record
+            project = KnowledgeProject(
+                id=str(uuid.uuid4()),
+                entry_id=entry_id,
+                project_path=project_path,
+                project_type=project_type,
+            )
+
+            data = project.to_dict()
+            cursor.execute(
+                """
+                INSERT INTO knowledge_projects (
+                    id, entry_id, project_path, project_type,
+                    first_seen, last_seen, occurrence_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data["id"],
+                    data["entry_id"],
+                    data["project_path"],
+                    data["project_type"],
+                    data["first_seen"],
+                    data["last_seen"],
+                    data["occurrence_count"],
+                ),
+            )
+            self.conn.commit()
+            return project.id
+
+    def get_project_history(
+        self, project_path: str, limit: int = 100
+    ) -> List[KnowledgeEntry]:
+        """
+        Get all knowledge entries encountered by a project.
+
+        Args:
+            project_path: Path to the project
+            limit: Maximum entries to return
+
+        Returns:
+            List of KnowledgeEntry objects, ordered by most recent
+        """
+        cursor = self.conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT ke.*
+            FROM knowledge_entries ke
+            JOIN knowledge_projects kp ON kp.entry_id = ke.id
+            WHERE kp.project_path = ?
+            ORDER BY kp.last_seen DESC
+            LIMIT ?
+            """,
+            (project_path, limit),
+        )
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(KnowledgeEntry.from_dict(dict(row)))
+
+        return results
+
+    def get_projects_for_entry(self, entry_id: str) -> List[str]:
+        """
+        Get all projects that have encountered a knowledge entry.
+
+        Args:
+            entry_id: Knowledge entry ID
+
+        Returns:
+            List of project paths
+        """
+        cursor = self.conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT project_path, occurrence_count
+            FROM knowledge_projects
+            WHERE entry_id = ?
+            ORDER BY occurrence_count DESC
+            """,
+            (entry_id,),
+        )
+
+        return [row["project_path"] for row in cursor.fetchall()]
+
+    # ========== Build Metrics ==========
+
+    def track_build(self, metric: "BuildMetric") -> str:
+        """
+        Track build metrics and knowledge application.
+
+        Args:
+            metric: BuildMetric object
+
+        Returns:
+            Metric ID
+        """
+
+        data = metric.to_dict()
+
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO build_metrics (
+                id, job_id, project_path, project_type,
+                duration_seconds, phase_durations_json,
+                success, exit_code,
+                patterns_applied, issues_encountered, new_learnings,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                data["id"],
+                data["job_id"],
+                data["project_path"],
+                data["project_type"],
+                data["duration_seconds"],
+                data["phase_durations_json"],
+                data["success"],
+                data["exit_code"],
+                data["patterns_applied"],
+                data["issues_encountered"],
+                data["new_learnings"],
+                data["created_at"],
+            ),
+        )
+        self.conn.commit()
+
+        return metric.id
+
+    def get_metrics(
+        self,
+        project_path: Optional[str] = None,
+        success_only: bool = False,
+        limit: int = 100,
+    ) -> List["BuildMetric"]:
+        """
+        Query build metrics.
+
+        Args:
+            project_path: Optional filter by project path
+            success_only: If True, only return successful builds
+            limit: Maximum results to return
+
+        Returns:
+            List of BuildMetric objects
+        """
+        from .models import BuildMetric
+
+        cursor = self.conn.cursor()
+
+        query = "SELECT * FROM build_metrics WHERE 1=1"
+        params = []
+
+        if project_path:
+            query += " AND project_path = ?"
+            params.append(project_path)
+
+        if success_only:
+            query += " AND success = TRUE"
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        cursor.execute(query, params)
+
+        results = []
+        for row in cursor.fetchall():
+            results.append(BuildMetric.from_dict(dict(row)))
+
+        return results
+
+    def get_build_stats(self, project_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Get build statistics.
+
+        Args:
+            project_path: Optional filter by project
+
+        Returns:
+            Dictionary with build statistics
+        """
+        cursor = self.conn.cursor()
+
+        query_filter = ""
+        params = []
+        if project_path:
+            query_filter = "WHERE project_path = ?"
+            params = [project_path]
+
+        # Success rate
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) as total_builds,
+                SUM(CASE WHEN success = TRUE THEN 1 ELSE 0 END) as successful_builds,
+                AVG(duration_seconds) as avg_duration
+            FROM build_metrics
+            {query_filter}
+            """,
+            params,
+        )
+
+        row = cursor.fetchone()
+
+        total_builds = row["total_builds"] or 0
+        successful_builds = row["successful_builds"] or 0
+        success_rate = (successful_builds / total_builds) if total_builds > 0 else 0.0
+
+        return {
+            "total_builds": total_builds,
+            "successful_builds": successful_builds,
+            "success_rate": success_rate,
+            "avg_duration_seconds": row["avg_duration"],
         }
 
 
