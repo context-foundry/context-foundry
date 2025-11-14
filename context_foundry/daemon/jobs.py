@@ -14,6 +14,7 @@ from queue import Queue, Empty
 from .models import Job, JobStatus, JobType, LogEntry
 from .config import Config
 from .store import Store
+from .workdir_lock import WorkDirLockManager
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ class JobManager:
         # Track currently running jobs (job_id -> thread)
         self._running_jobs: Dict[str, threading.Thread] = {}
         self._running_jobs_lock = threading.Lock()
+
+        # Working directory lock manager
+        self._workdir_lock = WorkDirLockManager()
 
         logger.info("JobManager initialized")
 
@@ -203,6 +207,39 @@ class JobManager:
 
     # ===== Worker Loop Management =====
 
+    def _get_potentially_locked_directories(self) -> List[str]:
+        """
+        Get working directories from jobs that might have lockfiles
+
+        Called on daemon startup to find directories that need stale lock cleanup.
+
+        Returns:
+            List of working directory paths
+        """
+        workdirs = []
+
+        # Check RUNNING jobs (may have crashed with locks still held)
+        running_jobs = self.store.list_jobs(status=JobStatus.RUNNING, limit=1000)
+        for job in running_jobs:
+            workdir = job.params.get("working_directory")
+            if workdir:
+                workdirs.append(workdir)
+
+        # Also check recent FAILED jobs (may have left stale locks)
+        failed_jobs = self.store.list_jobs(status=JobStatus.FAILED, limit=100)
+        for job in failed_jobs:
+            workdir = job.params.get("working_directory")
+            if workdir:
+                workdirs.append(workdir)
+
+        # Deduplicate
+        unique_workdirs = list(set(workdirs))
+
+        logger.info(
+            f"Found {len(unique_workdirs)} working directories to check for stale locks"
+        )
+        return unique_workdirs
+
     def start(self, num_workers: Optional[int] = None):
         """
         Start job processing workers
@@ -219,6 +256,12 @@ class JobManager:
 
         self._running = True
         self._stop_event.clear()
+
+        # Clean up stale working directory locks
+        # Get working directories from jobs that might have left lockfiles
+        logger.info("Cleaning up stale working directory locks...")
+        workdirs_to_check = self._get_potentially_locked_directories()
+        self._workdir_lock.cleanup_stale_locks(workdirs_to_check)
 
         # Start worker threads
         for i in range(num_workers):
@@ -328,6 +371,9 @@ class JobManager:
         Args:
             job_id: Job ID to execute
         """
+        working_dir = None
+        lock_acquired = False
+
         try:
             # Retrieve job
             job = self.store.get_job(job_id)
@@ -339,6 +385,40 @@ class JobManager:
             if job.status != JobStatus.QUEUED:
                 logger.info(f"Job {job_id} skipped (status={job.status})")
                 return
+
+            # Extract working directory from job params (if applicable)
+            working_dir = job.params.get("working_directory")
+
+            # Acquire working directory lock (if job has a working directory)
+            if working_dir:
+                lock_acquired = self._workdir_lock.acquire(working_dir, job_id)
+
+                if not lock_acquired:
+                    # Directory is locked by another job - fail this job
+                    is_locked, holder_job_id = self._workdir_lock.is_locked(working_dir)
+                    error_msg = (
+                        f"Working directory {working_dir} is already locked by job {holder_job_id}. "
+                        "Cannot execute concurrent builds in the same directory."
+                    )
+                    logger.warning(error_msg)
+
+                    # Mark job as failed
+                    self.store.update_job_status(
+                        job_id,
+                        JobStatus.FAILED,
+                        completed_at=datetime.now(),
+                        result={"error": error_msg},
+                    )
+
+                    # Emit log
+                    log = LogEntry.create(
+                        job_id=job_id,
+                        level="ERROR",
+                        message=error_msg,
+                        source="job_manager",
+                    )
+                    self.store.save_log(log)
+                    return
 
             # Update status to RUNNING
             self.store.update_job_status(
@@ -440,6 +520,10 @@ class JobManager:
                 logger.error(f"Job {job_id} failed permanently")
 
         finally:
+            # Release working directory lock
+            if working_dir and lock_acquired:
+                self._workdir_lock.release(working_dir, job_id)
+
             # Remove from running jobs
             with self._running_jobs_lock:
                 self._running_jobs.pop(job_id, None)
