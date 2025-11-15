@@ -107,29 +107,31 @@ cfd codex export --type common-issues --output patterns.json
 ### Reusable Skills Development
 **Capture and reuse successful implementations across projects**
 
-Inspired by [Anthropic's Code Execution Guide](https://www.anthropic.com/news/building-effective-agents-with-code-execution-and-mcp), Context Foundry now automatically builds a library of proven code implementations:
+Inspired by [Anthropic's Code Execution Guide](https://www.anthropic.com/news/building-effective-agents-with-code-execution-and-mcp), Context Foundry provides infrastructure for building a library of proven code implementations:
 
-- **Search Before Building** - Scout phase checks 700+ skill library before researching
-- **Auto-Capture** - Test phase saves successful implementations after tests pass
+- **Search Before Building** - Scout agents instructed to search skill library before researching
+- **Auto-Capture** - Test agents instructed to save successful implementations after tests pass
 - **Quality Tracking** - Success rates guide recommendations (only suggest ≥70% success)
-- **Self-Improving** - Each successful build contributes reusable components
+- **Self-Improving** - Each successful build can contribute reusable components
+
+**Note**: New installations start with an empty skills library. The library grows as builds succeed and agents capture implementations.
 
 **Example workflow:**
 
 ```python
 # Build #1: JWT auth for FastAPI (no existing skills)
-Scout → Research from scratch → Build → Test ✅ → Capture skill
+Scout → Research from scratch → Build → Test ✅ → Agent captures skill (if instructed)
 
 # Build #2: Another FastAPI app needs auth
-Scout → Found "JWT Authentication" (success_rate=100%, 1 use)
+Scout → Agent searches library → Found "JWT Authentication" (success_rate=100%, 1 use)
       → Reuse existing implementation → Test ✅ → Update metrics
 
-# Build #15: Same pattern, instant success
+# Build #15: Same pattern, potential instant success
 Scout → Found "JWT Authentication" (success_rate=85%, 14 uses)
-      → High confidence recommendation
+      → High confidence recommendation (if agent searches and uses it)
 ```
 
-**Storage**: Hybrid JSON + SQLite + auto-generated markdown
+**Storage**: Hybrid JSON + auto-generated markdown (Codex indexing planned)
 
 ```bash
 ~/.context-foundry/skills/

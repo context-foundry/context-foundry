@@ -2,20 +2,26 @@
 
 **Pattern from**: [Anthropic's Code Execution with MCP](https://www.anthropic.com/news/building-effective-agents-with-code-execution-and-mcp)
 
-Context Foundry implements Anthropic's **Reusable Skills Development** pattern to automatically capture, index, and reuse successful code implementations across projects.
+Context Foundry provides infrastructure for Anthropic's **Reusable Skills Development** pattern, allowing agents to capture, index, and reuse successful code implementations across projects.
 
 ---
 
 ## Overview
 
-Instead of researching and implementing the same solutions repeatedly (JWT auth, database connections, API clients, etc.), Context Foundry:
+Instead of researching and implementing the same solutions repeatedly (JWT auth, database connections, API clients, etc.), agents CAN:
 
-1. **Searches** existing skills library before building from scratch (Scout phase)
-2. **Captures** successful implementations after tests pass (Test phase)
-3. **Tracks** success rates across projects (Feedback phase)
-4. **Recommends** high-quality skills (≥70% success rate) for future builds
+1. **Search** existing skills library before building from scratch (Scout phase instruction)
+2. **Capture** successful implementations after tests pass (Test phase instruction)
+3. **Track** success rates across projects (Feedback phase instruction)
+4. **Recommend** high-quality skills (≥70% success rate) for future builds
 
-This creates a **self-improving system** where each successful build contributes reusable components for future projects.
+This provides the **foundation for a self-improving system** where successful builds contribute reusable components.
+
+**Important Limitations**:
+- **Prompt-Based Integration**: Agents are *instructed* to use skills via phase prompts, not forced by orchestration code
+- **Agent Discretion**: Agents may choose whether to search/capture/reuse skills
+- **Empty Start**: New installations have zero skills; library grows through successful builds
+- **JSON Search**: Currently uses basic JSON iteration, not database search (Codex indexing is write-only)
 
 ---
 
@@ -23,7 +29,7 @@ This creates a **self-improving system** where each successful build contributes
 
 ### Phase 1: Scout - Search Before Building
 
-When starting a new project, Scout agents first search the skills library:
+When starting a new project, Scout agents are *instructed* (via prompt) to search the skills library:
 
 ```python
 # Scout searches for existing skills
@@ -48,7 +54,7 @@ else:
 
 ### Phase 2: Test - Capture After Success
 
-When tests pass, the Test agent identifies reusable components:
+When tests pass, the Test agent is *instructed* (via prompt) to identify reusable components:
 
 ```python
 # After tests PASS, identify reusable code
@@ -148,9 +154,11 @@ Auto-generated documentation with:
 - Dependencies
 - Success metrics
 
-**3. Context Codex (Fast Search)**
+**3. Context Codex (Write-Only Indexing)**
 
-Skills are indexed in the SQLite Context Codex for fast full-text search.
+Skills are indexed in the SQLite Context Codex during save (planned for future search integration).
+
+**Current Status**: Search uses JSON iteration, not Codex queries. Codex integration is write-only.
 
 ---
 
@@ -464,6 +472,5 @@ pytest tests/test_skills_manager.py -v
 ## See Also
 
 - [Anthropic's Code Execution Guide](https://www.anthropic.com/news/building-effective-agents-with-code-execution-and-mcp)
-- [Context Codex Documentation](CONTEXT_CODEX.md)
-- [Build Pipeline Documentation](BUILD_PIPELINE.md)
-- [SkillsManager API Reference](../tools/skills/README.md)
+- [Main README](../README.md)
+- [SkillsManager Source Code](../tools/skills/manager.py)
