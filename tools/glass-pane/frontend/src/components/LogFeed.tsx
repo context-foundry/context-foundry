@@ -89,7 +89,7 @@ export default function LogFeed({ jobId }: LogFeedProps) {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg h-[500px] flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-gray-800 space-y-3">
         <div className="flex items-center justify-between">

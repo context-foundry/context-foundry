@@ -67,7 +67,7 @@ class StoreService:
         List jobs with optional filtering.
 
         Args:
-            status: Filter by status ('running', 'completed', 'failed')
+            status: Filter by status ('running', 'succeeded', 'failed', 'cancelled')
             limit: Maximum number of jobs to return
             offset: Pagination offset
 
@@ -76,12 +76,12 @@ class StoreService:
         """
         conn = self._get_connection()
         try:
-            # Build query
+            # Build query with case-insensitive status comparison
             query = "SELECT * FROM jobs"
             params = []
 
             if status:
-                query += " WHERE status = ?"
+                query += " WHERE LOWER(status) = LOWER(?)"
                 params.append(status)
 
             query += " ORDER BY started_at DESC LIMIT ? OFFSET ?"
@@ -94,7 +94,7 @@ class StoreService:
             # Get total count
             count_query = "SELECT COUNT(*) FROM jobs"
             if status:
-                count_query += " WHERE status = ?"
+                count_query += " WHERE LOWER(status) = LOWER(?)"
                 total = conn.execute(count_query, [status]).fetchone()[0]
             else:
                 total = conn.execute(count_query).fetchone()[0]
@@ -127,6 +127,39 @@ class StoreService:
 
             return self._row_to_job(row)
 
+        finally:
+            conn.close()
+
+    def get_job_working_directory(self, job_id: str) -> Optional[str]:
+        """
+        Get working directory for a specific job from params_json.
+
+        Args:
+            job_id: Job UUID
+
+        Returns:
+            Working directory path or None if not found
+        """
+        conn = self._get_connection()
+        try:
+            cursor = conn.execute("SELECT params_json FROM jobs WHERE id = ?", [job_id])
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            import json
+
+            params = json.loads(row["params_json"])
+            working_dir = params.get("working_directory")
+
+            if working_dir:
+                logger.info(f"Job {job_id} working_directory: {working_dir}")
+            return working_dir
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse params_json for job {job_id}: {e}")
+            return None
         finally:
             conn.close()
 
@@ -243,7 +276,8 @@ class StoreService:
         search: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-        since_id: Optional[int] = None,
+        since_timestamp: Optional[str] = None,
+        since_id: Optional[str] = None,
     ) -> tuple[List[Log], int]:
         """
         Get logs for a specific job.
@@ -254,7 +288,8 @@ class StoreService:
             search: Text search in message
             limit: Maximum number of logs
             offset: Pagination offset
-            since_id: Get logs after this ID (for incremental fetches)
+            since_timestamp: Get logs after this timestamp (for incremental fetches)
+            since_id: Get logs after this ID when timestamp matches (for lossless streaming)
 
         Returns:
             Tuple of (logs list, total count)
@@ -273,11 +308,17 @@ class StoreService:
                 query += " AND message LIKE ?"
                 params.append(f"%{search}%")
 
-            if since_id is not None:
-                query += " AND id > ?"
-                params.append(since_id)
+            # Use composite filtering to handle same-timestamp logs
+            if since_timestamp is not None:
+                if since_id is not None:
+                    # Get logs where (timestamp > since_timestamp) OR (timestamp = since_timestamp AND id > since_id)
+                    query += " AND ((timestamp > ?) OR (timestamp = ? AND id > ?))"
+                    params.extend([since_timestamp, since_timestamp, since_id])
+                else:
+                    query += " AND timestamp > ?"
+                    params.append(since_timestamp)
 
-            query += " ORDER BY id ASC LIMIT ? OFFSET ?"
+            query += " ORDER BY timestamp ASC, id ASC LIMIT ? OFFSET ?"
             params.extend([limit, offset])
 
             # Execute query
@@ -312,15 +353,70 @@ class StoreService:
         # Convert to dict for easier access with defaults
         row_dict = dict(row)
 
+        # Parse metadata_json to extract project_name
+        import json
+
+        metadata = {}
+        try:
+            metadata = json.loads(row_dict.get("metadata_json", "{}"))
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse metadata_json for job {row_dict['id']}")
+
+        params = {}
+        try:
+            params = json.loads(row_dict.get("params_json", "{}"))
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse params_json for job {row_dict['id']}")
+
+        # Extract project_name from metadata or params
+        project_name = metadata.get("project_name")
+        if not project_name:
+            working_dir = params.get("working_directory", "")
+            project_name = Path(working_dir).name if working_dir else "Unknown"
+
+        # Get tokens_used and total_files from metadata, or try to load from session-summary.json
+        tokens_used = metadata.get("tokens_used", 0)
+        total_files = metadata.get("total_files", 0)
+        current_phase = metadata.get("current_phase")
+
+        # If metadata is empty, try to load from session-summary.json
+        if tokens_used == 0 and total_files == 0:
+            working_dir = params.get("working_directory", "")
+            if working_dir:
+                summary_path = (
+                    Path(working_dir) / ".context-foundry" / "session-summary.json"
+                )
+                if summary_path.exists():
+                    try:
+                        summary_data = json.loads(summary_path.read_text())
+
+                        # Calculate total tokens from all phases
+                        context_metrics = summary_data.get("context_metrics", {})
+                        by_phase = context_metrics.get("by_phase", {})
+                        for phase_name, phase_data in by_phase.items():
+                            tokens_used += phase_data.get("tokens_used", 0)
+
+                        # Get file count from files_created array
+                        files_created = summary_data.get("files_created", [])
+                        total_files = len(files_created)
+
+                        logger.info(
+                            f"Loaded metrics from session-summary.json for job {row_dict['id']}: {tokens_used} tokens, {total_files} files"
+                        )
+                    except (json.JSONDecodeError, FileNotFoundError) as e:
+                        logger.debug(
+                            f"Could not load session-summary.json for job {row_dict['id']}: {e}"
+                        )
+
         return Job(
             id=row_dict["id"],
             status=row_dict.get("status", "unknown"),
             started_at=row_dict.get("started_at") or datetime.now().isoformat(),
             completed_at=row_dict.get("completed_at"),
-            project_name=row_dict.get("project_name", "Unknown"),
-            current_phase=row_dict.get("current_phase"),
-            tokens_used=row_dict.get("tokens_used", 0),
-            total_files=row_dict.get("total_files", 0),
+            project_name=project_name,
+            current_phase=current_phase,
+            tokens_used=tokens_used,
+            total_files=total_files,
         )
 
     def _row_to_log(self, row: sqlite3.Row) -> Log:

@@ -3,6 +3,7 @@ Server-Sent Events (SSE) endpoints for real-time updates.
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Request
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 store = StoreService(settings.expanded_db_path)
 file_watcher = FileWatcher(
     broadcaster=broadcaster,
-    watch_path=settings.expanded_watch_path,
+    store_service=store,
     debounce_seconds=settings.debounce_seconds,
 )
 
@@ -81,7 +82,7 @@ async def stream_job_updates(job_id: str, request: Request):
                 # Yield event to client
                 yield {
                     "event": event["type"],
-                    "data": event["data"],
+                    "data": json.dumps(event["data"]),
                 }
 
         except asyncio.CancelledError:

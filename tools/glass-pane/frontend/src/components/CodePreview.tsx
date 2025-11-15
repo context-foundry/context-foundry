@@ -91,7 +91,7 @@ export default function CodePreview({ filePath }: CodePreviewProps) {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg h-[500px] flex flex-col">
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <div className="flex items-center gap-2">

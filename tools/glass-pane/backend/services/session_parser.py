@@ -32,6 +32,51 @@ class SessionParser:
         """
         self.watch_path = watch_path
 
+    def _normalize_phase_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Normalize phase data to consistent field names.
+
+        Handles both:
+        - snake_case (current_phase, progress_detail)
+        - camelCase (currentPhase, progressDetail)
+
+        Args:
+            data: Raw phase data dict
+
+        Returns:
+            Normalized dict with consistent field names
+        """
+        normalized = {}
+
+        # Phase field (current_phase, currentPhase -> phase)
+        normalized["phase"] = (
+            data.get("phase") or data.get("current_phase") or data.get("currentPhase")
+        )
+
+        # Status field
+        normalized["status"] = data.get("status")
+
+        # Description field (progress_detail, progressDetail -> description)
+        normalized["description"] = (
+            data.get("description")
+            or data.get("progress_detail")
+            or data.get("progressDetail")
+            or ""
+        )
+
+        # Session ID
+        normalized["session_id"] = data.get("session_id") or data.get("sessionId")
+
+        # Test iteration
+        normalized["test_iteration"] = data.get("test_iteration") or data.get(
+            "testIteration"
+        )
+
+        # Phase number
+        normalized["phase_number"] = data.get("phase_number") or data.get("phaseNumber")
+
+        return normalized
+
     def read_current_phase(
         self, job_id: str, started_at: Optional[datetime] = None
     ) -> Optional[Dict[str, Any]]:
@@ -63,12 +108,69 @@ class SessionParser:
 
         try:
             with open(file_path, "r") as f:
-                data = json.load(f)
+                content = f.read()
 
-            logger.debug(
-                f"Read current phase: {data.get('phase')} - {data.get('status')}"
-            )
-            return data
+            # Try to parse as JSON directly first
+            try:
+                data = json.loads(content)
+                # Unwrap PhaseInfo if present
+                if "PhaseInfo" in data:
+                    data = data["PhaseInfo"]
+
+                # Normalize field names (support both snake_case and camelCase)
+                normalized = self._normalize_phase_data(data)
+
+                logger.debug(
+                    f"Read current phase: {normalized.get('phase')} - {normalized.get('status')}"
+                )
+                return normalized
+            except json.JSONDecodeError:
+                # File might have BAML debug output - find the last valid JSON object
+                lines = content.strip().split("\n")
+                # Start from the end and find lines that look like JSON
+                json_lines = []
+                in_json = False
+                brace_count = 0
+
+                for line in reversed(lines):
+                    if not in_json:
+                        # Look for closing brace
+                        if line.strip() == "}":
+                            in_json = True
+                            brace_count = 1
+                            json_lines.insert(0, line)
+                    else:
+                        json_lines.insert(0, line)
+                        # Count braces to find start of JSON (backwards iteration)
+                        brace_count += line.count("}") - line.count("{")
+                        if brace_count == 0:
+                            # Found complete JSON object
+                            break
+
+                if json_lines:
+                    try:
+                        json_str = "\n".join(json_lines)
+                        data = json.loads(json_str)
+
+                        # Unwrap PhaseInfo if present
+                        if "PhaseInfo" in data:
+                            data = data["PhaseInfo"]
+
+                        # Normalize field names
+                        normalized = self._normalize_phase_data(data)
+
+                        logger.debug(
+                            f"Read current phase (from BAML output): {normalized.get('phase')} - {normalized.get('status')}"
+                        )
+                        return normalized
+                    except json.JSONDecodeError as e:
+                        logger.error(
+                            f"Failed to parse extracted JSON from BAML output: {e}"
+                        )
+                        return None
+                else:
+                    logger.error("Could not find valid JSON in current-phase.json")
+                    return None
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse current-phase.json: {e}")

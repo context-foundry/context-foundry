@@ -31,7 +31,7 @@ class Config:
     active_hours: tuple = (6, 22)  # (start_hour, end_hour)
 
     # Job settings
-    default_job_timeout_minutes: int = 120
+    default_job_timeout_minutes: int = 90
     default_max_retries: int = 3
 
     # Paths

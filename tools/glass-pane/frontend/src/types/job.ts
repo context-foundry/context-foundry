@@ -28,7 +28,7 @@ export interface PhaseInfo {
 
 export interface Job {
   id: string
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
   started_at: string // ISO 8601
   completed_at: string | null
   project_name: string

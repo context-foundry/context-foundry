@@ -1,20 +1,24 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useFileTree } from '../hooks/useFileTree';
 import { FileNode } from '../types/job';
 
 interface FileTreeProps {
   onFileSelect: (filePath: string) => void;
+  visibleNodes: FileNode[];
+  toggleDirectory: (path: string) => void;
+  collapseAll: () => void;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
 }
 
-export default function FileTree({ onFileSelect }: FileTreeProps) {
-  const {
-    visibleNodes,
-    toggleDirectory,
-    collapseAll,
-    searchQuery,
-    setSearchQuery,
-  } = useFileTree([]);
+export default function FileTree({
+  onFileSelect,
+  visibleNodes,
+  toggleDirectory,
+  collapseAll,
+  searchQuery,
+  setSearchQuery,
+}: FileTreeProps) {
 
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
 
@@ -32,10 +36,9 @@ export default function FileTree({ onFileSelect }: FileTreeProps) {
   };
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 h-[500px] flex flex-col">
+    <div className="p-4 h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-100">Files</h2>
+      <div className="flex items-center justify-end mb-4">
         <button
           onClick={collapseAll}
           className="text-xs text-gray-400 hover:text-gray-300 transition-colors"

@@ -6,38 +6,60 @@ from fastapi import APIRouter, HTTPException, Query
 from pathlib import Path
 import logging
 
+from services.store_service import StoreService
+from config import settings
+
 router = APIRouter(prefix="/api/files", tags=["files"])
 logger = logging.getLogger(__name__)
+
+# Initialize store service
+store = StoreService(settings.expanded_db_path)
 
 
 @router.get("")
 async def get_file_content(
-    path: str = Query(..., description="Relative file path (e.g., src/App.tsx)"),
+    path: str = Query(
+        ..., description="Relative file path (e.g., .context-foundry/scout-report.md)"
+    ),
+    job_id: str = Query(None, description="Job ID to get working directory from"),
 ):
     """
     Get file content from project directory.
 
     Query Parameters:
     - path: Relative file path
+    - job_id: Optional job ID to determine working directory
 
     Security:
     - Path must be relative (no absolute paths)
     - Path cannot escape project directory (no ../)
-    - Only files within current working directory are accessible
+    - Only files within job's working directory are accessible
     """
     # Security: Prevent path traversal
     if path.startswith("/") or ".." in path:
         raise HTTPException(status_code=403, detail="Invalid file path")
 
-    # Resolve file path relative to current directory
-    file_path = Path.cwd() / path
+    # Get base directory (either job's working_directory or cwd)
+    if job_id:
+        working_dir = store.get_job_working_directory(job_id)
+        if not working_dir:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Job {job_id} not found or has no working_directory",
+            )
+        base_dir = Path(working_dir)
+    else:
+        base_dir = Path.cwd()
+
+    # Resolve file path relative to base directory
+    file_path = base_dir / path
 
     # Security: Ensure resolved path is within project
     try:
         file_path = file_path.resolve()
-        Path.cwd().resolve()  # Ensure we're comparing absolute paths
+        base_dir_resolved = base_dir.resolve()
 
-        if not str(file_path).startswith(str(Path.cwd().resolve())):
+        if not str(file_path).startswith(str(base_dir_resolved)):
             raise HTTPException(
                 status_code=403, detail="Path outside project directory"
             )

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from api import jobs_router, logs_router, files_router, sse_router
+from api import jobs_router, logs_router, files_router, sse_router, artifacts_router
 
 # Configure logging
 logging.basicConfig(
@@ -58,6 +58,7 @@ app.include_router(jobs_router)
 app.include_router(logs_router)
 app.include_router(files_router)
 app.include_router(sse_router)
+app.include_router(artifacts_router)
 
 
 @app.get("/")

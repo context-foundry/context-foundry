@@ -171,6 +171,7 @@ class Runner:
                     working_directory=working_dir,
                     timeout_minutes=timeout_minutes,
                     additional_flags=additional_flags,
+                    job_id=job.id,
                 )
 
                 task_id = delegation_result.get("task_id")
@@ -215,6 +216,7 @@ class Runner:
         working_directory: str,
         timeout_minutes: float,
         additional_flags: Optional[str],
+        job_id: str,
     ) -> Dict[str, Any]:
         """Start async delegation"""
         result_json = delegate_to_claude_code_async_impl(
@@ -225,7 +227,12 @@ class Runner:
             active_tasks=self.active_tasks,
         )
 
-        return json.loads(result_json)
+        result = json.loads(result_json)
+        task_id = result.get("task_id")
+        if task_id and task_id in self.active_tasks:
+            self.active_tasks[task_id]["job_id"] = job_id
+
+        return result
 
     def _poll_for_completion(
         self,
@@ -601,28 +608,12 @@ print(json.dumps(result))
                     task_info = self.active_tasks[task_id]
                     process = task_info.get("process")
                     if process and process.poll() is None:
-                        # Process still running - kill it AND all child processes
                         logger.warning(
                             f"Killing autonomous build process for job {job_id}"
                         )
-                        try:
-                            # Kill child processes (claude subprocesses)
-                            import psutil
-
-                            try:
-                                parent = psutil.Process(process.pid)
-                                children = parent.children(recursive=True)
-                                for child in children:
-                                    logger.info(f"Killing child process {child.pid}")
-                                    child.kill()
-                            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                                pass
-
-                            # Kill main process
-                            process.kill()
-                            process.wait(timeout=10)
-                        except Exception as e:
-                            logger.error(f"Failed to kill process: {e}")
+                        self._kill_process_tree(
+                            process, f"autonomous build for job {job_id}"
+                        )
 
                     # Remove from active tasks
                     del self.active_tasks[task_id]
@@ -937,6 +928,74 @@ print(json.dumps(result))
                 None,
             )
 
+    def terminate_job_processes(self, job_id: str):
+        """
+        Force-terminate any tracked subprocess associated with a job.
+
+        Called when a job times out or is cancelled so we do not leave
+        rogue claude/runner processes lingering in the background.
+        """
+        tasks_for_job = [
+            (task_id, task_info)
+            for task_id, task_info in list(self.active_tasks.items())
+            if task_info.get("job_id") == job_id
+        ]
+
+        if not tasks_for_job:
+            logger.debug(f"No active tasks found for job {job_id} to terminate")
+            return
+
+        logger.info(
+            f"Terminating {len(tasks_for_job)} active task(s) associated with job {job_id}"
+        )
+
+        for task_id, task_info in tasks_for_job:
+            process = task_info.get("process")
+            if process and process.poll() is None:
+                self._kill_process_tree(process, f"job {job_id} task {task_id}")
+
+            self.active_tasks.pop(task_id, None)
+
+    def _kill_process_tree(self, process: subprocess.Popen, description: str):
+        """
+        Terminate a subprocess and any children to avoid orphans.
+        """
+        if process.poll() is not None:
+            return
+
+        logger.info(f"Terminating subprocess for {description} (PID {process.pid})")
+
+        # Kill child processes first so claude sessions do not linger
+        try:
+            import psutil
+
+            try:
+                parent = psutil.Process(process.pid)
+                for child in parent.children(recursive=True):
+                    logger.info(
+                        f"Terminating child process {child.pid} for {description}"
+                    )
+                    child.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        except ImportError:
+            logger.debug("psutil not available, skipping child process termination")
+        except Exception as e:
+            logger.warning(f"Failed to enumerate child processes: {e}")
+
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+            logger.info(f"{description} terminated gracefully")
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                f"{description} did not terminate after SIGTERM, sending SIGKILL"
+            )
+            process.kill()
+            process.wait(timeout=2)
+        except Exception as e:
+            logger.error(f"Failed to terminate {description}: {e}")
+
     def cleanup_active_tasks(self):
         """
         Kill all active subprocess tasks
@@ -952,25 +1011,7 @@ print(json.dumps(result))
         for task_id, task_info in list(self.active_tasks.items()):
             process = task_info.get("process")
             if process and process.poll() is None:
-                # Process still running - kill it
-                logger.info(
-                    f"Terminating subprocess for task {task_id} (PID {process.pid})"
-                )
-                try:
-                    process.terminate()
-                    # Give it 5 seconds to terminate gracefully
-                    try:
-                        process.wait(timeout=5)
-                        logger.info(f"Task {task_id} terminated gracefully")
-                    except subprocess.TimeoutExpired:
-                        # Still running after SIGTERM - force kill
-                        logger.warning(
-                            f"Task {task_id} did not terminate, sending SIGKILL"
-                        )
-                        process.kill()
-                        process.wait(timeout=2)
-                except Exception as e:
-                    logger.error(f"Failed to kill process for task {task_id}: {e}")
+                self._kill_process_tree(process, f"task {task_id}")
 
         # Clear all active tasks
         self.active_tasks.clear()

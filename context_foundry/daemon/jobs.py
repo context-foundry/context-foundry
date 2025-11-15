@@ -193,6 +193,18 @@ class JobManager:
             completed_at=datetime.now(),
         )
 
+        # Terminate any active subprocess for this job
+        if job.status == JobStatus.RUNNING and self.runner:
+            terminate_fn = getattr(self.runner, "terminate_job_processes", None)
+            if callable(terminate_fn):
+                try:
+                    terminate_fn(job_id)
+                except Exception as terminate_error:
+                    logger.error(
+                        f"Failed to terminate running processes for job {job_id}: {terminate_error}",
+                        exc_info=True,
+                    )
+
         # Emit log
         log = LogEntry.create(
             job_id=job_id,
@@ -442,8 +454,10 @@ class JobManager:
             if self.runner is None:
                 raise RuntimeError("No runner configured for JobManager")
 
-            # Get timeout from job params (default to 120 minutes)
-            timeout_minutes = job.params.get("timeout_minutes", 120)
+            # Get timeout from job params (default from config)
+            timeout_minutes = job.params.get(
+                "timeout_minutes", self.config.default_job_timeout_minutes
+            )
             timeout_seconds = timeout_minutes * 60
 
             # Execute runner in a thread with timeout
@@ -471,6 +485,22 @@ class JobManager:
                 logger.error(
                     f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
                 )
+
+                # Attempt to terminate any tracked subprocesses
+                if self.runner:
+                    terminate_fn = getattr(self.runner, "terminate_job_processes", None)
+                    if callable(terminate_fn):
+                        try:
+                            terminate_fn(job_id)
+                        except Exception as terminate_error:
+                            logger.error(
+                                f"Failed to terminate processes for timed-out job {job_id}: {terminate_error}",
+                                exc_info=True,
+                            )
+
+                # Give the runner thread a moment to unwind after termination
+                thread.join(timeout=5)
+
                 # Note: Can't forcefully kill the thread, but it's daemon so it will die when process exits
                 # The worker will be freed to process other jobs
                 raise RuntimeError(
@@ -513,6 +543,11 @@ class JobManager:
             # Retrieve job again to get current retry count
             job = self.store.get_job(job_id)
             if not job:
+                return
+
+            # If job was cancelled mid-run, skip retries and keep status
+            if job.status == JobStatus.CANCELLED:
+                logger.info(f"Job {job_id} was cancelled; skipping retries")
                 return
 
             # Check if we should retry

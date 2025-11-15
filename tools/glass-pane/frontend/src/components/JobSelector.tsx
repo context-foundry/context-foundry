@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useJob } from '../contexts/JobContext';
 import { Job } from '../types/job';
 
-type JobFilter = 'all' | 'running' | 'completed' | 'failed';
+type JobFilter = 'all' | 'running' | 'succeeded' | 'failed';
 
 export default function JobSelector() {
   const { currentJob, setCurrentJob, setIsLoading, setError } = useJob();
@@ -57,7 +57,7 @@ export default function JobSelector() {
     <div className="flex items-center gap-4">
       {/* Filter Tabs */}
       <div className="flex gap-2">
-        {(['running', 'completed', 'all'] as JobFilter[]).map(f => (
+        {(['running', 'succeeded', 'all'] as JobFilter[]).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -67,7 +67,7 @@ export default function JobSelector() {
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === 'succeeded' ? 'Completed' : f.charAt(0).toUpperCase() + f.slice(1)}
           </button>
         ))}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useJob } from '../contexts/JobContext';
 import { useSSE } from '../hooks/useSSE';
 import { usePhase } from '../hooks/usePhase';
@@ -7,19 +7,33 @@ import { useLogs } from '../hooks/useLogs';
 import { SSEEvent } from '../types/events';
 import JobSelector from './JobSelector';
 import PhasePipeline from './PhasePipeline';
+import PhaseBreakdown from './PhaseBreakdown';
 import MetricsPanel from './MetricsPanel';
 import FileTree from './FileTree';
 import CodePreview from './CodePreview';
 import LogFeed from './LogFeed';
-import ThoughtProcess from './ThoughtProcess';
+import MarkdownViewer from './MarkdownViewer';
 import MobileNav from './MobileNav';
+import GridLayout from 'react-grid-layout';
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 
 type MobileView = 'phase' | 'files' | 'logs' | 'code';
 
+const defaultLayout = [
+  { i: 'metrics', x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
+  { i: 'pipeline', x: 3, y: 0, w: 9, h: 3, minW: 4, minH: 2 },
+  { i: 'phase-breakdown', x: 0, y: 3, w: 3, h: 6, minW: 2, minH: 4 },
+  { i: 'file-tree', x: 0, y: 9, w: 3, h: 6, minW: 2, minH: 4 },
+  { i: 'artifacts', x: 3, y: 3, w: 4, h: 12, minW: 3, minH: 6 },
+  { i: 'code-preview', x: 7, y: 3, w: 5, h: 6, minW: 3, minH: 4 },
+  { i: 'logs', x: 7, y: 9, w: 5, h: 6, minW: 3, minH: 4 },
+];
+
 export default function Dashboard() {
-  const { currentJob } = useJob();
+  const { currentJob, setCurrentJob, refreshJob } = useJob();
   const { phaseInfo, updatePhase } = usePhase();
-  const { addFile, setFiles } = useFileTree([]);
+  const { addFile, setFiles, visibleNodes, toggleDirectory, collapseAll, searchQuery, setSearchQuery } = useFileTree([]);
   const { addLogs } = useLogs(currentJob?.id || null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>('phase');
@@ -28,9 +42,14 @@ export default function Dashboard() {
     duration: 0,
     files: 0,
   });
+  const [completedPhases, setCompletedPhases] = useState<import('../types/job').Phase[]>([]);
+  const [layout, setLayout] = useState(() => {
+    const saved = localStorage.getItem('dashboard-layout');
+    return saved ? JSON.parse(saved) : defaultLayout;
+  });
 
   // Handle SSE events
-  const handleSSEEvent = (event: SSEEvent) => {
+  const handleSSEEvent = useCallback((event: SSEEvent) => {
     switch (event.type) {
       case 'phase_update': {
         const phaseData = event.data as import('../types/events').PhaseUpdateData;
@@ -57,14 +76,32 @@ export default function Dashboard() {
         setMetrics(metricsData);
         break;
       }
-      case 'job_status_change':
-        // Handle job status change
+      case 'job_status_change': {
+        const statusData = event.data as import('../types/events').JobStatusChangeData;
+        // Update current job status and refresh full job data
+        if (currentJob) {
+          setCurrentJob({
+            ...currentJob,
+            status: statusData.status,
+          });
+          // Re-fetch complete job data to update all metrics and phase info
+          refreshJob();
+        }
         break;
+      }
+      case 'markdown_update': {
+        const markdownData = event.data as import('../types/events').MarkdownUpdateData;
+        // Notify MarkdownViewer component to refresh
+        if ((window as any).__markdownViewerHandler) {
+          (window as any).__markdownViewerHandler(markdownData);
+        }
+        break;
+      }
       case 'heartbeat':
         // Connection is alive
         break;
     }
-  };
+  }, [updatePhase, addFile, setMetrics, addLogs, currentJob, setCurrentJob, refreshJob]);
 
   useSSE(currentJob?.id || null, handleSSEEvent);
 
@@ -87,8 +124,57 @@ export default function Dashboard() {
           description: '',
         });
       }
+
+      // Fetch completed phases for pipeline display
+      if (currentJob.status === 'succeeded' || currentJob.status === 'failed' || currentJob.status === 'cancelled') {
+        fetch(`/api/jobs/${currentJob.id}/phases/detailed`)
+          .then(res => res.json())
+          .then(data => {
+            const phases: import('../types/job').Phase[] = [];
+            if (data.phases) {
+              data.phases.forEach((p: { name: string }) => {
+                if (p.name.includes('scout')) phases.push('Scout' as import('../types/job').Phase);
+                else if (p.name.includes('architect')) phases.push('Architect' as import('../types/job').Phase);
+                else if (p.name.includes('builder')) phases.push('Builder' as import('../types/job').Phase);
+                else if (p.name.includes('test')) phases.push('Test' as import('../types/job').Phase);
+              });
+            }
+            // Remove duplicates
+            setCompletedPhases([...new Set(phases)]);
+          })
+          .catch(err => console.error('Failed to fetch phase details:', err));
+      }
     }
   }, [currentJob, setFiles, updatePhase]);
+
+  const handleLayoutChange = (newLayout: any) => {
+    setLayout(newLayout);
+    localStorage.setItem('dashboard-layout', JSON.stringify(newLayout));
+  };
+
+  const resetLayout = () => {
+    setLayout(defaultLayout);
+    localStorage.setItem('dashboard-layout', JSON.stringify(defaultLayout));
+  };
+
+  const autoArrangeLayout = () => {
+    // Optimal layout for typical workflow:
+    // Top: Status overview (metrics + pipeline)
+    // Left: Navigation and breakdown (phase-breakdown + file-tree)
+    // Center: Main content (artifacts)
+    // Right: Code and logs (code-preview + logs)
+    const optimizedLayout = [
+      { i: 'metrics', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
+      { i: 'pipeline', x: 3, y: 0, w: 9, h: 2, minW: 4, minH: 2 },
+      { i: 'phase-breakdown', x: 0, y: 2, w: 3, h: 6, minW: 2, minH: 4 },
+      { i: 'file-tree', x: 0, y: 8, w: 3, h: 6, minW: 2, minH: 4 },
+      { i: 'artifacts', x: 3, y: 2, w: 5, h: 12, minW: 3, minH: 6 },
+      { i: 'code-preview', x: 8, y: 2, w: 4, h: 6, minW: 3, minH: 4 },
+      { i: 'logs', x: 8, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+    ];
+    setLayout(optimizedLayout);
+    localStorage.setItem('dashboard-layout', JSON.stringify(optimizedLayout));
+  };
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -102,42 +188,143 @@ export default function Dashboard() {
               </h1>
               <p className="text-sm text-gray-400">Context Foundry Build Monitor</p>
             </div>
-            <JobSelector />
+            <div className="flex items-center gap-4">
+              <button
+                onClick={autoArrangeLayout}
+                className="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 rounded-lg transition-colors"
+                title="Auto arrange tiles optimally"
+              >
+                Auto Arrange
+              </button>
+              <button
+                onClick={resetLayout}
+                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition-colors"
+                title="Reset dashboard layout"
+              >
+                Reset Layout
+              </button>
+              <JobSelector />
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Desktop Layout (>1024px) */}
+      {/* Desktop Layout (>1024px) - Draggable Grid */}
       <div className="hidden lg:block">
         <div className="max-w-[1920px] mx-auto p-4">
-          <div className="grid grid-cols-12 gap-4">
-            {/* Left Column - Metrics */}
-            <div className="col-span-3 space-y-4">
-              <MetricsPanel
-                tokensUsed={metrics.tokens_used}
-                duration={metrics.duration}
-                totalFiles={metrics.files}
-                status={currentJob?.status || 'unknown'}
-              />
-              <ThoughtProcess jobId={currentJob?.id || null} />
+          <GridLayout
+            className="layout"
+            layout={layout}
+            cols={12}
+            rowHeight={50}
+            width={1880}
+            onLayoutChange={handleLayoutChange}
+            draggableHandle=".drag-handle"
+            compactType={null}
+            preventCollision={false}
+          >
+            <div key="metrics" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Metrics</span>
+              </div>
+              <div className="p-4 overflow-auto flex-1">
+                <MetricsPanel
+                  tokensUsed={metrics.tokens_used}
+                  duration={metrics.duration}
+                  totalFiles={metrics.files}
+                  status={currentJob?.status || 'unknown'}
+                />
+              </div>
             </div>
 
-            {/* Middle Column - Phase & File Tree */}
-            <div className="col-span-4 space-y-4">
-              <PhasePipeline
-                currentPhase={phaseInfo.phase}
-                status={phaseInfo.status}
-                description={phaseInfo.description}
-              />
-              <FileTree onFileSelect={setSelectedFile} />
+            <div key="pipeline" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Pipeline</span>
+              </div>
+              <div className="p-4 overflow-auto flex-1">
+                <PhasePipeline
+                  currentPhase={phaseInfo.phase}
+                  status={phaseInfo.status}
+                  description={phaseInfo.description}
+                  jobStatus={currentJob?.status}
+                  completedPhases={completedPhases}
+                />
+              </div>
             </div>
 
-            {/* Right Column - Code & Logs */}
-            <div className="col-span-5 space-y-4">
-              <CodePreview filePath={selectedFile} />
-              <LogFeed jobId={currentJob?.id || null} />
+            <div key="phase-breakdown" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Phase Breakdown</span>
+              </div>
+              <div className="overflow-auto flex-1">
+                <PhaseBreakdown jobId={currentJob?.id || null} />
+              </div>
             </div>
-          </div>
+
+            <div key="file-tree" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">File Tree</span>
+              </div>
+              <div className="overflow-auto flex-1">
+                <FileTree
+                  onFileSelect={setSelectedFile}
+                  visibleNodes={visibleNodes}
+                  toggleDirectory={toggleDirectory}
+                  collapseAll={collapseAll}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                />
+              </div>
+            </div>
+
+            <div key="artifacts" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Artifacts</span>
+              </div>
+              <div className="overflow-auto flex-1">
+                <MarkdownViewer jobId={currentJob?.id || null} />
+              </div>
+            </div>
+
+            <div key="code-preview" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Code Preview</span>
+              </div>
+              <div className="overflow-auto flex-1">
+                <CodePreview filePath={selectedFile} />
+              </div>
+            </div>
+
+            <div key="logs" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
+                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                </svg>
+                <span className="text-sm font-medium text-gray-400">Logs</span>
+              </div>
+              <div className="overflow-auto flex-1">
+                <LogFeed jobId={currentJob?.id || null} />
+              </div>
+            </div>
+          </GridLayout>
         </div>
       </div>
 
@@ -156,8 +343,18 @@ export default function Dashboard() {
                 currentPhase={phaseInfo.phase}
                 status={phaseInfo.status}
                 description={phaseInfo.description}
+                jobStatus={currentJob?.status}
+                completedPhases={completedPhases}
               />
-              <FileTree onFileSelect={setSelectedFile} />
+              <PhaseBreakdown jobId={currentJob?.id || null} />
+              <FileTree
+                onFileSelect={setSelectedFile}
+                visibleNodes={visibleNodes}
+                toggleDirectory={toggleDirectory}
+                collapseAll={collapseAll}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+              />
             </div>
             <div className="space-y-4">
               <CodePreview filePath={selectedFile} />
@@ -182,10 +379,22 @@ export default function Dashboard() {
                 currentPhase={phaseInfo.phase}
                 status={phaseInfo.status}
                 description={phaseInfo.description}
+                jobStatus={currentJob?.status}
+                completedPhases={completedPhases}
               />
+              <PhaseBreakdown jobId={currentJob?.id || null} />
             </div>
           )}
-          {mobileView === 'files' && <FileTree onFileSelect={setSelectedFile} />}
+          {mobileView === 'files' && (
+            <FileTree
+              onFileSelect={setSelectedFile}
+              visibleNodes={visibleNodes}
+              toggleDirectory={toggleDirectory}
+              collapseAll={collapseAll}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+            />
+          )}
           {mobileView === 'logs' && <LogFeed jobId={currentJob?.id || null} />}
           {mobileView === 'code' && <CodePreview filePath={selectedFile} />}
         </div>

@@ -10,6 +10,7 @@ export type SSEEventType =
   | 'log_batch'
   | 'metrics_update'
   | 'job_status_change'
+  | 'markdown_update'
   | 'heartbeat'
 
 export interface PhaseUpdateData {
@@ -34,11 +35,19 @@ export interface MetricsUpdateData {
 }
 
 export interface JobStatusChangeData {
-  status: 'running' | 'completed' | 'failed'
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled'
 }
 
 export interface HeartbeatData {
   timestamp: string
+}
+
+export interface MarkdownUpdateData {
+  name: string
+  path: string
+  size: number
+  modified: number
+  is_new: boolean
 }
 
 export type SSEEventData =
@@ -47,6 +56,7 @@ export type SSEEventData =
   | LogBatchData
   | MetricsUpdateData
   | JobStatusChangeData
+  | MarkdownUpdateData
   | HeartbeatData
 
 export interface SSEEvent {

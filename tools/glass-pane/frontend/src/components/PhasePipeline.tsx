@@ -6,6 +6,8 @@ interface PhasePipelineProps {
   currentPhase: Phase | null;
   status: PhaseStatus;
   description: string;
+  jobStatus?: string;
+  completedPhases?: Phase[];
 }
 
 const PHASES: Phase[] = [Phase.Scout, Phase.Architect, Phase.Builder, Phase.Test, Phase.Deploy];
@@ -18,8 +20,17 @@ const PHASE_ICONS: Record<Phase, string> = {
   [Phase.Deploy]: '🚀',
 };
 
-export default function PhasePipeline({ currentPhase, status, description }: PhasePipelineProps) {
+export default function PhasePipeline({ currentPhase, status, description, jobStatus, completedPhases = [] }: PhasePipelineProps) {
   const getPhaseStatus = (phase: Phase): PhaseStatus => {
+    // If job is completed, use completedPhases list
+    if (jobStatus === 'succeeded' || jobStatus === 'failed' || jobStatus === 'cancelled') {
+      if (completedPhases.includes(phase)) {
+        return jobStatus === 'failed' ? PhaseStatus.Failed : PhaseStatus.Completed;
+      }
+      return PhaseStatus.Pending;
+    }
+
+    // Otherwise use current phase logic for running jobs
     if (!currentPhase) return PhaseStatus.Pending;
 
     const currentIndex = PHASES.indexOf(currentPhase);
