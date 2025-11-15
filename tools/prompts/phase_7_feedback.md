@@ -273,7 +273,112 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    "pattern_merge_error": "<error_message>"
    ```
 
-10. Share patterns to community (AUTOMATIC):
+10. Update Skill Metrics (Self-Learning):
+
+   **Purpose:** Track success rates of reused skills to improve future recommendations.
+
+   **Step A: Check if skills were used or captured**
+
+   Read these files to find skill usage:
+   - `.context-foundry/scout-report.md` - Check "Reusable Skills Found" section
+   - `.context-foundry/test-report.md` - Check "Captured Skills" section (if tests passed)
+
+   **Step B: Update metrics for reused skills**
+
+   For each skill that was REUSED by Scout:
+   ```python
+   # Get skill ID from scout-report.md (e.g., "skill-auth-jwt-001")
+   # Determine if build succeeded (check test-final-report.md status)
+
+   update_skill_metrics(
+       skill_id="skill-auth-jwt-001",  # From scout report
+       project_name="{project_name}",   # Current project name
+       success=true/false                # Build final status
+   )
+   ```
+
+   **When to mark as success:**
+   - Tests PASSED (status = PASSED in test-final-report.md)
+   - Skill implementation worked without modification
+   - No issues traced back to the reused skill
+
+   **When to mark as failure:**
+   - Tests FAILED and issue was traced to the skill
+   - Skill required significant modifications
+   - Skill caused build errors
+
+   **Step C: Track new skills captured**
+
+   For each skill CAPTURED by Test phase (from test-report.md):
+   - No metric update needed (success_rate starts at 0.0)
+   - Will be updated when first reused in future builds
+   - Log the skill IDs for reference
+
+   **Step D: Update session-summary.json**
+
+   Add skills tracking section:
+   ```json
+   {
+     ...,
+     "skills": {
+       "reused_skills": [
+         {
+           "skill_id": "skill-auth-jwt-001",
+           "title": "JWT Authentication with FastAPI",
+           "success": true,
+           "updated_success_rate": 0.85
+         }
+       ],
+       "captured_skills": [
+         {
+           "skill_id": "skill-db-postgres-pool-002",
+           "title": "PostgreSQL Connection Pool",
+           "category": "database"
+         }
+       ],
+       "total_skills_reused": 2,
+       "total_skills_captured": 3,
+       "skill_metrics_updated": true
+     }
+   }
+   ```
+
+   **Example workflow:**
+
+   ```markdown
+   # From scout-report.md:
+   ## Reusable Skills Found
+   1. **JWT Authentication** (skill-auth-jwt-001)
+   2. **Redis Caching** (skill-cache-redis-003)
+
+   # Build outcome: Tests PASSED ✅
+
+   # Update metrics:
+   update_skill_metrics(
+       skill_id="skill-auth-jwt-001",
+       project_name="my-api-project",
+       success=true  # Tests passed, skill worked!
+   )
+
+   update_skill_metrics(
+       skill_id="skill-cache-redis-003",
+       project_name="my-api-project",
+       success=true  # Tests passed, skill worked!
+   )
+
+   # Result:
+   # - skill-auth-jwt-001 success_rate: 0.75 → 0.80 (4/5 successes)
+   # - skill-cache-redis-003 success_rate: 0.67 → 0.75 (3/4 successes)
+   ```
+
+   **Important notes:**
+   - Only update metrics for skills that were REUSED (from Scout)
+   - New skills captured in Test have success_rate=0.0 initially
+   - Metrics update is non-blocking (if it fails, log but continue)
+   - Success rates improve over time as skills prove valuable
+   - Skills with success_rate < 0.5 after 10+ uses should be reviewed/removed
+
+11. Share patterns to community (AUTOMATIC):
 
    **Purpose:** Automatically contribute your learnings to the global Context Foundry community
    so everyone benefits from this build's patterns.
@@ -323,7 +428,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - You authenticated gh once (one-time setup)
    - Patterns are reviewed automatically before merge (validation workflow)
 
-11. **Generate Context Budget Report (MANDATORY):**
+12. **Generate Context Budget Report (MANDATORY):**
 
    Create comprehensive context budget analysis report showing how context window was utilized throughout the build.
 
@@ -366,7 +471,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
 
    **Note:** Report generation is non-fatal - if it fails, build continues successfully.
 
-12. Learning accumulation (GLOBAL - over time across ALL projects):
+13. Learning accumulation (GLOBAL - over time across ALL projects):
 
    As more builds complete (from ANY project):
    - GLOBAL pattern library grows with proven solutions from all builds
@@ -388,7 +493,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - Track average build duration (should stabilize/decrease globally)
    - Track pattern effectiveness (how often each pattern prevents issues)
 
-13. Update phase status (REQUIRED LAST STEP):
+14. Update phase status (REQUIRED LAST STEP):
     Update .context-foundry/current-phase.json:
     {
       "current_phase": "Feedback",

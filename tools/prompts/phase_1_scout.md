@@ -76,6 +76,109 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    "⚠️ CORS Risk: ES6 modules fail from file:// - Include dev server in architecture"
    (This learning comes from ANY past browser app build, not just this project)
 
+**REUSABLE SKILLS CHECK:**
+
+   **Before researching from scratch, search for existing implementations!**
+
+   Context Foundry has a growing library of reusable skills - proven code implementations
+   that have been successfully used in past builds. Use the `search_skills()` MCP tool to
+   find existing solutions before implementing from zero.
+
+   **When to search for skills:**
+   - Any common functionality (auth, database, API patterns, testing)
+   - Technology-specific implementations (JWT, OAuth, connection pooling, etc.)
+   - Project-type patterns (FastAPI setup, React components, Docker configs)
+
+   **Search Strategy:**
+
+   1. **Extract key technical requirements** from the task:
+      - What functionality is needed? (e.g., "JWT authentication")
+      - What technology/framework? (e.g., "FastAPI", "React", "Express")
+      - What specific features? (e.g., "token refresh", "password hashing")
+
+   2. **Search for matching skills:**
+      ```python
+      search_skills(
+          query="JWT authentication FastAPI",
+          project_type="fastapi",  # Match project framework
+          min_success_rate=0.7     # Only high-confidence skills (≥70% success)
+      )
+      ```
+
+   3. **Evaluate results:**
+      - **If skills found with ≥70% success rate:**
+        ✅ **USE THE EXISTING SKILL!**
+        - Call `load_skill(skill_id)` to get full implementation code
+        - Include skill reference in scout-report.md
+        - Note any customizations needed for this specific project
+        - Flag skill for metrics update in Feedback phase
+
+        **Scout Report Section:**
+        ```markdown
+        ## Reusable Skills Identified
+
+        ### JWT Authentication (skl-jwt-auth-001)
+        - **Success Rate**: 85% (used successfully in 6 projects)
+        - **Will Reuse**: ✅ Yes
+        - **Implementation**: Complete JWT token generation, validation, and refresh
+        - **Customizations Needed**:
+          - Configure SECRET_KEY in .env for this project
+          - Update token expiry time (current: 24h, this project: 1h)
+        - **Files to Create**:
+          - auth/jwt_handler.py (from skill)
+          - auth/dependencies.py (from skill)
+          - auth/__init__.py
+        ```
+
+      - **If no skills found OR success rate <70%:**
+        ⚠️ **RESEARCH FROM SCRATCH**
+        - Proceed with normal Scout research workflow
+        - Flag this implementation as "New pattern - candidate for skill capture"
+        - Note in scout-report.md so Test phase knows to capture it
+
+        **Scout Report Section:**
+        ```markdown
+        ## Reusable Skills Check
+
+        No existing skills found for "JWT authentication FastAPI" with ≥70% success rate.
+
+        **Action**: Research and implement from scratch
+        **Capture**: ✅ Flag for skill capture after successful build
+        ```
+
+   **Example Searches:**
+
+   ```python
+   # Authentication
+   search_skills("JWT authentication", project_type="fastapi", min_success_rate=0.7)
+   search_skills("OAuth2 flow", project_type="react", min_success_rate=0.7)
+
+   # Database
+   search_skills("postgres connection pool", project_type="python", min_success_rate=0.7)
+   search_skills("database migrations", project_type="django", min_success_rate=0.7)
+
+   # API Patterns
+   search_skills("REST API CRUD", project_type="express", min_success_rate=0.7)
+   search_skills("pagination", project_type="fastapi", min_success_rate=0.7)
+
+   # Testing
+   search_skills("pytest fixtures", project_type="python", min_success_rate=0.7)
+   search_skills("integration tests", project_type="nodejs", min_success_rate=0.7)
+   ```
+
+   **Benefits of Reusing Skills:**
+   - ✅ **Faster builds** - Skip research, use proven implementations
+   - ✅ **Higher quality** - Code with 70%+ success rate is battle-tested
+   - ✅ **Consistency** - Same patterns across multiple projects
+   - ✅ **Learning** - Builds get smarter over time
+
+   **IMPORTANT:**
+   - Always search BEFORE researching
+   - Use min_success_rate=0.7 as threshold for confidence
+   - Load full skill details with `load_skill()` if planning to reuse
+   - Document skill reuse in scout-report.md for Architect phase
+   - Flag new implementations for capture by Test phase
+
 **MCP SERVER PROJECT CHECK:**
 
    If the task mentions ANY of these keywords:

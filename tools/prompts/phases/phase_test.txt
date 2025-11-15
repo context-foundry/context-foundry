@@ -114,6 +114,91 @@ Create `.context-foundry/test-report.md`:
 {If PASSED: All tests passed, ready for deployment}
 ```
 
+═══════════════════════════════════════════════════════════
+🧠 SKILL CAPTURE (WHEN TESTS PASS)
+═══════════════════════════════════════════════════════════
+
+**When to capture**: ONLY when test status = PASSED
+
+After successful testing, identify reusable implementations and save them as skills for future projects!
+
+**Step 1: Identify Reusable Components**
+
+Look for code that:
+- Solves a common problem (auth, DB connection, API client, testing setup)
+- Is well-tested (you just verified it works!)
+- Could be reused across projects (not project-specific logic)
+- Has clear dependencies and requirements
+
+**Good skill candidates:**
+- Authentication implementations (JWT, OAuth, session management)
+- Database configurations (connection pooling, migrations, ORM setup)
+- API client wrappers (with error handling, retries, rate limiting)
+- Testing utilities (fixtures, mocks, test data generators)
+- Deployment scripts (Docker configs, CI/CD workflows)
+- UI components (reusable React/Vue components with tests)
+- Utility functions (data validation, formatting, parsing)
+
+**Bad skill candidates:**
+- Project-specific business logic
+- One-off scripts
+- Hardcoded configurations
+- Untested code
+
+**Step 2: Capture Skills**
+
+Use the `save_skill` MCP tool for each reusable component:
+
+```python
+save_skill(
+    title="JWT Authentication with FastAPI",
+    description="Complete JWT auth implementation with login, token refresh, and protected routes. Includes password hashing, token generation, and middleware.",
+    implementation_code="""
+    # Paste the actual implementation code here
+    # Include imports, main classes/functions, and usage examples
+    """,
+    file_type="python",  # python, typescript, bash, dockerfile, yaml, etc.
+    project_type="fastapi",  # fastapi, react, nodejs, python, etc.
+    tags=["authentication", "jwt", "security", "fastapi"],
+    requirements=["fastapi", "python-jose[cryptography]", "passlib[bcrypt]"],
+    file_path="auth/jwt_auth.py",  # Relative path in project
+    example="""
+    # Usage example:
+    from auth.jwt_auth import create_access_token, verify_token
+
+    token = create_access_token(data={"sub": user.email})
+    payload = verify_token(token)
+    """
+)
+```
+
+**Step 3: Document Captured Skills**
+
+Add to your test-report.md (before "Conclusion"):
+
+```markdown
+## Captured Skills
+
+The following reusable components were identified and saved for future projects:
+
+1. **JWT Authentication** (`skill-auth-jwt-001`)
+   - Implementation: auth/jwt_auth.py
+   - Success rate: New (not yet used)
+   - Tags: authentication, jwt, security, fastapi
+
+2. **PostgreSQL Connection Pool** (`skill-db-postgres-pool-001`)
+   - Implementation: db/postgres.py
+   - Success rate: New (not yet used)
+   - Tags: database, postgresql, connection-pool
+```
+
+**Important:**
+- Only capture skills when tests PASS
+- Each skill should be self-contained
+- Include all dependencies in `requirements`
+- Provide working usage examples
+- Use descriptive tags for searchability
+
 **PHASE TRACKING (COMPLETE):**
 ```bash
 python3 tools/use_baml.py update-phase \
