@@ -151,13 +151,13 @@ See [docs/REUSABLE_SKILLS.md](docs/REUSABLE_SKILLS.md) for details.
 ### Code Sandbox - In-Execution Data Filtering
 **Process datasets, return only filtered results**
 
-Implements Anthropic's **in-execution data filtering** pattern for **98-99.9% token savings** on data-heavy workflows (measured):
+Implements Anthropic's **in-execution data filtering** pattern for **98-99.9% token savings** on data-heavy workflows (estimated via tiktoken):
 
 - **Filter Before Return**: Process 2,000 rows, return only 5 matching results (99.8% reduction)
-- **Secure Execution**: Isolated subprocess with timeout and memory limits
+- **Secure Execution**: AST-based import validation, subprocess isolation, timeout and memory limits
 - **Whitelist-Only Imports**: Only json, math, datetime, re, itertools, functools, collections, statistics, random allowed
 - **File I/O Blocked**: open() calls rejected, preventing escapes
-- **Measured Savings**: 80,509 → 191 tokens (99.8% reduction - see tests/test_sandbox_integration.py)
+- **Estimated Savings**: 107,335 → 262 tokens (99.8% reduction - see tests/test_sandbox_integration.py)
 
 **Example workflow:**
 
@@ -172,7 +172,7 @@ execute_sandbox_code(
 )
 
 # Result: Only 5 rows enter agent context instead of 2,000!
-# Token savings: 99.8% reduction (measured)
+# Token savings: 99.8% reduction (estimated via tiktoken)
 ```
 
 **Limitations**: Dataset size limited to ~2,000-5,000 rows (subprocess argument buffer). No numpy/pandas. See docs for workarounds.

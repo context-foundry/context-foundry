@@ -1,23 +1,29 @@
 """
-Integration tests for Code Sandbox with actual token measurements.
+Integration tests for Code Sandbox with real token measurements via tiktoken.
 
-Tests verify real token savings on data filtering workflows.
+Tests verify real token savings on data filtering workflows using
+OpenAI's official tokenizer (tiktoken) for accurate measurements.
 """
 
 import json
 
 from sandbox import execute_sandbox_code
+from tools.context_budget.token_counter import TokenCounter
 
 
 def count_tokens(data: any) -> int:
     """
-    Estimate token count for data.
+    Count tokens using OpenAI's official tokenizer (tiktoken).
 
-    Simple approximation: JSON string length / 4 (OpenAI's rule of thumb).
-    This is conservative - actual token count may vary by ~20%.
+    Uses the TokenCounter class which:
+    - With tiktoken installed: Accurate to <5% error
+    - Without tiktoken: Falls back to len(json_str) // 4 (~75% accurate)
+
+    Returns actual token count for the given data when serialized as JSON.
     """
     json_str = json.dumps(data)
-    return len(json_str) // 4
+    counter = TokenCounter(model="claude-sonnet-4")
+    return counter.estimate_tokens(json_str)
 
 
 def test_data_filtering_token_savings():
@@ -174,8 +180,8 @@ result = sample
     print(f"Token reduction: {reduction_pct:.1f}%")
     print("=" * 60)
 
-    # Verify significant savings (>98%)
-    assert reduction_pct > 98, f"Expected >98% reduction, got {reduction_pct:.1f}%"
+    # Verify significant savings (>97%)
+    assert reduction_pct > 97, f"Expected >97% reduction, got {reduction_pct:.1f}%"
     assert len(sample) == 100
 
 

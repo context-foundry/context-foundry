@@ -2,7 +2,7 @@
 
 **Pattern from**: [Anthropic's Code Execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp)
 
-Context Foundry implements **in-execution data filtering** - allowing agents to process datasets and return only filtered results, achieving **98-99.9% token savings** on data-heavy workflows (measured).
+Context Foundry implements **in-execution data filtering** - allowing agents to process datasets and return only filtered results, achieving **98-99.9% token savings** on data-heavy workflows (estimated via tiktoken).
 
 ---
 
@@ -13,20 +13,20 @@ Context Foundry implements **in-execution data filtering** - allowing agents to 
 **Traditional Approach**:
 ```
 Agent: Fetch all 2,000 spreadsheet rows
-→ 2,000 rows loaded into context (~80,500 tokens)
+→ 2,000 rows loaded into context (~107,335 tokens via tiktoken)
 → Agent: Filter to pending rows
 → Returns 5 rows
 
-Cost: ~$0.16 per request
+Cost: ~$0.21 per request
 ```
 
 **Code Sandbox Approach**:
 ```
 Agent: Execute filtering code in sandbox
 → Code processes 2,000 rows internally
-→ Returns only 5 filtered rows (191 tokens)
+→ Returns only 5 filtered rows (262 tokens via tiktoken)
 
-Cost: ~$0.0004 per request (99.8% savings - measured!)
+Cost: ~$0.0005 per request (99.8% savings - estimated via tiktoken!)
 ```
 
 **Important Limitation**: Dataset size limited by subprocess argument buffer (~2,000-5,000 rows depending on row size). For larger datasets, use MCP tools to fetch and filter server-side, or implement file-based data passing.
@@ -70,7 +70,7 @@ execute_sandbox_code(
 )
 ```
 
-**Token Savings**: 80,509 tokens → 191 tokens (99.8% reduction - measured)
+**Token Savings**: 107,335 tokens → 262 tokens (99.8% reduction - estimated via tiktoken)
 
 ### 2. Aggregate Data
 
@@ -287,47 +287,47 @@ execute_sandbox_code(
 
 ---
 
-## Token Savings Examples (Measured)
+## Token Savings Examples (Estimated via tiktoken)
 
-All examples below are from `tests/test_sandbox_integration.py` with actual token measurements.
+All examples below are from `tests/test_sandbox_integration.py` with token counts estimated using OpenAI's tiktoken tokenizer (<5% error with tiktoken, ~75% accurate with fallback).
 
 ### Spreadsheet Filtering
 
 **Without Sandbox**:
 ```
-Load 2,000 rows → 80,509 tokens → ~$0.16
+Load 2,000 rows → 107,335 tokens → ~$0.21
 ```
 
 **With Sandbox**:
 ```
-Filter in sandbox → Return 5 rows → 191 tokens → ~$0.0004
-Savings: 99.8% (measured)
+Filter in sandbox → Return 5 rows → 262 tokens → ~$0.0005
+Savings: 99.8% (estimated via tiktoken)
 ```
 
 ### Transaction Aggregation
 
 **Without Sandbox**:
 ```
-Load 1,000 transactions → 37,023 tokens → ~$0.07
+Load 1,000 transactions → 53,014 tokens → ~$0.11
 ```
 
 **With Sandbox**:
 ```
-Aggregate in sandbox → Return summary (6 fields) → 34 tokens → ~$0.00007
-Savings: 99.9% (measured)
+Aggregate in sandbox → Return summary (6 fields) → 63 tokens → ~$0.0001
+Savings: 99.9% (estimated via tiktoken)
 ```
 
 ### Log Sampling
 
 **Without Sandbox**:
 ```
-Load 5,000 log entries → 173,160 tokens → ~$0.35
+Load 5,000 log entries → 219,002 tokens → ~$0.44
 ```
 
 **With Sandbox**:
 ```
-Sample in sandbox → Return 100 entries → 3,463 tokens → ~$0.007
-Savings: 98.0% (measured)
+Sample in sandbox → Return 100 entries → 4,385 tokens → ~$0.009
+Savings: 98.0% (estimated via tiktoken)
 ```
 
 ---
