@@ -148,6 +148,36 @@ Scout → Found "JWT Authentication" (success_rate=85%, 14 uses)
 
 See [docs/REUSABLE_SKILLS.md](docs/REUSABLE_SKILLS.md) for details.
 
+### Code Sandbox - In-Execution Data Filtering
+**Process large datasets, return only filtered results**
+
+Implements Anthropic's **in-execution data filtering** pattern for 98%+ token savings on data-heavy workflows:
+
+- **Filter Before Return**: Process 10,000 rows, return only 5 matching results
+- **Secure Execution**: Isolated subprocess with timeout and memory limits
+- **Forbidden Imports Blocked**: No `os`, `subprocess`, `eval`, network access
+- **Token Savings**: 150,000 → 2,000 tokens (98.7% reduction per Anthropic article)
+
+**Example workflow:**
+
+```python
+# Agent writes code that runs in sandbox
+execute_sandbox_code(
+    code='''
+    filtered = [row for row in data if row['status'] == 'pending']
+    result = filtered[:5]  # Only return 5 rows to agent
+    ''',
+    context={'data': fetch_10000_rows()}
+)
+
+# Result: Only 5 rows enter agent context instead of 10,000!
+# Token savings: 99.95% reduction
+```
+
+**Impact**: Agents can work with massive datasets without token bloat. Filter spreadsheets, aggregate logs, query databases - all while keeping context lean.
+
+See [docs/CODE_SANDBOX.md](docs/CODE_SANDBOX.md) for usage guide.
+
 ### Glass Pane Dashboard - Mission Control TUI
 **Your command center for autonomous AI development**
 

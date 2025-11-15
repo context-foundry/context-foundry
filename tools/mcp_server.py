@@ -1577,6 +1577,119 @@ def update_skill_metrics(skill_id: str, project_name: str, success: bool) -> str
         )
 
 
+# ============================================================================
+# CODE SANDBOX - In-Execution Data Filtering
+# ============================================================================
+# Implements Anthropic's in-execution data filtering pattern
+# https://www.anthropic.com/engineering/code-execution-with-mcp
+
+
+@mcp.tool()
+def execute_sandbox_code(
+    code: str,
+    context: dict = None,
+    timeout: int = 30,
+    max_memory_mb: int = 512,
+) -> str:
+    """
+    Execute Python code in secure sandbox for data filtering.
+
+    This implements Anthropic's in-execution data filtering pattern,
+    enabling agents to process large datasets and return only filtered
+    results. Achieves 98%+ token savings on data-heavy workflows.
+
+    **Use Case**: Process 10,000 spreadsheet rows, return only 5 matching rows
+    instead of loading all 10,000 into context.
+
+    **Security**: Isolated subprocess, timeout enforcement, forbidden imports blocked.
+
+    Args:
+        code: Python code to execute. Should set 'result' variable with output.
+        context: Dictionary of variables to make available in code (optional)
+        timeout: Maximum execution time in seconds (default: 30)
+        max_memory_mb: Maximum memory in megabytes (default: 512)
+
+    Returns:
+        JSON string with:
+            - success: bool (True if executed without errors)
+            - result: Any (the value of 'result' variable in code)
+            - stdout: str (captured print output)
+            - stderr: str (captured errors if any)
+
+    Examples:
+        # Filter large dataset
+        execute_sandbox_code(
+            code='''
+            filtered = [row for row in data if row['status'] == 'pending']
+            result = filtered[:5]  # Only return 5 rows
+            ''',
+            context={'data': fetch_10000_rows()}
+        )
+
+        # Aggregate data
+        execute_sandbox_code(
+            code='''
+            total = sum(row['amount'] for row in transactions)
+            result = {'total': total, 'count': len(transactions)}
+            ''',
+            context={'transactions': fetch_transactions()}
+        )
+
+        # Process and transform
+        execute_sandbox_code(
+            code='''
+            import json
+            import statistics
+            values = [float(row['price']) for row in items]
+            result = {
+                'mean': statistics.mean(values),
+                'median': statistics.median(values),
+                'count': len(values)
+            }
+            ''',
+            context={'items': fetch_items()}
+        )
+
+    Allowed imports:
+        json, math, datetime, re, itertools, functools, collections,
+        statistics, random
+
+    Forbidden operations:
+        import os, import subprocess, eval, exec, open, file I/O,
+        network access, __import__
+
+    **Token Savings Example** (from Anthropic article):
+        - Without sandbox: Load 10,000 rows into context (150,000 tokens)
+        - With sandbox: Return 5 filtered rows (2,000 tokens)
+        - Savings: 98.7% reduction
+    """
+    from tools.sandbox import execute_sandbox_code as sandbox_exec
+
+    try:
+        # Execute in sandbox
+        output = sandbox_exec(
+            code=code,
+            context=context,
+            timeout=timeout,
+            max_memory_mb=max_memory_mb,
+        )
+
+        return json.dumps(output, indent=2)
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "result": None,
+                "stdout": "",
+                "stderr": f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}",
+            },
+            indent=2,
+        )
+
+
 @mcp.tool()
 def codex_stats() -> str:
     """
