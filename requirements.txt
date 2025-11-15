@@ -23,3 +23,4 @@ watchdog>=3.0.0  # Monitor file system events for metrics collection
 # Note: This is a MINIMAL installation (~80MB total with BAML + Textual)
 # Previous versions included ~3-4GB of ML libraries that are no longer needed
 # See requirements-legacy.txt for the old v1.x Python CLI dependencies (deprecated)
+# See requirements-aws.txt for optional AWS integration dependencies (boto3)

@@ -22,6 +22,9 @@ from tools.version import get_version
 # Import Context Codex for knowledge management
 from context_foundry.codex import KnowledgeStore
 
+# Import S3 client for community pattern sync
+from context_foundry.storage import S3PatternClient
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context  # noqa: F401
@@ -804,6 +807,114 @@ def share_patterns_to_community(
         pattern_ids=pattern_ids,
         description=description,
     )
+
+
+# ========== S3 Pattern Sync Tools (AWS Integration) ==========
+
+
+@mcp.tool()
+def sync_patterns_to_s3(
+    pattern_type: str = "common-issues",
+    force: bool = False,
+) -> str:
+    """
+    Upload local patterns to S3 community repository.
+
+    Syncs patterns from ~/.context-foundry/patterns/ to
+    s3://bedrock-builder-kb-898587418237/community-patterns/
+
+    Args:
+        pattern_type: Type of pattern to upload ("common-issues", "scout-learnings",
+                     "architecture-patterns", "test-patterns", "mcp-server-patterns")
+        force: Force upload even if S3 version is newer
+
+    Returns:
+        JSON string with upload status and metadata
+
+    Examples:
+        # Upload common issues to S3
+        result = sync_patterns_to_s3("common-issues")
+
+        # Force upload even if conflicts exist
+        result = sync_patterns_to_s3("scout-learnings", force=True)
+    """
+    try:
+        client = S3PatternClient()
+        result = client.upload_pattern(pattern_type, force=force)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return json.dumps(
+            {"success": False, "error": f"S3 sync failed: {str(e)}"}, indent=2
+        )
+
+
+@mcp.tool()
+def pull_patterns_from_s3(
+    pattern_type: str = "common-issues",
+    force: bool = False,
+) -> str:
+    """
+    Download community patterns from S3 to local cache.
+
+    Downloads patterns from s3://bedrock-builder-kb-898587418237/community-patterns/
+    to ~/.context-foundry/patterns/
+
+    Args:
+        pattern_type: Type of pattern to download ("common-issues", "scout-learnings",
+                     "architecture-patterns", "test-patterns", "mcp-server-patterns")
+        force: Force download even if local version is newer
+
+    Returns:
+        JSON string with download status and metadata
+
+    Examples:
+        # Download latest common issues from S3
+        result = pull_patterns_from_s3("common-issues")
+
+        # Force download to overwrite local changes
+        result = pull_patterns_from_s3("architecture-patterns", force=True)
+    """
+    try:
+        client = S3PatternClient()
+        result = client.download_pattern(pattern_type, force=force)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return json.dumps(
+            {"success": False, "error": f"S3 download failed: {str(e)}"}, indent=2
+        )
+
+
+@mcp.tool()
+def list_s3_community_patterns(
+    pattern_type: Optional[str] = None,
+) -> str:
+    """
+    List available community patterns in S3.
+
+    Browses s3://bedrock-builder-kb-898587418237/community-patterns/ to see
+    what patterns are available for download.
+
+    Args:
+        pattern_type: Filter by specific pattern type (optional)
+
+    Returns:
+        JSON string with list of available patterns and metadata
+
+    Examples:
+        # List all community patterns
+        patterns = list_s3_community_patterns()
+
+        # List only common-issues patterns
+        patterns = list_s3_community_patterns("common-issues")
+    """
+    try:
+        client = S3PatternClient()
+        result = client.list_community_patterns(pattern_type=pattern_type)
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        return json.dumps(
+            {"success": False, "error": f"S3 list failed: {str(e)}"}, indent=2
+        )
 
 
 @mcp.resource("logs://latest")
@@ -1706,6 +1817,111 @@ def codex_stats() -> str:
     stats = store.get_stats()
 
     return json.dumps(stats, indent=2)
+
+
+@mcp.tool()
+def export_codex_to_patterns(
+    pattern_type: str = "all",
+    sync_to_s3: bool = True,
+) -> str:
+    """
+    Export Context Codex entries to legacy JSON pattern files and optionally sync to S3.
+
+    This bridges the gap between the modern codex.db database and the legacy JSON
+    pattern files that are synced to S3 and read by agents during builds.
+
+    After export, the patterns become available to:
+    - Scout/Architect/Builder agents (they read JSON files during builds)
+    - Community via S3 sync
+    - Pattern merging workflows
+
+    Args:
+        pattern_type: Type to export ("all", "issues", "patterns")
+        sync_to_s3: Whether to auto-sync exported files to S3 (default: True)
+
+    Returns:
+        JSON string with export and sync results
+
+    Examples:
+        # Export all codex entries and sync to S3
+        export_codex_to_patterns()
+
+        # Export only issues
+        export_codex_to_patterns("issues")
+
+        # Export without S3 sync
+        export_codex_to_patterns("all", sync_to_s3=False)
+    """
+    from tools.mcp_utils.codex_export import export_codex_to_patterns_impl
+
+    try:
+        # Export codex to JSON files
+        export_result = export_codex_to_patterns_impl(pattern_type)
+
+        if not export_result.get("success"):
+            return json.dumps(export_result, indent=2)
+
+        # Sync to S3 if requested
+        s3_results = []
+        if sync_to_s3:
+            try:
+                from context_foundry.storage import S3PatternClient
+
+                client = S3PatternClient()
+                if client.enabled:
+                    # Determine which files to sync based on what was exported
+                    files_to_sync = []
+                    if pattern_type in ("all", "issues"):
+                        files_to_sync.append("common-issues")
+                    if pattern_type in ("all", "patterns"):
+                        files_to_sync.append("architecture-patterns")
+
+                    for file_type in files_to_sync:
+                        s3_result = client.upload_pattern(file_type, force=True)
+                        s3_results.append(
+                            {
+                                "pattern_type": file_type,
+                                "success": s3_result.get("success"),
+                                "version_id": s3_result.get("version_id"),
+                                "s3_uri": s3_result.get("s3_uri"),
+                            }
+                        )
+                else:
+                    s3_results.append(
+                        {
+                            "warning": "S3 client not enabled (boto3 not installed)",
+                            "files_exported": "Files exported locally but not synced to S3",
+                        }
+                    )
+            except Exception as e:
+                s3_results.append({"s3_sync_error": str(e)})
+
+        # Build final result
+        result = {
+            "success": True,
+            "export": export_result,
+            "s3_sync": s3_results if sync_to_s3 else "Skipped (sync_to_s3=False)",
+            "message": f"{export_result.get('message', 'Export completed')}. "
+            + (
+                f"Synced {len(s3_results)} file(s) to S3."
+                if sync_to_s3 and s3_results
+                else ""
+            ),
+        }
+
+        return json.dumps(result, indent=2, default=str)
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
 
 
 def bootstrap_patterns_on_startup():

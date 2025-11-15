@@ -463,13 +463,42 @@ def merge_project_patterns_impl(
                 "details": save_response,
             }
 
-        return {
+        # Auto-sync to S3 (if enabled)
+        s3_sync_result = None
+        try:
+            from context_foundry.storage import S3PatternClient
+
+            client = S3PatternClient()
+            if client.enabled:
+                s3_sync_result = client.upload_pattern(pattern_type, force=False)
+                if not s3_sync_result.get("success"):
+                    # Log warning but don't fail the merge
+                    import logging
+
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"S3 auto-sync failed for {pattern_type}: {s3_sync_result.get('error')}"
+                    )
+        except Exception as e:
+            # Silently ignore S3 sync errors - don't break merge workflow
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"S3 auto-sync error for {pattern_type}: {e}")
+
+        result = {
             "status": "success",
             "message": f"Successfully merged {pattern_type} from project",
             "merge_stats": merge_stats,  # Keep nested for backward compatibility
             "global_file": save_response["pattern_file"],
             "project_file": str(project_file_path),
         }
+
+        # Add S3 sync status if available
+        if s3_sync_result:
+            result["s3_sync"] = s3_sync_result
+
+        return result
 
     except json.JSONDecodeError as e:
         return {
