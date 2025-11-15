@@ -149,14 +149,15 @@ Scout → Found "JWT Authentication" (success_rate=85%, 14 uses)
 See [docs/REUSABLE_SKILLS.md](docs/REUSABLE_SKILLS.md) for details.
 
 ### Code Sandbox - In-Execution Data Filtering
-**Process large datasets, return only filtered results**
+**Process datasets, return only filtered results**
 
-Implements Anthropic's **in-execution data filtering** pattern for 98%+ token savings on data-heavy workflows:
+Implements Anthropic's **in-execution data filtering** pattern for **98-99.9% token savings** on data-heavy workflows (measured):
 
-- **Filter Before Return**: Process 10,000 rows, return only 5 matching results
+- **Filter Before Return**: Process 2,000 rows, return only 5 matching results (99.8% reduction)
 - **Secure Execution**: Isolated subprocess with timeout and memory limits
-- **Forbidden Imports Blocked**: No `os`, `subprocess`, `eval`, network access
-- **Token Savings**: 150,000 → 2,000 tokens (98.7% reduction per Anthropic article)
+- **Whitelist-Only Imports**: Only json, math, datetime, re, itertools, functools, collections, statistics, random allowed
+- **File I/O Blocked**: open() calls rejected, preventing escapes
+- **Measured Savings**: 80,509 → 191 tokens (99.8% reduction - see tests/test_sandbox_integration.py)
 
 **Example workflow:**
 
@@ -167,14 +168,16 @@ execute_sandbox_code(
     filtered = [row for row in data if row['status'] == 'pending']
     result = filtered[:5]  # Only return 5 rows to agent
     ''',
-    context={'data': fetch_10000_rows()}
+    context={'data': fetch_2000_rows()}
 )
 
-# Result: Only 5 rows enter agent context instead of 10,000!
-# Token savings: 99.95% reduction
+# Result: Only 5 rows enter agent context instead of 2,000!
+# Token savings: 99.8% reduction (measured)
 ```
 
-**Impact**: Agents can work with massive datasets without token bloat. Filter spreadsheets, aggregate logs, query databases - all while keeping context lean.
+**Limitations**: Dataset size limited to ~2,000-5,000 rows (subprocess argument buffer). No numpy/pandas. See docs for workarounds.
+
+**Impact**: Agents can work with medium datasets without token bloat. Filter spreadsheets, aggregate logs, sample data - all while keeping context lean.
 
 See [docs/CODE_SANDBOX.md](docs/CODE_SANDBOX.md) for usage guide.
 

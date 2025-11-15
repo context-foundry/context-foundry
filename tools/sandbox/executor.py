@@ -117,9 +117,11 @@ class CodeSandbox:
         Raises:
             SandboxSecurityError: If code contains forbidden operations
         """
+        import re
+
         code_lower = code.lower()
 
-        # Check for forbidden imports
+        # Check for forbidden imports (explicit blacklist)
         for forbidden in FORBIDDEN_IMPORTS:
             if f"import {forbidden}" in code_lower or f"from {forbidden}" in code_lower:
                 raise SandboxSecurityError(
@@ -127,7 +129,18 @@ class CodeSandbox:
                     f"Only allowed: {', '.join(sorted(ALLOWED_IMPORTS))}"
                 )
 
-        # Check for dangerous builtins
+        # Extract all import statements and validate against whitelist
+        # Matches: import foo, from foo import bar, from foo.bar import baz
+        import_pattern = r"(?:^|;|\n)\s*(?:from\s+([a-zA-Z_][a-zA-Z0-9_]*)|import\s+([a-zA-Z_][a-zA-Z0-9_]*))"
+        for match in re.finditer(import_pattern, code, re.MULTILINE):
+            module = match.group(1) or match.group(2)
+            if module and module not in ALLOWED_IMPORTS:
+                raise SandboxSecurityError(
+                    f"Import '{module}' not in whitelist. "
+                    f"Only allowed: {', '.join(sorted(ALLOWED_IMPORTS))}"
+                )
+
+        # Check for dangerous builtins and file I/O
         dangerous_patterns = [
             "__import__",
             "eval(",
@@ -140,6 +153,8 @@ class CodeSandbox:
             "getattr(",
             "setattr(",
             "delattr(",
+            "open(",  # Block direct open() calls
+            "file(",  # Legacy file() builtin
         ]
 
         for pattern in dangerous_patterns:
@@ -361,11 +376,33 @@ result = filtered[:5]
     except SandboxSecurityError:
         print("✅ PASS: Blocked forbidden operation (eval)\n")
 
-    # Test 5: Timeout
-    print("Test 5: Timeout enforcement (1 second limit)")
+    # Test 5: Security - whitelist enforcement (numpy not allowed)
+    print("Test 5: Security - whitelist enforcement (numpy)")
+    try:
+        result = execute_sandbox_code(code="import numpy; result = 1")
+        print("❌ FAIL: Should have blocked numpy (not in whitelist)")
+    except SandboxSecurityError as e:
+        if "not in whitelist" in str(e):
+            print("✅ PASS: Blocked non-whitelisted import (numpy)\n")
+        else:
+            print(f"❌ FAIL: Wrong error: {e}\n")
+
+    # Test 6: Security - open() builtin blocked
+    print("Test 6: Security - open() file I/O blocked")
+    try:
+        result = execute_sandbox_code(code="result = open('/etc/passwd').read()")
+        print("❌ FAIL: Should have blocked open()")
+    except SandboxSecurityError as e:
+        if "open(" in str(e):
+            print("✅ PASS: Blocked open() builtin\n")
+        else:
+            print(f"❌ FAIL: Wrong error: {e}\n")
+
+    # Test 7: Timeout
+    print("Test 7: Timeout enforcement (1 second limit)")
     try:
         result = execute_sandbox_code(
-            code="import time; time.sleep(10); result = 'done'",
+            code="result = sum(range(10**9)); result = 'done'",  # Infinite loop alternative
             timeout=1,
         )
         print("❌ FAIL: Should have timed out")
@@ -375,13 +412,13 @@ result = filtered[:5]
         else:
             print(f"❌ FAIL: Wrong error: {e}\n")
 
-    # Test 6: Error handling
-    print("Test 6: Error handling")
+    # Test 8: Error handling
+    print("Test 8: Error handling")
     result = execute_sandbox_code(code="result = 1 / 0")
     assert result["success"] is False
     assert "ZeroDivisionError" in result["stderr"]
     print("✅ PASS: Errors captured correctly\n")
 
     print("=" * 50)
-    print("✅ All CodeSandbox tests passed!")
+    print("✅ All CodeSandbox tests passed (8/8)!")
     print("=" * 50)

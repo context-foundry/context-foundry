@@ -2,7 +2,7 @@
 
 **Pattern from**: [Anthropic's Code Execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp)
 
-Context Foundry implements **in-execution data filtering** - allowing agents to process large datasets and return only filtered results, achieving **98%+ token savings** on data-heavy workflows.
+Context Foundry implements **in-execution data filtering** - allowing agents to process datasets and return only filtered results, achieving **98-99.9% token savings** on data-heavy workflows (measured).
 
 ---
 
@@ -12,22 +12,24 @@ Context Foundry implements **in-execution data filtering** - allowing agents to 
 
 **Traditional Approach**:
 ```
-Agent: Fetch all 10,000 spreadsheet rows
-→ 10,000 rows loaded into context (150,000 tokens)
+Agent: Fetch all 2,000 spreadsheet rows
+→ 2,000 rows loaded into context (~80,500 tokens)
 → Agent: Filter to pending rows
 → Returns 5 rows
 
-Cost: $0.30 per request
+Cost: ~$0.16 per request
 ```
 
 **Code Sandbox Approach**:
 ```
 Agent: Execute filtering code in sandbox
-→ Code processes 10,000 rows internally
-→ Returns only 5 filtered rows (2,000 tokens)
+→ Code processes 2,000 rows internally
+→ Returns only 5 filtered rows (191 tokens)
 
-Cost: $0.004 per request (98.7% savings!)
+Cost: ~$0.0004 per request (99.8% savings - measured!)
 ```
+
+**Important Limitation**: Dataset size limited by subprocess argument buffer (~2,000-5,000 rows depending on row size). For larger datasets, use MCP tools to fetch and filter server-side, or implement file-based data passing.
 
 ---
 
@@ -53,7 +55,7 @@ execute_sandbox_code(
 
 ### 1. Filter Large Datasets
 
-**Scenario**: Process spreadsheet with 10,000 rows, return only pending orders
+**Scenario**: Process spreadsheet with 2,000 rows, return only pending orders
 
 ```python
 execute_sandbox_code(
@@ -64,11 +66,11 @@ execute_sandbox_code(
     # Return first 5 for agent review
     result = pending[:5]
     ''',
-    context={'orders': all_orders}  # 10,000 rows
+    context={'orders': all_orders}  # 2,000 rows
 )
 ```
 
-**Token Savings**: 10,000 rows → 5 rows (99.95% reduction)
+**Token Savings**: 80,509 tokens → 191 tokens (99.8% reduction - measured)
 
 ### 2. Aggregate Data
 
@@ -285,45 +287,47 @@ execute_sandbox_code(
 
 ---
 
-## Token Savings Examples
+## Token Savings Examples (Measured)
+
+All examples below are from `tests/test_sandbox_integration.py` with actual token measurements.
 
 ### Spreadsheet Filtering
 
 **Without Sandbox**:
 ```
-Load 10,000 rows → 150,000 tokens → $0.30
+Load 2,000 rows → 80,509 tokens → ~$0.16
 ```
 
 **With Sandbox**:
 ```
-Filter in sandbox → Return 5 rows → 2,000 tokens → $0.004
-Savings: 98.7%
+Filter in sandbox → Return 5 rows → 191 tokens → ~$0.0004
+Savings: 99.8% (measured)
 ```
 
-### Log Analysis
+### Transaction Aggregation
 
 **Without Sandbox**:
 ```
-Load 50,000 log entries → 500,000 tokens → $1.00
+Load 1,000 transactions → 37,023 tokens → ~$0.07
 ```
 
 **With Sandbox**:
 ```
-Filter errors in sandbox → Return 20 errors → 5,000 tokens → $0.01
-Savings: 99%
+Aggregate in sandbox → Return summary (6 fields) → 34 tokens → ~$0.00007
+Savings: 99.9% (measured)
 ```
 
-### Customer Database Query
+### Log Sampling
 
 **Without Sandbox**:
 ```
-Load 100,000 customer records → 1,000,000 tokens → $2.00
+Load 5,000 log entries → 173,160 tokens → ~$0.35
 ```
 
 **With Sandbox**:
 ```
-Query in sandbox → Return 10 matches → 3,000 tokens → $0.006
-Savings: 99.7%
+Sample in sandbox → Return 100 entries → 3,463 tokens → ~$0.007
+Savings: 98.0% (measured)
 ```
 
 ---
@@ -425,12 +429,14 @@ Test 6: Error handling
 
 ### Current Restrictions
 
-1. **No File I/O**: Cannot read/write files
-2. **No Network**: Cannot make HTTP requests
-3. **No System Access**: Cannot call shell commands
-4. **Memory Limit**: 512MB default (configurable)
-5. **Time Limit**: 30s default (configurable)
-6. **Limited Imports**: Only safe libraries allowed
+1. **Dataset Size Limit**: ~2,000-5,000 rows max (subprocess argument buffer limit)
+2. **No File I/O**: Cannot read/write files (open() blocked)
+3. **No Network**: Cannot make HTTP requests
+4. **No System Access**: Cannot call shell commands
+5. **Memory Limit**: 512MB default (configurable)
+6. **Time Limit**: 30s default (configurable)
+7. **Whitelist-Only Imports**: Only allowed: json, math, datetime, re, itertools, functools, collections, statistics, random
+   - numpy, pandas, requests, etc. are **blocked**
 
 ### Workarounds
 
