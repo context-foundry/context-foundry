@@ -482,6 +482,27 @@ def execute_build_with_phase_spawning(
 
         phases_completed.append("Architect")
 
+        # AUTO-DETECT PARALLEL BUILDS from Scout recommendation
+        if not use_parallel:  # Only auto-enable if not manually specified
+            scout_report_path = (
+                working_directory / ".context-foundry" / "scout-report.md"
+            )
+            if scout_report_path.exists():
+                scout_content = scout_report_path.read_text()
+                if (
+                    "Parallel Build Recommendation: YES" in scout_content
+                    or "Parallel Build Recommendation:** YES" in scout_content
+                ):
+                    use_parallel = True
+                    print(
+                        "\n🚀 Auto-enabling parallel builds (Scout recommended)",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "   Scout detected independent modules suitable for parallel execution",
+                        file=sys.stderr,
+                    )
+
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
         # ═══════════════════════════════════════════════════════════════════════
