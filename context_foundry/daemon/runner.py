@@ -855,6 +855,7 @@ print(json.dumps(result))
                 )
 
                 # Import export and S3 sync functionality
+                sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
                 from mcp_utils.codex_export import export_codex_to_patterns_impl
 
                 # Export Codex to JSON pattern files

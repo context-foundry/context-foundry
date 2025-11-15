@@ -3,39 +3,66 @@ Test suite to verify Codex database integrity and pattern existence.
 
 This test suite addresses auditor findings about Codex database verification.
 It confirms that patterns exported to JSON actually exist in the database.
+
+NOTE: These are integration tests that require the actual Codex database.
+To run in pytest, set REAL_HOME environment variable:
+    REAL_HOME=$HOME pytest tests/test_codex_verification.py -v
 """
 
+import os
 import sqlite3
 from pathlib import Path
 
-
-def get_codex_db_path():
-    """Get path to Codex database."""
-    return Path.home() / ".context-foundry" / "codex.db"
+import pytest
 
 
-def test_codex_database_exists():
+@pytest.fixture(scope="module")
+def codex_db_path():
+    """Get path to Codex database, handling pytest home isolation.
+
+    Returns the path to the real user's codex.db, not pytest's isolated temp home.
+    """
+    # Check if we're in pytest's isolated environment
+    current_home = Path.home()
+    if "pytest" in str(current_home) or "tmp" in str(current_home):
+        # Use REAL_HOME env var if set (for CI/testing)
+        real_home = os.environ.get("REAL_HOME")
+        if real_home:
+            return Path(real_home) / ".context-foundry" / "codex.db"
+
+        # Skip tests if database doesn't exist
+        pytest.skip("Codex database not found - set REAL_HOME to run integration tests")
+
+    return current_home / ".context-foundry" / "codex.db"
+
+
+@pytest.fixture(scope="module")
+def db_connection(codex_db_path):
+    """Create database connection fixture."""
+    if not codex_db_path.exists():
+        pytest.skip(f"Codex database not found at {codex_db_path}")
+
+    conn = sqlite3.connect(str(codex_db_path))
+    yield conn
+    conn.close()
+
+
+def test_codex_database_exists(codex_db_path):
     """Verify Codex database file exists."""
-    db_path = get_codex_db_path()
-    assert db_path.exists(), f"Codex database not found at {db_path}"
+    assert codex_db_path.exists(), f"Codex database not found at {codex_db_path}"
 
 
-def test_codex_has_entries():
+def test_codex_has_entries(db_connection):
     """Verify Codex database has entries."""
-    db_path = get_codex_db_path()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
+    cursor = db_connection.cursor()
     cursor.execute("SELECT COUNT(*) FROM knowledge_entries")
     count = cursor.fetchone()[0]
-
-    conn.close()
 
     assert count > 0, "Codex database has no entries"
     print(f"✅ Codex database has {count} entries")
 
 
-def test_santa_dashboard_patterns_exist():
+def test_santa_dashboard_patterns_exist(db_connection):
     """
     Verify that patterns mentioned in Santa Dashboard BUILD_POSTMORTEM
     actually exist in the Codex database.
@@ -43,9 +70,7 @@ def test_santa_dashboard_patterns_exist():
     This addresses the auditor's finding:
     'Codex lessons cited are only visible in JSON, not demonstrably in Codex'
     """
-    db_path = get_codex_db_path()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    cursor = db_connection.cursor()
 
     # Patterns mentioned in BUILD_POSTMORTEM.md
     expected_patterns = [
@@ -67,21 +92,14 @@ def test_santa_dashboard_patterns_exist():
             missing_patterns.append(pattern_id)
             print(f"❌ Missing: {pattern_id}")
 
-    conn.close()
-
     assert len(missing_patterns) == 0, f"Missing patterns in Codex: {missing_patterns}"
 
 
-def test_codex_pattern_counts():
+def test_codex_pattern_counts(db_connection):
     """Verify Codex has expected number of issues and patterns."""
-    db_path = get_codex_db_path()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
+    cursor = db_connection.cursor()
     cursor.execute("SELECT type, COUNT(*) FROM knowledge_entries GROUP BY type")
     counts = dict(cursor.fetchall())
-
-    conn.close()
 
     # We should have issues and patterns
     assert "issue" in counts, "No issues found in Codex"
@@ -95,12 +113,9 @@ def test_codex_pattern_counts():
     assert counts.get("pattern", 0) >= 10, "Expected at least 10 patterns"
 
 
-def test_daemon_issue_exists():
+def test_daemon_issue_exists(db_connection):
     """Verify the critical daemon bug from Santa Dashboard is documented."""
-    db_path = get_codex_db_path()
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
+    cursor = db_connection.cursor()
     cursor.execute(
         """
         SELECT id, title, description, severity
@@ -109,8 +124,6 @@ def test_daemon_issue_exists():
         """
     )
     results = cursor.fetchall()
-
-    conn.close()
 
     assert len(results) > 0, "Daemon status bug not found in Codex"
 
@@ -126,32 +139,45 @@ if __name__ == "__main__":
     print("=" * 60)
     print()
 
+    # Get real codex path (no pytest isolation when run directly)
+    codex_path = Path.home() / ".context-foundry" / "codex.db"
+
+    if not codex_path.exists():
+        print(f"❌ Codex database not found at {codex_path}")
+        print("Cannot run tests without database.")
+        exit(1)
+
+    # Create connection
+    conn = sqlite3.connect(str(codex_path))
+
     tests = [
-        test_codex_database_exists,
-        test_codex_has_entries,
-        test_santa_dashboard_patterns_exist,
-        test_codex_pattern_counts,
-        test_daemon_issue_exists,
+        ("Database exists", lambda: test_codex_database_exists(codex_path)),
+        ("Has entries", lambda: test_codex_has_entries(conn)),
+        ("Santa patterns exist", lambda: test_santa_dashboard_patterns_exist(conn)),
+        ("Pattern counts", lambda: test_codex_pattern_counts(conn)),
+        ("Daemon issue exists", lambda: test_daemon_issue_exists(conn)),
     ]
 
     passed = 0
     failed = 0
 
-    for test in tests:
-        print(f"\nRunning: {test.__name__}")
+    for name, test_func in tests:
+        print(f"\nRunning: {name}")
         print("-" * 60)
         try:
-            test()
-            print(f"✅ PASSED: {test.__name__}")
+            test_func()
+            print(f"✅ PASSED: {name}")
             passed += 1
         except AssertionError as e:
-            print(f"❌ FAILED: {test.__name__}")
+            print(f"❌ FAILED: {name}")
             print(f"   Error: {e}")
             failed += 1
         except Exception as e:
-            print(f"❌ ERROR: {test.__name__}")
+            print(f"❌ ERROR: {name}")
             print(f"   {type(e).__name__}: {e}")
             failed += 1
+
+    conn.close()
 
     print()
     print("=" * 60)

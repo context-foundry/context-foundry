@@ -1,0 +1,63 @@
+2025-11-15 12:14:43         81 community-patterns/.bootstrap-done
+2025-11-15 09:46:25          0 community-patterns/.initialized.json
+2025-11-15 12:14:43          0 community-patterns/.last-pattern-share
+2025-11-15 12:14:43       1705 community-patterns/.s3-sync-metadata.json
+2025-11-15 12:14:43      30008 community-patterns/architecture-patterns.json
+2025-11-15 12:14:43       9168 community-patterns/common-issues-youtube-transcript-summarizer.json
+2025-11-15 12:14:43      93812 community-patterns/common-issues.json
+2025-11-15 12:14:43      56184 community-patterns/common-issues.json.backup
+2025-11-15 09:53:27      14545 community-patterns/mcp-server-patterns.json
+2025-11-15 09:53:27       4782 community-patterns/scout-learnings.json
+2025-11-15 09:53:27       6438 community-patterns/test-patterns.json
+{
+    "common-issues": {
+        "pattern_type": "common-issues",
+        "version": "2.0",
+        "timestamp": "2025-11-09",
+        "source": "s3",
+        "item_count": 58,
+        "s3_etag": "\"d355c3ac6bc5b49d3410ca247e097437\"",
+        "s3_version_id": "4_iWv6qtfNul5UPed.RTfNgPOOsY8kb5",
+        "last_synced": "2025-11-15T17:13:47.540381"
+    },
+    "architecture-patterns": {
+        "pattern_type": "architecture-patterns",
+        "version": "1.0",
+        "timestamp": "2025-11-15T17:13:35.550316",
+        "source": "local",
+        "item_count": 14,
+        "s3_etag": "\"63c0d63d2b24df40e17c9ee5e4c5e740\"",
+        "s3_version_id": "CzfZYMIJ2lyeZVM8Ejhk51IKUrHlG6XZ",
+        "last_synced": "2025-11-15T17:13:35.550336"
+    },
+    "mcp-server-patterns": {
+        "pattern_type": "mcp-server-patterns",
+        "version": "1.0",
+        "timestamp": "2025-11-15T15:53:26.588144",
+        "source": "local",
+        "item_count": 2,
+        "s3_etag": "\"b3fcb094199620846f92d833353ce6b0\"",
+        "s3_version_id": "hddM1nw_kvG8kS5xstKXM6waKdX.6Wrj",
+        "last_synced": "2025-11-15T15:53:26.588190"
+    },
+    "scout-learnings": {
+        "pattern_type": "scout-learnings",
+        "version": "2.0",
+        "timestamp": "2025-11-15T16:06:50.409242",
+        "source": "local",
+        "item_count": 2,
+        "s3_etag": "\"4dcf7f63139ba1e62b82d35256c6ee44\"",
+        "s3_version_id": "d009edec-ad5a-4010-a01e-d4f873dad5b1",
+        "last_synced": "2025-11-15T16:06:50.416092"
+    },
+    "test-patterns": {
+        "pattern_type": "test-patterns",
+        "version": "2.0",
+        "timestamp": "2025-11-15T16:06:50.331889",
+        "source": "local",
+        "item_count": 2,
+        "s3_etag": "\"678865acbd14a0d7494e78557fe5f22a\"",
+        "s3_version_id": "3c141baa-a953-4923-82a1-015c28f65db2",
+        "last_synced": "2025-11-15T16:06:50.348486"
+    }
+}
