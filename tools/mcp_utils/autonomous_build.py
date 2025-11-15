@@ -344,6 +344,7 @@ def execute_build_with_phase_spawning(
     flowise_mode: bool,
     project_type: str,
     incremental: bool,
+    use_parallel: bool = False,
     timeout_minutes: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
@@ -502,7 +503,7 @@ def execute_build_with_phase_spawning(
             working_directory,
             project_type,
             flowise_mode=flowise_mode,
-            use_parallel=True,
+            use_parallel=use_parallel,
         )
 
         results["builder"] = builder_result

@@ -402,8 +402,7 @@ class Runner:
         """
         Execute full autonomous build with Scout→Architect→Builder→Test flow.
 
-        This is called for AUTONOMOUS_BUILD job types and runs the complete
-        build pipeline synchronously in the worker thread.
+        Uses background delegation with subprocess tracking for proper timeout enforcement.
 
         Args:
             job: Job instance with autonomous build parameters
@@ -419,7 +418,6 @@ class Runner:
         # Add context-foundry to path to import autonomous_build module
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-        from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
         from tools.mcp_utils.project_detection import detect_existing_codebase
         from tools.mcp_utils.task_classification import detect_task_intent
 
@@ -429,6 +427,7 @@ class Runner:
         max_test_iterations = job.params.get("max_test_iterations", 3)
         incremental = job.params.get("incremental", False)
         force_rebuild = job.params.get("force_rebuild", False)
+        use_parallel = job.params.get("use_parallel", False)
 
         # Detect project info
         working_path = Path(working_dir)
@@ -457,53 +456,306 @@ class Runner:
         # For existing projects, only enable if code already exists
         enable_test_loop = (mode == "new_project") or has_code
 
-        # Build task config
-        task_config = {
-            "task": task,
-            "working_directory": working_dir,
-            "github_repo_name": job.params.get("github_repo_name"),
-            "mode": mode,
-            "enable_test_loop": enable_test_loop,
-            "max_test_iterations": max_test_iterations,
-            "incremental": incremental and not force_rebuild,
-            "flowise_flow": flowise_mode,
-            "project_type": project_type,
-            "codebase_detection": codebase_info,
-        }
-
         # Emit phases info
         self._emit_log(
             job.id,
             "INFO",
-            f"Build config: mode={mode}, project_type={project_type}, test_loop={enable_test_loop}",
+            f"Build config: mode={mode}, project_type={project_type}, test_loop={enable_test_loop}, parallel={use_parallel}",
             None,
         )
 
-        # Execute build
+        # Build Python command to run autonomous build in background
+        # This enables proper subprocess tracking and timeout enforcement
+        build_script = f"""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+
+from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
+
+result = execute_build_with_phase_spawning(
+    task={repr(task)},
+    working_directory=Path({repr(str(working_path))}),
+    task_config={{
+        "task": {repr(task)},
+        "working_directory": {repr(working_dir)},
+        "github_repo_name": {repr(job.params.get("github_repo_name"))},
+        "mode": {repr(mode)},
+        "enable_test_loop": {enable_test_loop},
+        "max_test_iterations": {max_test_iterations},
+        "incremental": {incremental and not force_rebuild},
+        "flowise_flow": {flowise_mode},
+        "project_type": {repr(project_type)},
+        "use_parallel": {use_parallel},
+        "codebase_detection": {repr(codebase_info)},
+    }},
+    enable_test_loop={enable_test_loop},
+    max_test_iterations={max_test_iterations},
+    flowise_mode={flowise_mode},
+    project_type={repr(project_type)},
+    incremental={incremental and not force_rebuild},
+    use_parallel={use_parallel},
+    timeout_minutes={timeout_minutes},
+)
+
+# Print result as JSON for parent to parse
+import json
+print("__BUILD_RESULT__")
+print(json.dumps(result))
+"""
+
+        # Start autonomous build as tracked subprocess
         logger.info(
-            f"[TRACE] Calling execute_build_with_phase_spawning for job {job.id} at {datetime.now().isoformat()}"
+            f"[TRACE] Starting autonomous build subprocess for job {job.id} at {datetime.now().isoformat()}"
         )
 
-        result = execute_build_with_phase_spawning(
-            task=task,
-            working_directory=working_path,
-            task_config=task_config,
-            enable_test_loop=enable_test_loop,
-            max_test_iterations=max_test_iterations,
-            flowise_mode=flowise_mode,
-            project_type=project_type,
-            incremental=incremental and not force_rebuild,
-            timeout_minutes=timeout_minutes,
-        )
+        import tempfile
+        import uuid
 
-        logger.info(
-            f"[TRACE] execute_build_with_phase_spawning RETURNED for job {job.id} at {datetime.now().isoformat()}"
-        )
-        logger.info(
-            f"[TRACE] Result status: {result.get('status')}, phases: {result.get('phases_completed')}"
-        )
+        task_id = str(uuid.uuid4())
 
-        return result
+        # Write script to temp file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(build_script)
+            script_path = f.name
+
+        try:
+            # Start subprocess
+            process = subprocess.Popen(
+                [sys.executable, script_path],
+                cwd=str(Path(__file__).parent.parent.parent),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            # Track in active_tasks for timeout enforcement
+            self.active_tasks[task_id] = {
+                "process": process,
+                "job_id": job.id,
+                "start_time": datetime.now(),
+                "working_directory": working_dir,
+            }
+
+            logger.info(
+                f"[TRACE] Autonomous build subprocess started (PID: {process.pid}, task_id: {task_id})"
+            )
+
+            # Use existing poll_for_completion with timeout enforcement
+            result = self._poll_for_autonomous_build(
+                job.id, task_id, working_dir, timeout_minutes, script_path
+            )
+
+            logger.info(
+                f"[TRACE] Autonomous build completed for job {job.id} at {datetime.now().isoformat()}"
+            )
+
+            return result
+
+        finally:
+            # Clean up temp script
+            try:
+                Path(script_path).unlink()
+            except (FileNotFoundError, PermissionError):
+                pass
+
+    def _poll_for_autonomous_build(
+        self,
+        job_id: str,
+        task_id: str,
+        working_dir: str,
+        timeout_minutes: float,
+        script_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Poll for autonomous build completion with timeout enforcement.
+
+        Similar to _poll_for_completion but parses build result from stdout.
+
+        Args:
+            job_id: Job ID
+            task_id: Task ID
+            working_dir: Working directory
+            timeout_minutes: Maximum time to wait
+            script_path: Path to temp script (for cleanup)
+
+        Returns:
+            Dict with build results
+        """
+        last_phase = None
+        poll_interval = 5  # seconds
+
+        start_time = datetime.now()
+        timeout_seconds = timeout_minutes * 60
+
+        while True:
+            # Check timeout
+            elapsed_seconds = (datetime.now() - start_time).total_seconds()
+            if elapsed_seconds > timeout_seconds:
+                # Timeout exceeded - kill the process
+                logger.warning(
+                    f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
+                )
+
+                if task_id in self.active_tasks:
+                    task_info = self.active_tasks[task_id]
+                    process = task_info.get("process")
+                    if process and process.poll() is None:
+                        # Process still running - kill it AND all child processes
+                        logger.warning(
+                            f"Killing autonomous build process for job {job_id}"
+                        )
+                        try:
+                            # Kill child processes (claude subprocesses)
+                            import psutil
+
+                            try:
+                                parent = psutil.Process(process.pid)
+                                children = parent.children(recursive=True)
+                                for child in children:
+                                    logger.info(f"Killing child process {child.pid}")
+                                    child.kill()
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+
+                            # Kill main process
+                            process.kill()
+                            process.wait(timeout=10)
+                        except Exception as e:
+                            logger.error(f"Failed to kill process: {e}")
+
+                    # Remove from active tasks
+                    del self.active_tasks[task_id]
+
+                self._emit_log(
+                    job_id,
+                    "ERROR",
+                    f"Build exceeded timeout of {timeout_minutes} minutes and was terminated",
+                    None,
+                )
+
+                return {
+                    "status": "failed",
+                    "error": f"Build exceeded timeout of {timeout_minutes} minutes",
+                    "phases_completed": [],
+                    "test_iterations": 0,
+                    "duration_seconds": elapsed_seconds,
+                }
+
+            # Check if task is still active
+            if task_id not in self.active_tasks:
+                # Task completed or failed
+                break
+
+            task_info = self.active_tasks[task_id]
+
+            # Check phase transitions
+            phase_info = read_phase_info(working_dir, start_time)
+            current_phase = phase_info.get("currentPhase")
+
+            if current_phase and current_phase != last_phase:
+                # Phase transition detected
+                self._emit_phase_event(
+                    job_id=job_id,
+                    phase=current_phase,
+                    status="in_progress",
+                    details=phase_info,
+                )
+
+                self._emit_log(
+                    job_id,
+                    "INFO",
+                    f"Phase transition: {last_phase or 'Start'} → {current_phase}",
+                    current_phase,
+                )
+
+                last_phase = current_phase
+
+            # Check if process has completed
+            process = task_info.get("process")
+            if process and process.poll() is not None:
+                # Process finished
+                stdout, stderr = process.communicate(timeout=5)
+
+                logger.info(
+                    f"[TRACE] Autonomous build subprocess exited with code {process.returncode}"
+                )
+
+                # Parse result from stdout
+                result = self._parse_build_result(stdout, stderr, process.returncode)
+
+                # Emit final phase event
+                if last_phase:
+                    final_status = (
+                        "completed" if result.get("status") == "completed" else "failed"
+                    )
+                    self._emit_phase_event(
+                        job_id=job_id,
+                        phase=last_phase,
+                        status=final_status,
+                        details={},
+                    )
+
+                # Clean up task from active_tasks
+                self.active_tasks.pop(task_id, None)
+
+                return result
+
+            # Sleep before next poll
+            time.sleep(poll_interval)
+
+    def _parse_build_result(
+        self, stdout: str, stderr: str, exit_code: int
+    ) -> Dict[str, Any]:
+        """
+        Parse build result from subprocess output.
+
+        Looks for __BUILD_RESULT__ marker in stdout and parses JSON.
+
+        Args:
+            stdout: Process stdout
+            stderr: Process stderr
+            exit_code: Process exit code
+
+        Returns:
+            Build result dict
+        """
+        import json
+
+        # Look for result marker in stdout
+        if "__BUILD_RESULT__" in stdout:
+            try:
+                # Split on marker and get everything after it
+                result_json = stdout.split("__BUILD_RESULT__")[1].strip()
+                result = json.loads(result_json)
+                return result
+            except (json.JSONDecodeError, IndexError) as e:
+                logger.error(f"Failed to parse build result: {e}")
+                logger.debug(f"Stdout: {stdout[:1000]}")
+
+        # Fallback: infer from exit code
+        if exit_code == 0:
+            return {
+                "status": "completed",
+                "phases_completed": [],
+                "test_iterations": 0,
+                "duration_seconds": 0,
+            }
+        else:
+            # Try to extract error from stderr
+            error_msg = "Build failed"
+            if stderr:
+                # Get last few lines of stderr
+                error_lines = stderr.strip().split("\n")[-10:]
+                error_msg = "\n".join(error_lines)
+
+            return {
+                "status": "failed",
+                "error": error_msg,
+                "phases_completed": [],
+                "test_iterations": 0,
+                "duration_seconds": 0,
+            }
 
     def _merge_patterns(self, job_id: str, working_dir: str):
         """
