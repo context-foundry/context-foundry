@@ -7,7 +7,7 @@
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.2.0 - November 2025** ✨ **Now with Mission Control TUI!**
+**Version 2.3.0 - November 2025** ✨ **Glass Pane Dashboard + Intelligent AI + Self-Learning Codex!**
 
 [![GitHub release](https://img.shields.io/github/v/release/context-foundry/context-foundry?style=for-the-badge)](https://github.com/context-foundry/context-foundry/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
@@ -19,13 +19,14 @@
 Context Foundry is an **MCP (Model Context Protocol) server** that empowers Claude Code CLI to build complete software projects autonomously with **self-healing test loops** and **automatic GitHub deployment**.
 
 Unlike traditional AI coding tools that require constant supervision, Context Foundry lets you describe what you want and **walk away** while it:
-- Researches requirements (Scout phase)
+- Researches requirements (Scout phase) - **NEW: AI decides optimal parallelization**
 - Designs architecture (Architect phase)
-- Implements code with tests (Builder phase)
+- Implements code with tests (Builder phase) - **NEW: Intelligent parallel agent spawning**
 - Auto-fixes test failures (Test phase with self-healing)
 - **Captures screenshots automatically** (Screenshot phase)
 - Documents everything with visual guides (Documentation phase)
 - Deploys to GitHub (Deployment phase)
+- **NEW: Learns from every build** (Context Codex database)
 
 **Real Example:**
 ```
@@ -36,11 +37,81 @@ Result: ✅ Complete game deployed to GitHub, all tests passing
 
 ---
 
-## 🎮 Mission Control TUI - New in v2.2.0!
+## 🎮 What's New in v2.3.0
 
+### CF Daemon - Background Build Service
+**True "fire and forget" autonomous builds**
+
+The Context Foundry Daemon (cfd) is a persistent background service that manages build jobs:
+- **Job Persistence**: Builds survive disconnections and system restarts
+- **Working Directory Locking**: Prevents concurrent builds from conflicting
+- **Progress Monitoring**: Track multiple builds with `cfd logs <job-id> --follow`
+- **Automatic Retries**: Failed builds retry intelligently
+- **Priority Queue**: High-priority builds run first
+
+```bash
+# Start the daemon (one-time setup)
+./tools/cfd start
+
+# Submit a build (returns immediately)
+cfd submit --type building --params '{"task": "Build a weather app", "working_directory": "/tmp/weather"}'
+
+# Monitor progress
+cfd logs <job-id> --follow
+
+# List all jobs
+cfd list
+```
+
+### Intelligent Parallel Build Detection
+**AI decides how many parallel agents to spawn**
+
+Scout phase now analyzes project complexity and automatically determines:
+- **Whether to use parallel** - Based on module separation, file count, complexity score
+- **How many workers** - Dynamically calculates 2-8 workers based on project structure
+- **Time savings estimate** - Predicts 20-60% faster builds for complex projects
+
+```markdown
+## Scout Report - Parallel Recommendation
+
+✅ **Parallel Recommended**: Yes
+**Reason**: React frontend + FastAPI backend with clear separation
+**Estimated Workers**: 3
+**Complexity Score**: 75/100
+**Time Savings**: 40% faster (8 min vs 13 min)
+```
+
+No more guessing - Context Foundry intelligently parallelizes your builds!
+
+### Context Codex - Database-Backed Self-Learning
+**From file-based JSON to intelligent SQLite database**
+
+Context Foundry now uses a relational database (`~/.context-foundry/codex.db`) for knowledge management:
+- **Full-text search** - Find patterns instantly with SQL
+- **Relationships** - "What patterns prevent issue X?"
+- **Confidence scoring** - Track reliability of learnings
+- **Build metrics** - Analyze performance trends
+- **Automatic learning** - Every build teaches the system
+
+```bash
+# Search for knowledge
+cfd codex search "docker volumes"
+
+# View project-specific patterns
+cfd codex stats --project /path/to/project
+
+# Export/import for sharing
+cfd codex export --type common-issues --output patterns.json
+```
+
+### Glass Pane Dashboard - Mission Control TUI
 **Your command center for autonomous AI development**
 
-Mission Control is a full-featured Terminal User Interface that gives you real-time visibility and control over Context Foundry builds.
+Full-featured Terminal User Interface with real-time monitoring:
+- **Interactive Chat** - Natural language build requests
+- **Real-time Updates** - Live phase progress (Scout → Architect → Builder)
+- **Multi-build Support** - Monitor multiple projects simultaneously
+- **Keyboard Navigation** - Fast, efficient controls
 
 ### Key Features
 
@@ -566,32 +637,72 @@ your-project/
 cat /Users/name/homelab/vimquest/.context-foundry/architecture.md
 ```
 
-### Pattern Library Location
+### Context Codex Database (NEW in v2.3.0)
 
-**Global patterns** (shared across ALL builds):
+**Intelligent knowledge management with SQLite database**
+
+Global knowledge stored in database instead of JSON files:
 ```
-/Users/name/homelab/context-foundry/.context-foundry/patterns/
+~/.context-foundry/codex.db  # SQLite database with full-text search
+```
+
+**What's stored:**
+- **Issues & Solutions** - Common problems and how to fix them
+- **Scout Learnings** - What worked, what didn't during research
+- **Architecture Patterns** - Proven designs and structures
+- **Build Metrics** - Performance trends and optimization data
+- **Knowledge Relationships** - Understand what prevents what
+
+**How it works:**
+1. Each build reads from Context Codex database
+2. Applies past learnings automatically with confidence scoring
+3. Discovers new patterns during execution
+4. Updates database for future builds
+5. Tracks frequency and effectiveness over time
+
+**Query the Codex:**
+```bash
+# Search for knowledge (full-text search)
+cfd codex search "docker volumes"
+
+# View statistics
+cfd codex stats
+
+# Get entries by type
+cfd codex list --type issue --severity HIGH
+
+# Export to JSON (for sharing with community)
+cfd codex export --type common-issues --output patterns.json
+
+# Import community patterns
+cfd codex import --file community-patterns.json
+```
+
+**Database Schema Highlights:**
+- **knowledge_entries** - All issues, patterns, learnings
+- **solutions** - Multiple solutions per issue
+- **evidence** - Examples and symptoms
+- **relationships** - Links between knowledge (e.g., "pattern X prevents issue Y")
+- **build_metrics** - Performance tracking
+
+**Legacy JSON Files:**
+```
+~/.context-foundry/patterns/  # DEPRECATED (kept for migration)
 ├── common-issues.json
 ├── test-patterns.json
 ├── architecture-patterns.json
 └── scout-learnings.json
 ```
 
-**How it works:**
-- Each build reads global patterns
-- Applies past learnings automatically
-- Discovers new patterns
-- Updates library for future builds
-
-**See what Context Foundry has learned:**
-```bash
-cat /Users/name/homelab/context-foundry/.context-foundry/patterns/common-issues.json
-```
+**Migration:** Existing JSON files are automatically migrated to the database on first run of v2.3.0.
 
 ### Common Questions
 
 ❓ **Did Context Foundry change Claude Code's system prompt?**
 ✅ **No!** It spawns separate Claude instances via delegation. Your regular Claude Code usage is unaffected.
+
+❓ **What's the CF Daemon and do I need it?**
+✅ **Yes for v2.3.0+!** The daemon manages build jobs, provides persistence, and enables progress monitoring. Start it once: `./tools/cfd start`
 
 ❓ **Where can I find the architect's plan?**
 ✅ `<your-project>/.context-foundry/architecture.md`
@@ -683,7 +794,20 @@ cat .mcp.json
 #  - Progress monitoring (cfd logs <job-id> --follow)
 #  - Automatic retry on failures
 
-# 7. Authenticate with GitHub (for deployment)
+# 7. Start the CF Daemon (required for autonomous builds)
+./tools/cfd start
+
+# Verify daemon is running
+./tools/cfd status
+# Should show "CF Daemon is running"
+
+# The daemon provides:
+#  - Job persistence (survives disconnections)
+#  - Working directory locking (prevents conflicts)
+#  - Progress monitoring (cfd logs <job-id> --follow)
+#  - Automatic retry on failures
+
+# 8. Authenticate with GitHub (for deployment)
 gh auth login
 ```
 

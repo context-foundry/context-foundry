@@ -1,17 +1,23 @@
-# Context Foundry - 5-Minute Quickstart
+# Context Foundry v2.3.0 - 5-Minute Quickstart
 
 **Get from zero to deployed app in 5 minutes**
+
+**NEW in v2.3.0:**
+- ✨ **CF Daemon** - Background service for persistent job management
+- 🧠 **Intelligent Parallel Detection** - AI decides optimal build parallelization
+- 📚 **Context Codex Database** - SQLite-backed knowledge with full-text search
+- 🎮 **Glass Pane Dashboard** - Real-time build monitoring TUI
 
 ---
 
 ## What You'll Do
 
-1. One-time setup (2 minutes)
+1. One-time setup (2 minutes) - **NEW: Includes daemon start**
 2. Build your first app (3 minutes of your time, 7-15 min build runs in background)
 3. See it deployed on GitHub
 
 **Total active time:** 5 minutes
-**Build time:** 7-15 minutes (runs in background while you work - no waiting!)
+**Build time:** 7-15 minutes (daemon runs in background while you work - no waiting!)
 
 ---
 
@@ -64,6 +70,29 @@ cat .mcp.json
 # They're automatically detected when you run `claude` in this directory
 ```
 
+### Start the CF Daemon (NEW in v2.3.0)
+
+```bash
+# Start the Context Foundry Daemon (background service)
+./tools/cfd start
+
+# Verify it's running
+./tools/cfd status
+
+# Expected output:
+# CF Daemon is running (PID: 12345)
+# Jobs: 0 queued, 0 running, 0 completed
+
+# The daemon provides:
+# - Job persistence (survives disconnections)
+# - Working directory locking (prevents conflicts)
+# - Progress monitoring
+# - Automatic retries
+```
+
+**What is the daemon?**
+The CF Daemon is a background service that manages build jobs. Once started, it runs persistently and handles all autonomous builds. You can disconnect from your terminal and builds will continue!
+
 ### Authenticate with GitHub
 
 ```bash
@@ -98,19 +127,23 @@ Build a simple todo app with the following features:
 
 **That's it!** No commands to memorize, no copy/paste needed.
 
-### What Happens Next (Runs in Background!)
+### What Happens Next (Daemon Manages Everything!)
 
-Claude Code will automatically start the build **in the background**:
+Claude Code will automatically submit the build to the **CF Daemon**:
 
 ```
-🚀 Autonomous build started!
+🚀 Build submitted to CF Daemon!
 
+Job ID: 17044610-0379-4708-b9a3-768e8535e3ec
+Type: building
+Status: queued
+Priority: 5
 Project: todo-app
-Task ID: abc-123-def-456
 Location: /tmp/todo-app
 Expected duration: 7-15 minutes
 
-You can continue working - the build runs in the background.
+You can continue working - the daemon runs in the background.
+Monitor with: cfd logs 17044610-0379-4708-b9a3-768e8535e3ec --follow
 ```
 
 **You can now:**
@@ -120,14 +153,22 @@ You can continue working - the build runs in the background.
 - ✅ Check status anytime
 
 **The system autonomously:**
-1. **Scout** (1-2 min): Research best practices
+1. **Scout** (1-2 min): Research best practices + **NEW: Analyze complexity for parallel**
 2. **Architect** (1-2 min): Design the app
-3. **Builder** (2-5 min): Write all code + tests
+3. **Builder** (2-5 min): Write all code + tests - **NEW: Parallel if recommended**
 4. **Test** (1-2 min): Validate everything (auto-fixes failures!)
-5. **Document** (1 min): Create README and docs
-6. **Deploy** (30 sec): Push to GitHub
+5. **Screenshot** (30 sec): Capture visual documentation
+6. **Document** (1 min): Create README with screenshots
+7. **Deploy** (30 sec): Push to GitHub
+8. **Feedback** (10 sec): **NEW: Learn patterns → Context Codex database**
 
-**Total time:** 7-15 minutes (runs in background while you work)
+**Total time:** 7-15 minutes (daemon runs in background)
+
+**NEW: Intelligent Parallel Detection**
+Scout analyzes your project and automatically decides:
+- Whether to use parallel building (20-60% faster for complex projects)
+- How many worker agents to spawn (2-8 based on module separation)
+- Example: React + FastAPI = 3 parallel workers, 40% time savings!
 
 ### Visual Example: Real Build in Progress
 
@@ -151,8 +192,28 @@ You can continue working - the build runs in the background.
 **The entire process runs autonomously** - you can work on other things while it builds!
 
 **Check status:**
-```
+```bash
+# Ask Claude naturally
 What's the status of my build?
+
+# Or use the daemon directly
+cfd logs 17044610-0379-4708-b9a3-768e8535e3ec
+
+# List all jobs
+cfd list
+
+# Follow logs in real-time
+cfd logs 17044610-0379-4708-b9a3-768e8535e3ec --follow
+```
+
+**NEW: Glass Pane Dashboard**
+```bash
+# Launch the interactive TUI dashboard
+cf mission-control
+
+# Monitor multiple builds visually
+# See phase progress in real-time
+# Natural language interaction
 ```
 
 ---
