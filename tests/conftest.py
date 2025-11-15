@@ -11,31 +11,34 @@ from pathlib import Path
 
 import pytest
 
+# CRITICAL: Add paths at IMPORT TIME (before test collection)
+# This must happen before any test modules try to import from tools/
+_project_root = Path(__file__).parent.parent
+_tools_dir = _project_root / "tools"
+
+for _path in [str(_project_root), str(_tools_dir)]:
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+# Also set PYTHONPATH for subprocesses
+_current_pythonpath = os.environ.get("PYTHONPATH", "")
+_paths_to_add = [str(_project_root), str(_tools_dir)]
+if _current_pythonpath:
+    _paths_to_add.append(_current_pythonpath)
+os.environ["PYTHONPATH"] = os.pathsep.join(_paths_to_add)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment(tmp_path_factory):
     """
     Set up the test environment for all tests.
 
-    - Adds project root and tools/ to PYTHONPATH
     - Creates a temporary HOME directory to avoid permission issues
     - Ensures daemon tests can write to ~/.context-foundry/
+
+    Note: PYTHONPATH manipulation now happens at import time (above)
+    to fix collection-time imports.
     """
-    # Get project root (parent of tests/)
-    project_root = Path(__file__).parent.parent
-    tools_dir = project_root / "tools"
-
-    # Add to PYTHONPATH if not already present
-    for path in [str(project_root), str(tools_dir)]:
-        if path not in sys.path:
-            sys.path.insert(0, path)
-
-    # Set PYTHONPATH environment variable for subprocesses
-    current_pythonpath = os.environ.get("PYTHONPATH", "")
-    paths_to_add = [str(project_root), str(tools_dir)]
-    if current_pythonpath:
-        paths_to_add.append(current_pythonpath)
-    os.environ["PYTHONPATH"] = os.pathsep.join(paths_to_add)
 
     # Create a temporary HOME directory for the test session
     # This prevents permission errors when daemon tries to write logs
