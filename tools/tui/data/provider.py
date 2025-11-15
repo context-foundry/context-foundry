@@ -442,6 +442,7 @@ class TUIDataProvider:
                         status=build_status.status,
                         current_phase=build_status.current_phase,
                         started_at=build_status.started_at,
+                        working_directory=build_dir,  # Include working directory
                         duration_minutes=duration,
                         test_iterations=build_status.test_iteration,
                     )

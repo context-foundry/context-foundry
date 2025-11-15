@@ -101,6 +101,7 @@ class BuildSummary:
     status: str
     current_phase: str
     started_at: datetime
+    working_directory: str  # Absolute path to build directory
     duration_minutes: Optional[float] = None
     test_iterations: int = 0
 

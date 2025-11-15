@@ -57,15 +57,13 @@ class DashboardScreen(Screen):
             pipeline = self.query_one("#phase-pipeline", PhasesPipelineWidget)
 
             if builds:
-                most_recent = builds[0]
+                most_recent = builds[0]  # BuildSummary with working_directory
 
-                # Get the actual build status object
+                # FIX: Get build status from the CORRECT directory
                 from pathlib import Path
 
                 build_status = await self.provider.get_current_build(
-                    Path(self.provider._tracked_builds[0])
-                    if self.provider._tracked_builds
-                    else None
+                    Path(most_recent.working_directory)  # Use most_recent's directory!
                 )
 
                 if build_status:
@@ -79,10 +77,17 @@ class DashboardScreen(Screen):
                 # No builds - show empty state
                 pipeline.update_from_build(None)
 
-        except Exception:
-            # Log error but don't crash
-            # You can log to a file here if needed
-            pass
+        except Exception as e:
+            # Better error handling
+            import logging
+
+            logging.error(f"Dashboard refresh error: {e}")
+            # Don't crash - just show empty state
+            try:
+                pipeline = self.query_one("#phase-pipeline", PhasesPipelineWidget)
+                pipeline.update_from_build(None)
+            except Exception:
+                pass
 
     def action_quit(self):
         """Quit the app"""
