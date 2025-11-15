@@ -548,6 +548,206 @@ def run_phase(
         )
 
 
+def _run_parallel_builders(
+    build_tasks: dict,
+    working_directory: Path,
+    project_type: str,
+) -> PhaseResult:
+    """
+    Execute build tasks in parallel based on dependency graph.
+
+    Args:
+        build_tasks: Parsed build-tasks.json content
+        working_directory: Project directory
+        project_type: Project type for validation
+
+    Returns:
+        PhaseResult with aggregated metrics
+    """
+    import concurrent.futures
+    import threading
+
+    tasks = build_tasks.get("tasks", [])
+    if not tasks:
+        raise ValueError("build-tasks.json contains no tasks")
+
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"🚀 PARALLEL BUILD: {len(tasks)} tasks", file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr)
+
+    # Track task execution state
+    completed_tasks = set()
+    failed_tasks = set()
+    task_results = {}
+    results_lock = threading.Lock()
+
+    start_time = datetime.now()
+
+    def execute_task(task: dict) -> tuple[str, bool, dict]:
+        """Execute a single build task."""
+        task_id = task["task_id"]
+        task_name = task["name"]
+        task_dir = working_directory / task["working_directory"]
+
+        print(f"\n🔨 Starting task: {task_name} ({task_id})", file=sys.stderr)
+        print(f"   Working directory: {task_dir}", file=sys.stderr)
+
+        task_start = datetime.now()
+
+        try:
+            # Execute build commands sequentially for this task
+            for cmd in task["build_commands"]:
+                print(f"   Running: {cmd}", file=sys.stderr)
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=task_dir,
+                    capture_output=True,
+                    text=True,
+                    timeout=900,  # 15 min per command
+                )
+
+                if result.returncode != 0:
+                    print(f"❌ Task {task_name} failed: {cmd}", file=sys.stderr)
+                    print(f"   stderr: {result.stderr[:500]}", file=sys.stderr)
+                    return (
+                        task_id,
+                        False,
+                        {
+                            "error": f"Command failed: {cmd}",
+                            "stderr": result.stderr,
+                            "duration": (datetime.now() - task_start).total_seconds(),
+                        },
+                    )
+
+            duration = (datetime.now() - task_start).total_seconds()
+            print(f"✅ Task {task_name} completed in {duration:.1f}s", file=sys.stderr)
+
+            return (
+                task_id,
+                True,
+                {
+                    "duration": duration,
+                    "commands_executed": len(task["build_commands"]),
+                },
+            )
+
+        except subprocess.TimeoutExpired:
+            return (
+                task_id,
+                False,
+                {
+                    "error": "Task timeout (15 minutes)",
+                    "duration": 900,
+                },
+            )
+        except Exception as e:
+            return (
+                task_id,
+                False,
+                {
+                    "error": str(e),
+                    "duration": (datetime.now() - task_start).total_seconds(),
+                },
+            )
+
+    def get_ready_tasks() -> list[dict]:
+        """Get tasks whose dependencies are all completed."""
+        ready = []
+        for task in tasks:
+            task_id = task["task_id"]
+            if task_id in completed_tasks or task_id in failed_tasks:
+                continue
+
+            dependencies = task.get("dependencies", [])
+            if all(dep in completed_tasks for dep in dependencies):
+                ready.append(task)
+
+        return ready
+
+    # Execute tasks in waves (by dependency level)
+    wave_num = 0
+    total_tokens = 0
+
+    while len(completed_tasks) + len(failed_tasks) < len(tasks):
+        wave_num += 1
+        ready_tasks = get_ready_tasks()
+
+        if not ready_tasks:
+            # Check if we're stuck (cyclic dependency or all remaining failed)
+            if failed_tasks:
+                break
+            else:
+                raise ValueError("Cyclic dependency detected in build-tasks.json")
+
+        print(
+            f"\n🌊 Wave {wave_num}: {len(ready_tasks)} parallel tasks", file=sys.stderr
+        )
+
+        # Execute ready tasks in parallel
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(ready_tasks)
+        ) as executor:
+            futures = {
+                executor.submit(execute_task, task): task for task in ready_tasks
+            }
+
+            for future in concurrent.futures.as_completed(futures):
+                task_id, success, result_data = future.result()
+
+                with results_lock:
+                    task_results[task_id] = result_data
+
+                    if success:
+                        completed_tasks.add(task_id)
+                    else:
+                        failed_tasks.add(task_id)
+                        print(
+                            f"\n❌ Task {task_id} failed: {result_data.get('error')}",
+                            file=sys.stderr,
+                        )
+
+    total_duration = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n{'='*60}", file=sys.stderr)
+    print("📊 PARALLEL BUILD SUMMARY", file=sys.stderr)
+    print(f"{'='*60}", file=sys.stderr)
+    print(f"Total duration: {total_duration:.1f}s", file=sys.stderr)
+    print(f"Completed tasks: {len(completed_tasks)}/{len(tasks)}", file=sys.stderr)
+    print(f"Failed tasks: {len(failed_tasks)}/{len(tasks)}", file=sys.stderr)
+    print(f"Waves executed: {wave_num}", file=sys.stderr)
+
+    # Calculate time savings
+    estimated_sequential = build_tasks.get("total_estimated_sequential", 0) * 60
+    if estimated_sequential > 0:
+        savings_percent = (
+            (estimated_sequential - total_duration) / estimated_sequential
+        ) * 100
+        print(
+            f"Time savings: {savings_percent:.1f}% ({estimated_sequential:.0f}s → {total_duration:.0f}s)",
+            file=sys.stderr,
+        )
+
+    # Return aggregated result
+    if failed_tasks:
+        return PhaseResult(
+            phase="Builder (Parallel)",
+            status="failed",
+            duration_seconds=total_duration,
+            context_tokens=total_tokens,
+            exit_code=1,
+            error=f"{len(failed_tasks)} tasks failed: {', '.join(failed_tasks)}",
+        )
+    else:
+        return PhaseResult(
+            phase="Builder (Parallel)",
+            status="completed",
+            duration_seconds=total_duration,
+            context_tokens=total_tokens,
+            exit_code=0,
+        )
+
+
 def run_builder_phase(
     prompt_path: Path,
     instruction: str,
@@ -585,7 +785,47 @@ def run_builder_phase(
         )
         # Note: use_parallel parameter is for future parallelization support
 
-    # Run main builder phase
+    # Check if parallel build is enabled and feasible
+    build_tasks_file = working_directory / ".context-foundry" / "build-tasks.json"
+
+    if use_parallel and build_tasks_file.exists():
+        print(
+            "📋 Found build-tasks.json - checking for parallel build configuration",
+            file=sys.stderr,
+        )
+
+        try:
+            with open(build_tasks_file) as f:
+                build_tasks = json.load(f)
+
+            if build_tasks.get("parallel_build_enabled", False):
+                print(
+                    "🚀 Parallel build enabled - spawning task builders",
+                    file=sys.stderr,
+                )
+                return _run_parallel_builders(
+                    build_tasks,
+                    working_directory,
+                    project_type,
+                )
+            else:
+                print(
+                    "⚠️  build-tasks.json found but parallel_build_enabled=false - using sequential build",
+                    file=sys.stderr,
+                )
+
+        except (json.JSONDecodeError, KeyError) as e:
+            print(
+                f"⚠️  Failed to parse build-tasks.json: {e} - falling back to sequential build",
+                file=sys.stderr,
+            )
+
+    elif use_parallel:
+        print("📝 No build-tasks.json found - using sequential build", file=sys.stderr)
+    else:
+        print("⚠️  Parallel builds disabled (use_parallel=False)", file=sys.stderr)
+
+    # Run sequential builder (original behavior)
     result = run_phase(
         "Builder",
         prompt_path,
@@ -595,10 +835,6 @@ def run_builder_phase(
         validator=lambda wd, pt=project_type: PhaseValidator.validate_builder(wd, pt),
         project_type=project_type,
     )
-
-    # TODO: Implement parallel sub-builder spawning if needed
-    # For now, main builder does everything
-    # Parallel sub-builders would be spawned here based on build-tasks.json
 
     return result
 

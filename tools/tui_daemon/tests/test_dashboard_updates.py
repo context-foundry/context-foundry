@@ -36,15 +36,24 @@ class TestDashboardUpdates:
         assert job is not None
         assert job.job_id == job_id
 
-    def test_job_table_update(self, mock_daemon_client):
+    @pytest.mark.asyncio
+    async def test_job_table_update(self, mock_daemon_client):
         """Test updating job table with new data"""
+        from textual.app import App
+
         jobs = mock_daemon_client.list_jobs()
 
-        table = JobTable()
-        table.update_jobs(jobs)
+        class TestApp(App):
+            def compose(self):
+                yield JobTable()
 
-        # Job table should have rows for each job
-        assert len(table.rows) == 3
+        app = TestApp()
+        async with app.run_test() as pilot:
+            table = app.query_one(JobTable)
+            table.update_jobs(jobs)
+
+            # Job table should have rows for each job
+            assert len(table.rows) == 3
 
     def test_refresh_callbacks(self, manager):
         """Test refresh callback registration and triggering"""

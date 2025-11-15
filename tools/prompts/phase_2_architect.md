@@ -381,7 +381,101 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Document in architecture.md
    - Pattern IDs: react-useeffect-infinite-loop, react-animation-state-separation
 
-5. Save Architecture:
+5. **PARALLEL BUILD PLANNING (if Scout recommended parallel build):**
+
+   Read Scout's "Build Strategy" section from scout-report.md.
+
+   **IF Scout recommends "Parallel Build Recommendation: YES":**
+
+   Create file: .context-foundry/build-tasks.json
+
+   This JSON file defines independent build tasks that can be executed in parallel.
+
+   **Structure:**
+   ```json
+   {
+     "parallel_build_enabled": true,
+     "tasks": [
+       {
+         "task_id": "task-1",
+         "name": "Build Frontend",
+         "description": "Build React frontend with Vite",
+         "working_directory": "./frontend",
+         "build_commands": [
+           "npm install",
+           "npm run build"
+         ],
+         "dependencies": [],
+         "estimated_duration_minutes": 5
+       },
+       {
+         "task_id": "task-2",
+         "name": "Build Backend",
+         "description": "Build FastAPI backend",
+         "working_directory": "./backend",
+         "build_commands": [
+           "pip install -r requirements.txt",
+           "python -m pytest"
+         ],
+         "dependencies": [],
+         "estimated_duration_minutes": 3
+       },
+       {
+         "task_id": "task-3",
+         "name": "Integration Setup",
+         "description": "Configure integration between frontend and backend",
+         "working_directory": ".",
+         "build_commands": [
+           "cp backend/.env.example backend/.env",
+           "echo 'FRONTEND_URL=http://localhost:5173' >> backend/.env"
+         ],
+         "dependencies": ["task-1", "task-2"],
+         "estimated_duration_minutes": 1
+       }
+     ],
+     "total_estimated_sequential": 9,
+     "total_estimated_parallel": 6,
+     "time_savings_percent": 33
+   }
+   ```
+
+   **Key Requirements:**
+   - **task_id**: Unique identifier for each task
+   - **dependencies**: Array of task_ids that must complete before this task starts
+   - **working_directory**: Where to execute build_commands (relative to project root)
+   - **build_commands**: Shell commands to execute for this task
+   - Tasks with empty dependencies [] can run in parallel
+   - Tasks with dependencies run after their dependencies complete
+
+   **Dependency Graph Rules:**
+   - Independent modules (frontend, backend, services) → dependencies: []
+   - Integration/config tasks → dependencies: ["task-1", "task-2"]
+   - Database migrations → typically dependencies: [] (unless schema depends on code generation)
+
+   **Example Scenarios:**
+
+   *Full-stack app (frontend + backend):*
+   - Task 1: Build frontend (dependencies: [])
+   - Task 2: Build backend (dependencies: [])
+   - Task 3: Integration test (dependencies: ["task-1", "task-2"])
+
+   *Microservices (3 services):*
+   - Task 1: Build auth-service (dependencies: [])
+   - Task 2: Build api-service (dependencies: [])
+   - Task 3: Build worker-service (dependencies: [])
+   - Task 4: Deploy all (dependencies: ["task-1", "task-2", "task-3"])
+
+   *Monorepo with shared library:*
+   - Task 1: Build shared-lib (dependencies: [])
+   - Task 2: Build app-1 (dependencies: ["task-1"])
+   - Task 3: Build app-2 (dependencies: ["task-1"])
+
+   **IF Scout recommends "Parallel Build Recommendation: NO":**
+   - Do NOT create build-tasks.json
+   - Build will proceed with single sequential Builder agent
+   - Document in architecture.md: "Sequential build (no parallel tasks)"
+
+6. Save Architecture:
    Create file: .context-foundry/architecture.md
    Include:
    - System architecture overview
@@ -389,6 +483,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Module specifications
    - **Applied patterns and preventive measures**
    - Implementation steps (ordered)
+   - **Parallel build strategy (if build-tasks.json created)**
    - Testing requirements and procedures
    - Success criteria
 

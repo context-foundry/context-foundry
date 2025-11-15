@@ -265,6 +265,46 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 
    DO NOT write exhaustive documentation - Architect will expand details.
 
+   **PARALLEL BUILD FEASIBILITY ASSESSMENT:**
+
+   Analyze if this project can benefit from parallel building:
+
+   **Assess Module Independence:**
+   - Does the project have multiple independent modules? (e.g., frontend + backend, multiple services, separate libraries)
+   - Can modules be built without dependencies on each other's build artifacts?
+   - Are there clear boundaries between components?
+
+   **Evaluate Complexity:**
+   - Is the total build expected to take >15 minutes?
+   - Are there 3+ distinct buildable units?
+   - Would parallel execution reduce total build time by >30%?
+
+   **Check for Blockers:**
+   - Shared build artifacts or circular dependencies?
+   - Sequential configuration requirements?
+   - Single database schema that must be created before all services?
+
+   **Recommendation:**
+   Add to scout-report.md under "Build Strategy":
+
+   ```markdown
+   ## Build Strategy
+
+   **Parallel Build Recommendation:** [YES/NO]
+
+   [If YES:]
+   - **Parallelizable Modules:** [e.g., "frontend, backend, database migrations"]
+   - **Independence Verification:** [e.g., "Frontend has no build-time dependency on backend, backend can build independently"]
+   - **Estimated Time Savings:** [e.g., "~40% reduction (sequential: 20min → parallel: 12min)"]
+   - **Build Task Structure:** [Brief description of how tasks would be divided]
+
+   [If NO:]
+   - **Reason:** [e.g., "Single monolithic application with no separable modules" or "Sequential database migrations required before app build"]
+   - **Build Approach:** Sequential
+   ```
+
+   This assessment will be used by Architect to decide whether to create build-tasks.json for parallel execution.
+
 5. **Save Scout report to cache (if incremental mode enabled):**
    ```python
    python3 -c "

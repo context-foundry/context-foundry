@@ -38,10 +38,16 @@ class JobTable(DataTable):
         super().__init__(**kwargs)
         self.cursor_type = "row"
         self.zebra_stripes = True
-        self._setup_columns()
+        self._columns_initialized = False
+
+    def on_mount(self) -> None:
+        """Setup columns when widget is mounted to app (has context)."""
+        if not self._columns_initialized:
+            self._setup_columns()
+            self._columns_initialized = True
 
     def _setup_columns(self) -> None:
-        """Setup table columns"""
+        """Setup table columns. Must be called after mount (when app context exists)."""
         self.add_column("ID", width=10)
         self.add_column("Type", width=15)
         self.add_column("Status", width=12)
@@ -55,6 +61,11 @@ class JobTable(DataTable):
         Args:
             jobs: List of Job objects to display
         """
+        # Ensure columns are initialized before updating
+        if not self._columns_initialized:
+            self._setup_columns()
+            self._columns_initialized = True
+
         # Clear existing rows
         self.clear()
 

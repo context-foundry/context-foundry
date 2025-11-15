@@ -81,6 +81,15 @@ class PhasePipeline(Vertical):
             phase_weight = 100 / len(self.PHASES)
             self._progress_percent += (latest_progress / 100) * phase_weight
 
+    def compose(self):
+        """Initial composition of child widgets."""
+        yield Static("", id="phase-display")
+        yield Static("", id="progress-bar")
+
+    def on_mount(self) -> None:
+        """Initial render when widget mounts."""
+        self._refresh_display()
+
     def _refresh_display(self) -> None:
         """Refresh the visual display"""
         # Build phase status line
@@ -97,6 +106,9 @@ class PhasePipeline(Vertical):
         empty = bar_width - filled
         progress_bar = f"[{'█' * filled}{'░' * empty}] {self._progress_percent:.0f}%"
 
-        # Update display
-        self.mount(Static(phase_line))
-        self.mount(Static(progress_bar))
+        # Update existing widgets instead of mounting new ones
+        phase_widget = self.query_one("#phase-display", Static)
+        phase_widget.update(phase_line)
+
+        progress_widget = self.query_one("#progress-bar", Static)
+        progress_widget.update(progress_bar)

@@ -204,18 +204,3 @@ ProgressBar > .bar--incomplete {
 .status-info {
     color: #9cdcfe;
 }
-
-/* Scrollbar Styling */
-*::-webkit-scrollbar {
-    width: 8px;
-    background: #2d2d30;
-}
-
-*::-webkit-scrollbar-thumb {
-    background: #3e3e42;
-    border-radius: 4px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-    background: #4e4e52;
-}
