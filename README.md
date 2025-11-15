@@ -104,6 +104,48 @@ cfd codex stats --project /path/to/project
 cfd codex export --type common-issues --output patterns.json
 ```
 
+### Reusable Skills Development
+**Capture and reuse successful implementations across projects**
+
+Inspired by [Anthropic's Code Execution Guide](https://www.anthropic.com/news/building-effective-agents-with-code-execution-and-mcp), Context Foundry now automatically builds a library of proven code implementations:
+
+- **Search Before Building** - Scout phase checks 700+ skill library before researching
+- **Auto-Capture** - Test phase saves successful implementations after tests pass
+- **Quality Tracking** - Success rates guide recommendations (only suggest ≥70% success)
+- **Self-Improving** - Each successful build contributes reusable components
+
+**Example workflow:**
+
+```python
+# Build #1: JWT auth for FastAPI (no existing skills)
+Scout → Research from scratch → Build → Test ✅ → Capture skill
+
+# Build #2: Another FastAPI app needs auth
+Scout → Found "JWT Authentication" (success_rate=100%, 1 use)
+      → Reuse existing implementation → Test ✅ → Update metrics
+
+# Build #15: Same pattern, instant success
+Scout → Found "JWT Authentication" (success_rate=85%, 14 uses)
+      → High confidence recommendation
+```
+
+**Storage**: Hybrid JSON + SQLite + auto-generated markdown
+
+```bash
+~/.context-foundry/skills/
+├── authentication/
+│   ├── skl-jwt-authentication-001.json
+│   ├── skl-jwt-authentication-001.md
+├── database/
+│   ├── skl-postgres-pool-001.json
+│   └── skl-postgres-pool-001.md
+└── ...
+```
+
+**Impact**: Reduces duplicate work, maintains consistency, and creates self-improving system where each build makes future builds faster.
+
+See [docs/REUSABLE_SKILLS.md](docs/REUSABLE_SKILLS.md) for details.
+
 ### Glass Pane Dashboard - Mission Control TUI
 **Your command center for autonomous AI development**
 
