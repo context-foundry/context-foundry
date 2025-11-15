@@ -129,9 +129,26 @@ class CodexExporter:
         data["total_patterns"] = len(data["patterns"])
         data["last_updated"] = datetime.utcnow().isoformat()
 
-        # Save back to file
-        with open(common_issues_path, "w") as f:
-            json.dump(data, f, indent=2)
+        # Save back to file with error handling
+        try:
+            with open(common_issues_path, "w") as f:
+                json.dump(data, f, indent=2)
+        except PermissionError as e:
+            logger.error(f"Permission denied writing to {common_issues_path}: {e}")
+            return {
+                "success": False,
+                "error": f"Permission denied: {e}",
+                "file": str(common_issues_path),
+                "message": f"Failed to export: Permission denied writing to {common_issues_path}",
+            }
+        except OSError as e:
+            logger.error(f"OS error writing to {common_issues_path}: {e}")
+            return {
+                "success": False,
+                "error": f"OS error: {e}",
+                "file": str(common_issues_path),
+                "message": f"Failed to export: {e}",
+            }
 
         return {
             "success": True,
@@ -210,9 +227,26 @@ class CodexExporter:
                 data["patterns"].append(pattern)
                 added_count += 1
 
-        # Save back to file
-        with open(arch_patterns_path, "w") as f:
-            json.dump(data, f, indent=2)
+        # Save back to file with error handling
+        try:
+            with open(arch_patterns_path, "w") as f:
+                json.dump(data, f, indent=2)
+        except PermissionError as e:
+            logger.error(f"Permission denied writing to {arch_patterns_path}: {e}")
+            return {
+                "success": False,
+                "error": f"Permission denied: {e}",
+                "file": str(arch_patterns_path),
+                "message": f"Failed to export: Permission denied writing to {arch_patterns_path}",
+            }
+        except OSError as e:
+            logger.error(f"OS error writing to {arch_patterns_path}: {e}")
+            return {
+                "success": False,
+                "error": f"OS error: {e}",
+                "file": str(arch_patterns_path),
+                "message": f"Failed to export: {e}",
+            }
 
         return {
             "success": True,
@@ -239,12 +273,26 @@ class CodexExporter:
         patterns_result = self.export_patterns_to_architecture()
         results["exports"].append(patterns_result)
 
-        # Calculate totals
-        results["total_added"] = sum(r.get("added", 0) for r in results["exports"])
-        results["total_updated"] = sum(r.get("updated", 0) for r in results["exports"])
-        results["message"] = (
-            f"Exported {results['total_added']} new entries and updated {results['total_updated']} existing entries"
-        )
+        # Check if any exports failed
+        failed_exports = [r for r in results["exports"] if not r.get("success", False)]
+        if failed_exports:
+            results["success"] = False
+            error_messages = [r.get("error", "Unknown error") for r in failed_exports]
+            results["error"] = "; ".join(error_messages)
+
+        # Calculate totals (only from successful exports)
+        successful_exports = [r for r in results["exports"] if r.get("success", False)]
+        results["total_added"] = sum(r.get("added", 0) for r in successful_exports)
+        results["total_updated"] = sum(r.get("updated", 0) for r in successful_exports)
+
+        if failed_exports:
+            results["message"] = (
+                f"Partial export: {len(successful_exports)}/{len(results['exports'])} succeeded. Errors: {results['error']}"
+            )
+        else:
+            results["message"] = (
+                f"Exported {results['total_added']} new entries and updated {results['total_updated']} existing entries"
+            )
 
         # Sync to S3 if available
         s3_sync_result = {"attempted": False, "success": False, "files_synced": 0}

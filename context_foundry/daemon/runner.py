@@ -861,18 +861,33 @@ print(json.dumps(result))
                 # Export Codex to JSON pattern files
                 export_result = export_codex_to_patterns_impl()
 
-                if export_result.get("success"):
+                # Log export results (may be partial success)
+                exports = export_result.get("exports", [])
+                successful = [e for e in exports if e.get("success")]
+                failed = [e for e in exports if not e.get("success")]
+
+                if successful:
                     total_patterns = export_result.get(
                         "total_added", 0
                     ) + export_result.get("total_updated", 0)
                     self._emit_log(
                         job_id,
                         "INFO",
-                        f"Exported {total_patterns} patterns to JSON files",
+                        f"Exported {total_patterns} patterns ({len(successful)}/{len(exports)} files succeeded)",
                         None,
                     )
 
-                    # Check if S3 sync occurred
+                if failed:
+                    for failed_export in failed:
+                        self._emit_log(
+                            job_id,
+                            "WARNING",
+                            f"Export failed for {failed_export.get('file', 'unknown')}: {failed_export.get('error', 'Unknown error')}",
+                            None,
+                        )
+
+                # Check if S3 sync occurred (only if at least one export succeeded)
+                if successful:
                     s3_sync = export_result.get("s3_sync", {})
                     if s3_sync.get("attempted"):
                         if s3_sync.get("success"):
@@ -889,9 +904,15 @@ print(json.dumps(result))
                                 f"S3 sync failed: {s3_sync.get('error', 'Unknown error')}",
                                 None,
                             )
-                else:
+                elif not successful and failed:
                     logger.warning(
-                        f"Codex export failed: {export_result.get('error', 'Unknown error')}"
+                        f"All codex exports failed: {export_result.get('error', 'Unknown error')}"
+                    )
+                    self._emit_log(
+                        job_id,
+                        "WARNING",
+                        f"All pattern exports failed: {export_result.get('error', 'Unknown error')}",
+                        None,
                     )
 
             except Exception as export_error:
