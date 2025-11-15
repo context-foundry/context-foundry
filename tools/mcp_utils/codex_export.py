@@ -224,10 +224,10 @@ class CodexExporter:
         }
 
     def export_all(self) -> Dict[str, Any]:
-        """Export all codex entries to appropriate JSON files.
+        """Export all codex entries to appropriate JSON files and sync to S3.
 
         Returns:
-            Result dict with stats for all exports
+            Result dict with stats for all exports and S3 sync status
         """
         results = {"success": True, "exports": []}
 
@@ -245,6 +245,44 @@ class CodexExporter:
         results["message"] = (
             f"Exported {results['total_added']} new entries and updated {results['total_updated']} existing entries"
         )
+
+        # Sync to S3 if available
+        s3_sync_result = {"attempted": False, "success": False, "files_synced": 0}
+        try:
+            from context_foundry.storage import S3PatternClient
+
+            s3_client = S3PatternClient()
+            if s3_client.enabled:
+                s3_sync_result["attempted"] = True
+                files_synced = 0
+
+                # Sync each pattern type that was exported
+                pattern_types = ["common-issues", "architecture-patterns"]
+                for pattern_type in pattern_types:
+                    try:
+                        upload_result = s3_client.upload_pattern(
+                            pattern_type, force=True
+                        )
+                        if upload_result.get("success"):
+                            files_synced += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to upload {pattern_type} to S3: {e}")
+
+                s3_sync_result["success"] = files_synced > 0
+                s3_sync_result["files_synced"] = files_synced
+
+                if files_synced > 0:
+                    logger.info(f"Synced {files_synced} pattern files to S3")
+            else:
+                logger.debug("S3 sync not enabled (boto3 not available)")
+
+        except ImportError:
+            logger.debug("S3PatternClient not available, skipping S3 sync")
+        except Exception as e:
+            s3_sync_result["error"] = str(e)
+            logger.warning(f"S3 sync failed: {e}")
+
+        results["s3_sync"] = s3_sync_result
 
         return results
 

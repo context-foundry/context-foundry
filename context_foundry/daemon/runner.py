@@ -845,6 +845,65 @@ print(json.dumps(result))
                 None,
             )
 
+            # After pushing to Codex, export and sync to S3
+            try:
+                self._emit_log(
+                    job_id,
+                    "INFO",
+                    "Exporting Codex to pattern files and syncing to S3",
+                    None,
+                )
+
+                # Import export and S3 sync functionality
+                from mcp_utils.codex_export import export_codex_to_patterns_impl
+
+                # Export Codex to JSON pattern files
+                export_result = export_codex_to_patterns_impl()
+
+                if export_result.get("success"):
+                    total_patterns = export_result.get(
+                        "total_added", 0
+                    ) + export_result.get("total_updated", 0)
+                    self._emit_log(
+                        job_id,
+                        "INFO",
+                        f"Exported {total_patterns} patterns to JSON files",
+                        None,
+                    )
+
+                    # Check if S3 sync occurred
+                    s3_sync = export_result.get("s3_sync", {})
+                    if s3_sync.get("attempted"):
+                        if s3_sync.get("success"):
+                            self._emit_log(
+                                job_id,
+                                "INFO",
+                                f"Synced patterns to S3: {s3_sync.get('files_synced', 0)} files",
+                                None,
+                            )
+                        else:
+                            self._emit_log(
+                                job_id,
+                                "WARNING",
+                                f"S3 sync failed: {s3_sync.get('error', 'Unknown error')}",
+                                None,
+                            )
+                else:
+                    logger.warning(
+                        f"Codex export failed: {export_result.get('error', 'Unknown error')}"
+                    )
+
+            except Exception as export_error:
+                logger.warning(
+                    f"Failed to export/sync patterns for job {job_id}: {export_error}"
+                )
+                self._emit_log(
+                    job_id,
+                    "WARNING",
+                    f"Pattern export/sync failed: {str(export_error)}",
+                    None,
+                )
+
         except Exception as e:
             logger.error(
                 f"Failed to push patterns to codex for job {job_id}: {e}", exc_info=True
