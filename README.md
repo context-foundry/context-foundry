@@ -759,6 +759,23 @@ What's the status of my build?
 
 Claude will automatically check and report progress.
 
+#### Build Modes
+
+Context Foundry supports **6 build modes** that control how the autonomous pipeline behaves:
+
+| Mode | Use Case | Example |
+|------|----------|---------|
+| `new_project` | Create from scratch | "Build a Mario platformer game" |
+| `fix_bug` | Fix errors/bugs | "Fix the login timeout error" |
+| `add_feature` | Add functionality | "Add dark mode to the UI" |
+| `upgrade_deps` | Update packages | "Upgrade to React 18" |
+| `refactor` | Restructure code | "Refactor API to use middleware" |
+| `add_tests` | Add test coverage | "Add tests for authentication" |
+
+**Auto-detection:** Context Foundry automatically detects the mode from your task description.
+
+**Learn more:** See **[docs/BUILD_MODES.md](docs/BUILD_MODES.md)** for complete details on each mode, when to use them, and best practices.
+
 #### Delegate a Simple Task
 
 ```
