@@ -1202,6 +1202,381 @@ def codex_add_pattern(
     )
 
 
+# ============================================================================
+# Reusable Skills Management
+# ============================================================================
+
+
+@mcp.tool()
+def save_skill(
+    title: str,
+    description: str,
+    implementation_code: str,
+    file_type: str,
+    project_type: str,
+    tags: Optional[List[str]] = None,
+    requirements: Optional[List[str]] = None,
+    file_path: Optional[str] = None,
+    example: Optional[str] = None,
+) -> str:
+    """
+    Save a reusable skill to ~/.context-foundry/skills/
+
+    Captures successful implementations as reusable skills for future builds.
+    Skills are stored as JSON files with auto-generated markdown documentation
+    and indexed in Context Codex for fast search.
+
+    Args:
+        title: Skill name (e.g., "JWT Authentication Implementation")
+        description: Detailed description of what this skill does
+        implementation_code: Complete, working code implementation
+        file_type: Programming language (python, typescript, javascript, go, etc.)
+        project_type: Project framework/context (fastapi, react, express, etc.)
+        tags: Keywords for search (e.g., ["authentication", "jwt", "security"])
+        requirements: Dependencies needed (e.g., ["PyJWT>=2.8.0", "python-jose"])
+        file_path: Suggested file path for this code (e.g., "auth/jwt_handler.py")
+        example: Usage example code
+
+    Returns:
+        JSON string with skill_id and storage locations
+
+    Examples:
+        save_skill(
+            title="JWT Authentication for FastAPI",
+            description="Complete JWT token generation, validation, and refresh",
+            implementation_code=jwt_handler_code,
+            file_type="python",
+            project_type="fastapi",
+            tags=["authentication", "jwt", "security"],
+            requirements=["PyJWT>=2.8.0", "python-jose[cryptography]"],
+            file_path="auth/jwt_handler.py",
+            example="from auth.jwt_handler import verify_token\\n..."
+        )
+    """
+    from tools.skills.manager import SkillsManager
+
+    try:
+        manager = SkillsManager()
+
+        skill_id = manager.save_skill(
+            title=title,
+            description=description,
+            code=implementation_code,
+            file_type=file_type,
+            project_type=project_type,
+            tags=tags or [],
+            requirements=requirements or [],
+            file_path=file_path,
+            example=example,
+        )
+
+        # Get skill details for response
+        skill = manager.load_skill(skill_id)
+        category = skill["metadata"]["category"] if skill else "unknown"
+
+        return json.dumps(
+            {
+                "success": True,
+                "skill_id": skill_id,
+                "category": category,
+                "json_file": f"~/.context-foundry/skills/{category}/{skill_id}.json",
+                "markdown_file": f"~/.context-foundry/skills/{category}/{skill_id}.md",
+                "message": f"Skill '{title}' saved successfully",
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
+
+
+@mcp.tool()
+def search_skills(
+    query: str,
+    project_type: Optional[str] = None,
+    min_success_rate: float = 0.0,
+    limit: int = 10,
+) -> str:
+    """
+    Search for existing reusable skills before implementing from scratch.
+
+    Searches the skills library using query matching (title, description, tags)
+    and filters by project type and success rate. Use this in Scout phase to
+    find existing implementations that can be reused.
+
+    Args:
+        query: Search query (e.g., "JWT authentication", "database connection pool")
+        project_type: Filter by project type (e.g., "fastapi", "react", "express")
+        min_success_rate: Minimum success rate (0.0-1.0, default 0.0). Use 0.7 for high-confidence skills.
+        limit: Maximum number of results (default 10)
+
+    Returns:
+        JSON string with list of matching skills
+
+    Examples:
+        # Find JWT auth implementations for FastAPI projects
+        search_skills("JWT authentication", project_type="fastapi", min_success_rate=0.7)
+
+        # Find any database connection pooling skills
+        search_skills("database connection pool", min_success_rate=0.6)
+
+        # Find React component patterns
+        search_skills("react component", project_type="react")
+    """
+    from tools.skills.manager import SkillsManager
+
+    try:
+        manager = SkillsManager()
+
+        results = manager.search_skills(
+            query=query,
+            project_type=project_type,
+            min_success_rate=min_success_rate,
+            limit=limit,
+        )
+
+        # Format results for display
+        formatted_results = []
+        for skill in results:
+            success_rate_pct = (
+                f"{skill['success_rate'] * 100:.0f}%"
+                if skill.get("success_rate") is not None
+                else "Not yet used"
+            )
+
+            formatted_results.append(
+                {
+                    "skill_id": skill["skill_id"],
+                    "title": skill["title"],
+                    "category": skill["category"],
+                    "project_type": skill["project_type"],
+                    "success_rate": success_rate_pct,
+                    "usage_count": skill["usage_count"],
+                    "tags": skill["tags"],
+                }
+            )
+
+        return json.dumps(
+            {
+                "success": True,
+                "query": query,
+                "filters": {
+                    "project_type": project_type,
+                    "min_success_rate": min_success_rate,
+                },
+                "total_results": len(formatted_results),
+                "results": formatted_results,
+                "message": f"Found {len(formatted_results)} matching skill(s)",
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
+
+
+@mcp.tool()
+def load_skill(skill_id: str) -> str:
+    """
+    Load complete skill details including implementation code.
+
+    Retrieves the full skill definition with code, dependencies, usage examples,
+    and metrics. Use this after search_skills() to get the complete implementation
+    for a skill you want to reuse.
+
+    Args:
+        skill_id: Skill ID (e.g., "skl-jwt-auth-001")
+
+    Returns:
+        JSON string with complete skill details
+
+    Example:
+        # After searching, load full details
+        load_skill("skl-jwt-auth-001")
+    """
+    from tools.skills.manager import SkillsManager
+
+    try:
+        manager = SkillsManager()
+
+        skill = manager.load_skill(skill_id)
+
+        if not skill:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Skill not found: {skill_id}",
+                },
+                indent=2,
+            )
+
+        # Format success rate
+        success_rate = skill["metrics"].get("success_rate")
+        if success_rate is not None:
+            success_rate_display = f"{success_rate * 100:.0f}%"
+        else:
+            success_rate_display = "Not yet used"
+
+        return json.dumps(
+            {
+                "success": True,
+                "skill_id": skill_id,
+                "title": skill["metadata"]["title"],
+                "description": skill["metadata"]["description"],
+                "category": skill["metadata"]["category"],
+                "file_type": skill["metadata"]["file_type"],
+                "project_type": skill["metadata"]["project_type"],
+                "implementation": {
+                    "code": skill["implementation"]["code"],
+                    "file_path": skill["implementation"]["file_path"],
+                    "dependencies": skill["implementation"]["dependencies"],
+                },
+                "usage": skill["usage"],
+                "metrics": {
+                    "usage_count": skill["metrics"]["usage_count"],
+                    "success_rate": success_rate_display,
+                    "last_used": skill["metrics"]["last_used"],
+                    "projects_used": skill["metrics"]["projects_used"],
+                },
+                "tags": skill["tags"],
+                "created_at": skill["created_at"],
+                "updated_at": skill["updated_at"],
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
+
+
+@mcp.tool()
+def update_skill_metrics(skill_id: str, project_name: str, success: bool) -> str:
+    """
+    Update skill effectiveness metrics after using it in a build.
+
+    Tracks which projects used this skill and whether it was successful.
+    Updates success_rate based on historical usage. Call this in Feedback
+    phase after build completes.
+
+    Args:
+        skill_id: Skill ID that was used (e.g., "skl-jwt-auth-001")
+        project_name: Name/path of project that used this skill
+        success: Whether the build/tests passed successfully (True/False)
+
+    Returns:
+        JSON string with updated metrics
+
+    Example:
+        # After build completes successfully
+        update_skill_metrics(
+            skill_id="skl-jwt-auth-001",
+            project_name="ecommerce-api",
+            success=True
+        )
+
+        # After build failed
+        update_skill_metrics(
+            skill_id="skl-db-pool-002",
+            project_name="analytics-service",
+            success=False
+        )
+    """
+    from tools.skills.manager import SkillsManager
+
+    try:
+        manager = SkillsManager()
+
+        # Update metrics
+        updated = manager.update_metrics(
+            skill_id=skill_id, project_name=project_name, success=success
+        )
+
+        if not updated:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": f"Failed to update metrics for {skill_id}",
+                },
+                indent=2,
+            )
+
+        # Get updated skill
+        skill = manager.load_skill(skill_id)
+
+        if not skill:
+            return json.dumps(
+                {"success": False, "error": "Skill not found after update"},
+                indent=2,
+            )
+
+        # Format metrics
+        metrics = skill["metrics"]
+        success_rate_pct = (
+            f"{metrics['success_rate'] * 100:.0f}%"
+            if metrics.get("success_rate") is not None
+            else "0%"
+        )
+
+        return json.dumps(
+            {
+                "success": True,
+                "skill_id": skill_id,
+                "title": skill["metadata"]["title"],
+                "updated_metrics": {
+                    "usage_count": metrics["usage_count"],
+                    "success_rate": success_rate_pct,
+                    "last_used": metrics["last_used"],
+                    "total_projects": len(metrics["projects_used"]),
+                },
+                "this_usage": {
+                    "project_name": project_name,
+                    "success": success,
+                },
+                "message": f"Updated metrics for '{skill['metadata']['title']}'",
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        import traceback
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            indent=2,
+        )
+
+
 @mcp.tool()
 def codex_stats() -> str:
     """
