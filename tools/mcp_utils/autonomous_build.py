@@ -648,7 +648,14 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         duration = (datetime.now() - start_time).total_seconds()
 
-        return {
+        print(f"\n{'=' * 60}", file=sys.stderr)
+        print("[TRACE] execute_build_with_phase_spawning COMPLETING", file=sys.stderr)
+        print(f"[TRACE] Timestamp: {datetime.now().isoformat()}", file=sys.stderr)
+        print(f"[TRACE] Duration: {duration:.1f}s", file=sys.stderr)
+        print(f"[TRACE] Phases: {phases_completed}", file=sys.stderr)
+        print(f"{'=' * 60}\n", file=sys.stderr)
+
+        result = {
             "status": "completed",
             "phases_completed": phases_completed,
             "test_iterations": test_iteration,  # Now always defined
@@ -656,6 +663,15 @@ def execute_build_with_phase_spawning(
             "duration_seconds": duration,
             "message": f"Build completed successfully in {duration:.1f}s",
         }
+
+        print(
+            "[TRACE] About to RETURN from execute_build_with_phase_spawning",
+            file=sys.stderr,
+        )
+        print(f"[TRACE] Returning at: {datetime.now().isoformat()}", file=sys.stderr)
+        sys.stderr.flush()  # Force flush before return
+
+        return result
 
     except Exception as e:
         duration = (datetime.now() - start_time).total_seconds()

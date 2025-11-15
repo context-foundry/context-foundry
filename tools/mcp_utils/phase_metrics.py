@@ -119,6 +119,20 @@ def log_phase_metrics(
     else:
         summary = _create_new_summary()
 
+    # Ensure context_metrics structure exists (handles legacy summaries)
+    if "context_metrics" not in summary:
+        summary["context_metrics"] = {
+            "max_context_window": 200000,
+            "model": "claude-sonnet-4",
+            "by_phase": {},
+        }
+    elif "by_phase" not in summary["context_metrics"]:
+        summary["context_metrics"]["by_phase"] = {}
+
+    # Ensure phases structure exists
+    if "phases" not in summary:
+        summary["phases"] = {}
+
     # Calculate context percentage and zone
     max_context = 200000
     percentage = (context_tokens / max_context) * 100

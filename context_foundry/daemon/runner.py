@@ -7,6 +7,7 @@ Emits phase events and logs to Store for visibility.
 
 import json
 import logging
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -25,7 +26,6 @@ from mcp_utils.delegation import (
 )
 from mcp_utils.phase_tracking import read_phase_info
 from mcp_utils.output_utils import create_output_summary
-from mcp_utils.pattern_management import merge_project_patterns_impl
 
 
 logger = logging.getLogger(__name__)
@@ -93,12 +93,47 @@ class Runner:
             if job.type == JobType.AUTONOMOUS_BUILD:
                 # Full Scout→Architect→Builder→Test flow
                 self._emit_log(job.id, "INFO", "Starting autonomous build", None)
+                logger.info(
+                    f"[TRACE] run() calling _run_autonomous_build for job {job.id}"
+                )
+
                 result = self._run_autonomous_build(job, working_dir, timeout_minutes)
 
-                # If successful, trigger pattern merge
+                logger.info(
+                    f"[TRACE] run() received result from _run_autonomous_build: status={result.get('status')}"
+                )
+
+                # If successful, trigger pattern merge and update job status
                 if result.get("status") == "completed":
                     self._emit_log(job.id, "INFO", "Autonomous build completed", None)
+                    logger.info(
+                        f"[TRACE] run() calling _merge_patterns for job {job.id}"
+                    )
+
                     self._merge_patterns(job.id, working_dir)
+
+                    logger.info(
+                        "[TRACE] run() pattern merge complete, updating job status to SUCCEEDED"
+                    )
+
+                    # Update job status directly in store
+                    from context_foundry.daemon.models import JobStatus
+                    from datetime import datetime
+
+                    self.store.update_job_status(
+                        job.id,
+                        JobStatus.SUCCEEDED,
+                        completed_at=datetime.now(),
+                        result={
+                            "success": True,
+                            "exit_code": 0,
+                            "phases_completed": result.get("phases_completed", []),
+                            "test_iterations": result.get("test_iterations", 0),
+                            "duration_seconds": result.get("duration_seconds", 0),
+                        },
+                    )
+
+                    logger.info(f"[TRACE] Job {job.id} marked as SUCCEEDED")
 
                     return {
                         "success": True,
@@ -110,6 +145,24 @@ class Runner:
                 else:
                     error_msg = result.get("error", "Autonomous build failed")
                     self._emit_log(job.id, "ERROR", error_msg, None)
+
+                    logger.info(
+                        f"[TRACE] run() updating job status to FAILED: {error_msg}"
+                    )
+
+                    # Update job status directly in store
+                    from context_foundry.daemon.models import JobStatus
+                    from datetime import datetime
+
+                    self.store.update_job_status(
+                        job.id,
+                        JobStatus.FAILED,
+                        completed_at=datetime.now(),
+                        result={"error": error_msg},
+                    )
+
+                    logger.info(f"[TRACE] Job {job.id} marked as FAILED")
+
                     raise RuntimeError(error_msg)
             else:
                 # Standard delegation flow (for DELEGATION, ENHANCEMENT, etc.)
@@ -427,6 +480,10 @@ class Runner:
         )
 
         # Execute build
+        logger.info(
+            f"[TRACE] Calling execute_build_with_phase_spawning for job {job.id} at {datetime.now().isoformat()}"
+        )
+
         result = execute_build_with_phase_spawning(
             task=task,
             working_directory=working_path,
@@ -439,20 +496,27 @@ class Runner:
             timeout_minutes=timeout_minutes,
         )
 
+        logger.info(
+            f"[TRACE] execute_build_with_phase_spawning RETURNED for job {job.id} at {datetime.now().isoformat()}"
+        )
+        logger.info(
+            f"[TRACE] Result status: {result.get('status')}, phases: {result.get('phases_completed')}"
+        )
+
         return result
 
     def _merge_patterns(self, job_id: str, working_dir: str):
         """
-        Trigger pattern merge after successful job completion
+        Push learned patterns directly to Context Codex database
 
-        This implements self-improvement by extracting learnings and
-        writing them back to the pattern library.
+        This implements self-improvement by extracting learnings from test failures
+        and pushing them to the searchable knowledge base.
         """
         try:
             self._emit_log(
                 job_id,
                 "INFO",
-                "Merging learned patterns to pattern library",
+                "Pushing learned patterns to Context Codex",
                 None,
             )
 
@@ -465,37 +529,119 @@ class Runner:
             )
 
             if not pattern_file.exists():
-                logger.info(f"No patterns found for job {job_id}, skipping merge")
+                logger.info(f"No patterns found for job {job_id}, skipping codex push")
                 return
 
-            # Merge patterns
-            result = merge_project_patterns_impl(
-                project_pattern_file=str(pattern_file),
-                pattern_type="common-issues",
-                increment_build_count=True,
-            )
+            # Load patterns from file
+            import json
 
-            if result.get("status") == "success":
-                patterns_merged = result.get("patterns_merged", 0)
-                self._emit_log(
-                    job_id,
-                    "INFO",
-                    f"Successfully merged {patterns_merged} patterns to global library",
-                    None,
-                )
-            else:
-                logger.warning(f"Pattern merge had issues: {result}")
+            with open(pattern_file) as f:
+                patterns_data = json.load(f)
+
+            patterns = patterns_data.get("patterns", [])
+            if not patterns:
+                logger.info(f"No patterns in file for job {job_id}")
+                return
+
+            # Import codex integration
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
+            from mcp_utils.codex_integration import push_issue_to_codex
+
+            # Push each pattern to Context Codex database
+            patterns_pushed = 0
+            for pattern in patterns:
+                try:
+                    # Extract pattern data
+                    title = pattern.get("title", "Unknown issue")
+                    description = pattern.get(
+                        "description", pattern.get("error_message", "")
+                    )
+                    severity = pattern.get("severity", "MEDIUM")
+                    tech_stack = pattern.get("tech_stack", [])
+                    project_types = pattern.get("project_types", [])
+                    tags = tech_stack + project_types
+                    solution = pattern.get("solution", {})
+                    solution_desc = (
+                        solution.get("description")
+                        if isinstance(solution, dict)
+                        else str(solution)
+                    )
+
+                    # Push to codex database
+                    entry_id = push_issue_to_codex(
+                        title=title,
+                        description=description,
+                        severity=severity,
+                        tags=tags,
+                        project_types=project_types,
+                        solution_description=solution_desc if solution_desc else None,
+                    )
+
+                    patterns_pushed += 1
+                    logger.debug(f"Pushed pattern to codex: {title} ({entry_id})")
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to push pattern '{pattern.get('title')}' to codex: {e}"
+                    )
+                    continue
+
+            self._emit_log(
+                job_id,
+                "INFO",
+                f"Successfully pushed {patterns_pushed}/{len(patterns)} patterns to Context Codex",
+                None,
+            )
 
         except Exception as e:
             logger.error(
-                f"Failed to merge patterns for job {job_id}: {e}", exc_info=True
+                f"Failed to push patterns to codex for job {job_id}: {e}", exc_info=True
             )
             self._emit_log(
                 job_id,
                 "WARNING",
-                f"Pattern merge failed: {str(e)}",
+                f"Codex push failed: {str(e)}",
                 None,
             )
+
+    def cleanup_active_tasks(self):
+        """
+        Kill all active subprocess tasks
+
+        Called during daemon shutdown to prevent orphaned processes.
+        Iterates through all tracked tasks and terminates their subprocesses.
+        """
+        if not self.active_tasks:
+            return
+
+        logger.info(f"Cleaning up {len(self.active_tasks)} active tasks...")
+
+        for task_id, task_info in list(self.active_tasks.items()):
+            process = task_info.get("process")
+            if process and process.poll() is None:
+                # Process still running - kill it
+                logger.info(
+                    f"Terminating subprocess for task {task_id} (PID {process.pid})"
+                )
+                try:
+                    process.terminate()
+                    # Give it 5 seconds to terminate gracefully
+                    try:
+                        process.wait(timeout=5)
+                        logger.info(f"Task {task_id} terminated gracefully")
+                    except subprocess.TimeoutExpired:
+                        # Still running after SIGTERM - force kill
+                        logger.warning(
+                            f"Task {task_id} did not terminate, sending SIGKILL"
+                        )
+                        process.kill()
+                        process.wait(timeout=2)
+                except Exception as e:
+                    logger.error(f"Failed to kill process for task {task_id}: {e}")
+
+        # Clear all active tasks
+        self.active_tasks.clear()
+        logger.info("Active task cleanup complete")
 
 
 def create_runner(store: Store) -> Runner:

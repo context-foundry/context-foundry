@@ -477,6 +477,10 @@ class CFDaemon:
         logger.info("Stopping Context Foundry Daemon...")
         self.running = False
 
+        # Clean up any active subprocess tasks before stopping workers
+        logger.info("Cleaning up active subprocess tasks...")
+        self.runner.cleanup_active_tasks()
+
         # Stop JobManager
         self.job_manager.stop(timeout=30.0)
 
