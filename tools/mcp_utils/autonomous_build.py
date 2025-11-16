@@ -681,16 +681,29 @@ def execute_build_with_phase_spawning(
                         f"{architect_fix_file} is suspiciously small ({fix_file_path.stat().st_size} bytes)"
                     )
 
-                # 3. Check Architect didn't modify source files
+                # 3. Check Architect didn't modify or delete source files
                 source_files_after = _get_source_file_checksums(working_directory)
+
+                # Check for modifications
                 modified_files = [
                     f
                     for f, checksum in source_files_after.items()
                     if source_files_before.get(f) != checksum
                 ]
+
+                # Check for deletions
+                deleted_files = [
+                    f for f in source_files_before.keys() if f not in source_files_after
+                ]
+
                 if modified_files:
                     validation_errors.append(
                         f"Architect modified source files (should only create fix plan): {', '.join(modified_files[:5])}"
+                    )
+
+                if deleted_files:
+                    validation_errors.append(
+                        f"Architect deleted source files (should only create fix plan): {', '.join(deleted_files[:5])}"
                     )
 
                 if validation_errors:
@@ -701,7 +714,18 @@ def execute_build_with_phase_spawning(
                         "\n💡 Architect should ONLY create a fix plan document, not implement code!",
                         file=sys.stderr,
                     )
-                    break
+                    # Return explicit error instead of generic "Test failed"
+                    return {
+                        "status": "failed",
+                        "phase_failed": "Architect (fix validation)",
+                        "error": f"Architect fix validation failed: {'; '.join(validation_errors)}",
+                        "start_time": start_time.isoformat(),
+                        "duration_seconds": (
+                            datetime.now() - start_time
+                        ).total_seconds(),
+                        "phases_completed": phases_completed,
+                        "test_iterations": test_iteration,
+                    }
 
                 # ENFORCEMENT: Check Architect stayed within budget (14K tokens)
                 architect_budget = 14000
@@ -966,14 +990,11 @@ def _get_source_file_checksums(working_dir: Path) -> dict[str, str]:
 
     for file_path in working_dir.rglob("*"):
         if file_path.is_file():
-            # Skip excluded directories
+            # Skip ONLY the specific excluded directories
             if any(excluded in file_path.parts for excluded in exclude_dirs):
                 continue
 
-            # Skip hidden files
-            if any(part.startswith(".") for part in file_path.parts):
-                continue
-
+            # Include ALL other files (including .github, .vscode, .env, etc.)
             try:
                 relative_path = file_path.relative_to(working_dir)
                 with open(file_path, "rb") as f:

@@ -387,12 +387,37 @@ def run_phase(
         if phase_name == "Scout":
             phase_files = [working_directory / ".context-foundry" / "scout-report.md"]
         elif phase_name == "Architect":
-            phase_files = [
-                working_directory / ".context-foundry" / "scout-report.md",
-                working_directory / ".context-foundry" / "architecture.md",
-            ]
+            if iteration > 0:
+                # Fix iteration: reads test-report-{N}.md and architecture.md
+                # writes architecture-fix-{N}.md
+                phase_files = [
+                    working_directory / ".context-foundry" / "architecture.md",
+                    working_directory
+                    / ".context-foundry"
+                    / f"test-report-{iteration}.md",
+                    working_directory
+                    / ".context-foundry"
+                    / f"architecture-fix-{iteration}.md",
+                ]
+            else:
+                # Initial architecture: reads scout-report.md, writes architecture.md
+                phase_files = [
+                    working_directory / ".context-foundry" / "scout-report.md",
+                    working_directory / ".context-foundry" / "architecture.md",
+                ]
         elif phase_name == "Builder":
-            phase_files = [working_directory / ".context-foundry" / "architecture.md"]
+            if iteration > 0:
+                # Fix iteration: reads architecture-fix-{N}.md
+                phase_files = [
+                    working_directory
+                    / ".context-foundry"
+                    / f"architecture-fix-{iteration}.md"
+                ]
+            else:
+                # Initial build: reads architecture.md
+                phase_files = [
+                    working_directory / ".context-foundry" / "architecture.md"
+                ]
         elif phase_name == "Test":
             # FIX #3: Use iteration-aware filename for test reports
             test_filename = (
