@@ -137,69 +137,79 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
      ]
    }
 
-6. Update GLOBAL pattern library (Cross-Project Learning):
+6. Create LOCAL pattern file and merge to GLOBAL storage (Cross-Project Learning):
 
-   **CRITICAL:** Patterns must be saved to GLOBAL storage so ALL future builds benefit!
+   **CRITICAL:** Patterns must be saved BOTH locally and globally!
 
-   **IMPORTANT:** The feedback file already contains all patterns in structured format.
-   You do NOT need to create .context-foundry/patterns/ - just merge the feedback file directly!
+   **Step A: Create LOCAL pattern file** (Required for daemon to push to Codex + S3):
 
-   **Merge feedback patterns to GLOBAL storage** using MCP tool:
+   Create: .context-foundry/patterns/common-issues.json
 
-   Execute this command to merge patterns from the feedback file:
+   Extract all issues from the feedback file and convert to pattern format:
+   ```json
+   {
+     "patterns": [
+       {
+         "pattern_id": "unique-id-from-issue",
+         "title": "Issue title from feedback",
+         "description": "Issue description from feedback",
+         "first_seen": "2025-01-15",
+         "last_seen": "2025-01-15",
+         "frequency": 1,
+         "project_types": ["project-type-from-feedback"],
+         "tech_stack": ["tech-from-feedback"],
+         "severity": "HIGH",
+         "solution": {
+           "description": "Solution description from feedback",
+           "scout": "Scout-specific guidance",
+           "architect": "Architect-specific guidance",
+           "builder": "Builder-specific guidance",
+           "test": "Test-specific guidance"
+         },
+         "auto_apply": true
+       }
+     ],
+     "version": "1.0",
+     "last_updated": "2025-01-15T10:30:00Z",
+     "total_builds": 1
+   }
+   ```
+
+   **Important:** For each issue in feedback file's `issues_found` array:
+   - Extract pattern_id (or generate from issue title)
+   - Copy severity, project_types, tech_stack
+   - Structure solution with phase-specific guidance
+   - Set first_seen and last_seen to current date
+   - Set frequency to 1
+
+   **Step B: Merge patterns to GLOBAL storage** using MCP tool:
+
+   Execute this command to merge the LOCAL file to global storage:
    ```
    merge_project_patterns(
-     project_pattern_file="{absolute_path}/.context-foundry/feedback/build-feedback-{timestamp}.json",
+     project_pattern_file="{absolute_path}/.context-foundry/patterns/common-issues.json",
      pattern_type="common-issues",
      increment_build_count=true
    )
    ```
 
    Replace {absolute_path} with the actual working directory path (e.g., /Users/name/homelab/1942-shooter)
-   Replace {timestamp} with the actual feedback file timestamp (e.g., 2025-01-13)
 
    **What this does automatically:**
-     * Adds new patterns to ~/.context-foundry/patterns/common-issues.json
+     * Reads LOCAL .context-foundry/patterns/common-issues.json
+     * Adds new patterns to GLOBAL ~/.context-foundry/patterns/common-issues.json
      * Increments frequency for existing patterns
      * Updates last_seen dates
      * Merges project_types
      * Preserves highest severity
-     * Keeps most comprehensive solutions
      * Increments total_builds counter
 
-   **Example: Merging common-issues to global storage:**
-   ```
-   1. Create .context-foundry/patterns/common-issues.json with new pattern:
-   {
-     "patterns": [{
-       "pattern_id": "cors-es6-modules",
-       "first_seen": "2025-10-18",
-       "last_seen": "2025-10-18",
-       "frequency": 1,
-       "project_types": ["browser-app", "es6-modules", "web-game"],
-       "issue": "ES6 modules fail with CORS from file://",
-       "solution": {
-         "scout": "Flag CORS risk for ES6 modules",
-         "architect": "Include http-server in package.json",
-         "test": "Verify module loading works"
-       },
-       "severity": "HIGH",
-       "auto_apply": true
-     }],
-     "version": "1.0",
-     "total_builds": 1
-   }
-
-   2. Call MCP tool to merge:
-   merge_project_patterns(
-     project_pattern_file="{working_dir}/.context-foundry/patterns/common-issues.json",
-     pattern_type="common-issues",
-     increment_build_count=true
-   )
-
-   3. The pattern is now in ~/.context-foundry/patterns/common-issues.json
-   4. ALL future builds (any project) will read this pattern and avoid CORS issues!
-   ```
+   **What happens after build completes:**
+     1. Daemon reads LOCAL .context-foundry/patterns/common-issues.json
+     2. Pushes each pattern to Context Codex database
+     3. Exports Codex database → JSON files in ~/.context-foundry/patterns/
+     4. Syncs JSON files to S3 community repository
+     5. ALL future builds (across all users) benefit from your learnings!
 
    **Result:** Next browser app build will automatically:
    - Scout phase: Read this pattern and flag CORS risk
@@ -237,12 +247,14 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - **Impact:** Earlier detection, preventive measures
    ```
 
-8. Verify pattern merge succeeded:
+8. Verify pattern files created and merge succeeded:
 
-   After calling merge_project_patterns(), verify the result:
-   - Check the return value shows "status": "success"
+   After creating local file and calling merge_project_patterns():
+   - Verify .context-foundry/patterns/common-issues.json exists
+   - Check merge_project_patterns() return value shows "status": "success"
    - Confirm "new_patterns" and "updated_patterns" counts
    - If merge failed, log the error but continue (non-blocking)
+   - Note: Daemon will read LOCAL file after build completes to push to Codex + S3
 
 9. Save feedback metadata:
 
@@ -255,23 +267,33 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
      "feedback": {
        "analyzed": true,
        "feedback_file": ".context-foundry/feedback/build-feedback-{timestamp}.json",
+       "local_pattern_file": ".context-foundry/patterns/common-issues.json",
+       "local_pattern_file_created": true,
        "patterns_merged_to_global": true,
        "global_patterns_updated": ["~/.context-foundry/patterns/common-issues.json"],
        "new_patterns_added_globally": <actual_count_from_merge_result>,
        "existing_patterns_updated_globally": <actual_count_from_merge_result>,
        "pattern_merge_status": "success",
        "high_priority_recommendations": 2,
-       "cross_project_learning_enabled": true
+       "cross_project_learning_enabled": true,
+       "will_sync_to_codex_and_s3": true
      }
    }
    ```
 
    If pattern merge failed, set:
    ```json
+   "local_pattern_file_created": true,
    "patterns_merged_to_global": false,
    "pattern_merge_status": "failed",
-   "pattern_merge_error": "<error_message>"
+   "pattern_merge_error": "<error_message>",
+   "will_sync_to_codex_and_s3": true
    ```
+
+   Note: Even if global merge fails, the LOCAL file exists and daemon will still:
+   - Push patterns to Codex database
+   - Export Codex to JSON files
+   - Sync to S3 community repository
 
 10. Update Skill Metrics (Self-Learning):
 

@@ -121,10 +121,9 @@ async def list_files(job_id: str = Query(..., description="Job ID to list files 
     if not base_dir.exists():
         return {"files": []}
 
-    # Directories to exclude
+    # Directories to exclude (removed .context-foundry to make it browseable)
     exclude_dirs = {
         ".git",
-        ".context-foundry",
         "venv",
         "__pycache__",
         "node_modules",
@@ -157,3 +156,57 @@ async def list_files(job_id: str = Query(..., description="Job ID to list files 
     except Exception as e:
         logger.error(f"Error listing files for job {job_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to list files")
+
+
+@router.get("/current-phase")
+async def get_current_phase(job_id: str = Query(..., description="Job ID")):
+    """
+    Get current phase data from .context-foundry/current-phase.json
+
+    Query Parameters:
+    - job_id: Job ID to get phase data from
+
+    Returns:
+    - Phase data including phase name, status, description, etc.
+    """
+    # Get job's working directory
+    working_dir = store.get_job_working_directory(job_id)
+    if not working_dir:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} not found or has no working_directory",
+        )
+
+    # Build path to current-phase.json
+    phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+
+    if not phase_file.exists():
+        return {"phase": None, "status": None, "description": "Build not started yet"}
+
+    try:
+        import json
+
+        with open(phase_file, "r") as f:
+            content = f.read().strip()
+
+        # Handle empty file (being written to)
+        if not content:
+            return {
+                "phase": None,
+                "status": "initializing",
+                "description": "Phase file is being created",
+            }
+
+        phase_data = json.loads(content)
+        return phase_data
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"Invalid JSON in current-phase.json for job {job_id}: {e}")
+        return {
+            "phase": None,
+            "status": "updating",
+            "description": "Phase data is being updated",
+        }
+    except Exception as e:
+        logger.error(f"Error reading current-phase.json for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to read phase data")

@@ -456,17 +456,26 @@ class CFDaemon:
             while self.running:
                 time.sleep(1)
 
-                # Periodically log stats
+                # Periodically log stats (with error handling to prevent silent crashes)
                 if int(time.time()) % 60 == 0:  # Every minute
-                    stats = self.job_manager.get_stats()
-                    logger.info(
-                        f"Stats: {stats['jobs_running']} running, "
-                        f"{stats['job_counts']} total jobs"
-                    )
+                    try:
+                        stats = self.job_manager.get_stats()
+                        logger.info(
+                            f"Stats: {stats['jobs_running']} running, "
+                            f"{stats['job_counts']} total jobs"
+                        )
+                    except Exception as e:
+                        # Log error but continue running
+                        logger.error(f"Failed to get stats: {e}", exc_info=True)
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
             self.stop()
+        except Exception as e:
+            # Catch any other unexpected exceptions to prevent silent daemon death
+            logger.critical(f"Fatal error in daemon main loop: {e}", exc_info=True)
+            self.stop()
+            raise
 
     def stop(self):
         """Stop the daemon"""

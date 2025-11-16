@@ -735,6 +735,18 @@ print(json.dumps(result))
             # Sleep before next poll
             time.sleep(poll_interval)
 
+        # If we exited the loop without returning, task was removed unexpectedly
+        logger.error(
+            f"[TRACE] Autonomous build polling exited unexpectedly for job {job_id}, task {task_id} not in active_tasks"
+        )
+        return {
+            "status": "failed",
+            "error": "Build task was unexpectedly terminated or cancelled",
+            "phases_completed": [],
+            "test_iterations": 0,
+            "duration_seconds": (datetime.now() - start_time).total_seconds(),
+        }
+
     def _parse_build_result(
         self, stdout: str, stderr: str, exit_code: int
     ) -> Dict[str, Any]:
