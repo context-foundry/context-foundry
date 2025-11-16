@@ -51,7 +51,9 @@ def autonomous_build_and_deploy_impl(
     mode: str = "new_project",
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
-    use_parallel: bool = False,  # For parallel builders within Builder phase
+    use_parallel: Optional[
+        bool
+    ] = None,  # None = let Scout decide; True/False = user override
     incremental: bool = False,
     force_rebuild: bool = False,
     sandbox_path: Optional[str] = None,
@@ -350,7 +352,9 @@ def execute_build_with_phase_spawning(
     flowise_mode: bool,
     project_type: str,
     incremental: bool,
-    use_parallel: bool = False,
+    use_parallel: Optional[
+        bool
+    ] = None,  # None = let Scout decide; True/False = user override
     timeout_minutes: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
@@ -483,7 +487,8 @@ def execute_build_with_phase_spawning(
         phases_completed.append("Architect")
 
         # AUTO-DETECT PARALLEL BUILDS from Scout recommendation
-        if not use_parallel:  # Only auto-enable if not manually specified
+        # Only override if user didn't explicitly specify True or False
+        if use_parallel is None:  # User didn't specify - let Scout decide
             scout_report_path = (
                 working_directory / ".context-foundry" / "scout-report.md"
             )
@@ -502,6 +507,24 @@ def execute_build_with_phase_spawning(
                         "   Scout detected independent modules suitable for parallel execution",
                         file=sys.stderr,
                     )
+                else:
+                    # Scout didn't recommend parallel, default to False
+                    use_parallel = False
+            else:
+                # No Scout report, default to False
+                use_parallel = False
+        else:
+            # User explicitly set use_parallel to True or False - respect their choice
+            if use_parallel:
+                print(
+                    "\n🚀 Parallel builds ENABLED (user override)",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    "\n📦 Sequential build (user override - ignoring Scout recommendation)",
+                    file=sys.stderr,
+                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
