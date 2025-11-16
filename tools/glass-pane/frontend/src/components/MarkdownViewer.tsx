@@ -123,6 +123,16 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
         return '🔨';
       case 'test':
         return '🧪';
+      case 'screenshot':
+        return '📸';
+      case 'deploy':
+        return '🚀';
+      case 'build-config':
+        return '⚙️';
+      case 'phase-status':
+        return '📍';
+      case 'build-log':
+        return '📋';
       case 'summary':
         return '📊';
       default:
@@ -159,12 +169,17 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
   }, {} as Record<string, typeof files>);
 
   // Type order and labels
-  const typeOrder = ['scout', 'architect', 'builder', 'test', 'summary', 'other'];
+  const typeOrder = ['scout', 'architect', 'builder', 'test', 'screenshot', 'deploy', 'build-config', 'phase-status', 'build-log', 'summary', 'other'];
   const typeLabels: Record<string, string> = {
     scout: 'Scout Reports',
     architect: 'Architecture',
     builder: 'Builder',
     test: 'Test Reports',
+    screenshot: 'Screenshots',
+    deploy: 'Deployment',
+    'build-config': 'Build Configuration',
+    'phase-status': 'Phase Status',
+    'build-log': 'Build Logs',
     summary: 'Summaries',
     other: 'Other',
   };
