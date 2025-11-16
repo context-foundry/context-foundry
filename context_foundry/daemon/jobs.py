@@ -269,6 +269,35 @@ class JobManager:
         self._running = True
         self._stop_event.clear()
 
+        # ===================================================================
+        # CRITICAL FIX: Clean up orphaned RUNNING jobs from previous daemon session
+        # ===================================================================
+        # When daemon restarts, any jobs that were RUNNING are now orphaned
+        # because their subprocess and polling threads no longer exist.
+        # Mark them as FAILED so they don't stay stuck forever.
+        logger.info("Cleaning up orphaned RUNNING jobs from previous daemon session...")
+        running_jobs = self.store.list_jobs(status=JobStatus.RUNNING, limit=1000)
+        for job in running_jobs:
+            logger.warning(
+                f"Found orphaned RUNNING job {job.id} from previous session, marking as FAILED"
+            )
+            self.store.update_job_status(
+                job.id,
+                JobStatus.FAILED,
+                completed_at=datetime.now(),
+                error="Job was interrupted by daemon restart",
+            )
+            # Emit log
+            log = LogEntry.create(
+                job_id=job.id,
+                level="ERROR",
+                message="Job marked as FAILED due to daemon restart (was orphaned in RUNNING state)",
+                source="job_manager",
+            )
+            self.store.save_log(log)
+
+        logger.info(f"Cleaned up {len(running_jobs)} orphaned RUNNING jobs")
+
         # Clean up stale working directory locks
         # Get working directories from jobs that might have left lockfiles
         logger.info("Cleaning up stale working directory locks...")

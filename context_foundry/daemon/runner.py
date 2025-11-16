@@ -299,103 +299,123 @@ class Runner:
         start_time = datetime.now()
         timeout_seconds = timeout_minutes * 60
 
-        while True:
-            # Check timeout
-            elapsed_seconds = (datetime.now() - start_time).total_seconds()
-            if elapsed_seconds > timeout_seconds:
-                # Timeout exceeded - kill the process
-                logger.warning(
-                    f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
-                )
+        # Wrap entire polling loop in try/except to catch ANY unhandled exceptions
+        try:
+            while True:
+                # Check timeout
+                elapsed_seconds = (datetime.now() - start_time).total_seconds()
+                if elapsed_seconds > timeout_seconds:
+                    # Timeout exceeded - kill the process
+                    logger.warning(
+                        f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
+                    )
 
-                if task_id in self.active_tasks:
-                    task_info = self.active_tasks[task_id]
-                    process = task_info.get("process")
-                    if process and process.poll() is None:
-                        # Process still running - kill it
-                        logger.warning(f"Killing hung process for job {job_id}")
-                        try:
-                            process.kill()
-                            process.wait(timeout=10)
-                        except Exception as e:
-                            logger.error(f"Failed to kill process: {e}")
+                    if task_id in self.active_tasks:
+                        task_info = self.active_tasks[task_id]
+                        process = task_info.get("process")
+                        if process and process.poll() is None:
+                            # Process still running - kill it
+                            logger.warning(f"Killing hung process for job {job_id}")
+                            try:
+                                process.kill()
+                                process.wait(timeout=10)
+                            except Exception as e:
+                                logger.error(f"Failed to kill process: {e}")
 
-                    # Remove from active tasks
-                    del self.active_tasks[task_id]
+                        # Remove from active tasks
+                        del self.active_tasks[task_id]
 
-                self._emit_log(
-                    job_id,
-                    "ERROR",
-                    f"Job exceeded timeout of {timeout_minutes} minutes and was terminated",
-                    None,
-                )
+                    self._emit_log(
+                        job_id,
+                        "ERROR",
+                        f"Job exceeded timeout of {timeout_minutes} minutes and was terminated",
+                        None,
+                    )
 
-                raise RuntimeError(f"Job exceeded timeout of {timeout_minutes} minutes")
+                    raise RuntimeError(
+                        f"Job exceeded timeout of {timeout_minutes} minutes"
+                    )
 
-            # Check if task is still active
-            if task_id not in self.active_tasks:
-                # Task completed or failed
-                break
+                # Check if task is still active
+                if task_id not in self.active_tasks:
+                    # Task completed or failed
+                    break
 
-            task_info = self.active_tasks[task_id]
+                task_info = self.active_tasks[task_id]
 
-            # Check phase transitions
-            phase_info = read_phase_info(working_dir, start_time)
-            current_phase = phase_info.get("phase")
+                # Check phase transitions
+                phase_info = read_phase_info(working_dir, start_time)
+                current_phase = phase_info.get("phase")
 
-            if current_phase and current_phase != last_phase:
-                # Phase transition detected
-                self._emit_phase_event(
-                    job_id=job_id,
-                    phase=current_phase,
-                    status="in_progress",
-                    details=phase_info,
-                )
+                if current_phase and current_phase != last_phase:
+                    # Phase transition detected
+                    self._emit_phase_event(
+                        job_id=job_id,
+                        phase=current_phase,
+                        status="in_progress",
+                        details=phase_info,
+                    )
 
-                self._emit_log(
-                    job_id,
-                    "INFO",
-                    f"Phase transition: {last_phase or 'Start'} → {current_phase}",
-                    current_phase,
-                )
+                    self._emit_log(
+                        job_id,
+                        "INFO",
+                        f"Phase transition: {last_phase or 'Start'} → {current_phase}",
+                        current_phase,
+                    )
 
-                last_phase = current_phase
+                    last_phase = current_phase
 
-            # Check if process has completed
-            process = task_info.get("process")
-            if process and process.poll() is not None:
-                # Process finished, get final results
-                break
+                # Check if process has completed
+                process = task_info.get("process")
+                if process and process.poll() is not None:
+                    # Process finished, get final results
+                    break
 
-            # Sleep before next poll
-            time.sleep(poll_interval)
+                # Sleep before next poll
+                time.sleep(poll_interval)
 
-        # Get final delegation results
-        result_json = get_delegation_result_impl(
-            task_id=task_id,
-            include_full_output=False,  # Use summary to avoid token overhead
-            active_tasks=self.active_tasks,
-            read_phase_info_func=lambda wd, ts=None: read_phase_info(wd, ts),
-            create_output_summary_func=create_output_summary,
-            merge_project_patterns_func=None,  # We'll handle pattern merge separately
-        )
-
-        result = json.loads(result_json)
-
-        # Emit final phase event if we tracked phases
-        if last_phase:
-            final_status = "completed" if result.get("exit_code") == 0 else "failed"
-            self._emit_phase_event(
-                job_id=job_id,
-                phase=last_phase,
-                status=final_status,
-                details=result.get("phase_info", {}),
+            # Get final delegation results
+            result_json = get_delegation_result_impl(
+                task_id=task_id,
+                include_full_output=False,  # Use summary to avoid token overhead
+                active_tasks=self.active_tasks,
+                read_phase_info_func=lambda wd, ts=None: read_phase_info(wd, ts),
+                create_output_summary_func=create_output_summary,
+                merge_project_patterns_func=None,  # We'll handle pattern merge separately
             )
 
-        # Clean up task from active_tasks
-        self.active_tasks.pop(task_id, None)
+            result = json.loads(result_json)
 
-        return result
+            # Emit final phase event if we tracked phases
+            if last_phase:
+                final_status = "completed" if result.get("exit_code") == 0 else "failed"
+                self._emit_phase_event(
+                    job_id=job_id,
+                    phase=last_phase,
+                    status=final_status,
+                    details=result.get("phase_info", {}),
+                )
+
+            # Clean up task from active_tasks
+            self.active_tasks.pop(task_id, None)
+
+            return result
+
+        except Exception as e:
+            # CRITICAL FIX: Catch ANY unhandled exceptions in polling loop
+            logger.critical(
+                f"[CRITICAL] Unhandled exception in polling loop for job {job_id}: {e}",
+                exc_info=True,
+            )
+            self._emit_log(
+                job_id,
+                "ERROR",
+                f"Polling loop crashed with unhandled exception: {str(e)}",
+                None,
+            )
+            # Clean up
+            self.active_tasks.pop(task_id, None)
+            raise  # Re-raise so job manager marks as failed
 
     def _emit_phase_event(
         self,
@@ -474,7 +494,7 @@ class Runner:
         max_test_iterations = job.params.get("max_test_iterations", 3)
         incremental = job.params.get("incremental", False)
         force_rebuild = job.params.get("force_rebuild", False)
-        use_parallel = job.params.get("use_parallel", False)
+        use_parallel = job.params.get("use_parallel", None)
 
         # Detect project info
         working_path = Path(working_dir)
@@ -636,151 +656,181 @@ print(json.dumps(result))
         start_time = datetime.now()
         timeout_seconds = timeout_minutes * 60
 
-        while True:
-            # Check timeout
-            elapsed_seconds = (datetime.now() - start_time).total_seconds()
-            if elapsed_seconds > timeout_seconds:
-                # Timeout exceeded - kill the process
-                logger.warning(
-                    f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
-                )
-
-                if task_id in self.active_tasks:
-                    task_info = self.active_tasks[task_id]
-                    process = task_info.get("process")
-                    if process and process.poll() is None:
-                        logger.warning(
-                            f"Killing autonomous build process for job {job_id}"
-                        )
-                        self._kill_process_tree(
-                            process, f"autonomous build for job {job_id}"
-                        )
-
-                    # Remove from active tasks
-                    del self.active_tasks[task_id]
-
-                self._emit_log(
-                    job_id,
-                    "ERROR",
-                    f"Build exceeded timeout of {timeout_minutes} minutes and was terminated",
-                    None,
-                )
-
-                return {
-                    "status": "failed",
-                    "error": f"Build exceeded timeout of {timeout_minutes} minutes",
-                    "phases_completed": [],
-                    "test_iterations": 0,
-                    "duration_seconds": elapsed_seconds,
-                }
-
-            # Check if task is still active
-            if task_id not in self.active_tasks:
-                # Task completed or failed
-                break
-
-            task_info = self.active_tasks[task_id]
-
-            # Check phase transitions from current-phase.json (initial phases)
-            phase_info = read_phase_info(working_dir, start_time)
-            current_phase = phase_info.get("currentPhase")
-
-            if current_phase and current_phase != last_phase:
-                # Phase transition detected
-                self._emit_phase_event(
-                    job_id=job_id,
-                    phase=current_phase,
-                    status="in_progress",
-                    details=phase_info,
-                )
-
-                self._emit_log(
-                    job_id,
-                    "INFO",
-                    f"Phase transition: {last_phase or 'Start'} → {current_phase}",
-                    current_phase,
-                )
-
-                last_phase = current_phase
-
-            # ALSO check session-summary.json for iteration phases (visibility fix)
-            try:
-                summary_file = (
-                    Path(working_dir) / ".context-foundry" / "session-summary.json"
-                )
-                if summary_file.exists():
-                    with open(summary_file) as f:
-                        summary = json.load(f)
-
-                    # Get all completed phases from summary
-                    phases = summary.get("phases", {})
-                    for phase_key, phase_data in phases.items():
-                        # Check if this is a new phase we haven't logged yet
-                        if (
-                            phase_data.get("status") == "completed"
-                            and phase_key not in logged_phases
-                        ):
-                            # Emit completed phase event (for Glass Pane visibility)
-                            phase_name = (
-                                phase_key.replace("phase_", "")
-                                .replace("_", " ")
-                                .title()
-                            )
-                            self._emit_log(
-                                job_id,
-                                "INFO",
-                                f"[{phase_name}] Completed ({phase_data.get('duration_seconds', 0):.1f}s)",
-                                phase_name,
-                            )
-                            logged_phases.add(phase_key)  # Mark as logged
-            except Exception as e:
-                # Don't let phase tracking errors kill the polling loop
-                logger.debug(f"Error reading session-summary.json: {e}")
-
-            # Check if process has completed
-            process = task_info.get("process")
-            if process and process.poll() is not None:
-                # Process finished
-                stdout, stderr = process.communicate(timeout=5)
-
-                logger.info(
-                    f"[TRACE] Autonomous build subprocess exited with code {process.returncode}"
-                )
-
-                # Parse result from stdout
-                result = self._parse_build_result(stdout, stderr, process.returncode)
-
-                # Emit final phase event
-                if last_phase:
-                    final_status = (
-                        "completed" if result.get("status") == "completed" else "failed"
+        # Wrap entire polling loop in try/except to catch ANY unhandled exceptions
+        # This prevents daemon threads from dying silently and leaving jobs stuck
+        try:
+            while True:
+                # Check timeout
+                elapsed_seconds = (datetime.now() - start_time).total_seconds()
+                if elapsed_seconds > timeout_seconds:
+                    # Timeout exceeded - kill the process
+                    logger.warning(
+                        f"Job {job_id} exceeded timeout of {timeout_minutes} minutes"
                     )
+
+                    if task_id in self.active_tasks:
+                        task_info = self.active_tasks[task_id]
+                        process = task_info.get("process")
+                        if process and process.poll() is None:
+                            logger.warning(
+                                f"Killing autonomous build process for job {job_id}"
+                            )
+                            self._kill_process_tree(
+                                process, f"autonomous build for job {job_id}"
+                            )
+
+                        # Remove from active tasks
+                        del self.active_tasks[task_id]
+
+                    self._emit_log(
+                        job_id,
+                        "ERROR",
+                        f"Build exceeded timeout of {timeout_minutes} minutes and was terminated",
+                        None,
+                    )
+
+                    return {
+                        "status": "failed",
+                        "error": f"Build exceeded timeout of {timeout_minutes} minutes",
+                        "phases_completed": [],
+                        "test_iterations": 0,
+                        "duration_seconds": elapsed_seconds,
+                    }
+
+                # Check if task is still active
+                if task_id not in self.active_tasks:
+                    # Task completed or failed
+                    break
+
+                task_info = self.active_tasks[task_id]
+
+                # Check phase transitions from current-phase.json (initial phases)
+                phase_info = read_phase_info(working_dir, start_time)
+                current_phase = phase_info.get("currentPhase")
+
+                if current_phase and current_phase != last_phase:
+                    # Phase transition detected
                     self._emit_phase_event(
                         job_id=job_id,
-                        phase=last_phase,
-                        status=final_status,
-                        details={},
+                        phase=current_phase,
+                        status="in_progress",
+                        details=phase_info,
                     )
 
-                # Clean up task from active_tasks
-                self.active_tasks.pop(task_id, None)
+                    self._emit_log(
+                        job_id,
+                        "INFO",
+                        f"Phase transition: {last_phase or 'Start'} → {current_phase}",
+                        current_phase,
+                    )
 
-                return result
+                    last_phase = current_phase
 
-            # Sleep before next poll
-            time.sleep(poll_interval)
+                # ALSO check session-summary.json for iteration phases (visibility fix)
+                try:
+                    summary_file = (
+                        Path(working_dir) / ".context-foundry" / "session-summary.json"
+                    )
+                    if summary_file.exists():
+                        with open(summary_file) as f:
+                            summary = json.load(f)
 
-        # If we exited the loop without returning, task was removed unexpectedly
-        logger.error(
-            f"[TRACE] Autonomous build polling exited unexpectedly for job {job_id}, task {task_id} not in active_tasks"
-        )
-        return {
-            "status": "failed",
-            "error": "Build task was unexpectedly terminated or cancelled",
-            "phases_completed": [],
-            "test_iterations": 0,
-            "duration_seconds": (datetime.now() - start_time).total_seconds(),
-        }
+                        # Get all completed phases from summary
+                        phases = summary.get("phases", {})
+                        for phase_key, phase_data in phases.items():
+                            # Check if this is a new phase we haven't logged yet
+                            if (
+                                phase_data.get("status") == "completed"
+                                and phase_key not in logged_phases
+                            ):
+                                # Emit completed phase event (for Glass Pane visibility)
+                                phase_name = (
+                                    phase_key.replace("phase_", "")
+                                    .replace("_", " ")
+                                    .title()
+                                )
+                                self._emit_log(
+                                    job_id,
+                                    "INFO",
+                                    f"[{phase_name}] Completed ({phase_data.get('duration_seconds', 0):.1f}s)",
+                                    phase_name,
+                                )
+                                logged_phases.add(phase_key)  # Mark as logged
+                except Exception as e:
+                    # Don't let phase tracking errors kill the polling loop
+                    logger.debug(f"Error reading session-summary.json: {e}")
+
+                # Check if process has completed
+                process = task_info.get("process")
+                if process and process.poll() is not None:
+                    # Process finished
+                    stdout, stderr = process.communicate(timeout=5)
+
+                    logger.info(
+                        f"[TRACE] Autonomous build subprocess exited with code {process.returncode}"
+                    )
+
+                    # Parse result from stdout
+                    result = self._parse_build_result(
+                        stdout, stderr, process.returncode
+                    )
+
+                    # Emit final phase event
+                    if last_phase:
+                        final_status = (
+                            "completed"
+                            if result.get("status") == "completed"
+                            else "failed"
+                        )
+                        self._emit_phase_event(
+                            job_id=job_id,
+                            phase=last_phase,
+                            status=final_status,
+                            details={},
+                        )
+
+                    # Clean up task from active_tasks
+                    self.active_tasks.pop(task_id, None)
+
+                    return result
+
+                # Sleep before next poll
+                time.sleep(poll_interval)
+
+            # If we exited the loop without returning, task was removed unexpectedly
+            logger.error(
+                f"[TRACE] Autonomous build polling exited unexpectedly for job {job_id}, task {task_id} not in active_tasks"
+            )
+            return {
+                "status": "failed",
+                "error": "Build task was unexpectedly terminated or cancelled",
+                "phases_completed": [],
+                "test_iterations": 0,
+                "duration_seconds": (datetime.now() - start_time).total_seconds(),
+            }
+
+        except Exception as e:
+            # CRITICAL FIX: Catch ANY unhandled exceptions in polling loop
+            # This prevents daemon threads from dying silently
+            logger.critical(
+                f"[CRITICAL] Unhandled exception in autonomous build polling loop for job {job_id}: {e}",
+                exc_info=True,
+            )
+            self._emit_log(
+                job_id,
+                "ERROR",
+                f"Polling loop crashed with unhandled exception: {str(e)}",
+                None,
+            )
+            # Clean up
+            self.active_tasks.pop(task_id, None)
+            return {
+                "status": "failed",
+                "error": f"Polling loop crashed: {str(e)}",
+                "phases_completed": [],
+                "test_iterations": 0,
+                "duration_seconds": (datetime.now() - start_time).total_seconds(),
+            }
 
     def _parse_build_result(
         self, stdout: str, stderr: str, exit_code: int
