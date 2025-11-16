@@ -515,7 +515,9 @@ def _autonomous_build_and_deploy_impl(
     mode: str = "new_project",
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
-    use_parallel: bool = False,
+    use_parallel: Optional[
+        bool
+    ] = None,  # None = let Scout decide; True/False = user override
     incremental: bool = False,
     force_rebuild: bool = False,
     sandbox_path: Optional[str] = None,
@@ -552,7 +554,9 @@ def autonomous_build_and_deploy(
     mode: str = "new_project",
     max_test_iterations: int = 3,
     timeout_minutes: float = 90.0,
-    use_parallel: bool = False,
+    use_parallel: Optional[
+        bool
+    ] = None,  # None = let Scout decide; True/False = user override
     incremental: bool = False,
     force_rebuild: bool = False,
 ) -> str:
