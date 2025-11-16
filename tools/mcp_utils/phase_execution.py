@@ -780,6 +780,7 @@ def run_builder_phase(
     project_type: str,
     flowise_mode: bool = False,
     use_parallel: bool = True,
+    iteration: int = 0,
 ) -> PhaseResult:
     """
     Run Builder phase with conditional parallelization.
@@ -798,6 +799,7 @@ def run_builder_phase(
         project_type: Project type for validation
         flowise_mode: True if Flowise workflow project
         use_parallel: Allow parallelization (can be disabled)
+        iteration: Fix iteration number (0 for initial build, >0 for fixes)
 
     Returns:
         PhaseResult with metrics
@@ -858,6 +860,7 @@ def run_builder_phase(
         working_directory,
         phase_timeout=1800,
         validator=lambda wd, pt=project_type: PhaseValidator.validate_builder(wd, pt),
+        iteration=iteration,
         project_type=project_type,
     )
 

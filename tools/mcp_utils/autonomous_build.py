@@ -633,6 +633,10 @@ def execute_build_with_phase_spawning(
                 # Self-healing: Run Architect to fix
                 print(f"\n🔄 Self-healing iteration {test_iteration}", file=sys.stderr)
 
+                # Recalculate test_file for the CURRENT iteration (after increment)
+                # This ensures fix_instruction and run_phase(iteration=N) reference the same file
+                test_file = f".context-foundry/test-report-{test_iteration}.md"
+
                 architect_fix_file = (
                     f".context-foundry/architecture-fix-{test_iteration}.md"
                 )
@@ -759,6 +763,7 @@ def execute_build_with_phase_spawning(
                     project_type,
                     flowise_mode=flowise_mode,
                     use_parallel=False,  # Fixes are small
+                    iteration=test_iteration,
                 )
 
                 if builder_fix_result.status != "completed":
