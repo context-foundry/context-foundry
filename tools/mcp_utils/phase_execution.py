@@ -617,10 +617,36 @@ def _run_parallel_builders(
         task_name = task["name"]
         task_dir = working_directory / task["working_directory"]
 
+        # Setup agent status tracking
+        context_foundry_dir = working_directory / ".context-foundry"
+        agent_status_file = context_foundry_dir / f"agent-{task_id}.json"
+
+        def update_agent_status(status: str, **kwargs):
+            """Write agent status to file for real-time tracking."""
+            import json
+            status_data = {
+                "task_id": task_id,
+                "task_name": task_name,
+                "description": task.get("description", ""),
+                "status": status,
+                "wave": wave_num,
+                "started_at": task_start.isoformat(),
+                "files": task.get("files", []),
+                **kwargs
+            }
+            try:
+                with open(agent_status_file, "w") as f:
+                    json.dump(status_data, f, indent=2)
+            except Exception as e:
+                print(f"Warning: Failed to write agent status: {e}", file=sys.stderr)
+
         print(f"\n🔨 Starting task: {task_name} ({task_id})", file=sys.stderr)
         print(f"   Working directory: {task_dir}", file=sys.stderr)
 
         task_start = datetime.now()
+
+        # Write initial status
+        update_agent_status("in_progress")
 
         try:
             # Execute build commands sequentially for this task
@@ -638,18 +664,37 @@ def _run_parallel_builders(
                 if result.returncode != 0:
                     print(f"❌ Task {task_name} failed: {cmd}", file=sys.stderr)
                     print(f"   stderr: {result.stderr[:500]}", file=sys.stderr)
+
+                    # Update status to failed
+                    duration = (datetime.now() - task_start).total_seconds()
+                    update_agent_status(
+                        "failed",
+                        completed_at=datetime.now().isoformat(),
+                        duration=duration,
+                        error=f"Command failed: {cmd}",
+                        stderr=result.stderr[:500]
+                    )
+
                     return (
                         task_id,
                         False,
                         {
                             "error": f"Command failed: {cmd}",
                             "stderr": result.stderr,
-                            "duration": (datetime.now() - task_start).total_seconds(),
+                            "duration": duration,
                         },
                     )
 
             duration = (datetime.now() - task_start).total_seconds()
             print(f"✅ Task {task_name} completed in {duration:.1f}s", file=sys.stderr)
+
+            # Update status to completed
+            update_agent_status(
+                "completed",
+                completed_at=datetime.now().isoformat(),
+                duration=duration,
+                commands_executed=len(task["build_commands"])
+            )
 
             return (
                 task_id,
@@ -661,6 +706,13 @@ def _run_parallel_builders(
             )
 
         except subprocess.TimeoutExpired:
+            # Update status to failed (timeout)
+            update_agent_status(
+                "failed",
+                completed_at=datetime.now().isoformat(),
+                duration=900,
+                error="Task timeout (15 minutes)"
+            )
             return (
                 task_id,
                 False,
@@ -670,12 +722,20 @@ def _run_parallel_builders(
                 },
             )
         except Exception as e:
+            # Update status to failed (exception)
+            duration = (datetime.now() - task_start).total_seconds()
+            update_agent_status(
+                "failed",
+                completed_at=datetime.now().isoformat(),
+                duration=duration,
+                error=str(e)
+            )
             return (
                 task_id,
                 False,
                 {
                     "error": str(e),
-                    "duration": (datetime.now() - task_start).total_seconds(),
+                    "duration": duration,
                 },
             )
 

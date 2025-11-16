@@ -32,6 +32,7 @@ import io
 import contextlib
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
 
 # BAML availability flag
 BAML_AVAILABLE = False
@@ -208,6 +209,38 @@ def get_baml_error() -> Optional[str]:
     return BAML_COMPILATION_ERROR
 
 
+def inject_real_timestamps(phase_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Inject real system timestamps into phase data.
+
+    LLMs cannot know the current time, so they hallucinate fake dates (often 2023).
+    This function replaces LLM-generated timestamps with actual system time.
+
+    Args:
+        phase_data: Phase info dict from BAML (with hallucinated timestamps)
+
+    Returns:
+        Phase info dict with corrected timestamps
+    """
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Fix timestamps object if it exists
+    if "timestamps" in phase_data:
+        phase_data["timestamps"]["phaseStart"] = now
+        phase_data["timestamps"]["lastUpdated"] = now
+        # Keep phaseEnd as null if it's null
+        if phase_data["timestamps"].get("phaseEnd") is None:
+            phase_data["timestamps"]["phaseEnd"] = None
+
+    # Also fix top-level timestamp fields if they exist (different schema versions)
+    if "started_at" in phase_data:
+        phase_data["started_at"] = now
+    if "last_updated" in phase_data:
+        phase_data["last_updated"] = now
+
+    return phase_data
+
+
 def update_phase_with_baml(
     phase: str,
     status: str,
@@ -283,7 +316,8 @@ def update_phase_with_baml(
                         "[BAML DEBUG] Successfully parsed BAML output using .parsed()",
                         file=sys.stderr,
                     )
-                    return parsed_data
+                    # Fix hallucinated timestamps with real system time
+                    return inject_real_timestamps(parsed_data)
                 except AttributeError:
                     # Fall back to unstable_internal_repr for older API
                     pass
@@ -326,14 +360,16 @@ def update_phase_with_baml(
                                         "[BAML DEBUG] Successfully parsed BAML output",
                                         file=sys.stderr,
                                     )
-                                    return parsed_data
+                                    # Fix hallucinated timestamps with real system time
+                                    return inject_real_timestamps(parsed_data)
 
                     # If we couldn't extract JSON, try parsing the whole thing
                     parsed_data = json.loads(content)
                     print(
                         "[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr
                     )
-                    return parsed_data
+                    # Fix hallucinated timestamps with real system time
+                    return inject_real_timestamps(parsed_data)
                 else:
                     print(
                         "[BAML DEBUG] Unexpected internal_repr format", file=sys.stderr

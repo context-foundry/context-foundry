@@ -54,4 +54,34 @@ export interface CurrentPhase {
   timestamp: string
   session_id: string
   iteration: number
+  parallel_build_info?: ParallelBuildInfo
+}
+
+export interface ParallelBuildInfo {
+  parallel_mode: boolean
+  total_tasks: number
+  current_wave: number
+  max_wave: number
+  tasks_per_wave: Record<string, number>
+  max_concurrent_agents: number
+}
+
+export interface ParallelAgent {
+  task_id: string
+  task_name: string
+  description: string
+  status: 'in_progress' | 'completed' | 'failed'
+  wave: number
+  started_at: string
+  completed_at?: string
+  duration?: number
+  files: string[]
+  commands_executed?: number
+  error?: string
+  stderr?: string
+}
+
+export interface ParallelAgentsResponse {
+  agents: ParallelAgent[]
+  has_parallel_build: boolean
 }

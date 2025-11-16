@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Phase, PhaseStatus } from '../types/job';
 import { formatDuration } from '../utils/formatters';
+import ParallelAgents from './ParallelAgents';
 
 interface PhaseDetail {
   name: string;
@@ -24,11 +25,22 @@ interface PhaseBreakdownData {
     name: string;
     status: string;
     description: string;
+    parallel_build_info?: {
+      parallel_mode: boolean;
+      total_tasks: number;
+      current_wave: number;
+      max_wave: number;
+      tasks_per_wave: Record<string, number>;
+      max_concurrent_agents: number;
+    };
   };
   deployment?: {
-    github_url: string;
-    commit_sha: string;
-    deployed_at: string;
+    status: string; // "success", "skipped", "failed"
+    reason?: string; // Error/skip reason
+    commit_sha?: string;
+    repository_url?: string;
+    local_commit_created?: boolean;
+    attempted_at?: string;
   };
 }
 
@@ -84,6 +96,7 @@ export default function PipelineMetrics({
 }: PipelineMetricsProps) {
   const [phaseData, setPhaseData] = useState<PhaseBreakdownData | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [agentsExpanded, setAgentsExpanded] = useState(false);
 
   // Fetch phase breakdown data
   useEffect(() => {
@@ -189,19 +202,35 @@ export default function PipelineMetrics({
             <h2 className="text-lg font-semibold text-gray-100">
               Build Pipeline{projectName ? `: ${projectName}` : ''}
             </h2>
-            {phaseData?.deployment?.github_url && (
-              <a
-                href={phaseData.deployment.github_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-                title="View on GitHub"
-              >
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
-                </svg>
-                GitHub
-              </a>
+            {phaseData?.deployment && (
+              <div className="flex items-center gap-2">
+                {phaseData.deployment.status === 'success' && phaseData.deployment.repository_url && (
+                  <a
+                    href={phaseData.deployment.repository_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-sm text-green-400 hover:text-green-300 transition-colors"
+                    title="View on GitHub"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+                    </svg>
+                    <span>✓ Deployed</span>
+                  </a>
+                )}
+                {phaseData.deployment.status === 'skipped' && (
+                  <div className="flex items-center gap-1.5 text-sm text-yellow-400" title={phaseData.deployment.reason}>
+                    <span>⚠️</span>
+                    <span>Deployment Skipped</span>
+                  </div>
+                )}
+                {phaseData.deployment.status === 'failed' && (
+                  <div className="flex items-center gap-1.5 text-sm text-red-400" title={phaseData.deployment.reason}>
+                    <span>✗</span>
+                    <span>Deployment Failed</span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
           <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
@@ -232,6 +261,43 @@ export default function PipelineMetrics({
             <div className="text-lg font-semibold text-orange-400">{totalFiles}</div>
           </div>
         </div>
+
+        {/* Parallel Build Info */}
+        {phaseData?.current_phase?.parallel_build_info?.parallel_mode && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-900/30 border border-cyan-700/50 rounded-md">
+              <span className="text-cyan-400">🚀</span>
+              <span className="text-sm text-cyan-300 font-medium">Parallel Build Active</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
+              <span className="text-xs text-gray-400">Wave</span>
+              <span className="text-sm text-white font-bold">
+                {phaseData.current_phase.parallel_build_info.current_wave}/{phaseData.current_phase.parallel_build_info.max_wave}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-900/30 border border-purple-700/50 rounded-md">
+              <span className="text-purple-400">⚡</span>
+              <span className="text-sm text-purple-300 font-medium">
+                {phaseData.current_phase.parallel_build_info.max_concurrent_agents} agents max
+              </span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
+              <span className="text-xs text-gray-400">Tasks</span>
+              <span className="text-sm text-white font-bold">
+                {phaseData.current_phase.parallel_build_info.total_tasks}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Parallel Builder Agents (expandable) - shows for both active and completed parallel builds */}
+        {jobId && (
+          <ParallelAgents
+            jobId={jobId}
+            isExpanded={agentsExpanded}
+            onToggle={() => setAgentsExpanded(!agentsExpanded)}
+          />
+        )}
       </div>
 
       {/* Phase Bars */}
@@ -396,6 +462,60 @@ export default function PipelineMetrics({
           <p className="text-sm text-gray-300">
             {typeof description === 'string' ? description : JSON.stringify(description)}
           </p>
+        </div>
+      )}
+
+      {/* Deployment Status Details */}
+      {phaseData?.deployment && (phaseData.deployment.status === 'skipped' || phaseData.deployment.status === 'failed') && (
+        <div className={`mt-4 p-4 rounded-lg border ${
+          phaseData.deployment.status === 'skipped'
+            ? 'bg-yellow-900/20 border-yellow-700/50'
+            : 'bg-red-900/20 border-red-700/50'
+        }`}>
+          <div className="flex items-start gap-2 mb-2">
+            <span className="text-lg">{phaseData.deployment.status === 'skipped' ? '⚠️' : '❌'}</span>
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-gray-100 mb-1">
+                Deployment {phaseData.deployment.status === 'skipped' ? 'Skipped' : 'Failed'}
+              </div>
+              {phaseData.deployment.reason && (
+                <p className={`text-sm mb-3 ${
+                  phaseData.deployment.status === 'skipped' ? 'text-yellow-300' : 'text-red-300'
+                }`}>
+                  {phaseData.deployment.reason}
+                </p>
+              )}
+
+              {phaseData.deployment.local_commit_created && phaseData.deployment.commit_sha && (
+                <div className="bg-gray-900/50 rounded p-2 mb-3">
+                  <div className="text-xs text-gray-400 mb-1">Local Commit Created</div>
+                  <code className="text-xs text-cyan-400 font-mono">{phaseData.deployment.commit_sha.substring(0, 8)}</code>
+                </div>
+              )}
+
+              {/* Actionable fix instructions for common errors */}
+              {phaseData.deployment.reason?.includes('public_repo scope') && (
+                <div className="bg-gray-900/80 rounded-lg p-3 border border-gray-700">
+                  <div className="text-xs font-semibold text-gray-300 mb-2">How to Fix</div>
+                  <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                    <li>Run: <code className="text-cyan-400 bg-gray-800 px-1 rounded">gh auth login --scopes public_repo</code></li>
+                    <li>Re-authenticate with GitHub CLI</li>
+                    <li>Manually push the commit: <code className="text-cyan-400 bg-gray-800 px-1 rounded">git push</code></li>
+                  </ol>
+                </div>
+              )}
+              {phaseData.deployment.reason?.includes('No GitHub token') && (
+                <div className="bg-gray-900/80 rounded-lg p-3 border border-gray-700">
+                  <div className="text-xs font-semibold text-gray-300 mb-2">How to Fix</div>
+                  <ol className="text-xs text-gray-400 space-y-1 list-decimal list-inside">
+                    <li>Run: <code className="text-cyan-400 bg-gray-800 px-1 rounded">gh auth login</code></li>
+                    <li>Follow prompts to authenticate with GitHub</li>
+                    <li>Ensure you grant the <code className="text-cyan-400">public_repo</code> scope</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

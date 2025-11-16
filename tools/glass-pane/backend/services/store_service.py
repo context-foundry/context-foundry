@@ -14,6 +14,7 @@ from datetime import datetime
 from models.job import Job, JobDetailResponse
 from models.log import Log
 from models.phase import PhaseInfo
+from services.session_parser import SessionParser
 
 logger = logging.getLogger(__name__)
 
@@ -180,13 +181,43 @@ class StoreService:
         # Get phase history (if phase_events table exists)
         phases = self._get_phase_history(job_id)
 
+        # If no phase_events in DB, try reading from current-phase.json
+        current_phase_name = job.current_phase
+        if not phases:
+            # Get working directory from job params
+            params = self.get_job_params(job_id)
+            if params and "working_directory" in params:
+                working_dir = Path(params["working_directory"]) / ".context-foundry"
+                if working_dir.exists():
+                    parser = SessionParser(working_dir)
+                    current_phase_data = parser.read_current_phase(
+                        job_id=job_id,
+                        started_at=job.started_at
+                    )
+                    if current_phase_data:
+                        # Update current phase name
+                        current_phase_name = current_phase_data.get("phase")
+
+                        # Create a PhaseInfo entry for the current active phase
+                        phases = [
+                            PhaseInfo(
+                                phase=current_phase_data.get("phase") or "Unknown",
+                                status=current_phase_data.get("status") or "in_progress",
+                                started_at=job.started_at,  # Use job start time as fallback
+                                completed_at=None,  # Not completed yet
+                                duration_seconds=None,
+                                description=current_phase_data.get("description") or "",
+                                iteration=current_phase_data.get("test_iteration") or 0,
+                            )
+                        ]
+
         return JobDetailResponse(
             id=job.id,
             status=job.status,
             started_at=job.started_at,
             completed_at=job.completed_at,
             project_name=job.project_name,
-            current_phase=job.current_phase,
+            current_phase=current_phase_name,
             tokens_used=job.tokens_used,
             total_files=job.total_files,
             phases=phases,

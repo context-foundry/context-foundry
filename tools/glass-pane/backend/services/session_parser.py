@@ -224,6 +224,30 @@ class SessionParser:
 
         return summary.get("files_created", [])
 
+    def get_deployment_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Get deployment information from session summary.
+
+        Returns:
+            Deployment info dict with status, reason, commit_sha, etc.
+        """
+        summary = self.read_session_summary()
+        if not summary:
+            return None
+
+        deployment = summary.get("deployment", {})
+        if not deployment:
+            return None
+
+        return {
+            "status": deployment.get("status"),  # "success", "skipped", "failed"
+            "reason": deployment.get("reason"),  # Error/skip reason
+            "commit_sha": deployment.get("commit_sha"),
+            "repository_url": deployment.get("repository_url"),
+            "local_commit_created": deployment.get("local_commit_created", False),
+            "attempted_at": deployment.get("attempted_at"),
+        }
+
     def compare_file_lists(
         self, old_files: List[str], new_files: List[str]
     ) -> List[str]:
@@ -246,6 +270,122 @@ class SessionParser:
             logger.info(f"Detected {len(created)} new files: {created}")
 
         return created
+
+    def read_build_tasks(self) -> Optional[Dict[str, Any]]:
+        """
+        Read build-tasks.json to get parallel build information.
+
+        Returns:
+            Build tasks dict with parallel_mode and task info, or None if not found
+        """
+        file_path = self.watch_path / "build-tasks.json"
+
+        if not file_path.exists():
+            logger.debug(f"build-tasks.json not found at {file_path}")
+            return None
+
+        try:
+            with open(file_path, "r") as f:
+                data = json.load(f)
+
+            parallel_mode = data.get("parallel_mode", False)
+            tasks = data.get("tasks", [])
+            total_tasks = data.get("total_tasks", len(tasks))
+
+            logger.debug(
+                f"Read build tasks: parallel_mode={parallel_mode}, total_tasks={total_tasks}"
+            )
+            return {
+                "parallel_mode": parallel_mode,
+                "total_tasks": total_tasks,
+                "tasks": tasks,
+            }
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse build-tasks.json: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error reading build-tasks.json: {e}")
+            return None
+
+    def get_parallel_build_info(self) -> Optional[Dict[str, Any]]:
+        """
+        Get parallel build information including task progress.
+
+        Returns:
+            Dict with parallel build metrics or None if not in parallel mode
+        """
+        build_tasks = self.read_build_tasks()
+        if not build_tasks or not build_tasks.get("parallel_mode"):
+            return None
+
+        tasks = build_tasks.get("tasks", [])
+        total_tasks = build_tasks.get("total_tasks", 0)
+
+        # Calculate wave structure based on dependencies
+        tasks_by_wave = self._calculate_waves(tasks)
+        current_wave = self._estimate_current_wave(tasks_by_wave)
+        max_wave = len(tasks_by_wave)
+
+        return {
+            "parallel_mode": True,
+            "total_tasks": total_tasks,
+            "current_wave": current_wave,
+            "max_wave": max_wave,
+            "tasks_per_wave": {
+                f"wave_{i+1}": len(wave) for i, wave in enumerate(tasks_by_wave)
+            },
+            "max_concurrent_agents": max(len(wave) for wave in tasks_by_wave)
+            if tasks_by_wave
+            else 0,
+        }
+
+    def _calculate_waves(self, tasks: List[Dict[str, Any]]) -> List[List[str]]:
+        """
+        Calculate task waves based on dependency graph.
+
+        Args:
+            tasks: List of task dictionaries with id and dependencies
+
+        Returns:
+            List of waves, where each wave is a list of task IDs
+        """
+        waves = []
+        completed = set()
+        remaining = {task["id"]: task.get("dependencies", []) for task in tasks}
+
+        while remaining:
+            # Find tasks with no unmet dependencies
+            ready = [
+                task_id
+                for task_id, deps in remaining.items()
+                if all(dep in completed for dep in deps)
+            ]
+
+            if not ready:
+                # Cyclic dependency or error
+                break
+
+            waves.append(ready)
+            for task_id in ready:
+                completed.add(task_id)
+                del remaining[task_id]
+
+        return waves
+
+    def _estimate_current_wave(self, tasks_by_wave: List[List[str]]) -> int:
+        """
+        Estimate which wave is currently running based on file creation.
+
+        Args:
+            tasks_by_wave: List of waves with task IDs
+
+        Returns:
+            Current wave number (1-indexed)
+        """
+        # Simple heuristic: assume we're in the last wave if build is active
+        # Could be enhanced by tracking task completion markers
+        return len(tasks_by_wave) if tasks_by_wave else 0
 
     def validate_file_mtime(self, file_path: Path, started_at: datetime) -> bool:
         """

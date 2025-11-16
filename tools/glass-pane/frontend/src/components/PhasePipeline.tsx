@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Phase, PhaseStatus } from '../types/job';
+import { ParallelBuildInfo } from '../types/api';
+import ParallelAgents from './ParallelAgents';
 
 interface PhasePipelineProps {
   currentPhase: Phase | null;
@@ -8,6 +10,8 @@ interface PhasePipelineProps {
   description: string;
   jobStatus?: string;
   completedPhases?: Phase[];
+  parallelBuildInfo?: ParallelBuildInfo;
+  jobId?: string;
 }
 
 const PHASES: Phase[] = [Phase.Scout, Phase.Architect, Phase.Builder, Phase.Test, Phase.Screenshot, Phase.Documentation, Phase.Deploy];
@@ -22,7 +26,9 @@ const PHASE_ICONS: Record<Phase, string> = {
   [Phase.Deploy]: '🚀',
 };
 
-export default function PhasePipeline({ currentPhase, status, description, jobStatus, completedPhases = [] }: PhasePipelineProps) {
+export default function PhasePipeline({ currentPhase, status, description, jobStatus, completedPhases = [], parallelBuildInfo, jobId }: PhasePipelineProps) {
+  const [agentsExpanded, setAgentsExpanded] = useState(false);
+
   const getPhaseStatus = (phase: Phase): PhaseStatus => {
     // If job is completed, use completedPhases list
     if (jobStatus === 'succeeded' || jobStatus === 'failed' || jobStatus === 'cancelled') {
@@ -69,7 +75,27 @@ export default function PhasePipeline({ currentPhase, status, description, jobSt
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg p-6">
-      <h2 className="text-lg font-semibold mb-4 text-gray-100">Build Pipeline</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-100">Build Pipeline</h2>
+
+        {/* Parallel Build Indicator */}
+        {parallelBuildInfo && parallelBuildInfo.parallel_mode && (
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-cyan-900/30 border border-cyan-700/50 rounded-md">
+              <span className="text-cyan-400">🚀</span>
+              <span className="text-cyan-300 font-medium">Parallel Build</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-md">
+              <span className="text-gray-400">Wave</span>
+              <span className="text-white font-bold">{parallelBuildInfo.current_wave}/{parallelBuildInfo.max_wave}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-900/30 border border-purple-700/50 rounded-md">
+              <span className="text-purple-400">⚡</span>
+              <span className="text-purple-300 font-medium">{parallelBuildInfo.max_concurrent_agents} agents</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Desktop/Tablet: Horizontal Layout */}
       <div className="hidden md:flex items-center justify-between">
@@ -176,6 +202,15 @@ export default function PhasePipeline({ currentPhase, status, description, jobSt
         <div className="mt-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
           <p className="text-sm text-gray-300">{description}</p>
         </div>
+      )}
+
+      {/* Parallel Builder Agents (expandable) */}
+      {jobId && parallelBuildInfo && parallelBuildInfo.parallel_mode && (
+        <ParallelAgents
+          jobId={jobId}
+          isExpanded={agentsExpanded}
+          onToggle={() => setAgentsExpanded(!agentsExpanded)}
+        />
       )}
     </div>
   );
