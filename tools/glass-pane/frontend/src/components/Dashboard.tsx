@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useJob } from '../contexts/JobContext';
 import { useSSE } from '../hooks/useSSE';
 import { usePhase } from '../hooks/usePhase';
@@ -9,8 +9,7 @@ import JobSelector from './JobSelector';
 import PhasePipeline from './PhasePipeline';
 import PhaseBreakdown from './PhaseBreakdown';
 import MetricsPanel from './MetricsPanel';
-import FileTree from './FileTree';
-import CodePreview from './CodePreview';
+import FileBrowser from './FileBrowser';
 import LogFeed from './LogFeed';
 import MarkdownViewer from './MarkdownViewer';
 import MobileNav from './MobileNav';
@@ -24,10 +23,9 @@ const defaultLayout = [
   { i: 'metrics', x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
   { i: 'pipeline', x: 3, y: 0, w: 9, h: 3, minW: 4, minH: 2 },
   { i: 'phase-breakdown', x: 0, y: 3, w: 3, h: 6, minW: 2, minH: 4 },
-  { i: 'file-tree', x: 0, y: 9, w: 3, h: 6, minW: 2, minH: 4 },
-  { i: 'artifacts', x: 3, y: 3, w: 4, h: 12, minW: 3, minH: 6 },
-  { i: 'code-preview', x: 7, y: 3, w: 5, h: 6, minW: 3, minH: 4 },
-  { i: 'logs', x: 7, y: 9, w: 5, h: 6, minW: 3, minH: 4 },
+  { i: 'file-browser', x: 0, y: 9, w: 5, h: 12, minW: 4, minH: 8 },
+  { i: 'artifacts', x: 5, y: 3, w: 4, h: 12, minW: 3, minH: 6 },
+  { i: 'logs', x: 9, y: 3, w: 3, h: 12, minW: 3, minH: 4 },
 ];
 
 export default function Dashboard() {
@@ -35,7 +33,6 @@ export default function Dashboard() {
   const { phaseInfo, updatePhase } = usePhase();
   const { addFile, setFiles, visibleNodes, toggleDirectory, collapseAll, searchQuery, setSearchQuery } = useFileTree([]);
   const { addLogs } = useLogs(currentJob?.id || null);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<MobileView>('phase');
   const [metrics, setMetrics] = useState({
     tokens_used: 0,
@@ -45,6 +42,12 @@ export default function Dashboard() {
     const saved = localStorage.getItem('dashboard-layout');
     return saved ? JSON.parse(saved) : defaultLayout;
   });
+  const [hiddenPanels, setHiddenPanels] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('dashboard-hidden-panels');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [containerWidth, setContainerWidth] = useState(1880);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle SSE events
   const handleSSEEvent = useCallback((event: SSEEvent) => {
@@ -102,6 +105,19 @@ export default function Dashboard() {
   }, [updatePhase, addFile, setMetrics, addLogs, currentJob, setCurrentJob, refreshJob]);
 
   useSSE(currentJob?.id || null, handleSSEEvent);
+
+  // Measure container width for responsive grid
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   // Update files when job changes
   useEffect(() => {
@@ -170,25 +186,44 @@ export default function Dashboard() {
     localStorage.setItem('dashboard-layout', JSON.stringify(newLayout));
   };
 
+  const closePanel = (panelId: string) => {
+    const newHiddenPanels = new Set(hiddenPanels);
+    newHiddenPanels.add(panelId);
+    setHiddenPanels(newHiddenPanels);
+    localStorage.setItem('dashboard-hidden-panels', JSON.stringify([...newHiddenPanels]));
+  };
+
   const resetLayout = () => {
     setLayout(defaultLayout);
+    setHiddenPanels(new Set());
     localStorage.setItem('dashboard-layout', JSON.stringify(defaultLayout));
+    localStorage.setItem('dashboard-hidden-panels', JSON.stringify([]));
   };
 
   const autoArrangeLayout = () => {
+    // Calculate available viewport height in grid units (rowHeight = 50px)
+    const viewportHeight = window.innerHeight;
+    const headerHeight = 80; // Approximate header height
+    const availableHeight = viewportHeight - headerHeight;
+    const rowHeight = 50;
+    const totalRows = Math.floor(availableHeight / rowHeight);
+
+    // Calculate proportional heights based on available space
+    const metricsHeight = Math.max(2, Math.floor(totalRows * 0.15));
+    const phaseHeight = Math.max(4, Math.floor((totalRows - metricsHeight) * 0.4));
+    const contentHeight = totalRows - metricsHeight;
+
     // Optimal layout for typical workflow:
     // Top: Status overview (metrics + pipeline)
-    // Left: Navigation and breakdown (phase-breakdown + file-tree)
-    // Center: Main content (artifacts)
-    // Right: Code and logs (code-preview + logs)
+    // Left: Navigation and breakdown (phase-breakdown + file-browser)
+    // Center-Right: Main content (artifacts + logs)
     const optimizedLayout = [
-      { i: 'metrics', x: 0, y: 0, w: 3, h: 2, minW: 2, minH: 2 },
-      { i: 'pipeline', x: 3, y: 0, w: 9, h: 2, minW: 4, minH: 2 },
-      { i: 'phase-breakdown', x: 0, y: 2, w: 3, h: 6, minW: 2, minH: 4 },
-      { i: 'file-tree', x: 0, y: 8, w: 3, h: 6, minW: 2, minH: 4 },
-      { i: 'artifacts', x: 3, y: 2, w: 5, h: 12, minW: 3, minH: 6 },
-      { i: 'code-preview', x: 8, y: 2, w: 4, h: 6, minW: 3, minH: 4 },
-      { i: 'logs', x: 8, y: 8, w: 4, h: 6, minW: 3, minH: 4 },
+      { i: 'metrics', x: 0, y: 0, w: 3, h: metricsHeight, minW: 2, minH: 2 },
+      { i: 'pipeline', x: 3, y: 0, w: 9, h: metricsHeight, minW: 4, minH: 2 },
+      { i: 'phase-breakdown', x: 0, y: metricsHeight, w: 3, h: phaseHeight, minW: 2, minH: 4 },
+      { i: 'file-browser', x: 0, y: metricsHeight + phaseHeight, w: 5, h: contentHeight - phaseHeight, minW: 4, minH: 8 },
+      { i: 'artifacts', x: 3, y: metricsHeight, w: 5, h: contentHeight, minW: 3, minH: 6 },
+      { i: 'logs', x: 8, y: metricsHeight, w: 4, h: contentHeight, minW: 3, minH: 4 },
     ];
     setLayout(optimizedLayout);
     localStorage.setItem('dashboard-layout', JSON.stringify(optimizedLayout));
@@ -229,24 +264,33 @@ export default function Dashboard() {
 
       {/* Desktop Layout (>1024px) - Draggable Grid */}
       <div className="hidden lg:block">
-        <div className="max-w-[1920px] mx-auto p-4">
+        <div ref={containerRef} className="max-w-[1920px] mx-auto p-4">
           <GridLayout
             className="layout"
-            layout={layout}
+            layout={layout.filter(item => !hiddenPanels.has(item.i))}
             cols={12}
             rowHeight={50}
-            width={1880}
+            width={containerWidth}
             onLayoutChange={handleLayoutChange}
             draggableHandle=".drag-handle"
             compactType={null}
             preventCollision={false}
           >
-            <div key="metrics" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="metrics" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('metrics') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">Metrics</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">Metrics</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('metrics'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="p-4 overflow-auto flex-1">
                 <MetricsPanel
@@ -259,12 +303,21 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div key="pipeline" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="pipeline" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('pipeline') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">Pipeline</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">Pipeline</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('pipeline'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="p-4 overflow-auto flex-1">
                 <PhasePipeline
@@ -277,67 +330,91 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div key="phase-breakdown" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="phase-breakdown" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('phase-breakdown') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">Phase Breakdown</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">Phase Breakdown</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('phase-breakdown'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="overflow-auto flex-1">
                 <PhaseBreakdown jobId={currentJob?.id || null} />
               </div>
             </div>
 
-            <div key="file-tree" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="file-browser" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('file-browser') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">File Tree</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">File Browser</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('file-browser'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="overflow-auto flex-1">
-                <FileTree
-                  onFileSelect={setSelectedFile}
+                <FileBrowser
                   visibleNodes={visibleNodes}
                   toggleDirectory={toggleDirectory}
                   collapseAll={collapseAll}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
+                  jobId={currentJob?.id}
                 />
               </div>
             </div>
 
-            <div key="artifacts" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="artifacts" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('artifacts') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">Artifacts</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">Artifacts</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('artifacts'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="overflow-auto flex-1">
                 <MarkdownViewer jobId={currentJob?.id || null} />
               </div>
             </div>
 
-            <div key="code-preview" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
+            <div key="logs" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('logs') ? 'none' : 'flex'}}>
               <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
                 </svg>
-                <span className="text-sm font-medium text-gray-400">Code Preview</span>
-              </div>
-              <div className="overflow-auto flex-1">
-                <CodePreview filePath={selectedFile} jobId={currentJob?.id} />
-              </div>
-            </div>
-
-            <div key="logs" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full">
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400">Logs</span>
+                <span className="text-sm font-medium text-gray-400 flex-1">Logs</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); closePanel('logs'); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                  title="Close panel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
               <div className="overflow-auto flex-1">
                 <LogFeed jobId={currentJob?.id || null} />
@@ -367,17 +444,18 @@ export default function Dashboard() {
                 completedPhases={completedPhases}
               />
               <PhaseBreakdown jobId={currentJob?.id || null} />
-              <FileTree
-                onFileSelect={setSelectedFile}
-                visibleNodes={visibleNodes}
-                toggleDirectory={toggleDirectory}
-                collapseAll={collapseAll}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              />
             </div>
             <div className="space-y-4">
-              <CodePreview filePath={selectedFile} jobId={currentJob?.id} />
+              <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '600px'}}>
+                <FileBrowser
+                  visibleNodes={visibleNodes}
+                  toggleDirectory={toggleDirectory}
+                  collapseAll={collapseAll}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  jobId={currentJob?.id}
+                />
+              </div>
               <LogFeed jobId={currentJob?.id || null} />
             </div>
           </div>
@@ -407,17 +485,30 @@ export default function Dashboard() {
             </div>
           )}
           {mobileView === 'files' && (
-            <FileTree
-              onFileSelect={setSelectedFile}
-              visibleNodes={visibleNodes}
-              toggleDirectory={toggleDirectory}
-              collapseAll={collapseAll}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-            />
+            <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: 'calc(100vh - 180px)'}}>
+              <FileBrowser
+                visibleNodes={visibleNodes}
+                toggleDirectory={toggleDirectory}
+                collapseAll={collapseAll}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                jobId={currentJob?.id}
+              />
+            </div>
           )}
           {mobileView === 'logs' && <LogFeed jobId={currentJob?.id || null} />}
-          {mobileView === 'code' && <CodePreview filePath={selectedFile} jobId={currentJob?.id} />}
+          {mobileView === 'code' && (
+            <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: 'calc(100vh - 180px)'}}>
+              <FileBrowser
+                visibleNodes={visibleNodes}
+                toggleDirectory={toggleDirectory}
+                collapseAll={collapseAll}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                jobId={currentJob?.id}
+              />
+            </div>
+          )}
         </div>
 
         <MobileNav activeView={mobileView} onViewChange={setMobileView} />
