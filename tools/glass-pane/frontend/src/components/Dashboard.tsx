@@ -134,6 +134,9 @@ export default function Dashboard() {
               else if (phaseName.includes('architect')) phases.push('Architect' as import('../types/job').Phase);
               else if (phaseName.includes('builder')) phases.push('Builder' as import('../types/job').Phase);
               else if (phaseName.includes('test')) phases.push('Test' as import('../types/job').Phase);
+              else if (phaseName.includes('screenshot')) phases.push('Screenshot' as import('../types/job').Phase);
+              else if (phaseName.includes('documentation')) phases.push('Documentation' as import('../types/job').Phase);
+              else if (phaseName.includes('deploy')) phases.push('Deploy' as import('../types/job').Phase);
             });
           }
           // Remove duplicates
@@ -215,6 +218,7 @@ export default function Dashboard() {
                   startedAt={currentJob?.started_at || null}
                   completedAt={currentJob?.completed_at || null}
                   totalFiles={currentJob?.total_files || 0}
+                  projectName={currentJob?.project_name}
                 />
               </div>
             </div>

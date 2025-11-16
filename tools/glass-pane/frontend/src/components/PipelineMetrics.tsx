@@ -38,6 +38,7 @@ interface PipelineMetricsProps {
   startedAt: string | null;
   completedAt: string | null;
   totalFiles: number;
+  projectName?: string;
 }
 
 const PHASES: Phase[] = [
@@ -74,6 +75,7 @@ export default function PipelineMetrics({
   startedAt,
   completedAt,
   totalFiles,
+  projectName,
 }: PipelineMetricsProps) {
   const [phaseData, setPhaseData] = useState<PhaseBreakdownData | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -178,7 +180,9 @@ export default function PipelineMetrics({
       {/* Overall Summary Bar */}
       <div className="bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-700 rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-gray-100">Build Pipeline</h2>
+          <h2 className="text-lg font-semibold text-gray-100">
+            Build Pipeline{projectName ? `: ${projectName}` : ''}
+          </h2>
           <span className={`text-xs font-semibold px-3 py-1 rounded-full ${
             jobStatus === 'running' ? 'bg-cyan-500/20 text-cyan-400' :
             jobStatus === 'succeeded' ? 'bg-green-500/20 text-green-400' :
