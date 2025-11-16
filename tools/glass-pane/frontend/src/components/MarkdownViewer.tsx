@@ -23,6 +23,7 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
   const [content, setContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // Fetch list of markdown files
   const fetchFiles = useCallback(async () => {
@@ -135,6 +136,18 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleCopy = async () => {
+    if (!content) return;
+
+    try {
+      await navigator.clipboard.writeText(content);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
   // Group files by type
   const groupedFiles = files.reduce((acc, file) => {
     const type = file.type;
@@ -157,9 +170,9 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full w-full flex">
       {/* File List Sidebar */}
-      <div className="w-64 border-r border-gray-800 flex flex-col">
+      <div className="w-64 min-w-[256px] border-r border-gray-800 flex flex-col flex-shrink-0">
         {/* Header */}
         <div className="p-4 border-b border-gray-800">
           <div className="flex items-center gap-2 mb-3">
@@ -174,7 +187,7 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
         </div>
 
         {/* File List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           {!jobId && (
             <div className="p-4 text-sm text-gray-500 text-center">
               Select a job
@@ -232,16 +245,42 @@ export default function MarkdownViewer({ jobId, onMarkdownUpdate }: MarkdownView
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Content Header */}
         {selectedFile && (
-          <div className="p-3 border-b border-gray-800 bg-gray-800/50">
-            <div className="text-sm font-medium text-gray-300 truncate">{selectedFile}</div>
+          <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <div className="text-sm font-medium text-gray-300 truncate">{selectedFile}</div>
+            </div>
+
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-sm ml-4"
+            >
+              {isCopied ? (
+                <>
+                  <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-green-400">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 min-w-0">
           {!selectedFile && (
             <div className="flex items-center justify-center h-full text-gray-500">
               {files.length > 0 ? 'Select a file to view' : 'No artifacts available'}

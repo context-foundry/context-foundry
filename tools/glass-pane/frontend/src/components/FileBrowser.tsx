@@ -111,9 +111,9 @@ export default function FileBrowser({
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full w-full flex">
       {/* File Tree Sidebar */}
-      <div className="w-64 border-r border-gray-800 flex flex-col">
+      <div className="w-64 min-w-[256px] border-r border-gray-800 flex flex-col flex-shrink-0">
         {/* Header */}
         <div className="p-4 border-b border-gray-800">
           <div className="flex items-center gap-2 mb-3">
@@ -155,7 +155,7 @@ export default function FileBrowser({
         </div>
 
         {/* File Tree */}
-        <div className="flex-1 overflow-y-auto py-2">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2">
           <AnimatePresence>
             {visibleNodes.map((node) => {
               const indentLevel = getIndentLevel(node.path);
@@ -214,10 +214,10 @@ export default function FileBrowser({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Content Header */}
         {selectedPath && (
-          <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center justify-between">
+          <div className="p-3 border-b border-gray-800 bg-gray-800/50 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
@@ -249,7 +249,7 @@ export default function FileBrowser({
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-w-0">
           {!selectedPath && (
             <div className="flex items-center justify-center h-full text-gray-500">
               Select a file to preview

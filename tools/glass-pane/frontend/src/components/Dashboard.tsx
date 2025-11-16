@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useJob } from '../contexts/JobContext';
 import { useSSE } from '../hooks/useSSE';
 import { usePhase } from '../hooks/usePhase';
@@ -206,7 +207,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-12 gap-4">
             {/* Pipeline with Metrics - Full Width */}
             <div className="col-span-12">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4" style={{height: 'calc(100vh - 200px)'}}>
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4" style={{height: '1000px'}}>
                 <PipelineMetrics
                   jobId={currentJob?.id || null}
                   currentPhase={phaseInfo.phase}
@@ -226,32 +227,39 @@ export default function Dashboard() {
         )}
 
         {activeTab === 'browse' && (
-          <div className="grid grid-cols-12 gap-4">
-            {/* File Browser - Left Half */}
-            <div className="col-span-12 lg:col-span-6">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
-                <FileBrowser
-                  visibleNodes={visibleNodes}
-                  toggleDirectory={toggleDirectory}
-                  collapseAll={collapseAll}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  jobId={currentJob?.id}
-                />
-              </div>
-            </div>
+          <div style={{height: '1400px'}}>
+            <PanelGroup direction="vertical">
+              {/* Build Files - Top Panel */}
+              <Panel defaultSize={50} minSize={20}>
+                <div className="h-full bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                  <MarkdownViewer jobId={currentJob?.id || null} />
+                </div>
+              </Panel>
 
-            {/* Artifacts - Right Half */}
-            <div className="col-span-12 lg:col-span-6">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
-                <MarkdownViewer jobId={currentJob?.id || null} />
-              </div>
-            </div>
+              {/* Resize Handle */}
+              <PanelResizeHandle className="h-2 bg-gray-800 hover:bg-cyan-500/50 transition-colors cursor-row-resize flex items-center justify-center group">
+                <div className="w-12 h-1 bg-gray-700 rounded-full group-hover:bg-cyan-500 transition-colors" />
+              </PanelResizeHandle>
+
+              {/* Project Files - Bottom Panel */}
+              <Panel defaultSize={50} minSize={20}>
+                <div className="h-full bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+                  <FileBrowser
+                    visibleNodes={visibleNodes}
+                    toggleDirectory={toggleDirectory}
+                    collapseAll={collapseAll}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    jobId={currentJob?.id}
+                  />
+                </div>
+              </Panel>
+            </PanelGroup>
           </div>
         )}
 
         {activeTab === 'logs' && (
-          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
+          <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '1200px'}}>
             <LogFeed jobId={currentJob?.id || null} />
           </div>
         )}
