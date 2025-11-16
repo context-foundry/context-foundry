@@ -1838,6 +1838,7 @@ All projects: Covered by subscription
 | Document | Description | Audience |
 |----------|-------------|----------|
 | **[CLAUDE_CODE_MCP_SETUP.md](docs/CLAUDE_CODE_MCP_SETUP.md)** | Complete MCP setup and troubleshooting | All users |
+| **[UPGRADE.md](UPGRADE.md)** | Version upgrade guide with step-by-step instructions | All users |
 | **[.mcp.json](.mcp.json)** | Project-shareable MCP configuration | Team leads |
 
 ### 🏗️ Architecture & Technical Deep Dives
@@ -1898,9 +1899,10 @@ All projects: Covered by subscription
 
 **Troubleshooting:**
 1. [CLAUDE_CODE_MCP_SETUP.md](docs/CLAUDE_CODE_MCP_SETUP.md) - Setup issues
-2. [FAQ.md](docs/FAQ.md) - Common questions
-3. [TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md) - Technical troubleshooting (parallel execution, test loops, etc.)
-4. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
+2. [UPGRADE.md](UPGRADE.md) - Version upgrade guide and migration
+3. [FAQ.md](docs/FAQ.md) - Common questions
+4. [TECHNICAL_FAQ.md](docs/TECHNICAL_FAQ.md) - Technical troubleshooting (parallel execution, test loops, etc.)
+5. [docs/MCP_SERVER_ARCHITECTURE.md](docs/MCP_SERVER_ARCHITECTURE.md#troubleshooting--debugging) - Advanced debugging
 
 ---
 
