@@ -633,9 +633,8 @@ def execute_build_with_phase_spawning(
                 # Self-healing: Run Architect to fix
                 print(f"\n🔄 Self-healing iteration {test_iteration}", file=sys.stderr)
 
-                # Recalculate test_file for the CURRENT iteration (after increment)
-                # This ensures fix_instruction and run_phase(iteration=N) reference the same file
-                test_file = f".context-foundry/test-report-{test_iteration}.md"
+                # test_file already points to the report that just failed (correct!)
+                # Don't recalculate - the next test iteration hasn't run yet
 
                 architect_fix_file = (
                     f".context-foundry/architecture-fix-{test_iteration}.md"

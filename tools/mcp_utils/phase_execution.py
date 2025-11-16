@@ -388,13 +388,16 @@ def run_phase(
             phase_files = [working_directory / ".context-foundry" / "scout-report.md"]
         elif phase_name == "Architect":
             if iteration > 0:
-                # Fix iteration: reads test-report-{N}.md and architecture.md
-                # writes architecture-fix-{N}.md
+                # Fix iteration N: reads test report from PREVIOUS iteration (N-1)
+                # Test file naming: iteration 0="test-report.md", 1="test-report-1.md"
+                previous_iteration = iteration - 1
+                test_filename = f"test-report{'-' + str(previous_iteration) if previous_iteration > 0 else ''}.md"
+
+                # Reads: test-report from previous iteration, architecture.md
+                # Writes: architecture-fix-{iteration}.md
                 phase_files = [
                     working_directory / ".context-foundry" / "architecture.md",
-                    working_directory
-                    / ".context-foundry"
-                    / f"test-report-{iteration}.md",
+                    working_directory / ".context-foundry" / test_filename,
                     working_directory
                     / ".context-foundry"
                     / f"architecture-fix-{iteration}.md",
