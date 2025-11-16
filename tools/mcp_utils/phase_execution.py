@@ -860,12 +860,22 @@ def tests_passed(test_report_path: Path) -> bool:
     content_lower = content.lower()
 
     # Check for pass indicators
+    # EXPANDED: Include all variations that Test phase actually produces
     passed_indicators = [
         "all tests passed",
+        "all tests passing",  # "All tests passing (153/153)"
+        "tests passing",  # "All tests passing"
         "✅ all tests passed",
+        "✅ all tests passing",
         "status: passed",
+        "status: ✅ passed",  # "**Status**: ✅ **PASSED**"
+        "status**: ✅ **passed",  # Bold formatting variation
+        "status**: passed",  # "**Status**: PASSED"
         "result: pass",
         "**status**: passed",
+        "all tests executed successfully",  # From test-report-2.md
+        "production ready",  # "PASSED - Production Ready"
+        "production-ready",  # Hyphenated variation
     ]
 
     fail_indicators = [
@@ -876,6 +886,8 @@ def tests_passed(test_report_path: Path) -> bool:
         "errors:",
         "test failures:",
         "**status**: failed",
+        "tests failed",  # Explicit failures
+        "failing",  # Tests are failing
     ]
 
     has_pass = any(indicator in content_lower for indicator in passed_indicators)
