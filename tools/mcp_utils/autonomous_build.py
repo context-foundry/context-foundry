@@ -648,6 +648,9 @@ def execute_build_with_phase_spawning(
                     f"- Builder will implement your plan in the next phase"
                 )
 
+                # Take snapshot of source files before Architect runs
+                source_files_before = _get_source_file_checksums(working_directory)
+
                 architect_fix_result = run_phase(
                     "Architect",
                     architect_prompt,
@@ -661,6 +664,63 @@ def execute_build_with_phase_spawning(
                 if architect_fix_result.status != "completed":
                     print("❌ Architect fix failed", file=sys.stderr)
                     break
+
+                # ENFORCEMENT: Validate Architect fix phase output
+                fix_file_path = working_directory / architect_fix_file
+                validation_errors = []
+
+                # 1. Check architecture-fix-{N}.md exists
+                if not fix_file_path.exists():
+                    validation_errors.append(
+                        f"Architect did not create {architect_fix_file}"
+                    )
+
+                # 2. Check it's not empty
+                elif fix_file_path.stat().st_size < 100:
+                    validation_errors.append(
+                        f"{architect_fix_file} is suspiciously small ({fix_file_path.stat().st_size} bytes)"
+                    )
+
+                # 3. Check Architect didn't modify source files
+                source_files_after = _get_source_file_checksums(working_directory)
+                modified_files = [
+                    f
+                    for f, checksum in source_files_after.items()
+                    if source_files_before.get(f) != checksum
+                ]
+                if modified_files:
+                    validation_errors.append(
+                        f"Architect modified source files (should only create fix plan): {', '.join(modified_files[:5])}"
+                    )
+
+                if validation_errors:
+                    print("\n❌ ARCHITECT FIX VALIDATION FAILED:", file=sys.stderr)
+                    for error in validation_errors:
+                        print(f"   - {error}", file=sys.stderr)
+                    print(
+                        "\n💡 Architect should ONLY create a fix plan document, not implement code!",
+                        file=sys.stderr,
+                    )
+                    break
+
+                # ENFORCEMENT: Check Architect stayed within budget (14K tokens)
+                architect_budget = 14000
+                if architect_fix_result.context_tokens > architect_budget:
+                    print(
+                        f"\n⚠️  WARNING: Architect fix used {architect_fix_result.context_tokens:,} tokens "
+                        f"(budget: {architect_budget:,})",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "   Architect should analyze failures briefly, not deeply implement solutions.",
+                        file=sys.stderr,
+                    )
+                    # Don't fail build, but log the violation
+                else:
+                    print(
+                        f"✅ Architect fix stayed within budget: {architect_fix_result.context_tokens:,}/{architect_budget:,} tokens",
+                        file=sys.stderr,
+                    )
 
                 # Run Builder with fixed architecture
                 builder_fix_instruction = (
@@ -680,6 +740,25 @@ def execute_build_with_phase_spawning(
                 if builder_fix_result.status != "completed":
                     print("❌ Builder fix failed", file=sys.stderr)
                     break
+
+                # ENFORCEMENT: Check Builder fix stayed within budget (40K tokens)
+                builder_budget = 40000
+                if builder_fix_result.context_tokens > builder_budget:
+                    print(
+                        f"\n⚠️  WARNING: Builder fix used {builder_fix_result.context_tokens:,} tokens "
+                        f"(budget: {builder_budget:,})",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "   Builder should make surgical fixes, not rebuild entire project.",
+                        file=sys.stderr,
+                    )
+                    # Don't fail build, but log the violation
+                else:
+                    print(
+                        f"✅ Builder fix stayed within budget: {builder_fix_result.context_tokens:,}/{builder_budget:,} tokens",
+                        file=sys.stderr,
+                    )
 
                 # Update file names for next iteration
                 architect_file = architect_fix_file
@@ -873,6 +952,38 @@ def execute_build_with_phase_spawning(
             "start_time": start_time.isoformat(),
             "duration_seconds": duration,
         }
+
+
+def _get_source_file_checksums(working_dir: Path) -> dict[str, str]:
+    """
+    Get MD5 checksums of all source files (excluding .context-foundry).
+    Used to detect if Architect modified files during fix iteration.
+    """
+    import hashlib
+
+    checksums = {}
+    exclude_dirs = {".context-foundry", ".git", "node_modules", "venv", "__pycache__"}
+
+    for file_path in working_dir.rglob("*"):
+        if file_path.is_file():
+            # Skip excluded directories
+            if any(excluded in file_path.parts for excluded in exclude_dirs):
+                continue
+
+            # Skip hidden files
+            if any(part.startswith(".") for part in file_path.parts):
+                continue
+
+            try:
+                relative_path = file_path.relative_to(working_dir)
+                with open(file_path, "rb") as f:
+                    file_hash = hashlib.md5(f.read()).hexdigest()
+                checksums[str(relative_path)] = file_hash
+            except (OSError, ValueError):
+                # Skip files we can't read
+                continue
+
+    return checksums
 
 
 def _validate_test_with_filename(working_dir: Path, test_filename: str) -> bool:
