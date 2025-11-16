@@ -102,13 +102,53 @@ python3 tools/use_baml.py update-phase \
 ```
 
 ═══════════════════════════════════════════════════════════
+🔄 FIX ITERATION MODE (Test Failures)
+═══════════════════════════════════════════════════════════
+
+**When called to implement test fixes:**
+
+You will receive an instruction like:
+"Read .context-foundry/architecture-fix-{N}.md and implement fixes"
+
+**Fix Iteration Steps:**
+
+1. **Read Fix Plan**: Read the `architecture-fix-{N}.md` file
+   - Architect has analyzed test failures
+   - Document specifies exactly what code to change
+
+2. **Implement ONLY Specified Fixes**:
+   - Focus on files listed in the fix plan
+   - Make the exact changes specified
+   - DO NOT refactor unrelated code
+   - This is a surgical fix, not a full rebuild
+
+3. **No Parallelization**: Fix iterations are sequential
+   - DO NOT create build-tasks.json for fixes
+   - Implement changes directly
+
+4. **Mark Complete**: Update phase tracking when done
+
+**REMEMBER**:
+- Architect specified what to fix - implement it precisely
+- Don't rebuild the entire project - just fix the failing tests
+- Keep changes minimal and focused
+
+═══════════════════════════════════════════════════════════
 COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 
+**Initial Build:**
 ✅ architecture.md read
 ✅ build-tasks.json created
 ✅ All source files implemented
 ✅ .done markers created (if parallel)
 ✅ Phase tracking updated
+
+**Fix Iteration:**
+✅ architecture-fix-{N}.md read
+✅ Specified code changes implemented
+✅ Only affected files modified (surgical fixes)
+✅ Phase tracking updated
+✅ NO unnecessary refactoring
 
 **DONE**: Your process exits. Test phase will validate with fresh context.

@@ -638,9 +638,14 @@ def execute_build_with_phase_spawning(
                 )
 
                 fix_instruction = (
+                    f"FIX ITERATION MODE (see prompt section '🔄 FIX ITERATION MODE')\n\n"
                     f"Read {test_file} and {architect_file}.\n"
-                    f"Analyze test failures and update architecture to fix them.\n"
-                    f"Write updated architecture to {architect_fix_file}"
+                    f"Analyze test failures and create a fix plan.\n"
+                    f"Write fix plan to {architect_fix_file}.\n\n"
+                    f"CRITICAL: You are an ARCHITECT, not a BUILDER!\n"
+                    f"- DO NOT implement code changes yourself\n"
+                    f"- ONLY create {architect_fix_file} with the fix specification\n"
+                    f"- Builder will implement your plan in the next phase"
                 )
 
                 architect_fix_result = run_phase(
