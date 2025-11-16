@@ -221,7 +221,7 @@ export default function PipelineMetrics({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: PHASES.indexOf(phase) * 0.1 }}
-              className={`bg-gray-800 border rounded-lg p-4 flex flex-col ${
+              className={`bg-gray-800 border rounded-lg p-4 flex flex-col min-h-[360px] ${
                 isActive ? 'border-cyan-500 shadow-lg shadow-cyan-500/20' :
                 isCompleted ? 'border-green-500/50' :
                 isFailed ? 'border-red-500/50' :
