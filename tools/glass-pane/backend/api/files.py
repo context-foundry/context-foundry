@@ -92,3 +92,68 @@ async def get_file_content(
     except Exception as e:
         logger.error(f"Error reading file {path}: {e}")
         raise HTTPException(status_code=500, detail="Failed to read file")
+
+
+@router.get("/list")
+async def list_files(job_id: str = Query(..., description="Job ID to list files from")):
+    """
+    List all files in a job's working directory.
+
+    Query Parameters:
+    - job_id: Job ID to get working directory from
+
+    Returns:
+    - Array of file paths relative to working directory
+
+    Security:
+    - Only files within job's working directory are listed
+    - Excludes .git, .context-foundry, venv, __pycache__, node_modules
+    """
+    # Get job's working directory
+    working_dir = store.get_job_working_directory(job_id)
+    if not working_dir:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job {job_id} not found or has no working_directory",
+        )
+
+    base_dir = Path(working_dir)
+    if not base_dir.exists():
+        return {"files": []}
+
+    # Directories to exclude
+    exclude_dirs = {
+        ".git",
+        ".context-foundry",
+        "venv",
+        "__pycache__",
+        "node_modules",
+        ".DS_Store",
+    }
+
+    try:
+        files = []
+        for file_path in base_dir.rglob("*"):
+            # Skip if any parent directory is in exclude list
+            if any(ex in file_path.parts for ex in exclude_dirs):
+                continue
+
+            # Skip if file itself is in exclude list
+            if file_path.name in exclude_dirs:
+                continue
+
+            if file_path.is_file():
+                # Get relative path from working directory
+                relative_path = file_path.relative_to(base_dir)
+                files.append(str(relative_path))
+
+        # Sort files alphabetically
+        files.sort()
+
+        logger.info(f"Listed {len(files)} files for job {job_id}")
+
+        return {"files": files}
+
+    except Exception as e:
+        logger.error(f"Error listing files for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list files")

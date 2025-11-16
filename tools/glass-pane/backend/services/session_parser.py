@@ -99,6 +99,9 @@ class SessionParser:
         # Check if file is stale
         if started_at:
             file_mtime = datetime.fromtimestamp(file_path.stat().st_mtime)
+            # Handle started_at as string (ISO format from DB) or datetime object
+            if isinstance(started_at, str):
+                started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
             if file_mtime < started_at:
                 logger.warning(
                     f"Stale current-phase.json detected for job {job_id}. "

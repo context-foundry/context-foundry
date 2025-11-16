@@ -27,6 +27,9 @@ from mcp_utils.delegation import (
 from mcp_utils.phase_tracking import read_phase_info
 from mcp_utils.output_utils import create_output_summary
 
+# Import build notifications
+from build_notifications import notify_build_started, notify_build_complete
+
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,13 @@ class Runner:
                     f"[TRACE] run() calling _run_autonomous_build for job {job.id}"
                 )
 
+                # Send Discord notification: Build started
+                try:
+                    project_name = Path(working_dir).name
+                    notify_build_started(project=project_name, task=task, job_id=job.id)
+                except Exception as e:
+                    logger.warning(f"Failed to send Discord start notification: {e}")
+
                 result = self._run_autonomous_build(job, working_dir, timeout_minutes)
 
                 logger.info(
@@ -135,6 +145,21 @@ class Runner:
 
                     logger.info(f"[TRACE] Job {job.id} marked as SUCCEEDED")
 
+                    # Send Discord notification: Build succeeded
+                    try:
+                        project_name = Path(working_dir).name
+                        notify_build_complete(
+                            project=project_name,
+                            status="success",
+                            duration_seconds=result.get("duration_seconds", 0),
+                            job_id=job.id,
+                            phases_completed=result.get("phases_completed", []),
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to send Discord success notification: {e}"
+                        )
+
                     return {
                         "success": True,
                         "exit_code": 0,
@@ -162,6 +187,21 @@ class Runner:
                     )
 
                     logger.info(f"[TRACE] Job {job.id} marked as FAILED")
+
+                    # Send Discord notification: Build failed
+                    try:
+                        project_name = Path(working_dir).name
+                        notify_build_complete(
+                            project=project_name,
+                            status="failed",
+                            duration_seconds=result.get("duration_seconds", 0),
+                            job_id=job.id,
+                            error_message=error_msg,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to send Discord failure notification: {e}"
+                        )
 
                     raise RuntimeError(error_msg)
             else:

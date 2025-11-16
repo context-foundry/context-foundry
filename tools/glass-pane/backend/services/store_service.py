@@ -408,6 +408,33 @@ class StoreService:
                             f"Could not load session-summary.json for job {row_dict['id']}: {e}"
                         )
 
+        # If still no file count, count from filesystem
+        if total_files == 0:
+            working_dir = params.get("working_directory", "")
+            if working_dir:
+                try:
+                    working_path = Path(working_dir)
+                    if working_path.exists():
+                        # Count files excluding .git, .context-foundry, venv, __pycache__
+                        exclude_dirs = {
+                            ".git",
+                            ".context-foundry",
+                            "venv",
+                            "__pycache__",
+                            "node_modules",
+                        }
+                        total_files = sum(
+                            1
+                            for f in working_path.rglob("*")
+                            if f.is_file()
+                            and not any(ex in f.parts for ex in exclude_dirs)
+                        )
+                        logger.debug(
+                            f"Counted {total_files} files from filesystem for job {row_dict['id']}"
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not count files for job {row_dict['id']}: {e}")
+
         return Job(
             id=row_dict["id"],
             status=row_dict.get("status", "unknown"),

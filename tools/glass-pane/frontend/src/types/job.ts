@@ -7,6 +7,8 @@ export enum Phase {
   Architect = 'Architect',
   Builder = 'Builder',
   Test = 'Test',
+  Screenshot = 'Screenshot',
+  Documentation = 'Documentation',
   Deploy = 'Deploy',
 }
 

@@ -4,9 +4,10 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface CodePreviewProps {
   filePath: string | null;
+  jobId?: string | null;
 }
 
-export default function CodePreview({ filePath }: CodePreviewProps) {
+export default function CodePreview({ filePath, jobId }: CodePreviewProps) {
   const [content, setContent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +20,7 @@ export default function CodePreview({ filePath }: CodePreviewProps) {
     }
 
     fetchFile();
-  }, [filePath]);
+  }, [filePath, jobId]);
 
   const fetchFile = async () => {
     if (!filePath) return;
@@ -29,6 +30,9 @@ export default function CodePreview({ filePath }: CodePreviewProps) {
 
     try {
       const params = new URLSearchParams({ path: filePath });
+      if (jobId) {
+        params.append('job_id', jobId);
+      }
       const response = await fetch(`/api/files?${params}`);
 
       if (!response.ok) {

@@ -10,13 +10,15 @@ interface PhasePipelineProps {
   completedPhases?: Phase[];
 }
 
-const PHASES: Phase[] = [Phase.Scout, Phase.Architect, Phase.Builder, Phase.Test, Phase.Deploy];
+const PHASES: Phase[] = [Phase.Scout, Phase.Architect, Phase.Builder, Phase.Test, Phase.Screenshot, Phase.Documentation, Phase.Deploy];
 
 const PHASE_ICONS: Record<Phase, string> = {
   [Phase.Scout]: '🔍',
   [Phase.Architect]: '📐',
   [Phase.Builder]: '🔨',
   [Phase.Test]: '🧪',
+  [Phase.Screenshot]: '📸',
+  [Phase.Documentation]: '📝',
   [Phase.Deploy]: '🚀',
 };
 
@@ -30,7 +32,12 @@ export default function PhasePipeline({ currentPhase, status, description, jobSt
       return PhaseStatus.Pending;
     }
 
-    // Otherwise use current phase logic for running jobs
+    // For running jobs, check completedPhases first
+    if (completedPhases.includes(phase)) {
+      return PhaseStatus.Completed;
+    }
+
+    // Then use current phase logic
     if (!currentPhase) return PhaseStatus.Pending;
 
     const currentIndex = PHASES.indexOf(currentPhase);

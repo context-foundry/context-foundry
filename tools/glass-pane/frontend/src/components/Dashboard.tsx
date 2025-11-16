@@ -39,8 +39,6 @@ export default function Dashboard() {
   const [mobileView, setMobileView] = useState<MobileView>('phase');
   const [metrics, setMetrics] = useState({
     tokens_used: 0,
-    duration: 0,
-    files: 0,
   });
   const [completedPhases, setCompletedPhases] = useState<import('../types/job').Phase[]>([]);
   const [layout, setLayout] = useState(() => {
@@ -63,7 +61,7 @@ export default function Dashboard() {
       case 'file_created': {
         const fileData = event.data as import('../types/events').FileCreatedData;
         addFile(fileData.path);
-        setMetrics(prev => ({ ...prev, files: prev.files + 1 }));
+        // File count is tracked in currentJob.total_files, updated via API polling
         break;
       }
       case 'log_batch': {
@@ -108,42 +106,62 @@ export default function Dashboard() {
   // Update files when job changes
   useEffect(() => {
     if (currentJob) {
-      // Fetch initial files from session summary
+      // Reset state
       setFiles([]);
       setMetrics({
         tokens_used: currentJob.tokens_used || 0,
-        duration: 0,
-        files: currentJob.total_files || 0,
       });
 
-      // Update phase info
-      if (currentJob.current_phase) {
-        updatePhase({
-          phase: currentJob.current_phase,
-          status: 'active',
-          description: '',
+      // Fetch existing files from working directory
+      fetch(`/api/files/list?job_id=${currentJob.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.files && data.files.length > 0) {
+            // Add all existing files to the tree
+            data.files.forEach((filePath: string) => {
+              addFile(filePath);
+            });
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load existing files:', err);
         });
-      }
 
-      // Fetch completed phases for pipeline display
-      if (currentJob.status === 'succeeded' || currentJob.status === 'failed' || currentJob.status === 'cancelled') {
-        fetch(`/api/jobs/${currentJob.id}/phases/detailed`)
-          .then(res => res.json())
-          .then(data => {
-            const phases: import('../types/job').Phase[] = [];
-            if (data.phases) {
-              data.phases.forEach((p: { name: string }) => {
-                if (p.name.includes('scout')) phases.push('Scout' as import('../types/job').Phase);
-                else if (p.name.includes('architect')) phases.push('Architect' as import('../types/job').Phase);
-                else if (p.name.includes('builder')) phases.push('Builder' as import('../types/job').Phase);
-                else if (p.name.includes('test')) phases.push('Test' as import('../types/job').Phase);
-              });
-            }
-            // Remove duplicates
-            setCompletedPhases([...new Set(phases)]);
-          })
-          .catch(err => console.error('Failed to fetch phase details:', err));
-      }
+      // Fetch phase details for all jobs (running or completed)
+      fetch(`/api/jobs/${currentJob.id}/phases/detailed`)
+        .then(res => res.json())
+        .then(data => {
+          // Update current phase info from current_phase field
+          if (data.current_phase) {
+            updatePhase({
+              phase: data.current_phase.name,
+              status: data.current_phase.status || 'active',
+              description: data.current_phase.description || '',
+            });
+          } else if (currentJob.current_phase) {
+            // Fallback to job's current_phase field
+            updatePhase({
+              phase: currentJob.current_phase,
+              status: 'active',
+              description: '',
+            });
+          }
+
+          // Update completed phases for pipeline display
+          const phases: import('../types/job').Phase[] = [];
+          if (data.phases) {
+            data.phases.forEach((p: { name: string }) => {
+              const phaseName = p.name.toLowerCase();
+              if (phaseName.includes('scout')) phases.push('Scout' as import('../types/job').Phase);
+              else if (phaseName.includes('architect')) phases.push('Architect' as import('../types/job').Phase);
+              else if (phaseName.includes('builder')) phases.push('Builder' as import('../types/job').Phase);
+              else if (phaseName.includes('test')) phases.push('Test' as import('../types/job').Phase);
+            });
+          }
+          // Remove duplicates
+          setCompletedPhases([...new Set(phases)]);
+        })
+        .catch(err => console.error('Failed to fetch phase details:', err));
     }
   }, [currentJob, setFiles, updatePhase]);
 
@@ -233,8 +251,9 @@ export default function Dashboard() {
               <div className="p-4 overflow-auto flex-1">
                 <MetricsPanel
                   tokensUsed={metrics.tokens_used}
-                  duration={metrics.duration}
-                  totalFiles={metrics.files}
+                  startedAt={currentJob?.started_at || null}
+                  completedAt={currentJob?.completed_at || null}
+                  totalFiles={currentJob?.total_files || 0}
                   status={currentJob?.status || 'unknown'}
                 />
               </div>
@@ -309,7 +328,7 @@ export default function Dashboard() {
                 <span className="text-sm font-medium text-gray-400">Code Preview</span>
               </div>
               <div className="overflow-auto flex-1">
-                <CodePreview filePath={selectedFile} />
+                <CodePreview filePath={selectedFile} jobId={currentJob?.id} />
               </div>
             </div>
 
@@ -335,8 +354,9 @@ export default function Dashboard() {
             <div className="space-y-4">
               <MetricsPanel
                 tokensUsed={metrics.tokens_used}
-                duration={metrics.duration}
-                totalFiles={metrics.files}
+                startedAt={currentJob?.started_at || null}
+                completedAt={currentJob?.completed_at || null}
+                totalFiles={currentJob?.total_files || 0}
                 status={currentJob?.status || 'unknown'}
               />
               <PhasePipeline
@@ -357,7 +377,7 @@ export default function Dashboard() {
               />
             </div>
             <div className="space-y-4">
-              <CodePreview filePath={selectedFile} />
+              <CodePreview filePath={selectedFile} jobId={currentJob?.id} />
               <LogFeed jobId={currentJob?.id || null} />
             </div>
           </div>
@@ -371,8 +391,9 @@ export default function Dashboard() {
             <div className="space-y-4">
               <MetricsPanel
                 tokensUsed={metrics.tokens_used}
-                duration={metrics.duration}
-                totalFiles={metrics.files}
+                startedAt={currentJob?.started_at || null}
+                completedAt={currentJob?.completed_at || null}
+                totalFiles={currentJob?.total_files || 0}
                 status={currentJob?.status || 'unknown'}
               />
               <PhasePipeline
@@ -396,7 +417,7 @@ export default function Dashboard() {
             />
           )}
           {mobileView === 'logs' && <LogFeed jobId={currentJob?.id || null} />}
-          {mobileView === 'code' && <CodePreview filePath={selectedFile} />}
+          {mobileView === 'code' && <CodePreview filePath={selectedFile} jobId={currentJob?.id} />}
         </div>
 
         <MobileNav activeView={mobileView} onViewChange={setMobileView} />

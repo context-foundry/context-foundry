@@ -239,6 +239,10 @@ class HealthCheck:
         if os.getenv("SLACK_WEBHOOK"):
             self.passed.append("Slack webhook configured")
 
+        # Check for DISCORD_WEBHOOK
+        if os.getenv("DISCORD_WEBHOOK"):
+            self.passed.append("Discord webhook configured")
+
     def display_results(self):
         """Display health check results."""
         # Passed checks
