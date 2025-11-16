@@ -6,48 +6,23 @@ import { useFileTree } from '../hooks/useFileTree';
 import { useLogs } from '../hooks/useLogs';
 import { SSEEvent } from '../types/events';
 import JobSelector from './JobSelector';
-import PhasePipeline from './PhasePipeline';
-import PhaseBreakdown from './PhaseBreakdown';
-import MetricsPanel from './MetricsPanel';
+import PipelineMetrics from './PipelineMetrics';
 import FileBrowser from './FileBrowser';
 import LogFeed from './LogFeed';
 import MarkdownViewer from './MarkdownViewer';
-import MobileNav from './MobileNav';
-import GridLayout from 'react-grid-layout';
-import 'react-grid-layout/css/styles.css';
-import 'react-resizable/css/styles.css';
 
-type MobileView = 'phase' | 'files' | 'logs' | 'code';
-
-const defaultLayout = [
-  { i: 'metrics', x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-  { i: 'pipeline', x: 3, y: 0, w: 9, h: 3, minW: 4, minH: 2 },
-  { i: 'phase-breakdown', x: 0, y: 3, w: 3, h: 6, minW: 2, minH: 4 },
-  { i: 'file-browser', x: 0, y: 9, w: 5, h: 12, minW: 4, minH: 8 },
-  { i: 'artifacts', x: 5, y: 3, w: 4, h: 12, minW: 3, minH: 6 },
-  { i: 'logs', x: 9, y: 3, w: 3, h: 12, minW: 3, minH: 4 },
-];
+type TabType = 'build' | 'browse' | 'logs';
 
 export default function Dashboard() {
   const { currentJob, setCurrentJob, refreshJob } = useJob();
   const { phaseInfo, updatePhase } = usePhase();
   const { addFile, setFiles, visibleNodes, toggleDirectory, collapseAll, searchQuery, setSearchQuery } = useFileTree([]);
   const { addLogs } = useLogs(currentJob?.id || null);
-  const [mobileView, setMobileView] = useState<MobileView>('phase');
+  const [activeTab, setActiveTab] = useState<TabType>('build');
   const [metrics, setMetrics] = useState({
     tokens_used: 0,
   });
   const [completedPhases, setCompletedPhases] = useState<import('../types/job').Phase[]>([]);
-  const [layout, setLayout] = useState(() => {
-    const saved = localStorage.getItem('dashboard-layout');
-    return saved ? JSON.parse(saved) : defaultLayout;
-  });
-  const [hiddenPanels, setHiddenPanels] = useState<Set<string>>(() => {
-    const saved = localStorage.getItem('dashboard-hidden-panels');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
-  });
-  const [containerWidth, setContainerWidth] = useState(1880);
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle SSE events
   const handleSSEEvent = useCallback((event: SSEEvent) => {
@@ -105,19 +80,6 @@ export default function Dashboard() {
   }, [updatePhase, addFile, setMetrics, addLogs, currentJob, setCurrentJob, refreshJob]);
 
   useSSE(currentJob?.id || null, handleSSEEvent);
-
-  // Measure container width for responsive grid
-  useEffect(() => {
-    const updateWidth = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.offsetWidth);
-      }
-    };
-
-    updateWidth();
-    window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
-  }, []);
 
   // Update files when job changes
   useEffect(() => {
@@ -181,60 +143,13 @@ export default function Dashboard() {
     }
   }, [currentJob, setFiles, updatePhase]);
 
-  const handleLayoutChange = (newLayout: any) => {
-    setLayout(newLayout);
-    localStorage.setItem('dashboard-layout', JSON.stringify(newLayout));
-  };
-
-  const closePanel = (panelId: string) => {
-    const newHiddenPanels = new Set(hiddenPanels);
-    newHiddenPanels.add(panelId);
-    setHiddenPanels(newHiddenPanels);
-    localStorage.setItem('dashboard-hidden-panels', JSON.stringify([...newHiddenPanels]));
-  };
-
-  const resetLayout = () => {
-    setLayout(defaultLayout);
-    setHiddenPanels(new Set());
-    localStorage.setItem('dashboard-layout', JSON.stringify(defaultLayout));
-    localStorage.setItem('dashboard-hidden-panels', JSON.stringify([]));
-  };
-
-  const autoArrangeLayout = () => {
-    // Calculate available viewport height in grid units (rowHeight = 50px)
-    const viewportHeight = window.innerHeight;
-    const headerHeight = 80; // Approximate header height
-    const availableHeight = viewportHeight - headerHeight;
-    const rowHeight = 50;
-    const totalRows = Math.floor(availableHeight / rowHeight);
-
-    // Calculate proportional heights based on available space
-    const metricsHeight = Math.max(2, Math.floor(totalRows * 0.15));
-    const phaseHeight = Math.max(4, Math.floor((totalRows - metricsHeight) * 0.4));
-    const contentHeight = totalRows - metricsHeight;
-
-    // Optimal layout for typical workflow:
-    // Top: Status overview (metrics + pipeline)
-    // Left: Navigation and breakdown (phase-breakdown + file-browser)
-    // Center-Right: Main content (artifacts + logs)
-    const optimizedLayout = [
-      { i: 'metrics', x: 0, y: 0, w: 3, h: metricsHeight, minW: 2, minH: 2 },
-      { i: 'pipeline', x: 3, y: 0, w: 9, h: metricsHeight, minW: 4, minH: 2 },
-      { i: 'phase-breakdown', x: 0, y: metricsHeight, w: 3, h: phaseHeight, minW: 2, minH: 4 },
-      { i: 'file-browser', x: 0, y: metricsHeight + phaseHeight, w: 5, h: contentHeight - phaseHeight, minW: 4, minH: 8 },
-      { i: 'artifacts', x: 3, y: metricsHeight, w: 5, h: contentHeight, minW: 3, minH: 6 },
-      { i: 'logs', x: 8, y: metricsHeight, w: 4, h: contentHeight, minW: 3, minH: 4 },
-    ];
-    setLayout(optimizedLayout);
-    localStorage.setItem('dashboard-layout', JSON.stringify(optimizedLayout));
-  };
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
       {/* Header */}
       <header className="border-b border-gray-800 bg-gray-900">
         <div className="max-w-[1920px] mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
                 Glass Pane
@@ -242,132 +157,75 @@ export default function Dashboard() {
               <p className="text-sm text-gray-400">Context Foundry Build Monitor</p>
             </div>
             <div className="flex items-center gap-4">
-              <button
-                onClick={autoArrangeLayout}
-                className="px-3 py-1.5 text-sm bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 rounded-lg transition-colors"
-                title="Auto arrange tiles optimally"
-              >
-                Auto Arrange
-              </button>
-              <button
-                onClick={resetLayout}
-                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition-colors"
-                title="Reset dashboard layout"
-              >
-                Reset Layout
-              </button>
               <JobSelector />
             </div>
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex gap-2 border-b border-gray-800">
+            <button
+              onClick={() => setActiveTab('build')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'build'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Build
+            </button>
+            <button
+              onClick={() => setActiveTab('browse')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'browse'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Browse
+            </button>
+            <button
+              onClick={() => setActiveTab('logs')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'logs'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Logs
+            </button>
           </div>
         </div>
       </header>
 
-      {/* Desktop Layout (>1024px) - Draggable Grid */}
-      <div className="hidden lg:block">
-        <div ref={containerRef} className="max-w-[1920px] mx-auto p-4">
-          <GridLayout
-            className="layout"
-            layout={layout.filter(item => !hiddenPanels.has(item.i))}
-            cols={12}
-            rowHeight={50}
-            width={containerWidth}
-            onLayoutChange={handleLayoutChange}
-            draggableHandle=".drag-handle"
-            compactType={null}
-            preventCollision={false}
-          >
-            <div key="metrics" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('metrics') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">Metrics</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('metrics'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-4 overflow-auto flex-1">
-                <MetricsPanel
-                  tokensUsed={metrics.tokens_used}
-                  startedAt={currentJob?.started_at || null}
-                  completedAt={currentJob?.completed_at || null}
-                  totalFiles={currentJob?.total_files || 0}
-                  status={currentJob?.status || 'unknown'}
-                />
-              </div>
-            </div>
-
-            <div key="pipeline" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('pipeline') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">Pipeline</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('pipeline'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="p-4 overflow-auto flex-1">
-                <PhasePipeline
+      {/* Tab Content */}
+      <div className="max-w-[1920px] mx-auto p-4">
+        {activeTab === 'build' && (
+          <div className="grid grid-cols-12 gap-4">
+            {/* Pipeline with Metrics - Full Width */}
+            <div className="col-span-12">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg p-4" style={{height: 'calc(100vh - 200px)'}}>
+                <PipelineMetrics
+                  jobId={currentJob?.id || null}
                   currentPhase={phaseInfo.phase}
                   status={phaseInfo.status}
                   description={phaseInfo.description}
                   jobStatus={currentJob?.status}
                   completedPhases={completedPhases}
+                  tokensUsed={metrics.tokens_used}
+                  startedAt={currentJob?.started_at || null}
+                  completedAt={currentJob?.completed_at || null}
+                  totalFiles={currentJob?.total_files || 0}
                 />
               </div>
             </div>
+          </div>
+        )}
 
-            <div key="phase-breakdown" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('phase-breakdown') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">Phase Breakdown</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('phase-breakdown'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="overflow-auto flex-1">
-                <PhaseBreakdown jobId={currentJob?.id || null} />
-              </div>
-            </div>
-
-            <div key="file-browser" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('file-browser') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">File Browser</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('file-browser'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="overflow-auto flex-1">
+        {activeTab === 'browse' && (
+          <div className="grid grid-cols-12 gap-4">
+            {/* File Browser - Left Half */}
+            <div className="col-span-12 lg:col-span-6">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
                 <FileBrowser
                   visibleNodes={visibleNodes}
                   toggleDirectory={toggleDirectory}
@@ -379,140 +237,23 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div key="artifacts" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('artifacts') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">Artifacts</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('artifacts'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="overflow-auto flex-1">
+            {/* Artifacts - Right Half */}
+            <div className="col-span-12 lg:col-span-6">
+              <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
                 <MarkdownViewer jobId={currentJob?.id || null} />
               </div>
             </div>
-
-            <div key="logs" className="bg-gray-900 border border-gray-800 rounded-lg flex flex-col h-full" style={{display: hiddenPanels.has('logs') ? 'none' : 'flex'}}>
-              <div className="drag-handle cursor-move bg-gray-800 px-4 py-2 border-b border-gray-700 flex items-center gap-2 flex-shrink-0">
-                <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-                </svg>
-                <span className="text-sm font-medium text-gray-400 flex-1">Logs</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); closePanel('logs'); }}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                  title="Close panel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="overflow-auto flex-1">
-                <LogFeed jobId={currentJob?.id || null} />
-              </div>
-            </div>
-          </GridLayout>
-        </div>
-      </div>
-
-      {/* Tablet Layout (768-1024px) */}
-      <div className="hidden md:block lg:hidden">
-        <div className="max-w-5xl mx-auto p-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-4">
-              <MetricsPanel
-                tokensUsed={metrics.tokens_used}
-                startedAt={currentJob?.started_at || null}
-                completedAt={currentJob?.completed_at || null}
-                totalFiles={currentJob?.total_files || 0}
-                status={currentJob?.status || 'unknown'}
-              />
-              <PhasePipeline
-                currentPhase={phaseInfo.phase}
-                status={phaseInfo.status}
-                description={phaseInfo.description}
-                jobStatus={currentJob?.status}
-                completedPhases={completedPhases}
-              />
-              <PhaseBreakdown jobId={currentJob?.id || null} />
-            </div>
-            <div className="space-y-4">
-              <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '600px'}}>
-                <FileBrowser
-                  visibleNodes={visibleNodes}
-                  toggleDirectory={toggleDirectory}
-                  collapseAll={collapseAll}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  jobId={currentJob?.id}
-                />
-              </div>
-              <LogFeed jobId={currentJob?.id || null} />
-            </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-auto" style={{height: 'calc(100vh - 250px)'}}>
+            <LogFeed jobId={currentJob?.id || null} />
+          </div>
+        )}
       </div>
 
-      {/* Mobile Layout (<768px) */}
-      <div className="md:hidden pb-16">
-        <div className="p-4">
-          {mobileView === 'phase' && (
-            <div className="space-y-4">
-              <MetricsPanel
-                tokensUsed={metrics.tokens_used}
-                startedAt={currentJob?.started_at || null}
-                completedAt={currentJob?.completed_at || null}
-                totalFiles={currentJob?.total_files || 0}
-                status={currentJob?.status || 'unknown'}
-              />
-              <PhasePipeline
-                currentPhase={phaseInfo.phase}
-                status={phaseInfo.status}
-                description={phaseInfo.description}
-                jobStatus={currentJob?.status}
-                completedPhases={completedPhases}
-              />
-              <PhaseBreakdown jobId={currentJob?.id || null} />
-            </div>
-          )}
-          {mobileView === 'files' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: 'calc(100vh - 180px)'}}>
-              <FileBrowser
-                visibleNodes={visibleNodes}
-                toggleDirectory={toggleDirectory}
-                collapseAll={collapseAll}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                jobId={currentJob?.id}
-              />
-            </div>
-          )}
-          {mobileView === 'logs' && <LogFeed jobId={currentJob?.id || null} />}
-          {mobileView === 'code' && (
-            <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: 'calc(100vh - 180px)'}}>
-              <FileBrowser
-                visibleNodes={visibleNodes}
-                toggleDirectory={toggleDirectory}
-                collapseAll={collapseAll}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                jobId={currentJob?.id}
-              />
-            </div>
-          )}
-        </div>
-
-        <MobileNav activeView={mobileView} onViewChange={setMobileView} />
-      </div>
+      {/* Mobile Nav (if needed) - keeping for compatibility */}
     </div>
   );
 }
