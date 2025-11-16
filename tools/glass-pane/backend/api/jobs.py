@@ -162,10 +162,20 @@ async def get_job_phases_detailed(job_id: str):
             # Log but don't fail - current phase might still be available
             pass
 
+    # Extract deployment info if available
+    deployment_info = None
+    if summary_path.exists():
+        try:
+            summary_data = json.loads(summary_path.read_text())
+            deployment_info = summary_data.get("deployment")
+        except (json.JSONDecodeError, FileNotFoundError):
+            pass
+
     return {
         "phases": phases,
         "current_phase": current_phase_data,
         "total_tokens": total_tokens,
         "max_context_window": max_context_window,
         "model": model,
+        "deployment": deployment_info,
     }

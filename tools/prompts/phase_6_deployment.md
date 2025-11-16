@@ -102,10 +102,20 @@ PHASE 6: DEPLOYMENT (GitHub)
 
 5. Capture deployment information:
    - Get final commit SHA: git rev-parse HEAD
-   - Get repository URL
-   - Save to .context-foundry/session-summary.json
+   - Get repository URL: `git remote get-url origin`
+   - Update .context-foundry/session-summary.json to add deployment info:
+     ```json
+     {
+       "deployment": {
+         "github_url": "https://github.com/username/repo-name",
+         "commit_sha": "abc123...",
+         "deployed_at": "2025-11-16T10:00:00Z"
+       }
+     }
+     ```
+   - Ensure you append/merge this into existing session-summary.json without overwriting other fields
 
-5. Update phase status (REQUIRED LAST STEP):
+6. Update phase status (REQUIRED LAST STEP):
    Update .context-foundry/current-phase.json:
    {
      "current_phase": "Deploy",
