@@ -98,7 +98,13 @@ export default function PipelineMetrics({
     };
 
     fetchPhaseDetails();
-  }, [jobId]);
+
+    // Poll for updates while job is running
+    if (jobStatus === 'running') {
+      const interval = setInterval(fetchPhaseDetails, 5000); // Refresh every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [jobId, jobStatus]);
 
   // Calculate elapsed time
   useEffect(() => {
@@ -110,7 +116,9 @@ export default function PipelineMetrics({
     const calculateDuration = () => {
       const start = new Date(startedAt).getTime();
       const end = completedAt ? new Date(completedAt).getTime() : Date.now();
-      return Math.floor((end - start) / 1000);
+      const duration = Math.floor((end - start) / 1000);
+      // Prevent negative durations from bad timestamp data
+      return Math.max(0, duration);
     };
 
     setElapsedTime(calculateDuration());
@@ -319,6 +327,27 @@ export default function PipelineMetrics({
                       <div className="text-xs text-gray-600 mt-1">
                         {phaseTokens.toLocaleString()} / {phaseDetail.budget_allocated.toLocaleString()} tokens ({((phaseTokens / phaseDetail.budget_allocated) * 100).toFixed(0)}%)
                       </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Active phase without metrics yet */}
+              {isActive && !phaseDetail && (
+                <div className="text-center py-6">
+                  <motion.div
+                    className="text-3xl mb-2"
+                    animate={{ rotate: [0, 360] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  >
+                    {PHASE_ICONS[phase]}
+                  </motion.div>
+                  <div className="text-xs text-cyan-400">
+                    In Progress
+                  </div>
+                  {description && phase.toLowerCase() === currentPhase?.toLowerCase() && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      {description}
                     </div>
                   )}
                 </div>
