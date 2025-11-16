@@ -630,6 +630,7 @@ print(json.dumps(result))
             Dict with build results
         """
         last_phase = None
+        logged_phases = set()  # Track which iteration phases we've already logged
         poll_interval = 5  # seconds
 
         start_time = datetime.now()
@@ -680,7 +681,7 @@ print(json.dumps(result))
 
             task_info = self.active_tasks[task_id]
 
-            # Check phase transitions
+            # Check phase transitions from current-phase.json (initial phases)
             phase_info = read_phase_info(working_dir, start_time)
             current_phase = phase_info.get("currentPhase")
 
@@ -701,6 +702,40 @@ print(json.dumps(result))
                 )
 
                 last_phase = current_phase
+
+            # ALSO check session-summary.json for iteration phases (visibility fix)
+            try:
+                summary_file = (
+                    Path(working_dir) / ".context-foundry" / "session-summary.json"
+                )
+                if summary_file.exists():
+                    with open(summary_file) as f:
+                        summary = json.load(f)
+
+                    # Get all completed phases from summary
+                    phases = summary.get("phases", {})
+                    for phase_key, phase_data in phases.items():
+                        # Check if this is a new phase we haven't logged yet
+                        if (
+                            phase_data.get("status") == "completed"
+                            and phase_key not in logged_phases
+                        ):
+                            # Emit completed phase event (for Glass Pane visibility)
+                            phase_name = (
+                                phase_key.replace("phase_", "")
+                                .replace("_", " ")
+                                .title()
+                            )
+                            self._emit_log(
+                                job_id,
+                                "INFO",
+                                f"[{phase_name}] Completed ({phase_data.get('duration_seconds', 0):.1f}s)",
+                                phase_name,
+                            )
+                            logged_phases.add(phase_key)  # Mark as logged
+            except Exception as e:
+                # Don't let phase tracking errors kill the polling loop
+                logger.debug(f"Error reading session-summary.json: {e}")
 
             # Check if process has completed
             process = task_info.get("process")

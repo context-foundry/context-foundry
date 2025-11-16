@@ -281,7 +281,7 @@ export default function PipelineMetrics({
                       {phaseTokens.toLocaleString()}
                     </div>
                     <div className="text-xs text-gray-600">
-                      {(phaseTokens / 1000).toFixed(1)}K
+                      of {(phaseDetail.budget_allocated / 1000).toFixed(0)}K budget
                     </div>
                   </div>
 
@@ -317,7 +317,7 @@ export default function PipelineMetrics({
                         />
                       </div>
                       <div className="text-xs text-gray-600 mt-1">
-                        {((phaseTokens / phaseDetail.budget_allocated) * 100).toFixed(0)}% of budget
+                        {phaseTokens.toLocaleString()} / {phaseDetail.budget_allocated.toLocaleString()} tokens ({((phaseTokens / phaseDetail.budget_allocated) * 100).toFixed(0)}%)
                       </div>
                     </div>
                   )}
