@@ -668,121 +668,137 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4.5: SCREENSHOT (Visual Documentation)
         # ═══════════════════════════════════════════════════════════════════════
-        timeout_result = check_timeout("Screenshot")
-        if not timeout_result:
-            print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
-            screenshot_prompt = MODULE_DIR / "prompts" / "phase_4_5_screenshot.md"
-            screenshot_instruction = (
-                "Capture screenshots of the application for documentation.\n"
-                "Install Playwright, start the app, capture hero + feature screenshots.\n"
-                "Save to docs/screenshots/ directory. Gracefully skip if not applicable."
+        # Screenshot phase ALWAYS runs after Test completes (has its own 10-min timeout)
+        print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
+        screenshot_timeout_result = check_timeout("Screenshot")
+        if screenshot_timeout_result:
+            print(
+                "⚠️  Build timeout exceeded, but running Screenshot anyway (max 10 min)",
+                file=sys.stderr,
             )
 
-            screenshot_result = run_phase(
-                "Screenshot",
-                screenshot_prompt,
-                screenshot_instruction,
-                working_directory,
-                phase_timeout=600,  # 10 min
-                project_type=project_type,
-            )
+        screenshot_prompt = MODULE_DIR / "prompts" / "phase_4_5_screenshot.md"
+        screenshot_instruction = (
+            "Capture screenshots of the application for documentation.\n"
+            "Install Playwright, start the app, capture hero + feature screenshots.\n"
+            "Save to docs/screenshots/ directory. Gracefully skip if not applicable."
+        )
 
-            # Screenshot is optional - don't fail build if it doesn't work
-            if screenshot_result.status == "completed":
-                phases_completed.append("Screenshot")
-                print("✅ Screenshots captured", file=sys.stderr)
-            else:
-                print(
-                    f"⚠️  Screenshot capture skipped: {screenshot_result.error or 'N/A'}",
-                    file=sys.stderr,
-                )
-                # Continue anyway - screenshots are optional
+        screenshot_result = run_phase(
+            "Screenshot",
+            screenshot_prompt,
+            screenshot_instruction,
+            working_directory,
+            phase_timeout=600,  # 10 min
+            project_type=project_type,
+        )
+
+        # Screenshot is optional - don't fail build if it doesn't work
+        if screenshot_result.status == "completed":
+            phases_completed.append("Screenshot")
+            print("✅ Screenshots captured", file=sys.stderr)
+        else:
+            print(
+                f"⚠️  Screenshot capture skipped: {screenshot_result.error or 'N/A'}",
+                file=sys.stderr,
+            )
+            # Continue anyway - screenshots are optional
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 5: DOCUMENTATION (README Generation)
         # ═══════════════════════════════════════════════════════════════════════
-        timeout_result = check_timeout("Documentation")
-        if not timeout_result:
-            print("\n📝 Running Documentation phase...", file=sys.stderr)
-            docs_prompt = MODULE_DIR / "prompts" / "phase_5_documentation.md"
-            docs_instruction = (
-                "Generate comprehensive README.md with:\n"
-                "- Project overview and features\n"
-                "- Installation instructions\n"
-                "- Usage examples\n"
-                "- Screenshots (from docs/screenshots/ if available)\n"
-                "- API documentation\n"
-                "- Contributing guidelines\n"
-                "- License and badges"
+        # Documentation phase ALWAYS runs after Screenshot completes (has its own 10-min timeout)
+        print("\n📝 Running Documentation phase...", file=sys.stderr)
+        doc_timeout_result = check_timeout("Documentation")
+        if doc_timeout_result:
+            print(
+                "⚠️  Build timeout exceeded, but running Documentation anyway (max 10 min)",
+                file=sys.stderr,
             )
 
-            docs_result = run_phase(
-                "Documentation",
-                docs_prompt,
-                docs_instruction,
-                working_directory,
-                phase_timeout=600,  # 10 min
-                project_type=project_type,
-            )
+        docs_prompt = MODULE_DIR / "prompts" / "phase_5_documentation.md"
+        docs_instruction = (
+            "Generate comprehensive README.md with:\n"
+            "- Project overview and features\n"
+            "- Installation instructions\n"
+            "- Usage examples\n"
+            "- Screenshots (from docs/screenshots/ if available)\n"
+            "- API documentation\n"
+            "- Contributing guidelines\n"
+            "- License and badges"
+        )
 
-            if docs_result.status == "completed":
-                phases_completed.append("Documentation")
-                print("✅ Documentation generated", file=sys.stderr)
-            else:
-                print(
-                    f"⚠️  Documentation generation failed: {docs_result.error}",
-                    file=sys.stderr,
-                )
-                # Continue to deployment even if docs fail
+        docs_result = run_phase(
+            "Documentation",
+            docs_prompt,
+            docs_instruction,
+            working_directory,
+            phase_timeout=600,  # 10 min
+            project_type=project_type,
+        )
+
+        if docs_result.status == "completed":
+            phases_completed.append("Documentation")
+            print("✅ Documentation generated", file=sys.stderr)
+        else:
+            print(
+                f"⚠️  Documentation generation failed: {docs_result.error}",
+                file=sys.stderr,
+            )
+            # Continue to deployment even if docs fail
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 6: DEPLOY (GitHub)
         # ═══════════════════════════════════════════════════════════════════════
-        timeout_result = check_timeout("Deploy")
-        if not timeout_result:
-            print("\n🚀 Running Deploy phase...", file=sys.stderr)
-            deploy_prompt = MODULE_DIR / "prompts" / "phase_6_deployment.md"
-
-            # Determine repository name
-            github_repo_name = task_config.get("github_repo_name")
-            repo_name = github_repo_name or working_directory.name
-
-            deploy_instruction = (
-                f"Deploy to GitHub:\n"
-                f"1. Check if gh CLI is available and authenticated\n"
-                f"2. Initialize git repo (if not already)\n"
-                f"3. Stage all files: git add .\n"
-                f"4. Commit: git commit -m 'feat: {task[:60]}'\n"
-                f"5. Create GitHub repo: gh repo create {repo_name} --public --source=. --push\n"
-                f"6. Push to main branch\n"
-                f"7. Update session-summary.json with repo URL\n\n"
-                f"If gh CLI not available, print instructions and exit with code 10 (build success, deploy skipped)."
+        # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
+        print("\n🚀 Running Deploy phase...", file=sys.stderr)
+        deploy_timeout_result = check_timeout("Deploy")
+        if deploy_timeout_result:
+            print(
+                "⚠️  Build timeout exceeded, but running Deploy anyway (max 10 min)",
+                file=sys.stderr,
             )
 
-            deploy_result = run_phase(
-                "Deploy",
-                deploy_prompt,
-                deploy_instruction,
-                working_directory,
-                phase_timeout=600,  # 10 min
-                project_type=project_type,
-            )
+        deploy_prompt = MODULE_DIR / "prompts" / "phase_6_deployment.md"
 
-            # Deploy is optional - don't fail build if GitHub unavailable
-            if deploy_result.status == "completed":
-                phases_completed.append("Deploy")
-                print("✅ Deployed to GitHub", file=sys.stderr)
-            elif deploy_result.exit_code == 10:
-                # Exit code 10 = build success, deployment skipped
-                print(
-                    "⚠️  Deployment skipped (GitHub CLI not available)", file=sys.stderr
-                )
-            else:
-                print(
-                    f"⚠️  Deployment failed: {deploy_result.error or 'Unknown error'}",
-                    file=sys.stderr,
-                )
-                # Continue anyway - deployment is optional
+        # Determine repository name
+        github_repo_name = task_config.get("github_repo_name")
+        repo_name = github_repo_name or working_directory.name
+
+        deploy_instruction = (
+            f"Deploy to GitHub:\n"
+            f"1. Check if gh CLI is available and authenticated\n"
+            f"2. Initialize git repo (if not already)\n"
+            f"3. Stage all files: git add .\n"
+            f"4. Commit: git commit -m 'feat: {task[:60]}'\n"
+            f"5. Create GitHub repo: gh repo create {repo_name} --public --source=. --push\n"
+            f"6. Push to main branch\n"
+            f"7. Update session-summary.json with repo URL\n\n"
+            f"If gh CLI not available, print instructions and exit with code 10 (build success, deploy skipped)."
+        )
+
+        deploy_result = run_phase(
+            "Deploy",
+            deploy_prompt,
+            deploy_instruction,
+            working_directory,
+            phase_timeout=600,  # 10 min
+            project_type=project_type,
+        )
+
+        # Deploy is optional - don't fail build if GitHub unavailable
+        if deploy_result.status == "completed":
+            phases_completed.append("Deploy")
+            print("✅ Deployed to GitHub", file=sys.stderr)
+        elif deploy_result.exit_code == 10:
+            # Exit code 10 = build success, deployment skipped
+            print("⚠️  Deployment skipped (GitHub CLI not available)", file=sys.stderr)
+        else:
+            print(
+                f"⚠️  Deployment failed: {deploy_result.error or 'Unknown error'}",
+                file=sys.stderr,
+            )
+            # Continue anyway - deployment is optional
 
         # ═══════════════════════════════════════════════════════════════════════
         # SUCCESS
