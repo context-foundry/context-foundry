@@ -339,7 +339,9 @@ export default function PipelineMetrics({
       {description && (
         <div className="mt-4 p-3 bg-gray-800 rounded-lg border border-gray-700">
           <div className="text-xs text-gray-400 mb-1">Current Activity</div>
-          <p className="text-sm text-gray-300">{description}</p>
+          <p className="text-sm text-gray-300">
+            {typeof description === 'string' ? description : JSON.stringify(description)}
+          </p>
         </div>
       )}
     </div>
