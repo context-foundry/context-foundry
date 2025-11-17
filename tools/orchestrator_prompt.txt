@@ -439,6 +439,24 @@ Update phase: "Codebase Analysis" (0/7, "analyzing", "Understanding existing cod
 
 PHASE 1: SCOUT (Research & Context Gathering + Learning Application)
 
+# === ROBLOX-SCOUT-START ===
+**If CONFIGURATION shows roblox_project: True:**
+
+🎮 **ROBLOX GAME PROJECT DETECTED**
+
+**Read the complete Roblox Scout assessment guide:**
+```
+Read extensions/roblox/prompts/SCOUT-PROJECT-ASSESSMENT.md
+```
+
+**Critical reminders:**
+- Language: Luau (typed Lua), NOT JavaScript/Python/TypeScript
+- Architecture: Server-authoritative, never trust client input
+- ❌ DO NOT research web frameworks, npm, REST APIs, cloud platforms
+- ✅ DO research: DataStore, RemoteEvents, Rojo, Luau, ModuleScripts
+- Query Context Codex for patterns: `obby-checkpoints-coin-shop`, `roblox-remote-events-security`, `roblox-datastore-best-practices`, `roblox-beginner-foundations`
+# === ROBLOX-SCOUT-END ===
+
 **⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
 
 **IF incremental mode is enabled (check CONFIGURATION.incremental):**
@@ -605,6 +623,89 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    - Note the exact field names and structure requirements
    - Flag that these are REAL tools (not phantom references)
 
+   🚨🚨🚨 **CRITICAL: FLOWISE ANTI-PATTERN DETECTION** 🚨🚨🚨
+
+   **IF task description mentions ANY infrastructure keywords:**
+   - "database schema", "PostgreSQL", "MySQL", "MongoDB", "database design"
+   - "API endpoints", "REST API", "GraphQL API"
+   - "backend server", "Express", "FastAPI", "Flask"
+   - "file storage system", "S3", "Azure Blob"
+   - "authentication system", "auth server"
+   - "email server", "SMTP server"
+
+   **⚠️ STOP AND REINTERPRET - These are EXTERNAL SERVICES! ⚠️**
+
+   **DO NOT design these as internal components!**
+
+   For Flowise projects, these are EXTERNAL DEPENDENCIES accessed via custom HTTP tools:
+
+   ❌ **WRONG APPROACH** (Full-Stack):
+   ```
+   Database Schema:
+   - users table (id, name, email)
+   - vehicles table (id, license_plate, make, model)
+
+   API Endpoints:
+   - POST /api/vehicles
+   - GET /api/permits
+
+   Backend: Express.js server with PostgreSQL
+   ```
+
+   ✅ **CORRECT APPROACH** (Flowise Workflow):
+   ```
+   Custom HTTP Tools Needed:
+   - vehicleCRUD: HTTP tool calling external database API
+   - workdayAPI: HTTP tool for HRIS integration
+   - emailNotification: HTTP tool for email service
+   - fileUpload: HTTP tool for document storage
+
+   Deliverable: Single workflow JSON with agent nodes + HTTP tool configs
+   ```
+
+   **Flowise Workflow Projects ONLY Design**:
+   1. ✅ Agent workflow structure (Start → Router → Agents → End)
+   2. ✅ Agent personas and prompts (specialized roles)
+   3. ✅ Custom HTTP tool configurations (external service wrappers)
+   4. ✅ State management within workflow (agentStateUpdates)
+   5. ✅ Routing logic and condition scenarios
+   6. ✅ Memory strategy (built-in agent memory)
+
+   **Flowise Workflow Projects NEVER Design**:
+   1. ❌ Database schemas (that's the external DB service's job)
+   2. ❌ API server implementations (that's the external API's job)
+   3. ❌ File storage systems (that's S3/Azure's job)
+   4. ❌ Email servers (that's SendGrid/SES's job)
+   5. ❌ Authentication systems (that's Auth0/Workday's job)
+   6. ❌ Multiple directories (database/, backend/, api/)
+
+   **Expected Deliverable for Flowise Projects**:
+   - ✅ `workflow-name.json` (SINGLE file, 1000-2000 lines)
+   - ✅ `README.md` (usage instructions)
+   - ✅ `INTEGRATION_GUIDE.md` (how to import into Flowise)
+   - ✅ `WORKFLOW-DIAGRAM.md` (Mermaid diagram - auto-generated)
+   - ❌ NO `database/` directory
+   - ❌ NO `backend/` or `api/` directory
+   - ❌ NO `src/` directory with app code
+
+   **Scout Must Explicitly State in scout-report.md**:
+   ```
+   ## Deliverable Confirmation
+
+   **Primary Deliverable**: `{workflow-name}.json` (single Flowise workflow JSON)
+
+   **External Services** (NOT built by us, accessed via HTTP tools):
+   - Database: [External PostgreSQL/MySQL service]
+   - APIs: [Workday, Email Service, etc.]
+   - Storage: [S3/Azure for file uploads]
+
+   **What We Build**:
+   - Flowise agent workflow JSON
+   - Custom HTTP tool configurations
+   - Agent personas and prompts
+   - Routing and orchestration logic
+   ```
+
    **Scout Focus Areas (Flowise-Only):**
    - Flow type analysis (multi-agent, RAG, workflow, chatbot)
    - Agent count and specialization requirements
@@ -753,6 +854,22 @@ Add to phases_completed: ["Scout"]
 
 PHASE 2: ARCHITECT (Design & Planning + Pattern Application)
 
+# === ROBLOX-ARCHITECT-START ===
+**If CONFIGURATION shows roblox_project: True:**
+
+🏗️ **DESIGNING ROBLOX GAME SYSTEMS**
+
+**Read the complete Roblox Architect design guide:**
+```
+Read extensions/roblox/prompts/ARCHITECT-GAME-SYSTEMS.md
+```
+
+**Critical architecture principles:**
+- Server-Authoritative: ALL game logic (coins, checkpoints, purchases) on server
+- Never trust client: Validate ALL RemoteEvent payloads (type → range → business logic → rate limit)
+- DataStore best practices: UpdateAsync, pcall, retry logic
+- Module organization: ServerScriptService/GameSystems, ReplicatedStorage/Modules, StarterPlayerScripts, StarterGui
+# === ROBLOX-ARCHITECT-END ===
 
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update phase: "Architect" (2/7, "designing", "Creating system architecture")
@@ -1036,6 +1153,24 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 
 PHASE 2.5: PARALLEL BUILD PLANNING (MANDATORY - ALWAYS USE)
 
+# === ROBLOX-BUILDER-START ===
+**If CONFIGURATION shows roblox_project: True:**
+
+⚡ **BUILDING ROBLOX GAME CODE**
+
+**Read the complete Roblox Builder coding guide:**
+```
+Read extensions/roblox/prompts/BUILDER-LUAU-BEST-PRACTICES.md
+```
+
+**Critical reminders:**
+- Language: Luau (.lua files), NOT JavaScript/Python/TypeScript
+- Runtime: Roblox engine, NOT Node.js/browser
+- ALWAYS validate RemoteEvent payloads: type → range → business logic → rate limit
+- Server-authoritative: Client sends INTENT, server calculates RESULT
+- DataStore: Always use pcall + retry logic + exponential backoff
+- Coding standards: Type annotations, frozen tables, cached services
+# === ROBLOX-BUILDER-END ===
 
 ⚡ **ALWAYS USE PARALLEL BUILDERS - NO EXCEPTIONS**
 
@@ -1643,6 +1778,23 @@ echo "Build may proceed to Phase 4 (Test)"
 
 
 PHASE 4: TEST (Validation & Quality Assurance + Pattern-Based Testing)
+
+# === ROBLOX-TESTER-START ===
+**If CONFIGURATION shows roblox_project: True:**
+
+🧪 **TESTING ROBLOX GAME**
+
+**Read the complete Roblox Tester strategy guide:**
+```
+Read extensions/roblox/prompts/TESTER-TEST-STRATEGY.md
+```
+
+**Test strategy summary:**
+1. Static analysis: stylua, selene, luau-analyze (graceful degradation if missing)
+2. Unit tests: TestEZ in src/ServerScriptService/Tests/ (manual execution in Studio)
+3. Manual testing: Checkpoints, coins, shop, persistence, multiplayer, security
+4. Performance: 60 FPS target, low server CPU
+# === ROBLOX-TESTER-END ===
 
 **⚡ SMART CACHE CHECK - INCREMENTAL BUILDS:**
 
@@ -2394,6 +2546,23 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
 
 PHASE 5: DOCUMENTATION
 
+# === ROBLOX-DOCS-START ===
+**If CONFIGURATION shows roblox_project: True:**
+
+📝 **DOCUMENTING ROBLOX GAME**
+
+**Read the complete Roblox documentation guide:**
+```
+Read extensions/roblox/prompts/DOCS-README-GUIDE.md
+```
+
+**Critical reminders:**
+- Generate README_ROBLOX.md, not README.md (preserves original project README)
+- Prerequisites: Rojo ≥7.0, Roblox Studio, optional static analysis tools
+- Building: `rojo build default.project.json -o dist/Game.rbxlx`
+- Publishing: Studio → File → Publish to Roblox
+- Include troubleshooting: Common errors, DataStore issues, performance tips
+# === ROBLOX-DOCS-END ===
 
 (Only reached if tests PASSED)
 
