@@ -372,15 +372,29 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 
    Analyze if this project can benefit from parallel building:
 
+   **🚀 DEFAULT TO PARALLEL - Parallelization speeds up builds significantly!**
+
    **Assess Module Independence:**
    - Does the project have multiple independent modules? (e.g., frontend + backend, multiple services, separate libraries)
    - Can modules be built without dependencies on each other's build artifacts?
    - Are there clear boundaries between components?
 
-   **Evaluate Complexity:**
-   - Is the total build expected to take >15 minutes?
-   - Are there 3+ distinct buildable units?
-   - Would parallel execution reduce total build time by >30%?
+   **When to Recommend PARALLEL (recommend YES if ANY of these apply):**
+   - ✅ 2+ separate folders/directories with different tech stacks (e.g., `frontend/` + `backend/`)
+   - ✅ Multiple independently buildable services (microservices, separate apps)
+   - ✅ Monorepo with multiple packages/apps
+   - ✅ Frontend + backend split (even if simple)
+   - ✅ Any project where modules don't depend on each other's build artifacts
+   - ✅ Expected total build time >5 minutes (parallel saves significant time)
+
+   **Only Recommend SEQUENTIAL if:**
+   - ❌ Single monolithic file or directory with no separable components
+   - ❌ Hard sequential dependencies (module B cannot even START until module A fully completes)
+   - ❌ Shared build artifacts that create race conditions
+
+   **⚡ IMPORTANT: Frontend + Backend = ALWAYS PARALLEL**
+   If you see separate `frontend/` and `backend/` folders, **ALWAYS recommend YES**.
+   They can build simultaneously - no build-time dependencies between them.
 
    **Check for Blockers:**
    - Shared build artifacts or circular dependencies?
