@@ -195,6 +195,54 @@ class TestPhaseTracking:
             assert "started_at" in phase_info
             assert "last_updated" in phase_info
 
+    def test_update_phase_with_baml_normalizes_and_injects_timestamps(self):
+        """Ensure PhaseInfo payloads are flattened with real timestamps"""
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client, patch(
+            "tools.baml_integration._now_iso", return_value="2025-01-02T03:04:05Z"
+        ):
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+
+            mock_response = {
+                "PhaseInfo": {
+                    "sessionId": "simple-claude-chat",
+                    "currentPhase": "Architect",
+                    "status": "designing",
+                    "progressDetail": "Starting Architect phase",
+                    "testIteration": 0,
+                    "timestamps": {
+                        "phaseStart": "2023-10-01T10:00:00Z",
+                        "lastUpdated": "2023-10-01T10:00:00Z",
+                        "phaseEnd": None,
+                    },
+                    "phaseStartTime": "2023-10-01T10:00:00Z",
+                    "lastUpdated": "2023-10-01T10:00:00Z",
+                }
+            }
+
+            mock_result = MagicMock()
+            mock_result.parsed.return_value = mock_response
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps(mock_response)}}
+            )
+            mock_client.call_function_sync.return_value = mock_result
+            mock_client.create_context_manager.return_value = MagicMock()
+
+            phase_info = update_phase_with_baml(
+                phase="Architect",
+                status="designing",
+                detail="Starting Architect phase",
+                session_id="simple-claude-chat",
+                iteration=0,
+            )
+
+            assert "PhaseInfo" not in phase_info
+            assert phase_info["phase"] == "Architect"
+            assert phase_info["session_id"] == "simple-claude-chat"
+            assert phase_info["phaseStartTime"] == "2025-01-02T03:04:05Z"
+            assert phase_info["timestamps"]["phaseStart"] == "2025-01-02T03:04:05Z"
+            assert phase_info["timestamps"]["lastUpdated"] == "2025-01-02T03:04:05Z"
+
     def test_update_phase_with_baml_redirects_stdout(self, capsys):
         """Ensure stdout noise from BAML is redirected to stderr"""
         with patch("tools.baml_integration.get_baml_client") as mock_get_client:

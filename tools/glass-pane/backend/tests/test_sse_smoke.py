@@ -1,7 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from services.store_service import StoreService
 from models.job import Job
 from datetime import datetime
 
@@ -10,32 +9,24 @@ client = TestClient(app)
 
 @pytest.fixture
 def test_job():
-    """Create a test job in the database"""
-    store = StoreService()
+    """Create a test job fixture (not inserted into DB)"""
 
-    # Create test job
+    # Create test job matching new schema
     job = Job(
         id="test-sse-job-123",
-        project_name="Test SSE Project",
-        project_path="/tmp/test-sse",
-        current_phase="scout",
-        status="in_progress",
+        type="autonomous_build",
+        status="running",
+        created_at=datetime.utcnow().isoformat() + "Z",
         started_at=datetime.utcnow().isoformat() + "Z",
+        completed_at=None,
+        project_name="Test SSE Project",
+        current_phase="scout",
         tokens_used=1000,
-        total_tokens=200000,
-        total_files=0,
+        total_files=5,
+        params={"working_directory": "/tmp/test-sse", "task": "Test build"},
     )
 
-    # Insert into DB
-    store.create_job(job)
-
     yield job
-
-    # Cleanup after test
-    try:
-        store.delete_job(job.id)
-    except Exception:
-        pass  # Job may already be deleted
 
 
 def test_sse_endpoint_exists(test_job):

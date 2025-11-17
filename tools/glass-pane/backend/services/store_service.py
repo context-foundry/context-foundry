@@ -181,8 +181,14 @@ class StoreService:
         # Get phase history (if phase_events table exists)
         phases = self._get_phase_history(job_id)
 
-        # If no phase_events in DB, try reading from current-phase.json
+        # Determine current phase from phases list
         current_phase_name = job.current_phase
+        if phases:
+            # Find the most recent active phase (status=active, no completed_at)
+            for phase_info in reversed(phases):
+                if phase_info.status == "active" and not phase_info.completed_at:
+                    current_phase_name = phase_info.phase
+                    break
         if not phases:
             # Get working directory from job params
             params = self.get_job_params(job_id)
@@ -191,8 +197,7 @@ class StoreService:
                 if working_dir.exists():
                     parser = SessionParser(working_dir)
                     current_phase_data = parser.read_current_phase(
-                        job_id=job_id,
-                        started_at=job.started_at
+                        job_id=job_id, started_at=job.started_at
                     )
                     if current_phase_data:
                         # Update current phase name
@@ -202,7 +207,8 @@ class StoreService:
                         phases = [
                             PhaseInfo(
                                 phase=current_phase_data.get("phase") or "Unknown",
-                                status=current_phase_data.get("status") or "in_progress",
+                                status=current_phase_data.get("status")
+                                or "in_progress",
                                 started_at=job.started_at,  # Use job start time as fallback
                                 completed_at=None,  # Not completed yet
                                 duration_seconds=None,
@@ -468,13 +474,16 @@ class StoreService:
 
         return Job(
             id=row_dict["id"],
+            type=row_dict.get("type", "unknown"),
             status=row_dict.get("status", "unknown"),
-            started_at=row_dict.get("started_at") or datetime.now().isoformat(),
+            created_at=row_dict.get("created_at") or datetime.now().isoformat(),
+            started_at=row_dict.get("started_at"),
             completed_at=row_dict.get("completed_at"),
             project_name=project_name,
             current_phase=current_phase,
             tokens_used=tokens_used,
             total_files=total_files,
+            params=params if params else None,
         )
 
     def _row_to_log(self, row: sqlite3.Row) -> Log:

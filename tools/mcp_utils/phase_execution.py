@@ -73,6 +73,16 @@ class PhaseValidator:
             with open(phase_file) as f:
                 phase_data = json.load(f)
 
+            if "PhaseInfo" in phase_data and isinstance(phase_data["PhaseInfo"], dict):
+                phase_data = phase_data["PhaseInfo"]
+
+            if "phase" not in phase_data:
+                camel_phase = phase_data.get("currentPhase") or phase_data.get(
+                    "current_phase"
+                )
+                if camel_phase:
+                    phase_data["phase"] = camel_phase
+
             if phase_data.get("phase") != phase_name:
                 print(
                     f"⚠️  BAML tracking mismatch: expected {phase_name}, got {phase_data.get('phase')}",
@@ -624,6 +634,7 @@ def _run_parallel_builders(
         def update_agent_status(status: str, **kwargs):
             """Write agent status to file for real-time tracking."""
             import json
+
             status_data = {
                 "task_id": task_id,
                 "task_name": task_name,
@@ -632,7 +643,7 @@ def _run_parallel_builders(
                 "wave": wave_num,
                 "started_at": task_start.isoformat(),
                 "files": task.get("files", []),
-                **kwargs
+                **kwargs,
             }
             try:
                 with open(agent_status_file, "w") as f:
@@ -672,7 +683,7 @@ def _run_parallel_builders(
                         completed_at=datetime.now().isoformat(),
                         duration=duration,
                         error=f"Command failed: {cmd}",
-                        stderr=result.stderr[:500]
+                        stderr=result.stderr[:500],
                     )
 
                     return (
@@ -693,7 +704,7 @@ def _run_parallel_builders(
                 "completed",
                 completed_at=datetime.now().isoformat(),
                 duration=duration,
-                commands_executed=len(task["build_commands"])
+                commands_executed=len(task["build_commands"]),
             )
 
             return (
@@ -711,7 +722,7 @@ def _run_parallel_builders(
                 "failed",
                 completed_at=datetime.now().isoformat(),
                 duration=900,
-                error="Task timeout (15 minutes)"
+                error="Task timeout (15 minutes)",
             )
             return (
                 task_id,
@@ -728,7 +739,7 @@ def _run_parallel_builders(
                 "failed",
                 completed_at=datetime.now().isoformat(),
                 duration=duration,
-                error=str(e)
+                error=str(e),
             )
             return (
                 task_id,

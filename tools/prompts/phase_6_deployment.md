@@ -5,18 +5,7 @@ PHASE 6: DEPLOYMENT (GitHub)
 
 **Enhancement modes:** See §Enhancement Mode Reference. Push to feature branch, create PR (skip to step 3 below).
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Deploy",
-     "phase_number": "6/8",
-     "status": "deploying",
-     "progress_detail": "Initializing Git and deploying to GitHub",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
 
 1. **Pre-Flight Checks** (CRITICAL - Check before attempting deployment):
 
@@ -331,14 +320,4 @@ with open(summary_file, 'w') as f:
    echo "═══════════════════════════════════════════════════"
    ```
 
-6. Update phase status (REQUIRED LAST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Deploy",
-     "phase_number": "6/8",
-     "status": "completed",
-     "progress_detail": "Successfully deployed to GitHub",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy"],
-     "last_updated": "{current ISO timestamp}"
-   }
+6. Proceed to next phase

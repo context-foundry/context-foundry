@@ -11,8 +11,9 @@ import PipelineMetrics from './PipelineMetrics';
 import FileBrowser from './FileBrowser';
 import LogFeed from './LogFeed';
 import MarkdownViewer from './MarkdownViewer';
+import CodexBrowser from './CodexBrowser';
 
-type TabType = 'build' | 'browse' | 'logs';
+type TabType = 'build' | 'browse' | 'logs' | 'codex';
 
 export default function Dashboard() {
   const { currentJob, setCurrentJob, refreshJob } = useJob();
@@ -197,6 +198,16 @@ export default function Dashboard() {
             >
               Logs
             </button>
+            <button
+              onClick={() => setActiveTab('codex')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'codex'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Codex
+            </button>
           </div>
         </div>
       </header>
@@ -261,6 +272,12 @@ export default function Dashboard() {
         {activeTab === 'logs' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '1200px'}}>
             <LogFeed jobId={currentJob?.id || null} />
+          </div>
+        )}
+
+        {activeTab === 'codex' && (
+          <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '1200px'}}>
+            <CodexBrowser />
           </div>
         )}
       </div>

@@ -211,7 +211,9 @@ async def get_current_phase(job_id: str = Query(..., description="Job ID")):
 
                 if parallel_info:
                     phase_data["parallel_build_info"] = parallel_info
-                    logger.info(f"Added parallel build info: {parallel_info['max_concurrent_agents']} max concurrent agents")
+                    logger.info(
+                        f"Added parallel build info: {parallel_info['max_concurrent_agents']} max concurrent agents"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to get parallel build info: {e}")
 
@@ -290,6 +292,8 @@ async def get_parallel_agents(job_id: str = Query(..., description="Job ID")):
     # Sort by task_id for consistent ordering
     agents.sort(key=lambda x: x.get("task_id", ""))
 
-    logger.info(f"Found {len(agents)} parallel agents for job {job_id} (parallel_build={is_parallel_build})")
+    logger.info(
+        f"Found {len(agents)} parallel agents for job {job_id} (parallel_build={is_parallel_build})"
+    )
 
     return {"agents": agents, "has_parallel_build": is_parallel_build}

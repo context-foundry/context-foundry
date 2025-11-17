@@ -5,18 +5,9 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
 
 **When to run:** Always run after Deploy (success) or after Test (failure)
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Feedback",
-     "phase_number": "7/8",
-     "status": "analyzing",
-     "progress_detail": "Analyzing build for learnings and pattern updates",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
+
+0.
 
 1. Create Feedback Analyzer agent:
    Type: /agents
@@ -514,15 +505,3 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    - Track build success rate (should increase globally)
    - Track average build duration (should stabilize/decrease globally)
    - Track pattern effectiveness (how often each pattern prevents issues)
-
-14. Update phase status (REQUIRED LAST STEP):
-    Update .context-foundry/current-phase.json:
-    {
-      "current_phase": "Feedback",
-      "phase_number": "7/8",
-      "status": "completed",
-      "progress_detail": "Build analysis complete, patterns updated globally",
-      "test_iteration": {final_iteration},
-      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"],
-      "last_updated": "{current ISO timestamp}"
-    }

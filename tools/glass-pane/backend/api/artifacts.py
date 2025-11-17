@@ -31,8 +31,10 @@ async def list_markdown_files(job_id: str):
     if not context_foundry_dir.exists():
         return {"files": []}
 
-    # Find all .md files
+    # Find all .md files and important build artifacts
     markdown_files = []
+
+    # Scan for markdown files
     for md_file in context_foundry_dir.glob("*.md"):
         try:
             stat = md_file.stat()
@@ -49,6 +51,32 @@ async def list_markdown_files(job_id: str):
             logger.error(f"Error reading markdown file {md_file}: {e}")
             continue
 
+    # Add important build log files
+    important_files = [
+        "main-builder.done",
+        "build-tasks.json",
+        "current-phase.json",
+        "session-summary.json",
+    ]
+
+    for filename in important_files:
+        file_path = context_foundry_dir / filename
+        if file_path.exists():
+            try:
+                stat = file_path.stat()
+                markdown_files.append(
+                    {
+                        "name": file_path.name,
+                        "path": str(file_path.relative_to(working_dir)),
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                        "type": _classify_file(file_path.name),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Error reading file {file_path}: {e}")
+                continue
+
     # Sort by modification time (newest first)
     markdown_files.sort(key=lambda x: x["modified"], reverse=True)
 
@@ -58,12 +86,16 @@ async def list_markdown_files(job_id: str):
 @router.get("/{job_id}/markdown/{file_name}", response_class=PlainTextResponse)
 async def get_markdown_file(job_id: str, file_name: str):
     """
-    Get content of a specific markdown file.
+    Get content of a specific markdown file or build artifact.
 
-    Returns raw markdown content.
+    Returns raw file content (markdown, JSON, or text).
     """
-    # Security: only allow .md files, no path traversal
-    if not file_name.endswith(".md") or "/" in file_name or "\\" in file_name:
+    # Security: only allow specific file types, no path traversal
+    allowed_extensions = [".md", ".json", ".done", ".log", ".txt"]
+    if not any(file_name.endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(status_code=400, detail="File type not allowed")
+
+    if "/" in file_name or "\\" in file_name:
         raise HTTPException(status_code=400, detail="Invalid file name")
 
     # Get working directory from job
@@ -96,7 +128,41 @@ def _classify_markdown_file(filename: str) -> str:
         return "test"
     elif "build" in filename_lower:
         return "build"
+    elif "deploy" in filename_lower:
+        return "deploy"
+    elif "screenshot" in filename_lower:
+        return "screenshot"
     elif "summary" in filename_lower:
         return "summary"
     else:
         return "other"
+
+
+def _classify_file(filename: str) -> str:
+    """Classify any file type based on name and extension."""
+    filename_lower = filename.lower()
+
+    # JSON files
+    if filename_lower.endswith(".json"):
+        if "build-tasks" in filename_lower:
+            return "build-config"
+        elif "current-phase" in filename_lower:
+            return "phase-status"
+        elif "session-summary" in filename_lower:
+            return "summary"
+        else:
+            return "config"
+
+    # Build completion markers
+    if filename_lower.endswith(".done"):
+        return "build-log"
+
+    # Log files
+    if filename_lower.endswith(".log"):
+        return "log"
+
+    # Markdown (fallback)
+    if filename_lower.endswith(".md"):
+        return _classify_markdown_file(filename)
+
+    return "other"

@@ -175,17 +175,12 @@ class StatusBar(Static):
                         metadata = json.loads(task_file.read_text())
                         if metadata.get("status") == "running":
                             active_builds += 1
-                    except:
+                    except (json.JSONDecodeError, OSError):
                         continue
 
             # Get MCP status
             mcp_status = self._get_mcp_status()
             status_text = "Ready" if mcp_status["available"] else "MCP Offline"
-
-            # Get current view mode
-            view_mode = "Conversation"
-            if hasattr(app, "current_view"):
-                view_mode = app.current_view.value.capitalize()
 
             # Simple status line
             builds_text = (
@@ -273,7 +268,7 @@ class FileTreeWidget(VerticalScroll):
                         build_status = "Timeout"
                     else:
                         build_status = status.capitalize()
-            except:
+            except (json.JSONDecodeError, OSError):
                 pass
 
             # Count files and folders, find latest modification
@@ -290,11 +285,11 @@ class FileTreeWidget(VerticalScroll):
                             mtime = item.stat().st_mtime
                             if mtime > latest_mtime:
                                 latest_mtime = mtime
-                        except:
+                        except OSError:
                             pass
                     elif item.is_dir():
                         folder_count += 1
-            except:
+            except OSError:
                 pass
 
             # Format last updated time
@@ -381,7 +376,7 @@ class FileTreeWidget(VerticalScroll):
                                 else:
                                     size_str = f"{size / (1024 * 1024):.1f}MB"
                                 result.append(f"  ({size_str})", style="dim")
-                            except:
+                            except OSError:
                                 pass
 
                             result.append("\n")
@@ -446,7 +441,7 @@ class DirectoryTabbedPanel(Static):
                             "project": project_name,
                             "status": status,
                         }
-                except:
+                except (json.JSONDecodeError, OSError):
                     continue
 
             tabbed_content = self.query_one("#directory_tabs", TabbedContent)
@@ -457,7 +452,7 @@ class DirectoryTabbedPanel(Static):
                     if pane.id == "loading-pane":
                         tabbed_content.remove_pane("loading-pane")
                         break
-            except:
+            except Exception:
                 pass
 
             # Add new builds
@@ -485,7 +480,7 @@ class DirectoryTabbedPanel(Static):
                         )
                         await pane.mount(placeholder)
                         tabbed_content.add_pane(pane)
-                except:
+                except Exception:
                     pass
             else:
                 # Remove placeholder if it exists
@@ -494,7 +489,7 @@ class DirectoryTabbedPanel(Static):
                         if pane.id == "no-builds":
                             tabbed_content.remove_pane("no-builds")
                             break
-                except:
+                except Exception:
                     pass
 
         except Exception:
@@ -535,7 +530,7 @@ class DirectoryTabbedPanel(Static):
         try:
             self.tracked_builds.pop(task_id, None)
             tabbed_content.remove_pane(f"build-{task_id}")
-        except:
+        except Exception:
             pass
 
 
@@ -589,7 +584,7 @@ class DelegationsListPanel(Static, can_focus=True):
                         try:
                             start_time = datetime.fromisoformat(start_time_str)
                             start_display = start_time.strftime("%H:%M:%S")
-                        except:
+                        except (ValueError, TypeError):
                             pass
 
                     # Calculate duration
@@ -603,7 +598,7 @@ class DelegationsListPanel(Static, can_focus=True):
                             try:
                                 end_time = datetime.fromisoformat(end_time_str)
                                 duration_secs = (end_time - start_time).total_seconds()
-                            except:
+                            except (ValueError, TypeError):
                                 duration_secs = metadata.get("duration", 0)
                         else:
                             # Still running - use current time
@@ -639,7 +634,6 @@ class DelegationsListPanel(Static, can_focus=True):
 
                     # Get phase information
                     phase = metadata.get("current_phase", "-")
-                    phase_status = metadata.get("phase_status", "")
                     progress = (
                         metadata.get("progress_detail", "")[:50]
                         if metadata.get("progress_detail")
@@ -678,7 +672,7 @@ class DelegationsListPanel(Static, can_focus=True):
                             "daemon_status": daemon_display,
                         }
                     )
-                except Exception:
+                except (json.JSONDecodeError, OSError, KeyError):
                     continue
 
             self.delegations = delegations
@@ -794,7 +788,7 @@ class ChatPanel(VerticalScroll):
         try:
             chat_input = self.app.query_one("#chat_input", ChatInput)
             chat_input.focus()
-        except:
+        except Exception:
             pass
 
     async def add_message(self, role: str, content: str) -> None:
@@ -1395,7 +1389,7 @@ class MissionControlApp(App):
         try:
             chat_input = self.query_one("#chat_input", ChatInput)
             chat_input.focus()
-        except:
+        except Exception:
             pass
 
     async def _update_view(self) -> None:
@@ -1453,7 +1447,7 @@ class MissionControlApp(App):
             try:
                 chat_input = self.query_one("#chat_input", ChatInput)
                 chat_input.focus()
-            except:
+            except Exception:
                 pass
 
     async def action_send_message(self) -> None:
@@ -1486,7 +1480,7 @@ class MissionControlApp(App):
             if chat_panel:
                 try:
                     await chat_panel.add_message("assistant", f"❌ Error: {str(e)}")
-                except:
+                except Exception:
                     pass
 
         finally:
@@ -1542,7 +1536,7 @@ class MissionControlApp(App):
                         f"{error_data.get('message', '')}\n\n"
                         f"{error_data.get('help', '')}"
                     )
-                except:
+                except (json.JSONDecodeError, KeyError):
                     return f"❌ Status check error:\n{stderr.decode()}"
 
         except Exception as e:
@@ -1805,7 +1799,7 @@ class MissionControlApp(App):
             if task_file.exists():
                 try:
                     existing_metadata = json.loads(task_file.read_text())
-                except:
+                except (json.JSONDecodeError, OSError):
                     pass
 
             # Merge with existing metadata, preserving critical fields like PID
@@ -1842,11 +1836,11 @@ class MissionControlApp(App):
                                 ).timestamp()
                                 if started > cutoff:
                                     active_builds.append(build)
-                            except:
+                            except (ValueError, TypeError):
                                 pass
                 return active_builds
             return []
-        except:
+        except (json.JSONDecodeError, OSError):
             return []
 
     async def action_refresh(self) -> None:
@@ -1854,7 +1848,7 @@ class MissionControlApp(App):
         try:
             status_bar = self.query_one("#status_bar", StatusBar)
             await status_bar.refresh_status()
-        except:
+        except Exception:
             pass
 
     async def action_toggle_view(self) -> None:
@@ -1873,7 +1867,7 @@ class MissionControlApp(App):
             try:
                 chat_input = self.query_one("#chat_input", ChatInput)
                 chat_input.focus()
-            except:
+            except Exception:
                 pass
 
     async def action_show_help(self) -> None:
@@ -1996,7 +1990,7 @@ class MissionControlApp(App):
                         error_json = json.loads(error_msg)
                         error_detail = error_json.get("error", error_msg)
                         error_detail += "\n" + error_json.get("message", "")
-                    except:
+                    except (json.JSONDecodeError, KeyError):
                         error_detail = error_msg
 
                     chat_panel = self.query_one("#chat", ChatPanel)
@@ -2010,7 +2004,7 @@ class MissionControlApp(App):
                 await chat_panel.add_message(
                     "assistant", f"Error cancelling build: {str(e)}"
                 )
-            except:
+            except Exception:
                 # If even showing the error fails, at least log it
                 import traceback
 

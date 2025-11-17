@@ -7,18 +7,9 @@ PHASE 7.5: GITHUB INTEGRATION (Comprehensive Project Infrastructure)
 
 **Skip if:** Build failed before Deploy phase completed.
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "GitHub Integration",
-     "phase_number": "7.5/8",
-     "status": "configuring",
-     "progress_detail": "Setting up GitHub project infrastructure",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
+
+0.
 
 1. Create GitHub Agent:
    Type: /agents
@@ -98,16 +89,6 @@ PHASE 7.5: GITHUB INTEGRATION (Comprehensive Project Infrastructure)
    fi
    ```
 
-4. Update phase status (REQUIRED LAST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "GitHub Integration",
-     "phase_number": "7.5/8",
-     "status": "completed",
-     "progress_detail": "GitHub project infrastructure fully configured",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback", "GitHub"],
-     "last_updated": "{current ISO timestamp}"
-   }
+
 
 **✅ GitHub Integration complete. Proceed to FINAL OUTPUT.**

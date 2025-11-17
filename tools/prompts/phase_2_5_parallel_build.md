@@ -507,19 +507,7 @@ python3 tools/use_baml.py update-phase \
    - Verify all expected files were created
    - Update build-log.md with parallel execution summary
 
-6. Update phase status:
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Builder",
-     "phase_number": "3/7",
-     "status": "completed",
-     "progress_detail": "Parallel build complete ({N} tasks, {M} parallel workers)",
-     "test_iteration": 0,
-     "phases_completed": ["Scout", "Architect", "Builder"],
-     "parallel_execution": true,
-     "tasks_completed": {count},
-     "last_updated": "{current ISO timestamp}"
-   }
+
 
 **After parallel build completes:**
 - ✅ **If successful:** Proceed to Build Finalization steps below

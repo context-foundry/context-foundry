@@ -3,18 +3,9 @@ PHASE 5: DOCUMENTATION
 
 (Only reached if tests PASSED)
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Documentation",
-     "phase_number": "5/8",
-     "status": "documenting",
-     "progress_detail": "Creating comprehensive documentation and guides",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
+
+0.
 
 1. Create comprehensive README.md in project root:
    Include:
@@ -93,15 +84,3 @@ PHASE 5: DOCUMENTATION
    Add to .context-foundry/build-log.md:
    - Documentation files created
    - Documentation completeness checklist
-
-4. Update phase status (REQUIRED LAST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Documentation",
-     "phase_number": "5/8",
-     "status": "completed",
-     "progress_detail": "All documentation created successfully",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation"],
-     "last_updated": "{current ISO timestamp}"
-   }

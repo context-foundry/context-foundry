@@ -37,7 +37,7 @@ class TestDaemonMaxConcurrentTasks(unittest.TestCase):
             with patch.object(
                 daemon.resource_manager, "can_accept_task", return_value=(True, "")
             ):
-                with patch.object(daemon, "_interruptible_sleep") as mock_sleep:
+                with patch.object(daemon, "_interruptible_sleep"):
                     daemon.main_loop()
 
         # Verify daemon logged max concurrent reached
@@ -305,20 +305,20 @@ class TestDaemonPRDetectionEdgeCases(unittest.TestCase):
 
         daemon = EvolutionDaemon()
 
+        # Enable MCP to avoid early return
+        daemon.mcp_available = True
+
         # Mock mode that returns tasks
         mock_mode = Mock()
-        mock_tasks = [
-            {
-                "type": TaskType.SELF_IMPROVEMENT.value,
-                "description": "Fix TODO: test coverage",
-                "params": {"file": "test.py", "line": 10},
-            }
+        mock_mode._find_todos.return_value = [
+            {"file": "test.py", "line": 10, "todo": "test coverage"}
         ]
-        mock_mode.generate_tasks.return_value = mock_tasks
-        daemon.mode = mock_mode
+        daemon.modes[TaskType.SELF_IMPROVEMENT.value] = mock_mode
 
-        with patch.object(daemon.task_queue, "create_task") as mock_create:
-            daemon._queue_next_improvement_task()
+        # Mock GitHub issues check to return 0 (no GitHub tasks)
+        with patch.object(daemon, "_poll_github_issues", return_value=0):
+            with patch.object(daemon.task_queue, "create_task") as mock_create:
+                daemon._queue_next_improvement_task()
 
         # Should create task
         mock_create.assert_called_once()

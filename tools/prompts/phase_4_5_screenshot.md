@@ -5,18 +5,9 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
 
 **Purpose:** Capture visual documentation of the working application for inclusion in README and user guides.
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   {
-     "current_phase": "Screenshot",
-     "phase_number": "4.5/8",
-     "status": "capturing",
-     "progress_detail": "Capturing screenshots of application for documentation",
-     "test_iteration": {final_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder", "Test"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
+
+0.
 
 1. Detect project type:
    - Examine package.json, file structure, and architecture.md
@@ -116,18 +107,7 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
      ✓ Manifest: docs/screenshots/manifest.json
      ```
 
-10. Update phase status (REQUIRED LAST STEP):
-    Update .context-foundry/current-phase.json:
-    {
-      "current_phase": "Screenshot",
-      "phase_number": "4.5/8",
-      "status": "completed",
-      "progress_detail": "Screenshots captured successfully",
-      "test_iteration": {final_iteration},
-      "phases_completed": ["Scout", "Architect", "Builder", "Test", "Screenshot"],
-      "screenshots_captured": {count},
-      "last_updated": "{current ISO timestamp}"
-    }
+
 
 **IMPORTANT NOTES:**
 - Screenshot capture is OPTIONAL - if it fails, continue anyway

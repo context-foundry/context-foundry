@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 # Import BAML integration
-from tools.baml_integration import is_baml_available, get_baml_error
+from tools.baml_integration import is_baml_available, get_baml_error, create_build_plan
 
 # Import safety mechanisms
 from tools.evolution.safety import enforce_sandbox_mode
@@ -485,6 +485,76 @@ def execute_build_with_phase_spawning(
             }
 
         phases_completed.append("Architect")
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)
+        # ═══════════════════════════════════════════════════════════════════════
+        print("\n📋 Generating build plan using BAML...", file=sys.stderr)
+
+        try:
+            # Read Scout report to get parallel build recommendation
+            scout_report_path = (
+                working_directory / ".context-foundry" / "scout-report.md"
+            )
+            scout_content = (
+                scout_report_path.read_text() if scout_report_path.exists() else ""
+            )
+
+            # Detect Scout's parallel build recommendation
+            scout_parallel_recommendation = False
+            scout_reasoning = "No Scout report found"
+
+            if scout_content:
+                if (
+                    "Parallel Build Recommendation: YES" in scout_content
+                    or "Parallel Build Recommendation:** YES" in scout_content
+                ):
+                    scout_parallel_recommendation = True
+                    # Extract reasoning (look for "Build Strategy" section)
+                    if "## Build Strategy" in scout_content:
+                        strategy_section = scout_content.split("## Build Strategy")[
+                            1
+                        ].split("##")[0]
+                        scout_reasoning = strategy_section.strip()
+                    else:
+                        scout_reasoning = "Scout recommended parallel build"
+                else:
+                    scout_reasoning = "Scout recommended sequential build"
+
+            # Read architecture summary
+            architecture_path = (
+                working_directory / ".context-foundry" / "architecture.md"
+            )
+            architecture_summary = (
+                architecture_path.read_text() if architecture_path.exists() else ""
+            )
+
+            # Call BAML to generate build plan
+            build_plan = create_build_plan(
+                architecture_summary=architecture_summary,
+                scout_parallel_recommendation=scout_parallel_recommendation,
+                scout_reasoning=scout_reasoning,
+                project_type=project_type,
+            )
+
+            # Save build-tasks.json
+            build_tasks_path = (
+                working_directory / ".context-foundry" / "build-tasks.json"
+            )
+            with open(build_tasks_path, "w") as f:
+                json.dump(build_plan, f, indent=2)
+
+            print(f"✅ Build plan generated: {build_tasks_path}", file=sys.stderr)
+            if build_plan.get("parallel_build_enabled"):
+                task_count = len(build_plan.get("tasks", []))
+                print(f"   Parallel build with {task_count} tasks", file=sys.stderr)
+            else:
+                print("   Sequential build (no parallel tasks)", file=sys.stderr)
+
+        except Exception as e:
+            print(f"⚠️  BAML build plan generation failed: {e}", file=sys.stderr)
+            print("   Continuing without build-tasks.json", file=sys.stderr)
+            traceback.print_exc()
 
         # AUTO-DETECT PARALLEL BUILDS from Scout recommendation
         # Only override if user didn't explicitly specify True or False

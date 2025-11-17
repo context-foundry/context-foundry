@@ -49,21 +49,9 @@ Reusing cached test results.
    If project has 2+ test types (unit/e2e/lint), use parallel execution
    60-70% faster than sequential testing!
 
-0. Write phase status (REQUIRED FIRST STEP):
-   Update .context-foundry/current-phase.json:
-   Read current .context-foundry/test-iteration-count.txt (default to 1 if doesn't exist)
-   {
-     "current_phase": "Test",
-     "phase_number": "4/7",
-     "status": "testing",
-     "progress_detail": "Running test suite and validating implementation",
-     "test_iteration": {current_iteration},
-     "phases_completed": ["Scout", "Architect", "Builder"],
-     "started_at": "{current ISO timestamp}",
-     "last_updated": "{current ISO timestamp}"
-   }
+**Note:** Phase tracking is handled automatically by the orchestrator using BAML.
 
-0.25 **CHECK CONTEXT BUDGET:**
+0. **CHECK CONTEXT BUDGET:**
    ```bash
    python3 tools/check_context_budget.py --phase test --check-before
    ```
@@ -448,17 +436,6 @@ PYTHON_SCRIPT
          echo "⚠️  Incremental mode disabled - skipping test cache"
      fi
      ```
-   - Update phase status:
-     Update .context-foundry/current-phase.json:
-     {
-       "current_phase": "Test",
-       "phase_number": "4/7",
-       "status": "completed",
-       "progress_detail": "All tests passed successfully",
-       "test_iteration": {final_iteration},
-       "phases_completed": ["Scout", "Architect", "Builder", "Test"],
-       "last_updated": "{current ISO timestamp}"
-     }
    - Proceed to PHASE 5 (Documentation)
 
    **IF ANY TESTS FAIL:**
@@ -481,19 +458,7 @@ PYTHON_SCRIPT
       - Impact assessment
       - Recommended fixes
 
-   a2. Update phase status to show self-healing:
-       Update .context-foundry/current-phase.json:
-       {
-         "current_phase": "Test",
-         "phase_number": "4/7",
-         "status": "self-healing",
-         "progress_detail": "Tests failed, initiating fix cycle (iteration {N})",
-         "test_iteration": {N},
-         "phases_completed": ["Scout", "Architect", "Builder"],
-         "last_updated": "{current ISO timestamp}"
-       }
-
-   a3. **FLOWISE PROJECTS ONLY**: Update FAILURE_PATTERNS.md with new learnings:
+   a2. **FLOWISE PROJECTS ONLY**: Update FAILURE_PATTERNS.md with new learnings:
 
        **IF this is a Flowise project** (check CONFIGURATION for flowise_flow: True):
 

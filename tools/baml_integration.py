@@ -209,12 +209,23 @@ def get_baml_error() -> Optional[str]:
     return BAML_COMPILATION_ERROR
 
 
+def _now_iso() -> str:
+    """Return current UTC timestamp without microseconds and with Z suffix."""
+    return (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+
+
 def inject_real_timestamps(phase_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Inject real system timestamps into phase data.
 
     LLMs cannot know the current time, so they hallucinate fake dates (often 2023).
-    This function replaces LLM-generated timestamps with actual system time.
+    This function replaces LLM-generated timestamps with actual system time across
+    every timestamp field that we expect downstream systems to read.
 
     Args:
         phase_data: Phase info dict from BAML (with hallucinated timestamps)
@@ -222,21 +233,75 @@ def inject_real_timestamps(phase_data: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Phase info dict with corrected timestamps
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = _now_iso()
 
     # Fix timestamps object if it exists
-    if "timestamps" in phase_data:
-        phase_data["timestamps"]["phaseStart"] = now
-        phase_data["timestamps"]["lastUpdated"] = now
+    timestamps = phase_data.get("timestamps")
+    if isinstance(timestamps, dict):
+        timestamps["phaseStart"] = now
+        timestamps["lastUpdated"] = now
         # Keep phaseEnd as null if it's null
-        if phase_data["timestamps"].get("phaseEnd") is None:
-            phase_data["timestamps"]["phaseEnd"] = None
+        if timestamps.get("phaseEnd") is None:
+            timestamps["phaseEnd"] = None
 
-    # Also fix top-level timestamp fields if they exist (different schema versions)
-    if "started_at" in phase_data:
-        phase_data["started_at"] = now
-    if "last_updated" in phase_data:
-        phase_data["last_updated"] = now
+    # Normalize any flattened timestamp fields that some schemas return
+    for key in [
+        "phaseStart",
+        "phaseStartTime",
+        "started_at",
+        "last_updated",
+        "lastUpdated",
+    ]:
+        if key in phase_data:
+            if key == "lastUpdated":
+                phase_data[key] = now
+            elif key == "phaseStart":
+                phase_data[key] = now
+            elif key == "phaseStartTime":
+                phase_data[key] = now
+            elif key == "started_at":
+                phase_data[key] = now
+            elif key == "last_updated":
+                phase_data[key] = now
+
+    return phase_data
+
+
+def normalize_phase_info(phase_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize PhaseInfo payloads from BAML.
+
+    BAML sometimes wraps responses in a {"PhaseInfo": {...}} envelope and
+    uses camelCase. We flatten the structure and duplicate key values in
+    snake_case so the rest of the system can read them consistently.
+    """
+    if "PhaseInfo" in phase_data and isinstance(phase_data["PhaseInfo"], dict):
+        phase_data = dict(phase_data["PhaseInfo"])
+    else:
+        phase_data = dict(phase_data)
+
+    # Map camelCase keys to snake_case equivalents (keeping originals too)
+    key_aliases = {
+        "sessionId": "session_id",
+        "currentPhase": "phase",
+        "current_phase": "phase",
+        "phaseNumber": "phase_number",
+        "progressDetail": "progress_detail",
+        "testIteration": "test_iteration",
+        "phasesCompleted": "phases_completed",
+        "completionTracking": "completion_tracking",
+    }
+
+    for source, target in key_aliases.items():
+        if source in phase_data and target not in phase_data:
+            phase_data[target] = phase_data[source]
+
+    # Ensure canonical short key exists for downstream validators
+    if "phase" not in phase_data:
+        if "currentPhase" in phase_data:
+            phase_data["phase"] = phase_data["currentPhase"]
+        elif "current_phase" in phase_data:
+            phase_data["phase"] = phase_data["current_phase"]
 
     return phase_data
 
@@ -316,8 +381,8 @@ def update_phase_with_baml(
                         "[BAML DEBUG] Successfully parsed BAML output using .parsed()",
                         file=sys.stderr,
                     )
-                    # Fix hallucinated timestamps with real system time
-                    return inject_real_timestamps(parsed_data)
+                    normalized = normalize_phase_info(parsed_data)
+                    return inject_real_timestamps(normalized)
                 except AttributeError:
                     # Fall back to unstable_internal_repr for older API
                     pass
@@ -360,16 +425,16 @@ def update_phase_with_baml(
                                         "[BAML DEBUG] Successfully parsed BAML output",
                                         file=sys.stderr,
                                     )
-                                    # Fix hallucinated timestamps with real system time
-                                    return inject_real_timestamps(parsed_data)
+                                    normalized = normalize_phase_info(parsed_data)
+                                    return inject_real_timestamps(normalized)
 
                     # If we couldn't extract JSON, try parsing the whole thing
                     parsed_data = json.loads(content)
                     print(
                         "[BAML DEBUG] Successfully parsed BAML output", file=sys.stderr
                     )
-                    # Fix hallucinated timestamps with real system time
-                    return inject_real_timestamps(parsed_data)
+                    normalized = normalize_phase_info(parsed_data)
+                    return inject_real_timestamps(normalized)
                 else:
                     print(
                         "[BAML DEBUG] Unexpected internal_repr format", file=sys.stderr
@@ -450,9 +515,11 @@ def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
             if content.endswith("```"):
                 content = content[:-3]
             validated_data = json.loads(content.strip())
-            return validated_data
+            normalized = normalize_phase_info(validated_data)
+            return inject_real_timestamps(normalized)
 
-        return internal_repr
+        normalized = normalize_phase_info(internal_repr)
+        return inject_real_timestamps(normalized)
 
     except Exception as e:
         # BAML is required - fail hard
@@ -668,6 +735,142 @@ def fallback_to_json(operation: str, error: Exception) -> None:
     """
     print(f"⚠️  BAML {operation} failed: {error}", file=sys.stderr)
     print("BAML is required for Context Foundry builds.", file=sys.stderr)
+
+
+def validate_build_plan_no_cycles(build_plan: Dict[str, Any]) -> None:
+    """
+    Validate that build plan has no cyclic dependencies using DFS.
+
+    Args:
+        build_plan: BuildPlan dict with tasks and dependencies
+
+    Raises:
+        ValueError: If cyclic dependencies detected
+    """
+    if not build_plan.get("parallel_build_enabled", False):
+        return  # No tasks to validate
+
+    tasks = build_plan.get("tasks", [])
+    if not tasks:
+        return
+
+    # Build adjacency list
+    task_ids = {task["task_id"] for task in tasks}
+    graph = {task["task_id"]: task.get("dependencies", []) for task in tasks}
+
+    # Validate all dependencies exist
+    for task_id, deps in graph.items():
+        for dep in deps:
+            if dep not in task_ids:
+                raise ValueError(
+                    f"Task '{task_id}' depends on non-existent task '{dep}'"
+                )
+
+    # DFS to detect cycles
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {task_id: WHITE for task_id in task_ids}
+    path = []
+
+    def dfs(node: str) -> None:
+        if color[node] == GRAY:
+            # Found a cycle
+            cycle_start = path.index(node)
+            cycle = " -> ".join(path[cycle_start:] + [node])
+            raise ValueError(f"Cyclic dependency detected: {cycle}")
+
+        if color[node] == BLACK:
+            return  # Already processed
+
+        color[node] = GRAY
+        path.append(node)
+
+        for neighbor in graph[node]:
+            dfs(neighbor)
+
+        path.pop()
+        color[node] = BLACK
+
+    for task_id in task_ids:
+        if color[task_id] == WHITE:
+            dfs(task_id)
+
+
+def create_build_plan(
+    architecture_summary: str,
+    scout_parallel_recommendation: bool,
+    scout_reasoning: str,
+    project_type: str,
+) -> Dict[str, Any]:
+    """
+    Generate structured build plan using BAML.
+
+    Args:
+        architecture_summary: Architecture summary from Architect phase
+        scout_parallel_recommendation: Whether Scout recommended parallel build
+        scout_reasoning: Scout's reasoning for parallel recommendation
+        project_type: Type of project (e.g., "fastapi", "react", "fullstack")
+
+    Returns:
+        BuildPlan dict with parallel_build_enabled, tasks, and time estimates
+
+    Raises:
+        RuntimeError: If BAML unavailable or generation fails
+    """
+    if not is_baml_available():
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
+
+    try:
+        client = get_baml_client()
+        if client is None:
+            raise RuntimeError("BAML client not available")
+
+        # Call BAML CreateBuildPlan function
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="CreateBuildPlan",
+            args={
+                "architecture_summary": architecture_summary,
+                "scout_parallel_recommendation": scout_parallel_recommendation,
+                "scout_reasoning": scout_reasoning,
+                "project_type": project_type,
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars=get_baml_env_vars(),
+            tags=None,
+        )
+
+        # Parse the result using unstable_internal_repr
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        build_plan = None
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            # Strip markdown code blocks
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            build_plan = json.loads(content.strip())
+        else:
+            build_plan = internal_repr
+
+        # Validate no cyclic dependencies
+        validate_build_plan_no_cycles(build_plan)
+
+        return build_plan
+
+    except Exception as e:
+        error_msg = f"BAML build plan generation failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
 
 
 def baml_status_summary() -> Dict[str, Any]:

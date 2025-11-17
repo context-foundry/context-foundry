@@ -80,10 +80,13 @@ class TestDaemonInitialization:
         """Test that initialization creates all required components."""
         assert daemon.task_queue is not None
         assert daemon.resource_manager is not None
-        assert len(daemon.modes) == 3
+        assert len(daemon.modes) == 6
         assert TaskType.SELF_IMPROVEMENT.value in daemon.modes
         assert TaskType.CHAOS_CREATIVE.value in daemon.modes
         assert TaskType.RESEARCH.value in daemon.modes
+        assert "delegation_build" in daemon.modes
+        assert "delegation_deploy" in daemon.modes
+        assert "delegation_test" in daemon.modes
 
     def test_init_sets_initial_state(self, daemon):
         """Test that initialization sets correct initial state."""
@@ -161,7 +164,6 @@ class TestDaemonSignalHandling:
         """Test SIGHUP handler reloads configuration."""
         # Create daemon with temp config
         daemon = EvolutionDaemon(temp_config)
-        original_interval = daemon.config["daemon"]["poll_interval_seconds"]
 
         # Modify config file
         with open(temp_config, "w") as f:
@@ -238,6 +240,9 @@ class TestDaemonTaskExecution:
             created_at=datetime.now().isoformat(),
         )
 
+        # Enable MCP for this test to avoid cancellation
+        daemon.mcp_available = True
+
         # Mock the mode execution
         mock_result = Mock()
         mock_result.output = {"status": "completed"}
@@ -275,6 +280,9 @@ class TestDaemonTaskExecution:
             created_at=datetime.now().isoformat(),
         )
 
+        # Enable MCP for this test to avoid cancellation
+        daemon.mcp_available = True
+
         # Mock mode to raise exception
         with patch.object(
             daemon.modes[TaskType.SELF_IMPROVEMENT.value],
@@ -305,6 +313,9 @@ class TestDaemonTaskExecution:
             max_retries=3,
             retry_count=0,
         )
+
+        # Enable MCP for this test to avoid cancellation
+        daemon.mcp_available = True
 
         # Mock mode to raise exception
         with patch.object(
