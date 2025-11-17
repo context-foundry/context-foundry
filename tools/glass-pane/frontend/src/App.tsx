@@ -1,6 +1,7 @@
 import { JobProvider } from './contexts/JobContext';
 import { SSEProvider } from './contexts/SSEContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ChatProvider } from './contexts/ChatContext';
 import Dashboard from './components/Dashboard';
 
 function App() {
@@ -8,7 +9,9 @@ function App() {
     <ThemeProvider>
       <SSEProvider>
         <JobProvider>
-          <Dashboard />
+          <ChatProvider>
+            <Dashboard />
+          </ChatProvider>
         </JobProvider>
       </SSEProvider>
     </ThemeProvider>

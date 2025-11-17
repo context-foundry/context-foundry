@@ -12,8 +12,9 @@ import FileBrowser from './FileBrowser';
 import LogFeed from './LogFeed';
 import MarkdownViewer from './MarkdownViewer';
 import CodexBrowser from './CodexBrowser';
+import Forge from './Forge';
 
-type TabType = 'build' | 'browse' | 'logs' | 'codex';
+type TabType = 'build' | 'browse' | 'logs' | 'codex' | 'forge';
 
 export default function Dashboard() {
   const { currentJob, setCurrentJob, refreshJob } = useJob();
@@ -169,6 +170,16 @@ export default function Dashboard() {
           {/* Tab Navigation */}
           <div className="flex gap-2 border-b border-gray-800">
             <button
+              onClick={() => setActiveTab('forge')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'forge'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Forge
+            </button>
+            <button
               onClick={() => setActiveTab('build')}
               className={`px-4 py-2 text-sm font-medium transition-colors relative ${
                 activeTab === 'build'
@@ -278,6 +289,12 @@ export default function Dashboard() {
         {activeTab === 'codex' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg" style={{height: '1200px'}}>
             <CodexBrowser />
+          </div>
+        )}
+
+        {activeTab === 'forge' && (
+          <div className="bg-gray-900 border border-gray-800 rounded-lg h-[calc(100vh-200px)]">
+            <Forge />
           </div>
         )}
       </div>
