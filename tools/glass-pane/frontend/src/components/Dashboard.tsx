@@ -21,7 +21,7 @@ export default function Dashboard() {
   const { phaseInfo, updatePhase } = usePhase();
   const { addFile, setFiles, visibleNodes, toggleDirectory, collapseAll, searchQuery, setSearchQuery } = useFileTree([]);
   const { addLogs } = useLogs(currentJob?.id || null);
-  const [activeTab, setActiveTab] = useState<TabType>('build');
+  const [activeTab, setActiveTab] = useState<TabType>('forge');
   const [metrics, setMetrics] = useState({
     tokens_used: 0,
   });
