@@ -87,8 +87,8 @@ def bootstrap_roblox_patterns():
 
         try:
             if existing:
-                # Update existing
-                store.update_entry(pattern_id, metadata=pattern)
+                # Update existing - increment frequency to show it's still relevant
+                store.increment_frequency(pattern_id)
                 updated_count += 1
                 print(f"  ✓ Updated: {pattern_id}")
             else:
@@ -128,8 +128,8 @@ def bootstrap_roblox_patterns():
 
         try:
             if existing:
-                # Update existing
-                store.update_entry(issue_id, metadata=issue)
+                # Update existing - increment frequency to show it's still relevant
+                store.increment_frequency(issue_id)
                 updated_count += 1
                 print(f"  ✓ Updated: {issue_id}")
             else:

@@ -87,16 +87,16 @@ class TestCodexIntegration:
 
     def test_codex_contains_flowise_patterns(self, codex_store):
         """Verify Codex contains Flowise patterns"""
-        # Search for Flowise patterns
-        results = codex_store.search("flowise", entry_type="pattern")
+        # Search for Flowise patterns using search_by_type
+        results = codex_store.search_by_type("pattern", category="flowise")
 
         # Should have at least 13 patterns
         assert len(results) >= 13, f"Expected 13+ patterns, found {len(results)}"
 
     def test_codex_contains_flowise_issues(self, codex_store):
         """Verify Codex contains Flowise issues"""
-        # Search for Flowise issues
-        results = codex_store.search("flowise", entry_type="issue")
+        # Search for Flowise issues using search_by_type
+        results = codex_store.search_by_type("issue", category="flowise")
 
         # Should have at least 15 issues
         assert len(results) >= 15, f"Expected 15+ issues, found {len(results)}"
@@ -202,16 +202,16 @@ class TestIdempotency:
             store = KnowledgeStore(str(codex_path))
 
             # Get initial count
-            initial_patterns = len(store.search("flowise", entry_type="pattern"))
-            initial_issues = len(store.search("flowise", entry_type="issue"))
+            initial_patterns = len(store.search_by_type("pattern", category="flowise"))
+            initial_issues = len(store.search_by_type("issue", category="flowise"))
 
             # Run bootstrap again
             script_path = cf_root / "scripts" / "bootstrap_flowise_patterns.py"
             subprocess.run([sys.executable, str(script_path)], capture_output=True)
 
             # Get new count
-            new_patterns = len(store.search("flowise", entry_type="pattern"))
-            new_issues = len(store.search("flowise", entry_type="issue"))
+            new_patterns = len(store.search_by_type("pattern", category="flowise"))
+            new_issues = len(store.search_by_type("issue", category="flowise"))
 
             # Counts should be equal (idempotent)
             assert (
