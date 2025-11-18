@@ -1,7 +1,109 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "last_updated": "2025-11-17",
   "description": "Flowise AgentFlow v2 workflow patterns, best practices, and anti-patterns for Context Codex integration",
+
+  "model_defaults": {
+    "anthropic": {
+      "credential": "Anthropic API Key",
+      "modelName": "claude-sonnet-4-5",
+      "temperature": "0.1",
+      "streaming": true,
+      "description": "Default settings for ChatAnthropic model in AgentFlow nodes"
+    },
+    "openai": {
+      "credential": "OpenAI API Key",
+      "modelName": "gpt-4o",
+      "temperature": "0.1",
+      "streaming": true,
+      "description": "Default settings for ChatOpenAI model in AgentFlow nodes"
+    }
+  },
+
+  "agentflow_structure": {
+    "node_type": "agentFlow",
+    "edge_type": "agentFlow",
+    "version": 2.2,
+    "required_fields": {
+      "start_node": {
+        "name": "startAgentflow",
+        "color": "#7EE787",
+        "input_field": "startInputType"
+      },
+      "condition_agent": {
+        "name": "conditionAgentAgentflow",
+        "color": "#ff8fab",
+        "model_field": "conditionAgentModel",
+        "scenarios_field": "conditionAgentScenarios",
+        "instructions_field": "conditionAgentInstructions"
+      },
+      "agent": {
+        "name": "agentAgentflow",
+        "model_field": "agentModel",
+        "messages_field": "agentMessages",
+        "tools_field": "agentTools",
+        "state_updates_field": "agentStateUpdates"
+      }
+    },
+    "v2_2_agent_structure": {
+      "description": "CRITICAL: Use this exact structure for all v2.2 agent nodes",
+      "node_data": {
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "label": "Agent.Name",
+        "version": 2.2,
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": 0.2,
+            "streaming": true,
+            "agentModel": "chatAnthropic"
+          },
+          "agentMessages": "",
+          "agentStateUpdates": [
+            {"key": "result_data", "value": "{{ result_data }}"},
+            {"key": "chain.step", "value": "1"}
+          ],
+          "agentTools": [
+            {
+              "agentSelectedTool": "currentDateTime",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "currentDateTime"
+              }
+            },
+            {
+              "agentSelectedTool": "searXNG",
+              "agentSelectedToolRequiresHumanInput": "",
+              "agentSelectedToolConfig": {
+                "agentSelectedTool": "searXNG",
+                "apiBase": "https://s.llam.ai",
+                "toolName": "searxng-search"
+              }
+            }
+          ]
+        }
+      },
+      "key_differences_from_older_versions": [
+        "agentModelConfig is nested object with credential, modelName, temperature, streaming, and agentModel",
+        "agentStateUpdates (NOT updateState) is array of {key, value} objects",
+        "agentSelectedToolConfig is nested inside each tool object",
+        "agentMessages can be empty string or array of messages",
+        "version MUST be 2.2"
+      ]
+    },
+    "model_config_structure": {
+      "anthropic": {
+        "credential": "Anthropic API Key",
+        "modelName": "claude-sonnet-4-5",
+        "temperature": 0.2,
+        "streaming": true,
+        "agentModel": "chatAnthropic"
+      }
+    }
+  },
 
   "patterns": [
     {
