@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Bootstrap Flowise Patterns into Global Codex
+Bootstrap Roblox Patterns into Global Codex
 
-This script loads patterns from extensions/flowise/patterns/flowise-expertise.json
+This script loads patterns from extensions/roblox/patterns/roblox-expertise.json
 and imports them into the global Context Foundry codex database.
 
 Idempotent: Safe to re-run after pattern updates.
 
 Usage:
-    python scripts/bootstrap_flowise_patterns.py
+    python scripts/bootstrap_roblox_patterns.py
 """
 
 import sys
@@ -32,16 +32,16 @@ except ImportError:
     sys.exit(1)
 
 
-def bootstrap_flowise_patterns():
-    """Bootstrap Flowise patterns into global codex"""
+def bootstrap_roblox_patterns():
+    """Bootstrap Roblox patterns into global codex"""
 
     print("=" * 70)
-    print("Bootstrap Flowise Patterns")
+    print("Bootstrap Roblox Patterns")
     print("=" * 70)
 
     # Load pattern file
     patterns_file = (
-        cf_root / "extensions" / "flowise" / "patterns" / "flowise-expertise.json"
+        cf_root / "extensions" / "roblox" / "patterns" / "roblox-expertise.json"
     )
 
     if not patterns_file.exists():
@@ -96,11 +96,11 @@ def bootstrap_flowise_patterns():
                 entry = KnowledgeEntry(
                     id=pattern_id,
                     type=KnowledgeType.PATTERN,
-                    category="flowise",
+                    category="roblox",
                     title=pattern.get("description", pattern_id),
                     description=pattern.get("description", ""),
-                    project_types=pattern.get("applies_to", ["flowise-agentflow"]),
-                    tags=["flowise"] + pattern.get("category", "").split(),
+                    project_types=pattern.get("applies_to", ["roblox-game"]),
+                    tags=["roblox"] + pattern.get("category", "").split(),
                     confidence=pattern.get("confidence", 0.9),
                     frequency=pattern.get("frequency", 1),
                     metadata=pattern,
@@ -147,12 +147,12 @@ def bootstrap_flowise_patterns():
                 entry = KnowledgeEntry(
                     id=issue_id,
                     type=KnowledgeType.ISSUE,
-                    category="flowise",
+                    category="roblox",
                     title=issue.get("description", issue_id),
                     description=issue.get("description", ""),
                     severity=severity,
-                    project_types=["flowise-agentflow"],
-                    tags=["flowise"] + [issue.get("category", "")],
+                    project_types=["roblox-game", "roblox-plugin"],
+                    tags=["roblox"] + [issue.get("category", "")],
                     confidence=issue.get("confidence", 0.9),
                     frequency=issue.get("frequency", 1),
                     metadata=issue,
@@ -168,12 +168,12 @@ def bootstrap_flowise_patterns():
     print("✅ Bootstrap complete!")
     print(f"   New entries: {new_count}")
     print(f"   Updated entries: {updated_count}")
-    print("   Category: flowise")
+    print("   Category: roblox")
     print("=" * 70)
 
     return True
 
 
 if __name__ == "__main__":
-    success = bootstrap_flowise_patterns()
+    success = bootstrap_roblox_patterns()
     sys.exit(0 if success else 1)

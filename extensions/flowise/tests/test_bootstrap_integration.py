@@ -80,7 +80,7 @@ class TestCodexIntegration:
         try:
             from context_foundry.codex import KnowledgeStore
 
-            codex_path = Path.home() / ".context-foundry" / "patterns" / "codex.db"
+            codex_path = Path.home() / ".context-foundry" / "codex.db"
             return KnowledgeStore(str(codex_path))
         except ImportError:
             pytest.skip("context_foundry.codex not available")
@@ -198,7 +198,7 @@ class TestIdempotency:
         try:
             from context_foundry.codex import KnowledgeStore
 
-            codex_path = Path.home() / ".context-foundry" / "patterns" / "codex.db"
+            codex_path = Path.home() / ".context-foundry" / "codex.db"
             store = KnowledgeStore(str(codex_path))
 
             # Get initial count
