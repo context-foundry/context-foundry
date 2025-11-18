@@ -586,28 +586,51 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    ✅ Prompt engineering best practices
    ✅ Condition routing and workflow orchestration
 
-   **MANDATORY Reading (Scout MUST execute these Read commands)**:
+   **MANDATORY: Query Context Codex for Flowise Patterns**:
 
-   1. **Read AGENT_PATTERN_REFERENCE.md** (the authority on Flowise structure):
+   1. **Query Codex for workflow patterns** (the authority on Flowise structure):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+      # Search for relevant workflow patterns
+      codex_search("flowise routing pattern")
+      codex_search("flowise chaining pattern")
+      codex_search("flowise start node requirements")
+
+      # Get specific pattern details based on flow type:
+      # - Sequential processing: codex_get_entry("afv2-chaining-pattern")
+      # - Intent classification: codex_get_entry("afv2-routing-pattern")
+      # - Multi-source research: codex_get_entry("afv2-parallel-pattern")
+      # - Quality refinement: codex_get_entry("afv2-iteration-pattern")
+      # - Validation retry: codex_get_entry("afv2-looping-pattern")
+      # - Task delegation: codex_get_entry("afv2-hierarchy-pattern")
+      # - HTTP integration: codex_get_entry("afv2-api-integration")
+      # - Document Q&A: codex_get_entry("afv2-rag-pattern")
       ```
 
-   2. **Read FAILURE_PATTERNS.md** (learn from past mistakes):
+   2. **Query Codex for known issues** (learn from past mistakes):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+      # Search for common issues to avoid
+      codex_search("flowise missing inputparams")
+      codex_search("flowise disconnected agents")
+      codex_search("flowise missing start node")
+
+      # Get critical issue details:
+      # codex_get_entry("flowise-missing-inputparams")  # CRITICAL
+      # codex_get_entry("flowise-missing-start-node")   # CRITICAL
+      # codex_get_entry("flowise-separate-configs")     # CRITICAL
+      # codex_get_entry("flowise-incorrect-tool-structure") # CRITICAL
       ```
-      This contains detailed root causes, fixes, and prevention checklists for 6+ known failure patterns.
-      Don't just read the summary - read the FULL file to understand WHY each pattern fails.
+
+      Document which patterns and issues were queried in scout-report.md.
+      List the applied pattern IDs for Architect to reference.
 
    3. **Read STANDARD_TOOLS.md** (understand required tools):
       ```
       Read /Users/name/homelab/context-foundry/extensions/flowise/tool-configs/STANDARD_TOOLS.md
       ```
 
-   4. **Read BEST_PRACTICES.md** (if exists):
+   4. **Read AGENT-NODE-TEMPLATE.json** (node structure reference):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/BEST_PRACTICES.md
+      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
       ```
 
    🚨 **CRITICAL: Standard Tools Research** 🚨
@@ -976,43 +999,55 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    **CRITICAL JSON STRUCTURE REQUIREMENTS**:
    ⚠️ Flowise Agent Flows MUST use the exact node structure from real Flowise exports!
 
-   **🚨🚨🚨 READ THIS FIRST - AUTHORITATIVE PATTERN REFERENCE 🚨🚨🚨**
+   **🚨🚨🚨 REFERENCE PATTERNS FROM CONTEXT CODEX 🚨🚨🚨**
 
-   **MANDATORY FIRST STEP - Architect MUST execute these Read commands**:
+   **MANDATORY FIRST STEP - Architect MUST query Codex for patterns**:
 
-   1. **Read the Authoritative Pattern Reference** (THE SINGLE SOURCE OF TRUTH):
+   1. **Reference workflow patterns by ID** (from Scout's pattern queries):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
+      # Get the patterns Scout identified as relevant:
+      codex_get_entry("afv2-routing-pattern")      # For intent classification
+      codex_get_entry("afv2-chaining-pattern")     # For sequential processing
+      codex_get_entry("afv2-api-integration")      # For HTTP tool calls
+      # etc. based on Scout's recommendations
       ```
-      This contains:
-      - Complete node type definitions (agentAgentflow, conditionAgentAgentflow)
-      - All input parameters with descriptions and examples
-      - Agent persona patterns and configuration guidelines
-      - Edge structure and connection patterns
-      - Critical design patterns (intent detection, agent specialization, knowledge integration)
-      - Complete implementation checklist
-      - Common pitfalls and how to avoid them
 
-   2. **Read FAILURE_PATTERNS.md** (CRITICAL - Learn from past failures):
-      ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
-      ```
-      **MUST READ THE FULL FILE** to avoid repeating past mistakes:
-      - Pattern #1: Meta-description instead of complete flow
-      - Pattern #2: Missing agent nodes
-      - Pattern #3: Separate config files anti-pattern (+ parallel build splitting variant)
-      - Pattern #4: Disconnected agent nodes (scenario count ≠ agent count)
-      - Pattern #5: Phantom tool and knowledge references (invented names that don't exist in Flowise)
-      - Pattern #6: Incorrect tool JSON structure (using wrong field names causes crashes)
+      **CRITICAL: Architecture.md MUST list applied pattern IDs**:
+      ```markdown
+      ## Applied Flowise Patterns
 
-      Each pattern includes: Symptom, Root Cause, Impact, Fix, and Prevention checklist.
-      The prevention checklists tell you EXACTLY what to check in your architecture design.
+      This architecture applies the following patterns from Context Codex:
 
-   3. **Read FLOWISE-STRUCTURE-AUTHORITY.md** (Validation checklist):
+      - **afv2-routing-pattern** (Primary): Intent classification with ConditionAgent
+      - **afv2-api-integration** (Tools): Custom HTTP tool integration
+      - **afv2-chaining-pattern** (Secondary): Sequential processing where needed
+
+      ### Pattern Compliance Checklist
+      - [ ] Start node specified with formTitle, formDescription, formInputTypes
+      - [ ] Router scenarios count equals agent count
+      - [ ] All agents have complete inputParams (15+ fields)
+      - [ ] Tool structure uses exact Flowise field names
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/FLOWISE-STRUCTURE-AUTHORITY.md
+
+   2. **Query Codex for critical issues to avoid**:
       ```
-      Detailed structural issues and validation checklist
+      # Get critical issues for prevention checklists:
+      codex_get_entry("flowise-missing-inputparams")       # CRITICAL
+      codex_get_entry("flowise-missing-start-node")        # CRITICAL
+      codex_get_entry("flowise-separate-configs")          # CRITICAL
+      codex_get_entry("flowise-incorrect-tool-structure")  # CRITICAL
+      codex_get_entry("flowise-disconnected-agents")       # HIGH
+      codex_get_entry("flowise-phantom-tools")             # HIGH
+      ```
+
+      Each issue entry includes: symptoms, root_cause, solution, code_fix, prevention.
+      Apply prevention checklists to architecture design.
+
+   3. **Read AGENT-NODE-TEMPLATE.json** (Node structure reference):
+      ```
+      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+      ```
+      Use as authoritative reference for inputParams array structure
 
    🚨🚨🚨 **MANDATORY REQUIREMENT: Standard Tools for ALL Flowise Agents** 🚨🚨🚨
 

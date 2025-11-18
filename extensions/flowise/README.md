@@ -514,6 +514,109 @@ extension_exists(extension_name: str) -> bool
     """Check if extension is available."""
 ```
 
+## Pattern System
+
+Flowise uses a pattern-driven workflow powered by the Context Codex knowledge base. This ensures consistent, validated workflow generation based on proven patterns.
+
+### Architecture
+
+```
+flowise-expertise.json → Bootstrap → Context Codex → Scout/Architect/Test queries
+                                           ↓
+                                    S3 Community Patterns
+```
+
+**Components**:
+
+1. **Pattern Library**: `extensions/flowise/patterns/flowise-expertise.json`
+   - 13 curated AFv2 workflow patterns
+   - 15 common issues and anti-patterns
+   - Structured JSON with full metadata
+
+2. **Bootstrap Script**: `scripts/bootstrap_flowise_patterns.py`
+   - Imports patterns into Context Codex
+   - Idempotent (safe to re-run)
+   - Run on installation or after pattern updates
+
+3. **Codex Integration**: Patterns available during builds
+   - Scout: Query patterns for architecture recommendations
+   - Architect: Reference patterns by ID in architecture.md
+   - Test: Validate workflows against pattern definitions
+
+### Usage
+
+#### Initial Setup
+
+```bash
+# Bootstrap Flowise patterns into Codex
+python3 scripts/bootstrap_flowise_patterns.py
+
+# Verify patterns loaded
+python3 -c "from context_foundry.codex import KnowledgeStore; \
+            store = KnowledgeStore(); \
+            print(f'Patterns: {len(store.search(\"flowise\", entry_type=\"pattern\"))}')"
+```
+
+#### During Builds
+
+Scout/Architect agents automatically query Codex for patterns:
+
+```python
+# Scout queries for relevant patterns
+codex_search("flowise routing pattern")
+codex_get_entry("afv2-chaining-pattern")
+
+# Architect references patterns in architecture.md
+"""
+## Applied Patterns
+- afv2-routing-pattern (Primary)
+- afv2-api-integration (Tools)
+"""
+```
+
+### Available Patterns
+
+**Workflow Patterns** (13):
+- `afv2-chaining-pattern` - Sequential processing
+- `afv2-parallel-pattern` - Multi-source research
+- `afv2-routing-pattern` - Intent classification
+- `afv2-iteration-pattern` - Quality refinement
+- `afv2-looping-pattern` - Validation retry
+- `afv2-hierarchy-pattern` - Task delegation
+- `afv2-batch-processing` - Array processing
+- `afv2-conditional-retry` - Score-based validation
+- `afv2-api-integration` - HTTP integration
+- `afv2-rag-pattern` - Document Q&A
+- `afv2-smart-calculator` - Cost optimization
+- `afv2-doc-qa-confidence` - Confidence routing
+- `afv2-data-pipeline-etl` - ETL validation
+
+**Common Issues** (15):
+- `flowise-missing-inputparams` - Agent nodes not editable (CRITICAL)
+- `flowise-missing-start-node` - No workflow entry point (CRITICAL)
+- `flowise-separate-configs` - External config files (CRITICAL)
+- `flowise-incorrect-tool-structure` - Tool import failures (CRITICAL)
+- See `patterns/flowise-expertise.json` for complete list
+
+### Testing Patterns
+
+```bash
+# Run pattern tests
+pytest extensions/flowise/tests/test_patterns.py -v
+
+# Run bootstrap integration tests
+pytest extensions/flowise/tests/test_bootstrap_integration.py -v
+```
+
+### Adding New Patterns
+
+1. Edit `extensions/flowise/patterns/flowise-expertise.json`
+2. Add pattern to `patterns` array with required fields
+3. Re-run bootstrap: `python3 scripts/bootstrap_flowise_patterns.py`
+4. Patterns immediately available in Codex
+
+See `docs/FLOWISE_PATTERN_UPGRADE_PLAN.md` for complete development guide.
+
 ## Troubleshooting
 
 ### Extension Not Loading
