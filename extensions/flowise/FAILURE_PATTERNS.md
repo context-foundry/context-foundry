@@ -22,7 +22,8 @@
 12. [Modular Prompt Refactor Breaking Tool Inclusion (Pattern #12)](#modular-prompt-refactor-breaking-tool-inclusion-pattern-12)
 13. [ConditionAgent Variable Format (Pattern #13)](#conditionagent-variable-format-pattern-13)
 14. [Node Type Mismatch (Pattern #14)](#node-type-mismatch-pattern-14)
-15. [Prevention Checklist](#prevention-checklist)
+15. [Missing Start Node (Pattern #15)](#missing-start-node-pattern-15)
+16. [Prevention Checklist](#prevention-checklist)
 
 ---
 
@@ -3137,6 +3138,323 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 ---
 
+## Missing Start Node (Pattern #15)
+
+### Symptom
+
+Workflow JSON file loads in Flowise but cannot execute. The workflow has 15-20 nodes including Router, specialized agents, tools, and HIL gates, but **no Start node**. Users cannot submit input to the workflow.
+
+**Visual Indicators**:
+- Workflow appears in Flowise UI with all nodes visible
+- No entry point/intake form visible
+- First node is ConditionAgent (Router) instead of Start node
+- Workflow cannot be triggered or tested
+
+**Example Failed Structure**:
+```json
+{
+  "nodes": [
+    {
+      "id": "conditionAgentAgentflow_0",  // ❌ WRONG: Router as first node
+      "type": "conditionAgent",
+      "data": {
+        "type": "ConditionAgent",
+        ...
+      }
+    },
+    // ... 19 more nodes (agents, tools, HIL)
+    // ❌ NO Start node anywhere
+  ],
+  "edges": [
+    // Router connects to agents, but nothing feeds into Router
+  ]
+}
+```
+
+**Expected Structure**:
+```json
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",  // ✅ CORRECT: Start node first
+      "type": "Start",
+      "data": {
+        "type": "Start",
+        "name": "startAgentflow",
+        "inputs": {
+          "formTitle": "Vehicle & Parking Management",
+          "formDescription": "Welcome...",
+          "formInputTypes": [...]
+        }
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0",  // Router second
+      ...
+    }
+  ]
+}
+```
+
+### Root Cause
+
+**Architect hallucinated existing implementation** and assumed Start node was already present, leading to:
+
+1. **File Existence Hallucination**: Architect incorrectly believed there was an "existing 2,195-line workflow" that just needed "validation and enhancement"
+2. **Start Node Omission**: Architect assumed Start node existed in this "existing implementation" and never specified it in architecture.md
+3. **Builder Faithfully Executed**: Builder correctly built ALL nodes Architect specified (Router + agents + tools + HIL) but had no Start node specification to work from
+4. **No Validation Caught It**: Test phase didn't validate Start node presence
+
+**Example from vehicle-parking-flow architecture.md**:
+```markdown
+This architecture defines a **validation and enhancement plan** for an
+**existing Flowise AgentFlow v2 workflow**...
+
+**Current Status**: Existing implementation found (2,195 lines) - requires
+Pattern #8 validation and remediation
+```
+
+**Reality**: Directory was empty. No existing file. Architect hallucinated.
+
+### Impact
+
+**Severity**: CRITICAL
+
+**Consequences**:
+- Workflow loads in Flowise (valid JSON structure)
+- Workflow **cannot execute** (no entry point)
+- Users cannot submit input (no intake form)
+- Router has no initial message to route
+- Wasted 30-40 minutes of build time
+- User confusion ("it loads but doesn't work")
+
+**Technical Impact**:
+- AgentFlow V2 spec violation (Start node mandatory)
+- No `formTitle`, `formDescription`, `formInputTypes` (intake form broken)
+- First edge missing (nothing connects TO the Router)
+- Workflow appears functional but is fundamentally broken
+
+### Fix
+
+**Immediate Fix** (manual JSON edit):
+
+Add Start node as first element in nodes array:
+
+```json
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "position": {"x": 100, "y": 100},
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Parking System Intake",
+        "version": 1.0,
+        "name": "startAgentflow",
+        "type": "Start",
+        "baseClasses": ["Start"],
+        "category": "Agent Flows",
+        "description": "Intake form for parking management requests",
+        "inputParams": [
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string",
+            "id": "startAgentflow_0-input-formTitle-string"
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string",
+            "rows": 3,
+            "id": "startAgentflow_0-input-formDescription-string"
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "type": "array",
+            "array": [
+              {
+                "label": "Label",
+                "name": "label",
+                "type": "string"
+              },
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {"label": "Text", "name": "text"},
+                  {"label": "Textarea", "name": "textarea"},
+                  {"label": "Select", "name": "select"},
+                  {"label": "Number", "name": "number"},
+                  {"label": "Checkbox", "name": "checkbox"}
+                ]
+              },
+              {
+                "label": "Options",
+                "name": "options",
+                "type": "string",
+                "optional": true
+              },
+              {
+                "label": "Required",
+                "name": "required",
+                "type": "boolean"
+              }
+            ],
+            "id": "startAgentflow_0-input-formInputTypes-array"
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "formTitle": "Vehicle & Parking Management",
+          "formDescription": "Register vehicles, request permits, book spots, check status",
+          "formInputTypes": [
+            {
+              "label": "Request Type",
+              "type": "select",
+              "options": "Register Vehicle|Request Permit|Renew Permit|Book Daily Spot|Check Waitlist|Visitor Permit|Compliance Check|View Reports",
+              "required": true
+            },
+            {
+              "label": "Additional Details",
+              "type": "textarea",
+              "required": false
+            }
+          ]
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output",
+            "name": "output",
+            "label": "Output",
+            "description": "Output",
+            "type": "Start"
+          }
+        ]
+      }
+    },
+    // ... existing nodes (Router, agents, etc.)
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0-input",
+      "type": "buttonedge",
+      "id": "startAgentflow_0-conditionAgentAgentflow_0"
+    },
+    // ... existing edges
+  ]
+}
+```
+
+### Prevention
+
+**During Architect Phase**:
+
+1. **VERIFY file existence** before assuming "existing implementation":
+   ```bash
+   ls -la *.json 2>&1
+   # If no files: BUILD FROM SCRATCH mode (MUST specify Start node)
+   # If files exist: Check for Start node before claiming "enhancement mode"
+   ```
+
+2. **ALWAYS specify Start node FIRST** in architecture.md:
+   ```markdown
+   ## Node Specifications
+
+   ### Node 0: Start Node (MANDATORY - FIRST NODE)
+   **Node ID**: startAgentflow_0
+   **Type**: Start
+   **Required Inputs**: formTitle, formDescription, formInputTypes
+   ```
+
+3. **Checklist before proceeding to Builder**:
+   - [ ] Start node specified in architecture
+   - [ ] Start node listed as Node 0 (first node)
+   - [ ] formTitle, formDescription, formInputTypes all defined
+   - [ ] Start node connects to Router or first agent
+
+**During Builder Phase**:
+
+1. **Read Start node specification** from architecture
+2. **Generate Start node FIRST** (index 0 in nodes array)
+3. **Verify Start node has all required inputs**
+4. **Add edge from Start → Router/FirstAgent**
+
+**During Test Phase**:
+
+1. **Validate Start node presence** (automated check):
+   ```bash
+   START_NODE_COUNT=$(jq '[.nodes[] | select(.data.type == "Start")] | length' workflow.json)
+   if [ "$START_NODE_COUNT" -eq 0 ]; then
+       echo "❌ CRITICAL: No Start node found"
+       exit 1
+   fi
+   ```
+
+2. **Validate Start node structure**:
+   - Has formTitle, formDescription, formInputTypes
+   - formInputTypes is an array
+   - Start node is connected (has outgoing edge)
+
+3. **Block build if Start node missing** - Do NOT proceed to deployment
+
+### Example: Working vs. Broken
+
+**✅ Working Flow** (conflict-of-interest-flow.json):
+```json
+{
+  "nodes": [
+    {"id": "startAgentflow_0", "type": "Start", ...},  // ← HAS Start node
+    {"id": "conditionAgentAgentflow_0", "type": "ConditionAgent", ...},
+    // ... 8 agent nodes
+  ]
+}
+```
+- 10 nodes total: 1 Start + 1 Router + 8 Agents
+- AgentFlow V2 compliant ✅
+- Works correctly in Flowise ✅
+
+**❌ Broken Flow** (vehicle-parking-flow.json):
+```json
+{
+  "nodes": [
+    {"id": "conditionAgentAgentflow_0", "type": "ConditionAgent", ...},  // ← NO Start node!
+    // ... 10 agents + 6 tools + 2 HIL gates
+  ]
+}
+```
+- 20 nodes total: 0 Start + 1 Router + 10 Agents + 6 Tools + 2 HIL + 1 DateTime
+- Missing Start node ❌
+- Loads but cannot execute ❌
+
+### Validation Rule
+
+**Rule**: Every AgentFlow V2 MUST have exactly 1 Start node
+
+**Check**:
+```bash
+jq '[.nodes[] | select(.data.type == "Start")] | length' workflow.json
+# Expected: 1
+# If 0: CRITICAL FAILURE
+# If >1: ERROR (duplicate Start nodes)
+```
+
+**Required Start Node Fields**:
+- `data.type`: "Start"
+- `data.name`: "startAgentflow"
+- `data.inputs.formTitle`: (string)
+- `data.inputs.formDescription`: (string)
+- `data.inputs.formInputTypes`: (array of form field objects)
+
+**Pattern ID**: missing-start-node-architect-hallucination
+
+---
+
 ## Lessons Learned
 
 1. **Extension activation is critical** - Without it, Builder has no guidance
@@ -3144,6 +3462,8 @@ This file shows the INCORRECT meta-description output that was generated before 
 3. **Explicit size requirements needed** - "Complete flow" is ambiguous, "1000+ lines" is concrete
 4. **Inline nodes are mandatory** - Flowise doesn't support external file references
 5. **Validation before completion** - Catch failures before they're deployed
+6. **Start node is non-negotiable** - AgentFlow V2 spec mandates it as entry point
+7. **File existence must be verified** - Never assume files exist without checking filesystem
 
 ---
 
@@ -3151,6 +3471,7 @@ This file shows the INCORRECT meta-description output that was generated before 
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1 | 2025-11-17 | Added "Missing Start Node" (Pattern #15) - CRITICAL failure where Architect hallucinated existing implementation and never specified Start node, resulting in workflow that loads but cannot execute. Added file existence verification, Start node validation, and prevention checklists. From vehicle-parking-flow build |
 | 2.0 | 2025-11-05 | Added "Node Type Mismatch" (Pattern #14) - CRITICAL node type errors causing missing icons and sync problems in Flowise UI. Start node used "StartFlow" instead of "Start", ConditionAgent used "ConditionNode", DirectReply missing inputParams. From bcm-compliance-assessment build |
 | 1.9 | 2025-11-05 | Added "Modular Prompt Refactor Breaking Tool Inclusion" (Pattern #12) - CRITICAL REGRESSION after modular prompt refactor. Agents missing currentDateTime + searXNG tools and credential configuration. From travel-booking-expense-flow build |
 | 1.8 | 2025-11-05 | Added "HIL Node Missing Required inputParams Fields" (Pattern #11) - Missing humanInputModel and humanInputModelPrompt causes blank screen when node is clicked. From travel-booking-expense-flow build |

@@ -888,6 +888,67 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Note all recommendations
    - **Note any flagged risks from pattern library**
 
+1a. **CRITICAL: Verify File Existence (Prevent Hallucination)**
+
+   🚨 **BEFORE making assumptions about existing implementations, VERIFY files exist:**
+
+   **For Flowise projects** (if CONFIGURATION shows flowise_flow: True):
+   ```bash
+   # Check if workflow JSON already exists
+   ls -la *.json 2>&1
+
+   # If NO JSON files found:
+   # - This is a NEW project building from scratch
+   # - DO NOT assume "existing implementation"
+   # - MUST design ALL nodes including Start node
+
+   # If JSON files found:
+   # - List file details (size, name)
+   # - Read first 100 lines to verify it's a Flowise workflow
+   # - Check for Start node: grep -c '"type": "Start"' *.json
+   # - Only then can you assume "enhancement" mode
+   ```
+
+   **Common Hallucination Symptoms**:
+   - ❌ "Existing implementation found (2,195 lines)" when starting in empty directory
+   - ❌ "Validation and enhancement plan" for brand new projects
+   - ❌ Assuming Start node exists without verification
+   - ❌ Referencing "current implementation" on first build
+
+   **Correct Determination**:
+   ```
+   IF no workflow JSON files exist:
+       mode = "BUILD FROM SCRATCH"
+       → MUST specify ALL nodes including Start node
+       → Architecture is prescriptive (tells Builder what to create)
+
+   IF workflow JSON exists AND has Start node:
+       mode = "ENHANCEMENT"
+       → Focus on adding/modifying specific nodes
+       → Architecture is descriptive (documents existing + changes)
+
+   IF workflow JSON exists BUT missing Start node:
+       mode = "FIX BROKEN WORKFLOW"
+       → MUST add Start node specification
+       → Architecture fixes structural issues
+   ```
+
+   **Verification Command** (MANDATORY for Flowise projects):
+   ```bash
+   if ls *.json 1>/dev/null 2>&1; then
+       echo "✅ JSON file(s) found - checking structure..."
+       START_NODE_COUNT=$(grep -c '"type": "Start"' *.json)
+       if [ "$START_NODE_COUNT" -eq 0 ]; then
+           echo "⚠️  WARNING: JSON exists but NO Start node - FIX mode"
+       else
+           echo "✅ Start node found - ENHANCEMENT mode OK"
+       fi
+   else
+       echo "📝 No JSON files - BUILD FROM SCRATCH mode"
+       echo "MUST specify Start node in architecture"
+   fi
+   ```
+
 2. Apply Architectural Patterns (Self-Learning System - GLOBAL PATTERNS):
 
    **Read GLOBAL pattern files** using MCP tools:
@@ -1069,6 +1130,82 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - Prompt templates for each agent (system prompts)
    - Testing plan (JSON validation, Flowise import testing)
    - File structure (SINGLE workflow.json + README.md + INTEGRATION_GUIDE.md)
+
+   🚨🚨🚨 **CRITICAL: START NODE MANDATORY FOR AGENTFLOW V2** 🚨🚨🚨
+
+   **EVERY AgentFlow V2 workflow MUST begin with a Start node.**
+
+   **Architect MUST specify in architecture.md**:
+
+   ```markdown
+   ## Node Specifications
+
+   ### Node 0: Start Node (MANDATORY - FIRST NODE)
+   **Node ID**: startAgentflow_0
+   **Type**: Start
+   **Purpose**: Intake form for user input - entry point to workflow
+
+   **Required Input Parameters**:
+   - `formTitle` (string): Workflow title shown to users
+   - `formDescription` (string): Instructions/welcome message for users
+   - `formInputTypes` (array): Form field definitions
+     * Each field has: label, type (text/textarea/select/number/checkbox), options (if select), required (boolean)
+
+   **Example formInputTypes**:
+   ```json
+   [
+     {
+       "label": "Request Type",
+       "type": "select",
+       "options": "Register Vehicle|Request Permit|Book Spot|Check Status",
+       "required": true
+     },
+     {
+       "label": "Additional Details",
+       "type": "textarea",
+       "required": false
+     }
+   ]
+   ```
+
+   **Output Anchor**:
+   - Connects to Router Agent (conditionAgentAgentflow_0) or first processing agent
+
+   **Position**: First node in nodes array (index 0)
+
+   ---
+
+   ### Node 1: Router Agent / Condition Agent
+   (Continue with router specification...)
+   ```
+
+   **Critical Validation Checklist**:
+   - [ ] Start node specified as Node 0 (FIRST in architecture)
+   - [ ] Start node has type: "Start"
+   - [ ] Start node has all 3 required inputs (formTitle, formDescription, formInputTypes)
+   - [ ] Start node output connects to Router or first agent
+   - [ ] formInputTypes array is properly defined with field objects
+   - [ ] NO workflow begins with Router/Agent/Tool directly
+
+   **Common Mistakes to Avoid**:
+   ❌ Starting workflow with conditionAgentAgentflow_0 (Router) as first node
+   ❌ Assuming Start node exists from "previous implementation" without verifying
+   ❌ Omitting formInputTypes (breaks Flowise UI form rendering)
+   ❌ Using wrong node type ("Agent" instead of "Start")
+
+   ✅ **CORRECT FLOW**: Start → Router → Specialized Agents
+
+   **Why This Matters**:
+   - Start node provides the intake form UI in Flowise
+   - Without Start node, users cannot submit input to workflow
+   - Router has no initial message to route
+   - Workflow cannot be triggered from Flowise interface
+   - File may load but workflow will not execute
+
+   **Verification Before Proceeding to Builder**:
+   1. Check architecture.md contains "### Node 0: Start Node" section
+   2. Verify formTitle, formDescription, formInputTypes are all defined
+   3. Confirm Start node is listed FIRST before Router/other agents
 
    **ELSE (STANDARD APPLICATION):**
 
@@ -2064,6 +2201,135 @@ VALIDATION_SCRIPT
 
    **IF validation PASSES (exit code 0)**:
    - ✅ Log: "Standard tools validation passed"
+   - ✅ Proceed to Start node validation
+
+   🚨 **FLOWISE PROJECTS: Start Node Validation (MANDATORY)** 🚨
+
+   **CRITICAL: Every AgentFlow V2 must have exactly 1 Start node**
+
+   ```bash
+   # Validate Start node presence and structure
+   cat > /tmp/validate_start_node.sh << 'VALIDATION_SCRIPT'
+#!/bin/bash
+set -e
+
+WORKFLOW_FILE=$(ls *.json 2>/dev/null | head -1)
+
+if [ -z "$WORKFLOW_FILE" ]; then
+    echo "❌ FATAL: No workflow JSON file found"
+    exit 1
+fi
+
+echo "🔍 Validating Start node in $WORKFLOW_FILE..."
+
+# Check 1: Start node exists
+START_NODE_COUNT=$(jq '[.nodes[] | select(.data.type == "Start")] | length' "$WORKFLOW_FILE")
+
+if [ "$START_NODE_COUNT" -eq 0 ]; then
+    echo ""
+    echo "❌ CRITICAL FAILURE: No Start node found"
+    echo ""
+    echo "AgentFlow V2 REQUIRES exactly 1 Start node as workflow entry point."
+    echo ""
+    echo "Expected structure:"
+    echo '  {'
+    echo '    "id": "startAgentflow_0",'
+    echo '    "data": {'
+    echo '      "type": "Start",'
+    echo '      "name": "startAgentflow",'
+    echo '      "inputs": {'
+    echo '        "formTitle": "...",'
+    echo '        "formDescription": "...",'
+    echo '        "formInputTypes": [...]'
+    echo '      }'
+    echo '    }'
+    echo '  }'
+    echo ""
+    echo "Fix: Add Start node specification to architecture.md"
+    echo "See: /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md"
+    exit 1
+fi
+
+if [ "$START_NODE_COUNT" -gt 1 ]; then
+    echo "❌ ERROR: Multiple Start nodes found ($START_NODE_COUNT)"
+    echo "AgentFlow V2 requires exactly 1 Start node"
+    exit 1
+fi
+
+echo "✅ Start node count: 1 (correct)"
+
+# Check 2: Start node has required inputs
+START_NODE_HAS_FORM=$(jq -e '
+    .nodes[] |
+    select(.data.type == "Start") |
+    .data.inputs |
+    (has("formTitle") and has("formDescription") and has("formInputTypes"))
+' "$WORKFLOW_FILE" >/dev/null 2>&1 && echo "true" || echo "false")
+
+if [ "$START_NODE_HAS_FORM" != "true" ]; then
+    echo ""
+    echo "❌ ERROR: Start node missing required form inputs"
+    echo ""
+    echo "Required inputs:"
+    echo "  - formTitle (string)"
+    echo "  - formDescription (string)"
+    echo "  - formInputTypes (array)"
+    echo ""
+    echo "Current Start node structure:"
+    jq '.nodes[] | select(.data.type == "Start") | .data.inputs' "$WORKFLOW_FILE"
+    exit 1
+fi
+
+echo "✅ Start node has required inputs (formTitle, formDescription, formInputTypes)"
+
+# Check 3: formInputTypes is an array
+FORM_INPUTS_IS_ARRAY=$(jq -e '
+    .nodes[] |
+    select(.data.type == "Start") |
+    .data.inputs.formInputTypes |
+    type == "array"
+' "$WORKFLOW_FILE" >/dev/null 2>&1 && echo "true" || echo "false")
+
+if [ "$FORM_INPUTS_IS_ARRAY" != "true" ]; then
+    echo "❌ ERROR: formInputTypes must be an array"
+    exit 1
+fi
+
+echo "✅ formInputTypes is properly formatted as array"
+
+# Check 4: Start node is connected (has outgoing edges)
+START_NODE_ID=$(jq -r '.nodes[] | select(.data.type == "Start") | .id' "$WORKFLOW_FILE")
+START_NODE_CONNECTED=$(jq -e --arg id "$START_NODE_ID" '
+    .edges[] |
+    select(.source == $id)
+' "$WORKFLOW_FILE" >/dev/null 2>&1 && echo "true" || echo "false")
+
+if [ "$START_NODE_CONNECTED" != "true" ]; then
+    echo "⚠️  WARNING: Start node is not connected to any other nodes"
+    echo "Start node should connect to Router or first processing agent"
+fi
+
+echo ""
+echo "✅✅✅ START NODE VALIDATION PASSED ✅✅✅"
+echo ""
+exit 0
+VALIDATION_SCRIPT
+
+   chmod +x /tmp/validate_start_node.sh
+   /tmp/validate_start_node.sh
+
+   START_NODE_EXIT_CODE=$?
+   ```
+
+   **IF Start node validation FAILS (exit code 1)**:
+   - ❌ **CRITICAL: Build BLOCKED - Missing Start node**
+   - Start node is MANDATORY for AgentFlow V2
+   - Workflow will load in Flowise but CANNOT execute
+   - Return to Builder phase to add Start node
+   - **Do NOT proceed to other validations**
+
+   **IF Start node validation PASSES (exit code 0)**:
+   - ✅ Log: "Start node validation passed"
    - ✅ Proceed to comprehensive pattern-based validation
 
    🚨 **FLOWISE PROJECTS: Comprehensive Pattern-Based Validation** 🚨
