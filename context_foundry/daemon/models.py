@@ -20,6 +20,12 @@ class JobStatus(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
+
+    @classmethod
+    def terminal_states(cls) -> set:
+        """Return set of terminal states that release locks/capacity"""
+        return {cls.SUCCEEDED, cls.FAILED, cls.CANCELLED, cls.TIMED_OUT}
 
 
 class JobType(str, Enum):
@@ -236,6 +242,103 @@ class LogEntry:
     def to_json(self) -> str:
         """Convert to JSON string"""
         return json.dumps(self.to_dict())
+
+
+@dataclass
+class AgentTracker:
+    """
+    Tracks active agents/tasks for a job.
+
+    Implements the agent counter pattern: increment when agent spawns,
+    decrement when agent completes. Job is complete when counter reaches zero.
+    """
+
+    job_id: str
+    active_count: int = 0
+    total_spawned: int = 0
+    total_completed: int = 0
+    total_failed: int = 0
+    last_activity: datetime = field(default_factory=datetime.now)
+    agent_ids: list = field(default_factory=list)  # Track individual agent IDs
+
+    def register_agent(self, agent_id: str) -> int:
+        """
+        Register a new agent as active.
+
+        Args:
+            agent_id: Unique identifier for the agent
+
+        Returns:
+            New active count
+        """
+        self.active_count += 1
+        self.total_spawned += 1
+        self.agent_ids.append(agent_id)
+        self.last_activity = datetime.now()
+        return self.active_count
+
+    def complete_agent(self, agent_id: str, success: bool = True) -> int:
+        """
+        Mark an agent as completed.
+
+        Args:
+            agent_id: Agent identifier
+            success: Whether agent completed successfully
+
+        Returns:
+            New active count
+        """
+        self.active_count = max(0, self.active_count - 1)
+        if success:
+            self.total_completed += 1
+        else:
+            self.total_failed += 1
+
+        if agent_id in self.agent_ids:
+            self.agent_ids.remove(agent_id)
+
+        self.last_activity = datetime.now()
+        return self.active_count
+
+    def is_complete(self) -> bool:
+        """Check if all agents have completed (counter is zero)"""
+        return self.active_count == 0 and self.total_spawned > 0
+
+    def is_stalled(self, stall_threshold_seconds: float = 300) -> bool:
+        """
+        Check if job appears stalled (no activity for threshold).
+
+        Args:
+            stall_threshold_seconds: Time without activity to consider stalled
+
+        Returns:
+            True if stalled
+        """
+        if self.active_count == 0:
+            return False
+
+        elapsed = (datetime.now() - self.last_activity).total_seconds()
+        return elapsed > stall_threshold_seconds
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization"""
+        return {
+            "job_id": self.job_id,
+            "active_count": self.active_count,
+            "total_spawned": self.total_spawned,
+            "total_completed": self.total_completed,
+            "total_failed": self.total_failed,
+            "last_activity": self.last_activity.isoformat(),
+            "agent_ids": self.agent_ids.copy(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentTracker":
+        """Create from dictionary"""
+        data = data.copy()
+        if "last_activity" in data:
+            data["last_activity"] = datetime.fromisoformat(data["last_activity"])
+        return cls(**data)
 
 
 # Type aliases for convenience

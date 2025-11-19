@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Callable
 from queue import Queue, Empty
 
-from .models import Job, JobStatus, JobType, LogEntry
+from .models import Job, JobStatus, JobType, LogEntry, AgentTracker
 from .config import Config
 from .store import Store
 from .workdir_lock import WorkDirLockManager
@@ -66,7 +66,105 @@ class JobManager:
         # Working directory lock manager
         self._workdir_lock = WorkDirLockManager()
 
+        # Agent tracking per job (job_id -> AgentTracker)
+        self._agent_trackers: Dict[str, AgentTracker] = {}
+        self._agent_trackers_lock = threading.Lock()
+
         logger.info("JobManager initialized")
+
+    # ===== Agent Tracking =====
+
+    def register_agent(self, job_id: str, agent_id: str) -> int:
+        """
+        Register a new agent as active for a job.
+
+        Args:
+            job_id: Job ID
+            agent_id: Unique identifier for the agent
+
+        Returns:
+            New active count
+        """
+        with self._agent_trackers_lock:
+            if job_id not in self._agent_trackers:
+                self._agent_trackers[job_id] = AgentTracker(job_id=job_id)
+
+            count = self._agent_trackers[job_id].register_agent(agent_id)
+
+            logger.debug(
+                f"Registered agent {agent_id} for job {job_id}, active count: {count}"
+            )
+
+            # Emit log
+            log = LogEntry.create(
+                job_id=job_id,
+                level="DEBUG",
+                message=f"Agent registered: {agent_id} (active: {count})",
+                source="job_manager",
+            )
+            self.store.save_log(log)
+
+            return count
+
+    def complete_agent(self, job_id: str, agent_id: str, success: bool = True) -> int:
+        """
+        Mark an agent as completed for a job.
+
+        Args:
+            job_id: Job ID
+            agent_id: Agent identifier
+            success: Whether agent completed successfully
+
+        Returns:
+            New active count
+        """
+        with self._agent_trackers_lock:
+            if job_id not in self._agent_trackers:
+                logger.warning(
+                    f"No tracker for job {job_id}, ignoring agent completion"
+                )
+                return 0
+
+            tracker = self._agent_trackers[job_id]
+            count = tracker.complete_agent(agent_id, success)
+
+            status_str = "succeeded" if success else "failed"
+            logger.debug(
+                f"Agent {agent_id} {status_str} for job {job_id}, active count: {count}"
+            )
+
+            # Emit log
+            log = LogEntry.create(
+                job_id=job_id,
+                level="DEBUG" if success else "WARNING",
+                message=f"Agent {status_str}: {agent_id} (remaining: {count})",
+                source="job_manager",
+            )
+            self.store.save_log(log)
+
+            return count
+
+    def get_agent_tracker(self, job_id: str) -> Optional[AgentTracker]:
+        """Get agent tracker for a job"""
+        with self._agent_trackers_lock:
+            return self._agent_trackers.get(job_id)
+
+    def is_job_stalled(self, job_id: str, stall_threshold_seconds: float = 300) -> bool:
+        """
+        Check if job appears stalled (no agent activity for threshold).
+
+        Args:
+            job_id: Job ID
+            stall_threshold_seconds: Time without activity to consider stalled
+
+        Returns:
+            True if stalled
+        """
+        with self._agent_trackers_lock:
+            tracker = self._agent_trackers.get(job_id)
+            if not tracker:
+                return False
+            return tracker.is_stalled(stall_threshold_seconds)
 
     # ===== Job Submission =====
 
@@ -180,7 +278,7 @@ class JobManager:
             return False
 
         # Can only cancel queued or running jobs
-        if job.status in [JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED]:
+        if job.status in JobStatus.terminal_states():
             logger.warning(
                 f"Cannot cancel job {job_id}: already in terminal state {job.status}"
             )
@@ -530,11 +628,30 @@ class JobManager:
                 # Give the runner thread a moment to unwind after termination
                 thread.join(timeout=5)
 
-                # Note: Can't forcefully kill the thread, but it's daemon so it will die when process exits
-                # The worker will be freed to process other jobs
-                raise RuntimeError(
-                    f"Job execution exceeded timeout of {timeout_minutes} minutes"
+                # Mark as TIMED_OUT instead of FAILED
+                self.store.update_job_status(
+                    job_id,
+                    JobStatus.TIMED_OUT,
+                    completed_at=datetime.now(),
+                    error=f"Job exceeded timeout of {timeout_minutes} minutes",
                 )
+
+                # Emit log
+                log = LogEntry.create(
+                    job_id=job_id,
+                    level="ERROR",
+                    message=f"Job timed out after {timeout_minutes} minutes",
+                    source="job_manager",
+                )
+                self.store.save_log(log)
+
+                logger.error(f"Job {job_id} timed out after {timeout_minutes} minutes")
+
+                # Clean up agent tracker
+                with self._agent_trackers_lock:
+                    self._agent_trackers.pop(job_id, None)
+
+                return  # Exit without retry
 
             # Check if error occurred
             if not error_queue.empty():
@@ -630,6 +747,10 @@ class JobManager:
             # Release working directory lock
             if working_dir and lock_acquired:
                 self._workdir_lock.release(working_dir, job_id)
+
+            # Clean up agent tracker
+            with self._agent_trackers_lock:
+                self._agent_trackers.pop(job_id, None)
 
             # Remove from running jobs
             with self._running_jobs_lock:
