@@ -34,24 +34,26 @@ PHASE TRACKING TEMPLATE (BAML)
 **REQUIRED**: Use BAML for ALL phase updates:
 
 ```bash
-# Phase START
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Scout" \
   "researching" \
   "Analyzing requirements and researching best practices" \
   --session-id "{project_name}" \
   --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 
-# Phase END
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Scout" \
   "completed" \
   "Research complete" \
   --session-id "{project_name}" \
   --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
+
+**NOTE**: Phase tracking is optional. The daemon tracks phases independently. If use_baml.py is not found, Scout should continue with its primary task of creating the scout-report.md.
 
 ═══════════════════════════════════════════════════════════
 SCOUT PHASE INSTRUCTIONS
@@ -100,6 +102,37 @@ If CONFIGURATION shows `flowise_flow: true`:
 ❌ Backend APIs (Express, FastAPI)
 ❌ Databases or ORMs
 ❌ Traditional full-stack patterns
+
+**MANDATORY: Use Pre-queried Context Codex Results**
+
+Context Codex patterns and issues have been pre-queried and injected into your task description
+(look for the "## Context Codex Research Results (Pre-queried)" section).
+
+1. **Use the pre-queried patterns**: The task includes Codex results with pattern IDs like:
+   - `pat-agentflow-v22-routing-pattern-*` - AgentFlow v2.2 routing
+   - `pat-flowise-conditionagent-*` - ConditionAgent template
+   - `iss-flowise-agentflow-v22-*` - Node type mismatch issues
+
+2. **Reference these pattern IDs** in your scout-report.md under "Context Codex Research" section:
+   ```markdown
+   ## Context Codex Research
+
+   **Patterns Applied:**
+   - pat-agentflow-v22-routing-pattern-372 (AgentFlow v2.2 Routing)
+   - pat-flowise-conditionagent-templat-327 (ConditionAgent Template)
+
+   **Anti-patterns to Avoid:**
+   - iss-flowise-agentflow-v22-wrong-852 (Wrong node type)
+   ```
+
+3. **Critical Flowise patterns to apply**:
+   - All nodes must use `"type": "agentFlow"` (NOT "customNode")
+   - Use `agentModel`, `agentStateUpdates` (NOT `model`, `stateUpdates`)
+   - Include ConditionAgent for routing patterns
+   - Reference templates from `extensions/flowise/prompts/*.json`
+
+4. **PhaseValidator requires** at least two Codex references in scout-report.md.
+   Copy the pattern IDs from the pre-queried results into your report.
 
 **Step 2: Research Task Requirements**
 

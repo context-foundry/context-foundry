@@ -31,10 +31,11 @@ TEST PHASE INSTRUCTIONS
 
 **PHASE TRACKING (START):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Test" "testing" "Running test suite" \
   --session-id "{project_name}" --iteration {ITERATION} \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
 **Step 1: Read Test Plan**
@@ -201,10 +202,11 @@ The following reusable components were identified and saved for future projects:
 
 **PHASE TRACKING (COMPLETE):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Test" "completed" "Testing complete" \
   --session-id "{project_name}" --iteration {ITERATION} \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
 ═══════════════════════════════════════════════════════════

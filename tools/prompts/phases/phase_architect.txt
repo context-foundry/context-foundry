@@ -32,10 +32,11 @@ ARCHITECT PHASE INSTRUCTIONS
 
 **PHASE TRACKING (START):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Architect" "designing" "Creating system architecture" \
   --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
 **Step 1: Read Scout Report**
@@ -81,6 +82,10 @@ Create `.context-foundry/architecture.md`:
 
 ## Module Specifications
 
+**⚠️ FLOWISE PROJECTS**: If Scout report mentions "Flowise" or "AgentFlow",
+use the Flowise module format from the FLOWISE AGENTFLOW v2.2 REQUIREMENTS
+section below with explicit template paths (e.g., `extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json`)
+
 ### Module: {Name}
 **Responsibility**: {what it does}
 **Key Files**: {list}
@@ -119,11 +124,105 @@ Create `.context-foundry/architecture.md`:
 
 **PHASE TRACKING (COMPLETE):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Architect" "completed" "Architecture design complete" \
   --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
+
+═══════════════════════════════════════════════════════════
+🔧 FLOWISE AGENTFLOW v2.2 REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+**CRITICAL: When building Flowise AgentFlow v2 workflows:**
+
+The Builder MUST use the template JSON files in `extensions/flowise/prompts/`.
+Your architecture.md MUST explicitly reference these templates.
+
+**Required Template References:**
+
+For each node in the architecture, specify:
+```markdown
+### Module: {Node Name}
+**Node Type**: {type} (e.g., Agent, ConditionAgent, Start)
+**Template**: extensions/flowise/prompts/{TEMPLATE-NAME}.json
+**Key Configuration**: {what to customize}
+```
+
+**Available Templates:**
+- `START-NODE-TEMPLATE.json` - Entry point with startInputType
+- `AGENT-NODE-TEMPLATE.json` - Agent with agentModel, agentTools, agentStateUpdates
+- `CONDITIONAGENT-NODE-TEMPLATE.json` - LLM-based classifier/router
+- `CONDITION-NODE-TEMPLATE.json` - Deterministic if/else
+- `RETRIEVER-NODE-TEMPLATE.json` - RAG vector retrieval
+- `LLM-NODE-TEMPLATE.json` - Simple LLM chain
+- `DIRECT-REPLY-NODE-TEMPLATE.json` - Output to user
+- `TOOL-NODE-TEMPLATE.json` - Tool configuration
+
+**AgentFlow v2.2 Schema Requirements:**
+
+1. **Node Structure**: All nodes MUST use:
+   - `"type": "agentFlow"` (NOT "customNode")
+   - `"version": 2.2` for agents
+   - Proper data.name (e.g., "agentAgentflow", "conditionAgentAgentflow")
+
+2. **Agent Fields** (NOT generic names):
+   - `agentModel` (NOT "model")
+   - `agentSystemMessage` or `agentMessages` (NOT "systemPrompt")
+   - `agentTools` (NOT "tools")
+   - `agentStateUpdates` (NOT "stateUpdates")
+   - `agentEnableMemory` (NOT "enableMemory")
+
+3. **ConditionAgent for Routing**:
+   When Scout recommends routing pattern, use ConditionAgent:
+   - `conditionAgentModel`
+   - `conditionAgentInstructions`
+   - `conditionAgentInput`
+   - `conditionAgentScenarios` (array of scenario descriptions)
+   - Each scenario creates an output anchor
+
+4. **State Management**:
+   Every agent should include agentStateUpdates:
+   ```json
+   "agentStateUpdates": [
+     {"key": "routing.category", "value": "{{ classification }}"},
+     {"key": "agent.response", "value": "{{ agentResponse }}"}
+   ]
+   ```
+
+**Example Architecture Section for Flowise:**
+
+```markdown
+### Module: Intent Classifier (classifier_0)
+**Node Type**: ConditionAgent
+**Template**: extensions/flowise/prompts/CONDITIONAGENT-NODE-TEMPLATE.json
+**Responsibility**: Classify user query and route to specialist agents
+**Key Configuration**:
+- conditionAgentModel: chatAnthropic (claude-sonnet)
+- conditionAgentInstructions: Classification logic for {N} categories
+- conditionAgentScenarios: [{scenario 1}, {scenario 2}, ...]
+**Output Anchors**: One per scenario, connected to specialist agents
+**State Updates**: routing.category = selected scenario
+
+### Module: Specialist Agent (agent_specialist_0)
+**Node Type**: Agent
+**Template**: extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+**Responsibility**: Handle specific category queries
+**Key Configuration**:
+- agentModel: chatAnthropic
+- agentMessages: Domain-specific system prompt
+- agentTools: [currentDateTime, searXNG]
+- agentEnableMemory: true
+- agentStateUpdates: Store response for synthesizer
+```
+
+**Anti-Patterns to Prevent:**
+- ⚠️ Using "customNode" type (workflow won't function)
+- ⚠️ Using generic field names (model, systemPrompt)
+- ⚠️ Missing agentStateUpdates (no downstream context)
+- ⚠️ Using Condition instead of ConditionAgent for LLM routing
+- ⚠️ Not referencing templates (Builder invents wrong schema)
 
 ═══════════════════════════════════════════════════════════
 🔄 FIX ITERATION MODE (Test Failures)

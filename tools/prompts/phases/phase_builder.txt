@@ -33,10 +33,11 @@ BUILDER PHASE INSTRUCTIONS
 
 **PHASE TRACKING (START):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Builder" "building" "Implementing system" \
   --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
 **Step 1: Read Architecture**
@@ -95,10 +96,11 @@ If you completed all tasks, create:
 
 **PHASE TRACKING (COMPLETE):**
 ```bash
+# Phase tracking is optional - ignore if script not found
 python3 tools/use_baml.py update-phase \
   "Builder" "completed" "Implementation complete" \
   --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json
+  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
 ═══════════════════════════════════════════════════════════
@@ -134,6 +136,233 @@ You will receive an instruction like:
 - Keep changes minimal and focused
 
 ═══════════════════════════════════════════════════════════
+🔧 FLOWISE AGENTFLOW v2.2 BUILDER REQUIREMENTS
+═══════════════════════════════════════════════════════════
+
+**CRITICAL: When architecture.md specifies a Flowise AgentFlow workflow:**
+
+This section is MANDATORY for all Flowise builds. You MUST produce flows that match
+the quality and structure of the reference: `/Users/name/homelab/vehicle-parking-management.json`
+
+**AUTHORITATIVE REFERENCE**:
+Read `/Users/name/homelab/vehicle-parking-management.json` before building ANY Flowise workflow.
+This file demonstrates the EXACT structure your output must match.
+
+═══════════════════════════════════════════════════════════
+📋 MANDATORY NODE STRUCTURE
+═══════════════════════════════════════════════════════════
+
+**Every Agent node MUST include these complete structures:**
+
+### 1. Complete inputParams Array (~200 lines per agent)
+```json
+"inputParams": [
+  {
+    "label": "Model",
+    "name": "agentModel",
+    "type": "asyncOptions",
+    "loadMethod": "listModels",
+    "loadConfig": true
+  },
+  {
+    "label": "Messages",
+    "name": "agentMessages",
+    "type": "array",
+    "optional": true,
+    "acceptVariable": true,
+    "array": [
+      {
+        "label": "Role",
+        "name": "role",
+        "type": "options",
+        "options": [
+          {"label": "System", "name": "system"},
+          {"label": "Assistant", "name": "assistant"},
+          {"label": "Developer", "name": "developer"},
+          {"label": "User", "name": "user"}
+        ]
+      },
+      {
+        "label": "Content",
+        "name": "content",
+        "type": "string",
+        "acceptVariable": true,
+        "generateInstruction": true,
+        "rows": 4
+      }
+    ]
+  },
+  {
+    "label": "Tools",
+    "name": "agentTools",
+    "type": "array",
+    "optional": true,
+    "array": [
+      {
+        "label": "Tool",
+        "name": "agentSelectedTool",
+        "type": "asyncOptions",
+        "loadMethod": "listTools",
+        "loadConfig": true
+      },
+      {
+        "label": "Require Human Input",
+        "name": "agentSelectedToolRequiresHumanInput",
+        "type": "boolean",
+        "optional": true
+      }
+    ]
+  },
+  {
+    "label": "Enable Memory",
+    "name": "agentEnableMemory",
+    "type": "boolean",
+    "default": false,
+    "optional": true
+  },
+  {
+    "label": "Update State",
+    "name": "agentStateUpdates",
+    "type": "array",
+    "optional": true,
+    "array": [
+      {
+        "label": "Key",
+        "name": "key",
+        "type": "string",
+        "placeholder": "e.g., user.name"
+      },
+      {
+        "label": "Value",
+        "name": "value",
+        "type": "string",
+        "acceptVariable": true,
+        "placeholder": "e.g., {{ userName }}"
+      }
+    ]
+  }
+]
+```
+
+### 2. Proper agentMessages Format (Array with role/content)
+```json
+"agentMessages": [
+  {
+    "role": "system",
+    "content": "Your system prompt here..."
+  }
+]
+```
+
+⚠️ NEVER use simple string: `"agentMessages": "Your prompt"`
+
+### 3. Complete agentTools with agentSelectedToolConfig
+```json
+"agentTools": [
+  {
+    "agentSelectedTool": "currentDateTime",
+    "agentSelectedToolRequiresHumanInput": "",
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "currentDateTime"
+    }
+  },
+  {
+    "agentSelectedTool": "searXNG",
+    "agentSelectedToolRequiresHumanInput": "",
+    "agentSelectedToolConfig": {
+      "agentSelectedTool": "searXNG",
+      "apiBase": "https://s.llam.ai",
+      "toolName": "searxng-search"
+    }
+  }
+]
+```
+
+### 4. Node Metadata (Required for UI rendering)
+```json
+{
+  "id": "agent_example",
+  "type": "agentFlow",
+  "position": {"x": 350, "y": 280},
+  "data": {
+    "id": "agent_example",
+    "label": "Agent.Example",
+    "version": 2.2,
+    "name": "agentAgentflow",
+    "type": "Agent",
+    "color": "#4DD0E1",
+    "baseClasses": ["Agent"],
+    "category": "Agent Flows",
+    "description": "Description of what this agent does",
+    ...
+  },
+  "width": 220,
+  "height": 100,
+  "positionAbsolute": {"x": 350, "y": 280},
+  "selected": false,
+  "dragging": false
+}
+```
+
+### 5. agentModelConfig Structure
+```json
+"agentModelConfig": {
+  "credential": "Anthropic API Key",
+  "modelName": "claude-sonnet-4-5",
+  "temperature": 0.2,
+  "streaming": true,
+  "agentModel": "chatAnthropic"
+}
+```
+
+═══════════════════════════════════════════════════════════
+🎯 BUILDING PROCESS FOR FLOWISE
+═══════════════════════════════════════════════════════════
+
+1. **Read Reference First**:
+   - Read `/Users/name/homelab/vehicle-parking-management.json`
+   - Use this as your template for node structure
+
+2. **Read Templates**:
+   - Read template files from `extensions/flowise/prompts/*.json`
+   - Copy COMPLETE structures, not abbreviated versions
+
+3. **Build Each Node Type**:
+   - **Start Node**: Use startAgentflow template with inputParams
+   - **Agent Nodes**: Copy FULL inputParams array (~90 lines)
+   - **ConditionAgent**: Include scenarios array with display flags
+   - **DirectReply**: Include inputParams with display flag
+
+4. **Customize Only the inputs Object**:
+   - inputParams defines the SCHEMA (never modify)
+   - inputs holds the ACTUAL VALUES (customize this)
+
+5. **Validate Structure**:
+   - Each agent node should be 150-200 lines
+   - Total flow should be 1500-2500+ lines (NOT 400)
+   - All nodes have color, baseClasses, category, description
+
+═══════════════════════════════════════════════════════════
+❌ ANTI-PATTERNS (FAILURES)
+═══════════════════════════════════════════════════════════
+
+**These will cause Flowise import/rendering failures:**
+
+1. ❌ Missing inputParams array entirely
+2. ❌ agentMessages as string instead of array
+3. ❌ Missing agentSelectedToolConfig in tools
+4. ❌ No color/baseClasses/category/description
+5. ❌ Missing width/height/positionAbsolute
+6. ❌ Abbreviated node structures (<100 lines per agent)
+7. ❌ Generic field names (model instead of agentModel)
+8. ❌ Missing version field (must be 2.2 for agents)
+
+**Quick Validation**:
+- Generated flow < 1000 lines? WRONG - rebuild with complete structures
+- Agent nodes < 100 lines? WRONG - missing inputParams
+- No inputParams array? WRONG - nodes won't render in UI
+
+═══════════════════════════════════════════════════════════
 COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 
@@ -143,6 +372,15 @@ COMPLETION CRITERIA
 ✅ All source files implemented
 ✅ .done markers created (if parallel)
 ✅ Phase tracking updated
+
+**Flowise Build (additional):**
+✅ Reference flow read (/Users/name/homelab/vehicle-parking-management.json)
+✅ Templates read from extensions/flowise/prompts/
+✅ Complete inputParams for all nodes
+✅ agentMessages as array with role/content
+✅ agentToolConfig nested structure
+✅ Node metadata (color, baseClasses, category, description)
+✅ Flow is 1500+ lines (not abbreviated)
 
 **Fix Iteration:**
 ✅ architecture-fix-{N}.md read
