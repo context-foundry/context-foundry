@@ -66,7 +66,42 @@ def cmd_status(args):
         print("Daemon is not running")
         return 1
 
+    from .art import get_status_art
+
+    print(get_status_art())
     print(f"Daemon is running (PID {pid})")
+
+    # Check heartbeat health
+    heartbeat_file = config.data_dir / "daemon_heartbeat.txt"
+    try:
+        if heartbeat_file.exists():
+            lines = heartbeat_file.read_text().strip().split("\n")
+            if len(lines) >= 3:
+                last_heartbeat_time = int(lines[0])
+                iteration_count = int(lines[1])
+                heartbeat_pid = int(lines[2])
+
+                current_time = int(time.time())
+                age = current_time - last_heartbeat_time
+
+                if age < 10:
+                    health = "✓ Healthy"
+                elif age < 60:
+                    health = f"⚠ Warning (heartbeat {age}s old)"
+                else:
+                    health = f"✗ UNHEALTHY (heartbeat {age}s old - daemon may be hung)"
+
+                print(f"Health: {health}")
+                if args.verbose:
+                    print(f"  Last heartbeat: {age}s ago")
+                    print(f"  Loop iterations: {iteration_count}")
+                    print(f"  Heartbeat PID: {heartbeat_pid}")
+            else:
+                print("Health: ⚠ Warning (incomplete heartbeat file)")
+        else:
+            print("Health: ⚠ Warning (no heartbeat file - may be starting up)")
+    except Exception as e:
+        print(f"Health: ⚠ Warning (failed to read heartbeat: {e})")
 
     if args.verbose:
         # Get more detailed status

@@ -1,0 +1,440 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-11-19",
+  "description": "Workday Canvas Kit component patterns, design system principles, and best practices for building Workday-style React applications",
+
+  "project_detection": {
+    "keywords": [
+      "workday",
+      "canvas kit",
+      "canvas-kit",
+      "workday-style",
+      "workday canvas",
+      "@workday/canvas-kit-react"
+    ],
+    "project_type": "workday-canvas",
+    "framework": "react",
+    "description": "Detects projects that should use Workday Canvas Kit components"
+  },
+
+  "installation": {
+    "required_packages": [
+      "@workday/canvas-kit-react",
+      "@workday/canvas-tokens-web"
+    ],
+    "optional_packages": [
+      "@workday/canvas-kit-react-fonts",
+      "@workday/canvas-kit-styling",
+      "@workday/canvas-kit-preview-react",
+      "@workday/canvas-kit-labs-react"
+    ],
+    "peer_dependencies": {
+      "react": ">=16.8 <19",
+      "react-dom": ">=16.8 <19",
+      "@emotion/react": "^11.7.0",
+      "@emotion/styled": "^11.7.0",
+      "typescript": ">=5.0"
+    },
+    "install_command": "yarn add @workday/canvas-kit-react @workday/canvas-tokens-web @emotion/react @emotion/styled"
+  },
+
+  "setup": {
+    "global_setup": {
+      "description": "Configure Canvas Kit in your application root",
+      "steps": [
+        "Import CSS variables and base styles",
+        "Wrap app in CanvasProvider for theme management",
+        "Configure Emotion styling engine",
+        "Import Workday fonts (optional)"
+      ],
+      "example_code": {
+        "app_root": "import { CanvasProvider } from '@workday/canvas-kit-react';\nimport '@workday/canvas-tokens-web/css/base/_variables.css';\nimport '@workday/canvas-tokens-web/css/system/_variables.css';\n\nfunction App() {\n  return (\n    <CanvasProvider>\n      {/* Your app components */}\n    </CanvasProvider>\n  );\n}"
+      }
+    },
+    "theme_configuration": {
+      "description": "Canvas Kit supports theme customization via CanvasProvider",
+      "theme_object": {
+        "palette": "Customize colors (primary, error, success, etc.)",
+        "canvas": "Design tokens and spacing",
+        "breakpoints": "Responsive breakpoints"
+      }
+    }
+  },
+
+  "design_principles": {
+    "workday_style": {
+      "description": "Canvas Kit follows Workday's design language",
+      "key_principles": [
+        "Clean, professional enterprise UI",
+        "Accessibility-first (WCAG 2.1 AA compliant)",
+        "Consistent spacing and typography",
+        "Compound component patterns for flexibility",
+        "Mobile-responsive layouts"
+      ]
+    },
+    "component_patterns": {
+      "compound_components": "Components use compound pattern (e.g., Modal.Card, Modal.Heading)",
+      "controlled_uncontrolled": "Support both controlled and uncontrolled usage",
+      "model_driven": "Many components use model-driven architecture",
+      "hooks_first": "Custom hooks for component logic (useTheme, useModal, etc.)"
+    }
+  },
+
+  "component_library": {
+    "categories": {
+      "buttons": {
+        "description": "Various button styles for different actions",
+        "components": [
+          {
+            "name": "PrimaryButton",
+            "import": "@workday/canvas-kit-react/button",
+            "use_case": "Primary call-to-action",
+            "variants": ["Default", "Growing", "Large", "Small"],
+            "example": "<PrimaryButton>Submit</PrimaryButton>"
+          },
+          {
+            "name": "SecondaryButton",
+            "import": "@workday/canvas-kit-react/button",
+            "use_case": "Secondary actions",
+            "example": "<SecondaryButton>Cancel</SecondaryButton>"
+          },
+          {
+            "name": "TertiaryButton",
+            "import": "@workday/canvas-kit-react/button",
+            "use_case": "Tertiary/subtle actions",
+            "example": "<TertiaryButton>Learn More</TertiaryButton>"
+          },
+          {
+            "name": "DeleteButton",
+            "import": "@workday/canvas-kit-react/button",
+            "use_case": "Destructive actions",
+            "example": "<DeleteButton>Delete Item</DeleteButton>"
+          },
+          {
+            "name": "SegmentedControl",
+            "import": "@workday/canvas-kit-react/segmented-control",
+            "use_case": "Toggle between 2-5 options",
+            "pattern": "compound_component",
+            "example": "<SegmentedControl>\n  <SegmentedControl.Button>Option 1</SegmentedControl.Button>\n  <SegmentedControl.Button>Option 2</SegmentedControl.Button>\n</SegmentedControl>"
+          }
+        ]
+      },
+      "forms": {
+        "description": "Form inputs and validation",
+        "components": [
+          {
+            "name": "FormField",
+            "import": "@workday/canvas-kit-react/form-field",
+            "use_case": "Wrapper for form inputs with label, hint, error",
+            "pattern": "compound_component",
+            "subcomponents": ["FormField.Label", "FormField.Input", "FormField.Hint", "FormField.Field"],
+            "example": "<FormField>\n  <FormField.Label>Email</FormField.Label>\n  <FormField.Input type=\"email\" />\n  <FormField.Hint>Enter your work email</FormField.Hint>\n</FormField>"
+          },
+          {
+            "name": "TextInput",
+            "import": "@workday/canvas-kit-react/text-input",
+            "use_case": "Single-line text input",
+            "states": ["default", "error", "alert", "disabled"],
+            "example": "<TextInput placeholder=\"Enter name\" />"
+          },
+          {
+            "name": "TextArea",
+            "import": "@workday/canvas-kit-react/text-area",
+            "use_case": "Multi-line text input",
+            "example": "<TextArea placeholder=\"Enter description\" />"
+          },
+          {
+            "name": "Select",
+            "import": "@workday/canvas-kit-react/select",
+            "use_case": "Dropdown selection",
+            "pattern": "compound_component",
+            "example": "<Select>\n  <Select.Option value=\"1\">Option 1</Select.Option>\n  <Select.Option value=\"2\">Option 2</Select.Option>\n</Select>"
+          },
+          {
+            "name": "Checkbox",
+            "import": "@workday/canvas-kit-react/checkbox",
+            "use_case": "Binary choice or multi-select",
+            "states": ["checked", "unchecked", "indeterminate"],
+            "example": "<Checkbox label=\"I agree to terms\" />"
+          },
+          {
+            "name": "Radio",
+            "import": "@workday/canvas-kit-react/radio",
+            "use_case": "Single selection from group",
+            "pattern": "RadioGroup with Radio children",
+            "example": "<RadioGroup>\n  <Radio value=\"yes\" label=\"Yes\" />\n  <Radio value=\"no\" label=\"No\" />\n</RadioGroup>"
+          },
+          {
+            "name": "Switch",
+            "import": "@workday/canvas-kit-react/switch",
+            "use_case": "Toggle on/off state",
+            "example": "<Switch checked={isOn} onChange={setIsOn} />"
+          }
+        ]
+      },
+      "layout": {
+        "description": "Layout and spacing components",
+        "components": [
+          {
+            "name": "Box",
+            "import": "@workday/canvas-kit-react/layout",
+            "use_case": "Generic container with spacing props",
+            "props": ["padding", "margin", "backgroundColor", "borderRadius"],
+            "example": "<Box padding=\"m\" margin=\"s\">\n  <Content />\n</Box>"
+          },
+          {
+            "name": "Flex",
+            "import": "@workday/canvas-kit-react/layout",
+            "use_case": "Flexbox container",
+            "props": ["gap", "alignItems", "justifyContent", "flexDirection"],
+            "example": "<Flex gap=\"s\" alignItems=\"center\">\n  <Item1 />\n  <Item2 />\n</Flex>"
+          },
+          {
+            "name": "Grid",
+            "import": "@workday/canvas-kit-react/layout",
+            "use_case": "CSS Grid layout",
+            "props": ["gridTemplateColumns", "gridGap"],
+            "example": "<Grid gridTemplateColumns=\"repeat(3, 1fr)\" gridGap=\"m\">\n  <Item1 />\n  <Item2 />\n  <Item3 />\n</Grid>"
+          },
+          {
+            "name": "Stack",
+            "import": "@workday/canvas-kit-react/layout",
+            "use_case": "Vertical or horizontal spacing",
+            "props": ["spacing", "direction"],
+            "example": "<Stack spacing=\"m\">\n  <Child1 />\n  <Child2 />\n</Stack>"
+          }
+        ]
+      },
+      "popups": {
+        "description": "Modals, tooltips, popovers",
+        "components": [
+          {
+            "name": "Modal",
+            "import": "@workday/canvas-kit-react/modal",
+            "use_case": "Dialog overlays for focused tasks",
+            "pattern": "compound_component",
+            "subcomponents": [
+              "Modal.Card",
+              "Modal.Overlay",
+              "Modal.Target",
+              "Modal.CloseIcon",
+              "Modal.CloseButton",
+              "Modal.Heading",
+              "Modal.Body"
+            ],
+            "example": "<Modal>\n  <Modal.Target>\n    <PrimaryButton>Open Modal</PrimaryButton>\n  </Modal.Target>\n  <Modal.Overlay>\n    <Modal.Card>\n      <Modal.CloseIcon />\n      <Modal.Heading>Title</Modal.Heading>\n      <Modal.Body>\n        Content here\n      </Modal.Body>\n    </Modal.Card>\n  </Modal.Overlay>\n</Modal>"
+          },
+          {
+            "name": "Popup",
+            "import": "@workday/canvas-kit-react/popup",
+            "use_case": "Generic popup container (tooltips, popovers, dropdowns)",
+            "pattern": "compound_component",
+            "example": "<Popup>\n  <Popup.Target>\n    <button>Show Popup</button>\n  </Popup.Target>\n  <Popup.Popper>\n    <Popup.Card>\n      Popup content\n    </Popup.Card>\n  </Popup.Popper>\n</Popup>"
+          },
+          {
+            "name": "Tooltip",
+            "import": "@workday/canvas-kit-react/tooltip",
+            "use_case": "Contextual help text on hover",
+            "example": "<Tooltip title=\"Help text\">\n  <button>Hover me</button>\n</Tooltip>"
+          }
+        ]
+      },
+      "navigation": {
+        "description": "Navigation and menu components",
+        "components": [
+          {
+            "name": "Menu",
+            "import": "@workday/canvas-kit-react/menu",
+            "use_case": "Dropdown menus and context menus",
+            "pattern": "compound_component",
+            "subcomponents": ["Menu.Target", "Menu.Popper", "Menu.Card", "Menu.List", "Menu.Item"],
+            "example": "<Menu>\n  <Menu.Target>\n    <SecondaryButton>Menu</SecondaryButton>\n  </Menu.Target>\n  <Menu.Popper>\n    <Menu.Card>\n      <Menu.List>\n        <Menu.Item>Action 1</Menu.Item>\n        <Menu.Item>Action 2</Menu.Item>\n      </Menu.List>\n    </Menu.Card>\n  </Menu.Popper>\n</Menu>"
+          },
+          {
+            "name": "Tabs",
+            "import": "@workday/canvas-kit-react/tabs",
+            "use_case": "Tabbed navigation",
+            "pattern": "compound_component",
+            "example": "<Tabs>\n  <Tabs.List>\n    <Tabs.Item>Tab 1</Tabs.Item>\n    <Tabs.Item>Tab 2</Tabs.Item>\n  </Tabs.List>\n  <Tabs.Panel>Content 1</Tabs.Panel>\n  <Tabs.Panel>Content 2</Tabs.Panel>\n</Tabs>"
+          }
+        ]
+      },
+      "containers": {
+        "description": "Content containers and surfaces",
+        "components": [
+          {
+            "name": "Card",
+            "import": "@workday/canvas-kit-react/card",
+            "use_case": "Container for grouped content",
+            "variants": ["default", "depth1", "depth2"],
+            "example": "<Card>\n  <Card.Heading>Title</Card.Heading>\n  <Card.Body>\n    Content\n  </Card.Body>\n</Card>"
+          },
+          {
+            "name": "Table",
+            "import": "@workday/canvas-kit-react/table",
+            "use_case": "Data tables",
+            "features": ["sorting", "selection", "pagination"],
+            "example": "<Table>\n  <Table.Head>\n    <Table.Row>\n      <Table.Header>Column 1</Table.Header>\n    </Table.Row>\n  </Table.Head>\n  <Table.Body>\n    <Table.Row>\n      <Table.Cell>Data</Table.Cell>\n    </Table.Row>\n  </Table.Body>\n</Table>"
+          }
+        ]
+      },
+      "feedback": {
+        "description": "User feedback and status indicators",
+        "components": [
+          {
+            "name": "Toast",
+            "import": "@workday/canvas-kit-react/toast",
+            "use_case": "Temporary notifications",
+            "variants": ["success", "error", "info"],
+            "example": "<Toast onClose={handleClose}>\n  Success message\n</Toast>"
+          },
+          {
+            "name": "Banner",
+            "import": "@workday/canvas-kit-react/banner",
+            "use_case": "Persistent messages/alerts",
+            "variants": ["error", "alert", "success"],
+            "example": "<Banner variant=\"error\">\n  Error message\n</Banner>"
+          },
+          {
+            "name": "LoadingDots",
+            "import": "@workday/canvas-kit-react/loading-dots",
+            "use_case": "Loading indicators",
+            "example": "<LoadingDots />"
+          },
+          {
+            "name": "StatusIndicator",
+            "import": "@workday/canvas-kit-react/status-indicator",
+            "use_case": "Show status with color and label",
+            "variants": ["gray", "orange", "blue", "green", "red"],
+            "example": "<StatusIndicator variant=\"green\">\n  Active\n</StatusIndicator>"
+          }
+        ]
+      },
+      "icons": {
+        "description": "Icon components",
+        "components": [
+          {
+            "name": "SystemIcon",
+            "import": "@workday/canvas-kit-react/icon",
+            "use_case": "System UI icons",
+            "sizes": ["small", "medium", "large"],
+            "example": "<SystemIcon icon={xIcon} />"
+          },
+          {
+            "name": "AccentIcon",
+            "import": "@workday/canvas-kit-react/icon",
+            "use_case": "Colorful accent icons",
+            "example": "<AccentIcon icon={rocketIcon} />"
+          },
+          {
+            "name": "AppletIcon",
+            "import": "@workday/canvas-kit-react/icon",
+            "use_case": "App/module icons",
+            "example": "<AppletIcon icon={analyticsIcon} />"
+          }
+        ]
+      }
+    }
+  },
+
+  "common_patterns": {
+    "branching_workflows": {
+      "description": "Multi-step forms with conditional branches (perfect for COI apps)",
+      "pattern": "State machine with conditional rendering",
+      "components_used": ["FormField", "Radio", "Checkbox", "Select", "PrimaryButton", "SecondaryButton"],
+      "example_structure": {
+        "state": "Track current question, answers, and branch logic",
+        "navigation": "Next/Previous/Submit buttons",
+        "validation": "Per-question and final validation",
+        "persistence": "Save progress to localStorage or API"
+      },
+      "code_example": "const [currentStep, setCurrentStep] = useState(0);\nconst [answers, setAnswers] = useState({});\n\nconst questions = [\n  {\n    id: 'role',\n    question: 'What is your role?',\n    type: 'radio',\n    options: ['Employee', 'Manager', 'Executive'],\n    next: (answer) => answer === 'Manager' ? 'manager-q1' : 'employee-q1'\n  },\n  // More questions...\n];"
+    },
+    "data_tables": {
+      "description": "Sortable, filterable data tables with actions",
+      "components_used": ["Table", "Select", "TextInput", "PrimaryButton", "Menu"],
+      "features": [
+        "Column sorting",
+        "Row selection (single/multi)",
+        "Pagination",
+        "Inline editing",
+        "Bulk actions",
+        "Search/filter"
+      ]
+    },
+    "form_validation": {
+      "description": "Form validation patterns",
+      "approach": "Use FormField error state + custom validation logic",
+      "validation_timing": ["onBlur", "onChange", "onSubmit"],
+      "error_display": "FormField.Hint with error styling",
+      "example": "<FormField error={errors.email ? FormField.ErrorType.Error : undefined}>\n  <FormField.Label>Email</FormField.Label>\n  <FormField.Input\n    type=\"email\"\n    value={email}\n    onChange={handleEmailChange}\n    onBlur={validateEmail}\n  />\n  {errors.email && <FormField.Hint>{errors.email}</FormField.Hint>}\n</FormField>"
+    },
+    "responsive_layout": {
+      "description": "Mobile-responsive layouts using Canvas Kit",
+      "components": ["Grid", "Flex", "Stack", "Box"],
+      "breakpoints": {
+        "zero": "0px (mobile)",
+        "s": "600px (tablet)",
+        "m": "960px (desktop)",
+        "l": "1280px (large desktop)",
+        "xl": "1920px (extra large)"
+      },
+      "media_query_hook": "useTheme() provides breakpoints object"
+    }
+  },
+
+  "best_practices": {
+    "accessibility": [
+      "Always provide labels for form inputs",
+      "Use semantic HTML elements",
+      "Ensure keyboard navigation works",
+      "Include ARIA labels where needed",
+      "Test with screen readers"
+    ],
+    "theming": [
+      "Use CanvasProvider at app root",
+      "Reference theme tokens, not hardcoded colors",
+      "Use useTheme() hook to access theme values",
+      "Support both light and dark themes if needed"
+    ],
+    "performance": [
+      "Use compound components correctly",
+      "Memoize expensive computations",
+      "Lazy load heavy components",
+      "Virtualize long lists/tables"
+    ],
+    "testing": [
+      "Use @testing-library/react for component tests",
+      "Test accessibility with jest-axe",
+      "Test keyboard interactions",
+      "Mock Canvas Kit components in unit tests"
+    ]
+  },
+
+  "anti_patterns": {
+    "avoid": [
+      "Don't mix Canvas Kit with other design systems (Material-UI, Ant Design)",
+      "Don't override Canvas Kit component styles directly",
+      "Don't use deprecated components (check upgrade guides)",
+      "Don't skip CanvasProvider setup",
+      "Don't ignore TypeScript types",
+      "Don't use non-Canvas Kit buttons/forms when Canvas Kit versions exist"
+    ]
+  },
+
+  "upgrade_guides": {
+    "description": "Canvas Kit has multiple major versions",
+    "current_version": "v13.x",
+    "migration_notes": "Check Workday Canvas Design System upgrade guides when upgrading major versions",
+    "breaking_changes": "Each major version may have API changes"
+  },
+
+  "resources": {
+    "documentation": "https://canvas.workday.com/",
+    "storybook": "https://workday.github.io/canvas-kit/",
+    "github": "https://github.com/Workday/canvas-kit",
+    "npm": "https://www.npmjs.com/package/@workday/canvas-kit-react",
+    "design_system": "https://canvas.workday.com/get-started/",
+    "component_api": "See Storybook for detailed component API docs"
+  }
+}

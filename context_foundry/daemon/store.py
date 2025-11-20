@@ -502,13 +502,29 @@ class Store:
         Returns:
             Dictionary with counts per status
         """
+        import time
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"[HANG-DEBUG] get_job_stats(): About to acquire DB connection at {time.time():.3f}"
+        )
         with self._get_connection() as conn:
+            logger.info(
+                f"[HANG-DEBUG] get_job_stats(): Acquired DB connection, executing query at {time.time():.3f}"
+            )
             cursor = conn.execute("""
                 SELECT status, COUNT(*) as count
                 FROM jobs
                 GROUP BY status
             """)
+            logger.info(
+                f"[HANG-DEBUG] get_job_stats(): Query executed, fetching results at {time.time():.3f}"
+            )
             rows = cursor.fetchall()
+            logger.info(
+                f"[HANG-DEBUG] get_job_stats(): Fetched all rows at {time.time():.3f}"
+            )
 
             return {row["status"]: row["count"] for row in rows}
 

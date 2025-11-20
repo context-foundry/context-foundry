@@ -4,10 +4,13 @@ CF Daemon Server
 Main daemon process with signal handling, PID management, and service supervision.
 """
 
+import faulthandler
+import io
 import logging
 import os
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -66,6 +69,14 @@ class CFDaemon:
 
         self.running = False
         self._logging_configured = False
+
+        # Watchdog: shared state for external monitoring
+        self._main_loop_heartbeat = time.time()
+        self._watchdog_thread = None
+        self._watchdog_stop = False
+
+        # Enable faulthandler for thread dump capability
+        faulthandler.enable()
 
     def _setup_logging(self, background_mode: bool = False):
         """
@@ -395,6 +406,14 @@ class CFDaemon:
         else:
             logger.info("Running in background mode")
 
+        # Start watchdog thread to monitor main loop health
+        self._watchdog_stop = False
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop, name="CFDaemonWatchdog", daemon=True
+        )
+        self._watchdog_thread.start()
+        logger.info("Watchdog thread started")
+
         # Report success to parent
         self._report_status(True)
 
@@ -449,24 +468,169 @@ class CFDaemon:
                 pass
             return False
 
+    def _watchdog_loop(self):
+        """
+        External watchdog thread that monitors main loop health.
+
+        Runs in a separate thread to detect if the main loop hangs.
+        If the main loop stops updating the heartbeat, logs critical
+        error and can optionally restart the daemon.
+        """
+        logger.info("[WATCHDOG] Starting external watchdog thread")
+        consecutive_warnings = 0
+
+        while not self._watchdog_stop:
+            try:
+                time.sleep(10)  # Check every 10 seconds
+
+                if self._watchdog_stop:
+                    break
+
+                # Check how long since main loop last updated heartbeat
+                age = time.time() - self._main_loop_heartbeat
+
+                if age > 120:  # 2 minutes without heartbeat
+                    consecutive_warnings += 1
+                    logger.critical(
+                        f"[WATCHDOG] MAIN LOOP HUNG DETECTED! "
+                        f"No heartbeat for {int(age)}s "
+                        f"(warning {consecutive_warnings}/3)"
+                    )
+
+                    # On first critical warning, dump thread stacks for debugging
+                    if consecutive_warnings == 1:
+                        logger.critical(
+                            "[WATCHDOG] Capturing thread dump for hang diagnosis..."
+                        )
+                        try:
+                            # Capture thread stacks to string buffer
+                            stack_buffer = io.StringIO()
+                            faulthandler.dump_traceback(
+                                file=stack_buffer, all_threads=True
+                            )
+                            stack_trace = stack_buffer.getvalue()
+
+                            # Log thread stacks (may be long, but critical for debugging)
+                            logger.critical(f"[WATCHDOG] Thread dump:\n{stack_trace}")
+
+                            # Also write to dedicated file for post-mortem analysis
+                            dump_file = (
+                                self.config.log_dir
+                                / f"thread_dump_{int(time.time())}.txt"
+                            )
+                            dump_file.write_text(stack_trace)
+                            logger.critical(
+                                f"[WATCHDOG] Thread dump saved to {dump_file}"
+                            )
+                        except Exception as dump_error:
+                            logger.error(
+                                f"[WATCHDOG] Failed to capture thread dump: {dump_error}"
+                            )
+
+                    if consecutive_warnings >= 3:  # 3 checks = 30+ seconds of hang
+                        logger.critical(
+                            "[WATCHDOG] Main loop confirmed hung for 2+ minutes. "
+                            "Initiating forced restart..."
+                        )
+                        # Force daemon restart by sending SIGTERM to self
+                        os.kill(os.getpid(), signal.SIGTERM)
+                        break
+
+                elif age > 60:  # Warning at 60 seconds
+                    logger.warning(
+                        f"[WATCHDOG] Main loop slow: no heartbeat for {int(age)}s"
+                    )
+                    consecutive_warnings = 0
+                else:
+                    # Reset warning counter if heartbeat is fresh
+                    if consecutive_warnings > 0:
+                        logger.info(
+                            f"[WATCHDOG] Main loop recovered (heartbeat age: {int(age)}s)"
+                        )
+                    consecutive_warnings = 0
+
+            except Exception as e:
+                logger.error(f"[WATCHDOG] Error in watchdog thread: {e}", exc_info=True)
+                time.sleep(10)
+
+        logger.info("[WATCHDOG] Watchdog thread stopped")
+
     def _run_foreground(self):
         """Run daemon in foreground"""
         try:
-            # Main loop - just keep alive while JobManager workers run
-            while self.running:
-                time.sleep(1)
+            # Health monitoring: track when main loop last progressed
+            last_stats_logged = time.time()
+            heartbeat_file = self.config.data_dir / "daemon_heartbeat.txt"
+            iteration_count = 0
+            last_stats_minute = -1  # Track which minute we last logged stats
 
-                # Periodically log stats (with error handling to prevent silent crashes)
-                if int(time.time()) % 60 == 0:  # Every minute
-                    try:
-                        stats = self.job_manager.get_stats()
-                        logger.info(
-                            f"Stats: {stats['jobs_running']} running, "
-                            f"{stats['job_counts']} total jobs"
+            # Main loop - just keep alive while JobManager workers run
+            logger.info("[DEBUG] Entering main loop, watchdog monitoring heartbeat")
+            while self.running:
+                try:
+                    current_time = time.time()
+                    iteration_count += 1
+
+                    # Update heartbeat (main loop is still progressing)
+                    # This is monitored by external watchdog thread
+                    self._main_loop_heartbeat = current_time
+
+                    # Write heartbeat file for external monitoring (every 5 iterations to reduce I/O)
+                    if iteration_count % 5 == 0:
+                        try:
+                            heartbeat_file.write_text(
+                                f"{int(current_time)}\n{iteration_count}\n{os.getpid()}"
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to write heartbeat file: {e}", exc_info=True
+                            )
+
+                    # Health check: detect if stats loop has stopped progressing
+                    time_since_stats = current_time - last_stats_logged
+                    if time_since_stats > 180:  # 3 minutes without stats
+                        logger.critical(
+                            f"HEALTH CHECK FAILED: Stats loop has not logged for "
+                            f"{int(time_since_stats)}s. Main loop still alive "
+                            f"(iteration {iteration_count}) but stats may be stuck. "
+                            f"Workers may not be processing jobs."
                         )
-                    except Exception as e:
-                        # Log error but continue running
-                        logger.error(f"Failed to get stats: {e}", exc_info=True)
+                        # Reset to avoid log spam (log once per 3 minutes)
+                        last_stats_logged = current_time
+
+                    # Periodically log stats (with error handling to prevent silent crashes)
+                    # Use fresh time and avoid missed windows by tracking which minute we logged
+                    current_minute = int(current_time // 60)
+                    if current_minute != last_stats_minute:
+                        try:
+                            # DEBUG: Track exact timing of get_stats() call (INFO level for production debugging)
+                            logger.info(
+                                f"[HANG-DEBUG] About to call get_stats() at {time.time():.3f}"
+                            )
+                            stats = self.job_manager.get_stats()
+                            logger.info(
+                                f"[HANG-DEBUG] get_stats() returned at {time.time():.3f}"
+                            )
+
+                            logger.info(
+                                f"Stats: {stats['jobs_running']} running, "
+                                f"{stats['job_counts']} total jobs"
+                            )
+                            # Stats successfully logged - update tracking
+                            last_stats_logged = current_time
+                            last_stats_minute = current_minute
+                        except Exception as e:
+                            # Log error but continue running
+                            logger.error(f"Failed to get stats: {e}", exc_info=True)
+                            # Still update minute to avoid repeated errors
+                            last_stats_minute = current_minute
+
+                    time.sleep(1)
+
+                except Exception as e:
+                    # Catch any loop iteration errors to prevent silent death
+                    logger.error(f"Error in main loop iteration: {e}", exc_info=True)
+                    time.sleep(1)  # Prevent tight error loop
 
         except KeyboardInterrupt:
             logger.info("Keyboard interrupt received")
@@ -486,6 +650,16 @@ class CFDaemon:
         logger.info("Stopping Context Foundry Daemon...")
         self.running = False
 
+        # Stop watchdog thread
+        if self._watchdog_thread and self._watchdog_thread.is_alive():
+            logger.info("Stopping watchdog thread...")
+            self._watchdog_stop = True
+            self._watchdog_thread.join(timeout=5.0)
+            if self._watchdog_thread.is_alive():
+                logger.warning("Watchdog thread did not stop gracefully")
+            else:
+                logger.info("Watchdog thread stopped")
+
         # Clean up any active subprocess tasks before stopping workers
         logger.info("Cleaning up active subprocess tasks...")
         self.runner.cleanup_active_tasks()
@@ -495,6 +669,14 @@ class CFDaemon:
 
         # Remove PID file
         self._remove_pid_file()
+
+        # Clean up heartbeat file
+        try:
+            heartbeat_file = self.config.data_dir / "daemon_heartbeat.txt"
+            if heartbeat_file.exists():
+                heartbeat_file.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to remove heartbeat file: {e}")
 
         logger.info("CF Daemon stopped")
 

@@ -278,4 +278,150 @@ def detect_existing_codebase(directory: Path) -> Dict[str, Any]:
     # END FLOWISE EXTENSION HOOK
     # ═══════════════════════════════════════════════════════════════════
 
+    # ═══════════════════════════════════════════════════════════════════
+    # ROBLOX EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+    try:
+        cf_base = Path(__file__).parent.parent.parent
+        roblox_ext_path = cf_base / "extensions" / "roblox"
+
+        if roblox_ext_path.exists():
+            ext_parent = str(roblox_ext_path.parent)
+            if ext_parent not in sys.path:
+                sys.path.insert(0, ext_parent)
+
+            from roblox import extensions_loader
+
+            roblox_detectors = extensions_loader.load_extension_detectors()
+
+            if roblox_detectors and "roblox" in roblox_detectors:
+                detection = roblox_detectors["roblox"].detect_roblox_project(directory)
+
+                if detection.get("is_roblox"):
+                    # Roblox project detected!
+                    print(
+                        f"🎮 Roblox Extension: Detected {detection.get('project_type')} project"
+                    )
+                    print(f"   - Subtype: {detection.get('project_subtype')}")
+                    print(f"   - Complexity: {detection.get('complexity')}")
+                    print(f"   - Has Tests: {detection.get('has_tests', False)}")
+
+                    result["roblox_project"] = True
+                    result["roblox_project_type"] = detection["project_type"]
+                    result["project_subtype"] = detection.get("project_subtype", "rojo")
+                    result["has_tests"] = detection.get("has_tests", False)
+                    result["complexity"] = detection.get("complexity", "moderate")
+
+                    # Update project classification
+                    if result["project_type"] is None or result["confidence"] != "high":
+                        result["project_type"] = detection["project_type"]
+                        result["confidence"] = detection.get("confidence", "high")
+
+                    # Add Lua to languages
+                    if "lua" not in result["languages"]:
+                        result["languages"].append("lua")
+
+                    # Add metadata
+                    if "metadata" in detection:
+                        result["roblox_metadata"] = detection["metadata"]
+
+                    print(
+                        "✅ Roblox Extension: Setting roblox_project=True in CONFIGURATION"
+                    )
+
+    except (ImportError, Exception):
+        # Roblox extension not installed or error - continue without it
+        pass
+    # ═══════════════════════════════════════════════════════════════════
+    # END ROBLOX EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════
+    # WORKDAY CANVAS KIT EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+    try:
+        cf_base = Path(__file__).parent.parent.parent
+        canvas_kit_ext_path = cf_base / "extensions" / "workday-canvas"
+
+        if canvas_kit_ext_path.exists():
+            ext_parent = str(canvas_kit_ext_path.parent)
+            if ext_parent not in sys.path:
+                sys.path.insert(0, ext_parent)
+
+            # Import workday-canvas extension
+            try:
+                # Import as workday_canvas (Python module name)
+                import importlib
+
+                workday_canvas = importlib.import_module("workday-canvas")
+                extensions_loader = workday_canvas.extensions_loader
+            except ImportError:
+                # Try alternative import
+                from workday_canvas import extensions_loader
+
+            # Load Canvas Kit detectors
+            canvas_kit_detectors = extensions_loader.load_extension_detectors()
+
+            if canvas_kit_detectors and "workday-canvas" in canvas_kit_detectors:
+                # Detect Canvas Kit project
+                detection = canvas_kit_detectors[
+                    "workday-canvas"
+                ].detect_canvas_kit_project(directory)
+
+                if detection.get("is_canvas_kit"):
+                    # Canvas Kit project detected!
+                    print(
+                        "🔍 Workday Canvas Kit Extension: Detected Canvas Kit project"
+                    )
+                    print(
+                        f"   - Version: {detection.get('canvas_kit_version', 'unknown')}"
+                    )
+                    print(f"   - TypeScript: {detection.get('has_typescript', False)}")
+                    print(f"   - Uses Emotion: {detection.get('uses_emotion', False)}")
+                    print(
+                        f"   - Preview Components: {detection.get('has_preview_components', False)}"
+                    )
+                    print(
+                        f"   - Labs Components: {detection.get('has_labs_components', False)}"
+                    )
+                    print(
+                        f"   - Component Imports: ~{detection.get('component_count_estimate', 0)}"
+                    )
+
+                    result["canvas_kit_project"] = True
+                    result["canvas_kit_version"] = detection.get("canvas_kit_version")
+                    result["canvas_kit_typescript"] = detection.get(
+                        "has_typescript", False
+                    )
+                    result["canvas_kit_emotion"] = detection.get("uses_emotion", False)
+                    result["canvas_kit_preview"] = detection.get(
+                        "has_preview_components", False
+                    )
+                    result["canvas_kit_labs"] = detection.get(
+                        "has_labs_components", False
+                    )
+
+                    # Update project classification
+                    if (
+                        result["project_type"] == "nodejs"
+                        or result["confidence"] != "high"
+                    ):
+                        result["project_type"] = "workday-canvas"
+                        result["confidence"] = "high"
+
+                    # Add to languages list
+                    if "Canvas Kit" not in result["languages"]:
+                        result["languages"].append("Canvas Kit")
+
+                    print(
+                        "✅ Workday Canvas Kit Extension: Setting canvas_kit_project=True in CONFIGURATION"
+                    )
+
+    except (ImportError, Exception):
+        # Canvas Kit extension not installed or error - continue without it
+        pass
+    # ═══════════════════════════════════════════════════════════════════
+    # END WORKDAY CANVAS KIT EXTENSION HOOK
+    # ═══════════════════════════════════════════════════════════════════
+
     return result

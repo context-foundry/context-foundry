@@ -765,11 +765,28 @@ class JobManager:
         Returns:
             Dictionary with various stats
         """
-        job_stats = self.store.get_job_stats()
+        import time
 
+        logger.info(
+            f"[HANG-DEBUG] get_stats(): About to call store.get_job_stats() at {time.time():.3f}"
+        )
+        job_stats = self.store.get_job_stats()
+        logger.info(
+            f"[HANG-DEBUG] get_stats(): store.get_job_stats() returned at {time.time():.3f}"
+        )
+
+        logger.info(
+            f"[HANG-DEBUG] get_stats(): About to acquire _running_jobs_lock at {time.time():.3f}"
+        )
         with self._running_jobs_lock:
+            logger.info(
+                f"[HANG-DEBUG] get_stats(): Acquired _running_jobs_lock at {time.time():.3f}"
+            )
             running_count = len(self._running_jobs)
             running_job_ids = list(self._running_jobs.keys())
+        logger.info(
+            f"[HANG-DEBUG] get_stats(): Released _running_jobs_lock at {time.time():.3f}"
+        )
 
         return {
             "running": self._running,
