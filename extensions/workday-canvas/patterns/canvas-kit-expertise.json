@@ -23,10 +23,12 @@
       "@workday/canvas-tokens-web"
     ],
     "optional_packages": [
-      "@workday/canvas-kit-react-fonts",
       "@workday/canvas-kit-styling",
       "@workday/canvas-kit-preview-react",
       "@workday/canvas-kit-labs-react"
+    ],
+    "removed_in_v13": [
+      "@workday/canvas-kit-react-fonts (package does not exist in v13)"
     ],
     "peer_dependencies": {
       "react": ">=16.8 <19",
@@ -197,11 +199,12 @@
             "example": "<Grid gridTemplateColumns=\"repeat(3, 1fr)\" gridGap=\"m\">\n  <Item1 />\n  <Item2 />\n  <Item3 />\n</Grid>"
           },
           {
-            "name": "Stack",
-            "import": "@workday/canvas-kit-react/layout",
-            "use_case": "Vertical or horizontal spacing",
-            "props": ["spacing", "direction"],
-            "example": "<Stack spacing=\"m\">\n  <Child1 />\n  <Child2 />\n</Stack>"
+            "name": "Stack (REMOVED in v13)",
+            "status": "DEPRECATED",
+            "old_import": "@workday/canvas-kit-react/layout",
+            "note": "Stack, VStack, HStack removed in v13. Use plain HTML div with inline flexbox styles.",
+            "v13_replacement": "Use div with inline styles",
+            "example": "<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>\n  <Child1 />\n  <Child2 />\n</div>"
           }
         ]
       },
@@ -285,15 +288,15 @@
             "name": "Toast",
             "import": "@workday/canvas-kit-react/toast",
             "use_case": "Temporary notifications",
-            "variants": ["success", "error", "info"],
-            "example": "<Toast onClose={handleClose}>\n  Success message\n</Toast>"
+            "note": "v13 API changed - use Toast.Provider and useToast hook",
+            "example": "// v13 pattern:\n// Wrap app in <Toast.Provider>\n// Use useToast() hook to show toasts\nconst toast = useToast();\ntoast.addToast({ message: 'Success!' });"
           },
           {
             "name": "Banner",
             "import": "@workday/canvas-kit-react/banner",
             "use_case": "Persistent messages/alerts",
-            "variants": ["error", "alert", "success"],
-            "example": "<Banner variant=\"error\">\n  Error message\n</Banner>"
+            "note": "v13 API changed - variant prop removed",
+            "example": "// Check Storybook for current v13 Banner API"
           },
           {
             "name": "LoadingDots",
@@ -427,6 +430,251 @@
     "current_version": "v13.x",
     "migration_notes": "Check Workday Canvas Design System upgrade guides when upgrading major versions",
     "breaking_changes": "Each major version may have API changes"
+  },
+
+  "v13_breaking_changes": {
+    "description": "Canvas Kit v13 introduced significant breaking changes from v11/v12. Use these patterns to avoid build errors.",
+    "last_verified": "2025-11-19",
+    "canvas_kit_version": "13.2.45",
+
+    "removed_components": {
+      "Stack": {
+        "status": "REMOVED",
+        "old_import": "@workday/canvas-kit-react/layout",
+        "old_usage": "<Stack spacing=\"m\"><Child /></Stack>",
+        "replacement": "Use regular div with inline flexbox styles",
+        "new_usage": "<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}><Child /></div>",
+        "notes": "Stack, VStack, HStack no longer exist in v13. Use plain HTML with CSS flexbox."
+      },
+      "Box_with_flex_props": {
+        "status": "API_CHANGED",
+        "component": "Box",
+        "import": "@workday/canvas-kit-react",
+        "issue": "Box component no longer accepts flexDirection, gap, or other flex props as direct props",
+        "old_usage": "<Box display=\"flex\" flexDirection=\"column\" gap=\"l\">",
+        "replacement": "Use regular div with inline styles instead",
+        "new_usage": "<div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>",
+        "spacing_reference": {
+          "xxs": "4px",
+          "xs": "8px",
+          "s": "12px",
+          "m": "16px",
+          "l": "24px",
+          "xl": "32px"
+        }
+      },
+      "canvas-kit-react-fonts": {
+        "status": "REMOVED",
+        "package": "@workday/canvas-kit-react-fonts",
+        "issue": "This package does not exist in v13",
+        "action": "Remove from package.json dependencies"
+      }
+    },
+
+    "component_api_changes": {
+      "Text": {
+        "component": "Text",
+        "import": "@workday/canvas-kit-react/text",
+        "breaking_changes": [
+          {
+            "prop": "size",
+            "status": "REMOVED",
+            "old_usage": "<Text size=\"small\">",
+            "replacement": "Use HTML elements with inline styles or CSS classes",
+            "new_usage": "<span style={{ fontSize: '14px' }}>Text</span>"
+          },
+          {
+            "prop": "color",
+            "status": "REMOVED",
+            "old_usage": "<Text color=\"hint\">",
+            "replacement": "Use inline styles",
+            "new_usage": "<span style={{ color: '#666' }}>Text</span>"
+          },
+          {
+            "prop": "fontWeight",
+            "status": "REMOVED",
+            "old_usage": "<Text fontWeight=\"medium\">",
+            "replacement": "Use inline styles",
+            "new_usage": "<span style={{ fontWeight: 500 }}>Text</span>"
+          }
+        ],
+        "recommendation": "For simple text styling, use plain HTML (span, p, div) with inline styles instead of Text component"
+      },
+
+      "FormField": {
+        "component": "FormField",
+        "import": "@workday/canvas-kit-react/form-field",
+        "breaking_changes": [
+          {
+            "pattern": "label prop removed",
+            "old_usage": "<FormField label=\"Name\" required>\n  <TextInput />\n</FormField>",
+            "new_usage": "<FormField>\n  <FormField.Label>Name</FormField.Label>\n  <FormField.Input as={TextInput} />\n</FormField>",
+            "notes": "v13 uses compound component pattern exclusively"
+          },
+          {
+            "prop": "required",
+            "status": "MOVED",
+            "old_location": "FormField",
+            "new_location": "FormField.Label",
+            "new_usage": "<FormField.Label isRequired>Name</FormField.Label>"
+          },
+          {
+            "prop": "hintText",
+            "status": "CHANGED",
+            "old_usage": "<FormField hintText=\"Help text\">",
+            "new_usage": "<FormField.Hint>Help text</FormField.Hint>"
+          },
+          {
+            "prop": "error",
+            "status": "CHANGED",
+            "new_usage": "Use FormField with error state and FormField.Hint for error message"
+          }
+        ],
+        "compound_components": [
+          "FormField.Label",
+          "FormField.Input",
+          "FormField.Hint"
+        ]
+      },
+
+      "StatusIndicator": {
+        "component": "StatusIndicator",
+        "import": "@workday/canvas-kit-react/status-indicator",
+        "breaking_changes": [
+          {
+            "prop": "variant",
+            "status": "REMOVED",
+            "old_usage": "<StatusIndicator variant=\"green\" label=\"Active\" />",
+            "new_usage": "<StatusIndicator type={StatusIndicator.Type.Green} label=\"Active\" />",
+            "notes": "Use type prop with StatusIndicator.Type enum instead of variant string"
+          }
+        ]
+      },
+
+      "Dialog": {
+        "component": "Dialog",
+        "import": "@workday/canvas-kit-react/dialog",
+        "breaking_changes": [
+          {
+            "prop": "open",
+            "status": "RENAMED",
+            "old_usage": "<Dialog open={isOpen}>",
+            "new_usage": "<Dialog isOpen={isOpen}>",
+            "notes": "Renamed to match React conventions"
+          }
+        ]
+      },
+
+      "Toast": {
+        "component": "Toast",
+        "import": "@workday/canvas-kit-react/toast",
+        "breaking_changes": [
+          {
+            "prop": "onClose",
+            "status": "REMOVED",
+            "old_usage": "<Toast onClose={handleClose}>Message</Toast>",
+            "notes": "v13 Toast uses different API - check Storybook for current implementation",
+            "recommendation": "Use Toast.Provider and useToast hook for proper v13 toast implementation"
+          }
+        ]
+      },
+
+      "Banner": {
+        "component": "Banner",
+        "import": "@workday/canvas-kit-react/banner",
+        "breaking_changes": [
+          {
+            "prop": "variant",
+            "status": "REMOVED",
+            "old_usage": "<Banner variant=\"error\">",
+            "notes": "v13 Banner API changed - check current implementation in Storybook",
+            "recommendation": "Use Banner with proper v13 props (check documentation for current API)"
+          }
+        ]
+      },
+
+      "TextArea": {
+        "component": "TextArea",
+        "breaking_changes": [
+          {
+            "import": "TextArea",
+            "old_import": "@workday/canvas-kit-react/text-input",
+            "new_import": "@workday/canvas-kit-react/textarea",
+            "notes": "TextArea moved to its own package in v13"
+          }
+        ]
+      },
+
+      "Breadcrumbs": {
+        "component": "Breadcrumbs",
+        "import": "@workday/canvas-kit-react/breadcrumbs",
+        "breaking_changes": [
+          {
+            "prop": "aria-label",
+            "status": "REQUIRED",
+            "new_usage": "<Breadcrumbs aria-label=\"Navigation\">",
+            "notes": "aria-label is now required for accessibility"
+          }
+        ]
+      }
+    },
+
+    "migration_guide": {
+      "layout_migration": {
+        "title": "Migrating from Stack/Box to plain HTML",
+        "steps": [
+          "Replace all Stack/VStack/HStack imports with plain div elements",
+          "Convert spacing props to pixel values (s=12px, m=16px, l=24px)",
+          "Use inline styles or CSS classes for flexbox layout",
+          "Test responsive behavior with inline styles"
+        ],
+        "examples": {
+          "vertical_stack": {
+            "before": "<Stack spacing=\"l\">\n  <Item1 />\n  <Item2 />\n</Stack>",
+            "after": "<div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>\n  <Item1 />\n  <Item2 />\n</div>"
+          },
+          "horizontal_stack": {
+            "before": "<Stack direction=\"horizontal\" spacing=\"m\">\n  <Item1 />\n  <Item2 />\n</Stack>",
+            "after": "<div style={{ display: 'flex', flexDirection: 'row', gap: '16px' }}>\n  <Item1 />\n  <Item2 />\n</div>"
+          }
+        }
+      },
+      "text_migration": {
+        "title": "Migrating Text component usage",
+        "recommendation": "Use plain HTML elements for simple text styling",
+        "examples": {
+          "small_hint_text": {
+            "before": "<Text size=\"small\" color=\"hint\">Helper text</Text>",
+            "after": "<span style={{ fontSize: '14px', color: '#666' }}>Helper text</span>"
+          },
+          "bold_text": {
+            "before": "<Text fontWeight=\"medium\">Important</Text>",
+            "after": "<span style={{ fontWeight: 500 }}>Important</span>"
+          }
+        }
+      },
+      "formfield_migration": {
+        "title": "Migrating to FormField compound pattern",
+        "before": "<FormField label=\"Username\" required hintText=\"Enter your username\">\n  <TextInput value={value} onChange={onChange} />\n</FormField>",
+        "after": "<FormField>\n  <FormField.Label isRequired>Username</FormField.Label>\n  <FormField.Input as={TextInput} value={value} onChange={onChange} />\n  <FormField.Hint>Enter your username</FormField.Hint>\n</FormField>"
+      }
+    },
+
+    "correct_patterns": {
+      "description": "Use these verified patterns for Canvas Kit v13",
+      "layout": {
+        "pattern": "Use plain HTML with inline styles for layouts",
+        "example": "<div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>\n  <div>Item 1</div>\n  <div>Item 2</div>\n</div>"
+      },
+      "form_with_validation": {
+        "pattern": "FormField compound component pattern",
+        "example": "<FormField>\n  <FormField.Label isRequired>Email</FormField.Label>\n  <FormField.Input as={TextInput} type=\"email\" />\n  <FormField.Hint>We'll never share your email</FormField.Hint>\n</FormField>"
+      },
+      "simple_text": {
+        "pattern": "Use HTML elements for basic text",
+        "example": "<span style={{ fontSize: '14px', color: '#666' }}>Helper text</span>"
+      }
+    }
   },
 
   "resources": {
