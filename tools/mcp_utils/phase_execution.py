@@ -987,6 +987,18 @@ def _normalize_build_tasks_schema(plan: dict) -> tuple[dict, bool, list[str]]:
         t.setdefault("name", t.get("description", task_id))
         t.setdefault("working_directory", ".")
 
+        # Dependencies normalization
+        deps = t.get("dependencies", [])
+        if deps is None:
+            deps = []
+        if not isinstance(deps, list):
+            warnings.append(
+                f"Task {task_id} dependencies must be a list, got {type(deps)}"
+            )
+            deps = []
+            parallel_ready = False
+        t["dependencies"] = deps
+
         build_commands = t.get("build_commands")
         if build_commands is None:
             warnings.append(
@@ -999,6 +1011,23 @@ def _normalize_build_tasks_schema(plan: dict) -> tuple[dict, bool, list[str]]:
                 f"Task {task_id} build_commands must be a list, got {type(build_commands)}"
             )
             t["build_commands"] = []
+            parallel_ready = False
+
+        # Provider normalization
+        provider = t.get("provider")
+        if not provider:
+            warnings.append(f"Task {task_id} missing provider — defaulting to Claude")
+            t["provider"] = "Claude"
+            parallel_ready = False
+
+        # Agent instruction normalization
+        instruction = t.get("agent_instruction")
+        if not instruction:
+            fallback = t.get("name") or t.get("description") or task_id
+            warnings.append(
+                f"Task {task_id} missing agent_instruction — synthesized fallback"
+            )
+            t["agent_instruction"] = f"Implement {fallback}"
             parallel_ready = False
 
         normalized_tasks.append(t)

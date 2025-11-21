@@ -12,6 +12,7 @@ Key differences from OLD autonomous_build.py:
 See docs/PHASE_PROCESS_SPAWNING_DESIGN.md for architecture details.
 """
 
+import copy
 import json
 import os
 import subprocess
@@ -20,7 +21,7 @@ import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 # Import BAML integration
 from tools.baml_integration import is_baml_available, get_baml_error, create_build_plan
@@ -41,6 +42,86 @@ from tools.mcp_utils.phase_execution import (
 
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
+
+
+def _post_process_build_plan(
+    build_plan: Dict[str, Any],
+) -> tuple[Dict[str, Any], List[str]]:
+    """
+    Normalize and harden build plan outputs before saving to disk.
+
+    - Ensure required task fields exist (task_id, agent_instruction, provider)
+    - Fill sensible defaults to avoid empty fields reaching Builder
+    - Add provenance metadata for traceability
+    """
+    warnings: List[str] = []
+    normalized = copy.deepcopy(build_plan) if isinstance(build_plan, dict) else {}
+
+    # Provenance metadata
+    normalized.setdefault("schema_version", "1.0")
+    normalized.setdefault("generated_by", "autonomous_build.py:create_build_plan")
+    normalized.setdefault("generated_at", datetime.utcnow().isoformat() + "Z")
+
+    tasks = normalized.get("tasks", [])
+    if not isinstance(tasks, list):
+        warnings.append("build_plan.tasks not a list; resetting to empty list")
+        normalized["tasks"] = []
+        return normalized, warnings
+
+    for idx, task in enumerate(tasks):
+        t = copy.deepcopy(task)
+
+        # task_id fallback
+        if not t.get("task_id"):
+            fallback_id = t.get("id") or f"task-{idx + 1}"
+            warnings.append(f"Task missing task_id; using fallback '{fallback_id}'")
+            t["task_id"] = fallback_id
+
+        # working_directory default
+        t.setdefault("working_directory", ".")
+
+        # dependencies normalization
+        deps = t.get("dependencies", [])
+        if deps is None:
+            deps = []
+        if not isinstance(deps, list):
+            warnings.append(
+                f"Task {t['task_id']}: dependencies not a list; coerced to []"
+            )
+            deps = []
+        t["dependencies"] = deps
+
+        # build_commands normalization
+        build_commands = t.get("build_commands", [])
+        if build_commands is None:
+            build_commands = []
+        if not isinstance(build_commands, list):
+            warnings.append(
+                f"Task {t['task_id']}: build_commands not a list; coerced to []"
+            )
+            build_commands = []
+        t["build_commands"] = build_commands
+
+        # provider default
+        if not t.get("provider"):
+            warnings.append(
+                f"Task {t['task_id']}: missing provider; defaulting to Claude"
+            )
+            t["provider"] = "Claude"
+
+        # agent_instruction default
+        if not t.get("agent_instruction"):
+            name = t.get("name") or t.get("description") or t["task_id"]
+            desc = t.get("description") or ""
+            t["agent_instruction"] = f"Implement {name}. {desc}".strip()
+            warnings.append(
+                f"Task {t['task_id']}: missing agent_instruction; synthesized fallback"
+            )
+
+        tasks[idx] = t
+
+    normalized["tasks"] = tasks
+    return normalized, warnings
 
 
 def autonomous_build_and_deploy_impl(
@@ -712,6 +793,11 @@ def execute_build_with_phase_spawning(
                 scout_reasoning=scout_reasoning,
                 project_type=project_type,
             )
+
+            # Post-process for required defaults and provenance
+            build_plan, plan_warnings = _post_process_build_plan(build_plan)
+            for w in plan_warnings:
+                print(f"⚠️  Build plan warning: {w}", file=sys.stderr)
 
             # Save build-tasks.json
             build_tasks_path = (
