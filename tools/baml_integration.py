@@ -822,7 +822,7 @@ def create_build_plan(
         )
 
     try:
-        client = get_baml_client()
+        client = get_baml_client(force_recompile=True)
         if client is None:
             raise RuntimeError("BAML client not available")
 
