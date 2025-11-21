@@ -40,39 +40,96 @@ python3 tools/use_baml.py update-phase \
   > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
-**Step 1: Read Architecture**
-- Read `.context-foundry/architecture.md` carefully
-- Understand file structure, modules, implementation steps
+**Step 1: Create Build Plan IMMEDIATELY**
 
-**Step 2: Create Build Plan**
+⚠️ **CRITICAL**: Create `.context-foundry/build-tasks.json` FIRST before ANY other work!
+This file MUST exist within the first 30 seconds of Builder execution.
 
-Create `.context-foundry/build-tasks.json`:
+Read architecture.md quickly, then immediately create build-tasks.json:
+
+**For Flowise AgentFlow projects** (single workflow JSON):
 ```json
 {
-  "parallel_mode": true,
-  "total_tasks": 4,
+  "parallel_mode": false,
+  "total_tasks": 1,
+  "total_estimated_sequential": 10,
   "tasks": [
     {
-      "id": "task-1",
-      "description": "Create core module",
-      "files": ["src/core.py", "src/__init__.py"],
-      "dependencies": []
-    },
-    {
-      "id": "task-2",
-      "description": "Create utils",
-      "files": ["src/utils.py"],
-      "dependencies": []
-    },
-    {
-      "id": "task-3",
-      "description": "Create main entry",
-      "files": ["src/main.py"],
-      "dependencies": ["task-1", "task-2"]
+      "task_id": "task-1",
+      "name": "Flowise Workflow",
+      "description": "Create Flowise workflow JSON",
+      "working_directory": ".",
+      "files": ["workflows/<workflow-name>.json"],
+      "dependencies": [],
+      "build_commands": [
+        "mkdir -p workflows",
+        "# Flowise builds are agent-driven, not command-based",
+        "# Agent will use Write tool to create the workflow JSON"
+      ]
     }
   ]
 }
 ```
+
+**For standard projects** (multiple source files):
+```json
+{
+  "parallel_mode": true,
+  "total_tasks": 4,
+  "total_estimated_sequential": 20,
+  "tasks": [
+    {
+      "task_id": "task-1",
+      "name": "Core Module",
+      "description": "Create core module",
+      "working_directory": ".",
+      "files": ["src/core.py", "src/__init__.py"],
+      "dependencies": [],
+      "build_commands": [
+        "mkdir -p src",
+        "cat > src/__init__.py << 'EOF'\n# Core module init\nEOF",
+        "cat > src/core.py << 'EOF'\n# Core implementation\nEOF"
+      ]
+    },
+    {
+      "task_id": "task-2",
+      "name": "Utilities",
+      "description": "Create utility functions",
+      "working_directory": ".",
+      "files": ["src/utils.py"],
+      "dependencies": [],
+      "build_commands": [
+        "mkdir -p src",
+        "cat > src/utils.py << 'EOF'\n# Utility functions\nEOF"
+      ]
+    },
+    {
+      "task_id": "task-3",
+      "name": "Main Entry Point",
+      "description": "Create main entry",
+      "working_directory": ".",
+      "files": ["src/main.py"],
+      "dependencies": ["task-1", "task-2"],
+      "build_commands": [
+        "cat > src/main.py << 'EOF'\n# Main entry point\nfrom src.core import *\nfrom src.utils import *\nEOF"
+      ]
+    }
+  ]
+}
+```
+
+**IMPORTANT:** Each task MUST include:
+- `task_id` (string): Unique task identifier
+- `name` (string): Human-readable task name
+- `description` (string): What this task does
+- `working_directory` (string): Directory to run commands in (usually ".")
+- `files` (array): List of files this task creates
+- `dependencies` (array): Task IDs this task depends on
+- `build_commands` (array): Shell commands to execute for this task
+
+**Step 2: Read Architecture Details**
+- Read `.context-foundry/architecture.md` carefully
+- Understand file structure, modules, implementation steps
 
 **Step 3: Implement Code**
 
@@ -142,11 +199,17 @@ You will receive an instruction like:
 **CRITICAL: When architecture.md specifies a Flowise AgentFlow workflow:**
 
 This section is MANDATORY for all Flowise builds. You MUST produce flows that match
-the quality and structure of the reference: `/Users/name/homelab/vehicle-parking-management.json`
+the quality and structure described in the Flowise pattern library that ships with Context Foundry.
 
-**AUTHORITATIVE REFERENCE**:
-Read `/Users/name/homelab/vehicle-parking-management.json` before building ANY Flowise workflow.
-This file demonstrates the EXACT structure your output must match.
+**AUTHORITATIVE REFERENCE DIRECTORY**:
+- Determine your Context Foundry install root (the directory that contains `tools/`, `extensions/`, etc.).
+- Read **every JSON file** inside `extensions/flowise/patterns/`.
+- That directory is the canonical Flowise pattern library. Its absolute path depends on where Context Foundry is installed (e.g., `<context_foundry_root>/extensions/flowise/patterns/`).
+- If the directory or its files are missing, continue the build normally; otherwise, mirror their structure and conventions.
+
+**OTHER EXTENSION PATTERN DIRECTORIES**:
+- Roblox projects follow the same rule: read all JSON files in `extensions/roblox/patterns/` under your Context Foundry install.
+- Future extensions may provide additional pattern directories. Whenever a directory exists inside `extensions/<extension>/patterns/`, read every file in it before building that extension’s workflow.
 
 ═══════════════════════════════════════════════════════════
 📋 MANDATORY NODE STRUCTURE
@@ -319,11 +382,31 @@ This file demonstrates the EXACT structure your output must match.
 🎯 BUILDING PROCESS FOR FLOWISE
 ═══════════════════════════════════════════════════════════
 
-1. **Read Reference First**:
-   - Read `/Users/name/homelab/vehicle-parking-management.json`
-   - Use this as your template for node structure
+1. **Load Flowise Pattern Library**:
+   - After `build-tasks.json` exists, read every JSON file inside `<context_foundry_root>/extensions/flowise/patterns/`
+   - Use these pattern files as your template for node structure
 
-2. **Read Templates**:
+2. **Check for Matching Example Flows** (HIGHLY RECOMMENDED):
+   - Determine the workflow pattern type from architecture.md (Routing, Parallel, Sequential, Conditional, Loop, Hybrid)
+   - Check `<context_foundry_root>/extensions/flowise/examples/{pattern-type}/` for working example flows
+   - If matching examples exist:
+     - **Read the example JSON file** - it's a complete, production-quality flow
+     - **Use it as your primary template** - copy the structure, node types, connections
+     - **Adapt the content** - change agent personas, routing logic, tools to match your requirements
+     - **Keep the proven pattern** - don't reinvent validated structures
+   - If no examples exist for your pattern type:
+     - Use the general patterns from step 1 and templates from step 3
+     - Consider contributing your flow as an example after successful build!
+
+   **Example pattern types:**
+   - **routing/** - Intent-based routing with ConditionAgent or LLM classifier
+   - **parallel/** - Concurrent execution with result merging
+   - **sequential/** - Multi-step chaining workflows
+   - **conditional/** - Decision tree branching
+   - **loop/** - Iteration and batch processing
+   - **hybrid/** - Mixed patterns for complex workflows
+
+3. **Read Templates**:
    - Read template files from `extensions/flowise/prompts/*.json`
    - Copy COMPLETE structures, not abbreviated versions
 
@@ -374,7 +457,7 @@ COMPLETION CRITERIA
 ✅ Phase tracking updated
 
 **Flowise Build (additional):**
-✅ Reference flow read (/Users/name/homelab/vehicle-parking-management.json)
+✅ Flowise pattern directory inspected (`extensions/flowise/patterns/`)
 ✅ Templates read from extensions/flowise/prompts/
 ✅ Complete inputParams for all nodes
 ✅ agentMessages as array with role/content

@@ -450,7 +450,11 @@ class PhaseValidator:
         # The parallel builder now writes .done markers for persistent tracking
         if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
             for task in plan.get("tasks", []):
-                task_id = task["id"]
+                # Support both old schema (id) and new schema (task_id)
+                task_id = task.get("task_id") or task.get("id")
+                if not task_id:
+                    raise ValueError(f"Task missing required 'task_id' field: {task}")
+
                 done_file = (
                     working_dir
                     / ".context-foundry"
