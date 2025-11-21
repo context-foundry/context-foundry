@@ -1187,6 +1187,22 @@ def run_builder_phase(
     Returns:
         PhaseResult with metrics
     """
+    # Prefer structured architecture JSON if available; append to instruction once
+    arch_json_path = working_directory / ".context-foundry" / "architecture.json"
+    if arch_json_path.exists() and "ARCHITECTURE_JSON:" not in instruction:
+        try:
+            arch_json = arch_json_path.read_text()
+            instruction = instruction + "\n\nARCHITECTURE_JSON:\n" + arch_json
+            print(
+                "ℹ️  Injected architecture.json into Builder instruction",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(
+                f"⚠️  Failed to read architecture.json; continuing without JSON ({e})",
+                file=sys.stderr,
+            )
+
     # HARD GATE: Flowise MUST be sequential
     if flowise_mode:
         print(
