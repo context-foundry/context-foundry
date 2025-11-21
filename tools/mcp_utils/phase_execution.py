@@ -442,11 +442,26 @@ class PhaseValidator:
         if not build_tasks.exists():
             raise FileNotFoundError("Builder failed to create build-tasks.json")
 
-        # NOTE: .done file validation removed for parallel mode
-        # The parallel builder (_run_parallel_builders) tracks completion internally
-        # and returns PhaseResult with success/failure status. The .done file markers
-        # are only relevant when the Builder agent itself creates them via prompts,
-        # not when _run_parallel_builders executes via code.
+        # Parse task plan to check for parallel mode
+        with open(build_tasks) as f:
+            plan = json.load(f)
+
+        # Check each task completed (if parallel mode enabled)
+        # The parallel builder now writes .done markers for persistent tracking
+        if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
+            for task in plan.get("tasks", []):
+                task_id = task["id"]
+                done_file = (
+                    working_dir
+                    / ".context-foundry"
+                    / "builder-logs"
+                    / f"{task_id}.done"
+                )
+                if not done_file.exists():
+                    raise RuntimeError(
+                        f"Builder task {task_id} did not complete.\n"
+                        f"Expected completion marker at: {done_file}"
+                    )
 
         # Smoke check: verify SOME source files created
         # Check session config for Flowise mode (more reliable than project_type)
@@ -1034,6 +1049,18 @@ def _run_parallel_builders(
                 duration=duration,
                 commands_executed=len(task["build_commands"]),
             )
+
+            # Write .done marker for persistent completion tracking
+            builder_logs_dir = context_foundry_dir / "builder-logs"
+            builder_logs_dir.mkdir(parents=True, exist_ok=True)
+            done_file = builder_logs_dir / f"{task_id}.done"
+            try:
+                done_file.write_text(
+                    f"Task completed successfully at {datetime.now().isoformat()}\n"
+                    f"Duration: {duration:.2f}s\n"
+                )
+            except Exception as e:
+                print(f"Warning: Failed to write .done marker: {e}", file=sys.stderr)
 
             return (
                 task_id,
