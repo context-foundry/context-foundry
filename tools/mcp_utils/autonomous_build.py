@@ -730,8 +730,10 @@ def execute_build_with_phase_spawning(
         architect_instruction = (
             "Prefer .context-foundry/scout_report.json if present; "
             "otherwise read .context-foundry/scout-report.md. "
-            "Create architecture.md."
+            "Create architecture.md.\n\n"
         )
+        if scout_json:
+            architect_instruction += "SCOUT_JSON:\n" + json.dumps(scout_json, indent=2)
 
         architect_result = run_phase(
             "Architect",
@@ -945,9 +947,18 @@ def execute_build_with_phase_spawning(
         # FIX #4: Use module-relative path
         builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
 
+        builder_instruction = (
+            "Prefer .context-foundry/architecture.json if present; otherwise read architecture.md. "
+            "Implement the project accordingly.\n\n"
+        )
+        if architecture_json:
+            builder_instruction += "ARCHITECTURE_JSON:\n" + json.dumps(
+                architecture_json, indent=2
+            )
+
         builder_result = run_builder_phase(
             builder_prompt,
-            "Prefer .context-foundry/architecture.json if present; otherwise read architecture.md. Implement the project accordingly.",
+            builder_instruction,
             working_directory,
             project_type,
             flowise_mode=flowise_mode,
