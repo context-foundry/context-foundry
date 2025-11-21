@@ -728,12 +728,16 @@ def execute_build_with_phase_spawning(
         architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
 
         architect_instruction = (
-            "Prefer .context-foundry/scout_report.json if present; "
-            "otherwise read .context-foundry/scout-report.md. "
+            "Use the provided structured Scout JSON (ignore markdown unless JSON is missing). "
             "Create architecture.md.\n\n"
         )
         if scout_json:
             architect_instruction += "SCOUT_JSON:\n" + json.dumps(scout_json, indent=2)
+        else:
+            architect_instruction = (
+                "Read .context-foundry/scout-report.md (scout_report.json missing). "
+                "Create architecture.md."
+            )
 
         architect_result = run_phase(
             "Architect",
@@ -948,12 +952,17 @@ def execute_build_with_phase_spawning(
         builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
 
         builder_instruction = (
-            "Prefer .context-foundry/architecture.json if present; otherwise read architecture.md. "
+            "Use the provided structured architecture JSON (ignore markdown unless JSON is missing). "
             "Implement the project accordingly.\n\n"
         )
         if architecture_json:
             builder_instruction += "ARCHITECTURE_JSON:\n" + json.dumps(
                 architecture_json, indent=2
+            )
+        else:
+            builder_instruction = (
+                "Read .context-foundry/architecture.md (architecture.json missing). "
+                "Implement the project accordingly."
             )
 
         builder_result = run_builder_phase(
