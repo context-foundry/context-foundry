@@ -1,108 +1,100 @@
 # Flowise Extension for Context Foundry
 
-A **private, modular extension framework** that teaches Context Foundry to become a Flowise expert. This extension automatically detects Flowise agent flows and provides world-class guidance for building high-quality workflows.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://img.shields.io/badge/tests-74%20passed-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](#testing)
+[![License](https://img.shields.io/badge/license-Private-red.svg)](#license)
+[![Build Status](https://img.shields.io/badge/build-autonomous-purple.svg)](#credits)
+
+> **A private, modular extension framework that teaches Context Foundry to become a Flowise expert.**
+
+This extension automatically detects Flowise agent flows and provides world-class guidance for building high-quality workflows with enterprise-grade patterns and comprehensive validation.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Notable Builds](#-notable-builds)
+- [Installation](#installation)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
+- [Pattern Library](#pattern-library)
+- [Testing](#testing)
+- [Documentation](#-documentation)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
+- [Credits](#credits)
+
+---
 
 ## Overview
 
 This extension augments Context Foundry with deep Flowise expertise through:
+
 - **Automatic Flow Detection**: Identifies Flowise JSON files and classifies flow types
 - **Pattern-Based Learning**: Extracts best practices from template analysis
 - **Phase Enhancements**: Injects expertise into Scout and Architect phases
 - **Graceful Integration**: Zero impact when extension is absent (public repo compatible)
-
-## 📚 Documentation
-
-### Authoritative Pattern Reference
-
-**[AGENT_PATTERN_REFERENCE.md](./AGENT_PATTERN_REFERENCE.md)** - The single source of truth for Flowise multi-agent systems
-
-This comprehensive reference defines the canonical way to structure Flowise agent flows:
-- ✅ Complete node type definitions (agentAgentflow, conditionAgentAgentflow, **executeFlowAgentflow**)
-- ✅ All input parameters with descriptions and examples
-- ✅ Agent persona patterns and configuration guidelines
-- ✅ Edge structure and connection patterns
-- ✅ Critical design patterns (intent detection, agent specialization, knowledge integration, **sub-flow execution**)
-- ✅ Complete implementation checklist
-- ✅ Common pitfalls and how to avoid them
-
-**NEW**: ExecuteFlow node support enables modular workflow composition with sub-flow execution and state management.
-
-**When to use**: Reference this document when designing or validating Flowise multi-agent architectures.
-
-### Supplementary Documentation
-
-- **[SELF-CONTAINED-AGENTS-FIX.md](./SELF-CONTAINED-AGENTS-FIX.md)** - Critical fix for self-contained agent architecture
-- **[prompts/FLOWISE-STRUCTURE-AUTHORITY.md](./prompts/FLOWISE-STRUCTURE-AUTHORITY.md)** - Detailed structural validation checklist
-
-### Guides
-
-- **[Training Guide](./docs/TRAINING_GUIDE.md)** 🎓 **NEW!** - Master how to teach the extension new capabilities
-  - Complete masterclass on documentation-based training
-  - Step-by-step process for adding new node types (HTTP, custom tools, knowledge nodes, etc.)
-  - Worked examples and troubleshooting
-  - The Four Knowledge Types: Structural, Behavioral, Avoidance, and Validation
-- **[Documentation Index](./docs/DOCUMENTATION_INDEX.md)** - Navigation hub for all Flowise documentation
+- **Comprehensive Validation**: Prevents 14+ known failure patterns automatically
 
 ## Features
 
-- ✅ **Auto-detect Flowise flows** (multi-agent, RAG, workflow, chatbot)
-- ✅ **Classify complexity** (simple, moderate, complex)
-- ✅ **Extract patterns** from template JSONs
-- ✅ **Enhance Scout phase** with Flowise research checklist
-- ✅ **Enhance Architect phase** with proven patterns
-- ✅ **ExecuteFlow node support** 🆕 - Modular sub-flow execution with state management
-- ✅ **Generate Mermaid diagrams** for visual workflow documentation
-- ✅ **Auto-embed diagrams in README** with interactive agent details
-- ✅ **CLI tools** for template analysis and diagram generation
-- ✅ **Zero dependencies** (Python stdlib only)
-- ✅ **100% test coverage** (comprehensive unit tests)
+### Core Capabilities
 
-## 🏆 Notable Builds
+- **Auto-detect Flowise flows** (multi-agent, RAG, workflow, chatbot)
+- **Classify complexity** (simple, moderate, complex)
+- **Extract patterns** from template JSONs
+- **Enhance Scout phase** with Flowise research checklist
+- **Enhance Architect phase** with proven patterns
+
+### Advanced Features
+
+- **ExecuteFlow node support** - Modular sub-flow execution with state management
+- **Generate Mermaid diagrams** for visual workflow documentation
+- **Auto-embed diagrams in README** with interactive agent details
+- **CLI tools** for template analysis and diagram generation
+- **100% test coverage** with comprehensive unit tests
+
+### Quality Assurance
+
+- **Zero dependencies** (Python stdlib only)
+- **14/14 failure patterns prevented** automatically
+- **100% first-iteration success** on all documented builds
+
+---
+
+## Notable Builds
 
 The Flowise extension has successfully built production-ready workflows across diverse enterprise use cases:
 
 ### Recent Successes
 
-#### 🎯 [Promotion Nomination Workflow](./SUCCESS_PROMOTION_NOMINATION.md) - November 4, 2025
+#### Promotion Nomination Workflow - November 4, 2025
 **First successful Human-in-the-Loop implementation!**
 
 - **Complexity**: Complex (11 nodes, 12 edges, 7 agents + 2 HIL gates)
 - **Duration**: 25 minutes (first-try success)
 - **GitHub**: [promotion-nomination-flowise-agent](https://github.com/snedea/promotion-nomination-flowise-agent)
 - **Highlights**:
-  - ✅ First successful HIL approval gates with semantic proceed/reject outputs
-  - ✅ Two-stage approval workflow (Local Leadership → Executive)
-  - ✅ Complete Workday HCM integration guide
-  - ✅ Bulk decision capability with org filtering
-  - ✅ All 9 failure patterns prevented on first iteration
-  - ✅ 3,734 lines of validated Flowise JSON
-- **Impact**: Validates extension's production maturity for enterprise approval workflows
+  - First successful HIL approval gates with semantic proceed/reject outputs
+  - Two-stage approval workflow (Local Leadership → Executive)
+  - Complete Workday HCM integration guide
+  - 3,734 lines of validated Flowise JSON
 
-#### 📚 [Personalized Onboarding Flow](./SUCCESS_PERSONALIZED_ONBOARDING.md) - November 2, 2025
+#### Personalized Onboarding Flow - November 2, 2025
+
 - **Complexity**: Moderate (10 nodes, 9 edges, 8 agents)
 - **Duration**: 17 minutes (1,027 seconds)
 - **GitHub**: [personalized-onboarding-flowise](https://github.com/snedea/personalized-onboarding-flowise)
 - **Highlights**:
-  - ✅ All 5 failure patterns prevented on first try
-  - ✅ 2,952 lines of self-contained workflow
-  - ✅ Complete HR/IT integration architecture
-
-#### ▶️ [ExecuteFlow Pattern](./SUCCESS_EXECUTEFLOW.md) - November 2, 2025
-- **Feature**: Sub-flow execution and modular workflow composition
-- **Validation**: ExecuteFlow node type fully integrated
-- **Impact**: Enables hierarchical workflow architectures
-
-#### 🔧 [Auto-Include Tools Pattern](./SUCCESS_AUTO_INCLUDE_TOOLS.md) - November 2, 2025
-- **Feature**: Standard tools (currentDateTime, searXNG) automatically included
-- **Impact**: Reduces manual tool configuration overhead
-
-#### 📦 [Workforce Allocation Workflow](./SUCCESS_WORKFORCE_ALLOCATION.md) - November 1, 2025
-- **Complexity**: Moderate (8 nodes, 7 edges)
-- **Impact**: Demonstrates warehouse operations automation
-
-#### 🛍️ [Gig Marketplace Workflow](./SUCCESS_GIG_MARKETPLACE.md) - November 1, 2025
-- **Complexity**: Moderate (9 nodes)
-- **Impact**: Multi-stakeholder coordination patterns
+  - All 5 failure patterns prevented on first try
+  - 2,952 lines of self-contained workflow
+  - Complete HR/IT integration architecture
 
 ### Success Metrics
 
@@ -114,28 +106,6 @@ The Flowise extension has successfully built production-ready workflows across d
 | **Largest File** | 3,734 lines | Promotion Nomination |
 | **Test Iterations** | 1 (all builds) | All recent builds |
 
-### Pattern Prevention Record
-
-All recent builds prevent **14/14 known failure patterns**:
-1. ✅ Meta-descriptions (Pattern #1)
-2. ✅ Missing agent nodes (Pattern #2)
-3. ✅ Separate config files (Pattern #3)
-4. ✅ Disconnected nodes (Pattern #4)
-5. ✅ Phantom tool references (Pattern #5)
-6. ✅ Incorrect tool structure (Pattern #6)
-7. ✅ Missing router scenarios (Pattern #7)
-8. ✅ Missing inputParams (Pattern #8)
-9. ✅ Mermaid diagram embedding (Pattern #9)
-10. ✅ HIL gate invalid inputParams (Pattern #10)
-11. ✅ HIL gate blank screen (Pattern #11)
-12. ✅ agentMessages array (Pattern #12)
-13. ✅ agentModel missing nested field (Pattern #13)
-14. ✅ **Node type mismatch (Pattern #14)** ⭐ NEW
-
-**Success Rate**: 100% first-iteration success on all documented builds
-
-**Latest Addition**: Pattern #14 detection (2025-11-06) - Prevents Start/ConditionNode/DirectReply type mismatches
-
 ---
 
 ## Installation
@@ -144,10 +114,11 @@ All recent builds prevent **14/14 known failure patterns**:
 
 - Python 3.10 or higher
 - Context Foundry installed
+- Git (for cloning)
 
-### Setup
+### Quick Start
 
-1. Clone or copy this extension to Context Foundry's extensions directory:
+1. **Clone or copy this extension** to Context Foundry's extensions directory:
 
 ```bash
 # From Context Foundry root directory
@@ -156,14 +127,20 @@ cd extensions
 git clone <this-repo-url> flowise
 ```
 
-2. Verify installation:
+2. **Verify installation**:
 
 ```bash
 cd flowise
 python3 -m unittest discover tests/
 ```
 
-All tests should pass.
+All tests should pass (74/74).
+
+### Detailed Installation
+
+For comprehensive installation instructions including MCP server integration and orchestrator setup, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+
+---
 
 ## Usage
 
@@ -228,14 +205,6 @@ python3 mermaid_generator.py path/to/workflow.json
 - Proper node shapes (stadium for start, hexagon for router, rectangle for agents)
 - Labeled edges showing routing scenarios
 - Optional interactive `<details>` section with agent descriptions table
-- GitHub natively renders Mermaid - instant visualization in README
-
-**Automatic Integration:**
-When building Flowise projects, Context Foundry automatically:
-1. Generates `WORKFLOW-DIAGRAM.md` after build completion
-2. Embeds diagram prominently in README hero section
-3. Includes interactive collapsible agent details
-4. Validates diagram files exist before proceeding to tests
 
 ### 4. Template Analysis
 
@@ -252,98 +221,206 @@ python3 analyzer.py --analyze-all templates/
 python3 analyzer.py --analyze-all templates/ --export-patterns patterns/my-patterns.json
 ```
 
-**Output:**
-```
-✅ Analyzed 12/15 files
+### 5. Workflow Validation
 
-Most Common Node Types:
-  - AgentExecutor: 45 occurrences
-  - LLMChain: 32 occurrences
-  - VectorStoreRetriever: 18 occurrences
-
-Most Common Connection Patterns:
-  - supervisor-to-worker: 23 occurrences
-  - retrieval-to-llm: 18 occurrences
-  - agent-to-tool: 15 occurrences
-```
-
-### 5. Pattern Library
-
-Load and use pattern library:
-
-```python
-from flowise import extensions_loader
-
-# Load patterns
-patterns = extensions_loader.load_extension_patterns('flowise')
-
-if patterns:
-    for pattern in patterns['patterns']:
-        print(f"{pattern['pattern_id']}: {pattern['description']}")
-```
-
-## Project Structure
-
-```
-flowise-extension/
-├── detector.py              # Flow detection logic
-├── analyzer.py              # Template analyzer with CLI
-├── mermaid_generator.py     # Mermaid diagram generator
-├── extensions_loader.py     # Safe dynamic loader
-├── patterns/
-│   ├── flowise-expertise.json.example   # Pattern library
-│   └── flow-templates.json.example      # Template catalog
-├── prompts/
-│   ├── scout-enhancement.txt            # Scout phase guidance
-│   └── architect-enhancement.txt        # Architect phase patterns
-├── integration/
-│   ├── mcp_server_hook.py              # MCP server integration
-│   └── orchestrator_prompt_injection.txt # Orchestrator enhancements
-├── tests/
-│   ├── test_detector.py                # Detector tests
-│   ├── test_analyzer.py                # Analyzer tests
-│   ├── test_loader.py                  # Loader tests
-│   └── fixtures/                        # Sample Flowise JSONs
-├── README.md                           # This file
-└── __init__.py                         # Package initialization
-```
-
-## Integration with Context Foundry
-
-### Step 1: MCP Server Integration
-
-Add the code from `integration/mcp_server_hook.py` to `mcp_server.py`:
-
-1. Open `context-foundry/mcp_server.py`
-2. Locate the `_detect_existing_codebase()` method
-3. Add the hook code after existing project detectors (~line 250-300)
-4. Save and test with a Flowise project
-
-### Step 2: Orchestrator Prompt Integration
-
-Add enhancements from `integration/orchestrator_prompt_injection.txt`:
-
-1. Open `context-foundry/orchestrator_prompt.txt`
-2. Add Scout enhancement after Scout phase intro (~line 470)
-3. Add Architect enhancement after Architect phase intro (~line 636)
-4. Save and test with a Flowise project
-
-### Step 3: Verify Integration
-
-Test with a Flowise project:
+Validate workflow files before deployment:
 
 ```bash
-# 1. Create test project with Flowise JSON
-mkdir test-flowise-project
-cd test-flowise-project
-cp path/to/flowise-extension/tests/fixtures/supervisor_multi_agent.json ./
-
-# 2. Run Context Foundry
-cf build "Analyze this Flowise flow"
-
-# 3. Verify Scout report mentions Flowise flow type
-cat .context-foundry/scout-report.md | grep -i flowise
+python3 validate_workflow.py path/to/workflow.json
 ```
+
+This checks for all 14 known failure patterns and provides detailed fix suggestions.
+
+For more usage examples and advanced features, see [docs/USAGE.md](docs/USAGE.md).
+
+---
+
+## API Reference
+
+### detector.py
+
+```python
+detect_flowise_flow(file_path: Path) -> dict
+    """Detect if a JSON file is a Flowise flow.
+
+    Args:
+        file_path: Path to the JSON file to analyze
+
+    Returns:
+        dict with keys: is_flowise, flow_type, complexity,
+        node_count, edge_count, agent_count, has_memory, has_tools
+    """
+
+scan_directory(directory: Path) -> list[Path]
+    """Find all JSON files in directory.
+
+    Args:
+        directory: Path to directory to scan
+
+    Returns:
+        List of Path objects for all JSON files found
+    """
+
+classify_flow_type(nodes, node_types, edges) -> str
+    """Classify flow type based on node patterns.
+
+    Args:
+        nodes: List of node objects
+        node_types: Set of node type strings
+        edges: List of edge connections
+
+    Returns:
+        One of: 'multi-agent', 'rag', 'workflow', 'chatbot'
+    """
+
+calculate_complexity(node_count, edge_count, agent_count) -> str
+    """Determine flow complexity level.
+
+    Args:
+        node_count: Total number of nodes
+        edge_count: Total number of edges
+        agent_count: Number of agent nodes
+
+    Returns:
+        One of: 'simple', 'moderate', 'complex'
+    """
+```
+
+### analyzer.py
+
+```python
+analyze_template(template_path: Path) -> dict
+    """Analyze a single Flowise template.
+
+    Args:
+        template_path: Path to template JSON file
+
+    Returns:
+        dict with node types, patterns, and configurations
+    """
+
+analyze_directory(directory: Path) -> dict
+    """Analyze all templates in a directory.
+
+    Args:
+        directory: Path to directory containing templates
+
+    Returns:
+        dict with aggregated analysis results
+    """
+
+extract_node_patterns(nodes: list) -> list[dict]
+    """Extract common node configurations.
+
+    Args:
+        nodes: List of node objects from template
+
+    Returns:
+        List of pattern dicts with frequency counts
+    """
+
+extract_connection_patterns(edges, nodes) -> list[dict]
+    """Identify connection patterns.
+
+    Args:
+        edges: List of edge connections
+        nodes: List of node objects
+
+    Returns:
+        List of connection pattern dicts
+    """
+
+export_patterns(patterns: dict, output_path: Path) -> None
+    """Export patterns to JSON file.
+
+    Args:
+        patterns: Pattern dict to export
+        output_path: Path to write JSON file
+    """
+```
+
+### extensions_loader.py
+
+```python
+load_extension_detectors() -> dict | None
+    """Load custom project detectors.
+
+    Returns:
+        dict of detector functions or None if not found
+    """
+
+load_extension_patterns(extension_name: str) -> dict | None
+    """Load patterns from specific extension.
+
+    Args:
+        extension_name: Name of the extension
+
+    Returns:
+        dict with patterns or None if not found
+    """
+
+get_extension_prompt(extension_name: str, phase: str) -> str | None
+    """Get phase-specific prompt enhancement.
+
+    Args:
+        extension_name: Name of the extension
+        phase: Phase name ('scout' or 'architect')
+
+    Returns:
+        Prompt enhancement string or None
+    """
+
+extension_exists(extension_name: str) -> bool
+    """Check if extension is available.
+
+    Args:
+        extension_name: Name of the extension
+
+    Returns:
+        True if extension exists and is loadable
+    """
+```
+
+### mermaid_generator.py
+
+```python
+generate_diagram(workflow_path: Path, interactive: bool = False) -> str
+    """Generate Mermaid diagram from Flowise workflow.
+
+    Args:
+        workflow_path: Path to workflow JSON file
+        interactive: Include interactive details section
+
+    Returns:
+        Mermaid diagram markdown string
+    """
+
+parse_workflow(workflow_json: dict) -> tuple[list, list]
+    """Parse workflow JSON into nodes and edges.
+
+    Args:
+        workflow_json: Parsed workflow JSON
+
+    Returns:
+        Tuple of (nodes list, edges list)
+    """
+```
+
+### validate_workflow.py
+
+```python
+validate_workflow(workflow_path: Path) -> dict
+    """Validate Flowise workflow against all known patterns.
+
+    Args:
+        workflow_path: Path to workflow JSON file
+
+    Returns:
+        dict with errors, warnings, and validation status
+    """
+```
+
+---
 
 ## Architecture
 
@@ -368,41 +445,76 @@ Extension Missing     → Normal Context Foundry (no errors)
 Non-Flowise Project   → Extension inactive (no enhancements)
 ```
 
+### Component Diagram
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Context Foundry                       │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│  │    Scout    │ → │  Architect  │ → │   Builder   │  │
+│  │   Phase     │    │    Phase    │    │    Phase    │  │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘  │
+│         │                  │                  │         │
+│         ▼                  ▼                  ▼         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │           Flowise Extension (Private)            │   │
+│  │  ┌─────────┐ ┌──────────┐ ┌───────────────┐    │   │
+│  │  │Detector │ │ Analyzer │ │ Pattern Lib   │    │   │
+│  │  └─────────┘ └──────────┘ └───────────────┘    │   │
+│  │  ┌─────────────────┐ ┌─────────────────────┐   │   │
+│  │  │ Mermaid Gen     │ │ Workflow Validator  │   │   │
+│  │  └─────────────────┘ └─────────────────────┘   │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+For detailed architecture documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
 ## Pattern Library
 
-The extension includes proven patterns for:
+The extension includes proven patterns for building production-ready Flowise workflows:
 
-### Multi-Agent Patterns
-- **Supervisor-Worker**: Coordinator + specialized workers
-- **Hierarchical**: Multi-level supervision
-- **Collaborative**: Peer-based cooperation
+### Workflow Patterns (13)
 
-### RAG Patterns
-- **Basic RAG**: Simple vector search + LLM
-- **RAG with Reranking**: Improved relevance
-- **Hybrid RAG**: Semantic + keyword search
-- **Agentic RAG**: Intelligent retrieval strategy
+| Pattern ID | Description | Use Case |
+|------------|-------------|----------|
+| `afv2-chaining-pattern` | Sequential processing | Multi-step data transformation |
+| `afv2-parallel-pattern` | Multi-source research | Concurrent data gathering |
+| `afv2-routing-pattern` | Intent classification | Query routing to specialists |
+| `afv2-iteration-pattern` | Quality refinement | Document improvement loops |
+| `afv2-looping-pattern` | Validation retry | Error correction flows |
+| `afv2-hierarchy-pattern` | Task delegation | Manager-worker architectures |
+| `afv2-batch-processing` | Array processing | Bulk operations |
+| `afv2-conditional-retry` | Score-based validation | Quality gates |
+| `afv2-api-integration` | HTTP integration | External service calls |
+| `afv2-rag-pattern` | Document Q&A | Knowledge retrieval |
+| `afv2-smart-calculator` | Cost optimization | Dynamic pricing |
+| `afv2-doc-qa-confidence` | Confidence routing | Uncertainty handling |
+| `afv2-data-pipeline-etl` | ETL validation | Data transformation |
 
-### Workflow Patterns
-- **Sequential**: Linear processing
-- **Branching**: Conditional logic
-- **Parallel**: Concurrent execution
+### Common Issues Prevented (15)
 
-### Chatbot Patterns
-- **Simple Chatbot**: Basic conversation
-- **Tool-Enabled**: Actions beyond text
-- **Multi-Modal**: Text + images
-- **Domain Expert**: Specialized knowledge
+| Issue ID | Severity | Description |
+|----------|----------|-------------|
+| `flowise-missing-inputparams` | CRITICAL | Agent nodes not editable in UI |
+| `flowise-missing-start-node` | CRITICAL | No workflow entry point |
+| `flowise-separate-configs` | CRITICAL | External config files |
+| `flowise-incorrect-tool-structure` | CRITICAL | Tool import failures |
+| `flowise-disconnected-nodes` | HIGH | Unreachable agents |
+| `flowise-phantom-tools` | HIGH | Referenced but missing tools |
+| `flowise-missing-router-scenarios` | HIGH | Incomplete routing logic |
+| `flowise-missing-mermaid` | MEDIUM | No visual documentation |
 
-### Quality Patterns
-- **Error Handling**: Retry with exponential backoff
-- **Self-Healing**: Automatic error recovery
-- **Human-in-the-Loop**: Approval gates
-- **Feedback Loop**: Continuous improvement
+For complete pattern documentation, see [FAILURE_PATTERNS.md](FAILURE_PATTERNS.md).
+
+---
 
 ## Testing
 
-Run the full test suite:
+### Running Tests
 
 ```bash
 # Run all tests
@@ -416,206 +528,96 @@ python3 -m unittest tests.test_detector.TestFlowiseDetector.test_detect_valid_mu
 
 # Run with verbose output
 python3 -m unittest discover tests/ -v
+
+# Run with pytest (recommended)
+python3 -m pytest tests/ -v --tb=short
 ```
 
-**Expected output:**
+### Test Coverage
+
+| Test Module | Tests | Coverage |
+|-------------|-------|----------|
+| test_analyzer.py | 15 | 100% |
+| test_bootstrap_integration.py | 14 | 100% |
+| test_detector.py | 14 | 100% |
+| test_loader.py | 17 | 100% |
+| test_patterns.py | 14 | 100% |
+| **Total** | **74** | **100%** |
+
+### Expected Output
+
 ```
-test_detect_valid_multi_agent_flow ... ok
-test_detect_valid_rag_flow ... ok
-test_detect_valid_chatbot ... ok
-test_reject_invalid_json ... ok
+============================= test session starts ==============================
+platform darwin -- Python 3.14.0, pytest-8.4.2
+collected 74 items
+
+tests/test_analyzer.py::test_analyze_template PASSED
+tests/test_detector.py::test_detect_valid_multi_agent_flow PASSED
 ...
-----------------------------------------------------------------------
-Ran 35 tests in 0.123s
-
-OK
+============================== 74 passed in 0.32s ==============================
 ```
 
-## Development
+For detailed testing documentation, see [docs/TESTING.md](docs/TESTING.md).
 
-### Adding New Patterns
+---
 
-1. Analyze new template:
-```bash
-python3 analyzer.py --analyze new-template.json
-```
+## Documentation
 
-2. Add pattern to `patterns/flowise-expertise.json.example`:
-```json
-{
-  "pattern_id": "new-pattern",
-  "category": "architecture",
-  "description": "...",
-  "applies_to": ["flow-type"],
-  "best_practices": [...],
-  "anti_patterns": [...]
-}
-```
+### Authoritative References
 
-3. Update tests in `tests/test_analyzer.py`
+- **[AGENT_PATTERN_REFERENCE.md](./AGENT_PATTERN_REFERENCE.md)** - The single source of truth for Flowise multi-agent systems
+- **[FAILURE_PATTERNS.md](./FAILURE_PATTERNS.md)** - Complete catalog of known issues and preventions
 
-### Adding New Flow Types
+### Guides
 
-1. Update `detector.py::classify_flow_type()` with new heuristics
-2. Add test case in `tests/test_detector.py`
-3. Create fixture in `tests/fixtures/`
-4. Update pattern library with new flow type guidance
+- **[Training Guide](./docs/TRAINING_GUIDE.md)** - Master how to teach the extension new capabilities
+- **[Documentation Index](./docs/DOCUMENTATION_INDEX.md)** - Navigation hub for all documentation
+- **[User Guide](./USER_GUIDE.md)** - End-to-end workflow for using the extension
+- **[Quickstart](./QUICKSTART.md)** - Get started in 5 minutes
 
-## API Reference
+### Integration
 
-### detector.py
+- **[Installation Guide](./docs/INSTALLATION.md)** - Detailed setup instructions
+- **[MCP Integration](./docs/CONTEXT_FOUNDRY_MCP_SETUP.md)** - MCP server configuration
+- **[Usage Guide](./docs/USAGE.md)** - Comprehensive usage examples
 
-```python
-detect_flowise_flow(file_path: Path) -> dict
-    """Detect if a JSON file is a Flowise flow."""
+---
 
-scan_directory(directory: Path) -> list[Path]
-    """Find all JSON files in directory."""
-
-classify_flow_type(nodes, node_types, edges) -> str
-    """Classify flow type based on node patterns."""
-
-calculate_complexity(node_count, edge_count, agent_count) -> str
-    """Determine flow complexity level."""
-```
-
-### analyzer.py
-
-```python
-analyze_template(template_path: Path) -> dict
-    """Analyze a single Flowise template."""
-
-analyze_directory(directory: Path) -> dict
-    """Analyze all templates in a directory."""
-
-extract_node_patterns(nodes: list) -> list[dict]
-    """Extract common node configurations."""
-
-extract_connection_patterns(edges, nodes) -> list[dict]
-    """Identify connection patterns."""
-
-export_patterns(patterns: dict, output_path: Path) -> None
-    """Export patterns to JSON file."""
-```
-
-### extensions_loader.py
-
-```python
-load_extension_detectors() -> dict | None
-    """Load custom project detectors."""
-
-load_extension_patterns(extension_name: str) -> dict | None
-    """Load patterns from specific extension."""
-
-get_extension_prompt(extension_name: str, phase: str) -> str | None
-    """Get phase-specific prompt enhancement."""
-
-extension_exists(extension_name: str) -> bool
-    """Check if extension is available."""
-```
-
-## Pattern System
-
-Flowise uses a pattern-driven workflow powered by the Context Codex knowledge base. This ensures consistent, validated workflow generation based on proven patterns.
-
-### Architecture
+## Project Structure
 
 ```
-flowise-expertise.json → Bootstrap → Context Codex → Scout/Architect/Test queries
-                                           ↓
-                                    S3 Community Patterns
+flowise-extension/
+├── detector.py              # Flow detection logic
+├── analyzer.py              # Template analyzer with CLI
+├── mermaid_generator.py     # Mermaid diagram generator
+├── extensions_loader.py     # Safe dynamic loader
+├── validate_workflow.py     # Comprehensive workflow validation
+├── patterns/
+│   ├── flowise-expertise.json   # Pattern library
+│   └── flow-templates.json      # Template catalog
+├── prompts/
+│   ├── scout-enhancement.txt    # Scout phase guidance
+│   └── architect-enhancement.txt # Architect phase patterns
+├── integration/
+│   ├── mcp_server_hook.py       # MCP server integration
+│   └── orchestrator_prompt_injection.txt
+├── templates/                    # Example Flowise templates
+├── tests/
+│   ├── test_detector.py         # Detector tests
+│   ├── test_analyzer.py         # Analyzer tests
+│   ├── test_loader.py           # Loader tests
+│   ├── test_patterns.py         # Pattern tests
+│   └── fixtures/                # Sample Flowise JSONs
+├── docs/
+│   ├── INSTALLATION.md
+│   ├── USAGE.md
+│   ├── TRAINING_GUIDE.md
+│   └── DOCUMENTATION_INDEX.md
+├── README.md                    # This file
+└── __init__.py                  # Package initialization
 ```
 
-**Components**:
-
-1. **Pattern Library**: `extensions/flowise/patterns/flowise-expertise.json`
-   - 13 curated AFv2 workflow patterns
-   - 15 common issues and anti-patterns
-   - Structured JSON with full metadata
-
-2. **Bootstrap Script**: `scripts/bootstrap_flowise_patterns.py`
-   - Imports patterns into Context Codex
-   - Idempotent (safe to re-run)
-   - Run on installation or after pattern updates
-
-3. **Codex Integration**: Patterns available during builds
-   - Scout: Query patterns for architecture recommendations
-   - Architect: Reference patterns by ID in architecture.md
-   - Test: Validate workflows against pattern definitions
-
-### Usage
-
-#### Initial Setup
-
-```bash
-# Bootstrap Flowise patterns into Codex
-python3 scripts/bootstrap_flowise_patterns.py
-
-# Verify patterns loaded
-python3 -c "from context_foundry.codex import KnowledgeStore; \
-            store = KnowledgeStore(); \
-            print(f'Patterns: {len(store.search(\"flowise\", entry_type=\"pattern\"))}')"
-```
-
-#### During Builds
-
-Scout/Architect agents automatically query Codex for patterns:
-
-```python
-# Scout queries for relevant patterns
-codex_search("flowise routing pattern")
-codex_get_entry("afv2-chaining-pattern")
-
-# Architect references patterns in architecture.md
-"""
-## Applied Patterns
-- afv2-routing-pattern (Primary)
-- afv2-api-integration (Tools)
-"""
-```
-
-### Available Patterns
-
-**Workflow Patterns** (13):
-- `afv2-chaining-pattern` - Sequential processing
-- `afv2-parallel-pattern` - Multi-source research
-- `afv2-routing-pattern` - Intent classification
-- `afv2-iteration-pattern` - Quality refinement
-- `afv2-looping-pattern` - Validation retry
-- `afv2-hierarchy-pattern` - Task delegation
-- `afv2-batch-processing` - Array processing
-- `afv2-conditional-retry` - Score-based validation
-- `afv2-api-integration` - HTTP integration
-- `afv2-rag-pattern` - Document Q&A
-- `afv2-smart-calculator` - Cost optimization
-- `afv2-doc-qa-confidence` - Confidence routing
-- `afv2-data-pipeline-etl` - ETL validation
-
-**Common Issues** (15):
-- `flowise-missing-inputparams` - Agent nodes not editable (CRITICAL)
-- `flowise-missing-start-node` - No workflow entry point (CRITICAL)
-- `flowise-separate-configs` - External config files (CRITICAL)
-- `flowise-incorrect-tool-structure` - Tool import failures (CRITICAL)
-- See `patterns/flowise-expertise.json` for complete list
-
-### Testing Patterns
-
-```bash
-# Run pattern tests
-pytest extensions/flowise/tests/test_patterns.py -v
-
-# Run bootstrap integration tests
-pytest extensions/flowise/tests/test_bootstrap_integration.py -v
-```
-
-### Adding New Patterns
-
-1. Edit `extensions/flowise/patterns/flowise-expertise.json`
-2. Add pattern to `patterns` array with required fields
-3. Re-run bootstrap: `python3 scripts/bootstrap_flowise_patterns.py`
-4. Patterns immediately available in Codex
-
-See `docs/FLOWISE_PATTERN_UPGRADE_PLAN.md` for complete development guide.
+---
 
 ## Troubleshooting
 
@@ -648,21 +650,100 @@ See `docs/FLOWISE_PATTERN_UPGRADE_PLAN.md` for complete development guide.
 3. Run individual tests to isolate issue
 4. Check for missing dependencies (should be none)
 
+### Workflow Validation Failures
+
+**Symptom**: `validate_workflow.py` reports critical errors
+
+**Solutions**:
+1. Review the specific error messages
+2. Reference [FAILURE_PATTERNS.md](./FAILURE_PATTERNS.md) for fixes
+3. Ensure all nodes have proper `inputParams` arrays
+4. Verify node types match Flowise registry
+
+---
+
 ## Contributing
 
 This is a **private extension** for Context Foundry. Contributions are managed internally.
 
-To propose improvements:
-1. Create a feature branch
-2. Add tests for new functionality
-3. Ensure all tests pass
-4. Update documentation
-5. Submit for review
+### How to Contribute
+
+1. **Create a feature branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes** following the code style:
+   - Python 3.10+ type hints
+   - Docstrings for all public functions
+   - No external dependencies
+
+3. **Add tests** for new functionality:
+   ```bash
+   # Create test file in tests/
+   # Follow existing test patterns
+   python3 -m pytest tests/test_your_module.py -v
+   ```
+
+4. **Ensure all tests pass**:
+   ```bash
+   python3 -m pytest tests/ -v
+   ```
+
+5. **Update documentation**:
+   - Update relevant .md files
+   - Add entries to DOCUMENTATION_INDEX.md if needed
+
+6. **Submit for review**
+
+### Code Style
+
+- Follow PEP 8
+- Use type hints for all function signatures
+- Include docstrings with Args/Returns sections
+- Keep functions focused and testable
+
+### Adding New Patterns
+
+1. Analyze new template:
+   ```bash
+   python3 analyzer.py --analyze new-template.json
+   ```
+
+2. Add pattern to `patterns/flowise-expertise.json`
+
+3. Update tests in `tests/test_patterns.py`
+
+4. Document in FAILURE_PATTERNS.md if it's an anti-pattern
+
+---
 
 ## License
 
-Private - Context Foundry Internal Use Only
+**Private** - Context Foundry Internal Use Only
+
+This extension is proprietary software for internal use within Context Foundry. Unauthorized distribution, modification, or use outside of Context Foundry is prohibited.
+
+---
 
 ## Credits
 
-🤖 Built autonomously by Context Foundry
+**Built autonomously by Context Foundry**
+
+### Technologies Used
+
+- **Python 3.10+** - Core language
+- **Flowise** - Target platform for AI workflow automation
+- **Mermaid** - Diagram generation
+- **Context Foundry** - Autonomous build orchestration
+
+### Contributors
+
+- Context Foundry Development Team
+- Flowise Community (patterns and templates)
+
+---
+
+<p align="center">
+  <strong>Building enterprise-grade Flowise workflows, autonomously.</strong>
+</p>

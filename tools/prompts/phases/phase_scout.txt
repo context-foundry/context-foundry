@@ -62,11 +62,75 @@ SCOUT PHASE INSTRUCTIONS
 **PHASE TRACKING (START) - MANDATORY FIRST ACTION:**
 Update phase to "Scout", status "researching"
 
-**Step 1: Check for Past Learnings (Global Patterns)**
+**Step 1: Detect Extension Mode and Load Isolated Patterns**
 
-Read global pattern files to learn from past projects:
-- `read_global_patterns("scout-learnings")` - Scout learnings from ALL past builds
-- `read_global_patterns("common-issues")` - Issues from ALL past projects
+🎯 **PATTERN ISOLATION MODEL** - Read ONLY relevant patterns for your build type:
+
+**First, check session configuration:**
+```bash
+cat .context-foundry/session-summary.json | grep -E '"extension"|"flowise_flow"'
+```
+
+═══════════════════════════════════════════════════════════
+**OPTION A: FLOWISE BUILD** (if `extension: "flowise"` OR `flowise_flow: true`)
+═══════════════════════════════════════════════════════════
+
+🚨 **FLOWISE-ONLY MODE - ISOLATED PATTERNS** 🚨
+
+**MANDATORY: Read Flowise patterns from extension directory:**
+- Find Context Foundry install root (directory containing `tools/`, `extensions/`)
+- Read ALL JSON files in `<cf_root>/extensions/flowise/patterns/`
+- These contain Flowise-specific expertise, examples, and anti-patterns
+
+**MANDATORY: Read Flowise documentation:**
+1. Read `<cf_root>/extensions/flowise/AGENT_PATTERN_REFERENCE.md`
+2. Read `<cf_root>/extensions/flowise/FAILURE_PATTERNS.md`
+3. Read `<cf_root>/extensions/flowise/tool-configs/STANDARD_TOOLS.md`
+
+**Focus ONLY on Flowise concepts:**
+✅ AgentFlow v2.2 node architectures
+✅ Agent specialization and personas
+✅ Tool integration (currentDateTime, searXNG)
+✅ Memory management strategies
+✅ Workflow orchestration patterns
+
+**DO NOT read global patterns** - You have Flowise-specific expertise
+
+**DO NOT research general web/backend concepts:**
+❌ Web frameworks (React, Vue, Angular)
+❌ Backend APIs (Express, FastAPI)
+❌ Databases or ORMs
+❌ Traditional full-stack patterns
+
+═══════════════════════════════════════════════════════════
+**OPTION B: ROBLOX BUILD** (if `extension: "roblox"`)
+═══════════════════════════════════════════════════════════
+
+🎮 **ROBLOX-ONLY MODE - ISOLATED PATTERNS** 🎮
+
+**MANDATORY: Read Roblox patterns from extension directory:**
+- Find Context Foundry install root
+- Read ALL JSON files in `<cf_root>/extensions/roblox/patterns/`
+- These contain Roblox/Luau-specific expertise and game development patterns
+
+**Focus ONLY on Roblox concepts:**
+✅ Luau scripting patterns
+✅ Roblox game architecture
+✅ ModuleScript organization
+✅ RemoteEvents/RemoteFunctions
+✅ DataStore patterns
+
+**DO NOT read global patterns** - You have Roblox-specific expertise
+
+═══════════════════════════════════════════════════════════
+**OPTION C: GENERAL BUILD** (No extension specified)
+═══════════════════════════════════════════════════════════
+
+🌍 **GENERAL MODE - GLOBAL PATTERNS ONLY**
+
+**Read global pattern files** (extension patterns are isolated):
+- `read_global_patterns("scout-learnings")` - General Scout learnings
+- `read_global_patterns("common-issues")` - General issues (NO Flowise/Roblox)
 
 **SPECIAL CASE - MCP SERVER DETECTION:**
 
@@ -79,60 +143,14 @@ Then additionally read:
 - `read_global_patterns("mcp-server-patterns")` - MCP implementation patterns
 - `read_global_patterns("architecture-patterns")` - Project structure guidance
 
-**SPECIAL CASE - FLOWISE DETECTION:**
+**Use these patterns for:**
+✅ Python/Node.js/Go/C++ general applications
+✅ Web backends (FastAPI, Express, Flask)
+✅ Frontend apps (React, Vue, Vite)
+✅ CLI tools, APIs, microservices
+✅ Any non-extension build type
 
-If CONFIGURATION shows `flowise_flow: true`:
-
-🚨 **FLOWISE-ONLY MODE** 🚨
-
-**MANDATORY Reading:**
-1. Read /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md
-2. Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
-3. Read /Users/name/homelab/context-foundry/extensions/flowise/tool-configs/STANDARD_TOOLS.md
-
-**Focus ONLY on:**
-✅ Flowise node architectures
-✅ Agent specialization and personas
-✅ Tool integration (currentDateTime, searXNG)
-✅ Memory management strategies
-✅ Workflow orchestration
-
-**DO NOT research:**
-❌ Web frameworks (React, Vue, Angular)
-❌ Backend APIs (Express, FastAPI)
-❌ Databases or ORMs
-❌ Traditional full-stack patterns
-
-**MANDATORY: Use Pre-queried Context Codex Results**
-
-Context Codex patterns and issues have been pre-queried and injected into your task description
-(look for the "## Context Codex Research Results (Pre-queried)" section).
-
-1. **Use the pre-queried patterns**: The task includes Codex results with pattern IDs like:
-   - `pat-agentflow-v22-routing-pattern-*` - AgentFlow v2.2 routing
-   - `pat-flowise-conditionagent-*` - ConditionAgent template
-   - `iss-flowise-agentflow-v22-*` - Node type mismatch issues
-
-2. **Reference these pattern IDs** in your scout-report.md under "Context Codex Research" section:
-   ```markdown
-   ## Context Codex Research
-
-   **Patterns Applied:**
-   - pat-agentflow-v22-routing-pattern-372 (AgentFlow v2.2 Routing)
-   - pat-flowise-conditionagent-templat-327 (ConditionAgent Template)
-
-   **Anti-patterns to Avoid:**
-   - iss-flowise-agentflow-v22-wrong-852 (Wrong node type)
-   ```
-
-3. **Critical Flowise patterns to apply**:
-   - All nodes must use `"type": "agentFlow"` (NOT "customNode")
-   - Use `agentModel`, `agentStateUpdates` (NOT `model`, `stateUpdates`)
-   - Include ConditionAgent for routing patterns
-   - Reference templates from `extensions/flowise/prompts/*.json`
-
-4. **PhaseValidator requires** at least two Codex references in scout-report.md.
-   Copy the pattern IDs from the pre-queried results into your report.
+═══════════════════════════════════════════════════════════
 
 **Step 2: Research Task Requirements**
 

@@ -269,6 +269,53 @@ class WorkDirLockManager:
 
             logger.info(f"Lock released for {norm_path} by job {job_id}")
 
+    def force_release(self, working_dir: Union[str, Path], job_id: str) -> bool:
+        """
+        Force-release a lock even if it's not tracked in-memory.
+
+        Used for cancellation paths where the JobManager instance handling the
+        cancel request may not be the same one that originally acquired the lock.
+
+        Returns:
+            True if a lockfile or in-memory lock was removed, False otherwise.
+        """
+        norm_path = self.normalize_path(working_dir)
+        lockfile_path = norm_path / self.LOCK_FILENAME
+
+        with self._lock:
+            current_holder = self._active_locks.get(norm_path)
+
+            # Prefer the normal release path when we hold the lock in-memory
+            if current_holder == job_id:
+                del self._active_locks[norm_path]
+                self._remove_lockfile(lockfile_path)
+                logger.info(
+                    f"Force-released in-memory lock for {norm_path} by job {job_id}"
+                )
+                return True
+
+            lock_info = self._read_lockfile(lockfile_path)
+            if lock_info and lock_info.job_id == job_id:
+                # Remove lockfile even if we didn't track it in-memory
+                self._remove_lockfile(lockfile_path)
+                # Clean up any stale in-memory reference
+                self._active_locks.pop(norm_path, None)
+                logger.info(
+                    f"Force-removed lockfile for {norm_path} held by job {job_id}"
+                )
+                return True
+
+            logger.debug(
+                "No matching lock to force-release",
+                extra={
+                    "working_dir": str(norm_path),
+                    "requested_job": job_id,
+                    "current_holder": current_holder,
+                    "lockfile_job": getattr(lock_info, "job_id", None),
+                },
+            )
+            return False
+
     def is_locked(self, working_dir: Union[str, Path]) -> tuple[bool, Optional[str]]:
         """
         Check if a working directory is locked

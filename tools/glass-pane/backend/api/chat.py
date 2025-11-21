@@ -51,6 +51,7 @@ async def send_message(request: ChatRequest):
                 model=request.model,
                 plan_mode=request.plan_mode,
                 bypass_permissions=request.bypass_permissions,
+                working_directory=request.working_directory,
             )
 
         # Save user message
@@ -66,6 +67,12 @@ async def send_message(request: ChatRequest):
             ClaudeMessage(role=msg.role, content=msg.content) for msg in messages
         ]
 
+        # Prepend system prompt if available
+        if claude_cli.system_prompt:
+            claude_messages.insert(
+                0, ClaudeMessage(role="system", content=claude_cli.system_prompt)
+            )
+
         # Configure CLI
         config = ClaudeConfig(
             model=request.model,
@@ -74,13 +81,18 @@ async def send_message(request: ChatRequest):
             timeout=120,  # 2 minute timeout for chat
         )
 
+        # Determine working directory (request override or session default)
+        working_directory = request.working_directory or session.working_directory
+
         # Stream response
         async def event_generator():
             """Generate SSE events from Claude CLI stream."""
             accumulated_response = []
 
             try:
-                async for event in claude_cli.chat_stream(claude_messages, config):
+                async for event in claude_cli.chat_stream(
+                    claude_messages, config, cwd=working_directory
+                ):
                     event_type = event.get("type")
 
                     if event_type == "delta":
@@ -159,6 +171,7 @@ async def create_session(request: CreateSessionRequest):
             plan_mode=request.plan_mode,
             bypass_permissions=request.bypass_permissions,
             title=request.title,
+            working_directory=request.working_directory,
         )
 
         return ChatSessionResponse(
@@ -170,6 +183,7 @@ async def create_session(request: CreateSessionRequest):
             bypass_permissions=session.bypass_permissions,
             title=session.title,
             message_count=session.message_count,
+            working_directory=session.working_directory,
         )
     except Exception as e:
         logger.error(f"Error creating session: {e}", exc_info=True)
@@ -193,6 +207,7 @@ async def list_sessions(limit: int = 50, offset: int = 0):
                     bypass_permissions=s.bypass_permissions,
                     title=s.title,
                     message_count=s.message_count,
+                    working_directory=s.working_directory,
                 )
                 for s in sessions
             ],
@@ -225,6 +240,7 @@ async def get_session_history(session_id: str):
                 bypass_permissions=session.bypass_permissions,
                 title=session.title,
                 message_count=session.message_count,
+                working_directory=session.working_directory,
             ),
             messages=[
                 ChatMessageResponse(
@@ -255,6 +271,7 @@ async def update_session(session_id: str, request: UpdateSessionRequest):
             plan_mode=request.plan_mode,
             bypass_permissions=request.bypass_permissions,
             title=request.title,
+            working_directory=request.working_directory,
         )
 
         if not success:
@@ -270,6 +287,7 @@ async def update_session(session_id: str, request: UpdateSessionRequest):
             bypass_permissions=session.bypass_permissions,
             title=session.title,
             message_count=session.message_count,
+            working_directory=session.working_directory,
         )
     except HTTPException:
         raise

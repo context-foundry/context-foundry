@@ -223,6 +223,9 @@ def cmd_show(args):
         return 1
 
     # Print job details
+    from .art import get_status_art
+
+    print(get_status_art())
     print(f"Job ID: {job.id}")
     print(f"Type: {job.type.value}")
     print(f"Status: {job.status.value}")

@@ -887,16 +887,60 @@ print(json.dumps(result))
 
     def _merge_patterns(self, job_id: str, working_dir: str):
         """
-        Push learned patterns directly to Context Codex database
+        Merge learned patterns into global pattern storage.
 
         This implements self-improvement by extracting learnings from test failures
-        and pushing them to the searchable knowledge base.
+        and merging them into the global JSON pattern files for git-trackable storage.
+
+        PATTERN ISOLATION MODEL:
+        - Extension builds (Flowise, Roblox) DO NOT merge into global storage
+        - Only general builds merge into global patterns
+        - This prevents cross-contamination
         """
         try:
+            # Check session configuration for extension mode (PATTERN ISOLATION)
+            session_file = (
+                Path(working_dir) / ".context-foundry" / "session-summary.json"
+            )
+            is_extension_build = False
+            extension_name = None
+
+            if session_file.exists():
+                try:
+                    import json
+
+                    with open(session_file) as f:
+                        session = json.load(f)
+                        config = session.get("configuration", {})
+                        # Check for extension marker or flowise_flow flag
+                        extension_name = config.get("extension")
+                        is_flowise = config.get("flowise_flow", False)
+
+                        if extension_name or is_flowise:
+                            is_extension_build = True
+                            extension_name = extension_name or "flowise"
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse session config for pattern isolation: {e}"
+                    )
+
+            # PATTERN ISOLATION: Skip merge for extension builds
+            if is_extension_build:
+                self._emit_log(
+                    job_id,
+                    "INFO",
+                    f"Skipping global pattern merge for {extension_name} build (pattern isolation enforced)",
+                    None,
+                )
+                logger.info(
+                    f"Pattern isolation: {extension_name} build will not contaminate global patterns"
+                )
+                return
+
             self._emit_log(
                 job_id,
                 "INFO",
-                "Pushing learned patterns to Context Codex",
+                "Merging learned patterns to global storage (general build)",
                 None,
             )
 
@@ -909,159 +953,69 @@ print(json.dumps(result))
             )
 
             if not pattern_file.exists():
-                logger.info(f"No patterns found for job {job_id}, skipping codex push")
+                logger.info(f"No patterns found for job {job_id}, skipping merge")
                 return
 
-            # Load patterns from file
-            import json
-
-            with open(pattern_file) as f:
-                patterns_data = json.load(f)
-
-            patterns = patterns_data.get("patterns", [])
-            if not patterns:
-                logger.info(f"No patterns in file for job {job_id}")
-                return
-
-            # Import codex integration
+            # Import pattern management
             sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
-            from mcp_utils.codex_integration import push_issue_to_codex
+            from mcp_utils.pattern_management import merge_project_patterns_impl
 
-            # Push each pattern to Context Codex database
-            patterns_pushed = 0
-            for pattern in patterns:
-                try:
-                    # Extract pattern data
-                    title = pattern.get("title", "Unknown issue")
-                    description = pattern.get(
-                        "description", pattern.get("error_message", "")
-                    )
-                    severity = pattern.get("severity", "MEDIUM")
-                    tech_stack = pattern.get("tech_stack", [])
-                    project_types = pattern.get("project_types", [])
-                    tags = tech_stack + project_types
-                    solution = pattern.get("solution", {})
-                    solution_desc = (
-                        solution.get("description")
-                        if isinstance(solution, dict)
-                        else str(solution)
-                    )
-
-                    # Push to codex database
-                    entry_id = push_issue_to_codex(
-                        title=title,
-                        description=description,
-                        severity=severity,
-                        tags=tags,
-                        project_types=project_types,
-                        solution_description=solution_desc if solution_desc else None,
-                    )
-
-                    patterns_pushed += 1
-                    logger.debug(f"Pushed pattern to codex: {title} ({entry_id})")
-
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to push pattern '{pattern.get('title')}' to codex: {e}"
-                    )
-                    continue
-
-            self._emit_log(
-                job_id,
-                "INFO",
-                f"Successfully pushed {patterns_pushed}/{len(patterns)} patterns to Context Codex",
-                None,
+            # Merge project patterns into global storage (GENERAL BUILDS ONLY)
+            merge_result = merge_project_patterns_impl(
+                str(pattern_file),
+                pattern_type="common-issues",
+                increment_build_count=True,
             )
 
-            # After pushing to Codex, export and sync to S3
-            try:
+            if merge_result.get("status") == "success":
+                added = merge_result.get("patterns_added", 0)
+                updated = merge_result.get("patterns_updated", 0)
                 self._emit_log(
                     job_id,
                     "INFO",
-                    "Exporting Codex to pattern files and syncing to S3",
+                    f"Merged patterns to global storage: {added} added, {updated} updated",
                     None,
                 )
 
-                # Import export and S3 sync functionality
-                sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
-                from mcp_utils.codex_export import export_codex_to_patterns_impl
+                # Sync to S3 if available
+                try:
+                    from context_foundry.storage import S3PatternClient
 
-                # Export Codex to JSON pattern files
-                export_result = export_codex_to_patterns_impl()
-
-                # Log export results (may be partial success)
-                exports = export_result.get("exports", [])
-                successful = [e for e in exports if e.get("success")]
-                failed = [e for e in exports if not e.get("success")]
-
-                if successful:
-                    total_patterns = export_result.get(
-                        "total_added", 0
-                    ) + export_result.get("total_updated", 0)
-                    self._emit_log(
-                        job_id,
-                        "INFO",
-                        f"Exported {total_patterns} patterns ({len(successful)}/{len(exports)} files succeeded)",
-                        None,
-                    )
-
-                if failed:
-                    for failed_export in failed:
-                        self._emit_log(
-                            job_id,
-                            "WARNING",
-                            f"Export failed for {failed_export.get('file', 'unknown')}: {failed_export.get('error', 'Unknown error')}",
-                            None,
-                        )
-
-                # Check if S3 sync occurred (only if at least one export succeeded)
-                if successful:
-                    s3_sync = export_result.get("s3_sync", {})
-                    if s3_sync.get("attempted"):
-                        if s3_sync.get("success"):
+                    client = S3PatternClient()
+                    if client.enabled:
+                        s3_result = client.upload_pattern("common-issues", force=True)
+                        if s3_result.get("success"):
                             self._emit_log(
                                 job_id,
                                 "INFO",
-                                f"Synced patterns to S3: {s3_sync.get('files_synced', 0)} files",
+                                f"Synced patterns to S3: {s3_result.get('s3_uri', 'unknown')}",
                                 None,
                             )
                         else:
                             self._emit_log(
                                 job_id,
                                 "WARNING",
-                                f"S3 sync failed: {s3_sync.get('error', 'Unknown error')}",
+                                f"S3 sync failed: {s3_result.get('error', 'Unknown error')}",
                                 None,
                             )
-                elif not successful and failed:
-                    logger.warning(
-                        f"All codex exports failed: {export_result.get('error', 'Unknown error')}"
-                    )
-                    self._emit_log(
-                        job_id,
-                        "WARNING",
-                        f"All pattern exports failed: {export_result.get('error', 'Unknown error')}",
-                        None,
-                    )
-
-            except Exception as export_error:
-                logger.warning(
-                    f"Failed to export/sync patterns for job {job_id}: {export_error}"
-                )
+                except Exception as s3_error:
+                    logger.debug(f"S3 sync not available: {s3_error}")
+            else:
                 self._emit_log(
                     job_id,
                     "WARNING",
-                    f"Pattern export/sync failed: {str(export_error)}",
+                    f"Pattern merge failed: {merge_result.get('error', 'Unknown error')}",
                     None,
                 )
 
         except Exception as e:
             logger.error(
-                f"Failed to push patterns to codex for job {job_id}: {e}", exc_info=True
+                f"Failed to merge patterns for job {job_id}: {e}", exc_info=True
             )
             self._emit_log(
                 job_id,
                 "WARNING",
-                f"Codex push failed: {str(e)}",
+                f"Pattern merge failed: {str(e)}",
                 None,
             )
 

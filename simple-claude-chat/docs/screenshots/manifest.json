@@ -1,0 +1,33 @@
+{
+  "generated": "2025-11-16T23:51:43.884Z",
+  "baseURL": "http://localhost:5176",
+  "projectType": "web-app",
+  "screenshots": [
+    {
+      "filename": "hero.png",
+      "path": "docs/screenshots/hero.png",
+      "type": "hero",
+      "description": "Main chat interface - initial state"
+    },
+    {
+      "filename": "step-01-initial-state.png",
+      "path": "docs/screenshots/step-01-initial-state.png",
+      "type": "step",
+      "description": "Initial application state - empty chat"
+    },
+    {
+      "filename": "feature-01-input-field.png",
+      "path": "docs/screenshots/feature-01-input-field.png",
+      "type": "feature",
+      "description": "Message input field focused"
+    },
+    {
+      "filename": "feature-02-interface-overview.png",
+      "path": "docs/screenshots/feature-02-interface-overview.png",
+      "type": "feature",
+      "description": "Complete chat interface layout"
+    }
+  ],
+  "total": 4,
+  "failed": 0
+}

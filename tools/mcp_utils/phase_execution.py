@@ -9,11 +9,13 @@ Implements:
 - BAML-enforced phase tracking
 """
 
+import copy
 import json
 import logging
 import os
 import subprocess
 import sys
+import traceback
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -446,6 +448,11 @@ class PhaseValidator:
         with open(build_tasks) as f:
             plan = json.load(f)
 
+        # Normalize schema to support legacy builds and avoid KeyErrors downstream
+        plan, _, warnings = _normalize_build_tasks_schema(plan)
+        for warning in warnings:
+            logger.warning(f"Build plan warning: {warning}")
+
         # Check each task completed (if parallel mode enabled)
         # The parallel builder now writes .done markers for persistent tracking
         if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
@@ -627,23 +634,25 @@ def run_phase(
     phase_prompt_path: Path,
     input_instruction: str,
     working_directory: Path,
-    phase_timeout: int = 1800,
-    validator: Optional[Callable[[Path], bool]] = None,
+    phase_timeout: int = 600,
+    validator: Callable[[Path, str], bool] = None,
     iteration: int = 0,
     project_type: str = "unknown",
+    provider: str = "claude",
 ) -> PhaseResult:
     """
-    Run a single phase with fresh context.
+    Execute a build phase using an AI agent (Claude or Gemini).
 
     Args:
-        phase_name: e.g., "Scout", "Architect", "Builder"
-        phase_prompt_path: Path to phase-specific prompt file
-        input_instruction: What to tell the agent
-        working_directory: Project directory
-        phase_timeout: Max seconds (default 30 min)
-        validator: Callable to validate output (phase-specific)
-        iteration: Test iteration number (for self-healing loop)
-        project_type: Project type for validation
+        phase_name: Name of the phase (e.g., "Architect")
+        phase_prompt_path: Path to the system prompt file
+        input_instruction: User instruction for this phase
+        working_directory: Directory to execute in
+        phase_timeout: Timeout in seconds
+        validator: Optional validation function
+        iteration: Current iteration number
+        project_type: Project type
+        provider: AI provider to use ("claude" or "gemini")
 
     Returns:
         PhaseResult with metrics
@@ -700,19 +709,34 @@ def run_phase(
 
     phase_prompt = phase_prompt_path.read_text()
 
-    # Build command
-    cmd = [
-        "claude",
-        "--permission-mode",
-        "bypassPermissions",
-        "--strict-mcp-config",  # Prevents loading user MCP servers
-        # Note: DO NOT add --print here - it prevents tool execution!
-        "--settings",
-        '{"thinkingMode": "off"}',
-        "--system-prompt",
-        phase_prompt,
-        input_instruction,
-    ]
+    # Build command based on provider
+    if provider.lower() == "gemini":
+        # Gemini CLI Command
+        # We prepend the system prompt to the user instruction because Gemini CLI
+        # doesn't have a dedicated --system-prompt flag in the version we checked.
+        full_prompt = f"SYSTEM INSTRUCTIONS:\n{phase_prompt}\n\nUSER INSTRUCTION:\n{input_instruction}"
+
+        cmd = [
+            "gemini",
+            "--yolo",  # Auto-approve tools (equivalent to bypassPermissions)
+            "--output-format",
+            "text",
+            full_prompt,
+        ]
+    else:
+        # Claude CLI Command (Default)
+        cmd = [
+            "claude",
+            "--permission-mode",
+            "bypassPermissions",
+            "--strict-mcp-config",  # Prevents loading user MCP servers
+            # Note: DO NOT add --print here - it prevents tool execution!
+            "--settings",
+            '{"thinkingMode": "off"}',
+            "--system-prompt",
+            phase_prompt,
+            input_instruction,
+        ]
 
     # Track start time
     start = datetime.now()
@@ -933,13 +957,66 @@ def run_phase(
         )
 
 
-def _run_parallel_builders(
+def _normalize_build_tasks_schema(plan: dict) -> tuple[dict, bool, list[str]]:
+    """
+    Normalize build-tasks schema and check if it's safe for parallel execution.
+
+    Returns:
+        (normalized_plan, parallel_ready, warnings)
+    """
+    normalized = copy.deepcopy(plan)
+    warnings: list[str] = []
+
+    tasks = normalized.get("tasks", [])
+    normalized_tasks = []
+    parallel_ready = True
+
+    for task in tasks:
+        t = copy.deepcopy(task)
+
+        # Support legacy "id" field
+        task_id = t.get("task_id") or t.get("id")
+        if not task_id:
+            warnings.append(f"Task missing task_id: {t}")
+            parallel_ready = False
+            continue
+
+        t["task_id"] = task_id
+
+        # Default name/working_directory if missing
+        t.setdefault("name", t.get("description", task_id))
+        t.setdefault("working_directory", ".")
+
+        build_commands = t.get("build_commands")
+        if build_commands is None:
+            warnings.append(
+                f"Task {task_id} missing build_commands — plan not compatible with parallel runner"
+            )
+            t["build_commands"] = []
+            parallel_ready = False
+        elif not isinstance(build_commands, list):
+            warnings.append(
+                f"Task {task_id} build_commands must be a list, got {type(build_commands)}"
+            )
+            t["build_commands"] = []
+            parallel_ready = False
+
+        normalized_tasks.append(t)
+
+    normalized["tasks"] = normalized_tasks
+
+    return normalized, parallel_ready, warnings
+
+    return normalized, parallel_ready, warnings
+
+
+def _execute_agentic_tasks(
     build_tasks: dict,
     working_directory: Path,
     project_type: str,
 ) -> PhaseResult:
     """
-    Execute build tasks in parallel based on dependency graph.
+    Execute build tasks using intelligent Agents (Unified Architecture).
 
     Args:
         build_tasks: Parsed build-tasks.json content
@@ -950,260 +1027,104 @@ def _run_parallel_builders(
         PhaseResult with aggregated metrics
     """
     import concurrent.futures
-    import threading
 
     tasks = build_tasks.get("tasks", [])
     if not tasks:
         raise ValueError("build-tasks.json contains no tasks")
 
     print(f"\n{'='*60}", file=sys.stderr)
-    print(f"🚀 PARALLEL BUILD: {len(tasks)} tasks", file=sys.stderr)
+    print(f"🚀 AGENTIC BUILD: {len(tasks)} tasks", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
 
-    # Track task execution state
-    completed_tasks = set()
-    failed_tasks = set()
-    task_results = {}
-    results_lock = threading.Lock()
+    # Task Prompt Path
+    task_prompt_path = (
+        CF_ROOT / "tools" / "prompts" / "phases" / "phase_task_builder.txt"
+    )
+    if not task_prompt_path.exists():
+        raise FileNotFoundError(f"Task prompt not found: {task_prompt_path}")
 
+    # Track execution
+    completed_tasks = []
+    failed_tasks = []
+    total_tokens = 0
     start_time = datetime.now()
 
-    def execute_task(task: dict) -> tuple[str, bool, dict]:
-        """Execute a single build task."""
-        task_id = task["task_id"]
-        task_name = task["name"]
-        task_dir = working_directory / task["working_directory"]
+    def execute_single_task(task: dict) -> dict:
+        """Run a single Agent for a task."""
+        task_id = task.get("task_id") or task.get("id")
+        task_name = task.get("name", "Unknown Task")
+        instruction = task.get("agent_instruction") or f"Implement task: {task_name}"
+        provider = task.get("provider", "claude")
 
-        # Setup agent status tracking
-        context_foundry_dir = working_directory / ".context-foundry"
-        agent_status_file = context_foundry_dir / f"agent-{task_id}.json"
+        # OVERRIDE: Force Claude Code for all tasks (ignore BAML provider selection)
+        provider = "claude"
 
-        def update_agent_status(status: str, **kwargs):
-            """Write agent status to file for real-time tracking."""
-            import json
-
-            status_data = {
-                "task_id": task_id,
-                "task_name": task_name,
-                "description": task.get("description", ""),
-                "status": status,
-                "wave": wave_num,
-                "started_at": task_start.isoformat(),
-                "files": task.get("files", []),
-                **kwargs,
-            }
-            try:
-                with open(agent_status_file, "w") as f:
-                    json.dump(status_data, f, indent=2)
-            except Exception as e:
-                print(f"Warning: Failed to write agent status: {e}", file=sys.stderr)
-
-        print(f"\n🔨 Starting task: {task_name} ({task_id})", file=sys.stderr)
-        print(f"   Working directory: {task_dir}", file=sys.stderr)
-
-        task_start = datetime.now()
-
-        # Write initial status
-        update_agent_status("in_progress")
-
-        try:
-            # Execute build commands sequentially for this task
-            for cmd in task["build_commands"]:
-                print(f"   Running: {cmd}", file=sys.stderr)
-                result = subprocess.run(
-                    cmd,
-                    shell=True,
-                    cwd=task_dir,
-                    capture_output=True,
-                    text=True,
-                    timeout=900,  # 15 min per command
-                )
-
-                if result.returncode != 0:
-                    print(f"❌ Task {task_name} failed: {cmd}", file=sys.stderr)
-                    print(f"   stderr: {result.stderr[:500]}", file=sys.stderr)
-
-                    # Update status to failed
-                    duration = (datetime.now() - task_start).total_seconds()
-                    update_agent_status(
-                        "failed",
-                        completed_at=datetime.now().isoformat(),
-                        duration=duration,
-                        error=f"Command failed: {cmd}",
-                        stderr=result.stderr[:500],
-                    )
-
-                    return (
-                        task_id,
-                        False,
-                        {
-                            "error": f"Command failed: {cmd}",
-                            "stderr": result.stderr,
-                            "duration": duration,
-                        },
-                    )
-
-            duration = (datetime.now() - task_start).total_seconds()
-            print(f"✅ Task {task_name} completed in {duration:.1f}s", file=sys.stderr)
-
-            # Update status to completed
-            update_agent_status(
-                "completed",
-                completed_at=datetime.now().isoformat(),
-                duration=duration,
-                commands_executed=len(task["build_commands"]),
+        # Add file context to instruction
+        files = task.get("files", [])
+        if files:
+            instruction += "\n\nFiles to create/modify:\n" + "\n".join(
+                f"- {f}" for f in files
             )
-
-            # Write .done marker for persistent completion tracking
-            builder_logs_dir = context_foundry_dir / "builder-logs"
-            builder_logs_dir.mkdir(parents=True, exist_ok=True)
-            done_file = builder_logs_dir / f"{task_id}.done"
-            try:
-                done_file.write_text(
-                    f"Task completed successfully at {datetime.now().isoformat()}\n"
-                    f"Duration: {duration:.2f}s\n"
-                )
-            except Exception as e:
-                print(f"Warning: Failed to write .done marker: {e}", file=sys.stderr)
-
-            return (
-                task_id,
-                True,
-                {
-                    "duration": duration,
-                    "commands_executed": len(task["build_commands"]),
-                },
-            )
-
-        except subprocess.TimeoutExpired:
-            # Update status to failed (timeout)
-            update_agent_status(
-                "failed",
-                completed_at=datetime.now().isoformat(),
-                duration=900,
-                error="Task timeout (15 minutes)",
-            )
-            return (
-                task_id,
-                False,
-                {
-                    "error": "Task timeout (15 minutes)",
-                    "duration": 900,
-                },
-            )
-        except Exception as e:
-            # Update status to failed (exception)
-            duration = (datetime.now() - task_start).total_seconds()
-            update_agent_status(
-                "failed",
-                completed_at=datetime.now().isoformat(),
-                duration=duration,
-                error=str(e),
-            )
-            return (
-                task_id,
-                False,
-                {
-                    "error": str(e),
-                    "duration": duration,
-                },
-            )
-
-    def get_ready_tasks() -> list[dict]:
-        """Get tasks whose dependencies are all completed."""
-        ready = []
-        for task in tasks:
-            task_id = task["task_id"]
-            if task_id in completed_tasks or task_id in failed_tasks:
-                continue
-
-            dependencies = task.get("dependencies", [])
-            if all(dep in completed_tasks for dep in dependencies):
-                ready.append(task)
-
-        return ready
-
-    # Execute tasks in waves (by dependency level)
-    wave_num = 0
-    total_tokens = 0
-
-    while len(completed_tasks) + len(failed_tasks) < len(tasks):
-        wave_num += 1
-        ready_tasks = get_ready_tasks()
-
-        if not ready_tasks:
-            # Check if we're stuck (cyclic dependency or all remaining failed)
-            if failed_tasks:
-                break
-            else:
-                raise ValueError("Cyclic dependency detected in build-tasks.json")
 
         print(
-            f"\n🌊 Wave {wave_num}: {len(ready_tasks)} parallel tasks", file=sys.stderr
-        )
-
-        # Execute ready tasks in parallel
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=len(ready_tasks)
-        ) as executor:
-            futures = {
-                executor.submit(execute_task, task): task for task in ready_tasks
-            }
-
-            for future in concurrent.futures.as_completed(futures):
-                task_id, success, result_data = future.result()
-
-                with results_lock:
-                    task_results[task_id] = result_data
-
-                    if success:
-                        completed_tasks.add(task_id)
-                    else:
-                        failed_tasks.add(task_id)
-                        print(
-                            f"\n❌ Task {task_id} failed: {result_data.get('error')}",
-                            file=sys.stderr,
-                        )
-
-    total_duration = (datetime.now() - start_time).total_seconds()
-
-    print(f"\n{'='*60}", file=sys.stderr)
-    print("📊 PARALLEL BUILD SUMMARY", file=sys.stderr)
-    print(f"{'='*60}", file=sys.stderr)
-    print(f"Total duration: {total_duration:.1f}s", file=sys.stderr)
-    print(f"Completed tasks: {len(completed_tasks)}/{len(tasks)}", file=sys.stderr)
-    print(f"Failed tasks: {len(failed_tasks)}/{len(tasks)}", file=sys.stderr)
-    print(f"Waves executed: {wave_num}", file=sys.stderr)
-
-    # Calculate time savings
-    estimated_sequential = build_tasks.get("total_estimated_sequential", 0) * 60
-    if estimated_sequential > 0:
-        savings_percent = (
-            (estimated_sequential - total_duration) / estimated_sequential
-        ) * 100
-        print(
-            f"Time savings: {savings_percent:.1f}% ({estimated_sequential:.0f}s → {total_duration:.0f}s)",
+            f"\n🤖 Spawning Agent ({provider}) for: {task_name} ({task_id})",
             file=sys.stderr,
         )
 
-    # Return aggregated result
-    if failed_tasks:
-        return PhaseResult(
-            phase="Builder (Parallel)",
-            status="failed",
-            duration_seconds=total_duration,
-            context_tokens=total_tokens,
-            exit_code=1,
-            error=f"{len(failed_tasks)} tasks failed: {', '.join(failed_tasks)}",
+        # Reuse run_phase to spawn the agent
+        # We use a unique phase name for logging/tracking
+        result = run_phase(
+            phase_name=f"Task-{task_id}",
+            phase_prompt_path=task_prompt_path,
+            input_instruction=instruction,
+            working_directory=working_directory,
+            phase_timeout=1200,  # 20 mins per task
+            validator=None,  # Sub-tasks don't need strict validation, the main build does
+            project_type=project_type,
+            provider=provider,
         )
+
+        return {"task_id": task_id, "success": result.exit_code == 0, "result": result}
+
+    # Execute Tasks
+    # If 1 task -> Run in main thread (easier debugging)
+    # If >1 task -> Run in parallel
+    results = []
+    if len(tasks) == 1:
+        results.append(execute_single_task(tasks[0]))
     else:
-        return PhaseResult(
-            phase="Builder (Parallel)",
-            status="completed",
-            duration_seconds=total_duration,
-            context_tokens=total_tokens,
-            exit_code=0,
-        )
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_task = {executor.submit(execute_single_task, t): t for t in tasks}
+            for future in concurrent.futures.as_completed(future_to_task):
+                results.append(future.result())
+
+    # Aggregate Results
+    for res in results:
+        r = res["result"]
+        total_tokens += r.context_tokens
+        if res["success"]:
+            completed_tasks.append(res["task_id"])
+        else:
+            failed_tasks.append(res["task_id"])
+
+    duration = (datetime.now() - start_time).total_seconds()
+    success = len(failed_tasks) == 0
+
+    print(f"\n{'='*60}", file=sys.stderr)
+    print(
+        f"🏁 BUILD COMPLETE: {len(completed_tasks)}/{len(tasks)} tasks successful",
+        file=sys.stderr,
+    )
+    print(f"{'='*60}\n", file=sys.stderr)
+
+    return PhaseResult(
+        phase="Builder",
+        status="completed" if success else "failed",
+        duration_seconds=duration,
+        context_tokens=total_tokens,
+        exit_code=0 if success else 1,
+        error=None if success else f"Failed tasks: {failed_tasks}",
+    )
 
 
 def run_builder_phase(
@@ -1257,12 +1178,12 @@ def run_builder_phase(
             )
         # Note: use_parallel parameter is for future parallelization support
 
-    # Check if parallel build is enabled and feasible
+    # Check if build plan exists (Unified Architecture)
     build_tasks_file = working_directory / ".context-foundry" / "build-tasks.json"
 
-    if use_parallel and build_tasks_file.exists():
+    if build_tasks_file.exists():
         print(
-            "📋 Found build-tasks.json - checking for parallel build configuration",
+            "📋 Found build-tasks.json - executing Unified Agentic Build",
             file=sys.stderr,
         )
 
@@ -1270,40 +1191,34 @@ def run_builder_phase(
             with open(build_tasks_file) as f:
                 build_tasks = json.load(f)
 
-            # Check for either parallel_build_enabled (new) or parallel_mode (legacy)
-            is_parallel = build_tasks.get(
-                "parallel_build_enabled", False
-            ) or build_tasks.get("parallel_mode", False)
+            # Normalize schema
+            build_tasks, _, plan_warnings = _normalize_build_tasks_schema(build_tasks)
 
-            if is_parallel:
-                print(
-                    "🚀 Parallel build enabled - spawning task builders",
-                    file=sys.stderr,
-                )
-                return _run_parallel_builders(
-                    build_tasks,
-                    working_directory,
-                    project_type,
-                )
-            else:
-                print(
-                    "⚠️  build-tasks.json found but parallel build disabled - using sequential build",
-                    file=sys.stderr,
-                )
+            for warning in plan_warnings:
+                print(f"⚠️  Build plan warning: {warning}", file=sys.stderr)
 
-        except (json.JSONDecodeError, KeyError) as e:
-            print(
-                f"⚠️  Failed to parse build-tasks.json: {e} - falling back to sequential build",
-                file=sys.stderr,
+            # EXECUTE AGENTS
+            return _execute_agentic_tasks(
+                build_tasks,
+                working_directory,
+                project_type,
             )
 
-    elif use_parallel:
-        print("📝 No build-tasks.json found - using sequential build", file=sys.stderr)
-    else:
-        print("⚠️  Parallel builds disabled (use_parallel=False)", file=sys.stderr)
+        except Exception as e:
+            print(
+                f"⚠️  Failed to execute agentic build: {e} - falling back to legacy sequential",
+                file=sys.stderr,
+            )
+            traceback.print_exc()
 
-    # Run sequential builder (original behavior)
-    result = run_phase(
+    else:
+        print(
+            "📝 No build-tasks.json found - using legacy sequential build",
+            file=sys.stderr,
+        )
+
+    # Fallback / Legacy Sequential
+    return run_phase(
         "Builder",
         prompt_path,
         instruction,
@@ -1313,8 +1228,6 @@ def run_builder_phase(
         iteration=iteration,
         project_type=project_type,
     )
-
-    return result
 
 
 def tests_passed(test_report_path: Path) -> bool:

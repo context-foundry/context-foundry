@@ -303,6 +303,18 @@ class JobManager:
                         exc_info=True,
                     )
 
+        # Release any working directory lock held by this job
+        working_dir = job.params.get("working_directory")
+        if working_dir:
+            released = self._workdir_lock.force_release(working_dir, job_id)
+            if released:
+                logger.info(f"Released working directory lock for {working_dir}")
+            else:
+                logger.debug(
+                    "No working directory lock to release on cancel",
+                    extra={"job_id": job_id, "working_dir": working_dir},
+                )
+
         # Emit log
         log = LogEntry.create(
             job_id=job_id,
@@ -335,12 +347,18 @@ class JobManager:
             if workdir:
                 workdirs.append(workdir)
 
-        # Also check recent FAILED jobs (may have left stale locks)
-        failed_jobs = self.store.list_jobs(status=JobStatus.FAILED, limit=100)
-        for job in failed_jobs:
-            workdir = job.params.get("working_directory")
-            if workdir:
-                workdirs.append(workdir)
+        # Also check recent FAILED/CANCELLED/TIMED_OUT jobs (may have left stale locks)
+        failed_like_statuses = [
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+            JobStatus.TIMED_OUT,
+        ]
+        for status in failed_like_statuses:
+            jobs = self.store.list_jobs(status=status, limit=100)
+            for job in jobs:
+                workdir = job.params.get("working_directory")
+                if workdir:
+                    workdirs.append(workdir)
 
         # Deduplicate
         unique_workdirs = list(set(workdirs))
@@ -349,6 +367,22 @@ class JobManager:
             f"Found {len(unique_workdirs)} working directories to check for stale locks"
         )
         return unique_workdirs
+
+    def _describe_lock_holder(self, holder_job_id: str) -> str:
+        """
+        Build a user-friendly description for a lock holder job.
+
+        Returns status-aware message when possible.
+        """
+        if not holder_job_id:
+            return "another job (unknown status)"
+
+        holder = self.store.get_job(holder_job_id)
+        if holder:
+            status = holder.status.value
+            return f"job {holder_job_id} (status: {status})"
+
+        return f"job {holder_job_id}"
 
     def start(self, num_workers: Optional[int] = None):
         """
@@ -535,9 +569,10 @@ class JobManager:
                 if not lock_acquired:
                     # Directory is locked by another job - fail this job
                     is_locked, holder_job_id = self._workdir_lock.is_locked(working_dir)
+                    holder_desc = self._describe_lock_holder(holder_job_id)
                     error_msg = (
-                        f"Working directory {working_dir} is already locked by job {holder_job_id}. "
-                        "Cannot execute concurrent builds in the same directory."
+                        f"Working directory {working_dir} is locked by {holder_desc}. "
+                        "Cannot submit a new job until the existing one finishes or is cancelled."
                     )
                     logger.warning(error_msg)
 

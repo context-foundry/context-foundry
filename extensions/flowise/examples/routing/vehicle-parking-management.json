@@ -1,0 +1,1106 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "position": {
+        "x": 100,
+        "y": 400
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "version": 1.1,
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "hideInput": true,
+        "baseClasses": ["Start"],
+        "category": "Agent Flows",
+        "description": "Starting point of the agentflow",
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options",
+            "options": [
+              {
+                "label": "Chat Input",
+                "name": "chatInput",
+                "description": "Start the conversation with chat input"
+              },
+              {
+                "label": "Form Input",
+                "name": "formInput",
+                "description": "Start the workflow with form inputs"
+              }
+            ],
+            "default": "chatInput",
+            "id": "startAgentflow_0-input-startInputType-options",
+            "display": true
+          },
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string",
+            "placeholder": "Please Fill Out The Form",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "id": "startAgentflow_0-input-formTitle-string",
+            "display": false
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string",
+            "placeholder": "Complete all fields below to continue",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "id": "startAgentflow_0-input-formDescription-string",
+            "display": false
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "description": "Specify the type of form input",
+            "type": "array",
+            "show": {
+              "startInputType": "formInput"
+            },
+            "array": [
+              {
+                "label": "Type",
+                "name": "type",
+                "type": "options",
+                "options": [
+                  {"label": "String", "name": "string"},
+                  {"label": "Number", "name": "number"},
+                  {"label": "Boolean", "name": "boolean"},
+                  {"label": "Options", "name": "options"}
+                ],
+                "default": "string"
+              },
+              {
+                "label": "Label",
+                "name": "label",
+                "type": "string",
+                "placeholder": "Label for the input"
+              },
+              {
+                "label": "Variable Name",
+                "name": "name",
+                "type": "string",
+                "placeholder": "Variable name for the input (must be camel case)"
+              }
+            ],
+            "id": "startAgentflow_0-input-formInputTypes-array",
+            "display": false
+          },
+          {
+            "label": "Ephemeral Memory",
+            "name": "startEphemeralMemory",
+            "type": "boolean",
+            "description": "Start fresh for every execution without past chat history",
+            "optional": true,
+            "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+            "display": true
+          },
+          {
+            "label": "Flow State",
+            "name": "startState",
+            "description": "Runtime state during the execution of the workflow",
+            "type": "array",
+            "optional": true,
+            "array": [
+              {
+                "label": "Key",
+                "name": "key",
+                "type": "string",
+                "placeholder": "Foo"
+              },
+              {
+                "label": "Value",
+                "name": "value",
+                "type": "string",
+                "placeholder": "Bar",
+                "optional": true
+              }
+            ],
+            "id": "startAgentflow_0-input-startState-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "startInputType": "chatInput",
+          "startEphemeralMemory": false,
+          "startState": []
+        },
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "label": "Start",
+            "name": "startAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 104,
+      "height": 67,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 100,
+        "y": 400
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_1",
+      "position": {
+        "x": 300,
+        "y": 200
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "conditionAgentAgentflow_1",
+        "label": "Intent Router",
+        "version": 1.1,
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": ["ConditionAgent"],
+        "category": "Agent Flows",
+        "description": "Routes requests to appropriate specialized agent based on user intent",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "conditionAgentAgentflow_1-input-conditionAgentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string",
+            "description": "A general instructions of what the condition agent should do",
+            "rows": 4,
+            "acceptVariable": true,
+            "placeholder": "Determine the user's intent for parking management",
+            "id": "conditionAgentAgentflow_1-input-conditionAgentInstructions-string",
+            "display": true
+          },
+          {
+            "label": "Input",
+            "name": "conditionAgentInput",
+            "type": "string",
+            "description": "Input to be used for the condition agent",
+            "rows": 4,
+            "acceptVariable": true,
+            "default": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span></p>",
+            "id": "conditionAgentAgentflow_1-input-conditionAgentInput-string",
+            "display": true
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "description": "Define the scenarios that will be used as the conditions to split the flow",
+            "type": "array",
+            "array": [
+              {
+                "label": "Scenario",
+                "name": "scenario",
+                "type": "string",
+                "placeholder": "User is asking about parking"
+              }
+            ],
+            "default": [],
+            "id": "conditionAgentAgentflow_1-input-conditionAgentScenarios-array",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "conditionAgentModel": "chatAnthropic",
+          "conditionAgentInstructions": "<h2>Vehicle & Parking Management Router</h2><p>You are the intent classification router for the Vehicle Registration & Parking Management system. Analyze the user's request and route it to the appropriate specialized agent.</p><h3>Intent Categories</h3><ol><li><strong>VEHICLE_REGISTRATION</strong> - registering, updating, or validating vehicle information, license plates, VIN</li><li><strong>PERMIT_MANAGEMENT</strong> - applying for permits, checking eligibility, waitlist, renewals</li><li><strong>SPOT_BOOKING</strong> - reserving parking spots, canceling reservations, checking availability</li><li><strong>COMPLIANCE</strong> - insurance verification, violation checks, compliance status</li><li><strong>VISITOR_PERMIT</strong> - temporary permits for guests/visitors, QR codes</li><li><strong>REPORTING</strong> - occupancy, revenue, violation reports and analytics</li><li><strong>VIOLATION_MANAGEMENT</strong> - issuing, appealing, or resolving violations</li></ol><p>Be deterministic in your routing. If ambiguous, ask for clarification.</p>",
+          "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span></p>",
+          "conditionAgentScenarios": [
+            {"scenario": "User is asking about vehicle registration, license plates, or VIN"},
+            {"scenario": "User is asking about parking permits or eligibility"},
+            {"scenario": "User is asking about booking or reserving parking spots"},
+            {"scenario": "User is asking about compliance, insurance, or violations status"},
+            {"scenario": "User is asking about visitor permits or guest passes"},
+            {"scenario": "User is asking about reports or analytics"},
+            {"scenario": "User is asking about violation management, appeals, or payments"}
+          ],
+          "conditionAgentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.1",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {"id": "conditionAgentAgentflow_1-output-0", "label": 0, "name": 0, "description": "Vehicle Registration"},
+          {"id": "conditionAgentAgentflow_1-output-1", "label": 1, "name": 1, "description": "Permit Management"},
+          {"id": "conditionAgentAgentflow_1-output-2", "label": 2, "name": 2, "description": "Spot Booking"},
+          {"id": "conditionAgentAgentflow_1-output-3", "label": 3, "name": 3, "description": "Compliance"},
+          {"id": "conditionAgentAgentflow_1-output-4", "label": 4, "name": 4, "description": "Visitor Permit"},
+          {"id": "conditionAgentAgentflow_1-output-5", "label": 5, "name": 5, "description": "Reporting"},
+          {"id": "conditionAgentAgentflow_1-output-6", "label": 6, "name": 6, "description": "Violation Management"}
+        ],
+        "outputs": {
+          "conditionAgentAgentflow": ""
+        },
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 300,
+        "y": 200
+      }
+    },
+    {
+      "id": "agentAgentflow_2",
+      "position": {
+        "x": 600,
+        "y": -100
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Vehicle Registration",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#4DD0E1",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles vehicle registration, updates, validation, and VIN capture",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_2-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_2-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_2-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_2-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Vehicle Registration Agent for the parking management system.\n\n**Capabilities:**\n- Register new vehicles (license plate, make, model, year, color, VIN)\n- Update existing vehicle information\n- Validate license plate formats (state-specific)\n- Capture and verify VIN numbers (17 characters, checksum validation)\n- Manage insurance document uploads\n- Link vehicles to employee/contractor profiles via Workday\n\n**Rules:**\n- Maximum 2 vehicles per employee, 1 per contractor\n- License plates must be unique in system\n- Insurance documents required for all vehicles\n- VIN must be 17 characters and pass checksum\n\n**Process:**\n1. Verify user identity via Workday API\n2. Validate all vehicle information\n3. Check for duplicate registrations\n4. Store vehicle record in database\n5. Return confirmation with registration ID"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": -100
+      }
+    },
+    {
+      "id": "agentAgentflow_3",
+      "position": {
+        "x": 600,
+        "y": 50
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Permit Management",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#FFB74D",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles permit applications, eligibility validation, approvals, and waitlist",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_3-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_3-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_3-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_3-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Permit Management Agent for the parking management system.\n\n**Permit Types:**\n- EMPLOYEE_STANDARD: Regular employee parking\n- EMPLOYEE_RESERVED: Reserved spot for senior staff (Director+)\n- CONTRACTOR_TEMP: Temporary contractor permit (max 90 days)\n- HANDICAP_ACCESSIBLE: ADA-compliant spots\n- EV_CHARGING: Electric vehicle charging spots\n\n**Eligibility Rules:**\n- Full-time employees: Eligible immediately\n- Part-time employees: 6-month tenure required\n- Contractors: Sponsor approval required\n- Reserved spots: Director+ level only\n\n**Workflow:**\n1. Check eligibility via Workday\n2. Verify no existing active permit\n3. Check availability or add to waitlist\n4. Route for approval if required\n5. Issue permit or confirm waitlist position"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 50
+      }
+    },
+    {
+      "id": "agentAgentflow_4",
+      "position": {
+        "x": 600,
+        "y": 200
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Spot Booking",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#81C784",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles daily parking reservations with double-booking prevention",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_4-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_4-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_4-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_4-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Spot Booking Agent for the parking management system.\n\n**Booking Rules:**\n- Users must have active permit to book\n- Maximum 5 advance bookings per user\n- Bookings open 7 days in advance\n- Cancellation must be 2+ hours before\n- No-shows result in penalty points\n\n**Spot Types:**\n- STANDARD: Regular parking spots\n- COMPACT: Small vehicle spots\n- EV_CHARGING: Electric vehicle spots (premium)\n- MOTORCYCLE: Two-wheeler spots\n- ACCESSIBLE: ADA-compliant spots\n\n**Process:**\n1. Verify user has active permit\n2. Check spot availability for requested date\n3. Validate no conflicts exist (prevent double-booking)\n4. Create reservation with confirmation code\n5. Send confirmation email with spot details"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 200
+      }
+    },
+    {
+      "id": "agentAgentflow_5",
+      "position": {
+        "x": 600,
+        "y": 350
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_5",
+        "label": "Compliance",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#E57373",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles compliance scanning, insurance verification, and violation checks",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_5-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_5-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_5-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_5-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Compliance Agent for the parking management system.\n\n**Compliance Checks:**\n- Insurance expiration (30-day warning, suspension on expiry)\n- Permit expiration (auto-renewal eligibility check)\n- Vehicle registration validity\n- Outstanding violations (blocks new permits if unpaid)\n- No-show penalty accumulation\n\n**Thresholds:**\n- 3 no-shows = 7-day booking suspension\n- 5 violations = permit review required\n- Expired insurance = immediate permit suspension\n\n**Actions:**\n1. Query user's compliance status\n2. Check insurance document expiration dates\n3. Retrieve violation history\n4. Calculate penalty points\n5. Generate compliance report\n6. Send warning notifications"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_5-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 350
+      }
+    },
+    {
+      "id": "agentAgentflow_6",
+      "position": {
+        "x": 600,
+        "y": 500
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_6",
+        "label": "Visitor Permit",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#BA68C8",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles temporary visitor permits with QR code generation",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_6-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_6-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_6-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_6-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Visitor Permit Agent for the parking management system.\n\n**Visitor Permit Types:**\n- SINGLE_DAY: One-time visitor pass\n- MULTI_DAY: Up to 5 consecutive days\n- RECURRING: Weekly visitor (max 12 visits)\n- VIP: Special guest with reserved spot\n- DELIVERY: Short-term for deliveries (max 2 hours)\n\n**Rules:**\n- Each employee can issue max 4 visitor permits/month\n- Visitor must provide vehicle license plate\n- QR code expires at end of permit period\n- Host employee is responsible for visitor conduct\n\n**Process:**\n1. Collect visitor details (name, company, vehicle)\n2. Verify host has available visitor quota\n3. Generate unique permit with QR code\n4. Assign visitor spot (or general visitor area)\n5. Send permit to visitor and host\n6. Log visit for compliance tracking"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_6-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 500
+      }
+    },
+    {
+      "id": "agentAgentflow_7",
+      "position": {
+        "x": 600,
+        "y": 650
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_7",
+        "label": "Reporting",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#64B5F6",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Generates occupancy, revenue, violations, and waitlist analytics reports",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_7-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_7-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_7-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_7-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Reporting Agent for the parking management system.\n\n**Report Types:**\n- OCCUPANCY: Current and historical parking utilization\n- REVENUE: Permit fees, visitor fees, violation fines\n- VIOLATIONS: Violation trends, top offenders, resolution rates\n- WAITLIST: Waitlist length, average wait time, turnover\n- COMPLIANCE: Insurance expiration, permit status summary\n- USAGE: Peak hours, popular spots, no-show rates\n\n**Metrics Tracked:**\n- Daily/weekly/monthly occupancy rate\n- Revenue by source (permits, visitors, violations)\n- Violation frequency by type\n- Waitlist conversion rate\n- Average permit processing time\n\n**Access Control:**\n- Standard users: Personal reports only\n- Managers: Department reports\n- Admins: Organization-wide reports"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_7-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 650
+      }
+    },
+    {
+      "id": "agentAgentflow_8",
+      "position": {
+        "x": 600,
+        "y": 800
+      },
+      "type": "agentFlow",
+      "data": {
+        "id": "agentAgentflow_8",
+        "label": "Violation Management",
+        "version": 2.2,
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#F06292",
+        "baseClasses": ["Agent"],
+        "category": "Agent Flows",
+        "description": "Handles violation issuance, appeals, payments, and resolution",
+        "inputParams": [
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "asyncOptions",
+            "loadMethod": "listModels",
+            "loadConfig": true,
+            "id": "agentAgentflow_8-input-agentModel-asyncOptions",
+            "display": true
+          },
+          {
+            "label": "Messages",
+            "name": "agentMessages",
+            "type": "array",
+            "optional": true,
+            "acceptVariable": true,
+            "array": [
+              {
+                "label": "Role",
+                "name": "role",
+                "type": "options",
+                "options": [
+                  {"label": "System", "name": "system"},
+                  {"label": "Assistant", "name": "assistant"},
+                  {"label": "User", "name": "user"}
+                ]
+              },
+              {
+                "label": "Content",
+                "name": "content",
+                "type": "string",
+                "acceptVariable": true,
+                "rows": 4
+              }
+            ],
+            "id": "agentAgentflow_8-input-agentMessages-array",
+            "display": true
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "Tool",
+            "list": true,
+            "optional": true,
+            "id": "agentAgentflow_8-input-agentTools-Tool",
+            "display": true
+          },
+          {
+            "label": "Max Iterations",
+            "name": "agentMaxIterations",
+            "type": "number",
+            "optional": true,
+            "default": 10,
+            "id": "agentAgentflow_8-input-agentMaxIterations-number",
+            "display": true
+          }
+        ],
+        "inputAnchors": [],
+        "inputs": {
+          "agentModel": "chatAnthropic",
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Violation Management Agent for the parking management system.\n\n**Violation Types:**\n- NO_PERMIT: Parking without valid permit ($50)\n- WRONG_SPOT: Parked in wrong area ($35)\n- EXPIRED_PERMIT: Using expired permit ($40)\n- OVERTIME: Exceeded time limit ($25)\n- HANDICAP_VIOLATION: Unauthorized accessible spot ($200)\n- FIRE_LANE: Blocking fire lane ($150)\n- RESERVED_SPOT: Using reserved spot without permission ($75)\n\n**Appeal Process:**\n1. User submits appeal within 7 days\n2. Provide reason and supporting documentation\n3. Admin reviews within 5 business days\n4. Decision: Uphold, Reduce, or Dismiss\n5. User notified via email\n\n**Enforcement Rules:**\n- 3 violations in 90 days = Warning letter\n- 5 violations in 180 days = Permit suspension review\n- Unpaid violations = Blocked from new permits/bookings"
+            }
+          ],
+          "agentTools": [],
+          "agentMaxIterations": 10,
+          "agentModelConfig": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          }
+        },
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_8-output-agentAgentflow",
+            "label": "Agent",
+            "name": "agentAgentflow"
+          }
+        ],
+        "outputs": {},
+        "selected": false
+      },
+      "width": 220,
+      "height": 160,
+      "selected": false,
+      "positionAbsolute": {
+        "x": 600,
+        "y": 800
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "conditionAgentAgentflow_1",
+      "targetHandle": "conditionAgentAgentflow_1-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "startAgentflow_0-startAgentflow_0-output-startAgentflow-conditionAgentAgentflow_1-conditionAgentAgentflow_1-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-0",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-0-agentAgentflow_2-agentAgentflow_2-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-1",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-1-agentAgentflow_3-agentAgentflow_3-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-2",
+      "target": "agentAgentflow_4",
+      "targetHandle": "agentAgentflow_4-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-2-agentAgentflow_4-agentAgentflow_4-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-3",
+      "target": "agentAgentflow_5",
+      "targetHandle": "agentAgentflow_5-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-3-agentAgentflow_5-agentAgentflow_5-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-4",
+      "target": "agentAgentflow_6",
+      "targetHandle": "agentAgentflow_6-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-4-agentAgentflow_6-agentAgentflow_6-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-5",
+      "target": "agentAgentflow_7",
+      "targetHandle": "agentAgentflow_7-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-5-agentAgentflow_7-agentAgentflow_7-input-sequentialNode"
+    },
+    {
+      "source": "conditionAgentAgentflow_1",
+      "sourceHandle": "conditionAgentAgentflow_1-output-6",
+      "target": "agentAgentflow_8",
+      "targetHandle": "agentAgentflow_8-input-sequentialNode",
+      "type": "agentFlow",
+      "id": "conditionAgentAgentflow_1-conditionAgentAgentflow_1-output-6-agentAgentflow_8-agentAgentflow_8-input-sequentialNode"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ export default function Forge() {
     isStreaming,
     sendMessage,
     createSession,
+    updateSession,
     deleteSession,
     loadSessions,
     loadMessages,
@@ -22,6 +23,8 @@ export default function Forge() {
     setPlanMode,
     bypassPermissions,
     setBypassPermissions,
+    workingDirectory,
+    setWorkingDirectory,
     error,
     setError,
     cliStatus,
@@ -103,6 +106,24 @@ export default function Forge() {
     }
   };
 
+  const handleSaveWorkingDirectory = async () => {
+    if (!currentSession) {
+      setError('No active session to update');
+      return;
+    }
+
+    try {
+      // Send empty string to explicitly clear, or the path to set
+      await updateSession(currentSession.id, {
+        working_directory: workingDirectory.trim() || ""
+      });
+    } catch (err) {
+      console.error('Failed to save working directory:', err);
+    }
+  };
+
+  const hasWorkingDirectoryChanged = currentSession?.working_directory !== workingDirectory;
+
   return (
     <div className="h-full flex flex-col bg-gray-900">
       {/* Header */}
@@ -156,7 +177,7 @@ export default function Forge() {
         {showSettings && (
           <div className="mt-3 p-3 bg-gray-800 rounded border border-gray-700">
             <h3 className="text-sm font-semibold text-gray-300 mb-2">Chat Settings</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-4 mb-3">
               {/* Model Selection */}
               <div>
                 <label className="text-xs text-gray-400 block mb-1">Model</label>
@@ -203,6 +224,40 @@ export default function Forge() {
                 </label>
               </div>
             </div>
+
+            {/* Working Directory Input */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-gray-400">
+                  Working Directory
+                  <span className="text-gray-500 ml-1">(optional)</span>
+                </label>
+                {currentSession && hasWorkingDirectoryChanged && (
+                  <button
+                    onClick={handleSaveWorkingDirectory}
+                    className="px-2 py-0.5 text-xs bg-cyan-600 hover:bg-cyan-500 text-white rounded transition-colors"
+                  >
+                    Save
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                value={workingDirectory}
+                onChange={(e) => setWorkingDirectory(e.target.value)}
+                placeholder="/path/to/project (leave empty to use backend default)"
+                className="w-full px-2 py-1.5 text-sm bg-gray-900 border border-gray-700 rounded text-gray-300 placeholder-gray-600 focus:border-cyan-600 focus:outline-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {currentSession?.working_directory ? (
+                  <>📁 Session directory: <span className="text-cyan-400 font-mono">{currentSession.working_directory}</span></>
+                ) : currentSession ? (
+                  '📁 No working directory set (using backend default)'
+                ) : (
+                  '📁 Create or select a session to set working directory'
+                )}
+              </p>
+            </div>
           </div>
         )}
 
@@ -239,6 +294,9 @@ export default function Forge() {
                       </p>
                       <p className="text-xs text-gray-500">
                         {session.message_count} messages • {session.model}
+                        {session.working_directory && (
+                          <> • 📁 {session.working_directory.split('/').pop()}</>
+                        )}
                       </p>
                     </div>
                     <button
@@ -373,6 +431,9 @@ export default function Forge() {
           {model === 'haiku' && '💨 Using fastest model'}
           {planMode && ' • 📋 Plan mode enabled'}
           {bypassPermissions && ' • 🔓 Permissions bypassed'}
+          {currentSession?.working_directory && (
+            <> • 📁 Directory: <span className="text-cyan-400 font-mono">{currentSession.working_directory}</span></>
+          )}
         </p>
       </div>
     </div>

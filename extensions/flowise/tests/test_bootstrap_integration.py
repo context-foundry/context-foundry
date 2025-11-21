@@ -1,12 +1,13 @@
 """
 Integration tests for Flowise pattern bootstrap
 
-Tests the complete flow: JSON → Bootstrap → Codex → Query
+Tests the complete flow: JSON → Bootstrap → Pattern Files → Query
 
 Run with: pytest extensions/flowise/tests/test_bootstrap_integration.py -v
 """
 
 import pytest
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -14,10 +15,11 @@ import sys
 # Add context-foundry to path
 cf_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(cf_root))
+sys.path.insert(0, str(cf_root / "tools"))
 
 
 class TestBootstrapIntegration:
-    """Test bootstrap script integration with Codex"""
+    """Test bootstrap script integration with pattern files"""
 
     @pytest.fixture(scope="class")
     def bootstrap_result(self):
@@ -65,8 +67,8 @@ class TestBootstrapIntegration:
         ), f"Expected 15+ issue import lines, found {len(issue_lines)}"
 
 
-class TestCodexIntegration:
-    """Test patterns are queryable from Codex after bootstrap"""
+class TestPatternFileIntegration:
+    """Test patterns are queryable from pattern files after bootstrap"""
 
     @pytest.fixture(scope="class", autouse=True)
     def run_bootstrap(self):
@@ -75,42 +77,64 @@ class TestCodexIntegration:
         subprocess.run([sys.executable, str(script_path)], capture_output=True)
 
     @pytest.fixture
-    def codex_store(self):
-        """Initialize Codex connection"""
-        try:
-            from context_foundry.codex import KnowledgeStore
+    def pattern_files(self):
+        """Load pattern files"""
+        pattern_dir = Path.home() / ".context-foundry" / "patterns"
 
-            codex_path = Path.home() / ".context-foundry" / "codex.db"
-            return KnowledgeStore(str(codex_path))
-        except ImportError:
-            pytest.skip("context_foundry.codex not available")
+        arch_file = pattern_dir / "architecture-patterns.json"
+        issues_file = pattern_dir / "common-issues.json"
 
-    def test_codex_contains_flowise_patterns(self, codex_store):
-        """Verify Codex contains Flowise patterns"""
-        # Search for Flowise patterns using search_by_type
-        results = codex_store.search_by_type("pattern", category="flowise")
+        arch_patterns = {}
+        common_issues = {}
+
+        if arch_file.exists():
+            with open(arch_file) as f:
+                arch_patterns = json.load(f)
+
+        if issues_file.exists():
+            with open(issues_file) as f:
+                common_issues = json.load(f)
+
+        return {
+            "architecture": arch_patterns,
+            "issues": common_issues,
+        }
+
+    def test_patterns_file_contains_flowise_patterns(self, pattern_files):
+        """Verify architecture patterns file contains Flowise patterns"""
+        patterns = pattern_files["architecture"].get("patterns", [])
+        flowise_patterns = [p for p in patterns if p.get("category") == "flowise"]
 
         # Should have at least 13 patterns
-        assert len(results) >= 13, f"Expected 13+ patterns, found {len(results)}"
+        assert (
+            len(flowise_patterns) >= 13
+        ), f"Expected 13+ patterns, found {len(flowise_patterns)}"
 
-    def test_codex_contains_flowise_issues(self, codex_store):
-        """Verify Codex contains Flowise issues"""
-        # Search for Flowise issues using search_by_type
-        results = codex_store.search_by_type("issue", category="flowise")
+    def test_issues_file_contains_flowise_issues(self, pattern_files):
+        """Verify common issues file contains Flowise issues"""
+        issues = pattern_files["issues"].get("patterns", [])
+        flowise_issues = [p for p in issues if p.get("category") == "flowise"]
 
         # Should have at least 15 issues
-        assert len(results) >= 15, f"Expected 15+ issues, found {len(results)}"
+        assert (
+            len(flowise_issues) >= 15
+        ), f"Expected 15+ issues, found {len(flowise_issues)}"
 
-    def test_chaining_pattern_in_codex(self, codex_store):
-        """Verify specific pattern (chaining) is in Codex with correct data"""
-        entry = codex_store.get_entry("afv2-chaining-pattern")
+    def test_chaining_pattern_in_files(self, pattern_files):
+        """Verify specific pattern (chaining) is in files with correct data"""
+        patterns = pattern_files["architecture"].get("patterns", [])
+        chaining_patterns = [
+            p for p in patterns if p.get("id") == "afv2-chaining-pattern"
+        ]
 
-        assert entry is not None, "Chaining pattern not found in Codex"
-        assert entry.id == "afv2-chaining-pattern"
-        assert "flowise" in entry.category.lower()
+        assert len(chaining_patterns) == 1, "Chaining pattern not found in files"
+        pattern = chaining_patterns[0]
+
+        assert pattern["id"] == "afv2-chaining-pattern"
+        assert "flowise" in pattern.get("category", "").lower()
 
         # Check metadata preserved
-        metadata = entry.metadata
+        metadata = pattern.get("metadata", {})
         assert (
             "implementation_notes" in metadata
         ), "Pattern metadata missing implementation_notes"
@@ -118,52 +142,85 @@ class TestCodexIntegration:
             "testing_checklist" in metadata
         ), "Pattern metadata missing testing_checklist"
 
-    def test_routing_pattern_in_codex(self, codex_store):
-        """Verify routing pattern (most common) is in Codex"""
-        entry = codex_store.get_entry("afv2-routing-pattern")
+    def test_routing_pattern_in_files(self, pattern_files):
+        """Verify routing pattern (most common) is in files"""
+        patterns = pattern_files["architecture"].get("patterns", [])
+        routing_patterns = [
+            p for p in patterns if p.get("id") == "afv2-routing-pattern"
+        ]
 
-        assert entry is not None, "Routing pattern not found in Codex"
-        assert entry.id == "afv2-routing-pattern"
-        assert entry.confidence >= 0.95, "Routing pattern should have high confidence"
+        assert len(routing_patterns) == 1, "Routing pattern not found in files"
+        pattern = routing_patterns[0]
 
-    def test_missing_inputparams_issue_in_codex(self, codex_store):
-        """Verify critical issue is in Codex with correct severity"""
-        entry = codex_store.get_entry("flowise-missing-inputparams")
-
-        assert entry is not None, "Missing inputParams issue not found in Codex"
-        assert entry.id == "flowise-missing-inputparams"
+        assert pattern["id"] == "afv2-routing-pattern"
         assert (
-            entry.severity.value == "CRITICAL"
-        ), f"Expected CRITICAL, got {entry.severity.value}"
+            pattern.get("confidence", 0) >= 0.95
+        ), "Routing pattern should have high confidence"
+
+    def test_missing_inputparams_issue_in_files(self, pattern_files):
+        """Verify critical issue is in files with correct severity"""
+        issues = pattern_files["issues"].get("patterns", [])
+        inputparam_issues = [
+            p for p in issues if p.get("id") == "flowise-missing-inputparams"
+        ]
+
+        assert (
+            len(inputparam_issues) == 1
+        ), "Missing inputParams issue not found in files"
+        issue = inputparam_issues[0]
+
+        assert issue["id"] == "flowise-missing-inputparams"
+        assert (
+            issue.get("severity") == "CRITICAL"
+        ), f"Expected CRITICAL, got {issue.get('severity')}"
 
         # Check metadata preserved
-        metadata = entry.metadata
+        metadata = issue.get("metadata", {})
         assert "symptoms" in metadata, "Issue metadata missing symptoms"
         assert "prevention" in metadata, "Issue metadata missing prevention"
 
-    def test_missing_start_node_issue_in_codex(self, codex_store):
-        """Verify missing start node issue is in Codex"""
-        entry = codex_store.get_entry("flowise-missing-start-node")
+    def test_missing_start_node_issue_in_files(self, pattern_files):
+        """Verify missing start node issue is in files"""
+        issues = pattern_files["issues"].get("patterns", [])
+        start_issues = [
+            p for p in issues if p.get("id") == "flowise-missing-start-node"
+        ]
 
-        assert entry is not None, "Missing start node issue not found in Codex"
-        assert entry.severity.value == "CRITICAL"
+        assert len(start_issues) == 1, "Missing start node issue not found in files"
+        assert start_issues[0].get("severity") == "CRITICAL"
 
-    def test_pattern_search_returns_relevant_results(self, codex_store):
+    def test_pattern_search_returns_relevant_results(self, pattern_files):
         """Verify pattern search returns relevant results"""
-        results = codex_store.search("routing pattern")
+        patterns = pattern_files["architecture"].get("patterns", [])
+
+        # Simple search by title/description
+        routing_patterns = [
+            p
+            for p in patterns
+            if "routing" in p.get("title", "").lower()
+            or "routing" in p.get("description", "").lower()
+        ]
 
         # Should find routing pattern
-        pattern_ids = [r.id for r in results]
+        pattern_ids = [p.get("id") for p in routing_patterns]
         assert (
             "afv2-routing-pattern" in pattern_ids
         ), f"Routing pattern not found in search results: {pattern_ids}"
 
-    def test_issue_search_returns_relevant_results(self, codex_store):
+    def test_issue_search_returns_relevant_results(self, pattern_files):
         """Verify issue search returns relevant results"""
-        results = codex_store.search("missing start node")
+        issues = pattern_files["issues"].get("patterns", [])
+
+        # Simple search by title/description
+        start_issues = [
+            p
+            for p in issues
+            if "start" in p.get("title", "").lower()
+            and "node" in p.get("title", "").lower()
+        ]
 
         # Should find start node issue
-        issue_ids = [r.id for r in results]
+        issue_ids = [p.get("id") for p in start_issues]
         assert (
             "flowise-missing-start-node" in issue_ids
         ), f"Start node issue not found in search results: {issue_ids}"
@@ -195,31 +252,53 @@ class TestIdempotency:
 
     def test_entry_count_stable_after_rerun(self):
         """Verify entry count doesn't increase after re-run"""
-        try:
-            from context_foundry.codex import KnowledgeStore
+        pattern_dir = Path.home() / ".context-foundry" / "patterns"
+        arch_file = pattern_dir / "architecture-patterns.json"
+        issues_file = pattern_dir / "common-issues.json"
 
-            codex_path = Path.home() / ".context-foundry" / "codex.db"
-            store = KnowledgeStore(str(codex_path))
+        def get_flowise_counts():
+            """Get count of flowise patterns and issues"""
+            pattern_count = 0
+            issue_count = 0
 
-            # Get initial count
-            initial_patterns = len(store.search_by_type("pattern", category="flowise"))
-            initial_issues = len(store.search_by_type("issue", category="flowise"))
+            if arch_file.exists():
+                with open(arch_file) as f:
+                    data = json.load(f)
+                    pattern_count = len(
+                        [
+                            p
+                            for p in data.get("patterns", [])
+                            if p.get("category") == "flowise"
+                        ]
+                    )
 
-            # Run bootstrap again
-            script_path = cf_root / "scripts" / "bootstrap_flowise_patterns.py"
-            subprocess.run([sys.executable, str(script_path)], capture_output=True)
+            if issues_file.exists():
+                with open(issues_file) as f:
+                    data = json.load(f)
+                    issue_count = len(
+                        [
+                            p
+                            for p in data.get("patterns", [])
+                            if p.get("category") == "flowise"
+                        ]
+                    )
 
-            # Get new count
-            new_patterns = len(store.search_by_type("pattern", category="flowise"))
-            new_issues = len(store.search_by_type("issue", category="flowise"))
+            return pattern_count, issue_count
 
-            # Counts should be equal (idempotent)
-            assert (
-                initial_patterns == new_patterns
-            ), f"Pattern count changed: {initial_patterns} -> {new_patterns}"
-            assert (
-                initial_issues == new_issues
-            ), f"Issue count changed: {initial_issues} -> {new_issues}"
+        # Get initial count
+        initial_patterns, initial_issues = get_flowise_counts()
 
-        except ImportError:
-            pytest.skip("context_foundry.codex not available")
+        # Run bootstrap again
+        script_path = cf_root / "scripts" / "bootstrap_flowise_patterns.py"
+        subprocess.run([sys.executable, str(script_path)], capture_output=True)
+
+        # Get new count
+        new_patterns, new_issues = get_flowise_counts()
+
+        # Counts should be equal (idempotent)
+        assert (
+            initial_patterns == new_patterns
+        ), f"Pattern count changed: {initial_patterns} -> {new_patterns}"
+        assert (
+            initial_issues == new_issues
+        ), f"Issue count changed: {initial_issues} -> {new_issues}"

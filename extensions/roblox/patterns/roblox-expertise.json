@@ -1,0 +1,524 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-11-17",
+  "description": "Roblox game development patterns, best practices, and common issues",
+
+  "patterns": [
+    {
+      "pattern_id": "obby-checkpoints-coin-shop",
+      "category": "game-genre",
+      "applies_to": ["roblox-game:rojo"],
+      "description": "Obby game with checkpoint system and coin-based shop",
+      "confidence": 0.95,
+      "frequency": 1,
+
+      "required_systems": [
+        "checkpoints",
+        "death_zones",
+        "coins",
+        "shop_ui",
+        "datastore_persistence"
+      ],
+
+      "optional_features": [
+        "stage_counter",
+        "leaderboard",
+        "cosmetics",
+        "music",
+        "particle_effects"
+      ],
+
+      "constraints": {
+        "must_use_rojo": true,
+        "must_support_offline_play": true,
+        "server_authoritative": true,
+        "client_input_validation": "required"
+      },
+
+      "directory_layout": {
+        "ServerScriptService/GameSystems": [
+          "CheckpointManager",
+          "CoinManager",
+          "ShopService",
+          "PlayerDataManager"
+        ],
+        "ReplicatedStorage/Modules": [
+          "PlayerData",
+          "ShopConfig",
+          "GameConfig"
+        ],
+        "StarterGui": [
+          "ShopUI",
+          "StageCounter",
+          "CoinDisplay"
+        ],
+        "Workspace": [
+          "Checkpoints",
+          "Stages",
+          "DeathZones"
+        ]
+      },
+
+      "code_templates": {
+        "checkpoint_manager": "basic-obby/src/ServerScriptService/GameSystems/CheckpointManager.lua",
+        "coin_manager": "basic-obby/src/ServerScriptService/GameSystems/CoinManager.lua",
+        "shop_service": "basic-obby/src/ServerScriptService/GameSystems/ShopService.lua",
+        "player_data": "basic-obby/src/ReplicatedStorage/Modules/PlayerData.lua"
+      },
+
+      "implementation_notes": [
+        "All checkpoint saving must be server-authoritative",
+        "Coin collection must validate on server before awarding",
+        "Shop purchases must verify coin balance server-side",
+        "Use UpdateAsync for DataStore operations to prevent race conditions",
+        "Implement retry logic for transient DataStore failures",
+        "Cache player data in memory, persist periodically and on leave"
+      ],
+
+      "security_requirements": [
+        "Never trust client-supplied checkpoint positions",
+        "Validate all RemoteEvent payloads for type and range",
+        "Rate-limit shop purchase requests to prevent spam",
+        "Verify player owns item before granting benefits",
+        "Log suspicious activity (impossible coin amounts, invalid purchases)"
+      ],
+
+      "testing_checklist": [
+        "Player spawns at spawn location",
+        "Touching checkpoint saves progress",
+        "Death teleports to last checkpoint",
+        "Coins award correct amount on collection",
+        "Coin balance persists across sessions",
+        "Shop UI displays available items",
+        "Shop purchases deduct correct amount",
+        "Insufficient coins prevents purchase",
+        "Purchased items grant correctly",
+        "Multiple players don't interfere with each other"
+      ]
+    },
+
+    {
+      "pattern_id": "roblox-module-structure",
+      "category": "architecture",
+      "applies_to": ["roblox-game", "roblox-library"],
+      "description": "ModuleScript organization best practices",
+      "confidence": 0.9,
+      "frequency": 1,
+
+      "best_practices": [
+        "Use ReplicatedStorage for shared client/server modules",
+        "Use ServerScriptService for server-only code",
+        "Use StarterPlayerScripts for client-only code",
+        "Return frozen tables from modules to prevent mutation",
+        "Avoid circular dependencies between modules",
+        "Cache service references at module level",
+        "Use type annotations for better IDE support and type checking"
+      ],
+
+      "module_template": {
+        "basic_module": "local Module = {}\nModule.__index = Module\n\nfunction Module.new()\n    local self = setmetatable({}, Module)\n    return self\nend\n\nreturn table.freeze(Module)",
+        "service_module": "local Service = {}\nlocal DataStoreService = game:GetService(\"DataStoreService\")\n\nfunction Service:Initialize()\n    -- Setup\nend\n\nreturn Service"
+      },
+
+      "anti_patterns": [
+        "Don't use _G for cross-script communication",
+        "Avoid require() in loops or frequent code paths",
+        "Don't mutate module tables after return",
+        "Avoid tight coupling between unrelated modules"
+      ]
+    },
+
+    {
+      "pattern_id": "roblox-datastore-best-practices",
+      "category": "persistence",
+      "applies_to": ["roblox-game"],
+      "description": "DataStore usage patterns for reliability and performance",
+      "confidence": 0.95,
+      "frequency": 1,
+
+      "best_practices": [
+        "Use UpdateAsync for atomic operations",
+        "Implement retry logic with exponential backoff",
+        "Cache data in memory, persist periodically",
+        "Use pcall for all DataStore operations",
+        "Handle errors gracefully (don't crash on DataStore failure)",
+        "Respect rate limits (60 + numPlayers * 10 requests per minute)",
+        "Use ordered data stores for leaderboards",
+        "Version your data structure for migration support"
+      ],
+
+      "code_example": "local success, result = pcall(function()\n    return PlayerDataStore:UpdateAsync(userId, function(oldData)\n        local data = oldData or {coins = 0, checkpoints = {}}\n        data.coins = data.coins + amount\n        return data\n    end)\nend)\n\nif not success then\n    warn(\"DataStore error:\", result)\n    -- Retry or handle gracefully\nend",
+
+      "rate_limits": {
+        "get_async": "60 + numPlayers * 10 per minute",
+        "set_async": "60 + numPlayers * 10 per minute",
+        "update_async": "60 + numPlayers * 10 per minute",
+        "get_sorted_async": "5 + numPlayers * 2 per minute"
+      }
+    },
+
+    {
+      "pattern_id": "roblox-remote-events-security",
+      "category": "security",
+      "applies_to": ["roblox-game"],
+      "description": "Secure RemoteEvent and RemoteFunction usage",
+      "confidence": 1.0,
+      "frequency": 1,
+
+      "security_rules": [
+        "ALWAYS validate client input on server",
+        "NEVER trust client-supplied amounts, positions, or identifiers",
+        "Use type checking for all parameters",
+        "Implement rate limiting to prevent spam",
+        "Log suspicious activity",
+        "Use RemoteEvents for one-way client-to-server",
+        "Use RemoteFunctions only when you need server-to-client response",
+        "Never use RemoteFunctions for critical operations (can be exploited)"
+      ],
+
+      "validation_template": "RemoteEvent.OnServerEvent:Connect(function(player, amount, itemId)\n    -- Type validation\n    if type(amount) ~= \"number\" or type(itemId) ~= \"string\" then\n        warn(\"Invalid parameters from\", player.Name)\n        return\n    end\n    \n    -- Range validation\n    if amount < 0 or amount > MAX_COINS then\n        warn(\"Suspicious coin amount from\", player.Name)\n        return\n    end\n    \n    -- Business logic validation\n    if not isValidItem(itemId) then\n        warn(\"Invalid item ID from\", player.Name)\n        return\n    end\n    \n    -- Process request\n    processRequest(player, amount, itemId)\nend)",
+
+      "common_exploits": [
+        {
+          "exploit": "Client sends inflated coin amounts",
+          "mitigation": "Server calculates all rewards, never trusts client values"
+        },
+        {
+          "exploit": "Client teleports to impossible positions",
+          "mitigation": "Server validates checkpoint positions against known checkpoints"
+        },
+        {
+          "exploit": "Client spams RemoteEvents",
+          "mitigation": "Implement rate limiting with cooldowns"
+        },
+        {
+          "exploit": "Client sends negative amounts to gain items",
+          "mitigation": "Validate amount > 0 and amount <= player balance"
+        }
+      ]
+    },
+
+    {
+      "pattern_id": "roblox-beginner-foundations",
+      "category": "education",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
+      "description": "Foundational building blocks for teaching Roblox Luau development",
+      "confidence": 1.0,
+      "frequency": 1,
+
+      "teaching_progression": [
+        "1. Variable binding and case sensitivity",
+        "2. Instance creation and parenting",
+        "3. Properties and conditionals",
+        "4. Events and player detection",
+        "5. Loops, randomness, and cleanup",
+        "6. Tables and data structures",
+        "7. Reusability patterns",
+        "8. Checkpoints and leaderstats"
+      ],
+
+      "foundational_patterns": {
+        "variable_binding": {
+          "explanation": "Always begin with local part = script.Parent to teach variable binding",
+          "example": "local part = script.Parent\npart.BrickColor = BrickColor.new(\"Bright red\")"
+        },
+        "instance_creation": {
+          "explanation": "Show Instance.new() + .Parent flow before adding logic",
+          "example": "local newPart = Instance.new(\"Part\")\nnewPart.Size = Vector3.new(10, 1, 10)\nnewPart.Parent = workspace"
+        },
+        "conditionals": {
+          "explanation": "Use property checks with if/elseif/else",
+          "example": "if part.Anchored == true then\n    print(\"Part is anchored\")\nelseif part.Transparency > 0.5 then\n    print(\"Part is transparent\")\nelse\n    print(\"Part is normal\")\nend"
+        },
+        "functions": {
+          "explanation": "Teach functions early for reuse",
+          "example": "local function add10(num)\n    return num + 10\nend\n\nlocal result = add10(5)\nprint(result) -- 15"
+        }
+      },
+
+      "common_patterns": {
+        "kill_brick": {
+          "description": "Template for damage-on-touch parts",
+          "code": "local killBrick = script.Parent\n\nkillBrick.Touched:Connect(function(hit)\n    local humanoid = hit.Parent:FindFirstChild(\"Humanoid\")\n    if humanoid then\n        humanoid.Health = 0\n    end\nend)",
+          "key_concepts": [
+            "Touched event connects to function",
+            "Always check for Humanoid before accessing it",
+            "Use FindFirstChild for safety"
+          ]
+        },
+        "player_detection": {
+          "description": "Get Player from touched part",
+          "code": "local Players = game:GetService(\"Players\")\n\npart.Touched:Connect(function(hit)\n    local player = Players:GetPlayerFromCharacter(hit.Parent)\n    if player then\n        print(player.Name, \"touched the part\")\n    end\nend)",
+          "key_concepts": [
+            "Use GetPlayerFromCharacter for reliable player detection",
+            "Always validate player exists before using"
+          ]
+        },
+        "checkpoint_system": {
+          "description": "Basic checkpoint saving with leaderstats",
+          "code": "local Players = game:GetService(\"Players\")\nlocal checkpoint = script.Parent\nlocal checkpointNumber = tonumber(checkpoint.Name)\n\ncheckpoint.Touched:Connect(function(hit)\n    local player = Players:GetPlayerFromCharacter(hit.Parent)\n    if player and checkpointNumber then\n        local stageValue = player.leaderstats.Stage\n        if checkpointNumber > stageValue.Value then\n            stageValue.Value = checkpointNumber\n        end\n    end\nend)",
+          "key_concepts": [
+            "Use tonumber() to convert string names to numbers",
+            "Only update if new checkpoint is higher",
+            "Store checkpoint number in leaderstats"
+          ]
+        },
+        "leaderstats_setup": {
+          "description": "Create leaderstats on player join",
+          "code": "local Players = game:GetService(\"Players\")\n\nPlayers.PlayerAdded:Connect(function(player)\n    local leaderstats = Instance.new(\"Folder\")\n    leaderstats.Name = \"leaderstats\"\n    leaderstats.Parent = player\n    \n    local stage = Instance.new(\"IntValue\")\n    stage.Name = \"Stage\"\n    stage.Value = 0\n    stage.Parent = leaderstats\nend)",
+          "key_concepts": [
+            "leaderstats folder must be exact name",
+            "Use IntValue for numbers",
+            "Create in PlayerAdded event"
+          ]
+        },
+        "checkpoint_respawn": {
+          "description": "Teleport player to checkpoint on spawn",
+          "code": "local Players = game:GetService(\"Players\")\nlocal checkpointsFolder = workspace.Checkpoints\n\nPlayers.PlayerAdded:Connect(function(player)\n    player.CharacterAdded:Connect(function(character)\n        local hrp = character:WaitForChild(\"HumanoidRootPart\")\n        local stage = player.leaderstats.Stage\n        \n        local checkpoint = checkpointsFolder:FindFirstChild(tostring(stage.Value))\n        if checkpoint then\n            hrp.CFrame = checkpoint.CFrame + Vector3.new(0, 3, 0)\n        end\n    end)\nend)",
+          "key_concepts": [
+            "Use CharacterAdded for respawn handling",
+            "WaitForChild for safety",
+            "Add offset to CFrame to avoid clipping"
+          ]
+        }
+      },
+
+      "loops_and_iteration": {
+        "numeric_loop": {
+          "example": "for i = 1, 10 do\n    print(\"Iteration\", i)\n    task.wait(1)\nend",
+          "warning": "Always include task.wait() in loops to prevent timeout"
+        },
+        "pairs_iteration": {
+          "example": "for _, child in pairs(workspace:GetChildren()) do\n    if child:IsA(\"BasePart\") then\n        child.BrickColor = BrickColor.new(\"Bright blue\")\n    end\nend",
+          "key_concepts": ["Use :IsA() to filter by type", "pairs() for arrays/dictionaries"]
+        },
+        "infinite_loop": {
+          "example": "while true do\n    print(\"Running...\")\n    task.wait(1)  -- REQUIRED!\nend",
+          "warning": "NEVER omit task.wait() in infinite loops - will crash server"
+        }
+      },
+
+      "randomness": {
+        "random_number": "math.random(1, 10)  -- Random integer 1-10",
+        "random_position": "Vector3.new(math.random(-50, 50), 10, math.random(-50, 50))",
+        "random_color": "BrickColor.random()"
+      },
+
+      "cleanup_patterns": {
+        "debris": {
+          "explanation": "Auto-delete parts after time",
+          "code": "local Debris = game:GetService(\"Debris\")\nDebris:AddItem(part, 5)  -- Destroys after 5 seconds"
+        },
+        "counter_limit": {
+          "explanation": "Prevent runaway spawning",
+          "code": "local maxParts = 100\nlocal currentParts = 0\n\nfunction spawnPart()\n    if currentParts >= maxParts then return end\n    currentParts += 1\n    -- spawn logic\nend"
+        }
+      },
+
+      "reusability": {
+        "explanation": "Move repeated scripts to ServerScriptService and iterate",
+        "example": "local folder = workspace.KillParts\n\nfor _, killBrick in pairs(folder:GetChildren()) do\n    if killBrick:IsA(\"BasePart\") then\n        killBrick.Touched:Connect(function(hit)\n            local humanoid = hit.Parent:FindFirstChild(\"Humanoid\")\n            if humanoid then\n                humanoid.Health = 0\n            end\n        end)\n    end\nend",
+        "benefits": ["Single script handles all similar objects", "Easier to update behavior", "Better organization"]
+      },
+
+      "best_practices": [
+        "Always validate event inputs before using them",
+        "Never run infinite loops without task.wait()",
+        "Prefer server scripts in ServerScriptService over per-part scripts",
+        "Use Debris and counters to avoid runaway part spawns",
+        "Reference Roblox Dev Hub for unfamiliar APIs",
+        "Test with multiple players to catch race conditions",
+        "Use print() statements for debugging"
+      ],
+
+      "common_mistakes": [
+        {
+          "mistake": "Forgetting task.wait() in loops",
+          "consequence": "Server timeout/crash",
+          "fix": "Always add task.wait() in while loops"
+        },
+        {
+          "mistake": "Not checking if Humanoid exists",
+          "consequence": "Attempt to index nil errors",
+          "fix": "Use FindFirstChild and validate before accessing"
+        },
+        {
+          "mistake": "Using game.Players instead of game:GetService('Players')",
+          "consequence": "Service might not be loaded yet",
+          "fix": "Always use :GetService() for services"
+        },
+        {
+          "mistake": "Creating separate scripts for identical objects",
+          "consequence": "Hard to maintain, lots of duplication",
+          "fix": "Use one script that iterates over folder of objects"
+        }
+      ],
+
+      "resources": [
+        "https://create.roblox.com/docs - Official Roblox Documentation",
+        "https://devforum.roblox.com - Developer Community Forum",
+        "https://robloxdev.com/resources - Additional Learning Resources"
+      ]
+    }
+  ],
+
+  "common_issues": [
+    {
+      "issue_id": "roblox-remote-security-001",
+      "severity": "HIGH",
+      "category": "security",
+      "description": "RemoteEvents vulnerable to exploits if client input not validated",
+      "frequency": 1,
+      "confidence": 1.0,
+
+      "symptoms": [
+        "Players gaining impossible amounts of coins",
+        "Players teleporting to unintended locations",
+        "Players purchasing items without sufficient funds",
+        "Exploit logs in server console"
+      ],
+
+      "solution": "Always validate client inputs on server. Check types, ranges, and business logic before processing.",
+
+      "code_fix": "-- BAD: Trusts client\nRemoteEvent.OnServerEvent:Connect(function(player, coins)\n    player.leaderstats.Coins.Value = coins\nend)\n\n-- GOOD: Validates input\nRemoteEvent.OnServerEvent:Connect(function(player, coins)\n    if type(coins) ~= \"number\" or coins < 0 or coins > 1000000 then\n        return -- Invalid\n    end\n    if coins <= getPlayerCoins(player) then\n        player.leaderstats.Coins.Value = coins\n    end\nend)",
+
+      "prevention": [
+        "Server calculates all rewards and state changes",
+        "Client only sends intent (\"collect coin\"), not result (\"add 10 coins\")",
+        "Validate all RemoteEvent parameters",
+        "Rate-limit requests"
+      ]
+    },
+
+    {
+      "issue_id": "roblox-datastore-failure-001",
+      "severity": "MEDIUM",
+      "category": "reliability",
+      "description": "DataStore failures crash game or lose player data",
+      "frequency": 1,
+      "confidence": 0.9,
+
+      "symptoms": [
+        "Player data not saving",
+        "Errors about DataStore request limits",
+        "Players losing progress on rejoin",
+        "Script errors when DataStore is unavailable"
+      ],
+
+      "solution": "Wrap all DataStore calls in pcall, implement retry logic, cache data in memory",
+
+      "code_fix": "-- BAD: No error handling\nlocal data = PlayerDataStore:GetAsync(userId)\n\n-- GOOD: Handles errors\nlocal function loadData(userId)\n    for attempt = 1, 3 do\n        local success, data = pcall(function()\n            return PlayerDataStore:GetAsync(userId)\n        end)\n        \n        if success then\n            return data or {coins = 0, checkpoints = {}}\n        else\n            warn(\"DataStore error (attempt\", attempt, \"):\", data)\n            wait(2 ^ attempt) -- Exponential backoff\n        end\n    end\n    \n    warn(\"Failed to load data for\", userId, \"- using defaults\")\n    return {coins = 0, checkpoints = {}} -- Default data\nend",
+
+      "prevention": [
+        "Always use pcall for DataStore operations",
+        "Implement retry logic with exponential backoff",
+        "Provide default data when loading fails",
+        "Cache data in memory to reduce requests",
+        "Save data periodically, not just on player leave"
+      ]
+    },
+
+    {
+      "issue_id": "roblox-performance-001",
+      "severity": "MEDIUM",
+      "category": "performance",
+      "description": "Poor performance from inefficient loops or :GetChildren() calls",
+      "frequency": 1,
+      "confidence": 0.85,
+
+      "symptoms": [
+        "Frame rate drops",
+        "Lag when many players join",
+        "Server performance warnings",
+        "Slow script execution"
+      ],
+
+      "solution": "Cache :GetChildren() results, avoid loops in Heartbeat, use WaitForChild sparingly",
+
+      "code_fix": "-- BAD: Calls GetChildren in loop\nwhile true do\n    for _, player in pairs(game.Players:GetPlayers()) do\n        for _, part in pairs(workspace:GetChildren()) do\n            -- Expensive operation\n        end\n    end\n    wait()\nend\n\n-- GOOD: Caches results, uses events\nlocal workspaceParts = workspace:GetChildren()\nworkspace.ChildAdded:Connect(function(child)\n    table.insert(workspaceParts, child)\nend)\n\nfor _, player in pairs(game.Players:GetPlayers()) do\n    for _, part in pairs(workspaceParts) do\n        -- Much faster\n    end\nend",
+
+      "prevention": [
+        "Cache :GetChildren() and :GetPlayers() results",
+        "Use :GetService() instead of game.Service",
+        "Avoid tight loops in Heartbeat or RenderStepped",
+        "Use task.spawn() for async work",
+        "Profile code with MicroProfiler"
+      ]
+    },
+
+    {
+      "issue_id": "roblox-memory-leak-001",
+      "severity": "LOW",
+      "category": "reliability",
+      "description": "Memory leaks from unconnected events or retained references",
+      "frequency": 1,
+      "confidence": 0.8,
+
+      "symptoms": [
+        "Memory usage increases over time",
+        "Server crashes after long uptime",
+        "Connections not cleaning up",
+        "Instances not garbage collecting"
+      ],
+
+      "solution": "Disconnect events when done, use Maid or Janitor pattern, avoid global references",
+
+      "code_fix": "-- BAD: Never disconnects\nlocal connection = part.Touched:Connect(function()\n    -- Handle touch\nend)\n\n-- GOOD: Disconnects when done\nlocal connection\nconnection = part.Touched:Connect(function()\n    -- Handle touch\n    connection:Disconnect()\nend)\n\n-- BETTER: Use cleanup pattern\nlocal connections = {}\ntable.insert(connections, part.Touched:Connect(function() end))\n\n-- On cleanup\nfor _, conn in pairs(connections) do\n    conn:Disconnect()\nend",
+
+      "prevention": [
+        "Disconnect events when objects are destroyed",
+        "Use Maid/Janitor libraries for cleanup",
+        "Avoid storing references in _G or global tables",
+        "Clean up on player leaving",
+        "Use weak tables for caches"
+      ]
+    }
+  ],
+
+  "project_types": {
+    "roblox-game": {
+      "description": "Full Roblox game project",
+      "typical_structure": ["ServerScriptService", "ReplicatedStorage", "StarterPlayer", "Workspace"],
+      "common_patterns": ["obby-checkpoints-coin-shop", "roblox-module-structure", "roblox-datastore-best-practices"]
+    },
+    "roblox-plugin": {
+      "description": "Roblox Studio plugin",
+      "typical_structure": ["plugin.lua", "src/"],
+      "common_patterns": ["roblox-module-structure"]
+    },
+    "roblox-library": {
+      "description": "Shared module or library",
+      "typical_structure": ["src/", "ModuleScripts"],
+      "common_patterns": ["roblox-module-structure"]
+    }
+  },
+
+  "toolchain": {
+    "rojo": {
+      "purpose": "Build system and project management",
+      "required": true,
+      "version": ">=7.0.0",
+      "install_url": "https://rojo.space"
+    },
+    "stylua": {
+      "purpose": "Code formatting",
+      "required": false,
+      "version": ">=0.20.0",
+      "install_command": "cargo install stylua"
+    },
+    "selene": {
+      "purpose": "Linting",
+      "required": false,
+      "version": ">=0.27.0",
+      "install_command": "cargo install selene"
+    },
+    "luau-analyze": {
+      "purpose": "Type checking",
+      "required": false,
+      "version": "latest",
+      "install_note": "Included with Roblox Studio"
+    }
+  },
+
+  "tags": ["roblox", "game-development", "luau", "rojo", "obby", "datastore", "remote-events", "security"]
+}

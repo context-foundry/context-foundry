@@ -213,7 +213,12 @@
         "Router temperature should be low (0.1-0.3) for deterministic decisions",
         "Number of scenarios MUST equal number of downstream agents",
         "Each scenario routes to exactly one specialized agent",
-        "Include clarification and error handling scenarios"
+        "Include clarification and error handling scenarios",
+        "CRITICAL: Use Synthesizer agent as TERMINAL node - all domain agents connect to Synthesizer, NO DirectReply after it",
+        "CRITICAL: Synthesizer must have agentEnableMemory: true or it throws 'at least one message is required' error",
+        "NEVER use || syntax in DirectReply (e.g., {{ var1 || var2 }}) - returns literal string, not resolved value",
+        "Agent nodes without outgoing edges return their response directly to user",
+        "Synthesizer reads from $flow.state to find which domain agent's response was populated"
       ],
       "use_cases": [
         "Customer support ticket routing",

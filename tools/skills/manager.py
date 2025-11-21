@@ -189,7 +189,6 @@ class SkillsManager:
             },
             "tags": tags,
             "related_skills": [],
-            "codex_entry_id": None,
         }
 
         # Save to JSON file
@@ -205,15 +204,6 @@ class SkillsManager:
 
         # Update index
         self._update_index(skill)
-
-        # Save to Context Codex for search (if available)
-        try:
-            codex_entry_id = self._save_to_codex(skill)
-            if codex_entry_id:
-                skill["codex_entry_id"] = codex_entry_id
-                skill_file.write_text(json.dumps(skill, indent=2))
-        except Exception as e:
-            logger.warning(f"Failed to save skill to Codex: {e}")
 
         logger.info(f"Saved skill: {skill_id} ({title})")
         return skill_id
@@ -496,12 +486,6 @@ class SkillsManager:
         # Update index
         self._update_index_metrics(skill)
 
-        # Update Codex entry
-        try:
-            self._update_codex_metrics(skill)
-        except Exception as e:
-            logger.warning(f"Failed to update Codex metrics: {e}")
-
         logger.info(f"Updated metrics for {skill_id}: {successes}/{total} success rate")
         return True
 
@@ -533,88 +517,6 @@ class SkillsManager:
 
         index["last_updated"] = datetime.now().isoformat()
         self.index_file.write_text(json.dumps(index, indent=2))
-
-    def _save_to_codex(self, skill: Dict[str, Any]) -> Optional[str]:
-        """
-        Save skill to Context Codex database for search.
-
-        Returns:
-            Codex entry ID if successful
-        """
-        try:
-            from context_foundry.codex.store import KnowledgeStore
-            from context_foundry.codex.models import (
-                KnowledgeEntry,
-                KnowledgeType,
-                Solution,
-            )
-
-            store = KnowledgeStore()
-
-            # Create knowledge entry
-            entry = KnowledgeEntry(
-                id=f"skill-{skill['skill_id']}",
-                type=KnowledgeType.PATTERN,
-                category="reusable-skill",
-                title=skill["metadata"]["title"],
-                description=skill["metadata"]["description"],
-                tags=",".join(skill["tags"]),
-                project_types=skill["metadata"]["project_type"],
-                confidence=skill["metrics"]["success_rate"]
-                if skill["metrics"]["success_rate"]
-                else 1.0,
-                frequency=skill["metrics"]["usage_count"],
-                metadata={
-                    "skill_id": skill["skill_id"],
-                    "file_type": skill["metadata"]["file_type"],
-                    "skill_file": f"{skill['metadata']['category']}/{skill['skill_id']}.json",
-                },
-            )
-
-            entry_id = store.add_entry(entry)
-
-            # Add code as solution
-            solution = Solution(
-                entry_id=entry_id,
-                phase="builder",
-                solution_type="implementation",
-                description=f"{skill['metadata']['title']} implementation",
-                code_example=skill["implementation"]["code"],
-                success_rate=skill["metrics"]["success_rate"],
-            )
-
-            store.add_solution(entry_id, solution)
-
-            return entry_id
-
-        except ImportError:
-            logger.warning("Context Codex not available, skipping database save")
-            return None
-        except Exception as e:
-            logger.error(f"Failed to save to Codex: {e}")
-            return None
-
-    def _update_codex_metrics(self, skill: Dict[str, Any]):
-        """Update skill metrics in Context Codex"""
-        if not skill.get("codex_entry_id"):
-            return
-
-        try:
-            from context_foundry.codex.store import KnowledgeStore
-
-            store = KnowledgeStore()
-
-            # Update frequency and confidence (success_rate)
-            store.update_entry(
-                skill["codex_entry_id"],
-                {
-                    "frequency": skill["metrics"]["usage_count"],
-                    "confidence": skill["metrics"]["success_rate"] or 0.0,
-                },
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to update Codex metrics: {e}")
 
     def get_stats(self) -> Dict[str, Any]:
         """

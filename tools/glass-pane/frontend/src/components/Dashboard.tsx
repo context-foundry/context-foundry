@@ -16,6 +16,35 @@ import Forge from './Forge';
 
 type TabType = 'build' | 'browse' | 'logs' | 'codex' | 'forge';
 
+// Funny rotating subtitles about Context Foundry
+const FORGE_SUBTITLES = [
+  "Where AI builds your dreams (and sometimes nightmares)",
+  "Teaching robots to code since 2024",
+  "99.9% uptime, 100% existential dread",
+  "Powered by coffee, Claude, and questionable decisions",
+  "Watch your app build itself. What could go wrong?",
+  "Like Iron Man's workshop, but with more TypeScript errors",
+  "The autonomous build system that never sleeps (literally)",
+  "Turning 'it works on my machine' into 'it builds autonomously'",
+  "Where Scout, Architect, and Builder argue until something works",
+  "Forging apps from pure context and determination",
+  "Because manually running npm install is so 2023",
+  "Your personal army of AI developers (they work for tokens)",
+  "Building the future, one hallucination at a time",
+  "Where parallel builds race to see who crashes first",
+  "The system that reads docs so you don't have to",
+  "Autonomous builds: Because sleep is for humans",
+  "Watching logs scroll by at 3 AM since day one",
+  "Docker containers spinning up faster than your anxiety",
+  "Where 'it compiles' is just the beginning",
+  "The forge where bugs are features in training",
+  "Powered by patterns learned from a thousand failed builds",
+  "Because manual deployment is cruel and unusual punishment",
+  "Where agents collaborate and occasionally fight",
+  "Building apps while you pretend to work",
+  "The only forge where the anvil is a database",
+];
+
 export default function Dashboard() {
   const { currentJob, setCurrentJob, refreshJob } = useJob();
   const { phaseInfo, updatePhase } = usePhase();
@@ -26,6 +55,11 @@ export default function Dashboard() {
     tokens_used: 0,
   });
   const [completedPhases, setCompletedPhases] = useState<import('../types/job').Phase[]>([]);
+
+  // Rotate subtitle every hour
+  const [subtitleIndex, setSubtitleIndex] = useState(() =>
+    Math.floor(Math.random() * FORGE_SUBTITLES.length)
+  );
 
   // Handle SSE events
   const handleSSEEvent = useCallback((event: SSEEvent) => {
@@ -83,6 +117,15 @@ export default function Dashboard() {
   }, [updatePhase, addFile, setMetrics, addLogs, currentJob, setCurrentJob, refreshJob]);
 
   useSSE(currentJob?.id || null, handleSSEEvent);
+
+  // Rotate subtitle every hour (3600000ms)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSubtitleIndex((prev) => (prev + 1) % FORGE_SUBTITLES.length);
+    }, 3600000); // 1 hour
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Update files when job changes
   useEffect(() => {
@@ -158,9 +201,9 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
-                Glass Pane
+                Forge
               </h1>
-              <p className="text-sm text-gray-400">Context Foundry Build Monitor</p>
+              <p className="text-sm text-gray-400">{FORGE_SUBTITLES[subtitleIndex]}</p>
             </div>
             <div className="flex items-center gap-4">
               <JobSelector />

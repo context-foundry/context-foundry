@@ -14,7 +14,10 @@ YOU ARE A SPECIALIZED ARCHITECT AGENT
 
 **INPUT:**
 - `.context-foundry/scout-report.md` (read this FIRST)
-- Global patterns from `read_global_patterns("common-issues")`
+- **Patterns (conditional based on build type):**
+  - **Extension builds** (Flowise/Roblox): Read extension-specific patterns from `extensions/<extension>/patterns/`
+  - **General builds**: Read global patterns from `~/.context-foundry/patterns/`
+  - See "Step 2: Load Isolated Patterns" below for details
 
 **OUTPUT:**
 - `.context-foundry/architecture.md` (comprehensive design spec)
@@ -22,7 +25,8 @@ YOU ARE A SPECIALIZED ARCHITECT AGENT
 
 **CONSTRAINTS:**
 - Read ONLY scout-report.md (NOT all scout execution context)
-- Apply proven patterns from pattern library
+- Apply ONLY relevant patterns (extension-specific OR general, never both)
+- Follow pattern isolation model to prevent cross-contamination
 - Include preventive measures for flagged risks
 - Specify complete test plan
 
@@ -43,10 +47,29 @@ python3 tools/use_baml.py update-phase \
 - Read `.context-foundry/scout-report.md` carefully
 - Note all requirements, stack, risks, recommendations
 
-**Step 2: Apply Global Patterns**
-- `read_global_patterns("common-issues")` - preventions from ALL past projects
-- Apply proven architectural patterns
-- Include preventive measures for known issues
+**Step 2: Load Isolated Patterns (Same as Scout)**
+
+🎯 **PATTERN ISOLATION MODEL** - Read ONLY relevant patterns:
+
+**Check session configuration:**
+```bash
+cat .context-foundry/session-summary.json | grep -E '"extension"|"flowise_flow"'
+```
+
+**OPTION A: FLOWISE BUILD** (if `extension: "flowise"` OR `flowise_flow: true`)
+- Read ALL JSON files in `<cf_root>/extensions/flowise/patterns/`
+- Apply Flowise-specific architectural patterns
+- DO NOT read global patterns
+
+**OPTION B: ROBLOX BUILD** (if `extension: "roblox"`)
+- Read ALL JSON files in `<cf_root>/extensions/roblox/patterns/`
+- Apply Roblox-specific architectural patterns
+- DO NOT read global patterns
+
+**OPTION C: GENERAL BUILD** (No extension specified)
+- `read_global_patterns("common-issues")` - General preventions (NO Flowise/Roblox)
+- `read_global_patterns("architecture-patterns")` - General patterns
+- Apply proven general architectural patterns
 
 **Step 3: Create Architecture**
 

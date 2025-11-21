@@ -1,0 +1,11 @@
+{
+  "languageMode": "strict",
+  "lint": {
+    "*": true,
+    "LocalUnused": false,
+    "LocalShadow": false
+  },
+  "lintErrors": false,
+  "typeErrors": false,
+  "globals": []
+}

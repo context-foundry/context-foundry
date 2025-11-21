@@ -1,13 +1,20 @@
 // Build Planning Schema for Context Foundry
 // Type-safe build task planning for parallel builds
 
+enum AgentProvider {
+  Claude
+  Gemini
+}
+
 class BuildTask {
   task_id string @description("Unique identifier for this task (e.g., 'task-1')")
   name string @description("Human-readable task name")
   description string @description("Detailed description of what this task does")
   working_directory string @description("Directory where build commands execute (relative to project root)")
-  build_commands string[] @description("Shell commands to execute for this task")
-  dependencies string[] @description("Array of task_ids that must complete before this task starts. Empty array [] means task can run immediately in parallel.")
+  agent_instruction string @description("REQUIRED: Natural language instruction for the AI Agent. Tell the agent what to build for this specific task.")
+  provider AgentProvider @description("REQUIRED: MUST be set to 'Claude' for ALL tasks. Do NOT use Gemini.")
+  build_commands string[] @description("DEPRECATED: Leave empty [] or only simple commands like mkdir. Agent will write code, not shell scripts.")
+  dependencies string[] @description("Array of task_ids that must complete before this task starts.")
   estimated_duration_minutes int @description("Estimated time to complete this task in minutes")
 }
 
@@ -38,51 +45,64 @@ function CreateBuildPlan(
 
     Create a comprehensive build plan with tasks and dependencies.
 
-    **🚀 PARALLEL BUILDS SIGNIFICANTLY SPEED UP DEVELOPMENT - FAVOR PARALLEL WHEN POSSIBLE!**
+    **UNIFIED AGENTIC BUILD ARCHITECTURE:**
+    - You define TASKS.
+    - The system spawns INTELLIGENT AGENTS to execute those tasks.
+    - **REQUIRED**: You MUST provide `agent_instruction` for EVERY task (natural language instruction)
+    - **REQUIRED**: You MUST provide `provider` for EVERY task (set to "Claude")
+    - DO NOT write complex shell scripts in `build_commands`. The Agent will write the code.
+    - build_commands is DEPRECATED - leave empty [] or use only for simple commands like "mkdir"
 
     **CRITICAL RULES:**
-    1. If scout_parallel_recommendation is false, return:
+    1. If scout_parallel_recommendation is FALSE (Sequential Mode):
        - parallel_build_enabled: false
-       - tasks: [] (empty array)
-       - Set all estimates to 0
+       - Create EXACTLY ONE task that covers the entire project.
+       - agent_instruction: "Implement the entire project according to architecture.md"
 
-    2. If scout_parallel_recommendation is true:
+    2. If scout_parallel_recommendation is TRUE (Parallel Mode):
        - parallel_build_enabled: true
        - **MAXIMIZE PARALLELIZATION** - split work into as many independent tasks as possible
        - Identify independent modules that can build in parallel
        - Define tasks with proper dependencies
-       - **ENSURE NO CYCLIC DEPENDENCIES** (task A depends on B, B depends on A)
+       - **ENSURE NO CYCLIC DEPENDENCIES**
        - **Default to empty dependencies []** - only add dependencies when truly required
-       - Tasks with empty dependencies [] run in parallel (THIS IS GOOD!)
-       - Integration/config tasks depend on their inputs
+
+    **🤖 PROVIDER SELECTION:**
+    - **IMPORTANT**: Always set provider to "Claude" for ALL tasks.
+    - Use Claude Code for every single task regardless of complexity.
+    - Do NOT use Gemini or any other provider.
 
     **⚡ PARALLELIZATION OPPORTUNITIES:**
     - Frontend + Backend: ALWAYS 2 separate parallel tasks (no dependencies between them)
     - Multiple services: Each service = separate parallel task
-    - Separate apps in monorepo: Each app = parallel task (unless sharing build artifacts)
+    - Separate apps in monorepo: Each app = parallel task
     - Independent libraries: Each lib = parallel task
-    - Database migrations + app code: Usually independent (parallel)
-
-    **Common Patterns:**
-    - Full-stack (frontend + backend): 2 parallel tasks with dependencies: []
-    - Microservices: N parallel service tasks + 1 deploy task
-    - Monorepo with shared lib: 1 lib task → N app tasks depend on it
-    - Frontend + Backend + Database: 3 parallel tasks (usually independent)
 
     **Example Dependency Graphs:**
     - Independent modules (MOST COMMON): dependencies: []
     - Integration tasks: dependencies: ["task-1", "task-2"]
-    - Apps using shared lib: dependencies: ["shared-lib-task"]
 
     **⚠️ IMPORTANT: Don't over-constrain dependencies!**
     - Frontend does NOT depend on backend build (they're separate artifacts)
     - Backend does NOT depend on frontend build
-    - Only add dependencies when module B needs module A's build output
 
     Calculate accurate time estimates:
     - total_estimated_sequential: sum of all task durations
     - total_estimated_parallel: length of critical path (longest dependency chain)
     - time_savings_percent: ((sequential - parallel) / sequential) * 100
+
+    **EXAMPLE TASK FORMAT (REQUIRED):**
+    {
+      "task_id": "task-1",
+      "name": "Build Frontend",
+      "description": "Create React frontend application",
+      "working_directory": ".",
+      "agent_instruction": "Create a React frontend with components in src/components/, implement routing, and add styling. Follow the architecture.md specifications.",
+      "provider": "Claude",
+      "build_commands": [],
+      "dependencies": [],
+      "estimated_duration_minutes": 5
+    }
 
     Return as structured BuildPlan object.
   "#

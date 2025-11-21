@@ -28,6 +28,7 @@ class ChatSession:
     bypass_permissions: bool
     title: Optional[str]
     message_count: int
+    working_directory: Optional[str] = None
 
 
 @dataclass
@@ -91,6 +92,7 @@ class ChatService:
         plan_mode: bool = False,
         bypass_permissions: bool = False,
         title: Optional[str] = None,
+        working_directory: Optional[str] = None,
     ) -> ChatSession:
         """
         Create a new chat session.
@@ -100,10 +102,25 @@ class ChatService:
             plan_mode: Enable plan mode
             bypass_permissions: Bypass permission checks
             title: Optional session title
+            working_directory: Optional working directory for CLI execution
 
         Returns:
             Created ChatSession
         """
+        # Validate working directory if provided
+        if working_directory:
+            working_dir_path = Path(working_directory)
+            if not working_dir_path.exists():
+                raise ValueError(
+                    f"Working directory does not exist: {working_directory}"
+                )
+            if not working_dir_path.is_dir():
+                raise ValueError(
+                    f"Working directory is not a directory: {working_directory}"
+                )
+            # Convert to absolute path
+            working_directory = str(working_dir_path.absolute())
+
         session_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat()
 
@@ -112,10 +129,19 @@ class ChatService:
             conn.execute(
                 """
                 INSERT INTO chat_sessions
-                (id, created_at, last_activity, model, plan_mode, bypass_permissions, title, message_count)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                (id, created_at, last_activity, model, plan_mode, bypass_permissions, title, message_count, working_directory)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
                 """,
-                (session_id, now, now, model, plan_mode, bypass_permissions, title),
+                (
+                    session_id,
+                    now,
+                    now,
+                    model,
+                    plan_mode,
+                    bypass_permissions,
+                    title,
+                    working_directory,
+                ),
             )
             conn.commit()
 
@@ -128,6 +154,7 @@ class ChatService:
                 bypass_permissions=bypass_permissions,
                 title=title,
                 message_count=0,
+                working_directory=working_directory,
             )
         finally:
             conn.close()
@@ -161,6 +188,7 @@ class ChatService:
                 bypass_permissions=bool(row["bypass_permissions"]),
                 title=row["title"],
                 message_count=row["message_count"],
+                working_directory=row["working_directory"],
             )
         finally:
             conn.close()
@@ -201,6 +229,7 @@ class ChatService:
                     bypass_permissions=bool(row["bypass_permissions"]),
                     title=row["title"],
                     message_count=row["message_count"],
+                    working_directory=row["working_directory"],
                 )
                 for row in rows
             ]
@@ -219,6 +248,7 @@ class ChatService:
         plan_mode: Optional[bool] = None,
         bypass_permissions: Optional[bool] = None,
         title: Optional[str] = None,
+        working_directory: Optional[str] = None,
     ) -> bool:
         """
         Update session settings.
@@ -229,10 +259,36 @@ class ChatService:
             plan_mode: New plan mode setting
             bypass_permissions: New permissions setting
             title: New title
+            working_directory: New working directory (empty string to clear)
 
         Returns:
             True if updated, False if session not found
         """
+        # Handle working directory with special cases:
+        # - None: no change (parameter not provided by API)
+        # - Empty string: clear the directory (set to NULL)
+        # - Non-empty string: validate and set
+        update_working_directory = False
+        if working_directory is not None:
+            if working_directory == "":
+                # Explicitly clear the working directory
+                working_directory = None
+                update_working_directory = True
+            else:
+                # Validate non-empty directory
+                working_dir_path = Path(working_directory)
+                if not working_dir_path.exists():
+                    raise ValueError(
+                        f"Working directory does not exist: {working_directory}"
+                    )
+                if not working_dir_path.is_dir():
+                    raise ValueError(
+                        f"Working directory is not a directory: {working_directory}"
+                    )
+                # Convert to absolute path
+                working_directory = str(working_dir_path.absolute())
+                update_working_directory = True
+
         updates = []
         params = []
 
@@ -251,6 +307,10 @@ class ChatService:
         if title is not None:
             updates.append("title = ?")
             params.append(title)
+
+        if update_working_directory:
+            updates.append("working_directory = ?")
+            params.append(working_directory)
 
         if not updates:
             return False

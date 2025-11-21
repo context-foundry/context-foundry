@@ -1,0 +1,336 @@
+=============================================================================
+ROBLOX EXTENSION - ORCHESTRATOR PROMPT INJECTION
+=============================================================================
+
+This file contains the code snippets to add to tools/orchestrator_prompt.txt
+to enable Roblox-specific guidance in each phase.
+
+IMPORTANT: All injections MUST be wrapped in conditional checks to prevent
+cross-contamination with other project types.
+
+=============================================================================
+
+STEP 1: Add anchor comments to orchestrator_prompt.txt
+-------------------------------------------------------
+
+Find each phase section and add anchor comments:
+
+
+### SCOUT PHASE (~line 545)
+
+Add after the phase introduction:
+
+# === ROBLOX-SCOUT-START ===
+# Roblox extension will inject here
+# === ROBLOX-SCOUT-END ===
+
+
+### ARCHITECT PHASE (~line 790)
+
+Add after the phase introduction:
+
+# === ROBLOX-ARCHITECT-START ===
+# Roblox extension will inject here
+# === ROBLOX-ARCHITECT-END ===
+
+
+### BUILDER PHASE (~line 1053)
+
+Add after the phase introduction:
+
+# === ROBLOX-BUILDER-START ===
+# Roblox extension will inject here
+# === ROBLOX-BUILDER-END ===
+
+
+### TESTER PHASE
+
+Add in the Tester phase section:
+
+# === ROBLOX-TESTER-START ===
+# Roblox extension will inject here
+# === ROBLOX-TESTER-END ===
+
+
+### DOCS PHASE
+
+Add in the Docs phase section:
+
+# === ROBLOX-DOCS-START ===
+# Roblox extension will inject here
+# === ROBLOX-DOCS-END ===
+
+
+=============================================================================
+
+STEP 2: Add injection content between anchors
+----------------------------------------------
+
+Replace the anchor comments with the following conditional blocks:
+
+
+### SCOUT PHASE INJECTION
+
+# === ROBLOX-SCOUT-START ===
+**ROBLOX EXTENSION CHECK**
+
+If CONFIGURATION shows roblox_project: True:
+
+🎮 **ROBLOX GAME PROJECT DETECTED** 🎮
+
+- Project Type: {roblox_project_type}
+- Subtype: {project_subtype} (rojo or placefile)
+- Complexity: {complexity}
+- Has Tests: {has_tests}
+
+**This is a Roblox game, NOT a web application**
+
+**DO NOT research:**
+❌ Web frameworks (React, Vue, Angular, Svelte)
+❌ Backend frameworks (Express, FastAPI, Django, Flask)
+❌ Databases (PostgreSQL, MongoDB, Redis)
+❌ HTTP/REST APIs (unless for external integrations)
+❌ Package managers (npm, pip, cargo)
+❌ Deployment platforms (Vercel, Netlify, AWS)
+
+**DO research:**
+✅ Roblox DataStore patterns and best practices
+✅ RemoteEvent/RemoteFunction security and usage
+✅ ModuleScript organization (ReplicatedStorage, ServerScriptService)
+✅ Rojo workflow and project structure
+✅ Luau type annotations and strict mode
+✅ Roblox services (Players, Workspace, TweenService, etc.)
+✅ Server-authoritative architecture patterns
+✅ Checkpoint systems for obby games
+✅ Coin/currency systems with persistence
+✅ Shop systems with validation
+
+**Query Context Codex:**
+- category="roblox"
+- project_types includes "{roblox_project_type}"
+- Look for patterns: obby-checkpoints-coin-shop, roblox-module-structure, roblox-datastore-best-practices, roblox-remote-events-security
+
+**Detailed Scout guidance:**
+[Refer to extensions/roblox/prompts/SCOUT-PROJECT-ASSESSMENT.md for complete assessment checklist]
+# === ROBLOX-SCOUT-END ===
+
+
+### ARCHITECT PHASE INJECTION
+
+# === ROBLOX-ARCHITECT-START ===
+**ROBLOX GAME ARCHITECTURE**
+
+If CONFIGURATION shows roblox_project: True:
+
+🏗️ **DESIGNING ROBLOX GAME SYSTEMS** 🏗️
+
+**Core Principles:**
+1. **Server-Authoritative:** All critical logic (coins, checkpoints, purchases) runs on server
+2. **Never Trust Client:** Validate ALL RemoteEvent payloads (type, range, business logic)
+3. **DataStore Best Practices:** Use UpdateAsync, pcall, retry logic
+
+**For Obby Pattern:**
+Required systems: CheckpointManager (server), CoinManager (server), ShopService (server), PlayerDataManager (server)
+
+**Module Organization:**
+- ServerScriptService/GameSystems/ - Core game logic
+- ReplicatedStorage/Modules/ - Shared code
+- StarterPlayerScripts/ - Client scripts
+- StarterGui/ - UI elements
+- Workspace/ - Game world objects
+
+**Security Requirements:**
+- Client sends INTENT ("I touched this checkpoint"), NOT RESULT ("Set my checkpoint to 5")
+- Server validates and calculates all state changes
+- RemoteEvents always validate: type → range → business logic → rate limit
+- Log suspicious activity
+
+**Detailed Architecture guidance:**
+[Refer to extensions/roblox/prompts/ARCHITECT-GAME-SYSTEMS.md for complete system design patterns]
+# === ROBLOX-ARCHITECT-END ===
+
+
+### BUILDER PHASE INJECTION
+
+# === ROBLOX-BUILDER-START ===
+**LUAU CODE IMPLEMENTATION**
+
+If CONFIGURATION shows roblox_project: True:
+
+⚡ **BUILDING ROBLOX GAME CODE** ⚡
+
+**Language:** Luau (typed Lua), NOT JavaScript/Python/TypeScript
+**File Extension:** .lua
+**Runtime:** Roblox engine
+
+**CRITICAL SECURITY RULES:**
+
+1. **ALWAYS Validate RemoteEvent Payloads:**
+```lua
+RemoteEvent.OnServerEvent:Connect(function(player, amount)
+    -- Type validation
+    if type(amount) ~= "number" then return end
+
+    -- Range validation
+    if amount < 0 or amount > 1000000 then return end
+
+    -- Business logic validation
+    if amount <= getPlayerBalance(player) then
+        processRequest(player, amount)
+    end
+end)
+```
+
+2. **Server-Authoritative Logic:**
+- ❌ Client: "Give me 100 coins" (exploitable)
+- ✅ Client: "I collected this coin" → Server validates & awards
+
+3. **DataStore Pattern:**
+```lua
+-- Always use pcall + retry logic
+for attempt = 1, 3 do
+    local success, result = pcall(function()
+        return DataStore:UpdateAsync(userId, updateFunction)
+    end)
+    if success then return result end
+    wait(2 ^ attempt)  -- Exponential backoff
+end
+```
+
+**Coding Standards:**
+- Use type annotations: `local function foo(x: number): string`
+- Return frozen tables: `return table.freeze(Module)`
+- Cache services: `local Players = game:GetService("Players")`
+- Wrap DataStore in pcall
+- Disconnect events when done
+
+**Detailed Builder guidance:**
+[Refer to extensions/roblox/prompts/BUILDER-LUAU-BEST-PRACTICES.md for complete coding standards]
+# === ROBLOX-BUILDER-END ===
+
+
+### TESTER PHASE INJECTION
+
+# === ROBLOX-TESTER-START ===
+**ROBLOX GAME TESTING**
+
+If CONFIGURATION shows roblox_project: True:
+
+🧪 **TESTING ROBLOX GAME** 🧪
+
+**V1 Test Strategy:**
+
+1. **Static Analysis (Automated):**
+   ```bash
+   stylua --check src/
+   selene src/
+   luau-analyze src/
+   ```
+   Graceful degradation: Warn if tools missing, don't fail build
+
+2. **Unit Tests (TestEZ):**
+   - Location: src/ServerScriptService/Tests/
+   - Framework: TestEZ
+   - Execution: Manual via TestEZ plugin in Studio
+   - Coverage: CheckpointManager, CoinManager, ShopService, PlayerDataManager
+
+3. **Manual Testing:**
+   - Spawn & initialization
+   - Checkpoint system (save/load/respawn)
+   - Coin system (collect/persist/display)
+   - Shop system (purchase/validate/grant)
+   - Data persistence across sessions
+   - Multi-player testing
+   - Security testing (anti-cheat validation)
+
+**Test Checklist:**
+- [ ] Player spawns correctly
+- [ ] Checkpoints save progress
+- [ ] Coins persist across sessions
+- [ ] Shop validates balance before purchase
+- [ ] No RemoteEvent exploits
+- [ ] Performance: 60 FPS, low server CPU
+
+**Detailed Testing guidance:**
+[Refer to extensions/roblox/prompts/TESTER-TEST-STRATEGY.md for complete test strategy]
+# === ROBLOX-TESTER-END ===
+
+
+### DOCS PHASE INJECTION
+
+# === ROBLOX-DOCS-START ===
+**ROBLOX GAME DOCUMENTATION**
+
+If CONFIGURATION shows roblox_project: True:
+
+📝 **DOCUMENTING ROBLOX GAME** 📝
+
+**Generate README_ROBLOX.md with:**
+
+1. **Installation:**
+   - Prerequisites: Rojo ≥7.0, Roblox Studio
+   - Optional: stylua, selene, luau-analyze
+   - Setup instructions
+
+2. **Building:**
+   ```bash
+   rojo build default.project.json -o dist/Game.rbxlx
+   ```
+
+3. **Testing:**
+   - Static analysis commands
+   - TestEZ instructions (install plugin, run tests)
+   - Manual test checklist
+
+4. **Publishing:**
+   - Open in Studio
+   - File → Publish to Roblox
+   - Configure game settings
+   - Test in live environment
+
+5. **Project Structure:**
+   - src/ directory layout
+   - Rojo configuration
+   - Module organization
+
+6. **Troubleshooting:**
+   - Common build errors
+   - DataStore issues
+   - Performance problems
+
+**Detailed Docs guidance:**
+[Refer to extensions/roblox/prompts/DOCS-README-GUIDE.md for complete documentation template]
+# === ROBLOX-DOCS-END ===
+
+
+=============================================================================
+
+VERIFICATION
+------------
+
+After adding injections, test with a Roblox project:
+
+1. Create test project:
+   mkdir test-roblox && cd test-roblox
+   echo '{"name": "Test"}' > default.project.json
+   mkdir -p src/ServerScriptService
+
+2. Run Context Foundry:
+   cf build "Create a simple obby with checkpoints"
+
+3. Verify:
+   - Scout phase shows Roblox detection message
+   - No web framework research
+   - Roblox-specific patterns applied
+   - Luau code generated (not JavaScript/Python)
+   - README mentions Rojo, not npm/webpack
+
+4. Test isolation (non-Roblox project):
+   cd ../some-web-app
+   cf build "Add authentication"
+
+   - Verify NO Roblox messages appear
+   - Normal web framework research happens
+   - No cross-contamination
+
+=============================================================================

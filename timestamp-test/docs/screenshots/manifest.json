@@ -1,0 +1,35 @@
+{
+  "generated": "2025-11-16T13:08:17Z",
+  "projectType": "cli-tool",
+  "screenshotType": "terminal-output",
+  "description": "Terminal output captures for CLI Python script documentation",
+  "screenshots": [
+    {
+      "filename": "terminal-output.txt",
+      "path": "docs/screenshots/terminal-output.txt",
+      "type": "hero",
+      "description": "Standard execution showing greeting and timestamp formats"
+    },
+    {
+      "filename": "executable-usage.txt",
+      "path": "docs/screenshots/executable-usage.txt",
+      "type": "feature",
+      "description": "Direct executable usage demonstration with shebang"
+    },
+    {
+      "filename": "project-structure.txt",
+      "path": "docs/screenshots/project-structure.txt",
+      "type": "feature",
+      "description": "Visual representation of project file structure"
+    }
+  ],
+  "total": 3,
+  "failed": 0,
+  "playwrightInstalled": false,
+  "notes": [
+    "CLI tool - terminal output captures used instead of browser screenshots",
+    "Playwright not applicable for command-line scripts",
+    "Text-based visual documentation provided for README inclusion",
+    "All captures use formatted terminal-style presentation"
+  ]
+}

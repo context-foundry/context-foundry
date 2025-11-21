@@ -1,0 +1,1412 @@
+{
+  "nodes": [
+    {
+      "id": "startAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 100,
+        "y": 300
+      },
+      "data": {
+        "id": "startAgentflow_0",
+        "label": "Start",
+        "name": "startAgentflow",
+        "type": "Start",
+        "color": "#7EE787",
+        "baseClasses": [
+          "Start"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "startInputType": "form",
+          "formTitle": "Vehicle Registration & Parking Management",
+          "formDescription": "Welcome to the Vehicle Registration & Parking Management System. Select your request type and provide details below. Our system handles vehicle registration, permit management, spot booking, compliance checking, visitor permits, reporting, and violation management.",
+          "formInputTypes": [
+            {
+              "label": "Request Type",
+              "name": "requestType",
+              "type": "options",
+              "options": [
+                {
+                  "label": "Vehicle Registration",
+                  "value": "vehicle_registration"
+                },
+                {
+                  "label": "Permit Management",
+                  "value": "permit_management"
+                },
+                {
+                  "label": "Spot Booking",
+                  "value": "spot_booking"
+                },
+                {
+                  "label": "Compliance Check",
+                  "value": "compliance"
+                },
+                {
+                  "label": "Visitor Permit",
+                  "value": "visitor_permit"
+                },
+                {
+                  "label": "Reports & Analytics",
+                  "value": "reporting"
+                },
+                {
+                  "label": "Violation Management",
+                  "value": "violation"
+                }
+              ]
+            },
+            {
+              "label": "Employee ID",
+              "name": "employeeId",
+              "type": "string"
+            },
+            {
+              "label": "Request Details",
+              "name": "requestDetails",
+              "type": "string"
+            },
+            {
+              "label": "License Plate (if applicable)",
+              "name": "licensePlate",
+              "type": "string"
+            },
+            {
+              "label": "VIN (if applicable)",
+              "name": "vin",
+              "type": "string"
+            },
+            {
+              "label": "Date (if applicable)",
+              "name": "requestDate",
+              "type": "string"
+            }
+          ],
+          "ephemeralMemory": true,
+          "startOutput": "{{requestType}}\n\nEmployee ID: {{employeeId}}\nRequest Details: {{requestDetails}}\nLicense Plate: {{licensePlate}}\nVIN: {{vin}}\nDate: {{requestDate}}"
+        },
+        "inputParams": [
+          {
+            "label": "Input Type",
+            "name": "startInputType",
+            "type": "options"
+          },
+          {
+            "label": "Form Title",
+            "name": "formTitle",
+            "type": "string"
+          },
+          {
+            "label": "Form Description",
+            "name": "formDescription",
+            "type": "string"
+          },
+          {
+            "label": "Form Input Types",
+            "name": "formInputTypes",
+            "type": "json"
+          },
+          {
+            "label": "Chat Input",
+            "name": "chatInput",
+            "type": "string"
+          },
+          {
+            "label": "Ephemeral Memory",
+            "name": "ephemeralMemory",
+            "type": "boolean"
+          },
+          {
+            "label": "Start Output",
+            "name": "startOutput",
+            "type": "string"
+          }
+        ],
+        "inputAnchors": [],
+        "outputAnchors": [
+          {
+            "id": "startAgentflow_0-output-startAgentflow",
+            "name": "startAgentflow",
+            "label": "Start",
+            "type": "Start"
+          }
+        ]
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 500,
+        "y": 300
+      },
+      "data": {
+        "id": "conditionAgentAgentflow_0",
+        "label": "Request Router",
+        "name": "conditionAgentAgentflow",
+        "type": "ConditionAgent",
+        "color": "#ff8fab",
+        "baseClasses": [
+          "ConditionAgent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "conditionAgentName": "Request Router",
+          "conditionAgentInstructions": "You are a request routing agent for the Vehicle Registration & Parking Management System. Analyze the incoming request and route it to the appropriate specialized agent based on the request type and content.\n\nRouting Rules:\n1. vehicle_registration or requests about license plates, VIN, insurance documents \u2192 Vehicle Registration Agent\n2. permit_management or requests about eligibility, approvals, waitlists, renewals \u2192 Permit Management Agent\n3. spot_booking or requests about daily reservations, availability, cancellations \u2192 Spot Booking Agent\n4. compliance or requests about expired insurance, violations scans, suspensions \u2192 Compliance Checking Agent\n5. visitor_permit or requests about temporary permits, QR codes, guest access \u2192 Visitor Permits Agent\n6. reporting or requests about analytics, occupancy, revenue, statistics \u2192 Reporting Agent\n7. violation or requests about enforcement, disputes, fines, appeals \u2192 Violation Management Agent\n\nAlways analyze both the requestType field and the requestDetails to determine the most appropriate routing. If the request is ambiguous, prioritize the explicit requestType selection.",
+          "conditionAgentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.1",
+            "streaming": true
+          },
+          "conditionAgentScenarios": [
+            {
+              "scenario": "vehicle_registration",
+              "condition": "Request involves vehicle registration, license plate validation, VIN capture, or insurance document management",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Vehicle Registration Agent for handling license plate validation, VIN capture, and insurance document management",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "permit_management",
+              "condition": "Request involves permit eligibility, approvals, waitlist management, or permit renewals",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Permit Management Agent for handling eligibility validation, multi-level approvals, waitlist automation, and renewal notifications",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "spot_booking",
+              "condition": "Request involves daily parking reservations, spot availability, or booking modifications",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Spot Booking Agent for handling daily reservations, double-booking prevention, and cancellation management",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "compliance",
+              "condition": "Request involves compliance checking, expired insurance scans, or suspension triggers",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Compliance Checking Agent for automated compliance scans, violation detection, and suspension workflows",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "visitor_permit",
+              "condition": "Request involves temporary visitor permits, QR code generation, or guest pre-registration",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Visitor Permits Agent for temporary permit generation, QR codes, and host validation",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "reporting",
+              "condition": "Request involves analytics, occupancy reports, revenue tracking, or statistical dashboards",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Reporting Agent for occupancy analytics, revenue forecasting, and trend analysis",
+              "input": "{{$flow.startOutput}}"
+            },
+            {
+              "scenario": "violation",
+              "condition": "Request involves violation management, enforcement actions, disputes, fines, or appeals",
+              "model": {
+                "credential": "Anthropic API Key",
+                "modelName": "claude-sonnet-4-5",
+                "temperature": "0.1",
+                "streaming": true
+              },
+              "instructions": "Route to Violation Management Agent for enforcement actions, dispute resolution, and appeals processing",
+              "input": "{{$flow.startOutput}}"
+            }
+          ]
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "conditionAgentName",
+            "type": "string"
+          },
+          {
+            "label": "Instructions",
+            "name": "conditionAgentInstructions",
+            "type": "string"
+          },
+          {
+            "label": "Model",
+            "name": "conditionAgentModel",
+            "type": "options"
+          },
+          {
+            "label": "Scenarios",
+            "name": "conditionAgentScenarios",
+            "type": "json"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-input",
+            "name": "input",
+            "label": "Input",
+            "type": "Start"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "conditionAgentAgentflow_0-output-vehicle_registration",
+            "name": "vehicle_registration",
+            "label": "Vehicle Registration",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-permit_management",
+            "name": "permit_management",
+            "label": "Permit Management",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-spot_booking",
+            "name": "spot_booking",
+            "label": "Spot Booking",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-compliance",
+            "name": "compliance",
+            "label": "Compliance",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-visitor_permit",
+            "name": "visitor_permit",
+            "label": "Visitor Permit",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-reporting",
+            "name": "reporting",
+            "label": "Reporting",
+            "type": "ConditionAgent"
+          },
+          {
+            "id": "conditionAgentAgentflow_0-output-violation",
+            "name": "violation",
+            "label": "Violation",
+            "type": "ConditionAgent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_0",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 0
+      },
+      "data": {
+        "id": "agentAgentflow_0",
+        "label": "Vehicle Registration Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#60a5fa",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Vehicle Registration Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Vehicle Registration Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### License Plate Validation\n- Validate license plate format based on state patterns (e.g., ABC-1234 for standard, 1ABC234 for California)\n- Perform state DMV lookup via API to verify plate registration\n- Check for duplicate registrations in the system\n- Flag plates with existing violations or suspensions\n\n### VIN Capture and Validation\n- Accept VIN input and validate 17-character format\n- Use NHTSA VIN decoder API to verify vehicle information\n- Extract make, model, year, and vehicle type\n- Cross-reference with registered license plate\n\n### Insurance Document Management\n- Process insurance document uploads (PDF, image formats)\n- Extract policy number, provider, coverage dates, and insured vehicle\n- Calculate days until expiration and set renewal reminders\n- Flag vehicles with expired or insufficient coverage\n- Store documents securely with employee association\n\n### Workday Integration\n- Verify employee/contractor status via Workday API\n- Retrieve employee department, location, and parking eligibility\n- Check employment end date for contractors\n- Validate supervisor information for approvals\n\n## Response Format\nAlways provide:\n1. Validation status (PASS/FAIL/PENDING)\n2. Any errors or warnings detected\n3. Next steps required from user\n4. Reference number for tracking\n\n## Error Handling\n- Invalid plate format: Provide correct format examples for the state\n- VIN mismatch: Request re-entry or manual verification\n- Expired insurance: Block registration until valid insurance provided\n- Employee not found: Direct to HR for Workday profile update"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "vehicleRegistrationResult": "{{$output}}",
+            "registrationStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_0-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_0-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_1",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 200
+      },
+      "data": {
+        "id": "agentAgentflow_1",
+        "label": "Permit Management Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#a78bfa",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Permit Management Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Permit Management Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Eligibility Validation\n- Query Workday to verify employee/contractor status\n- Check job level for permit tier eligibility (Executive, Standard, Contractor)\n- Verify building location assignment matches parking facility\n- Confirm no existing active permit for the employee\n- Check for any compliance violations blocking permit issuance\n\n### Multi-Level Approval Workflows\n- Route Standard permits: Manager approval required\n- Route Executive permits: Manager + Facilities Director approval\n- Route Contractor permits: Manager + Security + Contract Administrator\n- Track approval status and send reminders after 48 hours\n- Escalate stalled approvals to HR after 5 business days\n- Record all approval decisions with timestamps\n\n### Waitlist Automation\n- Add eligible employees to facility-specific waitlists\n- Calculate priority score based on: tenure, job level, commute distance\n- Send position updates when waitlist moves\n- Auto-offer permits when spots become available (24-hour acceptance window)\n- Remove from waitlist on permit acceptance or 3 declined offers\n\n### Permit Renewals\n- Send renewal notices 30 days before expiration\n- Auto-renew if: employment active, no violations, payment current\n- Block renewal if compliance issues exist\n- Update permit validity dates and issue new credentials\n\n## Permit Types\n- Executive Reserved: Designated spot, 24/7 access\n- Standard: General lot, business hours\n- Contractor: Temporary, tied to contract end date\n- Visitor Host: Allows visitor permit requests\n\n## Response Format\nAlways provide:\n1. Eligibility determination with reasoning\n2. Approval workflow status and next approver\n3. Waitlist position if applicable\n4. Estimated timeline for resolution\n5. Reference number for tracking"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "permitManagementResult": "{{$output}}",
+            "permitStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_1-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_1-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_2",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 400
+      },
+      "data": {
+        "id": "agentAgentflow_2",
+        "label": "Spot Booking Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#34d399",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Spot Booking Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Spot Booking Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Daily Parking Reservations\n- Accept booking requests for specific dates and facilities\n- Query calendar integration for employee schedule conflicts\n- Validate employee has active permit allowing reservations\n- Create bookings with confirmation numbers\n- Support recurring booking patterns (e.g., every Tuesday)\n\n### Double-Booking Prevention\n- Check real-time spot availability before confirming\n- Lock spots during booking transaction to prevent race conditions\n- Verify employee doesn't have existing booking for same date\n- Handle waitlist for fully-booked dates\n- Release holds after 5-minute timeout\n\n### Preferred Spot Assignment\n- Executive permits: Assign from reserved section, employee preference honored\n- Standard permits: Assign from general pool, proximity preference considered\n- ADA requirements: Prioritize accessible spots for registered employees\n- EV charging: Match EV-registered vehicles to charging spots\n- Apply seniority-based preferences when multiple options available\n\n### Cancellation and Modification\n- Allow cancellation up to 2 hours before booking time\n- Apply no-show penalties (3 strikes = 1-week booking suspension)\n- Support booking modifications (date, time, spot change)\n- Automatically release cancelled spots to waitlist\n- Send cancellation confirmations\n\n## Booking Rules\n- Maximum advance booking: 14 days\n- Maximum concurrent bookings: 5\n- Booking window opens: 7:00 AM daily\n- Cancellation deadline: 2 hours before arrival time\n\n## Response Format\nAlways provide:\n1. Booking confirmation number (or waitlist position)\n2. Assigned spot details (lot, level, spot number)\n3. Date and time window\n4. Any applicable restrictions or notes\n5. Cancellation/modification instructions"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "spotBookingResult": "{{$output}}",
+            "bookingStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_2-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_2-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_3",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 600
+      },
+      "data": {
+        "id": "agentAgentflow_3",
+        "label": "Compliance Checking Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#f87171",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Compliance Checking Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Compliance Checking Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Automated Daily Scans\n- Run nightly batch job scanning all active permits\n- Check insurance expiration dates (flag 30/14/7 days before expiry)\n- Verify vehicle registration validity with DMV\n- Confirm employee status still active in Workday\n- Check for unpaid parking fees or fines\n- Generate daily compliance report for facilities team\n\n### Violation Detection and Flagging\n- Identify vehicles with expired insurance (immediate flag)\n- Detect registration mismatches (plate vs permit)\n- Flag unauthorized vehicles in reserved spots\n- Identify permits used at wrong facilities\n- Track overtime violations (exceeding booking windows)\n- Monitor for suspicious activity patterns\n\n### Suspension Triggers\n- Auto-suspend permit after:\n  - 3 days with expired insurance\n  - Unpaid fines exceeding $100\n  - 3 no-show violations in 30 days\n  - Terminated employment status\n  - Failed background check (contractors)\n- Send suspension notice with appeal instructions\n- Record suspension reason and effective date\n\n### Notification Workflows\n- Insurance expiring soon: Email + SMS reminder\n- First violation: Warning email with policy link\n- Second violation: Manager notification added\n- Suspension pending: Urgent notification to employee + manager\n- Compliance cleared: Confirmation of good standing\n\n## Compliance Statuses\n- COMPLIANT: All requirements met\n- WARNING: Minor issues, grace period active\n- NON-COMPLIANT: Violations present, action required\n- SUSPENDED: Permit inactive, must resolve issues\n\n## Response Format\nAlways provide:\n1. Current compliance status\n2. List of any violations or warnings\n3. Required actions to resolve\n4. Deadlines for compliance\n5. Appeal process if applicable"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "complianceCheckResult": "{{$output}}",
+            "complianceStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_3-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_3-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_4",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 800
+      },
+      "data": {
+        "id": "agentAgentflow_4",
+        "label": "Visitor Permits Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#fbbf24",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Visitor Permits Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Visitor Permits Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Temporary Permit Generation\n- Create single-day or multi-day visitor permits (max 5 days)\n- Assign visitor lot spots (no reserved section access)\n- Generate unique permit ID with embedded validation\n- Set automatic expiration at end of visit period\n- Support multiple visitors per host request\n- Cap at 10 active visitor permits per host employee\n\n### QR Code Generation\n- Generate unique QR code for each visitor permit\n- Embed: permit ID, validity dates, assigned lot, vehicle info\n- QR scannable at gate for automated entry\n- Include manual entry code as backup\n- Support digital wallet integration (Apple/Google)\n- Time-limit QR validity to prevent reuse\n\n### Host Employee Validation\n- Verify host has active parking permit with visitor privileges\n- Check host's visitor permit quota not exceeded\n- Confirm host is not on compliance suspension\n- Validate host's department allows visitor parking\n- Require host acknowledgment of visitor parking policy\n\n### Pre-Registration Workflows\n- Accept advance registrations up to 30 days ahead\n- Collect visitor: name, company, vehicle info (plate, make, model)\n- Send visitor confirmation email with QR code and directions\n- Notify host of visitor arrival via gate scan\n- Support recurring visitor setup (e.g., weekly vendor)\n- Allow host to cancel/modify pre-registration\n\n## Visitor Permit Types\n- Standard Visitor: General visitor lot, business hours\n- VIP Visitor: Covered parking, extended hours\n- Vendor/Contractor: Multi-day, specific work areas\n- Interview Candidate: HR-sponsored, validated time window\n\n## Response Format\nAlways provide:\n1. Visitor permit ID\n2. QR code (as link or embedded)\n3. Valid dates and times\n4. Assigned lot and any restrictions\n5. Host employee confirmation\n6. Visitor instructions for arrival"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "visitorPermitResult": "{{$output}}",
+            "visitorStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_4-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_4-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_5",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 1000
+      },
+      "data": {
+        "id": "agentAgentflow_5",
+        "label": "Reporting Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#06b6d4",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Reporting Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Reporting Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Occupancy Analytics\n- Real-time occupancy by facility, lot, and level\n- Peak usage times and patterns (hourly, daily, weekly)\n- Occupancy trends over time (month-over-month, year-over-year)\n- Utilization rates by permit type\n- Heat maps of high-demand areas\n- Capacity planning recommendations\n\n### Revenue Tracking and Forecasting\n- Daily/weekly/monthly revenue by facility\n- Revenue breakdown: permits, daily parking, visitor fees, fines\n- Payment collection rates and outstanding balances\n- Cost per spot analysis\n- Revenue projections based on permit pipeline\n- Budget variance analysis\n\n### Violation Statistics and Trends\n- Violation counts by type (expired insurance, unauthorized parking, etc.)\n- Repeat offender identification\n- Violation hotspots by location\n- Resolution rates and average resolution time\n- Fine collection success rate\n- Trend analysis for policy effectiveness\n\n### Waitlist Analytics and Projections\n- Current waitlist size by facility and permit type\n- Average wait time to permit assignment\n- Waitlist turnover rate\n- Projected wait times based on churn\n- Offer acceptance/decline rates\n- Conversion rate from waitlist to active permit\n\n## Report Types\n- Executive Summary: High-level KPIs for leadership\n- Operations Dashboard: Daily metrics for facilities team\n- Financial Report: Revenue and cost analysis for finance\n- Compliance Report: Violation and enforcement metrics\n- Custom Report: User-defined parameters and filters\n\n## Response Format\nAlways provide:\n1. Requested data/metrics with visualizations where helpful\n2. Comparison to previous period and targets\n3. Key insights and anomalies\n4. Actionable recommendations\n5. Data source and report generation timestamp"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "reportingResult": "{{$output}}",
+            "reportStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_5-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_5-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agentAgentflow_6",
+      "type": "agentFlow",
+      "position": {
+        "x": 900,
+        "y": 1200
+      },
+      "data": {
+        "id": "agentAgentflow_6",
+        "label": "Violation Management Agent",
+        "name": "agentAgentflow",
+        "type": "Agent",
+        "color": "#f472b6",
+        "baseClasses": [
+          "Agent"
+        ],
+        "category": "Agent Flows",
+        "inputs": {
+          "agentName": "Violation Management Agent",
+          "agentModel": {
+            "credential": "Anthropic API Key",
+            "modelName": "claude-sonnet-4-5",
+            "temperature": "0.3",
+            "streaming": true
+          },
+          "agentMessages": [
+            {
+              "role": "system",
+              "content": "You are the Violation Management Agent for the corporate parking management system. Your responsibilities include:\n\n## Core Functions\n\n### Admin Tools for Enforcement Actions\n- Issue violations with evidence documentation (photos, timestamps)\n- Assign violation severity (Warning, Minor, Major, Critical)\n- Apply appropriate fines based on violation type and history\n- Boot/tow authorization for severe violations\n- Revoke permits for repeated offenses\n- Generate violation notices with policy citations\n\n### Violation Types and Fines\n- Unauthorized parking: $50 (first), $100 (repeat)\n- Expired insurance: Warning \u2192 $75 \u2192 Permit suspension\n- Overtime violation: $25 per occurrence\n- Reserved spot violation: $75 + towing possible\n- Blocking access: $100 + immediate tow\n- Fraudulent permit: $500 + permanent ban\n\n### Dispute Resolution Workflow\n- Accept dispute submissions with supporting evidence\n- Route to appropriate reviewer based on violation type\n- Standard review: Facilities supervisor\n- Manager escalation: HR involvement\n- Executive review: Legal and compliance\n- Decision timeline: 5 business days for standard\n- Notify all parties of resolution\n\n### Fine Calculation and Tracking\n- Calculate fines based on violation matrix\n- Apply repeat offender multipliers (1.5x for 3rd, 2x for 4th+)\n- Track payment status and due dates\n- Send payment reminders at 7, 14, 21 days\n- Apply late fees after 30 days (10% of fine)\n- Refer to collections after 60 days\n\n### Appeals Process Management\n- Formal appeals for disputed resolutions\n- Appeals committee: HR Director, Legal, Facilities Head\n- Submit supporting documentation\n- Hearing scheduled within 14 days\n- Final decision binding\n- Record all proceedings for audit\n\n## Response Format\nAlways provide:\n1. Violation details with evidence summary\n2. Fine amount and payment deadline\n3. Dispute/appeal options and deadlines\n4. Current violation history for context\n5. Next steps and consequences if unresolved"
+            },
+            {
+              "role": "user",
+              "content": "{{$flow.startOutput}}"
+            }
+          ],
+          "maxIterations": "10",
+          "agentTools": [],
+          "updateState": {
+            "violationManagementResult": "{{$output}}",
+            "violationStatus": "completed"
+          },
+          "enableAgentMessages": true,
+          "summarizeAfter": 5,
+          "isLoop": false
+        },
+        "inputParams": [
+          {
+            "label": "Agent Name",
+            "name": "agentName",
+            "type": "string"
+          },
+          {
+            "label": "System Message",
+            "name": "systemMessage",
+            "type": "string"
+          },
+          {
+            "label": "Agent Messages",
+            "name": "agentMessages",
+            "type": "json"
+          },
+          {
+            "label": "Model",
+            "name": "agentModel",
+            "type": "options"
+          },
+          {
+            "label": "Tools",
+            "name": "agentTools",
+            "type": "json"
+          },
+          {
+            "label": "Max Iterations",
+            "name": "maxIterations",
+            "type": "number"
+          },
+          {
+            "label": "Update State",
+            "name": "updateState",
+            "type": "json"
+          },
+          {
+            "label": "Enable Agent Messages",
+            "name": "enableAgentMessages",
+            "type": "boolean"
+          },
+          {
+            "label": "Summarize After",
+            "name": "summarizeAfter",
+            "type": "number"
+          },
+          {
+            "label": "Is Loop",
+            "name": "isLoop",
+            "type": "boolean"
+          },
+          {
+            "label": "Human Input",
+            "name": "humanInput",
+            "type": "boolean"
+          },
+          {
+            "label": "Memory Type",
+            "name": "memoryType",
+            "type": "options"
+          },
+          {
+            "label": "Session ID",
+            "name": "sessionId",
+            "type": "string"
+          },
+          {
+            "label": "Return Source Documents",
+            "name": "returnSourceDocuments",
+            "type": "boolean"
+          },
+          {
+            "label": "Knowledge Base",
+            "name": "knowledgeBase",
+            "type": "options"
+          }
+        ],
+        "inputAnchors": [
+          {
+            "id": "agentAgentflow_6-input",
+            "name": "input",
+            "label": "Input",
+            "type": "ConditionAgent"
+          }
+        ],
+        "outputAnchors": [
+          {
+            "id": "agentAgentflow_6-output",
+            "name": "output",
+            "label": "Output",
+            "type": "Agent"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "startAgentflow_0-conditionAgentAgentflow_0",
+      "source": "startAgentflow_0",
+      "sourceHandle": "startAgentflow_0-output-startAgentflow",
+      "target": "conditionAgentAgentflow_0",
+      "targetHandle": "conditionAgentAgentflow_0-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#7EE787",
+        "targetColor": "#ff8fab"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_0",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-vehicle_registration",
+      "target": "agentAgentflow_0",
+      "targetHandle": "agentAgentflow_0-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#60a5fa",
+        "edgeLabel": "vehicle_registration"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_1",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-permit_management",
+      "target": "agentAgentflow_1",
+      "targetHandle": "agentAgentflow_1-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#a78bfa",
+        "edgeLabel": "permit_management"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_2",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-spot_booking",
+      "target": "agentAgentflow_2",
+      "targetHandle": "agentAgentflow_2-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#34d399",
+        "edgeLabel": "spot_booking"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_3",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-compliance",
+      "target": "agentAgentflow_3",
+      "targetHandle": "agentAgentflow_3-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#f87171",
+        "edgeLabel": "compliance"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_4",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-visitor_permit",
+      "target": "agentAgentflow_4",
+      "targetHandle": "agentAgentflow_4-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#fbbf24",
+        "edgeLabel": "visitor_permit"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_5",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-reporting",
+      "target": "agentAgentflow_5",
+      "targetHandle": "agentAgentflow_5-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#06b6d4",
+        "edgeLabel": "reporting"
+      }
+    },
+    {
+      "id": "conditionAgentAgentflow_0-agentAgentflow_6",
+      "source": "conditionAgentAgentflow_0",
+      "sourceHandle": "conditionAgentAgentflow_0-output-violation",
+      "target": "agentAgentflow_6",
+      "targetHandle": "agentAgentflow_6-input",
+      "type": "agentFlow",
+      "data": {
+        "sourceColor": "#ff8fab",
+        "targetColor": "#f472b6",
+        "edgeLabel": "violation"
+      }
+    }
+  ]
+}

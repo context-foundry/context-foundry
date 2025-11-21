@@ -1,0 +1,4487 @@
+{
+  "success": true,
+  "total_files": 14,
+  "analyzed_successfully": 14,
+  "node_type_frequency": {
+    "agentFlow": 92,
+    "stickyNote": 17,
+    "iteration": 1,
+    "humanInputAgentflow": 2
+  },
+  "connection_frequency": {
+    "generic-connection": 113,
+    "hil-proceed-path": 1,
+    "hil-reject-path": 1
+  },
+  "individual_analyses": [
+    {
+      "success": true,
+      "file": "templates/Agentic RAG Agents.json",
+      "node_count": 11,
+      "edge_count": 8,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 9,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startState": [
+                {
+                  "key": "query",
+                  "value": ""
+                }
+              ]
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 2,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "First update of the state.query"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "llmAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "conditionAgentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "retrieverAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "retrieverAgentflow_0",
+          "target": "conditionAgentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_3",
+          "target": "loopAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "llmAgentflow_3",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "llmAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 11,
+          "label": 11,
+          "version": 11,
+          "name": 11,
+          "type": 11,
+          "color": 11,
+          "baseClasses": 11,
+          "category": 11,
+          "description": 11,
+          "inputParams": 11
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.375
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Change and Adoption Agent Agents.json",
+      "node_count": 11,
+      "edge_count": 6,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 7,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": true
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": true
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": true
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "formInput",
+              "formTitle": "Research",
+              "formDescription": "A research agent that takes in a query, and return a detailed report",
+              "formInputTypes": [
+                {
+                  "type": "string",
+                  "label": "Query",
+                  "name": "query",
+                  "addOptions": ""
+                }
+              ],
+              "startState": [
+                {
+                  "key": "subagents",
+                  "value": ""
+                },
+                {
+                  "key": "findings",
+                  "value": ""
+                }
+              ]
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 3,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "Each SubAgent has its own research task and tools to complete its findings"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "iteration",
+          "count": 1,
+          "example_config": {
+            "id": "iterationAgentflow_0",
+            "label": "Spawn SubAgents",
+            "version": 1,
+            "name": "iterationAgentflow",
+            "type": "Iteration",
+            "color": "#9C89B8",
+            "baseClasses": [
+              "Iteration"
+            ],
+            "category": "Agent Flows",
+            "description": "Execute the nodes within the iteration block through N iterations",
+            "inputParams": [
+              {
+                "label": "Array Input",
+                "name": "iterationInput",
+                "type": "string",
+                "description": "The input array to iterate over",
+                "acceptVariable": true,
+                "rows": 4,
+                "id": "iterationAgentflow_0-input-iterationInput-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "iterationInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"$flow.state.subagents\" data-label=\"$flow.state.subagents\">{{ $flow.state.subagents }}</span> </p>"
+            },
+            "outputAnchors": [
+              {
+                "id": "iterationAgentflow_0-output-iterationAgentflow",
+                "label": "Iteration",
+                "name": "iterationAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "iterationAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "iteration"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "loopAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "iterationAgentflow_0",
+          "target": "agentAgentflow_1",
+          "source_type": "iteration",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "conditionAgentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "directReplyAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 11,
+          "label": 11,
+          "version": 11,
+          "name": 11,
+          "type": 11,
+          "color": 11,
+          "baseClasses": 11,
+          "category": 11,
+          "description": 11,
+          "inputParams": 11
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": true,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.8333333333333333
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/My Email Reply Agent Agents.json",
+      "node_count": 6,
+      "edge_count": 5,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 6,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": true
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": true
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": true
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true,
+                "display": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "formInput",
+              "formTitle": "Email Inquiry",
+              "formDescription": "Incoming email inquiry",
+              "formInputTypes": [
+                {
+                  "type": "string",
+                  "label": "Subject",
+                  "name": "subject",
+                  "addOptions": ""
+                },
+                {
+                  "type": "string",
+                  "label": "Body",
+                  "name": "body",
+                  "addOptions": ""
+                },
+                {
+                  "type": "string",
+                  "label": "From",
+                  "name": "from",
+                  "addOptions": ""
+                }
+              ],
+              "startState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_0",
+          "target": "humanInputAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "humanInputAgentflow_0",
+          "target": "loopAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "humanInputAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "toolAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 6,
+          "label": 6,
+          "version": 6,
+          "name": 6,
+          "type": 6,
+          "color": 6,
+          "baseClasses": 6,
+          "category": 6,
+          "description": 6,
+          "inputParams": 6
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.2
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/My Support Agent Team Agents.json",
+      "node_count": 5,
+      "edge_count": 4,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 5,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "conditionAgentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 5,
+          "label": 5,
+          "version": 5,
+          "name": 5,
+          "type": 5,
+          "color": 5,
+          "baseClasses": 5,
+          "category": 5,
+          "description": 5,
+          "inputParams": 5
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.25
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/PMO Agents Agents.json",
+      "node_count": 10,
+      "edge_count": 19,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 8,
+          "example_config": {
+            "id": "conditionAgentAgentflow_1",
+            "label": "Detect User Intention",
+            "version": 1.1,
+            "name": "conditionAgentAgentflow",
+            "type": "ConditionAgent",
+            "color": "#ff8fab",
+            "baseClasses": [
+              "ConditionAgent"
+            ],
+            "category": "Agent Flows",
+            "description": "Utilize an agent to split flows based on dynamic conditions",
+            "inputParams": [
+              {
+                "label": "Model",
+                "name": "conditionAgentModel",
+                "type": "asyncOptions",
+                "loadMethod": "listModels",
+                "loadConfig": true,
+                "id": "conditionAgentAgentflow_1-input-conditionAgentModel-asyncOptions",
+                "display": true
+              },
+              {
+                "label": "Instructions",
+                "name": "conditionAgentInstructions",
+                "type": "string",
+                "description": "A general instructions of what the condition agent should do",
+                "rows": 4,
+                "acceptVariable": true,
+                "placeholder": "Determine if the user is interested in learning about AI",
+                "id": "conditionAgentAgentflow_1-input-conditionAgentInstructions-string",
+                "display": true
+              },
+              {
+                "label": "Input",
+                "name": "conditionAgentInput",
+                "type": "string",
+                "description": "Input to be used for the condition agent",
+                "rows": 4,
+                "acceptVariable": true,
+                "default": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
+                "id": "conditionAgentAgentflow_1-input-conditionAgentInput-string",
+                "display": true
+              },
+              {
+                "label": "Scenarios",
+                "name": "conditionAgentScenarios",
+                "description": "Define the scenarios that will be used as the conditions to split the flow",
+                "type": "array",
+                "array": [
+                  {
+                    "label": "Scenario",
+                    "name": "scenario",
+                    "type": "string",
+                    "placeholder": "User is asking for a pizza"
+                  }
+                ],
+                "default": [
+                  {
+                    "scenario": "Navigation \u2014 Basics"
+                  },
+                  {
+                    "scenario": "Fallback / Ambiguous"
+                  }
+                ],
+                "id": "conditionAgentAgentflow_1-input-conditionAgentScenarios-array",
+                "display": true
+              },
+              {
+                "label": "Override System Prompt",
+                "name": "conditionAgentOverrideSystemPrompt",
+                "type": "boolean",
+                "description": "Override initial system prompt for Condition Agent",
+                "optional": true,
+                "id": "conditionAgentAgentflow_1-input-conditionAgentOverrideSystemPrompt-boolean",
+                "display": true
+              },
+              {
+                "label": "Node System Prompt",
+                "name": "conditionAgentSystemPrompt",
+                "type": "string",
+                "rows": 4,
+                "optional": true,
+                "acceptVariable": true,
+                "default": "<p>You are part of a multi-agent system designed to make agent coordination and execution easy. Your task is to analyze the given input and select one matching scenario from a provided set of scenarios.</p>\n    <ul>\n        <li><strong>Input</strong>: A string representing the user's query, message or data.</li>\n        <li><strong>Scenarios</strong>: A list of predefined scenarios that relate to the input.</li>\n        <li><strong>Instruction</strong>: Determine which of the provided scenarios is the best fit for the input.</li>\n    </ul>\n    <h2>Steps</h2>\n    <ol>\n        <li><strong>Read the input string</strong> and the list of scenarios.</li>\n        <li><strong>Analyze the content of the input</strong> to identify its main topic or intention.</li>\n        <li><strong>Compare the input with each scenario</strong>: Evaluate how well the input's topic or intention aligns with each of the provided scenarios and select the one that is the best fit.</li>\n        <li><strong>Output the result</strong>: Return the selected scenario in the specified JSON format.</li>\n    </ol>\n    <h2>Output Format</h2>\n    <p>Output should be a JSON object that names the selected scenario, like this: <code>{\"output\": \"<selected_scenario_name>\"}</code>. No explanation is needed.</p>\n    <h2>Examples</h2>\n    <ol>\n       <li>\n            <p><strong>Input</strong>: <code>{\"input\": \"Hello\", \"scenarios\": [\"user is asking about AI\", \"user is not asking about AI\"], \"instruction\": \"Your task is to check if the user is asking about AI.\"}</code></p>\n            <p><strong>Output</strong>: <code>{\"output\": \"user is not asking about AI\"}</code></p>\n        </li>\n        <li>\n            <p><strong>Input</strong>: <code>{\"input\": \"What is AIGC?\", \"scenarios\": [\"user is asking about AI\", \"user is asking about the weather\"], \"instruction\": \"Your task is to check and see if the user is asking a topic about AI.\"}</code></p>\n            <p><strong>Output</strong>: <code>{\"output\": \"user is asking about AI\"}</code></p>\n        </li>\n        <li>\n            <p><strong>Input</strong>: <code>{\"input\": \"Can you explain deep learning?\", \"scenarios\": [\"user is interested in AI topics\", \"user wants to order food\"], \"instruction\": \"Determine if the user is interested in learning about AI.\"}</code></p>\n            <p><strong>Output</strong>: <code>{\"output\": \"user is interested in AI topics\"}</code></p>\n        </li>\n    </ol>\n    <h2>Note</h2>\n    <ul>\n        <li>Ensure that the input scenarios align well with potential user queries for accurate matching.</li>\n        <li>DO NOT include anything other than the JSON in your response.</li>\n    </ul>",
+                "description": "Expert use only. Modifying this can significantly alter agent behavior. Leave default if unsure",
+                "show": {
+                  "conditionAgentOverrideSystemPrompt": true
+                },
+                "id": "conditionAgentAgentflow_1-input-conditionAgentSystemPrompt-string",
+                "display": false
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "conditionAgentModel": "chatAnthropic",
+              "conditionAgentInstructions": "<h2>Agent Persona &amp; Core Directive</h2><p>You are the <strong>Workday PMO Support Router</strong>\u2014the central dispatcher for a corporate PMO ecosystem. Your job is to <strong>identify the user\u2019s intent from their first message</strong> and <strong>silently</strong> hand the conversation to the <strong>single best specialized agent</strong>. Be concise, professional, and helpful. <strong>Never reveal internal routing or agent names.</strong> Use the authenticated user context; <strong>don\u2019t ask for their name.</strong></p><h3>Primary Flow</h3><ol><li><p><strong>Greet briefly</strong> and invite the request: \u201cHi\u2014how can I help with your project or staffing needs?\u201d</p></li><li><p><strong>Detect the primary intent</strong> from the message.</p></li><li><p><strong>Clarify only if ambiguous</strong> with one focused question (e.g., specific project or date range). Avoid loops.</p></li><li><p><strong>Silent handoff</strong> to the mapped agent, passing extracted entities/slots.</p></li></ol><h3>Critical Guardrails</h3><ul><li><p><strong>No PII collection</strong> beyond what\u2019s required; rely on authenticated identity when possible.</p></li><li><p><strong>No legal/tax advice.</strong> Route such topics to the appropriate agent.<br><br>Project Financials \u2014 Forecasts</p><p><strong>Detect:</strong> forecasted hours by period; variance vs forecast.<br><strong>Keywords:</strong> forecast, forecasted hours, next week/month, variance vs forecast.<br><strong>Handoff:</strong> <code>Agent.Forecast</code></p><h3>SOW &amp; Change Requests</h3><p><strong>Detect:</strong> bill rates, Original SOW+CR amount, contracted hours, total project value, baseline/authorized budget.</p><p>Any Change Requests (CR) that may have been added to the SOW.<br><br><strong>Handoff:</strong> <code>Agent.SOW+CR</code></p><h3>Project Status</h3><p><strong>Detect:</strong> status/health/RYG, on track/blocked, risks/issues, portfolio status.<br><strong>Keywords:</strong> status, health, RYG, red/yellow/green, sentiment, progress, portfolio.<br><strong>Handoff:</strong> <code>Agent.ProjectStatus</code><br><strong>Note:</strong> Router may also pass helpful financial context (Actuals/Forecast/SOW) for that project if trivially available.</p><h3>Actuals (Worked Time)</h3><p><strong>Detect:</strong> actual hours, utilization, burn-to-date, missing/late/unapproved time, variance vs SOW/forecast.<br><strong>Handoff:</strong> <code>Agent.Actuals</code></p><h3>Forecast Within Budget (Bridge)</h3><p><strong>Detect:</strong> user wants to adjust forecast but keep within SOW/authorized budget.<br><strong>Handoff:</strong> <code>Agent.ForecastBudget</code></p><h3>Fallback</h3><p><strong>Detect:</strong> small talk, off-topic, or unrecognizable requests.<br><strong>Handoff:</strong> <code>Agent.Fallback</code></p><hr><h2>Cross-Topic Routing Rules (Primary Intent First)</h2><ul><li><p>\u201cWhat\u2019s our current project budget?\u201d or \u201cWhat are the bill rates?\u201d \u2192 <strong>SOW &amp; CR</strong></p></li><li><p>\u201cHow many hours did we actually work last week?\u201d \u2192 <strong>Actuals</strong></p></li><li><p>\u201cAre we over/under forecast?\u201d \u2192 <strong>Forecasts</strong></p></li><li><p>\u201cHelp me adjust my forecast to stay within the SOW budget.\u201d \u2192 <strong>Forecast Within Budget</strong></p></li><li><p>\u201cWho can cover me in November?\u201d \u2192 <strong>Availability &amp; Coverage Planning</strong></p></li></ul><hr><h2>Implementation Notes (practical &amp; terse)</h2><ul><li><p><strong>Never ask for the user\u2019s name.</strong> Use authenticated identity for employee context.</p></li><li><p><strong>Normalize dates</strong> (e.g., \u201c3 weeks in November\u201d \u2192 exact start/end once clarified).</p></li><li><p><strong>Pass only one clarifying question</strong> if the routing would otherwise be wrong; otherwise, hand off and let the target agent collect details.</p></li><li><p><strong>Do not echo internal terms</strong> like agent names to the user; target agent opens with a confident, action-oriented first line.</p></li></ul><hr><h2>Quick Test Cases</h2><ol><li><p>\u201cOut first two weeks of Nov\u2014who can sub for me on the banking project?\u201d \u2192 <strong>Availability &amp; Coverage</strong> (match role, dates present, project hint included)</p></li><li><p>\u201cWhat are my forecasted hours next month?\u201d \u2192 <strong>Forecasts</strong></p></li><li><p>\u201cWhat\u2019s the SOW budget and bill rates for Phoenix Revamp?\u201d \u2192 <strong>SOW &amp; CR</strong></p></li><li><p>\u201cStatus on Apollo and top 3 risks?\u201d \u2192 <strong>Project Status</strong></p></li><li><p>\u201cWe burned 320h\u2014how does that compare to forecast?\u201d \u2192 <strong>Actuals</strong> (variance context; can enrich downstream)</p></li><li><p>\"Which developers are most busy in (Month), (Day), (Year)?\" \u2192 <strong>Forecasts</strong></p></li><li><p><strong>\"What is the financial health of my _____ project\" </strong>\u2192 <strong>Actuals + </strong>\u2192 <strong>Forecasts - </strong>\u2192 <strong>SOW &amp; CR = Variance</strong></p></li></ol></li></ul>",
+              "conditionAgentInput": "<p><span class=\"variable\" data-type=\"mention\" data-id=\"question\" data-label=\"question\">{{ question }}</span> </p>",
+              "conditionAgentScenarios": [
+                {
+                  "scenario": "User is asking about something else"
+                },
+                {
+                  "scenario": "User or Agent is asking about Forecast"
+                },
+                {
+                  "scenario": "User or Agent is asking about Bill Rates, Estimated Hours in SOW and CR(s) and Total SOW amount"
+                },
+                {
+                  "scenario": "User or Agent is asking about actuals hours"
+                },
+                {
+                  "scenario": "User or Agent is asking about Project Status"
+                },
+                {
+                  "scenario": "User or Agent is asking about variance"
+                }
+              ],
+              "conditionAgentOverrideSystemPrompt": false,
+              "conditionAgentModelConfig": {
+                "credential": "",
+                "modelName": "claude-sonnet-4-0",
+                "temperature": "0.1",
+                "streaming": true,
+                "maxTokensToSample": "",
+                "topP": "",
+                "topK": "",
+                "extendedThinking": "",
+                "budgetTokens": 1024,
+                "allowImageUploads": "",
+                "conditionAgentModel": "chatAnthropic"
+              },
+              "undefined": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "conditionAgentAgentflow_1-output-0",
+                "label": 0,
+                "name": 0,
+                "description": "Condition 0"
+              },
+              {
+                "id": "conditionAgentAgentflow_1-output-1",
+                "label": 1,
+                "name": 1,
+                "description": "Condition 1"
+              },
+              {
+                "id": "conditionAgentAgentflow_1-output-2",
+                "label": 2,
+                "name": 2,
+                "description": "Condition 2"
+              },
+              {
+                "id": "conditionAgentAgentflow_1-output-3",
+                "label": 3,
+                "name": 3,
+                "description": "Condition 3"
+              },
+              {
+                "id": "conditionAgentAgentflow_1-output-4",
+                "label": 4,
+                "name": 4,
+                "description": "Condition 4"
+              },
+              {
+                "id": "conditionAgentAgentflow_1-output-5",
+                "label": 5,
+                "name": 5,
+                "description": "Condition 5"
+              }
+            ],
+            "outputs": {
+              "conditionAgentAgentflow": ""
+            },
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 2,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "PMO Agents"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "conditionAgentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_15",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_9",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_4",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_9",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_9",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_9",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_9",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "agentAgentflow_9",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_15",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 10,
+          "label": 10,
+          "version": 10,
+          "name": 10,
+          "type": 10,
+          "color": 10,
+          "baseClasses": 10,
+          "category": 10,
+          "description": 10,
+          "inputParams": 10
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 0.5263157894736842
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/SQL Agent Agents.json",
+      "node_count": 13,
+      "edge_count": 9,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 10,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true,
+                "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+                "display": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar",
+                    "optional": true
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startEphemeralMemory": "",
+              "startState": [
+                {
+                  "key": "sqlQuery",
+                  "value": ""
+                }
+              ],
+              "startPersistState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 3,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "This is an auto correct mechanism that regenerate sql query if result contains error"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "customFunctionAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "customFunctionAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "conditionAgentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "customFunctionAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "loopAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "customFunctionAgentflow_1",
+          "target": "conditionAgentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "llmAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "llmAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_2",
+          "target": "loopAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 13,
+          "label": 13,
+          "version": 13,
+          "name": 13,
+          "type": 13,
+          "color": 13,
+          "baseClasses": 13,
+          "category": 13,
+          "description": 13,
+          "inputParams": 13
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.4444444444444444
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Service Now HCM Ticket Router Agents.json",
+      "node_count": 6,
+      "edge_count": 10,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 5,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options"
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array"
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "startState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 1,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string"
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "Setup Instructions:\n\n1. Import this JSON into Flowise\n2. Configure API credentials for:\n   - OpenAI/ChatGPT\n   - ServiceNow (create custom tool)\n\n3. Create ServiceNow Assignment Groups:\n   - HCM_Payroll_Team\n   - HCM_Benefits_Team\n   - HCM_Time_Team\n   - HCM_Data_Team\n   - HCM_Onboarding_Team\n   - HCM_Performance_Team\n   - HCM_Compliance_Team\n   - HCM_General_Support\n\n4. Test with sample tickets\n5. Add more agents as needed"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "conditionAgentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 6,
+          "label": 6,
+          "version": 6,
+          "name": 6,
+          "type": 6,
+          "color": 6,
+          "baseClasses": 6,
+          "category": 6,
+          "inputParams": 6,
+          "inputAnchors": 6
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 0.6
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Simple Rag Agents.json",
+      "node_count": 3,
+      "edge_count": 1,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 2,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true,
+                "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+                "display": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar",
+                    "optional": true
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startEphemeralMemory": "",
+              "startState": "",
+              "startPersistState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 1,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "Agent can retrieve documents from upserted document store, and directly from vector database"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 3,
+          "label": 3,
+          "version": 3,
+          "name": 3,
+          "type": 3,
+          "color": 3,
+          "baseClasses": 3,
+          "category": 3,
+          "description": 3,
+          "inputParams": 3
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 3.0
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Structured Output Agents.json",
+      "node_count": 2,
+      "edge_count": 1,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 2,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true,
+                "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+                "display": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar",
+                    "optional": true
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startEphemeralMemory": "",
+              "startState": "",
+              "startPersistState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 2,
+          "label": 2,
+          "version": 2,
+          "name": 2,
+          "type": 2,
+          "color": 2,
+          "baseClasses": 2,
+          "category": 2,
+          "description": 2,
+          "inputParams": 2
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 2.0
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Supervisor Worker Agents.json",
+      "node_count": 8,
+      "edge_count": 7,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 8,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startState": [
+                {
+                  "key": "next",
+                  "value": ""
+                },
+                {
+                  "key": "instruction",
+                  "value": ""
+                }
+              ]
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "conditionAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentflow_0",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentflow_0",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentflow_0",
+          "target": "agentAgentflow_3",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "loopAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_2",
+          "target": "loopAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 8,
+          "label": 8,
+          "version": 8,
+          "name": 8,
+          "type": 8,
+          "color": 8,
+          "baseClasses": 8,
+          "category": 8,
+          "description": 8,
+          "inputParams": 8
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.1428571428571428
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Translator Agents.json",
+      "node_count": 2,
+      "edge_count": 1,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 2,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true,
+                "id": "startAgentflow_0-input-startEphemeralMemory-boolean",
+                "display": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar",
+                    "optional": true
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startEphemeralMemory": "",
+              "startState": "",
+              "startPersistState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 2,
+          "label": 2,
+          "version": 2,
+          "name": 2,
+          "type": 2,
+          "color": 2,
+          "baseClasses": 2,
+          "category": 2,
+          "description": 2,
+          "inputParams": 2
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 2.0
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Workday Agents Agents.json",
+      "node_count": 28,
+      "edge_count": 37,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 23,
+          "example_config": {
+            "id": "agentAgentflow_0",
+            "label": "Agent.NavigationBasics",
+            "version": 2.2,
+            "name": "agentAgentflow",
+            "type": "Agent",
+            "color": "#4DD0E1",
+            "baseClasses": [
+              "Agent"
+            ],
+            "category": "Agent Flows",
+            "description": "Dynamically choose and utilize tools during runtime, enabling multi-step reasoning",
+            "inputParams": [
+              {
+                "label": "Model",
+                "name": "agentModel",
+                "type": "asyncOptions",
+                "loadMethod": "listModels",
+                "loadConfig": true,
+                "id": "agentAgentflow_0-input-agentModel-asyncOptions",
+                "display": true
+              },
+              {
+                "label": "Messages",
+                "name": "agentMessages",
+                "type": "array",
+                "optional": true,
+                "acceptVariable": true,
+                "array": [
+                  {
+                    "label": "Role",
+                    "name": "role",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "System",
+                        "name": "system"
+                      },
+                      {
+                        "label": "Assistant",
+                        "name": "assistant"
+                      },
+                      {
+                        "label": "Developer",
+                        "name": "developer"
+                      },
+                      {
+                        "label": "User",
+                        "name": "user"
+                      }
+                    ]
+                  },
+                  {
+                    "label": "Content",
+                    "name": "content",
+                    "type": "string",
+                    "acceptVariable": true,
+                    "generateInstruction": true,
+                    "rows": 4
+                  }
+                ],
+                "id": "agentAgentflow_0-input-agentMessages-array",
+                "display": true
+              },
+              {
+                "label": "OpenAI Built-in Tools",
+                "name": "agentToolsBuiltInOpenAI",
+                "type": "multiOptions",
+                "optional": true,
+                "options": [
+                  {
+                    "label": "Web Search",
+                    "name": "web_search_preview",
+                    "description": "Search the web for the latest information"
+                  },
+                  {
+                    "label": "Code Interpreter",
+                    "name": "code_interpreter",
+                    "description": "Write and run Python code in a sandboxed environment"
+                  },
+                  {
+                    "label": "Image Generation",
+                    "name": "image_generation",
+                    "description": "Generate images based on a text prompt"
+                  }
+                ],
+                "show": {
+                  "agentModel": "chatOpenAI"
+                },
+                "id": "agentAgentflow_0-input-agentToolsBuiltInOpenAI-multiOptions",
+                "display": false
+              },
+              {
+                "label": "Gemini Built-in Tools",
+                "name": "agentToolsBuiltInGemini",
+                "type": "multiOptions",
+                "optional": true,
+                "options": [
+                  {
+                    "label": "URL Context",
+                    "name": "urlContext",
+                    "description": "Extract content from given URLs"
+                  },
+                  {
+                    "label": "Google Search",
+                    "name": "googleSearch",
+                    "description": "Search real-time web content"
+                  }
+                ],
+                "show": {
+                  "agentModel": "chatGoogleGenerativeAI"
+                },
+                "id": "agentAgentflow_0-input-agentToolsBuiltInGemini-multiOptions",
+                "display": false
+              },
+              {
+                "label": "Anthropic Built-in Tools",
+                "name": "agentToolsBuiltInAnthropic",
+                "type": "multiOptions",
+                "optional": true,
+                "options": [
+                  {
+                    "label": "Web Search",
+                    "name": "web_search_20250305",
+                    "description": "Search the web for the latest information"
+                  },
+                  {
+                    "label": "Web Fetch",
+                    "name": "web_fetch_20250910",
+                    "description": "Retrieve full content from specified web pages"
+                  }
+                ],
+                "show": {
+                  "agentModel": "chatAnthropic"
+                },
+                "id": "agentAgentflow_0-input-agentToolsBuiltInAnthropic-multiOptions",
+                "display": false
+              },
+              {
+                "label": "Tools",
+                "name": "agentTools",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Tool",
+                    "name": "agentSelectedTool",
+                    "type": "asyncOptions",
+                    "loadMethod": "listTools",
+                    "loadConfig": true
+                  },
+                  {
+                    "label": "Require Human Input",
+                    "name": "agentSelectedToolRequiresHumanInput",
+                    "type": "boolean",
+                    "optional": true
+                  }
+                ],
+                "id": "agentAgentflow_0-input-agentTools-array",
+                "display": true
+              },
+              {
+                "label": "Knowledge (Document Stores)",
+                "name": "agentKnowledgeDocumentStores",
+                "type": "array",
+                "description": "Give your agent context about different document sources. Document stores must be upserted in advance.",
+                "array": [
+                  {
+                    "label": "Document Store",
+                    "name": "documentStore",
+                    "type": "asyncOptions",
+                    "loadMethod": "listStores"
+                  },
+                  {
+                    "label": "Describe Knowledge",
+                    "name": "docStoreDescription",
+                    "type": "string",
+                    "generateDocStoreDescription": true,
+                    "placeholder": "Describe what the knowledge base is about, this is useful for the AI to know when and how to search for correct information",
+                    "rows": 4
+                  },
+                  {
+                    "label": "Return Source Documents",
+                    "name": "returnSourceDocuments",
+                    "type": "boolean",
+                    "optional": true
+                  }
+                ],
+                "optional": true,
+                "id": "agentAgentflow_0-input-agentKnowledgeDocumentStores-array",
+                "display": true
+              },
+              {
+                "label": "Knowledge (Vector Embeddings)",
+                "name": "agentKnowledgeVSEmbeddings",
+                "type": "array",
+                "description": "Give your agent context about different document sources from existing vector stores and embeddings",
+                "array": [
+                  {
+                    "label": "Vector Store",
+                    "name": "vectorStore",
+                    "type": "asyncOptions",
+                    "loadMethod": "listVectorStores",
+                    "loadConfig": true
+                  },
+                  {
+                    "label": "Embedding Model",
+                    "name": "embeddingModel",
+                    "type": "asyncOptions",
+                    "loadMethod": "listEmbeddings",
+                    "loadConfig": true
+                  },
+                  {
+                    "label": "Knowledge Name",
+                    "name": "knowledgeName",
+                    "type": "string",
+                    "placeholder": "A short name for the knowledge base, this is useful for the AI to know when and how to search for correct information"
+                  },
+                  {
+                    "label": "Describe Knowledge",
+                    "name": "knowledgeDescription",
+                    "type": "string",
+                    "placeholder": "Describe what the knowledge base is about, this is useful for the AI to know when and how to search for correct information",
+                    "rows": 4
+                  },
+                  {
+                    "label": "Return Source Documents",
+                    "name": "returnSourceDocuments",
+                    "type": "boolean",
+                    "optional": true
+                  }
+                ],
+                "optional": true,
+                "id": "agentAgentflow_0-input-agentKnowledgeVSEmbeddings-array",
+                "display": true
+              },
+              {
+                "label": "Enable Memory",
+                "name": "agentEnableMemory",
+                "type": "boolean",
+                "description": "Enable memory for the conversation thread",
+                "default": true,
+                "optional": true,
+                "id": "agentAgentflow_0-input-agentEnableMemory-boolean",
+                "display": true
+              },
+              {
+                "label": "Memory Type",
+                "name": "agentMemoryType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "All Messages",
+                    "name": "allMessages",
+                    "description": "Retrieve all messages from the conversation"
+                  },
+                  {
+                    "label": "Window Size",
+                    "name": "windowSize",
+                    "description": "Uses a fixed window size to surface the last N messages"
+                  },
+                  {
+                    "label": "Conversation Summary",
+                    "name": "conversationSummary",
+                    "description": "Summarizes the whole conversation"
+                  },
+                  {
+                    "label": "Conversation Summary Buffer",
+                    "name": "conversationSummaryBuffer",
+                    "description": "Summarize conversations once token limit is reached. Default to 2000"
+                  }
+                ],
+                "optional": true,
+                "default": "allMessages",
+                "show": {
+                  "agentEnableMemory": true
+                },
+                "id": "agentAgentflow_0-input-agentMemoryType-options",
+                "display": true
+              },
+              {
+                "label": "Window Size",
+                "name": "agentMemoryWindowSize",
+                "type": "number",
+                "default": "20",
+                "description": "Uses a fixed window size to surface the last N messages",
+                "show": {
+                  "agentMemoryType": "windowSize"
+                },
+                "id": "agentAgentflow_0-input-agentMemoryWindowSize-number",
+                "display": false
+              },
+              {
+                "label": "Max Token Limit",
+                "name": "agentMemoryMaxTokenLimit",
+                "type": "number",
+                "default": "2000",
+                "description": "Summarize conversations once token limit is reached. Default to 2000",
+                "show": {
+                  "agentMemoryType": "conversationSummaryBuffer"
+                },
+                "id": "agentAgentflow_0-input-agentMemoryMaxTokenLimit-number",
+                "display": false
+              },
+              {
+                "label": "Input Message",
+                "name": "agentUserMessage",
+                "type": "string",
+                "description": "Add an input message as user message at the end of the conversation",
+                "rows": 4,
+                "optional": true,
+                "acceptVariable": true,
+                "show": {
+                  "agentEnableMemory": true
+                },
+                "id": "agentAgentflow_0-input-agentUserMessage-string",
+                "display": true
+              },
+              {
+                "label": "Return Response As",
+                "name": "agentReturnResponseAs",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "User Message",
+                    "name": "userMessage"
+                  },
+                  {
+                    "label": "Assistant Message",
+                    "name": "assistantMessage"
+                  }
+                ],
+                "default": "userMessage",
+                "id": "agentAgentflow_0-input-agentReturnResponseAs-options",
+                "display": true
+              },
+              {
+                "label": "Update Flow State",
+                "name": "agentUpdateState",
+                "description": "Update runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "acceptVariable": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "asyncOptions",
+                    "loadMethod": "listRuntimeStateKeys",
+                    "freeSolo": true
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "acceptVariable": true,
+                    "acceptNodeOutputAsVariable": true
+                  }
+                ],
+                "id": "agentAgentflow_0-input-agentUpdateState-array",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "agentModel": "chatOpenAI",
+              "agentMessages": [
+                {
+                  "role": "system",
+                  "content": "<p><em>You are an expert Navigation Basics agent.</em> Provide the shortest click-path (2\u20135 steps) to reach the task (worklets, landing pages, Related Actions, Guide Me, filters, alerts, To-Dos), include one quick tip, and avoid policy/security changes or PII.</p>"
+                }
+              ],
+              "agentToolsBuiltInOpenAI": "",
+              "agentToolsBuiltInGemini": "",
+              "agentToolsBuiltInAnthropic": "",
+              "agentTools": [],
+              "agentKnowledgeDocumentStores": "",
+              "agentKnowledgeVSEmbeddings": "",
+              "agentEnableMemory": true,
+              "agentMemoryType": "allMessages",
+              "agentMemoryWindowSize": "20",
+              "agentMemoryMaxTokenLimit": "2000",
+              "agentUserMessage": "",
+              "agentReturnResponseAs": "userMessage",
+              "agentUpdateState": "",
+              "agentModelConfig": {
+                "credential": "",
+                "modelName": "gpt-4o-mini",
+                "temperature": 0.9,
+                "streaming": true,
+                "maxTokens": "",
+                "topP": "",
+                "frequencyPenalty": "",
+                "presencePenalty": "",
+                "timeout": "",
+                "strictToolCalling": "",
+                "stopSequence": "",
+                "basepath": "",
+                "proxyUrl": "",
+                "baseOptions": "",
+                "allowImageUploads": "",
+                "imageResolution": "low",
+                "reasoning": "",
+                "reasoningEffort": "",
+                "reasoningSummary": "",
+                "agentModel": "chatOpenAI"
+              }
+            },
+            "outputAnchors": [
+              {
+                "id": "agentAgentflow_0-output-agentAgentflow",
+                "label": "Agent",
+                "name": "agentAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        },
+        {
+          "type": "stickyNote",
+          "count": 5,
+          "example_config": {
+            "id": "stickyNoteAgentflow_0",
+            "label": "Sticky Note",
+            "version": 1,
+            "name": "stickyNoteAgentflow",
+            "type": "StickyNote",
+            "color": "#fee440",
+            "baseClasses": [
+              "StickyNote"
+            ],
+            "category": "Agent Flows",
+            "description": "Add notes to the agent flow",
+            "inputParams": [
+              {
+                "label": "",
+                "name": "note",
+                "type": "string",
+                "rows": 1,
+                "placeholder": "Type something here",
+                "optional": true,
+                "id": "stickyNoteAgentflow_0-input-note-string",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "note": "PMO Agents"
+            },
+            "outputAnchors": [
+              {
+                "id": "stickyNoteAgentflow_0-output-stickyNoteAgentflow",
+                "label": "Sticky Note",
+                "name": "stickyNoteAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "conditionAgentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_3",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_5",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_4",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_6",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_7",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_8",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_9",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_11",
+          "target": "agentAgentflow_13",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_9",
+          "target": "agentAgentflow_13",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_10",
+          "target": "agentAgentflow_13",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_13",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_15",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_10",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_11",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_15",
+          "target": "agentAgentflow_13",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_2",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_6",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_5",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_4",
+          "target": "agentAgentflow_8",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_4",
+          "target": "agentAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_4",
+          "target": "agentAgentflow_7",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_1",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_14",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_14",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_16",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "agentAgentflow_16",
+          "target": "agentAgentflow_12",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_17",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_18",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_19",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "conditionAgentAgentflow_1",
+          "target": "agentAgentflow_20",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 28,
+          "label": 28,
+          "version": 28,
+          "name": 28,
+          "type": 28,
+          "color": 28,
+          "baseClasses": 28,
+          "category": 28,
+          "description": 28,
+          "inputParams": 28
+        },
+        "total_unique_keys": 16
+      },
+      "quality_markers": {
+        "has_error_handling": true,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 0.7567567567567568
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/Workplace Chat Agents.json",
+      "node_count": 5,
+      "edge_count": 5,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 5,
+          "example_config": {
+            "id": "startAgentflow_0",
+            "label": "Start",
+            "version": 1.1,
+            "name": "startAgentflow",
+            "type": "Start",
+            "color": "#7EE787",
+            "hideInput": true,
+            "baseClasses": [
+              "Start"
+            ],
+            "category": "Agent Flows",
+            "description": "Starting point of the agentflow",
+            "inputParams": [
+              {
+                "label": "Input Type",
+                "name": "startInputType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Chat Input",
+                    "name": "chatInput",
+                    "description": "Start the conversation with chat input"
+                  },
+                  {
+                    "label": "Form Input",
+                    "name": "formInput",
+                    "description": "Start the workflow with form inputs"
+                  }
+                ],
+                "default": "chatInput",
+                "id": "startAgentflow_0-input-startInputType-options",
+                "display": true
+              },
+              {
+                "label": "Form Title",
+                "name": "formTitle",
+                "type": "string",
+                "placeholder": "Please Fill Out The Form",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formTitle-string",
+                "display": false
+              },
+              {
+                "label": "Form Description",
+                "name": "formDescription",
+                "type": "string",
+                "placeholder": "Complete all fields below to continue",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "id": "startAgentflow_0-input-formDescription-string",
+                "display": false
+              },
+              {
+                "label": "Form Input Types",
+                "name": "formInputTypes",
+                "description": "Specify the type of form input",
+                "type": "array",
+                "show": {
+                  "startInputType": "formInput"
+                },
+                "array": [
+                  {
+                    "label": "Type",
+                    "name": "type",
+                    "type": "options",
+                    "options": [
+                      {
+                        "label": "String",
+                        "name": "string"
+                      },
+                      {
+                        "label": "Number",
+                        "name": "number"
+                      },
+                      {
+                        "label": "Boolean",
+                        "name": "boolean"
+                      },
+                      {
+                        "label": "Options",
+                        "name": "options"
+                      }
+                    ],
+                    "default": "string"
+                  },
+                  {
+                    "label": "Label",
+                    "name": "label",
+                    "type": "string",
+                    "placeholder": "Label for the input"
+                  },
+                  {
+                    "label": "Variable Name",
+                    "name": "name",
+                    "type": "string",
+                    "placeholder": "Variable name for the input (must be camel case)",
+                    "description": "Variable name must be camel case. For example: firstName, lastName, etc."
+                  },
+                  {
+                    "label": "Add Options",
+                    "name": "addOptions",
+                    "type": "array",
+                    "show": {
+                      "formInputTypes[$index].type": "options"
+                    },
+                    "array": [
+                      {
+                        "label": "Option",
+                        "name": "option",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                ],
+                "id": "startAgentflow_0-input-formInputTypes-array",
+                "display": false
+              },
+              {
+                "label": "Ephemeral Memory",
+                "name": "startEphemeralMemory",
+                "type": "boolean",
+                "description": "Start fresh for every execution without past chat history",
+                "optional": true
+              },
+              {
+                "label": "Flow State",
+                "name": "startState",
+                "description": "Runtime state during the execution of the workflow",
+                "type": "array",
+                "optional": true,
+                "array": [
+                  {
+                    "label": "Key",
+                    "name": "key",
+                    "type": "string",
+                    "placeholder": "Foo"
+                  },
+                  {
+                    "label": "Value",
+                    "name": "value",
+                    "type": "string",
+                    "placeholder": "Bar"
+                  }
+                ],
+                "id": "startAgentflow_0-input-startState-array",
+                "display": true
+              },
+              {
+                "label": "Persist State",
+                "name": "startPersistState",
+                "type": "boolean",
+                "description": "Persist the state in the same session",
+                "optional": true,
+                "id": "startAgentflow_0-input-startPersistState-boolean",
+                "display": true
+              }
+            ],
+            "inputAnchors": [],
+            "inputs": {
+              "startInputType": "chatInput",
+              "formTitle": "",
+              "formDescription": "",
+              "formInputTypes": "",
+              "startState": ""
+            },
+            "outputAnchors": [
+              {
+                "id": "startAgentflow_0-output-startAgentflow",
+                "label": "Start",
+                "name": "startAgentflow"
+              }
+            ],
+            "outputs": {},
+            "selected": false
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "generic-connection",
+          "source": "startAgentflow_0",
+          "target": "llmAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "toolAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "toolAgentflow_0",
+          "target": "directReplyAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "llmAgentflow_0",
+          "target": "toolAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        },
+        {
+          "pattern": "generic-connection",
+          "source": "toolAgentflow_1",
+          "target": "directReplyAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "id": 5,
+          "label": 5,
+          "version": 5,
+          "name": 5,
+          "type": 5,
+          "color": 5,
+          "baseClasses": 5,
+          "category": 5,
+          "description": 5,
+          "inputParams": 5
+        },
+        "total_unique_keys": 17
+      },
+      "quality_markers": {
+        "has_error_handling": false,
+        "has_retry_logic": false,
+        "has_proper_memory": true,
+        "node_to_edge_ratio": 1.0
+      }
+    },
+    {
+      "success": true,
+      "file": "templates/HIL-PATTERN-REFERENCE.json",
+      "node_count": 2,
+      "edge_count": 4,
+      "node_patterns": [
+        {
+          "type": "agentFlow",
+          "count": 2,
+          "example_config": {
+            "id": "humanInputAgentflow_0",
+            "label": "Human Input - Fixed Description",
+            "version": 1.0,
+            "name": "humanInputAgentflow",
+            "type": "HumanInput",
+            "color": "#F06292",
+            "baseClasses": [
+              "HumanInput"
+            ],
+            "category": "Agent Flows",
+            "description": "Request human input, approval or rejection during execution",
+            "inputParams": [
+              {
+                "label": "Description Type",
+                "name": "humanInputDescriptionType",
+                "type": "options",
+                "options": [
+                  {
+                    "label": "Fixed",
+                    "name": "fixed",
+                    "description": "Specify a fixed description"
+                  },
+                  {
+                    "label": "Dynamic",
+                    "name": "dynamic",
+                    "description": "Use LLM to generate a description"
+                  }
+                ]
+              },
+              {
+                "label": "Description",
+                "name": "humanInputDescription",
+                "type": "string",
+                "rows": 8,
+                "acceptVariable": true
+              },
+              {
+                "label": "Enable Feedback",
+                "name": "humanInputEnableFeedback",
+                "type": "boolean",
+                "default": true
+              }
+            ],
+            "inputs": {
+              "humanInputDescriptionType": "fixed",
+              "humanInputDescription": "\u26a0\ufe0f CONFLICT OF INTEREST DETECTED\\n\\nAction: {{ $flow.state.hitl.pending.action }}\\nSummary: {{ $flow.state.hitl.pending.summary }}\\nRisk: {{ $flow.state.hitl.pending.risk_score }}/10\\nCost: ${{ $flow.state.hitl.pending.cost_estimate }}\\n\\n\ud83d\udd35 PROCEED: Approve with waiver\\n\ud83d\udd34 REJECT: Escalate to compliance",
+              "humanInputEnableFeedback": true
+            },
+            "outputAnchors": [
+              {
+                "id": "humanInputAgentflow_0-output-proceed",
+                "label": "Proceed",
+                "name": "proceed",
+                "description": "User approved"
+              },
+              {
+                "id": "humanInputAgentflow_0-output-reject",
+                "label": "Reject",
+                "name": "reject",
+                "description": "User rejected"
+              }
+            ]
+          }
+        }
+      ],
+      "connection_patterns": [
+        {
+          "pattern": "human-input-approval-flow",
+          "source": "agentAgentflow_0",
+          "target": "humanInputAgentflow_0",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Detection agent to HIL approval gate"
+        },
+        {
+          "pattern": "hil-proceed-path",
+          "source": "humanInputAgentflow_0",
+          "sourceHandle": "humanInputAgentflow_0-output-proceed",
+          "target": "agentAgentflow_1",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Proceed path to approval agent"
+        },
+        {
+          "pattern": "hil-reject-path",
+          "source": "humanInputAgentflow_0",
+          "sourceHandle": "humanInputAgentflow_0-output-reject",
+          "target": "agentAgentflow_2",
+          "source_type": "agentFlow",
+          "target_type": "agentFlow",
+          "description": "Reject path to remediation agent"
+        }
+      ],
+      "configuration_patterns": {
+        "common_config_keys": {
+          "humanInputDescriptionType": 1,
+          "humanInputDescription": 1,
+          "humanInputEnableFeedback": 1,
+          "humanInputModel": 1,
+          "humanInputModelPrompt": 1,
+          "humanInputModelConfig": 1
+        },
+        "semantic_output_anchors": {
+          "proceed": "User approved - continue with action",
+          "reject": "User rejected - cancel or escalate"
+        },
+        "flow_state_integration": {
+          "pattern": "template_variables",
+          "variables": [
+            "$flow.state.hitl.pending.action",
+            "$flow.state.hitl.pending.summary",
+            "$flow.state.hitl.pending.risk_score",
+            "$flow.state.hitl.pending.cost_estimate",
+            "$flow.state.hitl.pending.mitigations"
+          ]
+        }
+      },
+      "quality_markers": {
+        "has_semantic_labels": true,
+        "has_both_paths_wired": true,
+        "uses_state_context": true,
+        "approval_workflow_ready": true
+      }
+    }
+  ],
+  "common_patterns": {
+    "average_nodes": 8.461538461538462,
+    "average_edges": 8.692307692307692,
+    "files_with_error_handling": 7,
+    "files_with_retry_logic": 1,
+    "human_in_the_loop": {
+      "description": "Human-in-the-Loop approval gates with semantic Proceed/Reject outputs",
+      "variants": {
+        "fixed_description": {
+          "use_case": "Predefined approval messages with dynamic flow state data",
+          "template_variables": true,
+          "temperature": 0.0,
+          "example_use_cases": [
+            "Conflict of Interest",
+            "Budget Approval",
+            "Email Sending",
+            "Data Deletion"
+          ]
+        },
+        "dynamic_description": {
+          "use_case": "LLM-generated approval messages based on conversation context",
+          "requires_model": true,
+          "temperature": 0.0,
+          "generates_summary": true
+        }
+      },
+      "critical_features": {
+        "semantic_output_labels": [
+          "Proceed",
+          "Reject"
+        ],
+        "enable_feedback": true,
+        "both_paths_must_be_wired": true,
+        "flow_state_population": "required_before_hil_node",
+        "color": "#F06292"
+      },
+      "integration_pattern": "[Detection Agent] \u2192 [HIL Node] \u2192 [Proceed: Approval] | [Reject: Remediation]"
+    },
+    "loop_node_retry_logic": {
+      "description": "Loop Node for iterative workflows with retry logic, validation loops, and approval-with-revision patterns",
+      "node_type": "conditionAgentAgentflow",
+      "color": "#ffcc80",
+      "output_routes": {
+        "0": {
+          "label": "Continue (Loop Back)",
+          "description": "Loop back to revision/correction agent for another iteration",
+          "typical_target": "revision_agent",
+          "use_cases": [
+            "Rejection with revision opportunity",
+            "Validation errors requiring correction",
+            "Quality score below threshold"
+          ]
+        },
+        "1": {
+          "label": "Exit: Approved/Validated",
+          "description": "Success exit, proceed to next workflow stage",
+          "typical_target": "next_stage_agent",
+          "use_cases": [
+            "Approval state reached",
+            "Validation passed",
+            "Quality threshold met"
+          ]
+        },
+        "2": {
+          "label": "Exit: Max Iterations",
+          "description": "Failure exit, max iterations reached, stop with error",
+          "typical_target": "failure_handler_agent",
+          "use_cases": [
+            "Too many retry attempts",
+            "Unable to meet requirements",
+            "Safety stop triggered"
+          ]
+        },
+        "3": {
+          "label": "Escalate to Human",
+          "description": "Edge case exit, send to human review for decision",
+          "typical_target": "human_input_node",
+          "use_cases": [
+            "Ambiguous policy situation",
+            "Conflict requiring judgment",
+            "High-risk decision point"
+          ]
+        }
+      },
+      "key_parameters": {
+        "loopMaxIterations": {
+          "type": "number",
+          "default": 3,
+          "recommended_values": {
+            "approval_workflows": 3,
+            "validation_loops": 5,
+            "quality_gates": 3
+          },
+          "rationale": "Prevents infinite loops while allowing reasonable retry attempts"
+        },
+        "loopIterationKey": {
+          "type": "string",
+          "default": ".context-foundry/loop-iteration-count.txt",
+          "purpose": "Track iteration count in flow state"
+        },
+        "loopDelayMs": {
+          "type": "number",
+          "default": 0,
+          "use_when": "Rate-limiting external API calls"
+        },
+        "exitOnApprovalStates": {
+          "type": "array",
+          "examples": [
+            "APPROVED",
+            "VALIDATED",
+            "PASSED",
+            "COMPLETED"
+          ],
+          "purpose": "Define success states that trigger route 1 exit"
+        },
+        "temperature": {
+          "recommended": 0.1,
+          "rationale": "Loop decisions must be deterministic and consistent"
+        }
+      },
+      "routing_logic": {
+        "precedence": [
+          "1. Check approval_state in exitOnApprovalStates → Route 1",
+          "2. Check iteration_count >= max_iterations → Route 2",
+          "3. Check validation_errors/quality_score/rejection → Route 0",
+          "4. Check ambiguous/blocker conditions → Route 3",
+          "5. Default → Route 0"
+        ],
+        "deterministic": true
+      },
+      "usage_patterns": {
+        "approval_with_revision": {
+          "pattern": "[Submission] → [HIL Gate] → [Reject] → [Loop Node] → [0: Revision] → [Resubmit]",
+          "use_case": "Promotion nominations, document approvals",
+          "max_iterations": 3
+        },
+        "validation_with_correction": {
+          "pattern": "[User Input] → [Validator] → [Loop Node] → [0: Correction Form] → [Revalidate]",
+          "use_case": "Form validation, data quality checks",
+          "max_iterations": 5
+        },
+        "quality_gate_with_retry": {
+          "pattern": "[Builder] → [Quality Check] → [Loop Node] → [0: Improve] → [Re-check]",
+          "use_case": "Code quality, test execution, build validation",
+          "max_iterations": 3
+        }
+      },
+      "state_management": {
+        "required_fields": [
+          "iteration_count",
+          "max_iterations",
+          "approval_state"
+        ],
+        "optional_fields": [
+          "validation_errors",
+          "quality_score",
+          "required_fields_missing",
+          "notes"
+        ],
+        "increment_pattern": "Agent before loop node must increment loop.iteration_count in state",
+        "reset_pattern": "Reset iteration_count to 0 on successful exit (route 1)"
+      },
+      "integration_with_hil": {
+        "pattern": "[HIL Gate] → [Reject Path] → [Loop Node] → [Routes]",
+        "benefits": [
+          "Enables iterative refinement after rejection",
+          "Prevents infinite resubmission loops",
+          "Provides escalation path for edge cases",
+          "Tracks attempt count for audit trail"
+        ],
+        "typical_wiring": {
+          "hil_reject_to_loop": "humanInputAgentflow_0-output-reject → conditionAgentAgentflow_12",
+          "loop_continue_to_revision": "conditionAgentAgentflow_12-output-0 → revision_agent",
+          "loop_escalate_to_hil": "conditionAgentAgentflow_12-output-3 → humanInputAgentflow_1"
+        }
+      },
+      "best_practices": {
+        "do": [
+          "Set loopMaxIterations to 3-5 for production",
+          "Use temperature 0.1-0.2 for deterministic routing",
+          "Track iteration_count in flow state",
+          "Define clear exitOnApprovalStates",
+          "Wire all four output paths",
+          "Reset iteration counter on successful exit",
+          "Include loop context in audit trail"
+        ],
+        "dont": [
+          "Allow unlimited iterations (always set max)",
+          "Use high temperature (causes random routing)",
+          "Skip state tracking (loop can't enforce limits)",
+          "Leave escalation path unwired (edge cases need handling)",
+          "Use vague approval states (be explicit)",
+          "Nest loops inside loops (causes complexity explosion)"
+        ]
+      },
+      "anti_patterns": {
+        "infinite_loops": {
+          "problem": "No max iterations limit",
+          "solution": "Always set loopMaxIterations (default: 3)"
+        },
+        "non_deterministic_routing": {
+          "problem": "High temperature causes random decisions",
+          "solution": "Use temperature 0.1-0.2"
+        },
+        "missing_state_tracking": {
+          "problem": "Iteration count not tracked, can't exit",
+          "solution": "Track loop.iteration_count in flow state"
+        },
+        "unwired_escalation": {
+          "problem": "No human escalation path for edge cases",
+          "solution": "Always wire output-3 to human review node"
+        }
+      },
+      "validation_checklist": [
+        "Agent before loop node populates loop_context with required fields",
+        "Agent before loop node increments iteration_count in state",
+        "loopMaxIterations set to reasonable limit (3-5)",
+        "exitOnApprovalStates defined with success states",
+        "conditionAgentInstructions includes deterministic logic",
+        "Temperature set to 0.1-0.2",
+        "Output 0 (Continue) wired back to revision/correction agent",
+        "Output 1 (Exit Approved) wired to next stage",
+        "Output 2 (Exit Max Iters) wired to failure handler",
+        "Output 3 (Escalate) wired to human review node",
+        "State reset mechanism for successful completion"
+      ],
+      "template_reference": "prompts/LOOP-NODE-TEMPLATE.json",
+      "documentation_reference": "AGENT_PATTERN_REFERENCE.md#5-loop-node-conditionagentAgentflow"
+    }
+  }
+}

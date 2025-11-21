@@ -38,6 +38,14 @@ def pytest_configure(config):
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
 
+    # Run migrations on test database
+    try:
+        from migrations.run_migrations import run_migrations
+
+        run_migrations()
+    except Exception as e:
+        print(f"Warning: Failed to run migrations: {e}")
+
 
 def pytest_unconfigure(config):
     """

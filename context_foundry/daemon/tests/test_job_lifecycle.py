@@ -211,6 +211,30 @@ class TestJobManagerTimeout:
         cancelled_job = job_manager.get_job(job.id)
         assert cancelled_job.status == JobStatus.CANCELLED
 
+    def test_cancel_releases_workdir_lock(self, job_manager, tmp_path):
+        """Cancelling a job should release any held working directory lock"""
+        workdir = tmp_path / "project"
+        workdir.mkdir()
+
+        job = job_manager.submit_job(
+            job_type=JobType.DELEGATION,
+            params={"task": "test task", "working_directory": str(workdir)},
+        )
+
+        # Simulate a lock acquired by this job (as would happen when running)
+        acquired = job_manager._workdir_lock.acquire(workdir, job.id)
+        assert acquired is True
+        locked, holder = job_manager._workdir_lock.is_locked(workdir)
+        assert locked is True
+        assert holder == job.id
+
+        # Cancelling should clear the lockfile and in-memory tracking
+        job_manager.cancel_job(job.id)
+
+        locked_after, holder_after = job_manager._workdir_lock.is_locked(workdir)
+        assert locked_after is False
+        assert holder_after is None
+
     def test_cannot_cancel_terminal_job(self, job_manager):
         """Test cannot cancel job in terminal state"""
         job = job_manager.submit_job(

@@ -106,11 +106,55 @@ def autonomous_build_and_deploy_impl(
         #   "/tmp/test" → /tmp/test (explicit override)
         working_dir_input = Path(working_directory)
         if working_dir_input.is_absolute():
-            final_working_dir = working_dir_input
-            print(
-                f"📍 Using explicit working directory: {working_dir_input}",
-                file=sys.stderr,
-            )
+            # Check if this is an extension directory (should create project in homelab, not inside extension)
+            from tools.mcp_utils.path_utils import get_projects_root
+
+            projects_root = get_projects_root()
+
+            # Detect if working_dir is inside context-foundry/extensions/
+            # In that case, we should create a NEW project in homelab, not inside the extension
+            cf_extensions = projects_root / "context-foundry" / "extensions"
+            is_extension_dir = str(working_dir_input).startswith(str(cf_extensions))
+
+            if is_extension_dir and mode == "new_project":
+                # Extract project name from task description
+                # Look for common patterns like "FDM Worktag Coach" or project names
+                import re
+
+                # Try to extract a project name from the task
+                # Look for quoted names or capitalized phrases
+                project_name_match = re.search(r'"([^"]+)"', task) or re.search(
+                    r"'([^']+)'", task
+                )
+                if project_name_match:
+                    raw_name = project_name_match.group(1)
+                else:
+                    # Fallback: use first few words
+                    words = task.split()[:5]
+                    raw_name = " ".join(words)
+
+                # Convert to kebab-case directory name
+                project_name = re.sub(r"[^a-zA-Z0-9]+", "-", raw_name.lower()).strip(
+                    "-"
+                )
+                if len(project_name) > 50:
+                    project_name = project_name[:50].rsplit("-", 1)[0]
+
+                final_working_dir = projects_root / project_name
+                print(
+                    f"📍 Extension directory detected - creating project in: {final_working_dir}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"   (Extension source: {working_dir_input})",
+                    file=sys.stderr,
+                )
+            else:
+                final_working_dir = working_dir_input
+                print(
+                    f"📍 Using explicit working directory: {working_dir_input}",
+                    file=sys.stderr,
+                )
         else:
             from tools.mcp_utils.path_utils import get_projects_root
 
@@ -167,6 +211,39 @@ def autonomous_build_and_deploy_impl(
         print(f"✨ Final mode: {mode}", file=sys.stderr)
         if flowise_mode:
             print("🚨 Flowise mode: ENABLED", file=sys.stderr)
+
+            # ═══════════════════════════════════════════════════════════════════════
+            # FLOWISE BOOTSTRAP - Auto-load patterns into Codex
+            # ═══════════════════════════════════════════════════════════════════════
+            print("📚 Auto-loading Flowise patterns into Codex...", file=sys.stderr)
+            bootstrap_script = (
+                MODULE_DIR.parent / "scripts" / "bootstrap_flowise_patterns.py"
+            )
+            if bootstrap_script.exists():
+                try:
+                    result = subprocess.run(
+                        [sys.executable, str(bootstrap_script)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if result.returncode == 0:
+                        print("✅ Flowise patterns loaded into Codex", file=sys.stderr)
+                    else:
+                        print(
+                            f"⚠️ Bootstrap warning: {result.stderr[:200]}",
+                            file=sys.stderr,
+                        )
+                except subprocess.TimeoutExpired:
+                    print("⚠️ Bootstrap timed out (continuing anyway)", file=sys.stderr)
+                except Exception as e:
+                    print(
+                        f"⚠️ Bootstrap error: {e} (continuing anyway)", file=sys.stderr
+                    )
+            else:
+                print(
+                    f"⚠️ Bootstrap script not found: {bootstrap_script}", file=sys.stderr
+                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # TASK CONFIGURATION
@@ -233,7 +310,6 @@ result = execute_build_with_phase_spawning(
 
 print(json.dumps(result))
 """
-
         # Write script to temp file
         script_file = final_working_dir / ".context-foundry" / "build_runner.py"
         script_file.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +327,6 @@ print(json.dumps(result))
             process_env["CF_SANDBOX_MODE"] = "1"
             process_env["CF_SANDBOX_PATH"] = str(sandbox_path)
 
-        # Start process (NON-BLOCKING)
         process = subprocess.Popen(
             cmd,
             cwd=final_working_dir_str,
@@ -369,6 +444,57 @@ def execute_build_with_phase_spawning(
         Build result dict with status, phases_completed, etc.
     """
     # Import here (in background process)
+    import re
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PATH REDIRECTION FOR EXTENSION DIRECTORIES
+    # ═══════════════════════════════════════════════════════════════════════
+    # When working_directory is inside context-foundry/extensions/, create
+    # project under homelab/<project-name>/ instead
+    from tools.mcp_utils.path_utils import get_projects_root
+
+    projects_root = get_projects_root()
+    cf_extensions = projects_root / "context-foundry" / "extensions"
+
+    mode = task_config.get("mode", "new_project")
+    is_extension_dir = str(working_directory).startswith(str(cf_extensions))
+
+    if is_extension_dir and mode == "new_project":
+        # Extract project name from task description
+        project_name_match = re.search(r'"([^"]+)"', task) or re.search(
+            r"'([^']+)'", task
+        )
+        if project_name_match:
+            raw_name = project_name_match.group(1)
+        else:
+            # Fallback: use first few words
+            words = task.split()[:5]
+            raw_name = " ".join(words)
+
+        # Convert to kebab-case directory name
+        project_name = re.sub(r"[^a-zA-Z0-9]+", "-", raw_name.lower()).strip("-")
+        if len(project_name) > 50:
+            project_name = project_name[:50].rsplit("-", 1)[0]
+
+        working_directory = projects_root / project_name
+        print(
+            f"📍 Extension directory detected - creating project in: {working_directory}",
+            file=sys.stderr,
+        )
+        print(
+            f"   (Extension source: {cf_extensions})",
+            file=sys.stderr,
+        )
+
+        # Create the directory if it doesn't exist
+        if not working_directory.exists():
+            working_directory.mkdir(parents=True, exist_ok=True)
+
+        # Update task_config with new working directory
+        task_config["working_directory"] = str(working_directory)
+    # ═══════════════════════════════════════════════════════════════════════
+    # END PATH REDIRECTION
+    # ═══════════════════════════════════════════════════════════════════════
 
     start_time = datetime.now()
     phases_completed = []
@@ -417,10 +543,22 @@ def execute_build_with_phase_spawning(
             # FIX #4: Use module-relative path
             scout_prompt = MODULE_DIR / "prompts" / "phases" / "phase_scout.txt"
 
+            # ═══════════════════════════════════════════════════════════════════════
+            # PRE-QUERY CODEX FOR FLOWISE BUILDS
+            # ═══════════════════════════════════════════════════════════════════════
+            # Scout spawns as a separate claude CLI without MCP access, so we must
+            # pre-query Codex and inject results into the task description
+            scout_task = task
+            if flowise_mode:
+                codex_results = _pre_query_codex_for_flowise()
+                if codex_results:
+                    scout_task = f"{task}\n\n{codex_results}"
+                    print("📚 Injected Codex patterns into Scout task", file=sys.stderr)
+
             scout_result = run_phase(
                 "Scout",
                 scout_prompt,
-                task,
+                scout_task,
                 working_directory,
                 phase_timeout=600,  # 10 min
                 validator=PhaseValidator.validate_scout,
@@ -445,6 +583,24 @@ def execute_build_with_phase_spawning(
                 _save_scout_cache(task, task_config["mode"], working_directory)
 
         phases_completed.append("Scout")
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # FLOWISE CODEX VALIDATION - Enforce pattern queries
+        # ═══════════════════════════════════════════════════════════════════════
+        if flowise_mode:
+            print("🔍 Validating Flowise codex queries...", file=sys.stderr)
+            try:
+                PhaseValidator.validate_flowise_codex_queries(working_directory)
+            except ValueError as e:
+                return {
+                    "status": "failed",
+                    "phase_failed": "Scout",
+                    "error": str(e),
+                    "start_time": start_time.isoformat(),
+                    "duration_seconds": (datetime.now() - start_time).total_seconds(),
+                    "phases_completed": phases_completed,
+                    "test_iterations": test_iteration,
+                }
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 2: ARCHITECT
@@ -529,6 +685,26 @@ def execute_build_with_phase_spawning(
                 architecture_path.read_text() if architecture_path.exists() else ""
             )
 
+            # DETERMINE FINAL PARALLEL DECISION BEFORE CALLING BAML
+            # If user explicitly passed use_parallel, respect it and override Scout
+            if use_parallel is not None:
+                # User explicitly set use_parallel to True or False - respect their choice
+                if use_parallel:
+                    scout_parallel_recommendation = True
+                    scout_reasoning = "User override: parallel build requested"
+                    print(
+                        "\n🚀 Parallel builds ENABLED (user override)",
+                        file=sys.stderr,
+                    )
+                else:
+                    scout_parallel_recommendation = False
+                    scout_reasoning = "User override: sequential build requested"
+                    print(
+                        "\n📦 Sequential build (user override - ignoring Scout recommendation)",
+                        file=sys.stderr,
+                    )
+            # Otherwise scout_parallel_recommendation already set from Scout report above
+
             # Call BAML to generate build plan
             build_plan = create_build_plan(
                 architecture_summary=architecture_summary,
@@ -556,19 +732,12 @@ def execute_build_with_phase_spawning(
             print("   Continuing without build-tasks.json", file=sys.stderr)
             traceback.print_exc()
 
-        # AUTO-DETECT PARALLEL BUILDS from Scout recommendation
-        # Only override if user didn't explicitly specify True or False
-        if use_parallel is None:  # User didn't specify - let Scout decide
-            scout_report_path = (
-                working_directory / ".context-foundry" / "scout-report.md"
-            )
-            if scout_report_path.exists():
-                scout_content = scout_report_path.read_text()
-                if (
-                    "Parallel Build Recommendation: YES" in scout_content
-                    or "Parallel Build Recommendation:** YES" in scout_content
-                ):
-                    use_parallel = True
+        # SET FINAL use_parallel FROM BAML OUTPUT
+        # If user didn't specify, use the parallel_build_enabled from BAML output
+        if use_parallel is None:
+            try:
+                use_parallel = build_plan.get("parallel_build_enabled", False)
+                if use_parallel:
                     print(
                         "\n🚀 Auto-enabling parallel builds (Scout recommended)",
                         file=sys.stderr,
@@ -577,24 +746,8 @@ def execute_build_with_phase_spawning(
                         "   Scout detected independent modules suitable for parallel execution",
                         file=sys.stderr,
                     )
-                else:
-                    # Scout didn't recommend parallel, default to False
-                    use_parallel = False
-            else:
-                # No Scout report, default to False
+            except Exception:
                 use_parallel = False
-        else:
-            # User explicitly set use_parallel to True or False - respect their choice
-            if use_parallel:
-                print(
-                    "\n🚀 Parallel builds ENABLED (user override)",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    "\n📦 Sequential build (user override - ignoring Scout recommendation)",
-                    file=sys.stderr,
-                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
@@ -1050,6 +1203,84 @@ def execute_build_with_phase_spawning(
             "start_time": start_time.isoformat(),
             "duration_seconds": duration,
         }
+
+
+def _pre_query_codex_for_flowise() -> str:
+    """
+    Pre-query Codex for Flowise patterns and format for injection into Scout task.
+
+    Scout runs as a separate claude CLI process without MCP access, so we must
+    query Codex before spawning and include results in the task description.
+
+    Returns:
+        Formatted string with Codex research results, or empty string if unavailable.
+    """
+    import sqlite3
+    from pathlib import Path
+
+    codex_db = Path.home() / ".context-foundry" / "codex.db"
+    if not codex_db.exists():
+        print("⚠️  Codex database not found, skipping pre-query", file=sys.stderr)
+        return ""
+
+    try:
+        conn = sqlite3.connect(str(codex_db))
+        cursor = conn.cursor()
+
+        # Query for Flowise patterns
+        pattern_queries = [
+            ("flowise routing", "routing"),
+            ("flowise agentflow", "agentflow"),
+            ("flowise conditionagent", "conditionagent"),
+            ("flowise start node", "start"),
+            ("flowise inputparams", "inputparams"),
+        ]
+
+        patterns_found = []
+        issues_found = []
+
+        for query_term, _ in pattern_queries:
+            cursor.execute(
+                """
+                SELECT id, title, type, description
+                FROM knowledge_entries
+                WHERE (title LIKE ? OR description LIKE ? OR tags LIKE ?)
+                AND type IN ('pattern', 'issue')
+                LIMIT 5
+            """,
+                (f"%{query_term}%", f"%{query_term}%", f"%{query_term}%"),
+            )
+
+            for row in cursor.fetchall():
+                entry_id, title, entry_type, description = row
+                if entry_type == "pattern":
+                    patterns_found.append(f"- **{entry_id}**: {title}")
+                else:
+                    issues_found.append(f"- **{entry_id}**: {title}")
+
+        conn.close()
+
+        if not patterns_found and not issues_found:
+            return ""
+
+        # Format results for injection
+        result = "\n## Context Codex Research Results (Pre-queried)\n\n"
+
+        if patterns_found:
+            result += "### Patterns Found:\n"
+            result += "\n".join(sorted(set(patterns_found))) + "\n\n"
+
+        if issues_found:
+            result += "### Issues/Anti-patterns Found:\n"
+            result += "\n".join(sorted(set(issues_found))) + "\n\n"
+
+        result += "**IMPORTANT**: Use these patterns when designing the architecture. Reference the pattern IDs in your Context Codex Research section.\n"
+
+        return result
+
+    except Exception as e:
+        print(f"⚠️  Codex pre-query failed: {e}", file=sys.stderr)
+        return ""
 
 
 def _get_source_file_checksums(working_dir: Path) -> dict[str, str]:

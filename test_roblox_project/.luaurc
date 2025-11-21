@@ -1,0 +1,10 @@
+{
+  "languageMode": "strict",
+  "lint": {
+    "*": true,
+    "LocalShadow": false
+  },
+  "lintErrors": false,
+  "typeErrors": false,
+  "globals": ["game", "workspace", "script", "shared"]
+}

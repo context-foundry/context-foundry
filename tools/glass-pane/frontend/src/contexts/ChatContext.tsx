@@ -8,6 +8,7 @@ interface ChatContextValue {
   sessions: ChatSession[];
   loadSessions: () => Promise<void>;
   createSession: () => Promise<ChatSession>;
+  updateSession: (sessionId: string, updates: { working_directory?: string }) => Promise<void>;
   deleteSession: (sessionId: string) => Promise<void>;
 
   // Message management
@@ -28,6 +29,8 @@ interface ChatContextValue {
   setPlanMode: (enabled: boolean) => void;
   bypassPermissions: boolean;
   setBypassPermissions: (enabled: boolean) => void;
+  workingDirectory: string;
+  setWorkingDirectory: (dir: string) => void;
 
   // CLI status
   cliStatus: CLIStatus | null;
@@ -49,6 +52,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [model, setModel] = useState<'sonnet' | 'opus' | 'haiku'>('sonnet');
   const [planMode, setPlanMode] = useState(false);
   const [bypassPermissions, setBypassPermissions] = useState(false);
+  const [workingDirectory, setWorkingDirectory] = useState('');
   const [cliStatus, setCLIStatus] = useState<CLIStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +66,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     };
   }, []);
+
+  // Sync workingDirectory state when currentSession changes
+  useEffect(() => {
+    if (currentSession?.working_directory) {
+      setWorkingDirectory(currentSession.working_directory);
+    }
+  }, [currentSession?.id]);
 
   // Load sessions list
   const loadSessions = useCallback(async () => {
@@ -89,7 +100,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           model,
           plan_mode: planMode,
           bypass_permissions: bypassPermissions,
-          title: `Chat - ${new Date().toLocaleString()}`
+          title: `Chat - ${new Date().toLocaleString()}`,
+          working_directory: workingDirectory || undefined
         })
       });
 
@@ -108,7 +120,37 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       console.error('Error creating session:', err);
       throw err;
     }
-  }, [model, planMode, bypassPermissions]);
+  }, [model, planMode, bypassPermissions, workingDirectory]);
+
+  // Update session
+  const updateSession = useCallback(async (sessionId: string, updates: { working_directory?: string }) => {
+    try {
+      const response = await fetch(`/api/chat/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to update session: ${response.statusText}`);
+      }
+
+      const updatedSession = await response.json();
+
+      // Update in sessions list
+      setSessions(prev => prev.map(s => s.id === sessionId ? updatedSession : s));
+
+      // Update current session if it's the one being updated
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(updatedSession);
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update session';
+      setError(errorMessage);
+      console.error('Error updating session:', err);
+      throw err;
+    }
+  }, [currentSession]);
 
   // Delete session
   const deleteSession = useCallback(async (sessionId: string) => {
@@ -185,7 +227,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         message: content,
         model,
         plan_mode: planMode,
-        bypass_permissions: bypassPermissions
+        bypass_permissions: bypassPermissions,
+        working_directory: workingDirectory || undefined
       };
 
       // Use fetch with SSE
@@ -265,7 +308,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setIsStreaming(false);
       setStreamingMessage('');
     }
-  }, [currentSession, model, planMode, bypassPermissions, loadMessages]);
+  }, [currentSession, model, planMode, bypassPermissions, workingDirectory, loadMessages]);
 
   // Check Claude CLI status
   const checkCLIStatus = useCallback(async () => {
@@ -291,6 +334,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         sessions,
         loadSessions,
         createSession,
+        updateSession,
         deleteSession,
         messages,
         setMessages,
@@ -305,6 +349,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setPlanMode,
         bypassPermissions,
         setBypassPermissions,
+        workingDirectory,
+        setWorkingDirectory,
         cliStatus,
         checkCLIStatus,
         error,

@@ -23,6 +23,9 @@ class ChatRequest(BaseModel):
     model: str = Field("sonnet", description="Claude model: sonnet, opus, haiku")
     plan_mode: bool = Field(False, description="Enable plan mode")
     bypass_permissions: bool = Field(False, description="Bypass permission checks")
+    working_directory: Optional[str] = Field(
+        None, description="Working directory for Claude CLI execution"
+    )
 
 
 class ChatMessageResponse(BaseModel):
@@ -47,6 +50,7 @@ class ChatSessionResponse(BaseModel):
     bypass_permissions: bool
     title: Optional[str]
     message_count: int
+    working_directory: Optional[str] = None
 
 
 class ChatSessionListResponse(BaseModel):
@@ -81,6 +85,9 @@ class CreateSessionRequest(BaseModel):
     plan_mode: bool = Field(False, description="Enable plan mode")
     bypass_permissions: bool = Field(False, description="Bypass permissions")
     title: Optional[str] = Field(None, description="Session title")
+    working_directory: Optional[str] = Field(
+        None, description="Working directory for CLI execution"
+    )
 
 
 class UpdateSessionRequest(BaseModel):
@@ -90,6 +97,7 @@ class UpdateSessionRequest(BaseModel):
     plan_mode: Optional[bool] = None
     bypass_permissions: Optional[bool] = None
     title: Optional[str] = None
+    working_directory: Optional[str] = None
 
 
 class CLIStatusResponse(BaseModel):

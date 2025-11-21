@@ -20,6 +20,7 @@ export interface ChatSession {
   bypass_permissions: boolean;
   title?: string;
   message_count: number;
+  working_directory?: string;
 }
 
 export interface ChatSessionListResponse {
@@ -47,6 +48,7 @@ export interface SendMessageRequest {
   model: 'sonnet' | 'opus' | 'haiku';
   plan_mode: boolean;
   bypass_permissions: boolean;
+  working_directory?: string;
 }
 
 export interface CLIStatus {
