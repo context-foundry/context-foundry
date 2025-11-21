@@ -1221,17 +1221,47 @@ def run_builder_phase(
                 build_tasks = json.load(f)
 
             # Normalize schema
-            build_tasks, _, plan_warnings = _normalize_build_tasks_schema(build_tasks)
+            build_tasks, parallel_ready, plan_warnings = _normalize_build_tasks_schema(
+                build_tasks
+            )
 
             for warning in plan_warnings:
                 print(f"⚠️  Build plan warning: {warning}", file=sys.stderr)
 
-            # EXECUTE AGENTS
-            return _execute_agentic_tasks(
-                build_tasks,
-                working_directory,
-                project_type,
+            parallel_flag = build_tasks.get("parallel_mode") or build_tasks.get(
+                "parallel_build_enabled"
             )
+            tasks = build_tasks.get("tasks", [])
+
+            if not use_parallel:
+                print(
+                    "ℹ️  Parallel execution disabled by flag; running legacy Builder",
+                    file=sys.stderr,
+                )
+            elif not parallel_flag:
+                print(
+                    "ℹ️  Build plan indicates sequential mode; running legacy Builder",
+                    file=sys.stderr,
+                )
+            elif not parallel_ready:
+                print(
+                    "⚠️  Build plan not parallel-ready; running legacy Builder",
+                    file=sys.stderr,
+                )
+                for warning in plan_warnings:
+                    print(f"   - {warning}", file=sys.stderr)
+            elif len(tasks) <= 1:
+                print(
+                    "ℹ️  Single task in plan; running legacy Builder",
+                    file=sys.stderr,
+                )
+            else:
+                # EXECUTE AGENTS (parallel path)
+                return _execute_agentic_tasks(
+                    build_tasks,
+                    working_directory,
+                    project_type,
+                )
 
         except Exception as e:
             print(
