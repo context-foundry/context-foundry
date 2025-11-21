@@ -660,6 +660,122 @@ def generate_architecture_baml(
         raise RuntimeError(error_msg) from e
 
 
+def parse_scout_markdown_baml(markdown_content: str) -> Dict[str, Any]:
+    """
+    Parse Scout markdown into structured JSON using BAML schema.
+
+    Args:
+        markdown_content: Contents of scout-report.md
+
+    Returns:
+        ScoutReport dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or parsing fails
+    """
+    if not is_baml_available():
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
+
+    try:
+        client = get_baml_client()
+        if client is None:
+            raise RuntimeError("BAML client not available")
+
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="ParseScoutMarkdown",
+            args={
+                "markdown_content": markdown_content,
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars=get_baml_env_vars(),
+            tags=None,
+        )
+
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            return json.loads(content.strip())
+
+        return internal_repr
+
+    except Exception as e:
+        error_msg = f"BAML Scout markdown parsing failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
+
+
+def parse_architecture_markdown_baml(markdown_content: str) -> Dict[str, Any]:
+    """
+    Parse architecture markdown into structured JSON using BAML schema.
+
+    Args:
+        markdown_content: Contents of architecture.md
+
+    Returns:
+        ArchitectureBlueprint dict
+
+    Raises:
+        RuntimeError: If BAML unavailable or parsing fails
+    """
+    if not is_baml_available():
+        raise RuntimeError(
+            f"BAML is required but not available. Error: {get_baml_error()}"
+        )
+
+    try:
+        client = get_baml_client()
+        if client is None:
+            raise RuntimeError("BAML client not available")
+
+        ctx = client.create_context_manager()
+        result = client.call_function_sync(
+            function_name="ParseArchitectureMarkdown",
+            args={
+                "markdown_content": markdown_content,
+            },
+            ctx=ctx,
+            tb=None,
+            cb=None,
+            collectors=[],
+            env_vars=get_baml_env_vars(),
+            tags=None,
+        )
+
+        internal_repr_str = result.unstable_internal_repr()
+        internal_repr = json.loads(internal_repr_str)
+
+        if "Success" in internal_repr and "content" in internal_repr["Success"]:
+            content = internal_repr["Success"]["content"]
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            return json.loads(content.strip())
+
+        return internal_repr
+
+    except Exception as e:
+        error_msg = f"BAML Architecture markdown parsing failed: {e}"
+        print(f"❌ {error_msg}", file=sys.stderr)
+        raise RuntimeError(error_msg) from e
+
+
 def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
     """
     Validate builder task result using BAML.

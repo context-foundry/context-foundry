@@ -24,7 +24,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 
 # Import BAML integration
-from tools.baml_integration import is_baml_available, get_baml_error, create_build_plan
+from tools.baml_integration import (
+    is_baml_available,
+    get_baml_error,
+    create_build_plan,
+    parse_scout_markdown_baml,
+    parse_architecture_markdown_baml,
+)
 
 # Import safety mechanisms
 from tools.evolution.safety import enforce_sandbox_mode
@@ -665,6 +671,23 @@ def execute_build_with_phase_spawning(
 
         phases_completed.append("Scout")
 
+        # Structured Scout JSON (BAML parse)
+        scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
+        scout_json_path = working_directory / ".context-foundry" / "scout_report.json"
+        if scout_md_path.exists():
+            try:
+                scout_md = scout_md_path.read_text()
+                scout_json = parse_scout_markdown_baml(scout_md)
+                scout_json_path.write_text(json.dumps(scout_json, indent=2))
+                print(
+                    f"✅ Parsed Scout markdown to JSON: {scout_json_path}",
+                    file=sys.stderr,
+                )
+            except Exception as e:
+                print(
+                    f"⚠️  Failed to parse Scout markdown to JSON: {e}", file=sys.stderr
+                )
+
         # ═══════════════════════════════════════════════════════════════════════
         # FLOWISE CODEX VALIDATION - Enforce pattern queries
         # ═══════════════════════════════════════════════════════════════════════
@@ -722,6 +745,30 @@ def execute_build_with_phase_spawning(
             }
 
         phases_completed.append("Architect")
+
+        # Structured Architecture JSON (BAML parse)
+        architecture_md_path = (
+            working_directory / ".context-foundry" / "architecture.md"
+        )
+        architecture_json_path = (
+            working_directory / ".context-foundry" / "architecture.json"
+        )
+        if architecture_md_path.exists():
+            try:
+                architecture_md = architecture_md_path.read_text()
+                architecture_json = parse_architecture_markdown_baml(architecture_md)
+                architecture_json_path.write_text(
+                    json.dumps(architecture_json, indent=2)
+                )
+                print(
+                    f"✅ Parsed architecture markdown to JSON: {architecture_json_path}",
+                    file=sys.stderr,
+                )
+            except Exception as e:
+                print(
+                    f"⚠️  Failed to parse architecture markdown to JSON: {e}",
+                    file=sys.stderr,
+                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)

@@ -36,6 +36,8 @@ from tools.baml_integration import (
     validate_build_result_baml,
     baml_status_summary,
     fallback_to_json,
+    parse_scout_markdown_baml,
+    parse_architecture_markdown_baml,
 )
 
 
@@ -142,6 +144,44 @@ class TestBAMLClient:
 
         # Schemas should exist
         assert status["schemas_exist"] is True
+
+
+class TestParsers:
+    """Test parsing helpers for Scout/Architect markdown"""
+
+    def test_parse_scout_markdown_baml(self):
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+            mock_client.create_context_manager.return_value = MagicMock()
+
+            payload = {"foo": "bar"}
+            mock_result = MagicMock()
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps(payload)}}
+            )
+            mock_client.call_function_sync.return_value = mock_result
+
+            parsed = parse_scout_markdown_baml("md content")
+            assert parsed == payload
+            mock_client.call_function_sync.assert_called_once()
+
+    def test_parse_architecture_markdown_baml(self):
+        with patch("tools.baml_integration.get_baml_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+            mock_client.create_context_manager.return_value = MagicMock()
+
+            payload = {"system_overview": "x"}
+            mock_result = MagicMock()
+            mock_result.unstable_internal_repr.return_value = json.dumps(
+                {"Success": {"content": json.dumps(payload)}}
+            )
+            mock_client.call_function_sync.return_value = mock_result
+
+            parsed = parse_architecture_markdown_baml("md content")
+            assert parsed == payload
+            mock_client.call_function_sync.assert_called_once()
 
 
 class TestPhaseTracking:
