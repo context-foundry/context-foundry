@@ -642,10 +642,14 @@ def execute_build_with_phase_spawning(
                     scout_task = f"{task}\n\n{codex_results}"
                     print("📚 Injected Codex patterns into Scout task", file=sys.stderr)
 
+            scout_instruction = (
+                "Read .context-foundry/scout-report.md (or scout_report.json if present) "
+                "and produce scout-report.md with findings."
+            )
             scout_result = run_phase(
                 "Scout",
                 scout_prompt,
-                scout_task,
+                f"{scout_instruction}\n\n{scout_task}",
                 working_directory,
                 phase_timeout=600,  # 10 min
                 validator=PhaseValidator.validate_scout,
@@ -674,6 +678,7 @@ def execute_build_with_phase_spawning(
         # Structured Scout JSON (BAML parse)
         scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
         scout_json_path = working_directory / ".context-foundry" / "scout_report.json"
+        scout_json = None
         if scout_md_path.exists():
             try:
                 scout_md = scout_md_path.read_text()
@@ -685,7 +690,8 @@ def execute_build_with_phase_spawning(
                 )
             except Exception as e:
                 print(
-                    f"⚠️  Failed to parse Scout markdown to JSON: {e}", file=sys.stderr
+                    f"⚠️  Failed to parse Scout markdown to JSON: {e}",
+                    file=sys.stderr,
                 )
 
         # ═══════════════════════════════════════════════════════════════════════
@@ -721,10 +727,16 @@ def execute_build_with_phase_spawning(
         # FIX #4: Use module-relative path
         architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
 
+        architect_instruction = (
+            "Prefer .context-foundry/scout_report.json if present; "
+            "otherwise read .context-foundry/scout-report.md. "
+            "Create architecture.md."
+        )
+
         architect_result = run_phase(
             "Architect",
             architect_prompt,
-            "Read .context-foundry/scout-report.md and create architecture.md",
+            architect_instruction,
             working_directory,
             phase_timeout=900,  # 15 min
             validator=PhaseValidator.validate_architect,
@@ -753,6 +765,8 @@ def execute_build_with_phase_spawning(
         architecture_json_path = (
             working_directory / ".context-foundry" / "architecture.json"
         )
+        architecture_md = None
+        architecture_json = None
         if architecture_md_path.exists():
             try:
                 architecture_md = architecture_md_path.read_text()
@@ -776,25 +790,38 @@ def execute_build_with_phase_spawning(
         print("\n📋 Generating build plan using BAML...", file=sys.stderr)
 
         try:
-            # Read Scout report to get parallel build recommendation
+            # Read Scout report (prefer JSON) to get parallel build recommendation
             scout_report_path = (
                 working_directory / ".context-foundry" / "scout-report.md"
             )
             scout_content = (
                 scout_report_path.read_text() if scout_report_path.exists() else ""
             )
-
-            # Detect Scout's parallel build recommendation
-            scout_parallel_recommendation = False
+            scout_parallel_recommendation = None
             scout_reasoning = "No Scout report found"
 
-            if scout_content:
+            if scout_json:
+                # If JSON has a parallel flag, prefer it; otherwise fall back to markdown heuristics
+                json_parallel = None
+                for key in ["parallel_build_recommendation", "parallel_build"]:
+                    if key in scout_json:
+                        json_parallel = scout_json.get(key)
+                        break
+                if isinstance(json_parallel, bool):
+                    scout_parallel_recommendation = json_parallel
+                    scout_reasoning = "Scout JSON parallel flag"
+                else:
+                    print(
+                        "⚠️  Scout JSON present but missing parallel flag — falling back to markdown",
+                        file=sys.stderr,
+                    )
+
+            if scout_content and scout_parallel_recommendation is None:
                 if (
                     "Parallel Build Recommendation: YES" in scout_content
                     or "Parallel Build Recommendation:** YES" in scout_content
                 ):
                     scout_parallel_recommendation = True
-                    # Extract reasoning (look for "Build Strategy" section)
                     if "## Build Strategy" in scout_content:
                         strategy_section = scout_content.split("## Build Strategy")[
                             1
@@ -803,15 +830,36 @@ def execute_build_with_phase_spawning(
                     else:
                         scout_reasoning = "Scout recommended parallel build"
                 else:
+                    scout_parallel_recommendation = False
                     scout_reasoning = "Scout recommended sequential build"
 
-            # Read architecture summary
+            # Final default if still None
+            if scout_parallel_recommendation is None:
+                scout_parallel_recommendation = False
+
+            # Read architecture summary (prefer JSON)
             architecture_path = (
                 working_directory / ".context-foundry" / "architecture.md"
             )
-            architecture_summary = (
-                architecture_path.read_text() if architecture_path.exists() else ""
-            )
+            if architecture_json:
+                architecture_summary = json.dumps(architecture_json, indent=2)
+                print(
+                    "ℹ️  Using architecture.json for build plan input", file=sys.stderr
+                )
+            else:
+                architecture_summary = (
+                    architecture_path.read_text() if architecture_path.exists() else ""
+                )
+                if architecture_summary:
+                    print(
+                        "⚠️  architecture.json missing; using architecture.md",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "⚠️  No architecture context found; build plan may be incomplete",
+                        file=sys.stderr,
+                    )
 
             # DETERMINE FINAL PARALLEL DECISION BEFORE CALLING BAML
             # If user explicitly passed use_parallel, respect it and override Scout
@@ -899,7 +947,7 @@ def execute_build_with_phase_spawning(
 
         builder_result = run_builder_phase(
             builder_prompt,
-            "Read .context-foundry/architecture.md and implement the project",
+            "Prefer .context-foundry/architecture.json if present; otherwise read architecture.md. Implement the project accordingly.",
             working_directory,
             project_type,
             flowise_mode=flowise_mode,
