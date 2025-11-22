@@ -285,6 +285,33 @@
     },
 
     {
+      "pattern_id": "roblox-beginner-onboarding-checklist",
+      "category": "education",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
+      "description": "Onboarding checklist for first-time scripters so starter projects run without basic mistakes",
+      "confidence": 0.7,
+      "frequency": 1,
+
+      "lessons_learned": [
+        "Always show Output and use print() as a first debug tool; make prints visible in onboarding scaffolds.",
+        "Use Instance.new with class name and set Parent explicitly (e.g., workspace) after setting properties.",
+        "Bind created instances to locals (local part = ...) before property changes.",
+        "Set properties with correct types: strings quoted, numbers unquoted, BrickColor.new(\"ExactName\") for colors, transparency 0–1.",
+        "Emphasize case sensitivity on identifiers and BrickColor names to avoid nil or invalid value errors.",
+        "Remove default spawn when teaching basics to reduce clutter, but ensure a spawn exists in shipped templates.",
+        "Demonstrate property edits (BrickColor, Transparency) via code instead of relying on Studio UI clicks."
+      ],
+
+      "remediations": [
+        "Include a starter script that: prints to Output, creates a part with Instance.new, sets properties, parents it to workspace, and uses tostring() on user-facing strings.",
+        "Ship a minimal color/brickcolor helper or constants to prevent misspelling color names in samples.",
+        "Keep an onboarding README snippet that explains Output, print(), Instance.new syntax, and property typing (strings vs numbers)."
+      ],
+
+      "tags": ["education", "onboarding", "dev-experience", "beginners", "guardrails"]
+    },
+
+    {
       "pattern_id": "roblox-beginner-foundations",
       "category": "education",
       "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
@@ -569,6 +596,7 @@
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
+        "roblox-beginner-onboarding-checklist",
         "roblox-approved-inspiration-sources",
         "obby-checkpoints-coin-shop",
         "roblox-module-structure",
@@ -582,6 +610,7 @@
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
+        "roblox-beginner-onboarding-checklist",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
@@ -593,6 +622,7 @@
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
+        "roblox-beginner-onboarding-checklist",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
