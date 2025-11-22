@@ -747,19 +747,65 @@ def run_phase(
     print(f"   Working directory: {working_directory}", file=sys.stderr)
 
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             cmd,
             cwd=working_directory,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=phase_timeout,
             env={**dict(os.environ), "PYTHONUNBUFFERED": "1"},
         )
 
+        try:
+            stdout, stderr = process.communicate(timeout=phase_timeout)
+        except subprocess.TimeoutExpired:
+            duration = (datetime.now() - start).total_seconds()
+            print(
+                f"⏱️  {phase_name} TIMEOUT after {duration:.1f}s - killing process",
+                file=sys.stderr,
+            )
+            process.kill()
+            try:
+                stdout, stderr = process.communicate(timeout=10)
+            except Exception:
+                stdout, stderr = "", ""
+
+            if is_baml_available():
+                try:
+                    phase_info = update_phase_with_baml(
+                        phase=phase_name,
+                        status="Failed",
+                        detail=f"Timeout after {duration:.1f}s",
+                        session_id=session_id,
+                        iteration=iteration,
+                    )
+                    phase_file = (
+                        working_directory / ".context-foundry" / "current-phase.json"
+                    )
+                    phase_file.parent.mkdir(parents=True, exist_ok=True)
+                    phase_file.write_text(json.dumps(phase_info, indent=2))
+                except Exception as baml_error:
+                    print(
+                        f"⚠️  BAML timeout tracking failed: {baml_error}",
+                        file=sys.stderr,
+                    )
+
+            return PhaseResult(
+                phase=phase_name,
+                status="failed",
+                duration_seconds=duration,
+                context_tokens=0,
+                exit_code=-1,
+                error=f"Phase timeout after {phase_timeout}s",
+                stdout_lines=len(stdout.splitlines()) if stdout else 0,
+                stderr_lines=len(stderr.splitlines()) if stderr else 0,
+            )
+
         duration = (datetime.now() - start).total_seconds()
 
+        exit_code = process.returncode
         print(
-            f"✅ {phase_name} process completed (exit code: {result.returncode})",
+            f"✅ {phase_name} process completed (exit code: {exit_code})",
             file=sys.stderr,
         )
 
@@ -809,9 +855,7 @@ def run_phase(
             )
             phase_files = [working_directory / ".context-foundry" / test_filename]
 
-        context_tokens = estimate_context_tokens(
-            result.stdout, result.stderr, phase_files
-        )
+        context_tokens = estimate_context_tokens(stdout, stderr, phase_files)
 
         # Validate output using phase-specific validator
         if validator:
@@ -830,8 +874,8 @@ def run_phase(
                     context_tokens=context_tokens,
                     exit_code=1,
                     error=f"Output validation failed: {e}",
-                    stdout_lines=len(result.stdout.splitlines()),
-                    stderr_lines=len(result.stderr.splitlines()),
+                    stdout_lines=len(stdout.splitlines()),
+                    stderr_lines=len(stderr.splitlines()),
                 )
 
         # Verify BAML tracking (soft validation - doesn't fail build)
@@ -843,13 +887,13 @@ def run_phase(
             phase_name,
             duration,
             context_tokens,
-            result.returncode,
+            exit_code,
             working_directory,
             iteration,
         )
 
         # BAML: Track phase completion
-        final_status = "Completed" if result.returncode == 0 else "Failed"
+        final_status = "Completed" if exit_code == 0 else "Failed"
         if is_baml_available():
             try:
                 phase_info = update_phase_with_baml(
@@ -881,48 +925,15 @@ def run_phase(
             except Exception as e:
                 print(f"⚠️  BAML phase completion tracking failed: {e}", file=sys.stderr)
 
-        # Process EXITS here → context released
-        # Convert BAML status back to lowercase for PhaseResult
-        phase_result_status = "completed" if result.returncode == 0 else "failed"
+        phase_result_status = "completed" if exit_code == 0 else "failed"
         return PhaseResult(
             phase=phase_name,
             status=phase_result_status,
             duration_seconds=duration,
             context_tokens=context_tokens,
-            exit_code=result.returncode,
-            stdout_lines=len(result.stdout.splitlines()),
-            stderr_lines=len(result.stderr.splitlines()),
-        )
-
-    except subprocess.TimeoutExpired:
-        duration = (datetime.now() - start).total_seconds()
-        print(f"⏱️  {phase_name} TIMEOUT after {duration:.1f}s", file=sys.stderr)
-
-        # BAML: Track timeout
-        if is_baml_available():
-            try:
-                phase_info = update_phase_with_baml(
-                    phase=phase_name,
-                    status="Failed",
-                    detail=f"Timeout after {duration:.1f}s",
-                    session_id=session_id,
-                    iteration=iteration,
-                )
-                phase_file = (
-                    working_directory / ".context-foundry" / "current-phase.json"
-                )
-                phase_file.parent.mkdir(parents=True, exist_ok=True)
-                phase_file.write_text(json.dumps(phase_info, indent=2))
-            except Exception as baml_error:
-                print(f"⚠️  BAML timeout tracking failed: {baml_error}", file=sys.stderr)
-
-        return PhaseResult(
-            phase=phase_name,
-            status="failed",
-            duration_seconds=duration,
-            context_tokens=0,
-            exit_code=-1,
-            error=f"Phase timeout after {phase_timeout}s",
+            exit_code=exit_code,
+            stdout_lines=len(stdout.splitlines()),
+            stderr_lines=len(stderr.splitlines()),
         )
 
     except Exception as e:
@@ -1061,6 +1072,10 @@ def _execute_agentic_tasks(
     if not tasks:
         raise ValueError("build-tasks.json contains no tasks")
 
+    # Ensure builder logs directory exists for completion markers
+    builder_logs_dir = working_directory / ".context-foundry" / "builder-logs"
+    builder_logs_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"\n{'='*60}", file=sys.stderr)
     print(f"🚀 AGENTIC BUILD: {len(tasks)} tasks", file=sys.stderr)
     print(f"{'='*60}\n", file=sys.stderr)
@@ -1133,8 +1148,34 @@ def _execute_agentic_tasks(
         total_tokens += r.context_tokens
         if res["success"]:
             completed_tasks.append(res["task_id"])
+            done_file = builder_logs_dir / f"{res['task_id']}.done"
+            done_file.write_text(
+                json.dumps(
+                    {
+                        "task_id": res["task_id"],
+                        "status": "completed",
+                        "timestamp": datetime.now().isoformat(),
+                        "context_tokens": r.context_tokens,
+                        "duration_seconds": r.duration_seconds,
+                    },
+                    indent=2,
+                )
+            )
         else:
             failed_tasks.append(res["task_id"])
+            fail_file = builder_logs_dir / f"{res['task_id']}.fail"
+            fail_file.write_text(
+                json.dumps(
+                    {
+                        "task_id": res["task_id"],
+                        "status": "failed",
+                        "timestamp": datetime.now().isoformat(),
+                        "error": r.error,
+                        "exit_code": r.exit_code,
+                    },
+                    indent=2,
+                )
+            )
 
     duration = (datetime.now() - start_time).total_seconds()
     success = len(failed_tasks) == 0

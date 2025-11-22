@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, List
+from multiprocessing import Process, Queue
 
 # Import BAML integration
 from tools.baml_integration import (
@@ -135,6 +136,41 @@ def baml_breathing_buffer(seconds: float = 2.0):
         f"😮‍💨 Breathing buffer ({seconds}s) before next BAML call...", file=sys.stderr
     )
     time.sleep(seconds)
+
+
+def _parse_architecture_baml_with_timeout(md_content: str, timeout_seconds: int = 120):
+    """
+    Parse architecture markdown via BAML in a separate process with a hard timeout.
+
+    This prevents the main orchestrator from hanging if the BAML call blocks.
+    """
+
+    def _worker(md: str, q: Queue):
+        try:
+            parsed = parse_architecture_markdown_baml(md)
+            q.put(("ok", parsed))
+        except Exception as exc:  # pragma: no cover - defensive
+            q.put(("error", str(exc)))
+
+    q: Queue = Queue()
+    proc = Process(target=_worker, args=(md_content, q))
+    proc.start()
+    proc.join(timeout_seconds)
+
+    if proc.is_alive():
+        proc.terminate()
+        proc.join(5)
+        raise TimeoutException(
+            f"Architecture BAML parse exceeded {timeout_seconds}s (process killed)"
+        )
+
+    if q.empty():
+        raise RuntimeError("Architecture BAML parse returned no result")
+
+    status, payload = q.get()
+    if status == "ok":
+        return payload
+    raise RuntimeError(f"Architecture BAML parse failed: {payload}")
 
 
 def _post_process_build_plan(
@@ -847,6 +883,12 @@ def execute_build_with_phase_spawning(
 
         results["architect"] = architect_result
 
+        print(
+            f"[TRACE] Architect phase result: status={architect_result.status}, "
+            f"exit_code={architect_result.exit_code}, duration={architect_result.duration_seconds:.1f}s",
+            file=sys.stderr,
+        )
+
         if architect_result.status != "completed":
             return {
                 "status": "failed",
@@ -859,6 +901,11 @@ def execute_build_with_phase_spawning(
             }
 
         phases_completed.append("Architect")
+
+        print(
+            "[TRACE] Architect phase marked completed, entering post-processing",
+            file=sys.stderr,
+        )
 
         # Breathing buffer before next BAML call
         if scout_json is not None:  # Only add buffer if Scout BAML succeeded
@@ -874,14 +921,22 @@ def execute_build_with_phase_spawning(
         architecture_md = None
         architecture_json = None
         if architecture_md_path.exists():
+            print(
+                f"[TRACE] Reading architecture.md from {architecture_md_path}",
+                file=sys.stderr,
+            )
             try:
                 architecture_md = architecture_md_path.read_text()
+                print(
+                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting BAML parse",
+                    file=sys.stderr,
+                )
 
                 # BAML parse with timeout (120 seconds max, architecture is larger)
-                with baml_timeout(120, "Architecture BAML Parse"):
-                    architecture_json = parse_architecture_markdown_baml(
-                        architecture_md
-                    )
+                # Run in separate process so orchestrator cannot hang
+                architecture_json = _parse_architecture_baml_with_timeout(
+                    architecture_md, timeout_seconds=120
+                )
 
                 architecture_json_path.write_text(
                     json.dumps(architecture_json, indent=2)

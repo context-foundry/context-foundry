@@ -32,7 +32,7 @@ class Config:
 
     # Job settings
     default_job_timeout_minutes: int = 90
-    default_max_retries: int = 3
+    default_max_retries: int = 0
 
     # Paths
     data_dir: Path = field(
