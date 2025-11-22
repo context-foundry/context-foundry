@@ -255,6 +255,36 @@
     },
 
     {
+      "pattern_id": "roblox-async-patterns-signals-maids",
+      "category": "architecture",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile", "roblox-plugin", "roblox-library"],
+      "description": "Event-driven architecture using Signals and Maids to decouple code, avoid polling, and clean up connections safely",
+      "confidence": 0.7,
+      "frequency": 1,
+
+      "lessons_learned": [
+        "Prefer signals (events) over polling loops: observe the world, don’t query every frame; react immediately to state changes.",
+        "Always disconnect to prevent memory leaks—anonymous callbacks tied to instances keep objects alive if not cleaned up.",
+        "Use a Maid (or similar disposable aggregator) to register connections, functions, and destroyable instances; call :Destroy()/:DoCleaning() on teardown.",
+        "Fire callbacks on separate threads; expect errors not to stop other listeners—signals decouple failure domains.",
+        "Use per-feature RemoteEvents (with constants) rather than a global catch-all; place remotes near the systems they serve for context.",
+        "Prefer value objects for replication (or attributes when available): they auto-throttle, type-check, expose .Changed, and debounce identical values.",
+        "Wrap BindableEvents/Bindables in custom signal classes to avoid table re-serialization and extra allocations.",
+        "Expose activate/deactivate signals on components to keep side effects (VFX/SFX/haptics) decoupled from core logic."
+      ],
+
+      "remediations": [
+        "Ship a Signal helper and Maid/Janitor helper in scaffolds; register all connections through the Maid and destroy on cleanup.",
+        "Model features as event-driven: inputs update state via signals, not polling; initialize handlers once and reuse.",
+        "Co-locate RemoteEvents under the feature’s folder and reference by constant names; avoid a single global remote hub.",
+        "Use ValueBase instances (or attributes) for replicated config/state; avoid reinventing replication throttling.",
+        "Document a teardown step in templates: maid:Destroy() on component unmount/despawn."
+      ],
+
+      "tags": ["architecture", "asynchronous", "memory-safety", "events", "best-practices"]
+    },
+
+    {
       "pattern_id": "roblox-beginner-foundations",
       "category": "education",
       "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
@@ -538,6 +568,7 @@
       "common_patterns": [
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
+        "roblox-async-patterns-signals-maids",
         "roblox-approved-inspiration-sources",
         "obby-checkpoints-coin-shop",
         "roblox-module-structure",
@@ -550,6 +581,7 @@
       "common_patterns": [
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
+        "roblox-async-patterns-signals-maids",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
@@ -560,6 +592,7 @@
       "common_patterns": [
         "roblox-studio-safety-net",
         "roblox-scripting-basics-guardrails",
+        "roblox-async-patterns-signals-maids",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
