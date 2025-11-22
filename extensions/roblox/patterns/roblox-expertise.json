@@ -312,6 +312,37 @@
     },
 
     {
+      "pattern_id": "roblox-advanced-modules-and-performance",
+      "category": "architecture",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile", "roblox-plugin", "roblox-library"],
+      "description": "Module-driven architecture with shared state plus stress/usage/storage budgeting for performant Roblox code",
+      "confidence": 0.6,
+      "frequency": 1,
+
+      "lessons_learned": [
+        "ModuleScripts must return a value; use them as shared singletons for configuration/state instead of globals, and remember client/server modules do not cross boundaries.",
+        "Tables are references; requiring the same module returns the same table instance—mutations are shared across all require() callers.",
+        "Organize code into modules by feature; expose clear APIs and avoid per-script globals.",
+        "StarterPlayerScripts re-run after respawn; reacquire Character/Humanoid on CharacterAdded to avoid nil refs after death.",
+        "Performance budgeting: separate stress (run frequency), usage (per-call cost), and storage (memory footprint).",
+        "Throttle Heartbeat/RenderStepped work with accumulators and random staggering; do not recalc every frame when slower cadence is sufficient.",
+        "Prefer specialized APIs when faster/clearer (e.g., DistanceFromCharacter) but understand semantics (head vs root).",
+        "Clean up with Destroying/Destroy handlers and avoid heavy Touched loops when possible.",
+        "Validate remote payloads on the server; reject impossible client data."
+      ],
+
+      "remediations": [
+        "Ship module templates that return tables and document shared state; avoid using ModuleScripts to cross client/server.",
+        "Use CharacterAdded/AncestryChanged hooks in StarterPlayerScripts to rebind character-dependent logic after respawn.",
+        "Add loop throttling helpers (time accumulators, frame spreading) and default NPC/AI updates to >= 0.05–0.1s cadence unless needed faster.",
+        "Profile expensive calls and swap to built-in optimized methods when semantics allow; document differences (e.g., DistanceFromCharacter uses head).",
+        "Add server-side remote validators that check type/range/possibility before mutating state."
+      ],
+
+      "tags": ["architecture", "performance", "modules", "optimization", "roblox", "best-practices"]
+    },
+
+    {
       "pattern_id": "roblox-beginner-foundations",
       "category": "education",
       "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
@@ -597,6 +628,7 @@
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
         "roblox-beginner-onboarding-checklist",
+        "roblox-advanced-modules-and-performance",
         "roblox-approved-inspiration-sources",
         "obby-checkpoints-coin-shop",
         "roblox-module-structure",
@@ -611,6 +643,7 @@
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
         "roblox-beginner-onboarding-checklist",
+        "roblox-advanced-modules-and-performance",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
@@ -623,6 +656,7 @@
         "roblox-scripting-basics-guardrails",
         "roblox-async-patterns-signals-maids",
         "roblox-beginner-onboarding-checklist",
+        "roblox-advanced-modules-and-performance",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
