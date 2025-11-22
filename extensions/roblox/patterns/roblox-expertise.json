@@ -1,7 +1,9 @@
 {
   "version": "1.0.0",
-  "last_updated": "2025-11-17",
+  "last_updated": "2025-11-22",
   "description": "Roblox game development patterns, best practices, and common issues",
+
+  "related_patterns": ["roblox-approved-inspiration-sources"],
 
   "patterns": [
     {
@@ -196,6 +198,31 @@
           "mitigation": "Validate amount > 0 and amount <= player balance"
         }
       ]
+    },
+
+    {
+      "pattern_id": "roblox-studio-safety-net",
+      "category": "architecture",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
+      "description": "Studio-safe defaults to prevent empty-map falls, bad requires, and DataStore noise during development",
+      "confidence": 0.7,
+      "frequency": 1,
+
+      "lessons_learned": [
+        "Map scaffolds must be ModuleScripts to be require()'d from server scripts; .server.lua causes require failures.",
+        "Provide a fallback map (baseplate, spawn, checkpoints, tagged coins) so playtests don’t spawn into the void.",
+        "Mock DataStore in Studio to avoid publish-only errors; switch to real DataStore in live environments only.",
+        "UI should guard against missing config values (e.g., MAX_CHECKPOINT_STAGE) and nil UI descendants before string concatenation."
+      ],
+
+      "remediations": [
+        "Keep MapBuilder as ModuleScript under ServerScriptService and require it from GameInitializer.",
+        "On server start, build a minimal map only when checkpoints/coins are absent; skip when user-provided assets exist.",
+        "Use RunService:IsStudio() to route to in-memory persistence; use DataStoreService only when not in Studio.",
+        "Default checkpoint max stage to a sane number and nil-check progress/coin labels before updating text."
+      ],
+
+      "tags": ["architecture", "dev-experience", "safety-net", "studio", "best-practices"]
     },
 
     {
@@ -479,17 +506,31 @@
     "roblox-game": {
       "description": "Full Roblox game project",
       "typical_structure": ["ServerScriptService", "ReplicatedStorage", "StarterPlayer", "Workspace"],
-      "common_patterns": ["obby-checkpoints-coin-shop", "roblox-module-structure", "roblox-datastore-best-practices"]
+      "common_patterns": [
+        "roblox-studio-safety-net",
+        "roblox-approved-inspiration-sources",
+        "obby-checkpoints-coin-shop",
+        "roblox-module-structure",
+        "roblox-datastore-best-practices"
+      ]
     },
     "roblox-plugin": {
       "description": "Roblox Studio plugin",
       "typical_structure": ["plugin.lua", "src/"],
-      "common_patterns": ["roblox-module-structure"]
+      "common_patterns": [
+        "roblox-studio-safety-net",
+        "roblox-approved-inspiration-sources",
+        "roblox-module-structure"
+      ]
     },
     "roblox-library": {
       "description": "Shared module or library",
       "typical_structure": ["src/", "ModuleScripts"],
-      "common_patterns": ["roblox-module-structure"]
+      "common_patterns": [
+        "roblox-studio-safety-net",
+        "roblox-approved-inspiration-sources",
+        "roblox-module-structure"
+      ]
     }
   },
 
