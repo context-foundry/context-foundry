@@ -19,6 +19,9 @@ import subprocess
 import sys
 import traceback
 import uuid
+import time
+import signal
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, List
@@ -48,6 +51,90 @@ from tools.mcp_utils.phase_execution import (
 
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# BAML TIMEOUT & TIMING HELPERS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TimeoutException(Exception):
+    """Raised when BAML call exceeds timeout"""
+
+    pass
+
+
+def _timeout_handler(signum, frame):
+    """Signal handler for timeouts"""
+    raise TimeoutException("BAML call exceeded timeout")
+
+
+@contextmanager
+def baml_timeout(seconds: int, operation_name: str):
+    """
+    Context manager that enforces a timeout on BAML calls.
+
+    Args:
+        seconds: Timeout in seconds
+        operation_name: Name of operation for logging
+
+    Raises:
+        TimeoutException: If operation exceeds timeout
+    """
+    # Set up signal handler (Unix only)
+    if hasattr(signal, "SIGALRM"):
+        old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(seconds)
+        start_time = time.time()
+
+        try:
+            print(
+                f"⏱️  [{operation_name}] Starting (timeout: {seconds}s)...",
+                file=sys.stderr,
+            )
+            yield
+            duration = time.time() - start_time
+            print(
+                f"✅ [{operation_name}] Completed in {duration:.1f}s", file=sys.stderr
+            )
+        except TimeoutException:
+            print(f"⏰ [{operation_name}] TIMEOUT after {seconds}s", file=sys.stderr)
+            raise
+        finally:
+            signal.alarm(0)  # Cancel alarm
+            signal.signal(signal.SIGALRM, old_handler)
+    else:
+        # Windows fallback - no timeout enforcement, just timing
+        start_time = time.time()
+        print(
+            f"⏱️  [{operation_name}] Starting (no timeout on Windows)...",
+            file=sys.stderr,
+        )
+        try:
+            yield
+            duration = time.time() - start_time
+            print(
+                f"✅ [{operation_name}] Completed in {duration:.1f}s", file=sys.stderr
+            )
+        except Exception:
+            duration = time.time() - start_time
+            print(
+                f"❌ [{operation_name}] Failed after {duration:.1f}s", file=sys.stderr
+            )
+            raise
+
+
+def baml_breathing_buffer(seconds: float = 2.0):
+    """
+    Add a delay between BAML calls to avoid overwhelming GPT-4o-mini.
+
+    Args:
+        seconds: Delay in seconds (default: 2.0)
+    """
+    print(
+        f"😮‍💨 Breathing buffer ({seconds}s) before next BAML call...", file=sys.stderr
+    )
+    time.sleep(seconds)
 
 
 def _post_process_build_plan(
@@ -682,10 +769,19 @@ def execute_build_with_phase_spawning(
         if scout_md_path.exists():
             try:
                 scout_md = scout_md_path.read_text()
-                scout_json = parse_scout_markdown_baml(scout_md)
+
+                # BAML parse with timeout (90 seconds max)
+                with baml_timeout(90, "Scout BAML Parse"):
+                    scout_json = parse_scout_markdown_baml(scout_md)
+
                 scout_json_path.write_text(json.dumps(scout_json, indent=2))
                 print(
                     f"✅ Parsed Scout markdown to JSON: {scout_json_path}",
+                    file=sys.stderr,
+                )
+            except TimeoutException:
+                print(
+                    "⚠️  Scout BAML parse timed out after 90s - continuing without scout_report.json",
                     file=sys.stderr,
                 )
             except Exception as e:
@@ -764,6 +860,10 @@ def execute_build_with_phase_spawning(
 
         phases_completed.append("Architect")
 
+        # Breathing buffer before next BAML call
+        if scout_json is not None:  # Only add buffer if Scout BAML succeeded
+            baml_breathing_buffer(3.0)
+
         # Structured Architecture JSON (BAML parse)
         architecture_md_path = (
             working_directory / ".context-foundry" / "architecture.md"
@@ -776,12 +876,23 @@ def execute_build_with_phase_spawning(
         if architecture_md_path.exists():
             try:
                 architecture_md = architecture_md_path.read_text()
-                architecture_json = parse_architecture_markdown_baml(architecture_md)
+
+                # BAML parse with timeout (120 seconds max, architecture is larger)
+                with baml_timeout(120, "Architecture BAML Parse"):
+                    architecture_json = parse_architecture_markdown_baml(
+                        architecture_md
+                    )
+
                 architecture_json_path.write_text(
                     json.dumps(architecture_json, indent=2)
                 )
                 print(
                     f"✅ Parsed architecture markdown to JSON: {architecture_json_path}",
+                    file=sys.stderr,
+                )
+            except TimeoutException:
+                print(
+                    "⚠️  Architecture BAML parse timed out after 120s - continuing without architecture.json",
                     file=sys.stderr,
                 )
             except Exception as e:
@@ -793,8 +904,16 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)
         # ═══════════════════════════════════════════════════════════════════════
+
+        # Breathing buffer before build plan generation
+        if (
+            architecture_json is not None
+        ):  # Only add buffer if Architecture BAML succeeded
+            baml_breathing_buffer(3.0)
+
         print("\n📋 Generating build plan using BAML...", file=sys.stderr)
 
+        build_plan_generated = False
         try:
             # Read Scout report (prefer JSON) to get parallel build recommendation
             scout_report_path = (
@@ -887,13 +1006,15 @@ def execute_build_with_phase_spawning(
                     )
             # Otherwise scout_parallel_recommendation already set from Scout report above
 
-            # Call BAML to generate build plan
-            build_plan = create_build_plan(
-                architecture_summary=architecture_summary,
-                scout_parallel_recommendation=scout_parallel_recommendation,
-                scout_reasoning=scout_reasoning,
-                project_type=project_type,
-            )
+            # Call BAML to generate build plan with strict timeout (180 seconds = 3 minutes)
+            # This is the call that hung in the weather app build
+            with baml_timeout(180, "Build Plan Generation"):
+                build_plan = create_build_plan(
+                    architecture_summary=architecture_summary,
+                    scout_parallel_recommendation=scout_parallel_recommendation,
+                    scout_reasoning=scout_reasoning,
+                    project_type=project_type,
+                )
 
             # Post-process for required defaults and provenance
             build_plan, plan_warnings = _post_process_build_plan(build_plan)
@@ -914,27 +1035,47 @@ def execute_build_with_phase_spawning(
             else:
                 print("   Sequential build (no parallel tasks)", file=sys.stderr)
 
+            build_plan_generated = True
+
+        except TimeoutException:
+            print("⚠️  Build plan generation TIMED OUT after 180s", file=sys.stderr)
+            print(
+                "   Falling back to sequential build (no parallel tasks)",
+                file=sys.stderr,
+            )
+            print("   Builder will proceed without build-tasks.json", file=sys.stderr)
         except Exception as e:
             print(f"⚠️  BAML build plan generation failed: {e}", file=sys.stderr)
-            print("   Continuing without build-tasks.json", file=sys.stderr)
+            print(
+                "   Falling back to sequential build (no parallel tasks)",
+                file=sys.stderr,
+            )
             traceback.print_exc()
 
         # SET FINAL use_parallel FROM BAML OUTPUT
         # If user didn't specify, use the parallel_build_enabled from BAML output
         if use_parallel is None:
-            try:
-                use_parallel = build_plan.get("parallel_build_enabled", False)
-                if use_parallel:
-                    print(
-                        "\n🚀 Auto-enabling parallel builds (Scout recommended)",
-                        file=sys.stderr,
-                    )
-                    print(
-                        "   Scout detected independent modules suitable for parallel execution",
-                        file=sys.stderr,
-                    )
-            except Exception:
+            if build_plan_generated:
+                try:
+                    use_parallel = build_plan.get("parallel_build_enabled", False)
+                    if use_parallel:
+                        print(
+                            "\n🚀 Auto-enabling parallel builds (Scout recommended)",
+                            file=sys.stderr,
+                        )
+                        print(
+                            "   Scout detected independent modules suitable for parallel execution",
+                            file=sys.stderr,
+                        )
+                except Exception:
+                    use_parallel = False
+            else:
+                # Build plan generation failed/timed out - default to sequential
                 use_parallel = False
+                print(
+                    "\n📦 Sequential build (build plan generation failed)",
+                    file=sys.stderr,
+                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
