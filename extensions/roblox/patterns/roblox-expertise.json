@@ -226,6 +226,35 @@
     },
 
     {
+      "pattern_id": "roblox-scripting-basics-guardrails",
+      "category": "education",
+      "applies_to": ["roblox-game:rojo", "roblox-game:placefile", "roblox-plugin"],
+      "description": "Beginner-friendly scripting defaults and guardrails that prevent common Luau mistakes in new projects",
+      "confidence": 0.7,
+      "frequency": 1,
+
+      "lessons_learned": [
+        "Treat casing as critical: generated code and snippets must use exact property/function casing to avoid nil concatenations and runtime errors.",
+        "Always bind instances to locals before mutation (e.g., local part = script.Parent) to avoid repeated lookups and nil derefs.",
+        "Create instances with properties first, then set Parent last to avoid partially configured objects in the world.",
+        "Default static parts to Anchored = true and explicit CanCollide; do not rely on engine defaults.",
+        "Prefer task.wait() over wait() in generated examples to reduce frame stalls; reserve wait() only when exact timing is required.",
+        "Guard string concatenations with defaults (e.g., tostring(value or 0)) to avoid '.. nil' crashes in UI.",
+        "Encourage print checkpoints in templates (debug flag) so beginners can trace execution in the Studio Output.",
+        "Default to explicit true/false for booleans (CastShadow, Anchored, etc.) instead of relying on defaults."
+      ],
+
+      "remediations": [
+        "Ship template snippets that show: local binding, property set, task.wait(), Parent set last, and a debug print.",
+        "Wrap user-facing text updates in tostring()/fallbacks before concatenation.",
+        "Include a minimal \"hello part\" example in new scaffolds demonstrating variable binding, property set, anchoring, and parenting.",
+        "Keep a debug toggle in generated scripts to enable/disable print checkpoints without code edits."
+      ],
+
+      "tags": ["education", "best-practices", "dev-experience", "guardrails", "roblox"]
+    },
+
+    {
       "pattern_id": "roblox-beginner-foundations",
       "category": "education",
       "applies_to": ["roblox-game:rojo", "roblox-game:placefile"],
@@ -508,6 +537,7 @@
       "typical_structure": ["ServerScriptService", "ReplicatedStorage", "StarterPlayer", "Workspace"],
       "common_patterns": [
         "roblox-studio-safety-net",
+        "roblox-scripting-basics-guardrails",
         "roblox-approved-inspiration-sources",
         "obby-checkpoints-coin-shop",
         "roblox-module-structure",
@@ -519,6 +549,7 @@
       "typical_structure": ["plugin.lua", "src/"],
       "common_patterns": [
         "roblox-studio-safety-net",
+        "roblox-scripting-basics-guardrails",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
@@ -528,6 +559,7 @@
       "typical_structure": ["src/", "ModuleScripts"],
       "common_patterns": [
         "roblox-studio-safety-net",
+        "roblox-scripting-basics-guardrails",
         "roblox-approved-inspiration-sources",
         "roblox-module-structure"
       ]
