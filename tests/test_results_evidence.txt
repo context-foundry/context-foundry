@@ -1,0 +1,38 @@
+[1m============================= test session starts ==============================[0m
+platform darwin -- Python 3.14.0, pytest-8.4.2, pluggy-1.6.0 -- /opt/homebrew/opt/python@3.14/bin/python3.14
+cachedir: .pytest_cache
+rootdir: /Users/name/homelab/context-foundry
+configfile: pytest.ini
+plugins: mock-3.15.1, asyncio-1.2.0, anyio-4.11.0, cov-7.0.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+[1mcollecting ... [0mcollected 27 items
+
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_not_installed [32mPASSED[0m[32m [  3%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_success [32mPASSED[0m[32m [  7%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_returns_json_in_markdown_blocks [32mPASSED[0m[32m [ 11%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_non_zero_exit_code [32mPASSED[0m[32m [ 14%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_timeout [32mPASSED[0m[32m [ 18%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_empty_output [32mPASSED[0m[32m [ 22%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_invalid_json [32mPASSED[0m[32m [ 25%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_claude_cli_uses_correct_flags [32mPASSED[0m[32m [ 29%][0m
+tests/test_architecture_parsing.py::TestClaudeCliParsing::test_temp_file_cleanup [32mPASSED[0m[32m [ 33%][0m
+tests/test_architecture_parsing.py::TestArchitectureParsingIntegration::test_cli_to_baml_fallback_on_file_not_found [32mPASSED[0m[32m [ 37%][0m
+tests/test_architecture_parsing.py::TestArchitectureParsingIntegration::test_cli_to_baml_fallback_on_timeout [32mPASSED[0m[32m [ 40%][0m
+tests/test_architecture_parsing.py::TestArchitectureParsingIntegration::test_real_caller_fallback_to_baml_on_cli_failure [32mPASSED[0m[32m [ 44%][0m
+tests/test_architecture_parsing.py::TestProductionArchitectureParsingEndToEnd::test_e2e_claude_cli_success_saves_json [32mPASSED[0m[32m [ 48%][0m
+tests/test_architecture_parsing.py::TestProductionArchitectureParsingEndToEnd::test_e2e_baml_fallback_saves_json [32mPASSED[0m[32m [ 51%][0m
+tests/test_architecture_parsing.py::TestProductionArchitectureParsingEndToEnd::test_e2e_baml_timeout_returns_none [32mPASSED[0m[32m [ 55%][0m
+tests/test_architecture_parsing.py::TestProductionArchitectureParsingEndToEnd::test_e2e_dual_failure_returns_none [32mPASSED[0m[32m [ 59%][0m
+tests/test_architecture_parsing.py::TestProductionArchitectureParsingEndToEnd::test_e2e_missing_architecture_md [32mPASSED[0m[32m [ 62%][0m
+tests/test_runner_random_id.py::TestRandomIDAppending::test_new_project_gets_random_id [32mPASSED[0m[32m [ 66%][0m
+tests/test_runner_random_id.py::TestRandomIDAppending::test_delegation_jobs_skip_random_id [32mPASSED[0m[32m [ 70%][0m
+tests/test_runner_random_id.py::TestRandomIDAppending::test_no_double_suffixing [32mPASSED[0m[32m [ 74%][0m
+tests/test_runner_random_id.py::TestModeAutoSwitching::test_existing_code_switches_to_enhancement [32mPASSED[0m[32m [ 77%][0m
+tests/test_runner_random_id.py::TestModeAutoSwitching::test_new_project_without_code_stays_new_project [32mPASSED[0m[32m [ 81%][0m
+tests/test_runner_random_id.py::TestCollisionDetection::test_collision_detection_finds_unique_id [32mPASSED[0m[32m [ 85%][0m
+tests/test_runner_random_id.py::TestCollisionDetection::test_all_attempts_exhausted_keeps_original [32mPASSED[0m[32m [ 88%][0m
+tests/test_runner_random_id.py::TestJobParamsUpdate::test_job_params_reflect_actual_path [32mPASSED[0m[32m [ 92%][0m
+tests/test_runner_random_id.py::TestRunnerPreRunLogic::test_runner_persists_random_id_to_store [32mPASSED[0m[32m [ 96%][0m
+tests/test_runner_random_id.py::TestRunnerPreRunLogic::test_runner_persists_mode_auto_switch_to_store [32mPASSED[0m[32m [100%][0m
+
+[32m============================== [32m[1m27 passed[0m[32m in 2.05s[0m[32m ==============================[0m

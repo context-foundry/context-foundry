@@ -379,13 +379,20 @@ class TestJobParamsUpdate:
 
 @pytest.mark.integration
 @pytest.mark.tier1
-class TestRunnerEndToEnd:
-    """End-to-end tests that call Runner.run() to verify actual production behavior"""
+class TestRunnerPreRunLogic:
+    """
+    Integration tests that call Runner.run() to verify pre-run logic.
 
-    def test_e2e_runner_appends_random_id_to_new_project(
-        self, runner, store, temp_projects_dir
-    ):
-        """Test that Runner.run() actually appends random ID for new autonomous builds"""
+    SCOPE: These tests verify parameter mutations (random ID, mode switch) and
+    persistence to store that happen BEFORE _run_autonomous_build executes.
+
+    NOT TESTED: Polling loop, notifications, active task tracking, log/phase
+    emission, pattern merge, or store.update_job_status calls (all happen inside
+    _run_autonomous_build which is mocked).
+    """
+
+    def test_runner_persists_random_id_to_store(self, runner, store, temp_projects_dir):
+        """Test that Runner.run() appends random ID AND persists it via store.save_job()"""
         # Create job for new project (directory doesn't exist yet)
         working_dir = str(temp_projects_dir / "calculator")
         job = Job.create(
@@ -398,11 +405,18 @@ class TestRunnerEndToEnd:
         )
         store.save_job(job)
 
-        # Mock _run_autonomous_build to prevent actual build but verify execution
+        # Track store.save_job() calls
         from unittest.mock import patch
 
+        save_job_calls = []
+        original_save_job = store.save_job
+
+        def tracked_save_job(job_obj):
+            save_job_calls.append(job_obj.params.copy())
+            return original_save_job(job_obj)
+
         def mock_autonomous_build(job_obj, working_directory, timeout_minutes):
-            """Mock autonomous build that verifies it was called and returns success"""
+            """Mock autonomous build that returns success"""
             return {
                 "status": "completed",
                 "working_directory": working_directory,
@@ -410,30 +424,36 @@ class TestRunnerEndToEnd:
                 "phases_completed": ["Scout", "Architect", "Builder"],
             }
 
-        with patch.object(
-            runner, "_run_autonomous_build", side_effect=mock_autonomous_build
-        ):
-            # Call the ACTUAL Runner.run() method
-            result = runner.run(job)
+        with patch.object(store, "save_job", side_effect=tracked_save_job):
+            with patch.object(
+                runner, "_run_autonomous_build", side_effect=mock_autonomous_build
+            ):
+                # Call the ACTUAL Runner.run() method
+                result = runner.run(job)
 
-        # Verify the run actually completed (not just pre-run mutations)
+        # Verify the run completed (this tests post-run logic executed)
         assert result["success"] is True, "Runner.run() should return success=True"
-        assert "phases_completed" in result
         assert result["exit_code"] == 0
 
-        # Retrieve updated job from store
-        updated_job = store.get_job(job.id)
-        final_path = updated_job.params["working_directory"]
+        # KEY TEST: Verify store.save_job() was called with updated params
+        assert len(save_job_calls) >= 1, "store.save_job() should be called"
 
-        # Verify random ID was appended and persisted
+        # Verify random ID was appended in the saved params
+        saved_params = save_job_calls[-1]  # Get last save
+        final_path = saved_params["working_directory"]
+
         assert final_path != working_dir, "Working directory should be modified"
         assert re.search(r"-\d{4}$", final_path), "Should have 4-digit random ID suffix"
         assert "calculator" in final_path, "Should contain original name"
 
-    def test_e2e_runner_auto_switches_mode_for_existing_code(
+        # Verify persistence: retrieve from store and confirm
+        updated_job = store.get_job(job.id)
+        assert updated_job.params["working_directory"] == final_path
+
+    def test_runner_persists_mode_auto_switch_to_store(
         self, runner, store, temp_projects_dir
     ):
-        """Test that Runner.run() auto-switches to enhancement mode when code exists"""
+        """Test that Runner.run() auto-switches mode AND persists it via store.save_job()"""
         # Create existing project with code
         existing_project = temp_projects_dir / "my-app"
         existing_project.mkdir()
@@ -450,8 +470,15 @@ class TestRunnerEndToEnd:
         )
         store.save_job(job)
 
-        # Mock _run_autonomous_build to prevent actual build
+        # Track store.save_job() calls
         from unittest.mock import patch
+
+        save_job_calls = []
+        original_save_job = store.save_job
+
+        def tracked_save_job(job_obj):
+            save_job_calls.append(job_obj.params.copy())
+            return original_save_job(job_obj)
 
         def mock_autonomous_build(job_obj, working_directory, timeout_minutes):
             """Mock autonomous build that returns success"""
@@ -462,27 +489,31 @@ class TestRunnerEndToEnd:
                 "phases_completed": ["Scout", "Architect", "Builder"],
             }
 
-        with patch.object(
-            runner, "_run_autonomous_build", side_effect=mock_autonomous_build
-        ):
-            # Call the ACTUAL Runner.run() method
-            result = runner.run(job)
+        with patch.object(store, "save_job", side_effect=tracked_save_job):
+            with patch.object(
+                runner, "_run_autonomous_build", side_effect=mock_autonomous_build
+            ):
+                # Call the ACTUAL Runner.run() method
+                result = runner.run(job)
 
-        # Verify the run actually completed
-        assert result["success"] is True, "Runner.run() should return success=True"
-        assert "phases_completed" in result
+        # Verify the run completed
+        assert result["success"] is True
         assert result["exit_code"] == 0
 
-        # Retrieve updated job
-        updated_job = store.get_job(job.id)
+        # KEY TEST: Verify store.save_job() was called with mode change
+        assert len(save_job_calls) >= 1, "store.save_job() should be called"
 
-        # Verify mode was auto-switched to enhancement and persisted
+        # Verify mode was auto-switched in the saved params
+        saved_params = save_job_calls[-1]  # Get last save
         assert (
-            updated_job.params["mode"] == "enhancement"
-        ), "Should auto-switch to enhancement"
+            saved_params["mode"] == "enhancement"
+        ), "Mode should be auto-switched in saved params"
 
-        # Verify NO random ID was appended (because mode is now enhancement)
+        # Verify NO random ID was appended
+        assert saved_params["working_directory"] == str(existing_project)
+        assert not re.search(r"-\d{4}$", saved_params["working_directory"])
+
+        # Verify persistence: retrieve from store and confirm
+        updated_job = store.get_job(job.id)
+        assert updated_job.params["mode"] == "enhancement"
         assert updated_job.params["working_directory"] == str(existing_project)
-        assert not re.search(
-            r"-\d{4}$", updated_job.params["working_directory"]
-        ), "Should NOT append random ID for enhancement mode"
