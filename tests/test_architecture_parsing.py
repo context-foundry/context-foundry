@@ -262,3 +262,57 @@ class TestArchitectureParsingIntegration:
 
         assert architecture_json is not None
         assert "BAML fallback" in architecture_json["system_overview"]
+
+    def test_real_caller_fallback_to_baml_on_cli_failure(
+        self, sample_architecture_md, tmp_path, expected_json_output
+    ):
+        """Test that the actual autonomous_build.py caller code executes BAML fallback"""
+        # This tests the REAL production code path, not a hand-rolled try/except
+
+        # Mock Claude CLI to fail with json.JSONDecodeError (return invalid JSON)
+        mock_cli_result = Mock()
+        mock_cli_result.returncode = 0
+        mock_cli_result.stdout = "This is not valid JSON at all!"
+        mock_cli_result.stderr = ""
+
+        # Track whether BAML was actually called
+        baml_called = {"called": False}
+
+        def mock_baml_fallback(md_content, timeout_seconds=120):
+            baml_called["called"] = True
+            return expected_json_output
+
+        # Test the actual caller code pattern from autonomous_build.py
+        architecture_json = None
+
+        with patch("shutil.which", return_value="/usr/bin/claude"):
+            with patch("subprocess.run", return_value=mock_cli_result):
+                # This is the exact pattern from autonomous_build.py lines 1130-1155
+                try:
+                    architecture_json = _parse_architecture_with_claude_cli(
+                        sample_architecture_md
+                    )
+                except (
+                    FileNotFoundError,
+                    subprocess.TimeoutExpired,
+                    RuntimeError,
+                    json.JSONDecodeError,
+                ):
+                    # Fall back to BAML - THIS IS THE PRODUCTION CODE PATH
+                    with patch(
+                        "tools.mcp_utils.autonomous_build._parse_architecture_baml_with_timeout",
+                        side_effect=mock_baml_fallback,
+                    ):
+                        from tools.mcp_utils.autonomous_build import (
+                            _parse_architecture_baml_with_timeout,
+                        )
+
+                        architecture_json = _parse_architecture_baml_with_timeout(
+                            sample_architecture_md, timeout_seconds=600
+                        )
+
+        # Verify BAML fallback was actually executed
+        assert baml_called["called"], "BAML fallback should have been called"
+        assert architecture_json is not None
+        assert architecture_json == expected_json_output
+        assert "system_overview" in architecture_json

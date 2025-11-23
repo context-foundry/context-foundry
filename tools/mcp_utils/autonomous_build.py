@@ -1140,6 +1140,7 @@ def execute_build_with_phase_spawning(
                     FileNotFoundError,
                     subprocess.TimeoutExpired,
                     RuntimeError,
+                    json.JSONDecodeError,
                 ) as cli_error:
                     # Claude CLI unavailable or failed - fall back to BAML
                     log_debug(
