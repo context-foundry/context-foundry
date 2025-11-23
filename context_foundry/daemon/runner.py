@@ -110,25 +110,91 @@ class Runner:
 
             logger.info(f"Generated working_dir from prompt: {working_dir}")
 
-        # Append random ID for new projects to prevent overwriting
-        # IMPORTANT: Do this BEFORE any codebase detection or directory creation
+        # Check for existing code BEFORE appending random ID
+        # This allows auto mode-switching to work correctly
+        import random
+        import re
+        from pathlib import Path
+        from context_foundry.daemon.models import JobType
+
         mode = job.params.get("mode", "new_project")
-        if mode == "new_project":
-            import random
-            from pathlib import Path
+        original_working_dir = working_dir  # Save for codebase detection
 
-            # Generate 4-digit random ID
-            random_id = str(random.randint(1000, 9999))
+        # Detect existing codebase at the ORIGINAL path (before random ID)
+        # This ensures mode auto-switching works correctly
+        existing_repo_path = job.params.get("existing_repo")
+        if existing_repo_path:
+            # User specified an existing repo - use that for detection
+            detection_path = Path(existing_repo_path)
+        else:
+            # Check the original working directory
+            detection_path = Path(original_working_dir)
 
-            # Append to working directory
+        has_existing_code = detection_path.exists() and any(
+            detection_path.iterdir()
+        )  # Directory exists and is non-empty
+
+        # Auto-adjust mode if we detect existing code
+        if mode == "new_project" and has_existing_code:
+            # User said new_project but we found existing code
+            # Auto-switch to enhancement mode
+            mode = "enhancement"
+            logger.info(
+                f"Auto-adjusted mode: new_project → enhancement (detected existing code at {detection_path})"
+            )
+            job.params["mode"] = mode
+
+        # Append random ID for new projects to prevent overwriting
+        # IMPORTANT: Do this AFTER codebase detection so mode-switching works
+        # BUT ONLY for autonomous builds in new_project mode
+        # ONLY append random ID for:
+        # 1. AUTONOMOUS_BUILD jobs (not delegation/enhancement/testing jobs)
+        # 2. In new_project mode (after auto-switching logic)
+        # 3. When directory doesn't already exist
+        # 4. When directory name doesn't already have a random ID suffix
+        if (
+            job.type == JobType.AUTONOMOUS_BUILD
+            and mode == "new_project"
+            and not Path(working_dir).exists()
+        ):
+            # Generate 4-digit random ID with collision detection
             working_path = Path(working_dir)
             original_name = working_path.name
-            new_name = f"{original_name}-{random_id}"
-            working_dir = str(working_path.parent / new_name)
 
-            logger.info(
-                f"Appending random ID for new project: {original_name} → {new_name}"
-            )
+            # Check if the path already has a random ID suffix (avoid double-suffixing)
+            # Pattern: ends with "-NNNN" where N is a digit
+            already_has_suffix = bool(re.search(r"-\d{4}$", original_name))
+
+            if already_has_suffix:
+                logger.info(
+                    f"Path already has random ID suffix, skipping: {original_name}"
+                )
+                # Don't append another suffix
+            else:
+                # Keep trying until we find a unique ID (max 10 attempts)
+                max_attempts = 10
+                for attempt in range(max_attempts):
+                    random_id = str(random.randint(1000, 9999))
+                    new_name = f"{original_name}-{random_id}"
+                    new_path = working_path.parent / new_name
+
+                    if not new_path.exists():
+                        # Found unique directory name
+                        working_dir = str(new_path)
+                        logger.info(
+                            f"Appending random ID for new project: {original_name} → {new_name}"
+                        )
+
+                        # Update job params with the ACTUAL working directory
+                        # This ensures metadata, logs, and user-facing messages show the correct path
+                        job.params["working_directory"] = working_dir
+                        break
+                else:
+                    # All attempts failed (very unlikely with 10,000 possible IDs)
+                    logger.warning(
+                        f"Could not find unique random ID after {max_attempts} attempts, "
+                        f"using original path: {working_dir}"
+                    )
 
         # Extract task description
         task = job.params.get("task", job.params.get("description", "Build project"))
@@ -536,9 +602,9 @@ class Runner:
         sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
         from tools.mcp_utils.project_detection import detect_existing_codebase
-        from tools.mcp_utils.task_classification import detect_task_intent
 
         # Extract parameters from job
+        # NOTE: Mode has already been adjusted in run() method based on codebase detection
         task = job.params.get("task", "Build project")
         mode = job.params.get("mode", "new_project")
         max_test_iterations = job.params.get("max_test_iterations", 3)
@@ -546,17 +612,10 @@ class Runner:
         force_rebuild = job.params.get("force_rebuild", False)
         use_parallel = job.params.get("use_parallel", None)
 
-        # Detect project info
+        # Detect project info at the ACTUAL working directory
+        # (which may have random ID appended for new projects)
         working_path = Path(working_dir)
         codebase_info = detect_existing_codebase(working_path)
-
-        # Auto-adjust mode based on task intent
-        if mode == "new_project" and codebase_info["has_code"]:
-            detected_intent = detect_task_intent(task)
-            mode = detected_intent
-            self._emit_log(
-                job.id, "INFO", f"Auto-adjusted mode: new_project → {mode}", None
-            )
 
         # Check for Flowise mode
         flowise_mode = codebase_info.get("flowise_flow", False)

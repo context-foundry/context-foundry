@@ -165,6 +165,14 @@ def submit_autonomous_build_to_daemon(
         # Extract project name for display
         project_name = github_repo_name or final_working_dir.name
 
+        # Note: The actual working directory may have a random ID appended by the runner
+        # to prevent overwriting existing projects. We show the base path here, but users
+        # should check job.params['working_directory'] for the final path.
+        mode = params.get("mode", "new_project")
+        path_note = ""
+        if mode == "new_project":
+            path_note = f"\nNote: A random ID will be appended to prevent overwrites (e.g., {project_name}-1234)"
+
         # Return success response with monitoring instructions
         return json.dumps(
             {
@@ -180,11 +188,12 @@ Job ID: {job.id}
 Project: {project_name}
 Status: {job.status.value}
 Priority: {job.priority}
+Working Directory: {final_working_dir_str}{path_note}
 
 The daemon will execute this build when a worker is available.
 
 Monitor progress:
-  cfd show {job.id}           # View job details
+  cfd show {job.id}           # View job details (includes actual path)
   cfd logs {job.id} --follow  # Stream live logs
   cfd list                    # List all jobs
 
@@ -243,7 +252,7 @@ def get_job_status_from_daemon(job_id: str) -> str:
             {
                 "job_id": job.id,
                 "status": job.status.value,
-                "job_type": job.job_type.value,
+                "job_type": job.type.value,  # Fixed: job.type not job.job_type
                 "priority": job.priority,
                 "created_at": job.created_at.isoformat(),
                 "started_at": job.started_at.isoformat() if job.started_at else None,
