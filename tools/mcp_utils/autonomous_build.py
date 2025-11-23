@@ -243,9 +243,10 @@ Return ONLY the JSON object, nothing else."""
         f.write(prompt)
 
     try:
-        # Call claude CLI
+        # Call claude CLI with --print flag for non-interactive output
+        # --dangerously-skip-permissions is required for subprocess execution
         result = subprocess.run(
-            ["claude", prompt_file],
+            ["claude", "--print", "--dangerously-skip-permissions", prompt_file],
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout
