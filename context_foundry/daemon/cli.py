@@ -66,9 +66,12 @@ def cmd_status(args):
         print("Daemon is not running")
         return 1
 
-    from .art import get_status_art
+    from .art import get_lava_lamp_art
+    import random
 
-    print(get_status_art())
+    # Use random frame for variety each time status is called
+    frame = random.randint(0, 359)
+    print(get_lava_lamp_art(frame))
     print(f"Daemon is running (PID {pid})")
 
     # Check heartbeat health
@@ -118,7 +121,98 @@ def cmd_status(args):
         print(f"  DB path: {config.db_path}")
         print(f"  Max concurrent jobs: {config.max_concurrent_jobs}")
 
+    # Show ALL related processes (always, not just in verbose mode)
+    print("\n═══════════════════════════════════════════════════════════")
+    print("ALL RELATED PROCESSES:")
+    print("═══════════════════════════════════════════════════════════")
+
+    related_processes = _find_all_related_processes(pid)
+    if related_processes:
+        for proc in related_processes:
+            print(f"  [{proc['type']}] PID {proc['pid']}: {proc['cmd'][:80]}")
+        print(f"\nTotal: {len(related_processes)} related processes")
+        print("\nTo kill all: cfd killall")
+        print("To kill specific: kill <PID>")
+    else:
+        print("  ✓ No related processes found (only daemon running)")
+
+    # Check for zombie processes
+    from .zombies import find_zombies, format_zombie_list, PSUTIL_AVAILABLE
+
+    if PSUTIL_AVAILABLE:
+        zombies = find_zombies(exclude_pids=[pid])
+        if zombies:
+            print("\n⚠️  Zombie Processes Detected:")
+            print(format_zombie_list(zombies))
+            print("\nRun 'cfd cleanup' to remove these processes")
+        elif args.verbose:
+            print("\n✓ No zombie processes detected")
+    elif args.verbose:
+        print("\n⚠️  psutil not available - cannot detect zombie processes")
+
     return 0
+
+
+def _find_all_related_processes(daemon_pid):
+    """Find all Context Foundry related processes"""
+    import subprocess
+
+    related = []
+
+    try:
+        # Get all processes
+        ps_output = subprocess.check_output(["ps", "aux"], text=True)
+
+        for line in ps_output.splitlines()[1:]:  # Skip header
+            parts = line.split(None, 10)
+            if len(parts) < 11:
+                continue
+
+            pid_str = parts[1]
+            cmd = parts[10]
+
+            try:
+                proc_pid = int(pid_str)
+            except ValueError:
+                continue
+
+            # Skip daemon itself
+            if proc_pid == daemon_pid:
+                continue
+
+            # Categorize process types
+            proc_type = None
+
+            # Check for Claude processes (build agents)
+            # Match: "claude" command that's running builds
+            if cmd.strip().startswith("claude") or "bin/claude" in cmd:
+                # Basic claude command - likely a build process
+                proc_type = "CLAUDE"
+            elif "claude" in cmd.lower() and "context-foundry" in cmd.lower():
+                # Claude explicitly working with context-foundry
+                proc_type = "CLAUDE"
+            elif "tail -f" in cmd and ".context-foundry" in cmd:
+                proc_type = "MONITOR"
+            elif "grep" in cmd and (
+                "architect" in cmd or "baml" in cmd or "o4-mini" in cmd
+            ):
+                proc_type = "MONITOR"
+            elif "mcp_server.py" in cmd:
+                proc_type = "MCP"
+            elif "cfd" in cmd and ("logs" in cmd or "submit" in cmd):
+                proc_type = "CFD-CMD"
+            elif "python" in cmd and "build_runner.py" in cmd:
+                proc_type = "BUILD"
+            elif ".context-foundry" in cmd:
+                proc_type = "CF-PROC"
+
+            if proc_type:
+                related.append({"pid": proc_pid, "type": proc_type, "cmd": cmd})
+
+    except Exception as e:
+        print(f"Warning: Could not enumerate processes: {e}")
+
+    return related
 
 
 def cmd_submit(args):
@@ -353,6 +447,190 @@ def cmd_cancel(args):
         return 1
 
 
+def cmd_cleanup(args):
+    """Clean up zombie processes"""
+    from .zombies import (
+        find_zombies,
+        kill_process,
+        format_zombie_list,
+        PSUTIL_AVAILABLE,
+    )
+
+    if not PSUTIL_AVAILABLE:
+        print(
+            "Error: psutil is not available. Cannot detect zombie processes.",
+            file=sys.stderr,
+        )
+        print("Install with: pip install psutil", file=sys.stderr)
+        return 1
+
+    # Find zombies
+    zombies = find_zombies()
+
+    if not zombies:
+        print("✓ No zombie processes detected")
+        return 0
+
+    # Display zombies
+    print("Found zombie processes:")
+    print(format_zombie_list(zombies))
+
+    if args.force:
+        # Kill all without confirmation
+        print("\nKilling all zombie processes (--force mode)...")
+        killed = 0
+        failed = 0
+
+        for zombie in zombies:
+            print(f"Killing PID {zombie.pid} ({zombie.name})...", end=" ")
+            if kill_process(zombie.pid, force=True):
+                print("✓")
+                killed += 1
+            else:
+                print("✗ Failed")
+                failed += 1
+
+        print(f"\nKilled {killed} process(es), {failed} failed")
+        return 0 if failed == 0 else 1
+
+    # Interactive mode
+    print("\nInteractive cleanup mode. For each process:")
+    print("  y = kill this process")
+    print("  n = skip this process")
+    print("  a = kill all remaining")
+    print("  q = quit without killing more\n")
+
+    killed = 0
+    skipped = 0
+
+    for i, zombie in enumerate(zombies, 1):
+        print(f"\n[{i}/{len(zombies)}] PID {zombie.pid}: {zombie.name}")
+        print(f"  Age: {zombie.age_seconds/3600:.1f}h")
+        print(f"  Reason: {zombie.reason}")
+        print(f"  Command: {zombie.cmdline[:80]}")
+        print(f"  Kill command: kill -9 {zombie.pid}")
+
+        while True:
+            choice = input("\nAction [y/n/a/q]: ").strip().lower()
+
+            if choice == "y":
+                print(f"Killing PID {zombie.pid}...", end=" ")
+                if kill_process(zombie.pid, force=True):
+                    print("✓")
+                    killed += 1
+                else:
+                    print("✗ Failed")
+                break
+
+            elif choice == "n":
+                print("Skipped")
+                skipped += 1
+                break
+
+            elif choice == "a":
+                # Kill this one and all remaining
+                remaining = zombies[i - 1 :]
+                print(f"\nKilling {len(remaining)} remaining process(es)...")
+
+                for z in remaining:
+                    print(f"Killing PID {z.pid} ({z.name})...", end=" ")
+                    if kill_process(z.pid, force=True):
+                        print("✓")
+                        killed += 1
+                    else:
+                        print("✗ Failed")
+
+                print(f"\nKilled {killed} process(es), skipped {skipped}")
+                return 0
+
+            elif choice == "q":
+                print(
+                    f"\nQuitting. Killed {killed} process(es), skipped {skipped + len(zombies) - i}"
+                )
+                return 0
+
+            else:
+                print("Invalid choice. Please enter y, n, a, or q.")
+
+    print(f"\nDone. Killed {killed} process(es), skipped {skipped}")
+    return 0
+
+
+def cmd_killall(args):
+    """Kill all Context Foundry related processes except daemon and current process"""
+    import os
+    import signal
+
+    config = Config.load(args.config)
+
+    # Get daemon PID
+    pid = get_running_daemon_pid(config)
+    if not pid:
+        print("❌ Daemon is not running (no PID file found)")
+        return 1
+
+    # Get current process PID (the user's cfd process)
+    current_pid = os.getpid()
+
+    # Find all related processes
+    print("Scanning for Context Foundry processes...")
+    related_processes = _find_all_related_processes(pid)
+
+    if not related_processes:
+        print("✓ No related processes found to kill")
+        return 0
+
+    # Filter out daemon and current process
+    killable = [
+        p for p in related_processes if p["pid"] != pid and p["pid"] != current_pid
+    ]
+
+    if not killable:
+        print("✓ No killable processes found (only daemon running)")
+        return 0
+
+    # Show what will be killed
+    print(f"\nFound {len(killable)} process(es) to kill:")
+    print("═══════════════════════════════════════════════════════════")
+    for proc in killable:
+        print(f"  [{proc['type']}] PID {proc['pid']}: {proc['cmd'][:60]}")
+    print("═══════════════════════════════════════════════════════════")
+
+    # Confirm unless --force
+    if not args.force:
+        response = input(f"\nKill all {len(killable)} process(es)? [y/N]: ")
+        if response.lower() != "y":
+            print("Cancelled.")
+            return 0
+
+    # Kill all processes
+    killed = 0
+    failed = 0
+
+    print("\nKilling processes...")
+    for proc in killable:
+        try:
+            os.kill(proc["pid"], signal.SIGTERM)
+            print(f"  ✓ Killed PID {proc['pid']} ({proc['type']})")
+            killed += 1
+        except ProcessLookupError:
+            print(f"  ⚠ PID {proc['pid']} already dead")
+            killed += 1
+        except PermissionError:
+            print(f"  ✗ PID {proc['pid']} permission denied")
+            failed += 1
+        except Exception as e:
+            print(f"  ✗ PID {proc['pid']} error: {e}")
+            failed += 1
+
+    print(f"\nResults: {killed} killed, {failed} failed")
+
+    if failed > 0:
+        print("\nTip: Try running with sudo for permission issues")
+
+    return 0
+
+
 def _wait_for_job(store: Store, job_id: str, timeout: Optional[int] = None):
     """Wait for job to complete"""
     start_time = time.time()
@@ -463,6 +741,24 @@ def main():
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a job")
     cancel_parser.add_argument("job_id", help="Job ID")
 
+    # Cleanup command
+    cleanup_parser = subparsers.add_parser("cleanup", help="Clean up zombie processes")
+    cleanup_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Kill all zombies without confirmation",
+    )
+
+    # Killall command
+    killall_parser = subparsers.add_parser("killall", help="Kill all related processes")
+    killall_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Kill all without confirmation",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -479,6 +775,8 @@ def main():
         "show": cmd_show,
         "logs": cmd_logs,
         "cancel": cmd_cancel,
+        "cleanup": cmd_cleanup,
+        "killall": cmd_killall,
     }
 
     return commands[args.command](args)

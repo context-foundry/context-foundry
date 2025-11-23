@@ -708,7 +708,17 @@ def parse_scout_markdown_baml(markdown_content: str) -> Dict[str, Any]:
                 content = content[3:]
             if content.endswith("```"):
                 content = content[:-3]
-            return json.loads(content.strip())
+            if content.endswith("```"):
+                content = content[:-3]
+
+            try:
+                return json.loads(content.strip())
+            except json.JSONDecodeError as je:
+                print(
+                    f"[BAML DEBUG] JSON Decode Error. Raw content:\n{content}\n",
+                    file=sys.stderr,
+                )
+                raise je
 
         return internal_repr
 
@@ -766,7 +776,17 @@ def parse_architecture_markdown_baml(markdown_content: str) -> Dict[str, Any]:
                 content = content[3:]
             if content.endswith("```"):
                 content = content[:-3]
-            return json.loads(content.strip())
+            if content.endswith("```"):
+                content = content[:-3]
+
+            try:
+                return json.loads(content.strip())
+            except json.JSONDecodeError as je:
+                print(
+                    f"[BAML DEBUG] JSON Decode Error. Raw content:\n{content}\n",
+                    file=sys.stderr,
+                )
+                raise je
 
         return internal_repr
 

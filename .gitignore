@@ -112,4 +112,5 @@ smoke_test_*.txt
 #
 # ═══════════════════════════════════════════════════════════
 # extensions/  # Commented out for private repo - extensions now committed
+extensions/workday/
 docs/assets/SatoshiChoreTracker.gif

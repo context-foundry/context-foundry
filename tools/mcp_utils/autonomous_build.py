@@ -182,15 +182,28 @@ def _parse_architecture_with_claude_cli(md_content: str) -> Dict[str, Any]:
     Parse architecture markdown using Claude CLI (desktop subscription).
 
     This bypasses BAML and API requirements by using the local claude command.
+    Falls back to BAML if Claude CLI is unavailable or fails.
 
     Args:
         md_content: Architecture markdown to parse
 
     Returns:
         Dict with parsed architecture structure
+
+    Raises:
+        FileNotFoundError: If claude CLI is not installed
+        subprocess.TimeoutExpired: If parsing exceeds timeout
+        RuntimeError: If Claude CLI fails or returns invalid JSON
     """
     import subprocess
     import tempfile
+    import shutil
+
+    # Check if claude CLI is available
+    if not shutil.which("claude"):
+        raise FileNotFoundError(
+            "claude CLI not found in PATH - install from https://claude.com/download"
+        )
 
     # Create prompt for Claude to parse the architecture
     prompt = f"""Parse this architecture markdown document and extract it into a structured JSON format.
@@ -253,10 +266,15 @@ Return ONLY the JSON object, nothing else."""
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"Claude CLI failed: {result.stderr}")
+            raise RuntimeError(
+                f"Claude CLI exited with code {result.returncode}: {result.stderr}"
+            )
 
         # Parse JSON from output
         output = result.stdout.strip()
+
+        if not output:
+            raise RuntimeError("Claude CLI returned empty output")
 
         # Extract JSON if wrapped in markdown code blocks
         if "```json" in output:
@@ -1097,36 +1115,91 @@ def execute_build_with_phase_spawning(
             try:
                 architecture_md = architecture_md_path.read_text()
                 print(
-                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting Claude CLI parse",
+                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting parse",
                     file=sys.stderr,
                 )
-                # Architecture parsing now uses Claude CLI directly (desktop subscription - no API needed!)
-                # Bypasses BAML to avoid API costs and use local Claude subscription
-                log_debug(
-                    f"Attempting to parse Architecture markdown ({len(architecture_md)} bytes) with Claude CLI",
-                    working_directory,
-                )
-                architecture_json = _parse_architecture_with_claude_cli(architecture_md)
+
+                # Try Claude CLI first (free, uses desktop subscription)
+                # Falls back to BAML if CLI unavailable or fails
+                try:
+                    log_debug(
+                        f"Attempting to parse Architecture with Claude CLI ({len(architecture_md)} bytes)",
+                        working_directory,
+                    )
+                    architecture_json = _parse_architecture_with_claude_cli(
+                        architecture_md
+                    )
+                    log_debug(
+                        "✅ Architecture parsed with Claude CLI", working_directory
+                    )
+                    print(
+                        "✅ Architecture parsed with Claude CLI",
+                        file=sys.stderr,
+                    )
+                except (
+                    FileNotFoundError,
+                    subprocess.TimeoutExpired,
+                    RuntimeError,
+                ) as cli_error:
+                    # Claude CLI unavailable or failed - fall back to BAML
+                    log_debug(
+                        f"⚠️ Claude CLI parse failed ({type(cli_error).__name__}), falling back to BAML",
+                        working_directory,
+                    )
+                    print(
+                        f"⚠️  Claude CLI unavailable ({type(cli_error).__name__}), using BAML fallback...",
+                        file=sys.stderr,
+                    )
+
+                    # BAML fallback with timeout
+                    try:
+                        architecture_json = _parse_architecture_baml_with_timeout(
+                            architecture_md, timeout_seconds=600
+                        )
+                        log_debug("✅ Architecture parsed with BAML", working_directory)
+                        print(
+                            "✅ Architecture parsed with BAML (fallback)",
+                            file=sys.stderr,
+                        )
+                    except TimeoutException:
+                        log_debug(
+                            "⚠️ BAML parse also timed out after 600s", working_directory
+                        )
+                        print(
+                            "⚠️  BAML parse also timed out - continuing without architecture.json",
+                            file=sys.stderr,
+                        )
+                        raise  # Re-raise to outer handler
+                    except Exception as baml_error:
+                        log_debug(
+                            f"⚠️ BAML parse also failed: {str(baml_error)}",
+                            working_directory,
+                        )
+                        print(
+                            f"⚠️  BAML parse also failed: {baml_error}",
+                            file=sys.stderr,
+                        )
+                        raise  # Re-raise to outer handler
+
+                # Save architecture.json (from either Claude CLI or BAML)
                 architecture_json_path.write_text(
                     json.dumps(architecture_json, indent=2)
                 )
-                log_debug("✅ Architecture BAML parse successful", working_directory)
                 print(
-                    f"✅ Parsed architecture markdown to JSON: {architecture_json_path}",
+                    f"✅ Saved architecture.json: {architecture_json_path}",
                     file=sys.stderr,
                 )
+
             except TimeoutException:
                 log_debug(
-                    "⚠️ Architecture BAML parse TIMED OUT after 600s", working_directory
+                    "⚠️ Architecture parse TIMED OUT after 600s", working_directory
                 )
                 print(
-                    "⚠️  Architecture BAML parse timed out after 600s - continuing without architecture.json",
+                    "⚠️  Architecture parse timed out after 600s - continuing without architecture.json",
                     file=sys.stderr,
                 )
             except Exception as e:
-                log_debug(
-                    f"⚠️ Architecture BAML parse FAILED: {str(e)}", working_directory
-                )
+                log_debug(f"⚠️ Architecture parse FAILED: {str(e)}", working_directory)
                 print(
                     f"⚠️  Failed to parse architecture markdown to JSON: {e}",
                     file=sys.stderr,

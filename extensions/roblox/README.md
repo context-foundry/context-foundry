@@ -254,6 +254,34 @@ print(result)
 - **"DataStore request rejected"** - Enable API Services in Studio settings
 - **"Tests failing"** - Check TestEZ plugin installed, verify test files exist
 
+### Controllers Not Working in Studio
+
+**Issue:** Controllers are broken in Roblox Studio due to the Virtual Gamepad Controller Emulator feature stealing the first controller slot (Gamepad1). This causes your character not to move (only camera moves), as additional gamepads become slots 2 or 3.
+
+**Quick Fix:**
+
+```bash
+# Automatically fix the issue
+python extensions/roblox/fix_studio_controllers.py
+
+# Preview changes without applying them
+python extensions/roblox/fix_studio_controllers.py --dry-run
+
+# Restore original behavior
+python extensions/roblox/fix_studio_controllers.py --restore
+```
+
+**Manual Fix:**
+
+1. Disable the Virtual Gamepad Controller Emulator Beta Feature in Studio
+2. Since disabling doesn't actually disable it, you need to rename/delete the file:
+   - **Windows:** `%localappdata%/Roblox/Versions/<version>/BuiltInStandalonePlugins/Optimized_Embedded_Signature/ControlsEmulator.rbxm`
+   - **macOS:** Search your Roblox installation for `ControlsEmulator.rbxm`
+3. Rename `ControlsEmulator.rbxm` to `ControlsEmulator.rbxm.disabled`
+4. Restart Roblox Studio
+
+The automated script will find and rename this file for you across all installed Roblox Studio versions.
+
 ## Advanced Usage
 
 ### Custom Patterns

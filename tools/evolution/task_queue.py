@@ -170,7 +170,8 @@ class TaskQueueManager:
 
     def _init_db(self):
         """Initialize database with schema"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # Set timeout to 30 seconds to prevent indefinite hangs
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
         self.conn.row_factory = sqlite3.Row
 
         # Enable WAL mode for better concurrency
