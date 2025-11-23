@@ -375,3 +375,101 @@ class TestJobParamsUpdate:
         # This is the key fix: job metadata reflects the ACTUAL path
         # Users can query this via get_job_status_from_daemon()
         assert "weather-app-9999" in actual_path
+
+
+@pytest.mark.integration
+@pytest.mark.tier1
+class TestRunnerEndToEnd:
+    """End-to-end tests that call Runner.run() to verify actual production behavior"""
+
+    def test_e2e_runner_appends_random_id_to_new_project(
+        self, runner, store, temp_projects_dir
+    ):
+        """Test that Runner.run() actually appends random ID for new autonomous builds"""
+        # Create job for new project (directory doesn't exist yet)
+        working_dir = str(temp_projects_dir / "calculator")
+        job = Job.create(
+            job_type=JobType.AUTONOMOUS_BUILD,
+            params={
+                "task": "Build a calculator",
+                "working_directory": working_dir,
+                "mode": "new_project",
+            },
+        )
+        store.save_job(job)
+
+        # Mock the subprocess call to prevent actual build
+        from unittest.mock import patch, Mock
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "success"
+        mock_result.stderr = ""
+
+        with patch("subprocess.Popen", return_value=mock_result):
+            with patch.object(mock_result, "wait", return_value=0):
+                with patch.object(mock_result, "communicate", return_value=("", "")):
+                    try:
+                        # Call the ACTUAL Runner.run() method with Job object (not job_id)
+                        runner.run(job)
+                    except Exception:
+                        # We don't care if the build fails, we just want to test the random ID
+                        pass
+
+        # Retrieve updated job from store (job object was modified in-place and saved)
+        updated_job = store.get_job(job.id)
+        final_path = updated_job.params["working_directory"]
+
+        # Verify random ID was appended
+        assert final_path != working_dir, "Working directory should be modified"
+        assert re.search(r"-\d{4}$", final_path), "Should have 4-digit random ID suffix"
+        assert "calculator" in final_path, "Should contain original name"
+
+    def test_e2e_runner_auto_switches_mode_for_existing_code(
+        self, runner, store, temp_projects_dir
+    ):
+        """Test that Runner.run() auto-switches to enhancement mode when code exists"""
+        # Create existing project with code
+        existing_project = temp_projects_dir / "my-app"
+        existing_project.mkdir()
+        (existing_project / "main.py").write_text("print('hello')")
+
+        # Create job claiming new_project mode
+        job = Job.create(
+            job_type=JobType.AUTONOMOUS_BUILD,
+            params={
+                "task": "Add a feature",
+                "working_directory": str(existing_project),
+                "mode": "new_project",  # User says new_project
+            },
+        )
+        store.save_job(job)
+
+        # Mock subprocess to prevent actual build
+        from unittest.mock import patch, Mock
+
+        mock_result = Mock()
+        mock_result.returncode = 0
+
+        with patch("subprocess.Popen", return_value=mock_result):
+            with patch.object(mock_result, "wait", return_value=0):
+                with patch.object(mock_result, "communicate", return_value=("", "")):
+                    try:
+                        # Call the ACTUAL Runner.run() method with Job object (not job_id)
+                        runner.run(job)
+                    except Exception:
+                        pass
+
+        # Retrieve updated job (job object was modified in-place and saved)
+        updated_job = store.get_job(job.id)
+
+        # Verify mode was auto-switched to enhancement
+        assert (
+            updated_job.params["mode"] == "enhancement"
+        ), "Should auto-switch to enhancement"
+
+        # Verify NO random ID was appended (because mode is now enhancement)
+        assert updated_job.params["working_directory"] == str(existing_project)
+        assert not re.search(
+            r"-\d{4}$", updated_job.params["working_directory"]
+        ), "Should NOT append random ID for enhancement mode"

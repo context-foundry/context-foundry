@@ -144,6 +144,9 @@ class Runner:
             )
             job.params["mode"] = mode
 
+            # IMPORTANT: Save job to persist the mode change
+            self.store.save_job(job)
+
         # Append random ID for new projects to prevent overwriting
         # IMPORTANT: Do this AFTER codebase detection so mode-switching works
         # BUT ONLY for autonomous builds in new_project mode
@@ -188,6 +191,9 @@ class Runner:
                         # Update job params with the ACTUAL working directory
                         # This ensures metadata, logs, and user-facing messages show the correct path
                         job.params["working_directory"] = working_dir
+
+                        # IMPORTANT: Save job to persist the updated working directory
+                        self.store.save_job(job)
                         break
                 else:
                     # All attempts failed (very unlikely with 10,000 possible IDs)

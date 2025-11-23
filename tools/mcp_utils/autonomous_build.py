@@ -326,6 +326,129 @@ def _parse_architecture_baml_with_timeout(md_content: str, timeout_seconds: int 
     raise RuntimeError(f"Architecture BAML parse failed: {payload}")
 
 
+def parse_and_save_architecture_json(
+    working_directory: Path,
+) -> Optional[Dict[str, Any]]:
+    """
+    Parse architecture.md to architecture.json using Claude CLI with BAML fallback.
+
+    This is the production code path that:
+    1. Reads .context-foundry/architecture.md
+    2. Tries to parse with Claude CLI (free, uses desktop subscription)
+    3. Falls back to BAML if Claude CLI fails/unavailable
+    4. Saves result to .context-foundry/architecture.json
+    5. Handles timeouts and errors gracefully
+
+    Returns:
+        Dict with parsed architecture if successful, None if parsing failed or file missing
+    """
+    architecture_md_path = working_directory / ".context-foundry" / "architecture.md"
+    architecture_json_path = (
+        working_directory / ".context-foundry" / "architecture.json"
+    )
+    architecture_md = None
+    architecture_json = None
+
+    if not architecture_md_path.exists():
+        log_debug(
+            "⚠️ Architecture markdown missing, skipping BAML parse",
+            working_directory,
+        )
+        return None
+
+    print(
+        f"[TRACE] Reading architecture.md from {architecture_md_path}",
+        file=sys.stderr,
+    )
+
+    try:
+        architecture_md = architecture_md_path.read_text()
+        print(
+            f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting parse",
+            file=sys.stderr,
+        )
+
+        # Try Claude CLI first (free, uses desktop subscription)
+        # Falls back to BAML if CLI unavailable or fails
+        try:
+            log_debug(
+                f"Attempting to parse Architecture with Claude CLI ({len(architecture_md)} bytes)",
+                working_directory,
+            )
+            architecture_json = _parse_architecture_with_claude_cli(architecture_md)
+            log_debug("✅ Architecture parsed with Claude CLI", working_directory)
+            print(
+                "✅ Architecture parsed with Claude CLI",
+                file=sys.stderr,
+            )
+        except (
+            FileNotFoundError,
+            subprocess.TimeoutExpired,
+            RuntimeError,
+            json.JSONDecodeError,
+        ) as cli_error:
+            # Claude CLI unavailable or failed - fall back to BAML
+            log_debug(
+                f"⚠️ Claude CLI parse failed ({type(cli_error).__name__}), falling back to BAML",
+                working_directory,
+            )
+            print(
+                f"⚠️  Claude CLI unavailable ({type(cli_error).__name__}), using BAML fallback...",
+                file=sys.stderr,
+            )
+
+            # BAML fallback with timeout
+            try:
+                architecture_json = _parse_architecture_baml_with_timeout(
+                    architecture_md, timeout_seconds=600
+                )
+                log_debug("✅ Architecture parsed with BAML", working_directory)
+                print(
+                    "✅ Architecture parsed with BAML (fallback)",
+                    file=sys.stderr,
+                )
+            except TimeoutException:
+                log_debug("⚠️ BAML parse also timed out after 600s", working_directory)
+                print(
+                    "⚠️  BAML parse also timed out - continuing without architecture.json",
+                    file=sys.stderr,
+                )
+                raise  # Re-raise to outer handler
+            except Exception as baml_error:
+                log_debug(
+                    f"⚠️ BAML parse also failed: {str(baml_error)}",
+                    working_directory,
+                )
+                print(
+                    f"⚠️  BAML parse also failed: {baml_error}",
+                    file=sys.stderr,
+                )
+                raise  # Re-raise to outer handler
+
+        # Save architecture.json (from either Claude CLI or BAML)
+        architecture_json_path.write_text(json.dumps(architecture_json, indent=2))
+        print(
+            f"✅ Saved architecture.json: {architecture_json_path}",
+            file=sys.stderr,
+        )
+        return architecture_json
+
+    except TimeoutException:
+        log_debug("⚠️ Architecture parse TIMED OUT after 600s", working_directory)
+        print(
+            "⚠️  Architecture parse timed out after 600s - continuing without architecture.json",
+            file=sys.stderr,
+        )
+        return None
+    except Exception as e:
+        log_debug(f"⚠️ Architecture parse FAILED: {str(e)}", working_directory)
+        print(
+            f"⚠️  Failed to parse architecture markdown to JSON: {e}",
+            file=sys.stderr,
+        )
+        return None
+
+
 def _post_process_build_plan(
     build_plan: Dict[str, Any],
 ) -> tuple[Dict[str, Any], List[str]]:
@@ -1098,118 +1221,8 @@ def execute_build_with_phase_spawning(
         if scout_json is not None:  # Only add buffer if Scout BAML succeeded
             baml_breathing_buffer(3.0)
 
-        # Structured Architecture JSON (BAML parse)
-        architecture_md_path = (
-            working_directory / ".context-foundry" / "architecture.md"
-        )
-        architecture_json_path = (
-            working_directory / ".context-foundry" / "architecture.json"
-        )
-        architecture_md = None
-        architecture_json = None
-        if architecture_md_path.exists():
-            print(
-                f"[TRACE] Reading architecture.md from {architecture_md_path}",
-                file=sys.stderr,
-            )
-            try:
-                architecture_md = architecture_md_path.read_text()
-                print(
-                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting parse",
-                    file=sys.stderr,
-                )
-
-                # Try Claude CLI first (free, uses desktop subscription)
-                # Falls back to BAML if CLI unavailable or fails
-                try:
-                    log_debug(
-                        f"Attempting to parse Architecture with Claude CLI ({len(architecture_md)} bytes)",
-                        working_directory,
-                    )
-                    architecture_json = _parse_architecture_with_claude_cli(
-                        architecture_md
-                    )
-                    log_debug(
-                        "✅ Architecture parsed with Claude CLI", working_directory
-                    )
-                    print(
-                        "✅ Architecture parsed with Claude CLI",
-                        file=sys.stderr,
-                    )
-                except (
-                    FileNotFoundError,
-                    subprocess.TimeoutExpired,
-                    RuntimeError,
-                    json.JSONDecodeError,
-                ) as cli_error:
-                    # Claude CLI unavailable or failed - fall back to BAML
-                    log_debug(
-                        f"⚠️ Claude CLI parse failed ({type(cli_error).__name__}), falling back to BAML",
-                        working_directory,
-                    )
-                    print(
-                        f"⚠️  Claude CLI unavailable ({type(cli_error).__name__}), using BAML fallback...",
-                        file=sys.stderr,
-                    )
-
-                    # BAML fallback with timeout
-                    try:
-                        architecture_json = _parse_architecture_baml_with_timeout(
-                            architecture_md, timeout_seconds=600
-                        )
-                        log_debug("✅ Architecture parsed with BAML", working_directory)
-                        print(
-                            "✅ Architecture parsed with BAML (fallback)",
-                            file=sys.stderr,
-                        )
-                    except TimeoutException:
-                        log_debug(
-                            "⚠️ BAML parse also timed out after 600s", working_directory
-                        )
-                        print(
-                            "⚠️  BAML parse also timed out - continuing without architecture.json",
-                            file=sys.stderr,
-                        )
-                        raise  # Re-raise to outer handler
-                    except Exception as baml_error:
-                        log_debug(
-                            f"⚠️ BAML parse also failed: {str(baml_error)}",
-                            working_directory,
-                        )
-                        print(
-                            f"⚠️  BAML parse also failed: {baml_error}",
-                            file=sys.stderr,
-                        )
-                        raise  # Re-raise to outer handler
-
-                # Save architecture.json (from either Claude CLI or BAML)
-                architecture_json_path.write_text(
-                    json.dumps(architecture_json, indent=2)
-                )
-                print(
-                    f"✅ Saved architecture.json: {architecture_json_path}",
-                    file=sys.stderr,
-                )
-
-            except TimeoutException:
-                log_debug(
-                    "⚠️ Architecture parse TIMED OUT after 600s", working_directory
-                )
-                print(
-                    "⚠️  Architecture parse timed out after 600s - continuing without architecture.json",
-                    file=sys.stderr,
-                )
-            except Exception as e:
-                log_debug(f"⚠️ Architecture parse FAILED: {str(e)}", working_directory)
-                print(
-                    f"⚠️  Failed to parse architecture markdown to JSON: {e}",
-                    file=sys.stderr,
-                )
-        else:
-            log_debug(
-                "⚠️ Architecture markdown missing, skipping BAML parse",
-                working_directory,
-            )
+        # Structured Architecture JSON (BAML parse) - extracted to testable function
+        architecture_json = parse_and_save_architecture_json(working_directory)
 
         # ═══════════════════════════════════════════════════════════════════════
         # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)

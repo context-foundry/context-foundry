@@ -316,3 +316,148 @@ class TestArchitectureParsingIntegration:
         assert architecture_json is not None
         assert architecture_json == expected_json_output
         assert "system_overview" in architecture_json
+
+
+@pytest.mark.integration
+@pytest.mark.tier1
+class TestProductionArchitectureParsingEndToEnd:
+    """End-to-end tests for parse_and_save_architecture_json production function"""
+
+    def test_e2e_claude_cli_success_saves_json(
+        self, sample_architecture_md, tmp_path, expected_json_output
+    ):
+        """Test production function with Claude CLI success - verifies file I/O"""
+        from tools.mcp_utils.autonomous_build import parse_and_save_architecture_json
+
+        # Create project structure
+        project_dir = tmp_path / "test-project"
+        cf_dir = project_dir / ".context-foundry"
+        cf_dir.mkdir(parents=True)
+        arch_md_path = cf_dir / "architecture.md"
+        arch_md_path.write_text(sample_architecture_md)
+
+        # Mock Claude CLI success
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = json.dumps(expected_json_output)
+        mock_result.stderr = ""
+
+        with patch("shutil.which", return_value="/usr/bin/claude"):
+            with patch("subprocess.run", return_value=mock_result):
+                result = parse_and_save_architecture_json(project_dir)
+
+        # Verify returned result
+        assert result == expected_json_output
+
+        # Verify file was ACTUALLY saved
+        arch_json_path = cf_dir / "architecture.json"
+        assert arch_json_path.exists()
+        saved = json.loads(arch_json_path.read_text())
+        assert saved == expected_json_output
+
+    def test_e2e_baml_fallback_saves_json(
+        self, sample_architecture_md, tmp_path, expected_json_output
+    ):
+        """Test production function BAML fallback - verifies actual fallback execution"""
+        from tools.mcp_utils.autonomous_build import parse_and_save_architecture_json
+
+        # Create project structure
+        project_dir = tmp_path / "test-project"
+        cf_dir = project_dir / ".context-foundry"
+        cf_dir.mkdir(parents=True)
+        arch_md_path = cf_dir / "architecture.md"
+        arch_md_path.write_text(sample_architecture_md)
+
+        # Mock CLI failure
+        mock_result = Mock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Invalid JSON"
+
+        baml_called = []
+
+        def mock_baml(md, timeout_seconds=120):
+            baml_called.append(True)
+            return expected_json_output
+
+        with patch("shutil.which", return_value="/usr/bin/claude"):
+            with patch("subprocess.run", return_value=mock_result):
+                with patch(
+                    "tools.mcp_utils.autonomous_build._parse_architecture_baml_with_timeout",
+                    side_effect=mock_baml,
+                ):
+                    parse_and_save_architecture_json(project_dir)
+
+        # Verify BAML was actually called
+        assert len(baml_called) == 1
+
+        # Verify file was saved
+        arch_json_path = cf_dir / "architecture.json"
+        assert arch_json_path.exists()
+        saved = json.loads(arch_json_path.read_text())
+        assert saved == expected_json_output
+
+    def test_e2e_baml_timeout_returns_none(self, sample_architecture_md, tmp_path):
+        """Test production function handles BAML timeout gracefully"""
+        from tools.mcp_utils.autonomous_build import (
+            parse_and_save_architecture_json,
+            TimeoutException,
+        )
+
+        # Create project structure
+        project_dir = tmp_path / "test-project"
+        cf_dir = project_dir / ".context-foundry"
+        cf_dir.mkdir(parents=True)
+        arch_md_path = cf_dir / "architecture.md"
+        arch_md_path.write_text(sample_architecture_md)
+
+        # Mock CLI unavailable, BAML times out
+        with patch("shutil.which", return_value=None):
+            with patch(
+                "tools.mcp_utils.autonomous_build._parse_architecture_baml_with_timeout",
+                side_effect=TimeoutException("Timed out"),
+            ):
+                result = parse_and_save_architecture_json(project_dir)
+
+        # Verify graceful degradation
+        assert result is None
+        arch_json_path = cf_dir / "architecture.json"
+        assert not arch_json_path.exists()
+
+    def test_e2e_dual_failure_returns_none(self, sample_architecture_md, tmp_path):
+        """Test production function handles both CLI and BAML failure"""
+        from tools.mcp_utils.autonomous_build import parse_and_save_architecture_json
+
+        # Create project structure
+        project_dir = tmp_path / "test-project"
+        cf_dir = project_dir / ".context-foundry"
+        cf_dir.mkdir(parents=True)
+        arch_md_path = cf_dir / "architecture.md"
+        arch_md_path.write_text(sample_architecture_md)
+
+        # Mock both failing
+        with patch("shutil.which", return_value=None):
+            with patch(
+                "tools.mcp_utils.autonomous_build._parse_architecture_baml_with_timeout",
+                side_effect=Exception("BAML failed"),
+            ):
+                result = parse_and_save_architecture_json(project_dir)
+
+        # Verify graceful degradation
+        assert result is None
+        arch_json_path = cf_dir / "architecture.json"
+        assert not arch_json_path.exists()
+
+    def test_e2e_missing_architecture_md(self, tmp_path):
+        """Test production function handles missing source file"""
+        from tools.mcp_utils.autonomous_build import parse_and_save_architecture_json
+
+        # Create project WITHOUT architecture.md
+        project_dir = tmp_path / "test-project"
+        cf_dir = project_dir / ".context-foundry"
+        cf_dir.mkdir(parents=True)
+
+        result = parse_and_save_architecture_json(project_dir)
+
+        assert result is None
+        arch_json_path = cf_dir / "architecture.json"
+        assert not arch_json_path.exists()
