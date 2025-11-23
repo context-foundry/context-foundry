@@ -639,6 +639,7 @@ def run_phase(
     iteration: int = 0,
     project_type: str = "unknown",
     provider: str = "claude",
+    model: str = None,
 ) -> PhaseResult:
     """
     Execute a build phase using an AI agent (Claude or Gemini).
@@ -653,6 +654,7 @@ def run_phase(
         iteration: Current iteration number
         project_type: Project type
         provider: AI provider to use ("claude" or "gemini")
+        model: Optional model override (e.g., "claude-opus-4-20250514")
 
     Returns:
         PhaseResult with metrics
@@ -737,6 +739,11 @@ def run_phase(
             phase_prompt,
             input_instruction,
         ]
+
+        # Add model override if specified
+        if model:
+            cmd.insert(1, "--model")
+            cmd.insert(2, model)
 
     # Track start time
     start = datetime.now()

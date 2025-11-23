@@ -75,7 +75,7 @@ function GenerateArchitecture(
 }
 
 function ParseArchitectureMarkdown(markdown_content: string) -> ArchitectureBlueprint {
-  client GPT4oMini
+  client O4Mini
   prompt #"
     Parse this architecture markdown into a structured ArchitectureBlueprint object:
 

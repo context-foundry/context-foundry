@@ -34,8 +34,18 @@ client<llm> GPT4oMini {
   }
 }
 
+client<llm> O4Mini {
+  provider openai
+  options {
+    model "o4-mini"
+    api_key env.OPENAI_API_KEY
+    // o4-mini: Efficiency engine with strong math and visual reasoning
+  }
+}
+
 // Claude clients removed - Context Foundry uses OpenAI GPT-4o-mini for BAML
-// to avoid Anthropic API charges. All BAML functions use GPT4oMini client.
+// to avoid Anthropic API charges. Most BAML functions use GPT4oMini client.
+// Architecture parsing uses O4Mini for enhanced reasoning at lower cost.
 
 // Retry policies for reliability
 retry_policy StandardRetry {
