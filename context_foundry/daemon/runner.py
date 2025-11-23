@@ -78,7 +78,57 @@ class Runner:
         # Determine working directory from job params
         working_dir = job.params.get("working_directory")
         if not working_dir:
-            working_dir = job.params.get("project_path", str(Path.cwd()))
+            working_dir = job.params.get("project_path")
+
+        # If still no working_dir, generate from prompt/task
+        if not working_dir:
+            import re
+            from tools.mcp_utils.path_utils import get_projects_root
+
+            prompt = job.params.get("prompt", job.params.get("task", "project"))
+
+            # Extract project name from prompt
+            # Try common patterns: "build a X", "create X", "make X"
+            project_name_pattern = r"(?:build|create|make|develop)\s+(?:a|an)?\s+([a-z0-9\s-]+?)(?:\s+(?:app|application|project|website|game|tool|calculator|using|with|for))"
+            match = re.search(project_name_pattern, prompt.lower())
+
+            if match:
+                raw_name = match.group(1).strip()
+            else:
+                # Fallback: use first few meaningful words
+                words = prompt.split()[:5]
+                raw_name = " ".join(words)
+
+            # Convert to kebab-case directory name
+            project_name = re.sub(r"[^a-zA-Z0-9]+", "-", raw_name.lower()).strip("-")
+            if len(project_name) > 50:
+                project_name = project_name[:50].rsplit("-", 1)[0]
+
+            # Get projects root and create path
+            projects_root = get_projects_root()
+            working_dir = str(projects_root / project_name)
+
+            logger.info(f"Generated working_dir from prompt: {working_dir}")
+
+        # Append random ID for new projects to prevent overwriting
+        # IMPORTANT: Do this BEFORE any codebase detection or directory creation
+        mode = job.params.get("mode", "new_project")
+        if mode == "new_project":
+            import random
+            from pathlib import Path
+
+            # Generate 4-digit random ID
+            random_id = str(random.randint(1000, 9999))
+
+            # Append to working directory
+            working_path = Path(working_dir)
+            original_name = working_path.name
+            new_name = f"{original_name}-{random_id}"
+            working_dir = str(working_path.parent / new_name)
+
+            logger.info(
+                f"Appending random ID for new project: {original_name} → {new_name}"
+            )
 
         # Extract task description
         task = job.params.get("task", job.params.get("description", "Build project"))

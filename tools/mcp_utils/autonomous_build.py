@@ -177,6 +177,100 @@ def baml_breathing_buffer(seconds: float = 2.0):
     time.sleep(seconds)
 
 
+def _parse_architecture_with_claude_cli(md_content: str) -> Dict[str, Any]:
+    """
+    Parse architecture markdown using Claude CLI (desktop subscription).
+
+    This bypasses BAML and API requirements by using the local claude command.
+
+    Args:
+        md_content: Architecture markdown to parse
+
+    Returns:
+        Dict with parsed architecture structure
+    """
+    import subprocess
+    import tempfile
+
+    # Create prompt for Claude to parse the architecture
+    prompt = f"""Parse this architecture markdown document and extract it into a structured JSON format.
+
+Return ONLY valid JSON (no markdown, no explanations) with this exact structure:
+{{
+  "system_overview": "string - complete system architecture overview",
+  "file_structure": [
+    {{
+      "path": "string - file/directory path",
+      "purpose": "string - purpose of this file",
+      "dependencies": ["string - list of dependencies"]
+    }}
+  ],
+  "modules": [
+    {{
+      "name": "string - module name",
+      "responsibility": "string - module responsibility",
+      "interfaces": ["string - public APIs"],
+      "dependencies": ["string - module dependencies"]
+    }}
+  ],
+  "applied_patterns": [
+    {{
+      "pattern_id": "string - pattern ID",
+      "pattern_name": "string - pattern name",
+      "reason": "string - why this pattern"
+    }}
+  ],
+  "preventive_measures": ["string - list of preventive measures"],
+  "implementation_steps": ["string - ordered implementation steps"],
+  "test_plan": {{
+    "unit_tests": ["string - unit tests"],
+    "integration_tests": ["string - integration tests"],
+    "e2e_tests": ["string - e2e tests"],
+    "test_framework": "string - framework to use",
+    "success_criteria": ["string - success criteria"]
+  }},
+  "success_criteria": ["string - overall success criteria"]
+}}
+
+ARCHITECTURE MARKDOWN:
+{md_content}
+
+Return ONLY the JSON object, nothing else."""
+
+    # Write prompt to temp file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        prompt_file = f.name
+        f.write(prompt)
+
+    try:
+        # Call claude CLI
+        result = subprocess.run(
+            ["claude", prompt_file],
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(f"Claude CLI failed: {result.stderr}")
+
+        # Parse JSON from output
+        output = result.stdout.strip()
+
+        # Extract JSON if wrapped in markdown code blocks
+        if "```json" in output:
+            output = output.split("```json")[1].split("```")[0].strip()
+        elif "```" in output:
+            output = output.split("```")[1].split("```")[0].strip()
+
+        parsed = json.loads(output)
+        return parsed
+
+    finally:
+        # Clean up temp file
+        Path(prompt_file).unlink(missing_ok=True)
+
+
 def _architecture_baml_worker(md: str, q: Queue):
     """Worker function for parsing architecture BAML in separate process."""
     try:
@@ -418,9 +512,10 @@ def autonomous_build_and_deploy_impl(
         # ═══════════════════════════════════════════════════════════════════════
         # APPEND RANDOM ID FOR NEW PROJECTS
         # ═══════════════════════════════════════════════════════════════════════
-        # For new projects, append a random ID to prevent overwriting existing builds
+        # For new projects, ALWAYS append a random ID to prevent overwriting existing builds
         # Example: weather-app → weather-app-4817
-        if mode == "new_project" and not final_working_dir.exists():
+        # IMPORTANT: Do this BEFORE creating the directory to ensure uniqueness
+        if mode == "new_project":
             random_id = generate_random_id()
             original_name = final_working_dir.name
             new_name = f"{original_name}-{random_id}"
@@ -1001,18 +1096,16 @@ def execute_build_with_phase_spawning(
             try:
                 architecture_md = architecture_md_path.read_text()
                 print(
-                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting BAML parse with o4-mini",
+                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting Claude CLI parse",
                     file=sys.stderr,
                 )
-                # Architecture BAML parsing now uses o4-mini (stronger reasoning than gpt-4o-mini)
-                # o4-mini handles complex nested schemas better: FileStructure[], ModuleSpec[], TestPlan
+                # Architecture parsing now uses Claude CLI directly (desktop subscription - no API needed!)
+                # Bypasses BAML to avoid API costs and use local Claude subscription
                 log_debug(
-                    f"Attempting to parse Architecture markdown ({len(architecture_md)} bytes) with BAML (o4-mini)",
+                    f"Attempting to parse Architecture markdown ({len(architecture_md)} bytes) with Claude CLI",
                     working_directory,
                 )
-                architecture_json = _parse_architecture_baml_with_timeout(
-                    architecture_md, timeout_seconds=600
-                )
+                architecture_json = _parse_architecture_with_claude_cli(architecture_md)
                 architecture_json_path.write_text(
                     json.dumps(architecture_json, indent=2)
                 )
