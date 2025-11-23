@@ -398,29 +398,34 @@ class TestRunnerEndToEnd:
         )
         store.save_job(job)
 
-        # Mock the subprocess call to prevent actual build
-        from unittest.mock import patch, Mock
+        # Mock _run_autonomous_build to prevent actual build but verify execution
+        from unittest.mock import patch
 
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "success"
-        mock_result.stderr = ""
+        def mock_autonomous_build(job_obj, working_directory, timeout_minutes):
+            """Mock autonomous build that verifies it was called and returns success"""
+            return {
+                "status": "completed",
+                "working_directory": working_directory,
+                "duration_seconds": 1.0,
+                "phases_completed": ["Scout", "Architect", "Builder"],
+            }
 
-        with patch("subprocess.Popen", return_value=mock_result):
-            with patch.object(mock_result, "wait", return_value=0):
-                with patch.object(mock_result, "communicate", return_value=("", "")):
-                    try:
-                        # Call the ACTUAL Runner.run() method with Job object (not job_id)
-                        runner.run(job)
-                    except Exception:
-                        # We don't care if the build fails, we just want to test the random ID
-                        pass
+        with patch.object(
+            runner, "_run_autonomous_build", side_effect=mock_autonomous_build
+        ):
+            # Call the ACTUAL Runner.run() method
+            result = runner.run(job)
 
-        # Retrieve updated job from store (job object was modified in-place and saved)
+        # Verify the run actually completed (not just pre-run mutations)
+        assert result["success"] is True, "Runner.run() should return success=True"
+        assert "phases_completed" in result
+        assert result["exit_code"] == 0
+
+        # Retrieve updated job from store
         updated_job = store.get_job(job.id)
         final_path = updated_job.params["working_directory"]
 
-        # Verify random ID was appended
+        # Verify random ID was appended and persisted
         assert final_path != working_dir, "Working directory should be modified"
         assert re.search(r"-\d{4}$", final_path), "Should have 4-digit random ID suffix"
         assert "calculator" in final_path, "Should contain original name"
@@ -445,25 +450,33 @@ class TestRunnerEndToEnd:
         )
         store.save_job(job)
 
-        # Mock subprocess to prevent actual build
-        from unittest.mock import patch, Mock
+        # Mock _run_autonomous_build to prevent actual build
+        from unittest.mock import patch
 
-        mock_result = Mock()
-        mock_result.returncode = 0
+        def mock_autonomous_build(job_obj, working_directory, timeout_minutes):
+            """Mock autonomous build that returns success"""
+            return {
+                "status": "completed",
+                "working_directory": working_directory,
+                "duration_seconds": 1.0,
+                "phases_completed": ["Scout", "Architect", "Builder"],
+            }
 
-        with patch("subprocess.Popen", return_value=mock_result):
-            with patch.object(mock_result, "wait", return_value=0):
-                with patch.object(mock_result, "communicate", return_value=("", "")):
-                    try:
-                        # Call the ACTUAL Runner.run() method with Job object (not job_id)
-                        runner.run(job)
-                    except Exception:
-                        pass
+        with patch.object(
+            runner, "_run_autonomous_build", side_effect=mock_autonomous_build
+        ):
+            # Call the ACTUAL Runner.run() method
+            result = runner.run(job)
 
-        # Retrieve updated job (job object was modified in-place and saved)
+        # Verify the run actually completed
+        assert result["success"] is True, "Runner.run() should return success=True"
+        assert "phases_completed" in result
+        assert result["exit_code"] == 0
+
+        # Retrieve updated job
         updated_job = store.get_job(job.id)
 
-        # Verify mode was auto-switched to enhancement
+        # Verify mode was auto-switched to enhancement and persisted
         assert (
             updated_job.params["mode"] == "enhancement"
         ), "Should auto-switch to enhancement"
