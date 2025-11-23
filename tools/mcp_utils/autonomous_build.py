@@ -15,6 +15,7 @@ See docs/PHASE_PROCESS_SPAWNING_DESIGN.md for architecture details.
 import copy
 import json
 import os
+import random
 import subprocess
 import sys
 import traceback
@@ -52,6 +53,44 @@ from tools.mcp_utils.phase_execution import (
 
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# DIRECTORY NAMING HELPER
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def generate_random_id(length: int = 4) -> str:
+    """
+    Generate a random numeric ID for directory naming.
+
+    Args:
+        length: Number of digits (default: 4)
+
+    Returns:
+        Random numeric string (e.g., "4817")
+    """
+    return str(random.randint(10 ** (length - 1), 10**length - 1))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# LOGGING HELPER
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def log_debug(message: str, working_directory: Optional[Path] = None):
+    """Append debug message to .context-foundry/build_debug.log"""
+    try:
+        if working_directory:
+            log_file = working_directory / ".context-foundry" / "build_debug.log"
+            if not log_file.parent.exists():
+                log_file.parent.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().isoformat()
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        pass  # Fail silently to not disrupt build
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -138,22 +177,23 @@ def baml_breathing_buffer(seconds: float = 2.0):
     time.sleep(seconds)
 
 
+def _architecture_baml_worker(md: str, q: Queue):
+    """Worker function for parsing architecture BAML in separate process."""
+    try:
+        parsed = parse_architecture_markdown_baml(md)
+        q.put(("ok", parsed))
+    except Exception as exc:  # pragma: no cover - defensive
+        q.put(("error", str(exc)))
+
+
 def _parse_architecture_baml_with_timeout(md_content: str, timeout_seconds: int = 120):
     """
     Parse architecture markdown via BAML in a separate process with a hard timeout.
 
     This prevents the main orchestrator from hanging if the BAML call blocks.
     """
-
-    def _worker(md: str, q: Queue):
-        try:
-            parsed = parse_architecture_markdown_baml(md)
-            q.put(("ok", parsed))
-        except Exception as exc:  # pragma: no cover - defensive
-            q.put(("error", str(exc)))
-
     q: Queue = Queue()
-    proc = Process(target=_worker, args=(md_content, q))
+    proc = Process(target=_architecture_baml_worker, args=(md_content, q))
     proc.start()
     proc.join(timeout_seconds)
 
@@ -372,6 +412,21 @@ def autonomous_build_and_deploy_impl(
             final_working_dir = projects_root / working_directory
             print(
                 f"📍 Creating project in: {final_working_dir} (sibling to context-foundry)",
+                file=sys.stderr,
+            )
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # APPEND RANDOM ID FOR NEW PROJECTS
+        # ═══════════════════════════════════════════════════════════════════════
+        # For new projects, append a random ID to prevent overwriting existing builds
+        # Example: weather-app → weather-app-4817
+        if mode == "new_project" and not final_working_dir.exists():
+            random_id = generate_random_id()
+            original_name = final_working_dir.name
+            new_name = f"{original_name}-{random_id}"
+            final_working_dir = final_working_dir.parent / new_name
+            print(
+                f"📍 Appending random ID for new project: {original_name} → {new_name}",
                 file=sys.stderr,
             )
 
@@ -711,6 +766,13 @@ def execute_build_with_phase_spawning(
     results = {}
     test_iteration = 0  # FIX #2: Initialize before conditional
 
+    # Log start of build process
+    log_debug(f"Build process started. Task: {task[:50]}...", working_directory)
+    log_debug(
+        f"Configuration: flowise={flowise_mode}, incremental={incremental}, parallel={use_parallel}",
+        working_directory,
+    )
+
     def check_timeout(phase_name: str) -> Optional[Dict[str, Any]]:
         """Check if timeout has been exceeded. Returns error dict if timed out, None otherwise."""
         if timeout_minutes is not None:
@@ -805,26 +867,37 @@ def execute_build_with_phase_spawning(
         if scout_md_path.exists():
             try:
                 scout_md = scout_md_path.read_text()
+                log_debug(
+                    f"Attempting to parse Scout markdown ({len(scout_md)} bytes) with BAML",
+                    working_directory,
+                )
 
                 # BAML parse with timeout (90 seconds max)
                 with baml_timeout(90, "Scout BAML Parse"):
                     scout_json = parse_scout_markdown_baml(scout_md)
 
                 scout_json_path.write_text(json.dumps(scout_json, indent=2))
+                log_debug("✅ Scout BAML parse successful", working_directory)
                 print(
                     f"✅ Parsed Scout markdown to JSON: {scout_json_path}",
                     file=sys.stderr,
                 )
             except TimeoutException:
+                log_debug("⚠️ Scout BAML parse TIMED OUT after 90s", working_directory)
                 print(
                     "⚠️  Scout BAML parse timed out after 90s - continuing without scout_report.json",
                     file=sys.stderr,
                 )
             except Exception as e:
+                log_debug(f"⚠️ Scout BAML parse FAILED: {str(e)}", working_directory)
                 print(
                     f"⚠️  Failed to parse Scout markdown to JSON: {e}",
                     file=sys.stderr,
                 )
+        else:
+            log_debug(
+                "⚠️ Scout markdown missing, skipping BAML parse", working_directory
+            )
 
         # ═══════════════════════════════════════════════════════════════════════
         # FLOWISE CODEX VALIDATION - Enforce pattern queries
@@ -928,33 +1001,47 @@ def execute_build_with_phase_spawning(
             try:
                 architecture_md = architecture_md_path.read_text()
                 print(
-                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting BAML parse",
+                    f"[TRACE] architecture.md loaded ({len(architecture_md)} bytes); starting BAML parse with o4-mini",
                     file=sys.stderr,
                 )
-
-                # BAML parse with timeout (120 seconds max, architecture is larger)
-                # Run in separate process so orchestrator cannot hang
-                architecture_json = _parse_architecture_baml_with_timeout(
-                    architecture_md, timeout_seconds=120
+                # Architecture BAML parsing now uses o4-mini (stronger reasoning than gpt-4o-mini)
+                # o4-mini handles complex nested schemas better: FileStructure[], ModuleSpec[], TestPlan
+                log_debug(
+                    f"Attempting to parse Architecture markdown ({len(architecture_md)} bytes) with BAML (o4-mini)",
+                    working_directory,
                 )
-
+                architecture_json = _parse_architecture_baml_with_timeout(
+                    architecture_md, timeout_seconds=600
+                )
                 architecture_json_path.write_text(
                     json.dumps(architecture_json, indent=2)
                 )
+                log_debug("✅ Architecture BAML parse successful", working_directory)
                 print(
                     f"✅ Parsed architecture markdown to JSON: {architecture_json_path}",
                     file=sys.stderr,
                 )
             except TimeoutException:
+                log_debug(
+                    "⚠️ Architecture BAML parse TIMED OUT after 600s", working_directory
+                )
                 print(
-                    "⚠️  Architecture BAML parse timed out after 120s - continuing without architecture.json",
+                    "⚠️  Architecture BAML parse timed out after 600s - continuing without architecture.json",
                     file=sys.stderr,
                 )
             except Exception as e:
+                log_debug(
+                    f"⚠️ Architecture BAML parse FAILED: {str(e)}", working_directory
+                )
                 print(
                     f"⚠️  Failed to parse architecture markdown to JSON: {e}",
                     file=sys.stderr,
                 )
+        else:
+            log_debug(
+                "⚠️ Architecture markdown missing, skipping BAML parse",
+                working_directory,
+            )
 
         # ═══════════════════════════════════════════════════════════════════════
         # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)
@@ -1023,6 +1110,7 @@ def execute_build_with_phase_spawning(
             )
             if architecture_json:
                 architecture_summary = json.dumps(architecture_json, indent=2)
+                log_debug("Using architecture.json for build plan", working_directory)
                 print(
                     "ℹ️  Using architecture.json for build plan input", file=sys.stderr
                 )
@@ -1031,11 +1119,19 @@ def execute_build_with_phase_spawning(
                     architecture_path.read_text() if architecture_path.exists() else ""
                 )
                 if architecture_summary:
+                    log_debug(
+                        "⚠️ architecture.json missing; falling back to architecture.md for build plan",
+                        working_directory,
+                    )
                     print(
                         "⚠️  architecture.json missing; using architecture.md",
                         file=sys.stderr,
                     )
                 else:
+                    log_debug(
+                        "⚠️ No architecture context found for build plan",
+                        working_directory,
+                    )
                     print(
                         "⚠️  No architecture context found; build plan may be incomplete",
                         file=sys.stderr,
@@ -1152,10 +1248,14 @@ def execute_build_with_phase_spawning(
             "Implement the project accordingly.\n\n"
         )
         if architecture_json:
+            log_debug("Providing architecture.json to Builder", working_directory)
             builder_instruction += "ARCHITECTURE_JSON:\n" + json.dumps(
                 architecture_json, indent=2
             )
         else:
+            log_debug(
+                "Providing architecture.md to Builder (JSON missing)", working_directory
+            )
             builder_instruction = (
                 "Read .context-foundry/architecture.md (architecture.json missing). "
                 "Implement the project accordingly."
