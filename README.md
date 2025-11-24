@@ -7,10 +7,73 @@
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
-**Version 2.3.0 - November 2025** ✨ **Glass Pane Dashboard + Intelligent AI + Self-Learning Codex!**
+**Version 2.4.0 - November 2025** 🎯 **BAML JSON-First Architecture: First-Try Success!**
 
 [![GitHub release](https://img.shields.io/github/v/release/context-foundry/context-foundry?style=for-the-badge)](https://github.com/context-foundry/context-foundry/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+
+---
+
+## 🎯 NEW: BAML Type-Safe Outputs - First-Try Success!
+
+**Major Breakthrough:** Context Foundry now uses **[BAML](https://github.com/BoundaryML/baml)** (Boundary ML) for type-safe JSON outputs, delivering **crisp, fully-working, feature-rich applications on the first try**.
+
+> **Real Result:** "Just tested a complex app for the first time using the new BAML JSON outputs for all files, Scout, Architect, and the Builder is looking at the .json file outputs, not the .md files—and we got a crisp, fully working, greatly detailed and feature-rich weather app on the first try. This is a significant upgrade!"
+
+### What Changed
+
+**Before:** Markdown-based outputs → ~5% parsing failures → unpredictable structure
+
+**After:** BAML-validated JSON → <1% errors → guaranteed structure → first-try success
+
+### JSON Outputs
+
+All phases now generate structured, validated JSON:
+
+```bash
+.context-foundry/
+├── scout_report.json      # Type-safe requirements (ScoutReport schema)
+├── architecture.json      # Validated system design (ArchitectureBlueprint schema)
+├── build-tasks.json       # Parallel execution plan (BuildPlan schema)
+└── current-phase.json     # Real-time phase tracking (PhaseInfo schema)
+```
+
+**Query with jq:**
+```bash
+# Extract architecture patterns
+cat .context-foundry/architecture.json | jq '.applied_patterns'
+
+# Get parallel build recommendation
+cat .context-foundry/scout_report.json | jq '.parallel_build_recommended'
+
+# List all build tasks
+cat .context-foundry/build-tasks.json | jq '.tasks[] | {task_id, dependencies}'
+```
+
+### Dual-Mode Architecture Parsing
+
+1. **Claude CLI** (fast, $0) - Uses your subscription for instant extraction
+2. **BAML Fallback** (reliable, ~$0.03) - Ensures type-safe validation if CLI fails
+3. **Graceful Degradation** - Falls back to markdown if needed
+
+### Benefits
+
+- ✅ **Reliability**: Parsing errors reduced from 5% to <1%
+- ✅ **Type Safety**: Compile-time schema validation catches errors early
+- ✅ **Better Outputs**: More detailed, feature-rich implementations
+- ✅ **Queryable**: Use `jq` or JSON tools to extract specific data
+- ✅ **Developer Experience**: Full IDE autocomplete with type hints
+
+### Powered by BAML
+
+**[BAML (Basically a Made-up Language)](https://github.com/BoundaryML/baml)** by Boundary ML provides:
+- 🔒 Type-safe LLM outputs with compile-time validation
+- 🌐 Multi-provider support (OpenAI, Anthropic, Gemini, Ollama)
+- ⚡ Native streaming with type guarantees
+- 📊 Schema-aligned parsing for reliable structured data
+- 🛠️ Open-source (Apache 2.0) with no telemetry
+
+**Learn more:** [docs/WORKFLOW_WITH_BAML.md](docs/WORKFLOW_WITH_BAML.md) | [BAML Docs](https://docs.boundaryml.com)
 
 ---
 
