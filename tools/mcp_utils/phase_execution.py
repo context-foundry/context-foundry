@@ -13,6 +13,7 @@ import copy
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import traceback
@@ -747,6 +748,31 @@ def run_phase(
 
     # Track start time
     start = datetime.now()
+
+    # Check if required CLI is available
+    cli_command = cmd[0]  # First element is the command (claude or gemini)
+    if not shutil.which(cli_command):
+        error_msg = f"""❌ {cli_command} CLI not found in PATH
+
+The {phase_name} phase requires the {cli_command} CLI to be installed and available in PATH.
+
+Installation:
+  - Claude CLI: https://claude.com/download
+  - Gemini CLI: https://ai.google.dev/gemini-api/docs/cli
+
+Current PATH: {os.environ.get('PATH', 'NOT SET')}
+
+Environment: Running in daemon? Check daemon's PATH configuration.
+"""
+        print(error_msg, file=sys.stderr)
+        return PhaseResult(
+            phase=phase_name,
+            status="failed",
+            duration_seconds=0,
+            context_tokens=0,
+            exit_code=127,  # Command not found
+            error=f"{cli_command} CLI not found in PATH",
+        )
 
     # Run phase (BLOCKS until complete)
     print(f"⏳ Running {phase_name} phase...", file=sys.stderr)

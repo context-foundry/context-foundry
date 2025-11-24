@@ -30,6 +30,9 @@ import sys
 import json
 import io
 import contextlib
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
@@ -38,6 +41,7 @@ from datetime import datetime, timezone
 BAML_AVAILABLE = False
 BAML_CLIENT = None
 BAML_COMPILATION_ERROR = None
+BAML_USE_CLAUDE_CLI = os.getenv("BAML_USE_CLAUDE_CLI", "true").lower() == "true"
 
 try:
     # Try to import baml-py (v0.211+ uses BamlRuntime)
@@ -80,6 +84,82 @@ def get_baml_env_vars() -> Dict[str, str]:
         env_vars["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
 
     return env_vars
+
+
+def _validate_scout_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate a Scout payload against the BAML-generated Pydantic model.
+
+    Returns the normalized dict if validation passes, otherwise raises.
+    """
+    try:
+        from tools.baml_client.baml_client.types import ScoutReport
+    except Exception as exc:  # pragma: no cover - defensive import
+        raise RuntimeError(
+            f"Failed to import ScoutReport for validation: {exc}"
+        ) from exc
+
+    try:
+        if hasattr(ScoutReport, "model_validate"):  # Pydantic v2
+            validated = ScoutReport.model_validate(payload)
+            return validated.model_dump()
+        validated = ScoutReport.parse_obj(payload)  # Pydantic v1
+        return validated.dict()
+    except Exception as exc:
+        raise RuntimeError(f"Scout payload failed schema validation: {exc}") from exc
+
+
+def _run_claude_cli_json(prompt: str, timeout_seconds: int = 180) -> Dict[str, Any]:
+    """
+    Execute Claude CLI with a prompt and parse the JSON response.
+
+    This uses the local Claude Code subscription instead of GPT-4o-mini API.
+    """
+    if not shutil.which("claude"):
+        raise FileNotFoundError(
+            "claude CLI not found in PATH; install from https://claude.com/download"
+        )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        prompt_path = f.name
+        f.write(prompt)
+
+    try:
+        cmd = [
+            "claude",
+            "--print",
+            "--permission-mode",
+            "bypassPermissions",
+            "--settings",
+            '{"thinkingMode":"off"}',
+            prompt_path,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Claude CLI exited with code {result.returncode}: {result.stderr}"
+            )
+
+        output = result.stdout.strip()
+        if not output:
+            raise RuntimeError("Claude CLI returned empty output")
+
+        # Strip code fences if present
+        if "```json" in output:
+            output = output.split("```json", 1)[1].split("```", 1)[0].strip()
+        elif "```" in output:
+            output = output.split("```", 1)[1].split("```", 1)[0].strip()
+
+        return json.loads(output)
+
+    finally:
+        Path(prompt_path).unlink(missing_ok=True)
 
 
 def compile_baml_schemas(force: bool = False) -> tuple[bool, Optional[str]]:
@@ -545,6 +625,50 @@ def generate_scout_report_baml(
     Raises:
         RuntimeError: If BAML unavailable or generation fails
     """
+    # Prefer Claude CLI (subscription) to avoid GPT-4o-mini timeouts/costs
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            prompt = f"""You are the Scout agent for Context Foundry, researching requirements.
+
+TASK DESCRIPTION:
+{task_description}
+
+CODEBASE ANALYSIS:
+{codebase_analysis}
+
+PAST PATTERNS:
+{past_patterns}
+
+Return ONLY valid JSON for the ScoutReport schema:
+{{
+  "executive_summary": "2-3 paragraphs max",
+  "past_learnings_applied": ["bullet points"],
+  "known_risks": ["risks"],
+  "key_requirements": ["bulleted requirements"],
+  "tech_stack": {{
+    "languages": ["languages"],
+    "frameworks": ["frameworks"],
+    "dependencies": ["dependencies"],
+    "justification": "brief justification"
+  }},
+  "architecture_recommendations": ["top 3-5 recommendations"],
+  "main_challenges": [
+    {{"description": "string", "severity": "LOW|MEDIUM|HIGH|CRITICAL", "mitigation": "string"}}
+  ],
+  "testing_approach": "brief testing outline",
+  "timeline_estimate": "single line estimate (e.g., '2-3 hours')"
+}}
+
+Do not include markdown or prose outside the JSON."""
+
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=240)
+            return _validate_scout_payload(cli_payload)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Scout generation failed, falling back to GPT-4o-mini BAML: {cli_exc}",
+                file=sys.stderr,
+            )
+
     if not is_baml_available():
         raise RuntimeError(
             f"BAML is required but not available. Error: {get_baml_error()}"
@@ -673,6 +797,34 @@ def parse_scout_markdown_baml(markdown_content: str) -> Dict[str, Any]:
     Raises:
         RuntimeError: If BAML unavailable or parsing fails
     """
+    # Prefer Claude CLI (subscription) for parsing to avoid BAML GPT-4o-mini timeouts
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            prompt = f"""Parse this Scout report markdown into the ScoutReport JSON schema.
+
+{markdown_content}
+
+Return ONLY valid JSON with these keys:
+- executive_summary (string, 2-3 paragraphs max)
+- past_learnings_applied (string array)
+- known_risks (string array)
+- key_requirements (string array)
+- tech_stack (object with languages, frameworks, dependencies, justification)
+- architecture_recommendations (string array)
+- main_challenges (array of objects: description, severity=LOW|MEDIUM|HIGH|CRITICAL, mitigation)
+- testing_approach (string)
+- timeline_estimate (string, single line)
+
+Do not include markdown fences or commentary."""
+
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=180)
+            return _validate_scout_payload(cli_payload)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Scout parsing failed, falling back to GPT-4o-mini BAML: {cli_exc}",
+                file=sys.stderr,
+            )
+
     if not is_baml_available():
         raise RuntimeError(
             f"BAML is required but not available. Error: {get_baml_error()}"
