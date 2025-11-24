@@ -209,6 +209,14 @@ body {
   background-clip: text;
 }
 
+#rotating-tagline {
+  transition: opacity 0.3s ease-in-out;
+  display: inline-block;
+  min-width: 300px;
+  text-align: left;
+  opacity: 1;
+}
+
 .hero-subheadline {
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);

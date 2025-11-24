@@ -14,10 +14,66 @@
   }
 
   function init() {
+    initRotatingTagline();
     initSmoothScroll();
     initCopyButtons();
     initScrollAnimations();
     initExternalLinks();
+  }
+
+  /**
+   * Rotate through hero taglines with fade animation
+   */
+  function initRotatingTagline() {
+    const taglines = [
+      'while you sleep',
+      'while you grab coffee',
+      'while you doom scroll',
+      'while you walk the dog',
+      'while you review PRs',
+      'while you touch grass',
+      'while you read Hacker News',
+      'while you fix your vim config',
+      'while you yak shave',
+      'while you explain what you do to your parents',
+      'while you actually read the docs',
+      'while you solve today\'s Wordle',
+      'while the daemon works',
+      'with BAML-structured outputs',
+      'while agents self-improve',
+      'while tests fix themselves',
+      'during your standup',
+      'while you debate tabs vs spaces',
+      'while patterns learn themselves',
+      'while 8 builders run in parallel',
+      'with fresh 200K token windows',
+      'while the job queue persists',
+      'while schemas validate themselves',
+      'while you ship actual features',
+      'while context stays clean'
+    ];
+
+    const taglineElement = document.getElementById('rotating-tagline');
+    if (!taglineElement) return;
+
+    // Start with first tagline
+    let currentIndex = 0;
+    taglineElement.textContent = taglines[currentIndex];
+
+    // Rotate every 3 seconds
+    setInterval(function() {
+      // Fade out
+      taglineElement.style.opacity = '0';
+
+      setTimeout(function() {
+        // Move to next tagline
+        currentIndex = (currentIndex + 1) % taglines.length;
+        taglineElement.textContent = taglines[currentIndex];
+
+        // Fade in
+        taglineElement.style.opacity = '1';
+      }, 300);
+    }, 3000);
   }
 
   /**
