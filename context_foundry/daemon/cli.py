@@ -436,6 +436,159 @@ def cmd_show(args):
     return 0
 
 
+def display_phase_breakdown(job, store):
+    """Display detailed phase breakdown for a job"""
+
+    # Get phase events for this job
+    phase_events = store.get_phase_events(job.id)
+
+    if not phase_events:
+        print(f"\nJob: {job.id[:8]} ({job.type.value})")
+        print(f"Status: {job.status.value.upper()}")
+        print("\n⚠️  No phase information available")
+        print("   This build failed before phase tracking started.")
+        print("\nShowing error logs instead:\n")
+
+        # Show error logs
+        error_logs = store.get_logs(job_id=job.id, level="ERROR", limit=10)
+        if error_logs:
+            for log in error_logs:
+                timestamp = log.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                print(f"{timestamp} │ {log.message}")
+        else:
+            all_logs = store.get_logs(job_id=job.id, limit=10)
+            if all_logs:
+                print("Last logs:")
+                for log in all_logs[-5:]:
+                    timestamp = log.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{timestamp} {log.level:<8} │ {log.message}")
+            else:
+                print("No logs available")
+        return
+
+    # Group events by phase
+    phase_data = {}
+    for event in phase_events:
+        if event.phase not in phase_data:
+            phase_data[event.phase] = []
+        phase_data[event.phase].append(event)
+
+    # Display job header
+    print(f"\nJob: {job.id[:8]} ({job.type.value})")
+    print(f"Status: {job.status.value.upper()}", end="")
+
+    if job.duration():
+        minutes = int(job.duration() // 60)
+        seconds = int(job.duration() % 60)
+        print(f" | Duration: {minutes}m {seconds}s")
+    else:
+        print()
+
+    print("\nPhases:")
+    print("=" * 80)
+
+    # Get phases_completed from result if available
+    phases_completed = []
+    if job.result and isinstance(job.result, dict):
+        phases_completed = job.result.get("phases_completed", [])
+
+    # Display each phase
+    for phase_name, events in sorted(phase_data.items()):
+        # Get latest event for this phase
+        latest_event = events[-1]
+        status = latest_event.status
+
+        # Override status if phase is in phases_completed (more reliable)
+        if phase_name in phases_completed:
+            status = "completed"
+
+        # Status icon
+        if status == "completed":
+            icon = "✓"
+        elif status == "failed":
+            icon = "✗"
+        elif status in ["started", "in_progress"]:
+            icon = "⋯"
+        else:
+            icon = "○"
+
+        # Format phase line
+        phase_display = f"  {icon} {phase_name:<12}"
+        status_display = f"[{status.upper():<12}]"
+
+        # Add duration if available
+        if latest_event.duration_seconds is not None:
+            minutes = int(latest_event.duration_seconds // 60)
+            seconds = int(latest_event.duration_seconds % 60)
+            duration_display = f" {minutes}m {seconds}s"
+        else:
+            duration_display = ""
+
+        print(f"{phase_display}{status_display}{duration_display}")
+
+        # Show additional details if available
+        if latest_event.tokens_used:
+            print(f"    └─ Tokens: {latest_event.tokens_used:,}")
+
+        if latest_event.context_percent:
+            print(f"    └─ Context: {latest_event.context_percent:.1f}%")
+
+        # Show details dict if it has useful info
+        if latest_event.details:
+            if "error" in latest_event.details:
+                print(f"    └─ Error: {latest_event.details['error']}")
+            elif "files_created" in latest_event.details:
+                print(f"    └─ Files created: {latest_event.details['files_created']}")
+            elif (
+                "tests_passed" in latest_event.details
+                and "tests_total" in latest_event.details
+            ):
+                passed = latest_event.details["tests_passed"]
+                total = latest_event.details["tests_total"]
+                print(f"    └─ Tests: {passed}/{total} passed")
+
+    # Show timeout information
+    if job.params and "timeout_minutes" in job.params:
+        timeout_minutes = job.params["timeout_minutes"]
+        print(f"\n⏱️  Timeout: {timeout_minutes}m total", end="")
+
+        if job.duration():
+            elapsed_minutes = job.duration() / 60
+            remaining_minutes = timeout_minutes - elapsed_minutes
+
+            if remaining_minutes > 0:
+                print(f" | {remaining_minutes:.1f}m remaining")
+            else:
+                print(" | EXCEEDED")
+        else:
+            print()
+
+    # Show error logs for failed phases
+    failed_phases = [
+        phase_name
+        for phase_name, events in phase_data.items()
+        if events[-1].status == "failed"
+    ]
+
+    if failed_phases:
+        print("\n" + "=" * 80)
+        print("Error Details:")
+        print("=" * 80)
+
+        for phase_name in failed_phases:
+            # Get logs for this phase
+            phase_logs = store.get_logs(job_id=job.id, level="ERROR", limit=20)
+
+            # Filter logs for this phase
+            relevant_logs = [log for log in phase_logs if log.phase == phase_name]
+
+            if relevant_logs:
+                print(f"\n[{phase_name}] Last errors:")
+                for log in relevant_logs[-5:]:  # Last 5 errors
+                    timestamp = log.timestamp.strftime("%H:%M:%S")
+                    print(f"  {timestamp} │ {log.message}")
+
+
 def cmd_logs(args):
     """Show job logs"""
     config = Config.load(args.config)
@@ -445,6 +598,11 @@ def cmd_logs(args):
     if not job:
         print(f"Job not found: {args.job_id}", file=sys.stderr)
         return 1
+
+    # Show phase breakdown if requested
+    if args.phases:
+        display_phase_breakdown(job, store)
+        return 0
 
     # Get logs
     logs = store.get_logs(
@@ -846,6 +1004,12 @@ def main():
     )
     logs_parser.add_argument(
         "--follow", "-f", action="store_true", help="Follow logs in real-time"
+    )
+    logs_parser.add_argument(
+        "--phases",
+        "-p",
+        action="store_true",
+        help="Show phase breakdown with status and durations",
     )
 
     # Cancel command
