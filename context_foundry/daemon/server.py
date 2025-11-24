@@ -5,6 +5,7 @@ Main daemon process with signal handling, PID management, and service supervisio
 """
 
 import faulthandler
+import errno
 import io
 import logging
 import os
@@ -73,7 +74,7 @@ class CFDaemon:
         # Watchdog: shared state for external monitoring
         self._main_loop_heartbeat = time.time()
         self._watchdog_thread = None
-        self._watchdog_stop = False
+        self._watchdog_stop_event = threading.Event()
 
         # Enable faulthandler for thread dump capability
         faulthandler.enable()
@@ -406,10 +407,13 @@ class CFDaemon:
         else:
             logger.info("Running in background mode")
 
+        # Clean up stale heartbeat file from previous run (if any)
+        self._cleanup_stale_heartbeat_file()
+
         # Start watchdog thread to monitor main loop health
-        self._watchdog_stop = False
+        self._watchdog_stop_event.clear()
         self._watchdog_thread = threading.Thread(
-            target=self._watchdog_loop, name="CFDaemonWatchdog", daemon=True
+            target=self._watchdog_loop, name="CFDaemonWatchdog", daemon=False
         )
         self._watchdog_thread.start()
         logger.info("Watchdog thread started")
@@ -479,11 +483,10 @@ class CFDaemon:
         logger.info("[WATCHDOG] Starting external watchdog thread")
         consecutive_warnings = 0
 
-        while not self._watchdog_stop:
+        while not self._watchdog_stop_event.is_set():
             try:
-                time.sleep(10)  # Check every 10 seconds
-
-                if self._watchdog_stop:
+                # Wait so we can exit promptly when stop signal arrives
+                if self._watchdog_stop_event.wait(10):
                     break
 
                 # Check how long since main loop last updated heartbeat
@@ -532,8 +535,8 @@ class CFDaemon:
                             "[WATCHDOG] Main loop confirmed hung for 2+ minutes. "
                             "Initiating forced restart..."
                         )
-                        # Force daemon restart by sending SIGTERM to self
-                        os.kill(os.getpid(), signal.SIGTERM)
+                        # Force daemon restart by sending SIGTERM to self, then SIGKILL fallback
+                        self._force_stop_with_sigkill_fallback()
                         break
 
                 elif age > 60:  # Warning at 60 seconds
@@ -577,14 +580,9 @@ class CFDaemon:
 
                     # Write heartbeat file for external monitoring (every 5 iterations to reduce I/O)
                     if iteration_count % 5 == 0:
-                        try:
-                            heartbeat_file.write_text(
-                                f"{int(current_time)}\n{iteration_count}\n{os.getpid()}"
-                            )
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to write heartbeat file: {e}", exc_info=True
-                            )
+                        self._write_heartbeat_file(
+                            heartbeat_file, current_time, iteration_count
+                        )
 
                     # Health check: detect if stats loop has stopped progressing
                     time_since_stats = current_time - last_stats_logged
@@ -653,7 +651,7 @@ class CFDaemon:
         # Stop watchdog thread
         if self._watchdog_thread and self._watchdog_thread.is_alive():
             logger.info("Stopping watchdog thread...")
-            self._watchdog_stop = True
+            self._watchdog_stop_event.set()
             self._watchdog_thread.join(timeout=5.0)
             if self._watchdog_thread.is_alive():
                 logger.warning("Watchdog thread did not stop gracefully")
@@ -698,6 +696,114 @@ class CFDaemon:
             },
             "job_manager": self.job_manager.get_stats() if self.running else None,
         }
+
+    @staticmethod
+    def _pid_is_alive(pid: int) -> bool:
+        """Return True if a PID is alive (or inaccessible but present)."""
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError as e:
+            return e.errno == errno.EPERM
+
+    def _cleanup_stale_heartbeat_file(self):
+        """Remove a stale or unreadable heartbeat file from previous runs."""
+        heartbeat_file = self.config.data_dir / "daemon_heartbeat.txt"
+        if not heartbeat_file.exists():
+            return
+
+        try:
+            lines = heartbeat_file.read_text().strip().split("\n")
+            if len(lines) < 3:
+                heartbeat_file.unlink()
+                logger.info("Removed incomplete heartbeat file")
+                return
+
+            last_ts = int(lines[0])
+            heartbeat_pid = int(lines[2])
+            age = time.time() - last_ts
+
+            # If another process is still alive, keep the file so status reflects that
+            if heartbeat_pid != os.getpid() and self._pid_is_alive(heartbeat_pid):
+                logger.warning(
+                    f"Existing heartbeat belongs to live PID {heartbeat_pid}; keeping file"
+                )
+                return
+
+            # If stale or from a dead process, remove so the new daemon writes fresh heartbeats
+            if age > 300 or not self._pid_is_alive(heartbeat_pid):
+                heartbeat_file.unlink()
+                logger.info(
+                    f"Removed stale heartbeat file from PID {heartbeat_pid} (age: {int(age)}s)"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Failed to inspect heartbeat file: {e}; removing stale copy"
+            )
+            try:
+                heartbeat_file.unlink()
+            except Exception as unlink_error:
+                logger.warning(
+                    f"Failed to remove corrupted heartbeat file: {unlink_error}"
+                )
+
+    def _write_heartbeat_file(
+        self, heartbeat_file: Path, current_time: float, iteration_count: int
+    ):
+        """Write heartbeat file with retries and atomic replace."""
+        payload = f"{int(current_time)}\n{iteration_count}\n{os.getpid()}"
+        tmp_path = heartbeat_file.with_suffix(".tmp")
+
+        for attempt in range(3):
+            try:
+                heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path.write_text(payload)
+                tmp_path.replace(heartbeat_file)
+                return
+            except Exception as e:
+                logger.error(
+                    f"Failed to write heartbeat file (attempt {attempt + 1}/3): {e}",
+                    exc_info=True,
+                )
+                time.sleep(0.2 * (attempt + 1))
+
+        logger.critical(
+            "Failed to persist heartbeat file after 3 attempts; health checks may be stale"
+        )
+
+    def _force_stop_with_sigkill_fallback(self, grace: int = 20):
+        """Send SIGTERM to self and schedule SIGKILL if the process doesn't exit."""
+        pid = os.getpid()
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except Exception as e:
+            logger.error(f"[WATCHDOG] Failed to send SIGTERM: {e}")
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception as kill_error:
+                logger.critical(
+                    f"[WATCHDOG] Failed to SIGKILL after SIGTERM failure: {kill_error}"
+                )
+            return
+
+        def _sigkill_timer():
+            deadline = time.time() + grace
+            while time.time() < deadline:
+                if not self._pid_is_alive(pid):
+                    return
+                time.sleep(1)
+            if self._pid_is_alive(pid):
+                logger.critical(
+                    "[WATCHDOG] Daemon did not exit after SIGTERM; sending SIGKILL"
+                )
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception as kill_error:
+                    logger.critical(f"[WATCHDOG] Failed to send SIGKILL: {kill_error}")
+
+        threading.Thread(
+            target=_sigkill_timer, name="CFDSigkillTimer", daemon=True
+        ).start()
 
 
 def get_running_daemon_pid(config: Optional[Config] = None) -> Optional[int]:

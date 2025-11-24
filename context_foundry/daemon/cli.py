@@ -215,6 +215,89 @@ def _find_all_related_processes(daemon_pid):
     return related
 
 
+def _restart_daemon(config, config_path, timeout):
+    """Stop the current daemon (if running) and start a new instance."""
+    print("Attempting daemon restart...")
+    stop_running_daemon(config, timeout=timeout)
+
+    try:
+        daemon = CFDaemon(config, config_path=config_path)
+        started = daemon.start(foreground=False)
+        if started:
+            print("Daemon restarted")
+            return True
+        print("Daemon failed to restart", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"Daemon restart failed: {e}", file=sys.stderr)
+        return False
+
+
+def cmd_healthcheck(args):
+    """Machine-friendly healthcheck for supervisors (optionally restart daemon)"""
+    config = Config.load(args.config)
+    pid = get_running_daemon_pid(config)
+
+    if not pid:
+        print("Daemon is not running")
+        if args.restart:
+            return 0 if _restart_daemon(config, args.config, args.timeout) else 3
+        return 2
+
+    heartbeat_file = config.data_dir / "daemon_heartbeat.txt"
+    state = "unknown"
+    age = None
+    iteration_count = None
+    heartbeat_pid = None
+
+    try:
+        lines = heartbeat_file.read_text().strip().split("\n")
+        if len(lines) >= 3:
+            last_heartbeat_time = int(lines[0])
+            iteration_count = int(lines[1])
+            heartbeat_pid = int(lines[2])
+            age = int(time.time()) - last_heartbeat_time
+
+            if age < 10:
+                state = "healthy"
+            elif age < args.max_stale:
+                state = "warning"
+            else:
+                state = "unhealthy"
+        else:
+            state = "error"
+    except FileNotFoundError:
+        state = "missing"
+    except Exception as e:
+        print(f"Heartbeat read failed: {e}")
+        state = "error"
+
+    if state == "healthy":
+        print(f"Healthy (age {age}s)")
+        return 0
+
+    if state == "warning":
+        print(f"Warning: heartbeat is stale (age {age}s)")
+        exit_code = 1
+    elif state in {"unhealthy", "missing", "error"}:
+        detail = f"age {age}s" if age is not None else "no heartbeat available"
+        print(f"Unhealthy: {detail}")
+        exit_code = 2
+    else:
+        print("Unhealthy: unknown heartbeat state")
+        exit_code = 2
+
+    if args.restart:
+        restart_ok = _restart_daemon(config, args.config, args.timeout)
+        return 0 if restart_ok else 3
+
+    if args.verbose and iteration_count is not None:
+        print(f"  Loop iterations: {iteration_count}")
+        print(f"  Heartbeat PID: {heartbeat_pid}")
+
+    return exit_code
+
+
 def cmd_submit(args):
     """Submit a new job"""
     config = Config.load(args.config)
@@ -697,6 +780,34 @@ def main():
         help="Show detailed status",
     )
 
+    # Healthcheck command (for supervisors)
+    health_parser = subparsers.add_parser(
+        "healthcheck", help="Healthcheck and optional auto-restart"
+    )
+    health_parser.add_argument(
+        "--max-stale",
+        type=int,
+        default=120,
+        help="Seconds after which heartbeat is considered unhealthy",
+    )
+    health_parser.add_argument(
+        "--restart",
+        action="store_true",
+        help="Attempt restart when heartbeat is unhealthy or missing",
+    )
+    health_parser.add_argument(
+        "--timeout",
+        type=int,
+        default=30,
+        help="Timeout for graceful shutdown when restarting (seconds)",
+    )
+    health_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show heartbeat details on warning/unhealthy states",
+    )
+
     # Submit command
     submit_parser = subparsers.add_parser("submit", help="Submit a new job")
     submit_parser.add_argument("--type", required=True, help="Job type")
@@ -770,6 +881,7 @@ def main():
         "start": cmd_start,
         "stop": cmd_stop,
         "status": cmd_status,
+        "healthcheck": cmd_healthcheck,
         "submit": cmd_submit,
         "list": cmd_list,
         "show": cmd_show,

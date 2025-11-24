@@ -171,7 +171,7 @@ def submit_autonomous_build_to_daemon(
         mode = params.get("mode", "new_project")
         path_note = ""
         if mode == "new_project":
-            path_note = f"\nNote: A random ID will be appended to prevent overwrites (e.g., {project_name}-1234)"
+            path_note = f"\nNote: A random ID will be appended to prevent overwrites (e.g., {project_name}-c4r)"
 
         # Return success response with monitoring instructions
         return json.dumps(

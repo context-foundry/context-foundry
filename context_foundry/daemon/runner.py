@@ -110,74 +110,57 @@ class Runner:
 
             logger.info(f"Generated working_dir from prompt: {working_dir}")
 
-        # Check for existing code BEFORE appending random ID
-        # This allows auto mode-switching to work correctly
+        # Import needed modules for random ID and codebase detection
         import random
         import re
         from pathlib import Path
         from context_foundry.daemon.models import JobType
 
         mode = job.params.get("mode", "new_project")
-        original_working_dir = working_dir  # Save for codebase detection
 
-        # Detect existing codebase at the ORIGINAL path (before random ID)
-        # This ensures mode auto-switching works correctly
-        existing_repo_path = job.params.get("existing_repo")
-        if existing_repo_path:
-            # User specified an existing repo - use that for detection
-            detection_path = Path(existing_repo_path)
-        else:
-            # Check the original working directory
-            detection_path = Path(original_working_dir)
+        # Save the ORIGINAL base path (before any random ID suffix) for safety checks
+        base_path_for_detection = working_dir
 
-        has_existing_code = detection_path.exists() and any(
-            detection_path.iterdir()
-        )  # Directory exists and is non-empty
-
-        # Auto-adjust mode if we detect existing code
-        if mode == "new_project" and has_existing_code:
-            # User said new_project but we found existing code
-            # Auto-switch to enhancement mode
-            mode = "enhancement"
-            logger.info(
-                f"Auto-adjusted mode: new_project → enhancement (detected existing code at {detection_path})"
-            )
-            job.params["mode"] = mode
-
-            # IMPORTANT: Save job to persist the mode change
-            self.store.save_job(job)
-
-        # Append random ID for new projects to prevent overwriting
-        # IMPORTANT: Do this AFTER codebase detection so mode-switching works
-        # BUT ONLY for autonomous builds in new_project mode
+        # Append random ID for new projects BEFORE checking for existing code
+        # This ensures every new build gets a unique directory, avoiding conflicts
+        # with previous builds or existing projects
+        #
         # ONLY append random ID for:
         # 1. AUTONOMOUS_BUILD jobs (not delegation/enhancement/testing jobs)
-        # 2. In new_project mode (after auto-switching logic)
-        # 3. When directory doesn't already exist
-        # 4. When directory name doesn't already have a random ID suffix
-        if (
-            job.type == JobType.AUTONOMOUS_BUILD
-            and mode == "new_project"
-            and not Path(working_dir).exists()
-        ):
-            # Generate 4-digit random ID with collision detection
+        # 2. In new_project mode (user's explicit intent)
+        # 3. When directory name doesn't already have a random ID suffix
+        if job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project":
             working_path = Path(working_dir)
             original_name = working_path.name
 
             # Check if the path already has a random ID suffix (avoid double-suffixing)
-            # Pattern: ends with "-NNNN" where N is a digit
-            already_has_suffix = bool(re.search(r"-\d{4}$", original_name))
+            # Pattern: ends with "-CDC" where C=consonant, D=digit (strict match for our generator)
+            already_has_suffix = bool(
+                re.search(
+                    r"-[bcdfghjklmnpqrstvwxz][0-9][bcdfghjklmnpqrstvwxz]$",
+                    original_name,
+                )
+            )
 
             if already_has_suffix:
                 logger.info(
                     f"Path already has random ID suffix, skipping: {original_name}"
                 )
-                # Don't append another suffix
             else:
-                # Keep trying until we find a unique ID (max 10 attempts)
-                max_attempts = 10
+                # Generate 3-character cute random ID (e.g., "c4r", "n3r", "b0w")
+                # Format: consonant + digit + consonant for memorable, pronounceable names
+                consonants = "bcdfghjklmnpqrstvwxz"
+
+                # Keep trying until we find a unique ID (max 20 attempts)
+                # With 4,000 possible IDs (20 consonants × 10 digits × 20 consonants),
+                # collision is extremely unlikely
+                max_attempts = 20
                 for attempt in range(max_attempts):
-                    random_id = str(random.randint(1000, 9999))
+                    c1 = random.choice(consonants)
+                    digit = random.choice("0123456789")
+                    c2 = random.choice(consonants)
+                    random_id = f"{c1}{digit}{c2}"
+
                     new_name = f"{original_name}-{random_id}"
                     new_path = working_path.parent / new_name
 
@@ -196,11 +179,54 @@ class Runner:
                         self.store.save_job(job)
                         break
                 else:
-                    # All attempts failed (very unlikely with 10,000 possible IDs)
+                    # All attempts failed (very unlikely with 4,000 possible IDs)
                     logger.warning(
                         f"Could not find unique random ID after {max_attempts} attempts, "
                         f"using original path: {working_dir}"
                     )
+
+        # Check the BASE path (before random ID) for existing code
+        # This provides a safety warning if user might want enhancement instead
+        #
+        # Example: User runs "build weather app" and /homelab/weather-app exists
+        # - We create /homelab/weather-app-c4r (honors user's new_project intent)
+        # - We log a warning about the existing /homelab/weather-app (safety net)
+        existing_repo_path = job.params.get("existing_repo")
+        if existing_repo_path:
+            # User explicitly specified an existing repo - use that for detection
+            detection_path = Path(existing_repo_path)
+        else:
+            # Check the BASE path (before any random ID we just appended)
+            detection_path = Path(base_path_for_detection)
+
+        has_existing_code = detection_path.exists() and any(
+            detection_path.iterdir()
+        )  # Directory exists and is non-empty
+
+        # Safety warning: If base path exists with code, warn but proceed with new build
+        # This preserves the testing workflow while still alerting to potential mistakes
+        if mode == "new_project" and has_existing_code and not existing_repo_path:
+            logger.warning(
+                f"WARNING: Existing project detected at {detection_path}, but mode=new_project. "
+                f"Creating new build at {working_dir}. "
+                f"If you meant to enhance the existing project, use mode=enhancement or existing_repo={detection_path}"
+            )
+            self._emit_log(
+                job.id,
+                "WARNING",
+                f"Existing project detected at {detection_path} - creating new build anyway (mode=new_project)",
+                None,
+            )
+
+        # Auto-switch to enhancement ONLY if user explicitly provided existing_repo
+        # This is the legitimate use case: user knows they have an existing repo and wants to enhance it
+        if existing_repo_path and has_existing_code and mode == "new_project":
+            mode = "enhancement"
+            logger.info(
+                f"Auto-adjusted mode: new_project → enhancement (existing_repo={existing_repo_path} has code)"
+            )
+            job.params["mode"] = mode
+            self.store.save_job(job)
 
         # Extract task description
         task = job.params.get("task", job.params.get("description", "Build project"))

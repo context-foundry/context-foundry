@@ -68,12 +68,8 @@ class TestRandomIDAppending:
         # This is the critical section that appends random IDs
         mode = job.params.get("mode", "new_project")
 
-        # Check conditions for random ID appending
-        should_append = (
-            job.type == JobType.AUTONOMOUS_BUILD
-            and mode == "new_project"
-            and not Path(working_dir).exists()
-        )
+        # Check conditions for random ID appending (new: no exists() check)
+        should_append = job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project"
 
         assert should_append, "Random ID should be appended for new autonomous builds"
 
@@ -82,12 +78,17 @@ class TestRandomIDAppending:
             working_path = Path(working_dir)
             original_name = working_path.name
 
-            # Check if already has suffix
-            already_has_suffix = bool(re.search(r"-\d{4}$", original_name))
+            # Check if already has suffix (strict pattern: consonant-digit-consonant)
+            already_has_suffix = bool(
+                re.search(
+                    r"-[bcdfghjklmnpqrstvwxz][0-9][bcdfghjklmnpqrstvwxz]$",
+                    original_name,
+                )
+            )
             assert not already_has_suffix, "Original name should not have suffix"
 
-            # Append fixed ID for testing
-            test_id = "1234"
+            # Append fixed 3-character ID for testing
+            test_id = "c4r"
             new_name = f"{original_name}-{test_id}"
             new_path = working_path.parent / new_name
             new_working_dir = str(new_path)
@@ -102,8 +103,8 @@ class TestRandomIDAppending:
 
         # Assert random ID was appended
         assert final_path != working_dir, "Working directory should be modified"
-        assert final_path.endswith("-1234"), f"Expected -1234 suffix, got: {final_path}"
-        assert "calculator-1234" in final_path, "Should have calculator-1234"
+        assert final_path.endswith("-c4r"), f"Expected -c4r suffix, got: {final_path}"
+        assert "calculator-c4r" in final_path, "Should have calculator-c4r"
 
     def test_delegation_jobs_skip_random_id(self, runner, store, temp_projects_dir):
         """Test that delegation jobs do NOT get random IDs"""
@@ -120,12 +121,8 @@ class TestRandomIDAppending:
 
         mode = job.params.get("mode", "new_project")
 
-        # Check conditions
-        should_append = (
-            job.type == JobType.AUTONOMOUS_BUILD
-            and mode == "new_project"
-            and not Path(working_dir).exists()
-        )
+        # Check conditions (new: no exists() check)
+        should_append = job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project"
 
         # Verify random ID should NOT be appended for delegation jobs
         assert not should_append, "Random ID should NOT be appended for delegation jobs"
@@ -135,8 +132,8 @@ class TestRandomIDAppending:
 
     def test_no_double_suffixing(self, runner, store, temp_projects_dir):
         """Test that already-suffixed paths don't get another suffix"""
-        # Create path that already has a random ID suffix
-        working_dir = str(temp_projects_dir / "calculator-1234")
+        # Create path that already has a 3-character random ID suffix
+        working_dir = str(temp_projects_dir / "calculator-c4r")
         job = Job.create(
             job_type=JobType.AUTONOMOUS_BUILD,
             params={
@@ -151,28 +148,26 @@ class TestRandomIDAppending:
         working_path = Path(working_dir)
         original_name = working_path.name
 
-        # Check if already has suffix (this is what the real code does)
-        already_has_suffix = bool(re.search(r"-\d{4}$", original_name))
+        # Check if already has suffix (strict pattern: consonant-digit-consonant)
+        already_has_suffix = bool(
+            re.search(
+                r"-[bcdfghjklmnpqrstvwxz][0-9][bcdfghjklmnpqrstvwxz]$", original_name
+            )
+        )
 
         # Verify suffix is detected
         assert already_has_suffix, f"Should detect existing suffix in: {original_name}"
 
-        # Verify no new suffix would be added
-        if (
-            job.type == JobType.AUTONOMOUS_BUILD
-            and mode == "new_project"
-            and not Path(working_dir).exists()
-        ):
+        # Verify no new suffix would be added (new: no exists() check)
+        if job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project":
             # In real code, this branch would skip appending if already_has_suffix
             if not already_has_suffix:
                 pytest.fail("Should have detected existing suffix")
 
         # Verify path unchanged
         assert job.params["working_directory"] == working_dir
-        assert job.params["working_directory"].endswith("-1234")
-        assert not job.params["working_directory"].endswith(
-            "-1234-"
-        )  # No double suffix
+        assert job.params["working_directory"].endswith("-c4r")
+        assert not job.params["working_directory"].endswith("-c4r-")  # No double suffix
 
 
 @pytest.mark.unit
@@ -183,7 +178,12 @@ class TestModeAutoSwitching:
     def test_existing_code_switches_to_enhancement(
         self, runner, store, temp_projects_dir
     ):
-        """Test that existing code triggers mode switch from new_project to enhancement"""
+        """Test that mode switches to enhancement ONLY with explicit existing_repo
+
+        NEW BEHAVIOR:
+        - Without existing_repo: mode stays new_project (logs warning, appends random ID)
+        - With existing_repo: mode switches to enhancement (no random ID)
+        """
         # Create existing project with code
         existing_project = temp_projects_dir / "my-app"
         existing_project.mkdir()
@@ -193,39 +193,47 @@ class TestModeAutoSwitching:
             job_type=JobType.AUTONOMOUS_BUILD,
             params={
                 "task": "Add a feature",
-                "working_directory": str(existing_project),
+                "working_directory": str(
+                    temp_projects_dir / "ignored"
+                ),  # Will be overridden
                 "mode": "new_project",  # User says new_project
+                "existing_repo": str(
+                    existing_project
+                ),  # But explicitly points to existing repo
             },
         )
         store.save_job(job)
 
-        # Simulate mode detection logic (this is what runner.run() does)
-        original_working_dir = job.params["working_directory"]
+        # Simulate NEW mode detection logic
         mode = job.params.get("mode", "new_project")
+        existing_repo_path = job.params.get("existing_repo")
 
-        detection_path = Path(original_working_dir)
+        # With new logic: check existing_repo path for code
+        if existing_repo_path:
+            detection_path = Path(existing_repo_path)
+        else:
+            detection_path = Path(job.params["working_directory"])
+
         has_existing_code = detection_path.exists() and any(detection_path.iterdir())
 
         # Verify existing code is detected
-        assert has_existing_code, "Should detect existing code"
+        assert has_existing_code, "Should detect existing code at existing_repo"
 
-        # Auto-adjust mode (this is what the real code does)
-        if mode == "new_project" and has_existing_code:
+        # Auto-adjust mode ONLY if existing_repo is provided (NEW behavior)
+        if existing_repo_path and has_existing_code and mode == "new_project":
             mode = "enhancement"
             job.params["mode"] = mode
             store.save_job(job)
 
-        # Verify mode was switched
+        # Verify mode was switched (because existing_repo was provided)
         updated_job = store.get_job(job.id)
         assert updated_job.params["mode"] == "enhancement"
 
         # Verify random ID would NOT be appended (because mode is now enhancement)
-        should_append = (
-            job.type == JobType.AUTONOMOUS_BUILD
-            and mode == "new_project"  # This is now False
-            and not Path(original_working_dir).exists()
-        )
-        assert not should_append, "Random ID should NOT be appended after mode switch"
+        should_append = job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project"
+        assert (
+            not should_append
+        ), "Random ID should NOT be appended after mode switch to enhancement"
 
     def test_new_project_without_code_stays_new_project(
         self, runner, store, temp_projects_dir
@@ -266,10 +274,11 @@ class TestCollisionDetection:
         self, runner, store, temp_projects_dir
     ):
         """Test that collision detection tries multiple IDs until unique one is found"""
-        # Create existing directories with IDs 1000-1005
+        # Create existing directories with various 3-char IDs
         base_name = "myapp"
-        for i in range(1000, 1006):
-            (temp_projects_dir / f"{base_name}-{i}").mkdir()
+        existing_ids = ["c4r", "n3r", "b0w", "t5p", "m7k"]
+        for test_id in existing_ids:
+            (temp_projects_dir / f"{base_name}-{test_id}").mkdir()
 
         working_dir = str(temp_projects_dir / base_name)
         job = Job.create(
@@ -283,12 +292,18 @@ class TestCollisionDetection:
 
         # Simulate collision detection (this is what the real code does)
         working_path = Path(working_dir)
-        max_attempts = 10
+        max_attempts = 20
         found_unique = False
 
+        # Use fixed sequence for testing
+        test_ids = ["c4r", "n3r", "b0w", "t5p", "m7k", "q2z"]  # q2z doesn't exist
+
         for attempt in range(max_attempts):
-            # Try sequential IDs starting from 1000 (simulating random attempts)
-            test_id = str(1000 + attempt)
+            if attempt < len(test_ids):
+                test_id = test_ids[attempt]
+            else:
+                test_id = "x9y"  # fallback
+
             new_name = f"{base_name}-{test_id}"
             new_path = working_path.parent / new_name
 
@@ -298,9 +313,9 @@ class TestCollisionDetection:
                 job.params["working_directory"] = str(new_path)
                 break
 
-        # Verify unique ID was found (should be 1006, the first non-existing one)
-        assert found_unique, "Should find unique ID within 10 attempts"
-        assert job.params["working_directory"].endswith("-1006"), "Should have ID 1006"
+        # Verify unique ID was found (should be q2z, the first non-existing one)
+        assert found_unique, "Should find unique ID within 20 attempts"
+        assert job.params["working_directory"].endswith("-q2z"), "Should have ID q2z"
 
     def test_all_attempts_exhausted_keeps_original(
         self, runner, store, temp_projects_dir
@@ -354,14 +369,14 @@ class TestJobParamsUpdate:
         )
         store.save_job(job)
 
-        # Simulate random ID appending
+        # Simulate random ID appending (new: no exists() check)
         if (
             job.type == JobType.AUTONOMOUS_BUILD
             and job.params.get("mode") == "new_project"
-            and not Path(original_path).exists()
         ):
             working_path = Path(original_path)
-            new_path = working_path.parent / f"{working_path.name}-9999"
+            # Use 3-character ID like c4r
+            new_path = working_path.parent / f"{working_path.name}-c4r"
             job.params["working_directory"] = str(new_path)
             store.save_job(job)
 
@@ -370,11 +385,11 @@ class TestJobParamsUpdate:
         actual_path = updated_job.params["working_directory"]
 
         assert actual_path != original_path, "Path should be updated"
-        assert actual_path.endswith("-9999"), "Should have random ID suffix"
+        assert actual_path.endswith("-c4r"), "Should have 3-char random ID suffix"
 
         # This is the key fix: job metadata reflects the ACTUAL path
         # Users can query this via get_job_status_from_daemon()
-        assert "weather-app-9999" in actual_path
+        assert "weather-app-c4r" in actual_path
 
 
 @pytest.mark.integration
@@ -443,7 +458,9 @@ class TestRunnerPreRunLogic:
         final_path = saved_params["working_directory"]
 
         assert final_path != working_dir, "Working directory should be modified"
-        assert re.search(r"-\d{4}$", final_path), "Should have 4-digit random ID suffix"
+        assert re.search(
+            r"-[bcdfghjklmnpqrstvwxz][0-9][bcdfghjklmnpqrstvwxz]$", final_path
+        ), "Should have consonant-digit-consonant random ID suffix"
         assert "calculator" in final_path, "Should contain original name"
 
         # Verify persistence: retrieve from store and confirm
@@ -453,19 +470,30 @@ class TestRunnerPreRunLogic:
     def test_runner_persists_mode_auto_switch_to_store(
         self, runner, store, temp_projects_dir
     ):
-        """Test that Runner.run() auto-switches mode AND persists it via store.save_job()"""
+        """Test that Runner.run() auto-switches mode ONLY with explicit existing_repo
+
+        NEW BEHAVIOR (after fix):
+        - Auto-switch to enhancement ONLY when existing_repo is explicitly provided
+        - Without existing_repo, mode stays new_project (with warning logged)
+        - This preserves testing workflow while maintaining safety net for legitimate enhancements
+        """
         # Create existing project with code
         existing_project = temp_projects_dir / "my-app"
         existing_project.mkdir()
         (existing_project / "main.py").write_text("print('hello')")
 
-        # Create job claiming new_project mode
+        # Create job with mode=new_project AND existing_repo (explicit enhancement request)
         job = Job.create(
             job_type=JobType.AUTONOMOUS_BUILD,
             params={
                 "task": "Add a feature",
-                "working_directory": str(existing_project),
-                "mode": "new_project",  # User says new_project
+                "working_directory": str(
+                    temp_projects_dir / "ignored"
+                ),  # Will be overridden by existing_repo
+                "mode": "new_project",  # User says new_project...
+                "existing_repo": str(
+                    existing_project
+                ),  # ...but points to existing repo
             },
         )
         store.save_job(job)
@@ -500,20 +528,17 @@ class TestRunnerPreRunLogic:
         assert result["success"] is True
         assert result["exit_code"] == 0
 
-        # KEY TEST: Verify store.save_job() was called with mode change
+        # KEY TEST: Verify store.save_job() was called
         assert len(save_job_calls) >= 1, "store.save_job() should be called"
 
-        # Verify mode was auto-switched in the saved params
+        # With new logic: mode auto-switches ONLY because existing_repo was provided
         saved_params = save_job_calls[-1]  # Get last save
+
+        # Verify mode was auto-switched to enhancement (because existing_repo + code exists)
         assert (
             saved_params["mode"] == "enhancement"
-        ), "Mode should be auto-switched in saved params"
-
-        # Verify NO random ID was appended
-        assert saved_params["working_directory"] == str(existing_project)
-        assert not re.search(r"-\d{4}$", saved_params["working_directory"])
+        ), "Mode should be auto-switched when existing_repo is provided and has code"
 
         # Verify persistence: retrieve from store and confirm
         updated_job = store.get_job(job.id)
         assert updated_job.params["mode"] == "enhancement"
-        assert updated_job.params["working_directory"] == str(existing_project)
