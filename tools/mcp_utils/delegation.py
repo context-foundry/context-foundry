@@ -9,6 +9,7 @@ import os
 import re
 import select
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -144,6 +145,25 @@ Directory: {cwd}
 
 Please provide a valid directory path or omit the working_directory parameter to use the current directory.
 """
+
+        # Check if claude CLI is available
+        if not shutil.which("claude"):
+            error_msg = """❌ Error: Claude CLI not found in PATH
+
+The delegation system requires the Claude CLI to be installed and available in PATH.
+
+Installation:
+  - Download from: https://claude.com/download
+  - Ensure it's in your PATH after installation
+
+Current PATH: {}
+
+Troubleshooting:
+  - Verify installation: run 'which claude' in terminal
+  - Check PATH: echo $PATH
+  - Restart terminal after installation
+""".format(os.environ.get("PATH", "NOT SET"))
+            return error_msg
 
         # Convert timeout to seconds
         timeout_seconds = timeout_minutes * 60
