@@ -25,6 +25,8 @@
    * Rotate through hero taglines with fade animation
    */
   function initRotatingTagline() {
+    console.log('[Rotation] Starting initialization...');
+
     const taglines = [
       'while you sleep',
       'while you grab coffee',
@@ -54,14 +56,20 @@
     ];
 
     const taglineElement = document.getElementById('rotating-tagline');
-    if (!taglineElement) return;
+    if (!taglineElement) {
+      console.error('[Rotation] Element #rotating-tagline not found!');
+      return;
+    }
+    console.log('[Rotation] Element found:', taglineElement);
 
     // Start with first tagline
     let currentIndex = 0;
     taglineElement.textContent = taglines[currentIndex];
+    console.log('[Rotation] Set initial tagline:', taglines[currentIndex]);
 
     // Rotate every 3 seconds
     setInterval(function() {
+      console.log('[Rotation] Rotating to next tagline...');
       // Fade out
       taglineElement.style.opacity = '0';
 
@@ -69,11 +77,14 @@
         // Move to next tagline
         currentIndex = (currentIndex + 1) % taglines.length;
         taglineElement.textContent = taglines[currentIndex];
+        console.log('[Rotation] Now showing:', taglines[currentIndex]);
 
         // Fade in
         taglineElement.style.opacity = '1';
       }, 300);
     }, 3000);
+
+    console.log('[Rotation] setInterval established, will rotate every 3 seconds');
   }
 
   /**
