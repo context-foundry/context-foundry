@@ -1,0 +1,77 @@
+/* Feedback Display Styles */
+.feedback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 20px 30px;
+  border-radius: 15px;
+  font-size: 28px;
+  font-weight: bold;
+  min-height: 80px;
+  animation: fadeInBounce 0.5s ease-out;
+}
+
+@keyframes fadeInBounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) translateY(-20px);
+  }
+  60% {
+    transform: scale(1.1) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.correct {
+  background: linear-gradient(135deg, #4CAF50 0%, #45A049 100%);
+  color: white;
+  box-shadow: 0 6px 12px rgba(76, 175, 80, 0.4);
+}
+
+.incorrect {
+  background: linear-gradient(135deg, #FF9800 0%, #F57C00 100%);
+  color: white;
+  box-shadow: 0 6px 12px rgba(255, 152, 0, 0.4);
+  animation: shake 0.5s ease-out;
+}
+
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-10px);
+  }
+  75% {
+    transform: translateX(10px);
+  }
+}
+
+.icon {
+  font-size: 40px;
+}
+
+.message {
+  font-size: 28px;
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+  .feedback {
+    font-size: 24px;
+    padding: 15px 20px;
+    min-height: 70px;
+  }
+
+  .icon {
+    font-size: 32px;
+  }
+
+  .message {
+    font-size: 24px;
+  }
+}

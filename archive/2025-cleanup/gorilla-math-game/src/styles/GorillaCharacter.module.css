@@ -1,0 +1,109 @@
+/* Gorilla Character Styles */
+.gorillaContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.character {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.gorilla {
+  font-size: 64px;
+  transition: transform 0.3s ease;
+}
+
+.animating .gorilla {
+  animation: jump 0.5s ease-out;
+}
+
+@keyframes jump {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+.gorilla.happy {
+  animation: celebrate 0.6s ease-out;
+}
+
+@keyframes celebrate {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-10deg) scale(1.1);
+  }
+  75% {
+    transform: rotate(10deg) scale(1.1);
+  }
+}
+
+.gorilla.thinking {
+  animation: think 2s ease-in-out infinite;
+}
+
+@keyframes think {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.speechBubble {
+  background: white;
+  border: 3px solid #333;
+  border-radius: 15px;
+  padding: 12px 20px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  max-width: 250px;
+  text-align: center;
+}
+
+.speechBubble::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 10px solid transparent;
+  border-bottom-color: #333;
+}
+
+.speechBubble::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-bottom-color: white;
+  margin-bottom: -1px;
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+  .gorilla {
+    font-size: 48px;
+  }
+
+  .speechBubble {
+    font-size: 16px;
+    padding: 10px 15px;
+    max-width: 200px;
+  }
+}

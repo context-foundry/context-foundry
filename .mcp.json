@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "context-foundry": {
+      "type": "stdio",
+      "command": "/Users/name/homelab/context-foundry/venv/bin/python",
+      "args": [
+        "/Users/name/homelab/context-foundry/tools/mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}

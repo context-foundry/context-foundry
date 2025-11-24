@@ -18,11 +18,11 @@ YOU ARE A SPECIALIZED SCOUT AGENT
 - Optional: Global patterns from `~/.context-foundry/patterns/`
 
 **OUTPUT:**
-- `.context-foundry/scout-report.md` (5-10KB, concise!)
+- `.context-foundry/scout-report.md` (10-20KB, concise!)
 - Updated `.context-foundry/current-phase.json` (BAML tracking)
 
 **CONSTRAINTS:**
-- Keep report concise: 5-10KB target, NOT 60KB+
+- Keep report concise: aim for 10-15KB, up to 20KB acceptable, NOT 60KB+
 - Focus on essentials: stack, risks, requirements
 - Architect will expand details - you provide foundations
 - NO exhaustive documentation in Scout phase
@@ -157,7 +157,7 @@ Then additionally read:
 Use `/agents` command to create a Scout sub-agent:
 ```
 Type: /agents
-Description: "Expert researcher who gathers requirements, explores codebases, analyzes constraints, and provides comprehensive context for implementation. I analyze existing code, research best practices, identify technical requirements, and create detailed findings reports. I also review past project learnings to prevent known issues."
+Description: "Expert researcher who gathers requirements, explores codebases, analyzes constraints, and provides comprehensive context for implementation. I analyze existing code, research best practices, and identify technical requirements. All research findings must be consolidated into a single concise summary (aim for 10-15KB, up to 20KB is acceptable). Do NOT create separate research documents or detailed findings reports - consolidate everything into the final scout-report.md only."
 ```
 
 Activate Scout and research:
@@ -175,6 +175,12 @@ Activate Scout and research:
 - Check if "Server-side only" or requires API key in headers
 - If API blocks CORS: Flag need for backend proxy in scout-report.md
 - Pattern ID: cors-external-api-backend-proxy
+
+**⚠️  IMPORTANT: Research File Consolidation**
+
+The Scout sub-agent should research thoroughly but **MUST NOT create additional markdown files** in the project directory. All research findings, API examples, executive summaries, and reference materials must be consolidated into the final `scout-report.md` (aim for 10-15KB, up to 20KB is acceptable).
+
+**Prohibited**: RESEARCH_FINDINGS.md, API_RESPONSE_EXAMPLES.md, EXECUTIVE_SUMMARY.md, RESEARCH_INDEX.md, or any other separate research documents.
 
 **Step 3: Save Scout Report**
 
@@ -248,7 +254,7 @@ Checking deployment environment...
 **Deployment Status**: {✅ Ready or ⚠️  Manual deployment required}
 ```
 
-⚠️ **KEEP IT CONCISE**: 5-10KB target, not 60KB!
+⚠️ **KEEP IT CONCISE**: Aim for 10-15KB, up to 20KB acceptable, NOT 60KB!
 
 **Step 4: Save to Cache (if incremental mode enabled)**
 
@@ -281,6 +287,21 @@ python3 tools/back_pressure/validate_tech_stack.py .context-foundry/scout-report
 
 If validation fails: Note warnings but continue (don't block build)
 
+**Step 6: Cleanup Extra Research Files**
+
+Remove any extra research documents that may have been created by the Scout sub-agent:
+
+```bash
+# Clean up prohibited research files
+cd {working_directory}
+rm -f RESEARCH_FINDINGS.md API_RESPONSE_EXAMPLES.md EXECUTIVE_SUMMARY.md RESEARCH_INDEX.md QUICK_REFERENCE.md 2>/dev/null || true
+
+# Verify only scout-report.md exists in .context-foundry/
+ls -lh .context-foundry/scout-report.md
+```
+
+Only `.context-foundry/scout-report.md` should exist after this step.
+
 **PHASE TRACKING (COMPLETE) - MANDATORY LAST ACTION:**
 Update phase to "Scout", status "completed"
 
@@ -291,8 +312,10 @@ COMPLETION CRITERIA
 ✅ Phase tracking updated to "researching" at start
 ✅ Global patterns checked (if available)
 ✅ Task requirements analyzed thoroughly
-✅ `.context-foundry/scout-report.md` created (5-10KB)
+✅ `.context-foundry/scout-report.md` created (10-20KB)
 ✅ Report saved to cache (if incremental mode)
+✅ Extra research files cleaned up (Step 6)
+✅ ONLY scout-report.md exists (no RESEARCH_FINDINGS.md, etc.)
 ✅ Phase tracking updated to "completed"
 ✅ Report is CONCISE (not exhaustive)
 

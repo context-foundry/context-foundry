@@ -17,7 +17,6 @@ from api import (
     files_router,
     sse_router,
     artifacts_router,
-    codex_router,
     chat_router,
     builds_router,
 )
@@ -68,7 +67,6 @@ app.include_router(logs_router)
 app.include_router(files_router)
 app.include_router(sse_router)
 app.include_router(artifacts_router)
-app.include_router(codex_router)
 app.include_router(chat_router)
 app.include_router(builds_router)
 
