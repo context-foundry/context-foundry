@@ -110,6 +110,10 @@ def test_scout_parse_with_cli():
 
     # Force Claude CLI mode
     os.environ["BAML_USE_CLAUDE_CLI"] = "true"
+    env_state = {
+        "BAML_USE_CLAUDE_CLI": os.getenv("BAML_USE_CLAUDE_CLI"),
+        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
+    }
 
     from tools.baml_integration import parse_scout_markdown_baml
 
@@ -117,6 +121,15 @@ def test_scout_parse_with_cli():
     try:
         result = parse_scout_markdown_baml(TEST_SCOUT_MARKDOWN)
         elapsed = time.time() - start_time
+
+        # Assert reasonable timing (should be < 30s, warn if > 20s)
+        if elapsed > 30:
+            raise AssertionError(f"Parse took {elapsed:.2f}s, exceeds 30s threshold")
+        elif elapsed > 20:
+            print(f"⚠️  WARNING: Parse took {elapsed:.2f}s (> 20s)")
+            timing_assertion = "warn_gt_20s"
+        else:
+            timing_assertion = "pass"
 
         print(f"✅ SUCCESS: Parse completed in {elapsed:.2f}s")
         print(f"   Keys present: {list(result.keys())}")
@@ -130,6 +143,8 @@ def test_scout_parse_with_cli():
             "elapsed_seconds": elapsed,
             "keys": list(result.keys()),
             "error": None,
+            "env_state": env_state,
+            "timing_assertion": timing_assertion,
         }
     except Exception as e:
         elapsed = time.time() - start_time
@@ -140,6 +155,8 @@ def test_scout_parse_with_cli():
             "elapsed_seconds": elapsed,
             "keys": None,
             "error": str(e),
+            "env_state": env_state,
+            "timing_assertion": "fail",
         }
 
 
@@ -157,10 +174,16 @@ def test_scout_parse_fallback():
             "method": "gpt4o_mini",
             "elapsed_seconds": 0,
             "error": "OPENAI_API_KEY not set",
+            "env_state": {"BAML_USE_CLAUDE_CLI": "false", "OPENAI_API_KEY": False},
+            "timing_assertion": "skipped",
         }
 
     # Disable Claude CLI to force fallback
     os.environ["BAML_USE_CLAUDE_CLI"] = "false"
+    env_state = {
+        "BAML_USE_CLAUDE_CLI": os.getenv("BAML_USE_CLAUDE_CLI"),
+        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
+    }
 
     # Force reload module to pick up env change
     if "tools.baml_integration" in sys.modules:
@@ -173,6 +196,17 @@ def test_scout_parse_fallback():
         result = parse_scout_markdown_baml(TEST_SCOUT_MARKDOWN)
         elapsed = time.time() - start_time
 
+        # Assert reasonable timing for fallback (should be < 30s, warn if > 20s)
+        if elapsed > 30:
+            raise AssertionError(
+                f"Fallback parse took {elapsed:.2f}s, exceeds 30s threshold"
+            )
+        elif elapsed > 20:
+            print(f"⚠️  WARNING: Fallback parse took {elapsed:.2f}s (> 20s)")
+            timing_assertion = "warn_gt_20s"
+        else:
+            timing_assertion = "pass"
+
         print(f"✅ SUCCESS: Parse completed in {elapsed:.2f}s")
         print(f"   Keys present: {list(result.keys())}")
 
@@ -182,6 +216,8 @@ def test_scout_parse_fallback():
             "elapsed_seconds": elapsed,
             "keys": list(result.keys()),
             "error": None,
+            "env_state": env_state,
+            "timing_assertion": timing_assertion,
         }
     except Exception as e:
         elapsed = time.time() - start_time
@@ -192,6 +228,8 @@ def test_scout_parse_fallback():
             "elapsed_seconds": elapsed,
             "keys": None,
             "error": str(e),
+            "env_state": env_state,
+            "timing_assertion": "fail",
         }
 
 
@@ -211,6 +249,10 @@ def main():
         print(f"Claude CLI version: {cli_version}")
     print(f"OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
     print(f"BAML_USE_CLAUDE_CLI default: {os.getenv('BAML_USE_CLAUDE_CLI', 'true')}")
+    initial_env_state = {
+        "BAML_USE_CLAUDE_CLI": os.getenv("BAML_USE_CLAUDE_CLI", "true"),
+        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
+    }
 
     # Run tests
     results = []
@@ -242,6 +284,7 @@ def main():
             "claude_cli_version": cli_version,
             "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
             "baml_use_claude_cli": os.getenv("BAML_USE_CLAUDE_CLI", "true"),
+            "initial_env_state": initial_env_state,
         },
         "tests": results,
     }
@@ -264,6 +307,21 @@ def main():
             else "⏭️  SKIP"
         )
         print(f"{status} - {result['method']}: {result['elapsed_seconds']:.2f}s")
+        if result.get("env_state"):
+            print(f"         Env: {result['env_state']}")
+        if result.get("timing_assertion"):
+            assertion_icon = (
+                "✅"
+                if result["timing_assertion"] in ["pass"]
+                else "⚠️"
+                if result["timing_assertion"].startswith("warn")
+                else "❌"
+                if result["timing_assertion"] == "fail"
+                else "⏭️"
+            )
+            print(
+                f"         Timing: {assertion_icon} {result['timing_assertion']} (threshold: <30s, warn >20s)"
+            )
         if result.get("error"):
             print(f"         Error: {result['error']}")
 
