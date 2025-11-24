@@ -239,6 +239,9 @@ def main():
     print(f"Timestamp: {datetime.now().isoformat()}")
     print(f"Working directory: {os.getcwd()}")
 
+    # Capture INITIAL environment state before any tests run
+    initial_baml_use_claude_cli = os.getenv("BAML_USE_CLAUDE_CLI", "true")
+
     # Check Claude CLI availability
     print("\n" + "=" * 60)
     print("Environment Check")
@@ -248,11 +251,7 @@ def main():
     if cli_available:
         print(f"Claude CLI version: {cli_version}")
     print(f"OPENAI_API_KEY set: {bool(os.getenv('OPENAI_API_KEY'))}")
-    print(f"BAML_USE_CLAUDE_CLI default: {os.getenv('BAML_USE_CLAUDE_CLI', 'true')}")
-    initial_env_state = {
-        "BAML_USE_CLAUDE_CLI": os.getenv("BAML_USE_CLAUDE_CLI", "true"),
-        "OPENAI_API_KEY": bool(os.getenv("OPENAI_API_KEY")),
-    }
+    print(f"BAML_USE_CLAUDE_CLI initial: {initial_baml_use_claude_cli}")
 
     # Run tests
     results = []
@@ -283,8 +282,8 @@ def main():
             "claude_cli_available": cli_available,
             "claude_cli_version": cli_version,
             "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
-            "baml_use_claude_cli": os.getenv("BAML_USE_CLAUDE_CLI", "true"),
-            "initial_env_state": initial_env_state,
+            "baml_use_claude_cli_initial": initial_baml_use_claude_cli,
+            "baml_use_claude_cli_final": os.getenv("BAML_USE_CLAUDE_CLI", "true"),
         },
         "tests": results,
     }
