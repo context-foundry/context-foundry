@@ -667,45 +667,37 @@
             50% { box-shadow: 0 0 40px rgba(0, 255, 255, 0.6); }
         }
 
-        /* Tool Info Modal */
+        /* Tool Info Tooltip Modal */
         #tool-modal {
             display: none;
             position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.85);
             z-index: 1000;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(8px);
+            pointer-events: none;
         }
 
         #tool-modal.visible {
-            display: flex;
+            display: block;
         }
 
         .tool-modal-content {
-            background: rgba(15, 15, 25, 0.98);
-            border: 1px solid rgba(0, 255, 255, 0.3);
-            border-radius: 12px;
-            padding: 32px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 0 60px rgba(0, 255, 255, 0.3);
+            background: rgba(10, 10, 18, 0.98);
+            border: 2px solid rgba(0, 255, 255, 0.4);
+            border-radius: 8px;
+            padding: 16px 20px;
+            max-width: 400px;
+            box-shadow: 0 8px 32px rgba(0, 255, 255, 0.3),
+                        0 0 80px rgba(0, 255, 255, 0.15);
+            pointer-events: auto;
         }
 
         .tool-modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 16px;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
             border-bottom: 1px solid rgba(0, 255, 255, 0.2);
         }
 
         .tool-modal-title {
-            font-size: 20px;
+            font-size: 16px;
             font-weight: 600;
             background: linear-gradient(135deg, #00ffff, #ff00ff);
             -webkit-background-clip: text;
@@ -713,57 +705,23 @@
             background-clip: text;
         }
 
-        .tool-modal-close {
-            background: transparent;
-            border: none;
-            color: #888;
-            font-size: 24px;
-            cursor: pointer;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .tool-modal-close:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-        }
-
         .tool-modal-body {
-            font-size: 14px;
-            line-height: 1.8;
-            color: #ccc;
-        }
-
-        .tool-modal-body h3 {
-            color: #00ffff;
-            margin: 16px 0 8px 0;
-            font-size: 16px;
-        }
-
-        .tool-modal-body ul {
-            margin: 8px 0;
-            padding-left: 20px;
-        }
-
-        .tool-modal-body li {
-            margin: 4px 0;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #d0d0d0;
         }
 
         .tool-item-clickable {
-            cursor: pointer;
+            cursor: help;
             transition: all 0.2s;
-            padding: 4px 8px;
+            padding: 6px 10px;
             border-radius: 4px;
+            position: relative;
         }
 
         .tool-item-clickable:hover {
-            background: rgba(0, 255, 255, 0.1);
-            transform: translateX(4px);
+            background: rgba(0, 255, 255, 0.15);
+            transform: translateX(2px);
         }
 
         /* Error State */
@@ -2186,8 +2144,8 @@
                 const tools = agentData.tools || [];
                 document.getElementById('tools-tech').innerHTML = tools.map(tool =>
                     `<div class="metric tool-item-clickable"
-                         onmouseenter="showToolInfo('${tool}')"
-                         onmouseleave="hideToolModal()">
+                         onmouseenter="showToolInfo(event, '${tool}')"
+                         onmouseleave="scheduleHideToolModal()">
                         <span class="metric-value" style="color: ${color}">${tool}</span>
                     </div>`
                 ).join('');
@@ -2423,7 +2381,15 @@
             'S3': 'Amazon S3 cloud storage service for storing and sharing learned patterns across the community.'
         };
 
-        function showToolInfo(tool) {
+        let hideModalTimeout = null;
+
+        function showToolInfo(event, tool) {
+            // Clear any pending hide
+            if (hideModalTimeout) {
+                clearTimeout(hideModalTimeout);
+                hideModalTimeout = null;
+            }
+
             const modal = document.getElementById('tool-modal');
             const title = document.getElementById('tool-modal-title');
             const body = document.getElementById('tool-modal-body');
@@ -2432,18 +2398,33 @@
             const info = toolInformation[tool] || 'Information about this tool coming soon.';
             body.innerHTML = `<p>${info}</p>`;
 
+            // Position modal near the cursor
+            const rect = event.currentTarget.getBoundingClientRect();
+            modal.style.left = (rect.right + 10) + 'px';
+            modal.style.top = rect.top + 'px';
+
             modal.classList.add('visible');
         }
 
-        function hideToolModal() {
-            document.getElementById('tool-modal').classList.remove('visible');
+        function scheduleHideToolModal() {
+            // Delay hiding so user can move mouse to modal
+            hideModalTimeout = setTimeout(() => {
+                document.getElementById('tool-modal').classList.remove('visible');
+            }, 200);
         }
 
-        // Modal event listeners
-        document.getElementById('tool-modal-close').addEventListener('click', hideToolModal);
-        document.getElementById('tool-modal').addEventListener('click', (e) => {
-            if (e.target.id === 'tool-modal') hideToolModal();
-        });
+        function keepModalVisible() {
+            // Cancel hide when hovering over modal
+            if (hideModalTimeout) {
+                clearTimeout(hideModalTimeout);
+                hideModalTimeout = null;
+            }
+        }
+
+        // Modal hover listeners to keep it visible
+        const toolModal = document.getElementById('tool-modal');
+        toolModal.addEventListener('mouseenter', keepModalVisible);
+        toolModal.addEventListener('mouseleave', scheduleHideToolModal);
 
         // Progress bar management for tour
         let progressInterval = null;
@@ -2481,12 +2462,11 @@
         app.init();
     </script>
 
-    <!-- Tool Info Modal -->
+    <!-- Tool Info Modal (Tooltip) -->
     <div id="tool-modal">
         <div class="tool-modal-content">
             <div class="tool-modal-header">
                 <div class="tool-modal-title" id="tool-modal-title">Tool Information</div>
-                <button class="tool-modal-close" id="tool-modal-close">×</button>
             </div>
             <div class="tool-modal-body" id="tool-modal-body">
                 <!-- Content populated by JS -->
