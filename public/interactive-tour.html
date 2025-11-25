@@ -28,6 +28,23 @@
             left: 0;
         }
 
+        /* CF Logo Watermark */
+        #cf-watermark {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            opacity: 0.3;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 0.3s;
+        }
+
+        #cf-watermark:hover {
+            opacity: 0.5;
+        }
+
         /* Agent Labels - Cyberpunk Style */
         .agent-label {
             padding: 6px 12px;
@@ -763,6 +780,9 @@
     </div>
 
     <div id="canvas-container"></div>
+
+    <!-- CF Logo Watermark -->
+    <img src="cf_logo_gray_2025.png" id="cf-watermark" alt="Context Foundry" />
 
     <!-- TOC Toggle Button -->
     <button id="toc-toggle" title="Table of Contents">☰</button>
