@@ -2142,13 +2142,22 @@
 
                 // Tools & Technologies (hover to show info)
                 const tools = agentData.tools || [];
-                document.getElementById('tools-tech').innerHTML = tools.map(tool =>
-                    `<div class="metric tool-item-clickable"
-                         onmouseenter="showToolInfo(event, '${tool}')"
-                         onmouseleave="scheduleHideToolModal()">
-                        <span class="metric-value" style="color: ${color}">${tool}</span>
-                    </div>`
-                ).join('');
+                const toolsContainer = document.getElementById('tools-tech');
+                toolsContainer.innerHTML = '';
+
+                tools.forEach(tool => {
+                    const toolDiv = document.createElement('div');
+                    toolDiv.className = 'metric tool-item-clickable';
+                    toolDiv.innerHTML = `<span class="metric-value" style="color: ${color}">${tool}</span>`;
+
+                    // Extract base tool name (remove parentheses and extra info)
+                    const baseTool = tool.split('(')[0].trim();
+
+                    toolDiv.addEventListener('mouseenter', (e) => showToolInfo(e, baseTool, tool));
+                    toolDiv.addEventListener('mouseleave', scheduleHideToolModal);
+
+                    toolsContainer.appendChild(toolDiv);
+                });
 
                 // Decision Logic
                 document.getElementById('decision-logic').innerHTML = `
@@ -2371,19 +2380,28 @@
             'Three.js': 'A powerful 3D JavaScript library for creating and rendering 3D graphics in the browser. Used for rendering the agent visualization scene.',
             'WebGL': 'Web Graphics Library - enables GPU-accelerated rendering in browsers. Provides hardware acceleration for smooth 3D graphics.',
             'Python': 'High-level programming language used for backend logic, agent coordination, and build orchestration.',
-            'ThreadPoolExecutor': 'Python concurrent execution framework that enables parallel building across multiple worker threads.',
-            'BAML': 'Boundary Analysis Markup Language - provides type-safe structured outputs for AI responses with validation.',
-            'MCP': 'Model Context Protocol - Anthropic\'s protocol for connecting AI models with external tools and data sources.',
-            'Git': 'Version control system for tracking code changes and deploying to GitHub repositories.',
-            'pytest': 'Python testing framework for running and validating test suites.',
-            'Jest': 'JavaScript testing framework for Node.js and frontend applications.',
-            'Playwright': 'End-to-end testing framework for web applications with browser automation.',
-            'S3': 'Amazon S3 cloud storage service for storing and sharing learned patterns across the community.'
+            'ThreadPoolExecutor': 'Python concurrent execution framework that enables parallel building across multiple worker threads. Allows up to 5 workers to build independent modules simultaneously for faster completion.',
+            'BAML': 'Boundary Analysis Markup Language - provides type-safe structured outputs for AI responses with validation. Ensures architecture decisions are structured and validated against schemas.',
+            'MCP': 'Model Context Protocol - Anthropic\'s protocol for connecting AI models with external tools and data sources. Enables Context Foundry to spawn fresh Claude instances.',
+            'Git': 'Version control system for tracking code changes and deploying to GitHub repositories. Used for initializing repos, committing code, and pushing to remote.',
+            'pytest': 'Python testing framework for running and validating test suites. Automatically discovers and runs tests, provides detailed failure reports.',
+            'Jest': 'JavaScript testing framework for Node.js and frontend applications. Provides snapshot testing, mocking, and coverage reports.',
+            'Playwright': 'End-to-end testing framework for web applications with browser automation. Tests across Chrome, Firefox, and Safari with reliable interactions.',
+            'S3': 'Amazon S3 cloud storage service for storing and sharing learned patterns across the community. Enables pattern learning to improve with every build.',
+            'File generation': 'Creates source code files, configuration files, and project structure based on the architecture design. Writes clean, idiomatic code following best practices.',
+            'Code synthesis': 'Generates implementation code by combining architecture patterns, learned templates, and AI reasoning. Produces production-ready code that passes tests.',
+            'Pattern matching': 'Analyzes existing codebases to identify architectural patterns, coding conventions, and dependencies. Enables intelligent recommendations.',
+            'Dependency analysis': 'Examines project dependencies, package versions, and compatibility issues. Creates requirements.txt or package.json with correct versions.',
+            'Test framework selection': 'Automatically chooses the appropriate testing framework based on project type (pytest for Python, Jest for JavaScript, Playwright for E2E).',
+            'Architecture validation': 'Validates system design against best practices and BAML schemas. Ensures module boundaries, data flow, and scalability patterns are sound.',
+            'GitHub integration': 'Creates repositories, initializes git, commits code, and pushes to remote. Updates README with screenshots and project documentation.',
+            'Pattern extraction': 'Learns from successful builds by extracting reusable patterns, solutions, and architectural decisions. Stored locally and synced to S3.',
+            'Report parsing': 'Analyzes test output, build logs, and error messages to extract structured failure information for the feedback loop.'
         };
 
         let hideModalTimeout = null;
 
-        function showToolInfo(event, tool) {
+        function showToolInfo(event, baseTool, fullToolName) {
             // Clear any pending hide
             if (hideModalTimeout) {
                 clearTimeout(hideModalTimeout);
@@ -2394,13 +2412,23 @@
             const title = document.getElementById('tool-modal-title');
             const body = document.getElementById('tool-modal-body');
 
-            title.textContent = tool;
-            const info = toolInformation[tool] || 'Information about this tool coming soon.';
+            // Use full name for title (with extra info), base name for lookup
+            title.textContent = fullToolName || baseTool;
+            const info = toolInformation[baseTool] || 'Information about this tool coming soon.';
             body.innerHTML = `<p>${info}</p>`;
 
             // Position modal near the cursor
             const rect = event.currentTarget.getBoundingClientRect();
-            modal.style.left = (rect.right + 10) + 'px';
+            const rightSideSpace = window.innerWidth - rect.right;
+
+            // Position to the right if there's space, otherwise to the left
+            if (rightSideSpace > 420) {
+                modal.style.left = (rect.right + 10) + 'px';
+                modal.style.right = 'auto';
+            } else {
+                modal.style.right = (window.innerWidth - rect.left + 10) + 'px';
+                modal.style.left = 'auto';
+            }
             modal.style.top = rect.top + 'px';
 
             modal.classList.add('visible');
