@@ -621,7 +621,8 @@
             height: 60px;
             opacity: 0.25;
             z-index: 100;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: pointer;
             transition: opacity 0.3s;
         }
 
@@ -828,7 +829,9 @@
     </div>
 
     <!-- CF Logo Watermark (replaces stats) -->
-    <img src="cf_logo_gray_2025.png" id="stats" alt="Context Foundry" />
+    <a href="https://contextfoundry.dev/" title="Go to Context Foundry homepage">
+        <img src="cf_logo_gray_2025.png" id="stats" alt="Context Foundry" />
+    </a>
 
     <!-- Right Sidebar - Agent Detail Panel (Enhanced) -->
     <div id="info-panel">

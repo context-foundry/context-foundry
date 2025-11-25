@@ -599,12 +599,17 @@
             position: fixed;
             bottom: 90px;
             right: 20px;
-            font-size: 10px;
-            font-family: monospace;
-            opacity: 0.4;
+            width: 60px;
+            height: 60px;
+            opacity: 0.25;
             z-index: 100;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: pointer;
             transition: opacity 0.3s;
+        }
+
+        #stats:hover {
+            opacity: 0.4;
         }
 
         /* Loading State */
@@ -744,7 +749,10 @@
         <kbd>Drag</kbd> to rotate · <kbd>Scroll</kbd> to zoom · <kbd>Click</kbd> agent for details
     </div>
 
-    <div id="stats"></div>
+    <!-- CF Logo Watermark (replaces stats) -->
+    <a href="https://contextfoundry.dev/" title="Go to Context Foundry homepage">
+        <img src="assets/cf_logo_gray_2025.png" id="stats" alt="Context Foundry" />
+    </a>
 
     <!-- Right Sidebar - Agent Detail Panel (Enhanced) -->
     <div id="info-panel">
