@@ -688,6 +688,7 @@
             box-shadow: 0 8px 32px rgba(0, 255, 255, 0.3),
                         0 0 80px rgba(0, 255, 255, 0.15);
             pointer-events: auto;
+            cursor: default;
         }
 
         .tool-modal-header {
@@ -2153,8 +2154,22 @@
                     // Extract base tool name (remove parentheses and extra info)
                     const baseTool = tool.split('(')[0].trim();
 
-                    toolDiv.addEventListener('mouseenter', (e) => showToolInfo(e, baseTool, tool));
-                    toolDiv.addEventListener('mouseleave', scheduleHideToolModal);
+                    // Hover to show tooltip
+                    toolDiv.addEventListener('mouseenter', (e) => {
+                        e.stopPropagation();
+                        showToolInfo(e, baseTool, tool);
+                    });
+
+                    toolDiv.addEventListener('mouseleave', (e) => {
+                        e.stopPropagation();
+                        scheduleHideToolModal();
+                    });
+
+                    // Prevent click from doing anything (no closing panel)
+                    toolDiv.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
 
                     toolsContainer.appendChild(toolDiv);
                 });
