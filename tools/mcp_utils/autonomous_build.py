@@ -474,56 +474,56 @@ def _post_process_build_plan(
         return normalized, warnings
 
     for idx, task in enumerate(tasks):
-        t = copy.deepcopy(task)
+        normalized_task = copy.deepcopy(task)
 
         # task_id fallback
-        if not t.get("task_id"):
-            fallback_id = t.get("id") or f"task-{idx + 1}"
+        if not normalized_task.get("task_id"):
+            fallback_id = normalized_task.get("id") or f"task-{idx + 1}"
             warnings.append(f"Task missing task_id; using fallback '{fallback_id}'")
-            t["task_id"] = fallback_id
+            normalized_task["task_id"] = fallback_id
 
         # working_directory default
-        t.setdefault("working_directory", ".")
+        normalized_task.setdefault("working_directory", ".")
 
         # dependencies normalization
-        deps = t.get("dependencies", [])
+        deps = normalized_task.get("dependencies", [])
         if deps is None:
             deps = []
         if not isinstance(deps, list):
             warnings.append(
-                f"Task {t['task_id']}: dependencies not a list; coerced to []"
+                f"Task {normalized_task['task_id']}: dependencies not a list; coerced to []"
             )
             deps = []
-        t["dependencies"] = deps
+        normalized_task["dependencies"] = deps
 
         # build_commands normalization
-        build_commands = t.get("build_commands", [])
+        build_commands = normalized_task.get("build_commands", [])
         if build_commands is None:
             build_commands = []
         if not isinstance(build_commands, list):
             warnings.append(
-                f"Task {t['task_id']}: build_commands not a list; coerced to []"
+                f"Task {normalized_task['task_id']}: build_commands not a list; coerced to []"
             )
             build_commands = []
-        t["build_commands"] = build_commands
+        normalized_task["build_commands"] = build_commands
 
         # provider default
-        if not t.get("provider"):
+        if not normalized_task.get("provider"):
             warnings.append(
-                f"Task {t['task_id']}: missing provider; defaulting to Claude"
+                f"Task {normalized_task['task_id']}: missing provider; defaulting to Claude"
             )
-            t["provider"] = "Claude"
+            normalized_task["provider"] = "Claude"
 
         # agent_instruction default
-        if not t.get("agent_instruction"):
-            name = t.get("name") or t.get("description") or t["task_id"]
-            desc = t.get("description") or ""
-            t["agent_instruction"] = f"Implement {name}. {desc}".strip()
+        if not normalized_task.get("agent_instruction"):
+            name = normalized_task.get("name") or normalized_task.get("description") or normalized_task["task_id"]
+            desc = normalized_task.get("description") or ""
+            normalized_task["agent_instruction"] = f"Implement {name}. {desc}".strip()
             warnings.append(
-                f"Task {t['task_id']}: missing agent_instruction; synthesized fallback"
+                f"Task {normalized_task['task_id']}: missing agent_instruction; synthesized fallback"
             )
 
-        tasks[idx] = t
+        tasks[idx] = normalized_task
 
     normalized["tasks"] = tasks
     return normalized, warnings

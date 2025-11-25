@@ -1016,23 +1016,23 @@ def _normalize_build_tasks_schema(plan: dict) -> tuple[dict, bool, list[str]]:
     parallel_ready = True
 
     for task in tasks:
-        t = copy.deepcopy(task)
+        normalized_task = copy.deepcopy(task)
 
         # Support legacy "id" field
-        task_id = t.get("task_id") or t.get("id")
+        task_id = normalized_task.get("task_id") or normalized_task.get("id")
         if not task_id:
-            warnings.append(f"Task missing task_id: {t}")
+            warnings.append(f"Task missing task_id: {normalized_task}")
             parallel_ready = False
             continue
 
-        t["task_id"] = task_id
+        normalized_task["task_id"] = task_id
 
         # Default name/working_directory if missing
-        t.setdefault("name", t.get("description", task_id))
-        t.setdefault("working_directory", ".")
+        normalized_task.setdefault("name", normalized_task.get("description", task_id))
+        normalized_task.setdefault("working_directory", ".")
 
         # Dependencies normalization
-        deps = t.get("dependencies", [])
+        deps = normalized_task.get("dependencies", [])
         if deps is None:
             deps = []
         if not isinstance(deps, list):
@@ -1041,40 +1041,40 @@ def _normalize_build_tasks_schema(plan: dict) -> tuple[dict, bool, list[str]]:
             )
             deps = []
             parallel_ready = False
-        t["dependencies"] = deps
+        normalized_task["dependencies"] = deps
 
-        build_commands = t.get("build_commands")
+        build_commands = normalized_task.get("build_commands")
         if build_commands is None:
             warnings.append(
                 f"Task {task_id} missing build_commands — plan not compatible with parallel runner"
             )
-            t["build_commands"] = []
+            normalized_task["build_commands"] = []
             parallel_ready = False
         elif not isinstance(build_commands, list):
             warnings.append(
                 f"Task {task_id} build_commands must be a list, got {type(build_commands)}"
             )
-            t["build_commands"] = []
+            normalized_task["build_commands"] = []
             parallel_ready = False
 
         # Provider normalization
-        provider = t.get("provider")
+        provider = normalized_task.get("provider")
         if not provider:
             warnings.append(f"Task {task_id} missing provider — defaulting to Claude")
-            t["provider"] = "Claude"
+            normalized_task["provider"] = "Claude"
             parallel_ready = False
 
         # Agent instruction normalization
-        instruction = t.get("agent_instruction")
+        instruction = normalized_task.get("agent_instruction")
         if not instruction:
-            fallback = t.get("name") or t.get("description") or task_id
+            fallback = normalized_task.get("name") or normalized_task.get("description") or task_id
             warnings.append(
                 f"Task {task_id} missing agent_instruction — synthesized fallback"
             )
-            t["agent_instruction"] = f"Implement {fallback}"
+            normalized_task["agent_instruction"] = f"Implement {fallback}"
             parallel_ready = False
 
-        normalized_tasks.append(t)
+        normalized_tasks.append(normalized_task)
 
     normalized["tasks"] = normalized_tasks
 
@@ -1177,8 +1177,8 @@ def _execute_agentic_tasks(
 
     # Aggregate Results
     for res in results:
-        r = res["result"]
-        total_tokens += r.context_tokens
+        task_result = res["result"]
+        total_tokens += task_result.context_tokens
         if res["success"]:
             completed_tasks.append(res["task_id"])
             done_file = builder_logs_dir / f"{res['task_id']}.done"
@@ -1188,8 +1188,8 @@ def _execute_agentic_tasks(
                         "task_id": res["task_id"],
                         "status": "completed",
                         "timestamp": datetime.now().isoformat(),
-                        "context_tokens": r.context_tokens,
-                        "duration_seconds": r.duration_seconds,
+                        "context_tokens": task_result.context_tokens,
+                        "duration_seconds": task_result.duration_seconds,
                     },
                     indent=2,
                 )
@@ -1203,8 +1203,8 @@ def _execute_agentic_tasks(
                         "task_id": res["task_id"],
                         "status": "failed",
                         "timestamp": datetime.now().isoformat(),
-                        "error": r.error,
-                        "exit_code": r.exit_code,
+                        "error": task_result.error,
+                        "exit_code": task_result.exit_code,
                     },
                     indent=2,
                 )
