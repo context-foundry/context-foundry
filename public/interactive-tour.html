@@ -1560,7 +1560,7 @@
             activeConnections: [], // Which connections should show particles
             sequenceIndex: 0, // For landing screen sequential animation
             sequenceTimer: 0, // Timer for sequential transitions
-            sequenceDuration: 1.5, // Seconds per connection in sequence
+            sequenceDuration: 2.7, // Seconds per connection in sequence
 
             createParticleSystem() {
                 // Detect touch/mobile device and reduce particles for performance
@@ -1651,9 +1651,23 @@
 
             // Update which connections are active for landing screen sequence
             updateActiveConnections() {
-                // Main workflow sequence (skip feedback loops)
+                // Complete workflow sequence including feedback loops
                 const mainWorkflow = [
+                    // Normal forward flow
                     { from: 'scout', to: 'architect' },
+                    { from: 'architect', to: 'builder' },
+                    { from: 'builder', to: 'tester' },
+                    { from: 'tester', to: 'feedback' },
+                    { from: 'feedback', to: 'patterns' },
+                    { from: 'patterns', to: 'deploy' },
+                    // Feedback loop: Test failures go back to Architect
+                    { from: 'tester', to: 'architect' },
+                    { from: 'architect', to: 'builder' },
+                    { from: 'builder', to: 'tester' },
+                    // Continue to success
+                    { from: 'tester', to: 'feedback' },
+                    // Feedback loop: Feedback analysis suggests architecture changes
+                    { from: 'feedback', to: 'architect' },
                     { from: 'architect', to: 'builder' },
                     { from: 'builder', to: 'tester' },
                     { from: 'tester', to: 'feedback' },
@@ -1678,7 +1692,7 @@
                     this.sequenceTimer += delta;
                     if (this.sequenceTimer >= this.sequenceDuration) {
                         this.sequenceTimer = 0;
-                        this.sequenceIndex = (this.sequenceIndex + 1) % 6; // Loop through 6 main connections
+                        this.sequenceIndex = (this.sequenceIndex + 1) % 16; // Loop through 16 workflow steps (includes feedback loops)
                         this.updateActiveConnections();
                     }
                 }
