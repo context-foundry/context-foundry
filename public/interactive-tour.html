@@ -1557,6 +1557,10 @@
             instancedMesh: null,
             particles: [],
             dummy: new THREE.Object3D(),
+            activeConnections: [], // Which connections should show particles
+            sequenceIndex: 0, // For landing screen sequential animation
+            sequenceTimer: 0, // Timer for sequential transitions
+            sequenceDuration: 1.5, // Seconds per connection in sequence
 
             createParticleSystem() {
                 // Detect touch/mobile device and reduce particles for performance
@@ -1572,7 +1576,7 @@
                 const particleMaterial = new THREE.MeshBasicMaterial({
                     color: 0xffffff,
                     transparent: true,
-                    opacity: 0.8,
+                    opacity: 0.6, // Duller particles
                     blending: THREE.AdditiveBlending
                 });
 
@@ -1590,26 +1594,114 @@
                         const particleIndex = connIndex * particlesPerCurve + i;
                         if (particleIndex >= maxParticles) break;
 
+                        // Duller color matching source agent
+                        const sourceColor = new THREE.Color(connection.startAgent.userData.agentData.color);
+                        sourceColor.multiplyScalar(0.6); // Make duller
+
                         this.particles.push({
                             connectionIndex: connIndex,
                             t: i / particlesPerCurve,
                             speed: 0.1 + Math.random() * 0.15,
-                            color: new THREE.Color(connection.startAgent.userData.agentData.color)
+                            color: sourceColor
                         });
                     }
                 });
 
                 SceneManager.scene.add(this.instancedMesh);
+
+                // Start on landing screen (all connections inactive initially)
+                this.setLandingScreenMode();
+            },
+
+            // Set which connections are active based on sequential workflow
+            setLandingScreenMode() {
+                // Landing screen: start sequential animation
+                this.sequenceIndex = 0;
+                this.sequenceTimer = 0;
+                this.updateActiveConnections();
+            },
+
+            // Set active connections based on current chapter
+            setStoryModeConnections(chapterId) {
+                this.activeConnections = [];
+
+                // Map chapter ID to agent and show incoming connection
+                const chapterToAgent = {
+                    0: null, // Introduction - no connections
+                    1: null, // Overview - no connections
+                    2: 'scout', // Scout - show incoming to scout
+                    3: 'architect', // Architect - show scout → architect
+                    4: 'builder', // Builder - show architect → builder
+                    5: 'tester', // Tester - show builder → tester
+                    6: 'feedback', // Feedback - show tester → feedback
+                    7: 'patterns', // Patterns - show feedback → patterns
+                    8: 'deploy' // Deploy - show patterns → deploy
+                };
+
+                const targetAgent = chapterToAgent[chapterId];
+                if (targetAgent) {
+                    // Find connections that END at this agent
+                    ConnectionSystem.connections.forEach((conn, index) => {
+                        if (conn.to === targetAgent) {
+                            this.activeConnections.push(index);
+                        }
+                    });
+                }
+            },
+
+            // Update which connections are active for landing screen sequence
+            updateActiveConnections() {
+                // Main workflow sequence (skip feedback loops)
+                const mainWorkflow = [
+                    { from: 'scout', to: 'architect' },
+                    { from: 'architect', to: 'builder' },
+                    { from: 'builder', to: 'tester' },
+                    { from: 'tester', to: 'feedback' },
+                    { from: 'feedback', to: 'patterns' },
+                    { from: 'patterns', to: 'deploy' }
+                ];
+
+                const currentFlow = mainWorkflow[this.sequenceIndex];
+                this.activeConnections = [];
+
+                // Find connection index for current flow
+                ConnectionSystem.connections.forEach((conn, index) => {
+                    if (conn.from === currentFlow.from && conn.to === currentFlow.to) {
+                        this.activeConnections.push(index);
+                    }
+                });
             },
 
             updateParticles(delta) {
-                this.particles.forEach((particle, index) => {
-                    // Update position along curve
-                    particle.t += particle.speed * delta;
-                    if (particle.t > 1) particle.t -= 1;
+                // Landing screen sequential animation
+                if (ChapterSystem.currentChapter === -1) {
+                    this.sequenceTimer += delta;
+                    if (this.sequenceTimer >= this.sequenceDuration) {
+                        this.sequenceTimer = 0;
+                        this.sequenceIndex = (this.sequenceIndex + 1) % 6; // Loop through 6 main connections
+                        this.updateActiveConnections();
+                    }
+                }
 
+                // Update connection tube opacity based on active connections
+                ConnectionSystem.connections.forEach((conn, index) => {
+                    const isActive = this.activeConnections.includes(index);
+                    if (conn.tube && conn.tube.material) {
+                        conn.tube.material.opacity = isActive ? 0.6 : 0.15;
+                    }
+                });
+
+                this.particles.forEach((particle, index) => {
                     const connection = ConnectionSystem.connections[particle.connectionIndex];
-                    if (connection && connection.curve) {
+
+                    // Only update particles for active connections
+                    const isActive = this.activeConnections.includes(particle.connectionIndex);
+
+                    if (isActive && connection && connection.curve) {
+                        // Update position along curve
+                        particle.t += particle.speed * delta;
+                        if (particle.t > 1) particle.t -= 1;
+
                         const position = connection.curve.getPoint(particle.t);
 
                         this.dummy.position.copy(position);
@@ -1617,10 +1709,19 @@
                         this.dummy.updateMatrix();
 
                         this.instancedMesh.setMatrixAt(index, this.dummy.matrix);
+                        this.instancedMesh.setColorAt(index, particle.color);
+                    } else {
+                        // Hide inactive particles by scaling to zero
+                        this.dummy.scale.setScalar(0);
+                        this.dummy.updateMatrix();
+                        this.instancedMesh.setMatrixAt(index, this.dummy.matrix);
                     }
                 });
 
                 this.instancedMesh.instanceMatrix.needsUpdate = true;
+                if (this.instancedMesh.instanceColor) {
+                    this.instancedMesh.instanceColor.needsUpdate = true;
+                }
             }
         };
 
@@ -1805,6 +1906,9 @@
                 // Update body class for tour mode
                 document.body.classList.add('tour-active');
 
+                // Update particle system for context-aware data flow
+                ParticleSystem.setStoryModeConnections(chapterId);
+
                 // Update chapter content overlay
                 this.updateChapterContent(chapter);
 
@@ -1860,11 +1964,16 @@
             },
 
             highlightAgent(agentId) {
-                // Scale up the focused agent only (no opacity changes)
+                // Update agent states based on current chapter progress
+                this.updateAgentStates();
+
+                // Scale up the focused agent
                 AgentSystem.agentMeshes.forEach(mesh => {
                     const isFocused = mesh.userData.agentId === agentId;
-                    mesh.userData.baseScale = isFocused ? 1.3 : 0.9;
-                    mesh.scale.setScalar(mesh.userData.baseScale);
+                    if (isFocused) {
+                        mesh.userData.baseScale = 1.3;
+                        mesh.scale.setScalar(1.3);
+                    }
                 });
             },
 
@@ -1872,6 +1981,69 @@
                 AgentSystem.agentMeshes.forEach(mesh => {
                     mesh.userData.baseScale = 1;
                     mesh.scale.setScalar(1);
+                    // Reset to normal brightness
+                    mesh.material.emissiveIntensity = 0.4;
+                    mesh.material.opacity = 1.0;
+                });
+            },
+
+            updateAgentStates() {
+                // Map chapter IDs to agent names
+                const chapterToAgent = {
+                    0: null, // Introduction
+                    1: null, // Overview
+                    2: 'scout',
+                    3: 'architect',
+                    4: 'builder',
+                    5: 'tester',
+                    6: 'feedback',
+                    7: 'patterns',
+                    8: 'deploy'
+                };
+
+                // Get list of visited agents
+                const visitedAgents = [];
+                const currentAgent = chapterToAgent[this.currentChapter];
+                const upcomingAgents = [];
+
+                for (let i = 0; i <= 8; i++) {
+                    const agent = chapterToAgent[i];
+                    if (!agent) continue;
+
+                    if (i < this.currentChapter) {
+                        visitedAgents.push(agent);
+                    } else if (i > this.currentChapter) {
+                        upcomingAgents.push(agent);
+                    }
+                }
+
+                // Apply visual states
+                AgentSystem.agentMeshes.forEach(mesh => {
+                    const agentId = mesh.userData.agentId;
+
+                    if (agentId === currentAgent) {
+                        // Current agent: highlighted
+                        mesh.material.emissiveIntensity = 0.6;
+                        mesh.material.opacity = 1.0;
+                        mesh.userData.baseScale = 1.3;
+                    } else if (visitedAgents.includes(agentId)) {
+                        // Visited agents: normal
+                        mesh.material.emissiveIntensity = 0.4;
+                        mesh.material.opacity = 1.0;
+                        mesh.userData.baseScale = 1.0;
+                    } else if (upcomingAgents.includes(agentId)) {
+                        // Upcoming agents: dimmed
+                        mesh.material.emissiveIntensity = 0.2;
+                        mesh.material.opacity = 0.4;
+                        mesh.userData.baseScale = 0.9;
+                    } else {
+                        // Default state
+                        mesh.material.emissiveIntensity = 0.4;
+                        mesh.material.opacity = 1.0;
+                        mesh.userData.baseScale = 1.0;
+                    }
+
+                    mesh.scale.setScalar(mesh.userData.baseScale);
                 });
             },
 
@@ -1968,6 +2140,10 @@
 
                 // Reset camera to overview position
                 AnimationController.interpolateCamera(new THREE.Vector3(0, 0, 0), 1.0);
+
+                // Reset to landing screen mode with sequential animation
+                this.currentChapter = -1;
+                ParticleSystem.setLandingScreenMode();
 
                 // Reset current chapter tracking (but keep progress in timeline)
                 // User can resume from nav bar or click agents freely
