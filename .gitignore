@@ -112,9 +112,10 @@ smoke_test_*.txt
 #
 # ═══════════════════════════════════════════════════════════
 # extensions/  # Commented out for private repo - extensions now committed
-extensions/workday/
 docs/assets/SatoshiChoreTracker.gif
 
 # Flowise documentation and articles (keep private)
 extensions/flowise/**/*.md
-!extensions/flowise/prompts/*.md
+
+# Workday transcripts (keep private)
+extensions/workday/**/*.txt
