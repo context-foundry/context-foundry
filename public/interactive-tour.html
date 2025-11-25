@@ -28,23 +28,6 @@
             left: 0;
         }
 
-        /* CF Logo Watermark */
-        #cf-watermark {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 80px;
-            height: 80px;
-            opacity: 0.3;
-            pointer-events: none;
-            z-index: 10;
-            transition: opacity 0.3s;
-        }
-
-        #cf-watermark:hover {
-            opacity: 0.5;
-        }
-
         /* Agent Labels - Cyberpunk Style */
         .agent-label {
             padding: 6px 12px;
@@ -634,12 +617,16 @@
             position: fixed;
             bottom: 90px;
             right: 20px;
-            font-size: 10px;
-            font-family: monospace;
-            opacity: 0.4;
+            width: 60px;
+            height: 60px;
+            opacity: 0.25;
             z-index: 100;
             pointer-events: none;
             transition: opacity 0.3s;
+        }
+
+        #stats:hover {
+            opacity: 0.4;
         }
 
         /* Loading State */
@@ -781,9 +768,6 @@
 
     <div id="canvas-container"></div>
 
-    <!-- CF Logo Watermark -->
-    <img src="cf_logo_gray_2025.png" id="cf-watermark" alt="Context Foundry" />
-
     <!-- TOC Toggle Button -->
     <button id="toc-toggle" title="Table of Contents">☰</button>
 
@@ -843,7 +827,8 @@
         <kbd>Drag</kbd> to rotate · <kbd>Scroll</kbd> to zoom · <kbd>Click</kbd> agent for details
     </div>
 
-    <div id="stats"></div>
+    <!-- CF Logo Watermark (replaces stats) -->
+    <img src="cf_logo_gray_2025.png" id="stats" alt="Context Foundry" />
 
     <!-- Right Sidebar - Agent Detail Panel (Enhanced) -->
     <div id="info-panel">
@@ -2491,9 +2476,7 @@
         // ═══════════════════════════════════════════════════════════════════════
         class Application {
             constructor() {
-                this.frameCount = 0;
-                this.lastTime = 0;
-                this.fps = 0;
+                // Application initialization
             }
 
             async init() {
@@ -2568,16 +2551,6 @@
                 requestAnimationFrame(() => this.animate());
 
                 const delta = SceneManager.clock.getDelta();
-                const time = performance.now();
-
-                // Update FPS counter
-                this.frameCount++;
-                if (time - this.lastTime >= 1000) {
-                    this.fps = this.frameCount;
-                    this.frameCount = 0;
-                    this.lastTime = time;
-                    this.updateStats();
-                }
 
                 // Update all systems
                 AnimationController.update(delta);
@@ -2586,15 +2559,6 @@
                 // Render
                 SceneManager.renderer.render(SceneManager.scene, SceneManager.camera);
                 LabelSystem.render();
-            }
-
-            updateStats() {
-                const info = SceneManager.renderer.info;
-                document.getElementById('stats').innerHTML = `
-                    FPS: ${this.fps}<br>
-                    Triangles: ${info.render.triangles}<br>
-                    Draw Calls: ${info.render.calls}
-                `;
             }
         }
 
