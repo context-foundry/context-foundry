@@ -302,6 +302,13 @@ class CFDaemon:
         if devnull > 2:
             os.close(devnull)
 
+        # Ensure Claude CLI is in PATH (fix for daemon PATH issues)
+        # Claude is typically at /opt/homebrew/bin/claude on macOS
+        current_path = os.environ.get("PATH", "")
+        homebrew_bin = "/opt/homebrew/bin"
+        if homebrew_bin not in current_path:
+            os.environ["PATH"] = f"{homebrew_bin}:{current_path}"
+
         # Store the status pipe for later use
         self._status_pipe = pipe_w
         return None  # We're the child
