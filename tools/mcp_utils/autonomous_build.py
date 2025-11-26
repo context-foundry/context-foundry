@@ -58,6 +58,20 @@ from tools.mcp_utils.pipeline_state import (
     get_phases_from,
 )
 
+# Import safety mechanisms (Milestone 3)
+from tools.mcp_utils.audit import (
+    audit_pipeline_started,
+    audit_phase_started,
+    audit_phase_completed,
+    audit_preflight_started,
+    audit_preflight_passed,
+    audit_preflight_failed,
+)
+from tools.mcp_utils.preflight import (
+    run_phase_preflight,
+    get_phase_preflight_config,
+)
+
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
 
@@ -1210,6 +1224,49 @@ def execute_build_with_phase_spawning(
         working_directory,
     )
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # AUDIT: Pipeline started
+    # ═══════════════════════════════════════════════════════════════════════
+    audit_pipeline_started(
+        working_directory=str(working_directory),
+        task=task,
+    )
+
+    def run_preflight_for_phase(phase_name: str) -> Optional[Dict[str, Any]]:
+        """Run preflight checks for a phase. Returns error dict if failed, None if passed."""
+        config = get_phase_preflight_config(phase_name)
+        if not config:
+            return None  # No preflight config for this phase
+
+        audit_preflight_started(phase_name, str(working_directory))
+
+        result = run_phase_preflight(
+            phase_name=phase_name,
+            working_directory=working_directory,
+            required_inputs=config.get("required_inputs"),
+            json_inputs=config.get("json_inputs"),
+            required_tools=config.get("required_tools"),
+        )
+
+        if result.passed:
+            audit_preflight_passed(phase_name, str(working_directory))
+            if result.warnings:
+                for warning in result.warnings:
+                    print(f"⚠️  Preflight warning: {warning.message}", file=sys.stderr)
+            return None
+        else:
+            failures = [{"name": f.name, "message": f.message} for f in result.failures]
+            audit_preflight_failed(phase_name, str(working_directory), failures)
+            print(f"❌ Preflight failed for {phase_name}:", file=sys.stderr)
+            for failure in result.failures:
+                print(f"   - {failure.message}", file=sys.stderr)
+            return {
+                "status": "failed",
+                "phase_failed": phase_name,
+                "error": f"Preflight checks failed: {result.failures[0].message}",
+                "preflight_failures": failures,
+            }
+
     def check_timeout(phase_name: str) -> Optional[Dict[str, Any]]:
         """Check if timeout has been exceeded. Returns error dict if timed out, None otherwise."""
         if timeout_minutes is not None:
@@ -1265,6 +1322,14 @@ def execute_build_with_phase_spawning(
             if pipeline_state:
                 pipeline_state.mark_phase_started("Scout")
                 save_pipeline_state(pipeline_state, working_directory)
+
+            # Run preflight checks
+            preflight_error = run_preflight_for_phase("Scout")
+            if preflight_error:
+                return preflight_error
+
+            # Audit: Phase started
+            audit_phase_started("Scout", str(working_directory))
 
             # Check Scout cache (if incremental)
             scout_cached = False
@@ -1338,6 +1403,8 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_phase_completed("Scout")
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase completed
+                audit_phase_completed("Scout", str(working_directory))
 
             # Check if we should pause after Scout
             pause_result = _check_and_handle_pause(
@@ -1450,6 +1517,14 @@ def execute_build_with_phase_spawning(
                 pipeline_state.mark_phase_started("Architect")
                 save_pipeline_state(pipeline_state, working_directory)
 
+            # Run preflight checks
+            preflight_error = run_preflight_for_phase("Architect")
+            if preflight_error:
+                return preflight_error
+
+            # Audit: Phase started
+            audit_phase_started("Architect", str(working_directory))
+
             # FIX #4: Use module-relative path
             architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
 
@@ -1509,6 +1584,8 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_phase_completed("Architect")
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase completed
+                audit_phase_completed("Architect", str(working_directory))
 
             print(
                 "[TRACE] Architect phase marked completed, entering post-processing",
@@ -1747,6 +1824,14 @@ def execute_build_with_phase_spawning(
                 pipeline_state.mark_phase_started("Builder")
                 save_pipeline_state(pipeline_state, working_directory)
 
+            # Run preflight checks
+            preflight_error = run_preflight_for_phase("Builder")
+            if preflight_error:
+                return preflight_error
+
+            # Audit: Phase started
+            audit_phase_started("Builder", str(working_directory))
+
             # FIX #4: Use module-relative path
             builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
 
@@ -1804,6 +1889,8 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_phase_completed("Builder")
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase completed
+                audit_phase_completed("Builder", str(working_directory))
 
             # Check if we should pause after Builder
             pause_result = _check_and_handle_pause(

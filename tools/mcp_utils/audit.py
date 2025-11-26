@@ -455,3 +455,53 @@ def audit_emergency_stop(
     job_id: Optional[str] = None,
 ):
     get_audit_logger().log_emergency_stop(reason, working_directory, phase, job_id)
+
+
+def audit_pipeline_started(
+    working_directory: str,
+    task: str,
+    job_id: Optional[str] = None,
+):
+    """Log pipeline started"""
+    get_audit_logger().log(
+        event_type=AuditEventType.PIPELINE_STARTED,
+        message=f"Pipeline started: {task[:100]}",
+        severity=AuditSeverity.INFO,
+        job_id=job_id,
+        working_directory=working_directory,
+        details={"task": task},
+    )
+
+
+def audit_pipeline_completed(
+    working_directory: str,
+    phases_completed: List[str],
+    job_id: Optional[str] = None,
+):
+    """Log pipeline completed"""
+    get_audit_logger().log(
+        event_type=AuditEventType.PIPELINE_COMPLETED,
+        message=f"Pipeline completed: {len(phases_completed)} phases",
+        severity=AuditSeverity.INFO,
+        job_id=job_id,
+        working_directory=working_directory,
+        details={"phases_completed": phases_completed},
+    )
+
+
+def audit_pipeline_failed(
+    working_directory: str,
+    error: str,
+    phase: Optional[str] = None,
+    job_id: Optional[str] = None,
+):
+    """Log pipeline failed"""
+    get_audit_logger().log(
+        event_type=AuditEventType.PIPELINE_FAILED,
+        message=f"Pipeline failed: {error}",
+        severity=AuditSeverity.ERROR,
+        phase=phase,
+        job_id=job_id,
+        working_directory=working_directory,
+        details={"error": error},
+    )
