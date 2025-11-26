@@ -161,7 +161,7 @@ jobs:
       - name: Commit pattern changes
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          git add .context-foundry/patterns/*.json
+          git add -f .context-foundry/patterns/*.json
           git commit -m "$(cat <<'EOF'
           chore: sync community patterns - ${{ steps.metadata.outputs.date }}
 

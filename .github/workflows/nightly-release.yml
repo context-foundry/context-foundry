@@ -201,7 +201,7 @@ jobs:
           git tag -a "${{ steps.version.outputs.version }}" -m "Nightly build ${{ steps.version.outputs.date_formatted }}"
           git push origin "${{ steps.version.outputs.version }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         if: steps.check_commits.outputs.has_commits == 'true'
@@ -213,7 +213,7 @@ jobs:
           prerelease: true
           draft: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         if: steps.check_commits.outputs.has_commits == 'true'
