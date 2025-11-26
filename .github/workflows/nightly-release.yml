@@ -100,7 +100,8 @@ jobs:
         id: version
         run: |
           DATE=$(date +'%Y%m%d')
-          NIGHTLY_VERSION="v${{ steps.stable.outputs.version }}-nightly.${DATE}"
+          TIMESTAMP=$(date +'%Y%m%d-%H%M%S')
+          NIGHTLY_VERSION="v${{ steps.stable.outputs.version }}-nightly.${TIMESTAMP}"
           echo "Nightly version: $NIGHTLY_VERSION"
           echo "version=$NIGHTLY_VERSION" >> $GITHUB_OUTPUT
           echo "date=$DATE" >> $GITHUB_OUTPUT
