@@ -810,6 +810,72 @@ def cmd_cleanup(args):
     return 0
 
 
+def cmd_emergency_stop(args):
+    """Activate emergency stop - halt all agent activity"""
+    try:
+        from tools.mcp_utils.emergency_stop import (
+            activate_emergency_stop,
+            is_emergency_stop_active,
+        )
+    except ImportError:
+        print("Error: Emergency stop module not available", file=sys.stderr)
+        return 1
+
+    if is_emergency_stop_active():
+        print("⚠️  Emergency stop is already active")
+        print("   Run 'cfd emergency-resume' to clear it first")
+        return 0
+
+    reason = args.reason or "Manual emergency stop via CLI"
+    status = activate_emergency_stop(reason)
+
+    print("\n🛑 EMERGENCY STOP ACTIVATED")
+    print("═══════════════════════════════════════════════════════════")
+    print(f"   Reason: {status.reason}")
+    print(f"   Activated by: {status.activated_by}")
+    print(f"   Activated at: {status.activated_at}")
+    print("═══════════════════════════════════════════════════════════")
+    print("\n⚠️  All pipeline execution is now blocked!")
+    print("   Running builds will stop at the next phase boundary.")
+    print("\n   To resume: cfd emergency-resume")
+
+    return 0
+
+
+def cmd_emergency_resume(args):
+    """Deactivate emergency stop - resume agent activity"""
+    try:
+        from tools.mcp_utils.emergency_stop import (
+            deactivate_emergency_stop,
+            is_emergency_stop_active,
+            get_emergency_stop_status,
+        )
+    except ImportError:
+        print("Error: Emergency stop module not available", file=sys.stderr)
+        return 1
+
+    if not is_emergency_stop_active():
+        print("✓ Emergency stop is not active - nothing to clear")
+        return 0
+
+    # Show current status before clearing
+    status = get_emergency_stop_status()
+    print("\nClearing emergency stop:")
+    print(f"   Was activated: {status.activated_at}")
+    print(f"   Reason was: {status.reason}")
+    print(f"   Activated by: {status.activated_by}")
+
+    deactivate_emergency_stop()
+
+    print("\n✅ EMERGENCY STOP CLEARED")
+    print("═══════════════════════════════════════════════════════════")
+    print("   Agents can now resume execution.")
+    print("   Paused pipelines can be resumed with 'cfd resume'.")
+    print("═══════════════════════════════════════════════════════════")
+
+    return 0
+
+
 def cmd_killall(args):
     """Kill all Context Foundry related processes except daemon and current process"""
     import os
@@ -1400,6 +1466,22 @@ def main():
         help="Kill all without confirmation",
     )
 
+    # Emergency stop command (Milestone 6)
+    emergency_stop_parser = subparsers.add_parser(
+        "emergency-stop", help="Activate emergency stop - halt all agent activity"
+    )
+    emergency_stop_parser.add_argument(
+        "--reason",
+        "-r",
+        type=str,
+        help="Reason for activating emergency stop",
+    )
+
+    # Emergency resume command (Milestone 6)
+    subparsers.add_parser(
+        "emergency-resume", help="Deactivate emergency stop - resume agent activity"
+    )
+
     # Pipeline-status command
     pipeline_status_parser = subparsers.add_parser(
         "pipeline-status", help="Show pipeline state for a project directory"
@@ -1547,6 +1629,8 @@ def main():
         "cancel": cmd_cancel,
         "cleanup": cmd_cleanup,
         "killall": cmd_killall,
+        "emergency-stop": cmd_emergency_stop,
+        "emergency-resume": cmd_emergency_resume,
         "pipeline-status": cmd_pipeline_status,
         "run-phase": cmd_run_phase,
         "resume": cmd_resume,

@@ -69,10 +69,15 @@ from tools.mcp_utils.audit import (
     audit_preflight_started,
     audit_preflight_passed,
     audit_preflight_failed,
+    audit_emergency_stop,
 )
 from tools.mcp_utils.preflight import (
     run_phase_preflight,
     get_phase_preflight_config,
+)
+from tools.mcp_utils.emergency_stop import (
+    is_emergency_stop_active,
+    get_emergency_stop_status,
 )
 
 # Get module directory for path resolution
@@ -1337,6 +1342,45 @@ def execute_build_with_phase_spawning(
                 print(f"   - {failure.message}", file=sys.stderr)
             return False
 
+    def check_emergency_stop(phase_name: str) -> Optional[Dict[str, Any]]:
+        """Check if emergency stop is active. Returns error dict if stopped, None otherwise."""
+        if is_emergency_stop_active():
+            status = get_emergency_stop_status()
+            reason = status.reason or "Emergency stop activated"
+            error_msg = f"Emergency stop: {reason}"
+            print(f"\n🛑 EMERGENCY STOP: {reason}", file=sys.stderr)
+            print(
+                f"   Activated by: {status.activated_by or 'unknown'}", file=sys.stderr
+            )
+            print(
+                f"   Activated at: {status.activated_at or 'unknown'}", file=sys.stderr
+            )
+            print("\n   To resume: cfd emergency-resume", file=sys.stderr)
+            # Persist cancelled state
+            if pipeline_state:
+                pipeline_state.mark_cancelled(reason)
+                save_pipeline_state(pipeline_state, working_directory)
+            # Audit: Emergency stop
+            audit_emergency_stop(reason, str(working_directory), phase_name)
+            return {
+                "status": "cancelled",
+                "phase_cancelled": phase_name,
+                "error": error_msg,
+                "emergency_stop": status.to_dict(),
+                "start_time": start_time.isoformat(),
+                "duration_seconds": (datetime.now() - start_time).total_seconds(),
+                "phases_completed": phases_completed,
+                "test_iterations": test_iteration,
+            }
+        return None
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # EMERGENCY STOP CHECK: Before any phases run
+    # ═══════════════════════════════════════════════════════════════════════
+    emergency_result = check_emergency_stop("Pipeline Start")
+    if emergency_result:
+        return emergency_result
+
     try:
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
@@ -1357,6 +1401,11 @@ def execute_build_with_phase_spawning(
                 except Exception:
                     pass
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Scout")
+            if emergency_result:
+                return emergency_result
+
             # Check timeout before starting phase
             timeout_result = check_timeout("Scout")
             if timeout_result:
@@ -1557,6 +1606,11 @@ def execute_build_with_phase_spawning(
                 except Exception:
                     pass
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Architect")
+            if emergency_result:
+                return emergency_result
+
             # Check timeout before starting phase
             timeout_result = check_timeout("Architect")
             if timeout_result:
@@ -1866,6 +1920,11 @@ def execute_build_with_phase_spawning(
         if builder_skipped:
             print("⏭️  Skipping Builder phase (already completed)", file=sys.stderr)
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Builder")
+            if emergency_result:
+                return emergency_result
+
             # Check timeout before starting phase
             timeout_result = check_timeout("Builder")
             if timeout_result:
@@ -1972,6 +2031,11 @@ def execute_build_with_phase_spawning(
         if test_skipped:
             print("⏭️  Skipping Test phase (already completed)", file=sys.stderr)
         elif enable_test_loop:
+            # Check emergency stop before starting test phase
+            emergency_result = check_emergency_stop("Test")
+            if emergency_result:
+                return emergency_result
+
             # Check timeout before starting test phase
             timeout_result = check_timeout("Test")
             if timeout_result:
@@ -1984,6 +2048,13 @@ def execute_build_with_phase_spawning(
             test_prompt = MODULE_DIR / "prompts" / "phases" / "phase_test.txt"
 
             while test_iteration <= max_test_iterations:
+                # Check emergency stop at start of each test iteration
+                emergency_result = check_emergency_stop(
+                    f"Test-Iteration-{test_iteration}"
+                )
+                if emergency_result:
+                    return emergency_result
+
                 # Check timeout at start of each test iteration
                 timeout_result = check_timeout(f"Test-Iteration-{test_iteration}")
                 if timeout_result:
@@ -2274,6 +2345,11 @@ def execute_build_with_phase_spawning(
         if screenshot_skipped:
             print("⏭️  Skipping Screenshot phase (already completed)", file=sys.stderr)
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Screenshot")
+            if emergency_result:
+                return emergency_result
+
             # Screenshot phase ALWAYS runs after Test completes (has its own 10-min timeout)
             print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
 
@@ -2360,6 +2436,11 @@ def execute_build_with_phase_spawning(
                 "⏭️  Skipping Documentation phase (already completed)", file=sys.stderr
             )
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Documentation")
+            if emergency_result:
+                return emergency_result
+
             # Documentation phase ALWAYS runs after Screenshot completes (has its own 10-min timeout)
             print("\n📝 Running Documentation phase...", file=sys.stderr)
 
@@ -2447,6 +2528,11 @@ def execute_build_with_phase_spawning(
             )
             phases_completed.append("Deploy")
         else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Deploy")
+            if emergency_result:
+                return emergency_result
+
             # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
             print("\n🚀 Running Deploy phase...", file=sys.stderr)
             if pipeline_state:

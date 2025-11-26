@@ -21,6 +21,14 @@ from .store import Store
 from .jobs import JobManager
 from .runner import create_runner
 
+# Import emergency stop for daemon monitoring
+try:
+    from tools.mcp_utils.emergency_stop import is_emergency_stop_active
+
+    EMERGENCY_STOP_AVAILABLE = True
+except ImportError:
+    EMERGENCY_STOP_AVAILABLE = False
+
 
 logger = logging.getLogger(__name__)
 
@@ -629,6 +637,18 @@ class CFDaemon:
                             logger.error(f"Failed to get stats: {e}", exc_info=True)
                             # Still update minute to avoid repeated errors
                             last_stats_minute = current_minute
+
+                        # Check emergency stop status (once per minute with stats)
+                        if EMERGENCY_STOP_AVAILABLE:
+                            try:
+                                if is_emergency_stop_active():
+                                    logger.warning(
+                                        "🛑 EMERGENCY STOP ACTIVE - New builds will be blocked, "
+                                        "running builds will stop at next phase boundary. "
+                                        "Run 'cfd emergency-resume' to clear."
+                                    )
+                            except Exception:
+                                pass  # Don't let emergency stop check crash daemon
 
                     time.sleep(1)
 
