@@ -16,10 +16,8 @@ build/
 logs/
 *.log
 
-# Session data
+# Session data and patterns (local + S3 backup, NOT GitHub)
 .context-foundry/
-!.context-foundry/patterns/
-!.context-foundry/patterns/**
 blueprints/
 checkpoints/
 checkpoints/artifacts/temp/
@@ -47,6 +45,8 @@ foundry/patterns/*.db
 # Claude Code
 .claude/
 .claude-code/cache/
+CLAUDE.md
+**/CLAUDE.md
 
 # OS
 .DS_Store
@@ -119,3 +119,6 @@ extensions/flowise/**/*.md
 
 # Workday transcripts (keep private)
 extensions/workday/**/*.txt
+
+# Extension dependencies (large/untracked)
+extensions/*/node_modules/
