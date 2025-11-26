@@ -1184,6 +1184,85 @@ def _wait_for_job(store: Store, job_id: str, timeout: Optional[int] = None):
         print(".", end="", flush=True)
 
 
+def cmd_audit_log(args):
+    """Show recent safety audit events"""
+    try:
+        from tools.mcp_utils.audit import (
+            get_audit_logger,
+            AuditEventType,
+            AuditSeverity,
+        )
+    except ImportError:
+        print("Error: Audit module not available", file=sys.stderr)
+        return 1
+
+    logger = get_audit_logger()
+
+    # Build event type filter
+    event_types = None
+    if args.type:
+        try:
+            event_types = [AuditEventType(args.type)]
+        except ValueError:
+            print(f"Error: Invalid event type: {args.type}", file=sys.stderr)
+            print(f"Valid types: {', '.join(e.value for e in AuditEventType)}")
+            return 1
+
+    # Build severity filter
+    severity_min = None
+    if args.severity:
+        try:
+            severity_min = AuditSeverity(args.severity)
+        except ValueError:
+            print(f"Error: Invalid severity: {args.severity}", file=sys.stderr)
+            print(f"Valid severities: {', '.join(s.value for s in AuditSeverity)}")
+            return 1
+
+    events = logger.read_recent_events(
+        limit=args.limit,
+        event_types=event_types,
+        severity_min=severity_min,
+    )
+
+    if not events:
+        print("No audit events found")
+        return 0
+
+    # Format output
+    if args.json:
+        print(json.dumps(events, indent=2))
+    else:
+        # Severity colors/markers
+        severity_markers = {
+            "info": "  ",
+            "warning": "⚠️",
+            "error": "❌",
+            "critical": "🚨",
+        }
+
+        print(f"Recent Safety Audit Events ({len(events)} shown):")
+        print("-" * 70)
+
+        for event in events:
+            ts = event.get("timestamp", "")[:19]  # Truncate microseconds
+            severity = event.get("severity", "info")
+            marker = severity_markers.get(severity, "  ")
+            event_type = event.get("event_type", "unknown")
+            message = event.get("message", "")
+            phase = event.get("phase", "")
+
+            phase_str = f"[{phase}] " if phase else ""
+            print(f"{marker} {ts} {phase_str}{event_type}")
+            print(f"   {message}")
+
+            if args.verbose and event.get("details"):
+                print(f"   Details: {json.dumps(event['details'])}")
+
+            print()
+
+    return 0
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -1414,6 +1493,41 @@ def main():
         help="Timeout for --wait (seconds)",
     )
 
+    # Audit-log command
+    audit_log_parser = subparsers.add_parser(
+        "audit-log", help="Show recent safety audit events"
+    )
+    audit_log_parser.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=50,
+        help="Maximum number of events to show (default: 50)",
+    )
+    audit_log_parser.add_argument(
+        "--type",
+        "-t",
+        type=str,
+        help="Filter by event type (e.g., scope_violation, preflight_failed)",
+    )
+    audit_log_parser.add_argument(
+        "--severity",
+        "-s",
+        type=str,
+        help="Minimum severity (info, warning, error, critical)",
+    )
+    audit_log_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+    audit_log_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show event details",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1436,6 +1550,7 @@ def main():
         "pipeline-status": cmd_pipeline_status,
         "run-phase": cmd_run_phase,
         "resume": cmd_resume,
+        "audit-log": cmd_audit_log,
     }
 
     return commands[args.command](args)
