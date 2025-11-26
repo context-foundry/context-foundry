@@ -1298,6 +1298,13 @@ def execute_build_with_phase_spawning(
                 }
         return None
 
+    def is_timeout_exceeded() -> bool:
+        """Check if timeout exceeded (for optional phases that continue anyway)."""
+        if timeout_minutes is not None:
+            elapsed_minutes = (datetime.now() - start_time).total_seconds() / 60
+            return elapsed_minutes > timeout_minutes
+        return False
+
     try:
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
@@ -2245,8 +2252,8 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Screenshot", str(working_directory))
 
-            screenshot_timeout_result = check_timeout("Screenshot")
-            if screenshot_timeout_result:
+            # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
+            if is_timeout_exceeded():
                 print(
                     "⚠️  Build timeout exceeded, but running Screenshot anyway (max 10 min)",
                     file=sys.stderr,
@@ -2293,6 +2300,12 @@ def execute_build_with_phase_spawning(
                 if pause_result:
                     return pause_result
             else:
+                # Audit: Phase failed (but not pipeline - optional phase)
+                audit_phase_failed(
+                    "Screenshot",
+                    str(working_directory),
+                    screenshot_result.error or "Screenshot capture failed",
+                )
                 print(
                     f"⚠️  Screenshot capture skipped: {screenshot_result.error or 'N/A'}",
                     file=sys.stderr,
@@ -2322,8 +2335,8 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Documentation", str(working_directory))
 
-            doc_timeout_result = check_timeout("Documentation")
-            if doc_timeout_result:
+            # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
+            if is_timeout_exceeded():
                 print(
                     "⚠️  Build timeout exceeded, but running Documentation anyway (max 10 min)",
                     file=sys.stderr,
@@ -2374,6 +2387,12 @@ def execute_build_with_phase_spawning(
                 if pause_result:
                     return pause_result
             else:
+                # Audit: Phase failed (but not pipeline - optional phase)
+                audit_phase_failed(
+                    "Documentation",
+                    str(working_directory),
+                    docs_result.error or "Documentation generation failed",
+                )
                 print(
                     f"⚠️  Documentation generation failed: {docs_result.error}",
                     file=sys.stderr,
@@ -2398,8 +2417,8 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Deploy", str(working_directory))
 
-            deploy_timeout_result = check_timeout("Deploy")
-            if deploy_timeout_result:
+            # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
+            if is_timeout_exceeded():
                 print(
                     "⚠️  Build timeout exceeded, but running Deploy anyway (max 10 min)",
                     file=sys.stderr,
@@ -2460,6 +2479,12 @@ def execute_build_with_phase_spawning(
                     "⚠️  Deployment skipped (GitHub CLI not available)", file=sys.stderr
                 )
             else:
+                # Audit: Phase failed (but not pipeline - optional phase)
+                audit_phase_failed(
+                    "Deploy",
+                    str(working_directory),
+                    deploy_result.error or "Deployment failed",
+                )
                 print(
                     f"⚠️  Deployment failed: {deploy_result.error or 'Unknown error'}",
                     file=sys.stderr,

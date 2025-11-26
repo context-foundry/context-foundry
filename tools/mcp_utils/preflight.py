@@ -338,6 +338,16 @@ PHASE_PREFLIGHT_CONFIG: Dict[str, Dict[str, Any]] = {
         "json_inputs": [],
         "required_tools": [],  # Varies by project type
     },
+    "Screenshot": {
+        "required_inputs": [],  # Optional phase - no hard requirements
+        "json_inputs": [],
+        "required_tools": [],  # Playwright installed at runtime
+    },
+    "Documentation": {
+        "required_inputs": [],  # Optional phase - no hard requirements
+        "json_inputs": [],
+        "required_tools": ["claude"],
+    },
     "Deploy": {
         "required_inputs": ["README.md"],
         "json_inputs": [],
