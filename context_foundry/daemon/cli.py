@@ -1496,11 +1496,39 @@ def cmd_pending_approvals(args):
 
     print("\n" + "=" * 70)
 
-    pending_count = sum(1 for r in requests if r.status.value == "pending")
-    if pending_count > 0:
-        print(f"\n📋 {pending_count} request(s) awaiting approval")
-        print("   Usage: cfd approve <id>        - Approve a request")
-        print("          cfd approve <id> --deny - Deny a request")
+    # Show appropriate summary based on view mode
+    if args.all:
+        # Show breakdown by status when viewing all requests
+        status_counts = {}
+        for r in requests:
+            status_counts[r.status.value] = status_counts.get(r.status.value, 0) + 1
+
+        print(f"\n📊 Summary: {len(requests)} total request(s)")
+        status_icons = {
+            "pending": "⏳",
+            "approved": "✅",
+            "denied": "❌",
+            "expired": "⌛",
+            "cancelled": "🚫",
+        }
+        for status, count in sorted(status_counts.items()):
+            icon = status_icons.get(status, "  ")
+            print(f"   {icon} {status.capitalize()}: {count}")
+
+        pending_count = status_counts.get("pending", 0)
+        if pending_count > 0:
+            print(f"\n   {pending_count} request(s) awaiting approval")
+            print("   Usage: cfd approve <id>        - Approve a request")
+            print("          cfd approve <id> --deny - Deny a request")
+    else:
+        # Default view: only pending requests, show approval instructions
+        pending_count = len(requests)  # All are pending in this view
+        if pending_count > 0:
+            print(f"\n📋 {pending_count} request(s) awaiting approval")
+            print("   Usage: cfd approve <id>        - Approve a request")
+            print("          cfd approve <id> --deny - Deny a request")
+        else:
+            print("\n✅ No pending approvals")
 
     return 0
 
