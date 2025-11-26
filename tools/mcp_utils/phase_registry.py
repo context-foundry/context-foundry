@@ -55,8 +55,8 @@ class PhaseDefinition:
 
 # Default phase definitions
 # NOTE: The system uses both .md (human-readable) and .json (machine/BAML) files:
-# - Scout: outputs scout-report.md (+ optional scout_report.json from BAML)
-# - Architect: reads scout-report.md, outputs architecture.md + architecture.json (BAML)
+# - Scout: outputs scout-report.md + scout_report.json (BAML) - JSON is the contract
+# - Architect: reads scout_report.json, outputs architecture.md + architecture.json (BAML)
 # - Builder: reads architecture.json (preferred) or architecture.md (fallback)
 DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
     PhaseId.SCOUT: PhaseDefinition(
@@ -67,8 +67,8 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         timeout_seconds=600,
         required_inputs=[],
         required_outputs=[
-            ".context-foundry/scout-report.md"
-        ],  # scout_report.json is optional
+            ".context-foundry/scout_report.json"
+        ],  # BAML-parsed JSON is the contract
         can_skip=False,
     ),
     PhaseId.ARCHITECT: PhaseDefinition(
@@ -77,7 +77,7 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         description="Design the solution architecture and implementation plan",
         depends_on=[PhaseId.SCOUT],
         timeout_seconds=900,
-        required_inputs=[".context-foundry/scout-report.md"],  # or scout_report.json
+        required_inputs=[".context-foundry/scout_report.json"],  # BAML JSON contract
         required_outputs=[
             ".context-foundry/architecture.json"
         ],  # BAML-parsed JSON is the contract

@@ -272,47 +272,48 @@ def validate_scout_output(working_dir: Path) -> ContractValidationResult:
         result=ValidationResult.PASSED,
     )
 
-    # Check for scout-report.md (required)
-    scout_md = working_dir / ".context-foundry" / "scout-report.md"
+    # Check for scout_report.json (required - BAML contract)
     scout_json = working_dir / ".context-foundry" / "scout_report.json"
+    scout_md = working_dir / ".context-foundry" / "scout-report.md"
 
-    if not scout_md.exists():
-        result.add_violation(
-            ContractViolation(
-                rule="required_output",
-                message="Scout report not created: scout-report.md",
-                severity=ValidationResult.FAILED,
-                path=str(scout_md),
-                suggestion="Scout phase should create .context-foundry/scout-report.md",
-            )
-        )
-    else:
-        content = scout_md.read_text()
-        # Check for key sections
-        required_sections = ["## Key Requirements", "## Technology Stack"]
-        for section in required_sections:
-            if section not in content:
-                result.add_violation(
-                    ContractViolation(
-                        rule="scout_section_missing",
-                        message=f"Scout report missing section: {section}",
-                        severity=ValidationResult.WARNING,
-                        path=str(scout_md),
-                        suggestion=f"Scout report should include {section}",
-                    )
-                )
-
-    # scout_report.json is optional but good to have
     if not scout_json.exists():
-        result.add_violation(
-            ContractViolation(
-                rule="scout_json_missing",
-                message="Scout BAML output not created: scout_report.json (optional)",
-                severity=ValidationResult.WARNING,
-                path=str(scout_json),
-                suggestion="BAML parsing may have timed out - scout-report.md will be used",
+        if scout_md.exists():
+            # MD exists but JSON doesn't - warn but don't fail (fallback available)
+            result.add_violation(
+                ContractViolation(
+                    rule="scout_json_missing",
+                    message="scout_report.json not created (scout-report.md exists as fallback)",
+                    severity=ValidationResult.WARNING,
+                    path=str(scout_json),
+                    suggestion="BAML parsing may have timed out - scout-report.md will be used",
+                )
             )
-        )
+        else:
+            # Neither exists - fail
+            result.add_violation(
+                ContractViolation(
+                    rule="required_output",
+                    message="Scout report not created: neither scout_report.json nor scout-report.md",
+                    severity=ValidationResult.FAILED,
+                    path=str(scout_json),
+                    suggestion="Scout phase should create .context-foundry/scout_report.json",
+                )
+            )
+    else:
+        # Validate JSON is parseable
+        try:
+            with open(scout_json) as f:
+                json.load(f)
+        except json.JSONDecodeError as e:
+            result.add_violation(
+                ContractViolation(
+                    rule="scout_json_invalid",
+                    message=f"scout_report.json is invalid JSON: {e}",
+                    severity=ValidationResult.FAILED,
+                    path=str(scout_json),
+                    suggestion="Check BAML parsing logs for errors",
+                )
+            )
 
     return result
 
