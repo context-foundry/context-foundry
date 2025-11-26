@@ -1305,6 +1305,38 @@ def execute_build_with_phase_spawning(
             return elapsed_minutes > timeout_minutes
         return False
 
+    def run_optional_preflight(phase_name: str) -> bool:
+        """Run preflight for optional phase. Returns True if passed, False if failed (but continues)."""
+        config = get_phase_preflight_config(phase_name)
+        if not config:
+            return True
+        audit_preflight_started(phase_name, str(working_directory))
+        result = run_phase_preflight(
+            phase_name=phase_name,
+            working_directory=working_directory,
+            required_inputs=config.get("required_inputs"),
+            json_inputs=config.get("json_inputs"),
+            required_tools=config.get("required_tools"),
+        )
+        if result.passed:
+            audit_preflight_passed(phase_name, str(working_directory))
+            if result.warnings:
+                for warning in result.warnings:
+                    print(f"⚠️  Preflight warning: {warning.message}", file=sys.stderr)
+            return True
+        else:
+            # Optional phase - warn but don't fail pipeline
+            failures = [{"name": f.name, "message": f.message} for f in result.failures]
+            audit_preflight_failed(phase_name, str(working_directory), failures)
+            # Note: No audit_pipeline_failed for optional phases
+            print(
+                f"⚠️  Preflight issues for {phase_name} (continuing anyway):",
+                file=sys.stderr,
+            )
+            for failure in result.failures:
+                print(f"   - {failure.message}", file=sys.stderr)
+            return False
+
     try:
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
@@ -2252,6 +2284,9 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Screenshot", str(working_directory))
 
+            # Run preflight for optional phase (warns but doesn't fail)
+            run_optional_preflight("Screenshot")
+
             # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
             if is_timeout_exceeded():
                 print(
@@ -2335,6 +2370,9 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Documentation", str(working_directory))
 
+            # Run preflight for optional phase (warns but doesn't fail)
+            run_optional_preflight("Documentation")
+
             # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
             if is_timeout_exceeded():
                 print(
@@ -2416,6 +2454,9 @@ def execute_build_with_phase_spawning(
                 save_pipeline_state(pipeline_state, working_directory)
             # Audit: Phase started
             audit_phase_started("Deploy", str(working_directory))
+
+            # Run preflight for optional phase (warns but doesn't fail)
+            run_optional_preflight("Deploy")
 
             # Use is_timeout_exceeded for optional phases (no audit_pipeline_failed)
             if is_timeout_exceeded():
