@@ -1,6 +1,8 @@
 # Context Foundry Architecture: Stateless Conversations
 
-> Understanding "🔄 Context reset - starting fresh conversation"
+> Understanding "Context reset - starting fresh conversation"
+
+> *"Generate probabilistically, validate deterministically."*
 
 ## Overview
 
@@ -584,7 +586,81 @@ Context Foundry's stateless conversation architecture is what enables:
 
 The key insight: **State in files, conversations are ephemeral.** This inverts the traditional AI coding approach and unlocks capabilities that weren't possible before.
 
-When you see "🔄 Context reset - starting fresh conversation", that's Context Foundry's secret weapon in action.
+When you see "Context reset - starting fresh conversation", that's Context Foundry's secret weapon in action.
+
+---
+
+## Deterministic Enforcement Layer
+
+Context Foundry doesn't rely on prompt engineering alone. The system wraps probabilistic AI generation with **deterministic validation checkpoints**.
+
+### The Problem with Prompt-Only Compliance
+
+CLAUDE.md and AGENTS.md files are probabilistic - the LLM *usually* follows them, but there's no guarantee. Context Foundry adds code-level enforcement:
+
+### Multi-Layer Enforcement Architecture
+
+| Layer | Type | Mechanism |
+|-------|------|-----------|
+| Phase prompts | Probabilistic | LLM follows instructions (mostly) |
+| Subprocess isolation | **Deterministic** | Fresh context per phase via `--system-prompt` |
+| File validation | **Deterministic** | Code checks outputs exist and meet size thresholds |
+| Checksum verification | **Deterministic** | Detects unauthorized file modifications |
+| BAML phase tracking | **Deterministic** | State machine validates phase order |
+| Emergency stop | **Deterministic** | Code can halt pipeline on violations |
+
+### How It Works
+
+**1. Subprocess Isolation (Deterministic)**
+
+Each phase spawns a fresh Claude CLI instance with rules injected at spawn time:
+
+```python
+subprocess.Popen([
+    "claude",
+    "--system-prompt", phase_prompt,  # Rules baked in before execution
+    task_instruction
+])
+```
+
+The agent cannot ignore the system prompt - it's injected before the task begins.
+
+**2. Post-Phase Validation (Deterministic)**
+
+After each phase, validators check outputs:
+
+```python
+class PhaseValidator:
+    def validate_scout_output(self):
+        if not scout_report.exists() or scout_report.stat().st_size < 100:
+            raise ValidationError("Scout failed to produce valid output")
+
+    def validate_architect_didnt_code(self):
+        checksums_before = get_file_checksums(src_dir)
+        # ... run architect ...
+        checksums_after = get_file_checksums(src_dir)
+        if checksums_before != checksums_after:
+            raise ValidationError("Architect modified source files!")
+```
+
+**3. Contract Enforcement via Data Flow (Deterministic)**
+
+The orchestrator parses Scout's markdown, transforms it to JSON, and injects it into Architect's instruction. Architect doesn't "choose" to read Scout's output - it's handed programmatically:
+
+```
+Scout MD --> [Orchestrator parses] --> SCOUT_JSON --> [Injected into Architect]
+```
+
+### Why This Matters
+
+The "bitter lesson" in AI argues against hand-coding knowledge - let models learn. But **compliance is different from capabilities**:
+
+- **Capabilities** = "Can the model write good code?" --> Let it learn
+- **Compliance** = "Did the model follow the rules?" --> **Verify deterministically**
+
+Context Foundry combines both: probabilistic generation wrapped in deterministic validation.
+
+See [Phase Handoff Flow](phase-handoff-flow.md) for detailed diagrams.
 
 ---
 

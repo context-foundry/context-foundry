@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/social-card-1280x640-dark.png" alt="Context Foundry Banner" width="100%">
+  <img src="docs/assets/cf_logo_twitter_2025.png" alt="Context Foundry" width="100%">
 </div>
 
 # 🏭 Context Foundry
@@ -7,10 +7,15 @@
 > **The AI That Builds Itself: Recursive Claude Spawning via Meta-MCP**
 > Context Foundry uses Claude Code to spawn fresh Claude instances that autonomously build complete projects. Walk away and come back to production-ready software.
 
+> *"Generate probabilistically, validate deterministically."*
+> Context Foundry's core philosophy: Let AI create freely, then verify compliance with code.
+
 **Version 2.4.0 - November 2025** 🎯 **BAML JSON-First Architecture: First-Try Success!**
 
 [![GitHub release](https://img.shields.io/github/v/release/context-foundry/context-foundry?style=for-the-badge)](https://github.com/context-foundry/context-foundry/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+
+<!-- mcp-name: io.github.context-foundry/context-foundry -->
 
 ---
 

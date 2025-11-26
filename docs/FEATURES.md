@@ -1,15 +1,17 @@
 # Context Foundry Features
 
-## 🎯 BAML Type-Safe Outputs (v2.4.0)
+> *"Generate probabilistically, validate deterministically."*
+
+## BAML Type-Safe Outputs (v2.4.0)
 
 **Major Breakthrough:** Context Foundry now uses **[BAML](https://github.com/BoundaryML/baml)** (Boundary ML) for type-safe JSON outputs, delivering **crisp, fully-working, feature-rich applications on the first try**.
 
 ### Benefits
-- ✅ **Reliability**: Parsing errors reduced from 5% to <1%
-- ✅ **Type Safety**: Compile-time schema validation catches errors early
-- ✅ **Better Outputs**: More detailed, feature-rich implementations
-- ✅ **Queryable**: Use `jq` or JSON tools to extract specific data
-- ✅ **Developer Experience**: Full IDE autocomplete with type hints
+- **Reliability**: Parsing errors reduced from 5% to <1%
+- **Type Safety**: Compile-time schema validation catches errors early
+- **Better Outputs**: More detailed, feature-rich implementations
+- **Queryable**: Use `jq` or JSON tools to extract specific data
+- **Developer Experience**: Full IDE autocomplete with type hints
 
 ### Dual-Mode Architecture Parsing
 1. **Claude CLI** (fast, $0) - Uses your subscription for instant extraction
@@ -18,25 +20,25 @@
 
 ---
 
-## 🎮 Mission Control TUI (v2.3.0)
+## Mission Control TUI (v2.3.0)
 
 **Your command center for autonomous AI development**
 
 Full-featured Terminal User Interface with real-time monitoring:
 - **Interactive Chat** - Natural language build requests
-- **Real-time Updates** - Live phase progress (Scout → Architect → Builder)
+- **Real-time Updates** - Live phase progress (Scout -> Architect -> Builder)
 - **Multi-build Support** - Monitor multiple projects simultaneously
 - **Keyboard Navigation** - Fast, efficient controls
 
 ### Key Features
-- 🎯 **Interactive Chat Interface**: Natural language commands, smart parsing
-- 📊 **Real-Time Build Monitoring**: Live status, phase progress, duration tracking
-- 🔍 **Three View Modes**: Conversation, Builds, Directory
-- ⌨️ **Keyboard Navigation**: Tab to cycle, arrow keys to navigate
+- **Interactive Chat Interface**: Natural language commands, smart parsing
+- **Real-Time Build Monitoring**: Live status, phase progress, duration tracking
+- **Three View Modes**: Conversation, Builds, Directory
+- **Keyboard Navigation**: Tab to cycle, arrow keys to navigate
 
 ---
 
-## 🧠 Context Codex (v2.3.0)
+## Context Codex (v2.3.0)
 
 **Database-Backed Self-Learning**
 
@@ -49,7 +51,7 @@ Context Foundry uses a relational database (`~/.context-foundry/codex.db`) for k
 
 ---
 
-## ⚡ Intelligent Parallel Build Detection
+## Intelligent Parallel Build Detection
 
 **AI decides how many parallel agents to spawn**
 
@@ -60,7 +62,7 @@ Scout phase now analyzes project complexity and automatically determines:
 
 ---
 
-## 🛡️ Agent Quality Enhancements
+## Agent Quality Enhancements
 
 ### 1. Back Pressure System
 Validation friction that prevents bad code from progressing through phases.
@@ -81,29 +83,30 @@ Explicit type markers in all tool outputs (`dir`, `file`, `match:def`) clarify t
 
 ---
 
-## 🏗️ Architecture Innovations
+## Architecture Innovations
 
 1. **Meta-MCP Innovation** - Use MCP to recursively spawn Claude Code instances
-2. **Subprocess Delegation** - Spawn fresh Claude instances via `subprocess.Popen()`
-3. **Context Window Isolation** - Each agent gets a fresh 200K token window
-4. **File-Based Context System** - Shared memory via filesystem
-5. **Markdown-First Design** - `.md` files over JSON for human+AI readability
+2. **Deterministic Compliance Layer** - *"Generate probabilistically, validate deterministically"* - Code-level enforcement wrapping AI generation
+3. **Subprocess Delegation** - Spawn fresh Claude instances via `subprocess.Popen()`
+4. **Context Window Isolation** - Each agent gets a fresh 200K token window
+5. **File-Based Context System** - Shared memory via filesystem
+6. **Markdown-First Design** - `.md` files over JSON for human+AI readability
 
-## 🤖 Automation Innovations
+## Automation Innovations
 
-6. **Self-Healing Test Loop** - Auto-fix test failures through redesign→rebuild→retest cycles
-7. **Parallel Execution Architecture** - Spawns concurrent agents (30-45% faster)
-8. **Meta-Prompt Orchestration** - AI orchestrates AI via `orchestrator_prompt.txt`
-9. **8-Phase Workflow** - Scout→Architect→Builder→Test→Screenshot→Docs→Deploy→Feedback
-10. **Async Task Management** - Non-blocking subprocess execution
+7. **Self-Healing Test Loop** - Auto-fix test failures through redesign->rebuild->retest cycles
+8. **Parallel Execution Architecture** - Spawns concurrent agents (30-45% faster)
+9. **Meta-Prompt Orchestration** - AI orchestrates AI via `orchestrator_prompt.txt`
+10. **8-Phase Workflow** - Scout->Architect->Builder->Test->Screenshot->Docs->Deploy->Feedback
+11. **Async Task Management** - Non-blocking subprocess execution
 
-## 🧠 Intelligence Innovations
+## Intelligence Innovations
 
-11. **Global Pattern Learning** - Cross-project knowledge accumulation
-12. **Output Truncation Strategy** - 45-45-10 split keeps critical context visible
+12. **Global Pattern Learning** - Cross-project knowledge accumulation
+13. **Output Truncation Strategy** - 45-45-10 split keeps critical context visible
 
-## 🎨 User Experience Innovations
+## User Experience Innovations
 
-13. **Screenshot Capture Phase** - Playwright-based visual documentation
-14. **Mission Control TUI** - Full-featured terminal interface
-15. **Livestream Integration** - WebSocket-based remote monitoring
+14. **Screenshot Capture Phase** - Playwright-based visual documentation
+15. **Mission Control TUI** - Full-featured terminal interface
+16. **Livestream Integration** - WebSocket-based remote monitoring

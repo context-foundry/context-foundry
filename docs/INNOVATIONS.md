@@ -10,22 +10,23 @@
 
 ## Table of Contents
 
-1. [The Meta-MCP Innovation](#1-the-meta-mcp-innovation-the-breakthrough) ⭐ **Featured Innovation**
-2. [Self-Healing Test Loop](#2-self-healing-test-loop)
-3. [Parallel Execution Architecture](#3-parallel-execution-architecture)
-4. [Subprocess Delegation with Auth Inheritance](#4-subprocess-delegation-with-auth-inheritance)
-5. [Meta-Prompt Orchestration](#5-meta-prompt-orchestration)
-6. [File-Based Context System](#6-file-based-context-system)
-7. [Markdown-First Design](#7-markdown-first-design)
-8. [Global Pattern Learning System](#8-global-pattern-learning-system)
-9. [Screenshot Capture Phase](#9-screenshot-capture-phase)
-10. [Async Task Management](#10-async-task-management)
-11. [Context Window Isolation](#11-context-window-isolation)
-12. [Output Truncation Strategy](#12-output-truncation-strategy)
-13. [TUI Real-time Monitoring](#13-tui-real-time-monitoring)
-14. [Livestream Integration](#14-livestream-integration)
-15. [8-Phase Workflow Architecture](#15-8-phase-workflow-architecture)
-16. [Agent Skills Integration via Meta-MCP](#16-agent-skills-integration-via-meta-mcp)
+1. [The Meta-MCP Innovation](#1-the-meta-mcp-innovation-the-breakthrough) **Featured Innovation**
+2. [Deterministic Compliance Layer](#2-deterministic-compliance-layer) **Core Philosophy**
+3. [Self-Healing Test Loop](#3-self-healing-test-loop)
+4. [Parallel Execution Architecture](#4-parallel-execution-architecture)
+5. [Subprocess Delegation with Auth Inheritance](#5-subprocess-delegation-with-auth-inheritance)
+6. [Meta-Prompt Orchestration](#6-meta-prompt-orchestration)
+7. [File-Based Context System](#7-file-based-context-system)
+8. [Markdown-First Design](#8-markdown-first-design)
+9. [Global Pattern Learning System](#9-global-pattern-learning-system)
+10. [Screenshot Capture Phase](#10-screenshot-capture-phase)
+11. [Async Task Management](#11-async-task-management)
+12. [Context Window Isolation](#12-context-window-isolation)
+13. [Output Truncation Strategy](#13-output-truncation-strategy)
+14. [TUI Real-time Monitoring](#14-tui-real-time-monitoring)
+15. [Livestream Integration](#15-livestream-integration)
+16. [8-Phase Workflow Architecture](#16-8-phase-workflow-architecture)
+17. [Agent Skills Integration via Meta-MCP](#17-agent-skills-integration-via-meta-mcp)
 
 ---
 
@@ -419,7 +420,99 @@ It's **technically complex** and **conceptually novel**—which is why it's an i
 
 ---
 
-## 2. Self-Healing Test Loop
+## 2. Deterministic Compliance Layer
+
+### The Innovation
+
+> *"Generate probabilistically, validate deterministically."*
+
+**Wrapping probabilistic AI generation with deterministic code-level enforcement checkpoints.**
+
+### The Problem It Solves
+
+**Traditional AI agent systems (CLAUDE.md, AGENTS.md):**
+```
+1. Write rules in markdown files
+2. Hope the LLM follows them
+3. LLM usually follows them... but not always
+4. No guarantee of compliance
+5. Failures are silent and unpredictable
+```
+
+**Context Foundry:**
+```
+1. Write rules in phase system prompts
+2. Inject rules via --system-prompt at subprocess spawn time
+3. LLM generates outputs (probabilistic)
+4. Deterministic validators check outputs exist and meet requirements
+5. Checksum verification detects unauthorized modifications
+6. Failures are caught and surfaced immediately
+```
+
+### How It Works
+
+**Multi-Layer Enforcement:**
+
+| Layer | Type | Mechanism |
+|-------|------|-----------|
+| Phase prompts | Probabilistic | LLM follows instructions (mostly) |
+| Subprocess isolation | **Deterministic** | Fresh context per phase via `--system-prompt` |
+| File validation | **Deterministic** | Code checks outputs exist and meet size thresholds |
+| Checksum verification | **Deterministic** | Detects unauthorized file modifications |
+| BAML phase tracking | **Deterministic** | State machine validates phase order |
+| Emergency stop | **Deterministic** | Code can halt pipeline on violations |
+
+**Subprocess Isolation:**
+```python
+# Rules injected at spawn time - agent cannot ignore them
+subprocess.Popen([
+    "claude",
+    "--system-prompt", phase_prompt,  # Baked in before execution
+    task_instruction
+])
+```
+
+**Post-Phase Validation:**
+```python
+class PhaseValidator:
+    def validate_scout_output(self):
+        if not scout_report.exists() or scout_report.stat().st_size < 100:
+            raise ValidationError("Scout failed to produce valid output")
+
+    def validate_architect_didnt_code(self):
+        checksums_before = get_file_checksums(src_dir)
+        # ... run architect ...
+        checksums_after = get_file_checksums(src_dir)
+        if checksums_before != checksums_after:
+            raise ValidationError("Architect modified source files!")
+```
+
+**Contract Enforcement via Data Flow:**
+```
+Scout MD --> [Orchestrator parses] --> SCOUT_JSON --> [Injected into Architect]
+```
+
+The Architect doesn't "choose" to read Scout's output - it's handed programmatically.
+
+### Why This Is An Innovation
+
+The "bitter lesson" in AI argues against hand-coding knowledge - let models learn. But **compliance is different from capabilities**:
+
+- **Capabilities** = "Can the model write good code?" --> Let it learn
+- **Compliance** = "Did the model follow the rules?" --> **Verify deterministically**
+
+Most AI agent frameworks stop at prompt engineering. Context Foundry adds the compliance layer that makes autonomous operation reliable.
+
+### Key Files
+
+- `tools/mcp_utils/phase_execution.py` - PhaseValidator class
+- `tools/mcp_utils/autonomous_build.py` - Orchestrator with checksum verification
+- `tools/prompts/phases/*.txt` - Phase-specific system prompts
+- `docs/phase-handoff-flow.md` - Visual diagrams of the enforcement architecture
+
+---
+
+## 3. Self-Healing Test Loop
 
 ### The Innovation
 
@@ -672,7 +765,7 @@ autonomous_build_and_deploy(
 
 ---
 
-## 3. Parallel Execution Architecture
+## 4. Parallel Execution Architecture
 
 ### The Innovation
 
@@ -1019,7 +1112,7 @@ Total: ~1 GB for 4 parallel builders (acceptable on modern machines)
 
 ---
 
-## 4. Subprocess Delegation with Auth Inheritance
+## 5. Subprocess Delegation with Auth Inheritance
 
 ### The Innovation
 
@@ -1323,7 +1416,7 @@ def get_delegation_result(task_id: str) -> str:
 
 ---
 
-## 5. Meta-Prompt Orchestration
+## 6. Meta-Prompt Orchestration
 
 ### The Innovation
 
@@ -1701,7 +1794,7 @@ Context Foundry: Write instructions that AI follows autonomously
 
 ---
 
-## 6. File-Based Context System
+## 7. File-Based Context System
 
 ### The Innovation
 
@@ -2067,7 +2160,7 @@ Context Foundry: Context in filesystem artifacts
 
 ---
 
-## 7. Markdown-First Design
+## 8. Markdown-First Design
 
 ### The Innovation
 
@@ -2585,7 +2678,7 @@ Context Foundry: Communication in Markdown (human+AI-readable), data in JSON
 
 ---
 
-## 8. Global Pattern Learning System
+## 9. Global Pattern Learning System
 
 ### The Innovation
 
@@ -3178,7 +3271,7 @@ Context Foundry v2.1: All users share one global knowledge base
 
 ---
 
-## 9. Screenshot Capture Phase
+## 10. Screenshot Capture Phase
 
 ### The Innovation
 
@@ -3659,7 +3752,7 @@ Context Foundry: "Generate code AND visual documentation automatically"
 
 ---
 
-## 10. Async Task Management
+## 11. Async Task Management
 
 ### The Innovation
 
@@ -4054,7 +4147,7 @@ Context Foundry: "Start all tasks simultaneously, collect results when ready"
 
 ---
 
-## 11. Context Window Isolation
+## 12. Context Window Isolation
 
 ### The Innovation
 
@@ -4346,7 +4439,7 @@ Context Foundry: "Isolated context windows per subprocess (unlimited)"
 
 ---
 
-## 12. Output Truncation Strategy
+## 13. Output Truncation Strategy
 
 ### The Innovation
 
@@ -4686,7 +4779,7 @@ Context Foundry: "Smart truncation keeping beginning + end (preserve context + r
 
 ---
 
-## 13. TUI Real-time Monitoring
+## 14. TUI Real-time Monitoring
 
 ### The Innovation
 
@@ -5079,7 +5172,7 @@ Context Foundry: "Monitor build in real-time, see every phase"
 
 ---
 
-## 14. Livestream Integration
+## 15. Livestream Integration
 
 ### The Innovation
 
@@ -5432,7 +5525,7 @@ Context Foundry: "Monitor remotely via web dashboard from any device"
 
 ---
 
-## 15. 8-Phase Workflow Architecture
+## 16. 8-Phase Workflow Architecture
 
 ### The Innovation
 
@@ -5823,7 +5916,7 @@ Context Foundry: "Structured, reproducible 8-phase workflow"
 
 ---
 
-## 16. Agent Skills Integration via Meta-MCP
+## 17. Agent Skills Integration via Meta-MCP
 
 ### The Innovation
 
