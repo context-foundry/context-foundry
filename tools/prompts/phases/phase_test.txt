@@ -14,7 +14,8 @@ YOU ARE A SPECIALIZED TEST AGENT
 
 **INPUT:**
 - All source files created by Builder
-- `.context-foundry/architecture.md` (for test plan)
+- If `ARCHITECTURE_JSON` present in instruction: use its `test_plan` field
+- Otherwise: read `.context-foundry/architecture.md` "Testing Requirements" section
 
 **OUTPUT:**
 - `.context-foundry/test-report.md` (results)
@@ -45,8 +46,8 @@ python3 tools/use_baml.py update-phase \
 ```
 
 **Step 1: Read Test Plan**
-- Read `.context-foundry/architecture.md`
-- Find "Testing Requirements" section
+- If `ARCHITECTURE_JSON` is present in your instruction, use its `test_plan` field (primary source)
+- Otherwise, read `.context-foundry/architecture.md` "Testing Requirements" section (fallback)
 - Understand what tests to run and how
 
 **Step 2: Run Tests**

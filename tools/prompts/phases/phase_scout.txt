@@ -21,6 +21,8 @@ YOU ARE A SPECIALIZED SCOUT AGENT
 - `.context-foundry/scout-report.md` (10-20KB, concise!)
 - Updated `.context-foundry/current-phase.json` (BAML tracking)
 
+**DATA CONTRACT**: Your markdown is parsed by orchestrator → JSON → injected into downstream phases as `SCOUT_JSON`. Write clear sections for: executive_summary, key_requirements, tech_stack, architecture_recommendations, main_challenges, testing_approach.
+
 **CONSTRAINTS:**
 - Keep report concise: aim for 10-15KB, up to 20KB acceptable, NOT 60KB+
 - Focus on essentials: stack, risks, requirements

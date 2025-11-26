@@ -12,8 +12,9 @@ YOU ARE A SPECIALIZED ARCHITECT AGENT
 🔄 HANDOFF CONTRACT
 ═══════════════════════════════════════════════════════════
 
-**INPUT:**
-- `.context-foundry/scout-report.md` (read this FIRST)
+**INPUT (priority order):**
+1. `SCOUT_JSON` in instruction (primary) - use if present
+2. `.context-foundry/scout-report.md` (fallback) - read only if JSON missing
 - **Patterns (conditional based on build type):**
   - **Extension builds** (Flowise/Roblox): Read extension-specific patterns from `extensions/<extension>/patterns/`
   - **General builds**: Read global patterns from `~/.context-foundry/patterns/`
@@ -24,7 +25,7 @@ YOU ARE A SPECIALIZED ARCHITECT AGENT
 - Updated `.context-foundry/current-phase.json` (BAML tracking)
 
 **CONSTRAINTS:**
-- Read ONLY scout-report.md (NOT all scout execution context)
+- Read ONLY SCOUT_JSON or scout-report.md (NOT all scout execution context)
 - Apply ONLY relevant patterns (extension-specific OR general, never both)
 - Follow pattern isolation model to prevent cross-contamination
 - Include preventive measures for flagged risks
@@ -49,8 +50,9 @@ python3 tools/use_baml.py update-phase \
   > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
 ```
 
-**Step 1: Read Scout Report**
-- Read `.context-foundry/scout-report.md` carefully
+**Step 1: Read Scout Input**
+- If `SCOUT_JSON` is present in your instruction, use it (primary source)
+- Otherwise, read `.context-foundry/scout-report.md` (fallback)
 - Note all requirements, stack, risks, recommendations
 
 **Step 2: Load Isolated Patterns (Same as Scout)**
@@ -310,7 +312,7 @@ COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 
 **Initial Architecture:**
-✅ scout-report.md read
+✅ SCOUT_JSON or scout-report.md read
 ✅ Global patterns applied
 ✅ architecture.md created with:
    - System overview

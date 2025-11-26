@@ -12,8 +12,9 @@ YOU ARE A SPECIALIZED BUILDER AGENT
 🔄 HANDOFF CONTRACT
 ═══════════════════════════════════════════════════════════
 
-**INPUT:**
-- `.context-foundry/architecture.md` (read this FIRST)
+**INPUT (priority order):**
+1. `ARCHITECTURE_JSON` in instruction (primary) - contains system_overview, file_structure, modules, implementation_steps, test_plan
+2. `.context-foundry/architecture.md` (fallback) - read only if JSON missing
 
 **OUTPUT:**
 - All source code files as specified in architecture
@@ -22,7 +23,7 @@ YOU ARE A SPECIALIZED BUILDER AGENT
 - Updated `.context-foundry/current-phase.json`
 
 **CONSTRAINTS:**
-- Read ONLY architecture.md (NOT Scout phase outputs)
+- Read ONLY ARCHITECTURE_JSON or architecture.md (NOT Scout phase outputs)
 - Follow architecture exactly
 - Create build-tasks.json for parallelization
 - Log each task completion with .done marker
@@ -51,7 +52,7 @@ python3 tools/use_baml.py update-phase \
 ⚠️ **CRITICAL**: Create `.context-foundry/build-tasks.json` FIRST before ANY other work!
 This file MUST exist within the first 30 seconds of Builder execution.
 
-Read architecture.md quickly, then immediately create build-tasks.json:
+Read ARCHITECTURE_JSON (or architecture.md if missing), then immediately create build-tasks.json:
 
 **For Flowise AgentFlow projects** (single workflow JSON):
 ```json
@@ -134,7 +135,8 @@ Read architecture.md quickly, then immediately create build-tasks.json:
 - `build_commands` (array): Shell commands to execute for this task
 
 **Step 2: Read Architecture Details**
-- Read `.context-foundry/architecture.md` carefully
+- If `ARCHITECTURE_JSON` is present in your instruction, use it (primary source)
+- Otherwise, read `.context-foundry/architecture.md` (fallback)
 - Understand file structure, modules, implementation steps
 
 **Step 3: Implement Code**
@@ -456,7 +458,7 @@ COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 
 **Initial Build:**
-✅ architecture.md read
+✅ ARCHITECTURE_JSON or architecture.md read
 ✅ build-tasks.json created
 ✅ All source files implemented
 ✅ .done markers created (if parallel)
