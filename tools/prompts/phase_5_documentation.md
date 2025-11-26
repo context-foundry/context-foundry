@@ -3,6 +3,12 @@ PHASE 5: DOCUMENTATION
 
 (Only reached if tests PASSED)
 
+**🚨 SCOPE CONSTRAINT - CRITICAL:**
+- ALL files MUST be created in the CURRENT WORKING DIRECTORY
+- Use RELATIVE paths only (e.g., `docs/`, `README.md`, NOT `/tmp/` or absolute paths)
+- NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
+- The project directory IS your sandbox - stay within it
+
 **Note:** Phase tracking is handled automatically by the orchestrator using BAML.
 
 0.

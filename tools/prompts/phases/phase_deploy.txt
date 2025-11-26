@@ -19,6 +19,11 @@ HANDOFF CONTRACT
 - GitHub repository created
 - Code pushed to main branch
 
+**🚨 SCOPE CONSTRAINT - CRITICAL:**
+- Work ONLY within the CURRENT WORKING DIRECTORY
+- Do NOT create or modify files outside the project directory
+- The project directory IS your sandbox - stay within it
+
 ═══════════════════════════════════════════════════════════
 DEPLOY INSTRUCTIONS
 ═══════════════════════════════════════════════════════════
