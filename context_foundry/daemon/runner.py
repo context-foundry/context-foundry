@@ -129,7 +129,15 @@ class Runner:
         # 1. AUTONOMOUS_BUILD jobs (not delegation/enhancement/testing jobs)
         # 2. In new_project mode (user's explicit intent)
         # 3. When directory name doesn't already have a random ID suffix
-        if job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project":
+        # 4. NOT for resume jobs (they must use the exact paused directory)
+        resume_from_phase = job.params.get("resume_from_phase")
+        is_resume_job = resume_from_phase is not None
+
+        if (
+            job.type == JobType.AUTONOMOUS_BUILD
+            and mode == "new_project"
+            and not is_resume_job
+        ):
             working_path = Path(working_dir)
             original_name = working_path.name
 
@@ -644,6 +652,11 @@ class Runner:
         force_rebuild = job.params.get("force_rebuild", False)
         use_parallel = job.params.get("use_parallel", None)
 
+        # Pause/resume parameters
+        pause_after_phases = job.params.get("pause_after_phases", [])
+        execution_mode = job.params.get("execution_mode", "autonomous")
+        resume_from_phase = job.params.get("resume_from_phase", None)
+
         # Detect project info at the ACTUAL working directory
         # (which may have random ID appended for new projects)
         working_path = Path(working_dir)
@@ -696,6 +709,9 @@ result = execute_build_with_phase_spawning(
         "project_type": {repr(project_type)},
         "use_parallel": {use_parallel},
         "codebase_detection": {repr(codebase_info)},
+        "pause_after_phases": {repr(pause_after_phases)},
+        "execution_mode": {repr(execution_mode)},
+        "timeout_minutes": {timeout_minutes},
     }},
     enable_test_loop={enable_test_loop},
     max_test_iterations={max_test_iterations},
@@ -704,6 +720,7 @@ result = execute_build_with_phase_spawning(
     incremental={incremental and not force_rebuild},
     use_parallel={use_parallel},
     timeout_minutes={timeout_minutes},
+    resume_from_phase={repr(resume_from_phase)},
 )
 
 # Print result as JSON for parent to parse

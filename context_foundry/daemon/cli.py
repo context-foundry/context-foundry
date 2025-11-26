@@ -17,6 +17,19 @@ from .store import Store
 from .server import CFDaemon, get_running_daemon_pid, stop_running_daemon
 from .models import JobType, JobStatus
 
+# Import pipeline state for pause/resume functionality
+try:
+    from tools.mcp_utils.pipeline_state import (
+        get_pipeline_state,
+        can_resume_pipeline,
+        PipelineState,
+        PHASE_ORDER,
+    )
+
+    PIPELINE_STATE_AVAILABLE = True
+except ImportError:
+    PIPELINE_STATE_AVAILABLE = False
+
 
 def cmd_start(args):
     """Start the daemon"""
@@ -872,6 +885,152 @@ def cmd_killall(args):
     return 0
 
 
+def cmd_pipeline_status(args):
+    """Show pipeline state for a project directory"""
+    if not PIPELINE_STATE_AVAILABLE:
+        print("Error: Pipeline state module not available", file=sys.stderr)
+        return 1
+
+    project_dir = Path(args.dir).resolve()
+    if not project_dir.exists():
+        print(f"Error: Directory does not exist: {project_dir}", file=sys.stderr)
+        return 1
+
+    state = get_pipeline_state(project_dir)
+    if not state:
+        print(f"No pipeline state found in {project_dir}")
+        print("  (No build has been run with pause/resume enabled)")
+        return 0
+
+    # Display pipeline state
+    print(f"\n{'=' * 60}")
+    print(f"Pipeline Status: {project_dir.name}")
+    print(f"{'=' * 60}")
+    print(state.get_status_summary())
+
+    # Show resume command if applicable
+    if state.state in PipelineState.resumable_states():
+        print(f"\n{'=' * 60}")
+        print("To resume this pipeline:")
+        print(f"  cfd resume --dir {project_dir}")
+        if state.phases_remaining:
+            print(
+                f"  cfd resume --dir {project_dir} --from {state.phases_remaining[0]}"
+            )
+        print(f"{'=' * 60}")
+
+    return 0
+
+
+def cmd_resume(args):
+    """Resume a paused pipeline"""
+    if not PIPELINE_STATE_AVAILABLE:
+        print("Error: Pipeline state module not available", file=sys.stderr)
+        return 1
+
+    project_dir = Path(args.dir).resolve()
+    if not project_dir.exists():
+        print(f"Error: Directory does not exist: {project_dir}", file=sys.stderr)
+        return 1
+
+    # Check if pipeline can be resumed
+    can_resume, reason = can_resume_pipeline(project_dir)
+    if not can_resume:
+        print(f"Error: Cannot resume pipeline: {reason}", file=sys.stderr)
+        return 1
+
+    state = get_pipeline_state(project_dir)
+    if not state:
+        print("Error: No pipeline state found", file=sys.stderr)
+        return 1
+
+    # Determine which phase to resume from
+    resume_from = args.from_phase
+    if resume_from:
+        # Validate phase name
+        if resume_from not in PHASE_ORDER:
+            print(f"Error: Invalid phase: {resume_from}", file=sys.stderr)
+            print(f"Valid phases: {', '.join(PHASE_ORDER)}", file=sys.stderr)
+            return 1
+    else:
+        # Resume from next phase
+        resume_from = state.get_next_phase()
+
+    if not resume_from:
+        print("Pipeline is already complete - nothing to resume")
+        return 0
+
+    print(f"Resuming pipeline from phase: {resume_from}")
+    print(f"Phases completed: {', '.join(state.phases_completed) or 'None'}")
+    print(f"Phases remaining: {', '.join(state.phases_remaining)}")
+
+    # Get task config from saved state
+    task_config = state.task_config
+    if not task_config:
+        print("Error: No task configuration found in pipeline state", file=sys.stderr)
+        return 1
+
+    config = Config.load(args.config)
+
+    # Check daemon is running
+    if not get_running_daemon_pid(config):
+        print("Warning: Daemon is not running. Starting build directly...")
+        # For now, run directly without daemon
+        from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
+
+        # Extract all required parameters from task_config
+        result = execute_build_with_phase_spawning(
+            task=task_config.get("task", "Resume build"),
+            working_directory=project_dir,
+            task_config=task_config,
+            enable_test_loop=task_config.get("enable_test_loop", True),
+            max_test_iterations=task_config.get("max_test_iterations", 3),
+            flowise_mode=task_config.get("flowise_flow", False),
+            project_type=task_config.get("project_type", "unknown"),
+            incremental=task_config.get("incremental", False),
+            use_parallel=task_config.get("use_parallel", None),
+            timeout_minutes=task_config.get("timeout_minutes", 90),
+            resume_from_phase=resume_from,
+        )
+
+        if result.get("status") == "completed":
+            print("\n✅ Build completed successfully")
+            return 0
+        elif result.get("status") == "paused":
+            print(f"\n⏸️  Build paused after {result.get('paused_after')}")
+            print(f"   Resume with: cfd resume --dir {project_dir}")
+            return 0
+        else:
+            print(f"\n❌ Build failed: {result.get('error', 'Unknown error')}")
+            return 1
+    else:
+        # Submit to daemon for execution
+        store = Store(config.db_path)
+        from .jobs import JobManager
+
+        # Add resume_from_phase to task config
+        task_config["resume_from_phase"] = resume_from
+
+        job_manager = JobManager(config, store, runner=None)
+        job = job_manager.submit_job(
+            job_type=JobType.AUTONOMOUS_BUILD,
+            params=task_config,
+            priority=args.priority,
+        )
+
+        print(f"\nJob submitted: {job.id}")
+        print(f"  Type: {job.type.value}")
+        print(f"  Resume from: {resume_from}")
+        print(f"  Status: {job.status.value}")
+        print(f"\nMonitor with: cfd logs {job.id} --phases")
+
+        if args.wait:
+            print("\nWaiting for job to complete...")
+            _wait_for_job(store, job.id, args.timeout)
+
+        return 0
+
+
 def _wait_for_job(store: Store, job_id: str, timeout: Optional[int] = None):
     """Wait for job to complete"""
     start_time = time.time()
@@ -1034,6 +1193,50 @@ def main():
         help="Kill all without confirmation",
     )
 
+    # Pipeline-status command
+    pipeline_status_parser = subparsers.add_parser(
+        "pipeline-status", help="Show pipeline state for a project directory"
+    )
+    pipeline_status_parser.add_argument(
+        "--dir",
+        "-d",
+        type=str,
+        default=".",
+        help="Project directory (default: current directory)",
+    )
+
+    # Resume command
+    resume_parser = subparsers.add_parser("resume", help="Resume a paused pipeline")
+    resume_parser.add_argument(
+        "--dir",
+        "-d",
+        type=str,
+        default=".",
+        help="Project directory (default: current directory)",
+    )
+    resume_parser.add_argument(
+        "--from",
+        dest="from_phase",
+        type=str,
+        help="Phase to resume from (e.g., Architect, Builder)",
+    )
+    resume_parser.add_argument(
+        "--priority",
+        type=int,
+        default=5,
+        help="Job priority when submitting to daemon (1-10)",
+    )
+    resume_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for job to complete",
+    )
+    resume_parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Timeout for --wait (seconds)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1053,6 +1256,8 @@ def main():
         "cancel": cmd_cancel,
         "cleanup": cmd_cleanup,
         "killall": cmd_killall,
+        "pipeline-status": cmd_pipeline_status,
+        "resume": cmd_resume,
     }
 
     return commands[args.command](args)

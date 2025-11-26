@@ -50,6 +50,13 @@ from tools.mcp_utils.phase_execution import (
     PhaseValidator,
     # tests_passed - REMOVED: Now using exit codes instead of parsing natural language
 )
+from tools.mcp_utils.pipeline_state import (
+    PipelineState,
+    PipelineStateSnapshot,
+    get_pipeline_state,
+    save_pipeline_state,
+    get_phases_from,
+)
 
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
@@ -91,6 +98,179 @@ def log_debug(message: str, working_directory: Optional[Path] = None):
                 f.write(f"[{timestamp}] {message}\n")
     except Exception:
         pass  # Fail silently to not disrupt build
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# PIPELINE PAUSE/RESUME HELPERS
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _check_and_handle_pause(
+    phase_name: str,
+    working_directory: Path,
+    pipeline_state: Optional[PipelineStateSnapshot],
+    phases_completed: List[str],
+    start_time: datetime,
+    test_iteration: int,
+    task_config: dict,
+) -> Optional[Dict[str, Any]]:
+    """
+    Check if pipeline should pause after a phase and return pause result if so.
+
+    Args:
+        phase_name: Phase that just completed
+        working_directory: Project directory
+        pipeline_state: Current pipeline state (or None for autonomous mode)
+        phases_completed: List of completed phases
+        start_time: Build start time
+        test_iteration: Current test iteration
+        task_config: Task configuration
+
+    Returns:
+        Pause result dict if should pause, None otherwise
+    """
+    if pipeline_state is None:
+        return None
+
+    if not pipeline_state.should_pause_after(phase_name):
+        return None
+
+    # Mark as paused and save state
+    pipeline_state.mark_phase_completed(phase_name)
+    pipeline_state.mark_paused(phase_name)
+    pipeline_state.task_config = task_config
+    save_pipeline_state(pipeline_state, working_directory)
+
+    duration = (datetime.now() - start_time).total_seconds()
+
+    print(f"\n{'=' * 60}", file=sys.stderr)
+    print(f"⏸️  PIPELINE PAUSED after {phase_name}", file=sys.stderr)
+    print(f"{'=' * 60}", file=sys.stderr)
+    print(f"Phases completed: {', '.join(phases_completed)}", file=sys.stderr)
+    print(f"Duration so far: {duration:.1f}s", file=sys.stderr)
+    print(f"\nTo resume: cfd resume --dir {working_directory}", file=sys.stderr)
+    if pipeline_state.phases_remaining:
+        next_phase = pipeline_state.phases_remaining[0]
+        print(f"Next phase: {next_phase}", file=sys.stderr)
+        print(
+            f"Or resume from specific phase: cfd resume --from {next_phase} --dir {working_directory}",
+            file=sys.stderr,
+        )
+    print(f"{'=' * 60}\n", file=sys.stderr)
+
+    return {
+        "status": "paused",
+        "paused_after": phase_name,
+        "phases_completed": phases_completed,
+        "phases_remaining": pipeline_state.phases_remaining,
+        "start_time": start_time.isoformat(),
+        "duration_seconds": duration,
+        "test_iterations": test_iteration,
+        "pipeline_id": pipeline_state.pipeline_id,
+        "resume_command": pipeline_state.get_resume_command(working_directory),
+        "message": f"Build paused after {phase_name}. Use 'cfd resume' to continue.",
+    }
+
+
+def _initialize_pipeline_state(
+    task_config: dict,
+    working_directory: Path,
+    resume_from_phase: Optional[str] = None,
+) -> Optional[PipelineStateSnapshot]:
+    """
+    Initialize or load pipeline state based on task config.
+
+    Args:
+        task_config: Task configuration with execution_mode, pause_after_phases, etc.
+        working_directory: Project directory
+        resume_from_phase: If resuming, the phase to resume from
+
+    Returns:
+        PipelineStateSnapshot if pipeline mode enabled, None for autonomous mode
+    """
+    execution_mode = task_config.get("execution_mode", "autonomous")
+    pause_after_phases = task_config.get("pause_after_phases", [])
+    target_phases = task_config.get("target_phases", [])
+
+    # Check for resume
+    if resume_from_phase:
+        existing_state = get_pipeline_state(working_directory)
+        if existing_state:
+            # Resuming from pause - update remaining phases
+            existing_state.mark_resumed()
+            existing_state.phases_remaining = get_phases_from(resume_from_phase)
+            save_pipeline_state(existing_state, working_directory)
+            print(f"📍 Resuming pipeline from {resume_from_phase}", file=sys.stderr)
+            return existing_state
+
+    # For autonomous mode without any pause points, skip pipeline state overhead
+    if execution_mode == "autonomous" and not pause_after_phases:
+        return None
+
+    # Create new pipeline state
+    state = PipelineStateSnapshot.create(
+        task_config=task_config,
+        execution_mode=execution_mode,
+        pause_after_phases=pause_after_phases,
+        target_phases=target_phases,
+    )
+    # Mark pipeline as RUNNING immediately
+    state.state = PipelineState.RUNNING
+    save_pipeline_state(state, working_directory)
+
+    mode_desc = {
+        "autonomous": "Full autonomous mode",
+        "interactive": "Interactive mode (pause after each phase)",
+        "selective": f"Selective mode (phases: {', '.join(target_phases)})",
+    }.get(execution_mode, execution_mode)
+
+    print(f"📋 Pipeline initialized: {mode_desc}", file=sys.stderr)
+    if pause_after_phases:
+        print(f"   Pause after: {', '.join(pause_after_phases)}", file=sys.stderr)
+
+    return state
+
+
+def _should_skip_phase(
+    phase_name: str,
+    pipeline_state: Optional[PipelineStateSnapshot],
+    resume_from_phase: Optional[str],
+) -> bool:
+    """
+    Check if a phase should be skipped (already completed or before resume point).
+
+    Args:
+        phase_name: Phase to check
+        pipeline_state: Current pipeline state
+        resume_from_phase: Phase to resume from (if resuming)
+
+    Returns:
+        True if phase should be skipped
+    """
+    # If resuming from a specific phase, skip all phases before it
+    if resume_from_phase:
+        from tools.mcp_utils.pipeline_state import PHASE_ORDER
+
+        try:
+            resume_idx = PHASE_ORDER.index(resume_from_phase)
+            current_idx = PHASE_ORDER.index(phase_name)
+            if current_idx < resume_idx:
+                return True
+        except ValueError:
+            pass  # Phase not in order, don't skip
+
+    if pipeline_state is None:
+        return False
+
+    # Skip if already completed
+    if phase_name in pipeline_state.phases_completed:
+        return True
+
+    # Skip if not in target phases (selective mode)
+    if pipeline_state.target_phases and phase_name not in pipeline_state.target_phases:
+        return True
+
+    return False
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -933,6 +1113,7 @@ def execute_build_with_phase_spawning(
         bool
     ] = None,  # None = let Scout decide; True/False = user override
     timeout_minutes: Optional[float] = None,
+    resume_from_phase: Optional[str] = None,  # Resume from specific phase
 ) -> Dict[str, Any]:
     """
     Execute autonomous build with per-phase process spawning.
@@ -941,9 +1122,11 @@ def execute_build_with_phase_spawning(
 
     Args:
         timeout_minutes: Maximum execution time in minutes. Build will terminate if exceeded.
+        resume_from_phase: If set, resume from this phase (skip earlier phases).
 
     Returns:
         Build result dict with status, phases_completed, etc.
+        Status can be: "completed", "failed", "paused", "error"
     """
     # Import here (in background process)
     import re
@@ -1003,6 +1186,23 @@ def execute_build_with_phase_spawning(
     results = {}
     test_iteration = 0  # FIX #2: Initialize before conditional
 
+    # ═══════════════════════════════════════════════════════════════════════
+    # PIPELINE STATE INITIALIZATION (for pause/resume support)
+    # ═══════════════════════════════════════════════════════════════════════
+    pipeline_state = _initialize_pipeline_state(
+        task_config=task_config,
+        working_directory=working_directory,
+        resume_from_phase=resume_from_phase,
+    )
+
+    # If resuming, populate phases_completed from saved state
+    if pipeline_state and pipeline_state.phases_completed:
+        phases_completed = list(pipeline_state.phases_completed)
+        print(
+            f"📍 Resuming with completed phases: {', '.join(phases_completed)}",
+            file=sys.stderr,
+        )
+
     # Log start of build process
     log_debug(f"Build process started. Task: {task[:50]}...", working_directory)
     log_debug(
@@ -1017,6 +1217,10 @@ def execute_build_with_phase_spawning(
             if elapsed_minutes > timeout_minutes:
                 error_msg = f"Build exceeded timeout of {timeout_minutes} minutes (elapsed: {elapsed_minutes:.1f} min)"
                 print(f"\n⏱️  TIMEOUT: {error_msg}", file=sys.stderr)
+                # Persist timeout failure state
+                if pipeline_state:
+                    pipeline_state.mark_failed(phase_name, error_msg)
+                    save_pipeline_state(pipeline_state, working_directory)
                 return {
                     "status": "failed",
                     "phase_failed": phase_name,
@@ -1032,109 +1236,166 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
         # ═══════════════════════════════════════════════════════════════════════
-        # Check timeout before starting phase
-        timeout_result = check_timeout("Scout")
-        if timeout_result:
-            return timeout_result
+        # Check if phase should be skipped (already completed or resuming from later phase)
+        scout_skipped = _should_skip_phase("Scout", pipeline_state, resume_from_phase)
 
-        print("\n" + "=" * 60, file=sys.stderr)
-        print("PHASE 1: SCOUT", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-
-        # Check Scout cache (if incremental)
-        scout_cached = False
-        if incremental:
-            scout_cached = _check_scout_cache(
-                task, task_config["mode"], working_directory
+        if scout_skipped:
+            print("⏭️  Skipping Scout phase (already completed)", file=sys.stderr)
+            # Still need scout_json for Architect - try to load from existing file
+            scout_json = None
+            scout_json_path = (
+                working_directory / ".context-foundry" / "scout_report.json"
             )
-
-        if not scout_cached:
-            # FIX #4: Use module-relative path
-            scout_prompt = MODULE_DIR / "prompts" / "phases" / "phase_scout.txt"
-
-            # ═══════════════════════════════════════════════════════════════════════
-            # PRE-QUERY CODEX FOR FLOWISE BUILDS
-            # ═══════════════════════════════════════════════════════════════════════
-            # Scout spawns as a separate claude CLI without MCP access, so we must
-            # pre-query Codex and inject results into the task description
-            scout_task = task
-            if flowise_mode:
-                codex_results = _pre_query_codex_for_flowise()
-                if codex_results:
-                    scout_task = f"{task}\n\n{codex_results}"
-                    print("📚 Injected Codex patterns into Scout task", file=sys.stderr)
-
-            scout_instruction = (
-                "Read .context-foundry/scout-report.md (or scout_report.json if present) "
-                "and produce scout-report.md with findings."
-            )
-            scout_result = run_phase(
-                "Scout",
-                scout_prompt,
-                f"{scout_instruction}\n\n{scout_task}",
-                working_directory,
-                phase_timeout=600,  # 10 min
-                validator=PhaseValidator.validate_scout,
-                project_type=project_type,
-            )
-
-            results["scout"] = scout_result
-
-            if scout_result.status != "completed":
-                return {
-                    "status": "failed",
-                    "phase_failed": "Scout",
-                    "error": scout_result.error,
-                    "start_time": start_time.isoformat(),
-                    "duration_seconds": (datetime.now() - start_time).total_seconds(),
-                    "phases_completed": phases_completed,
-                    "test_iterations": test_iteration,
-                }
-
-            # Save to cache
-            if incremental:
-                _save_scout_cache(task, task_config["mode"], working_directory)
-
-        phases_completed.append("Scout")
-
-        # Structured Scout JSON (BAML parse)
-        scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
-        scout_json_path = working_directory / ".context-foundry" / "scout_report.json"
-        scout_json = None
-        if scout_md_path.exists():
-            try:
-                scout_md = scout_md_path.read_text()
-                log_debug(
-                    f"Attempting to parse Scout markdown ({len(scout_md)} bytes) with BAML",
-                    working_directory,
-                )
-
-                # BAML parse with timeout (90 seconds max)
-                with baml_timeout(90, "Scout BAML Parse"):
-                    scout_json = parse_scout_markdown_baml(scout_md)
-
-                scout_json_path.write_text(json.dumps(scout_json, indent=2))
-                log_debug("✅ Scout BAML parse successful", working_directory)
-                print(
-                    f"✅ Parsed Scout markdown to JSON: {scout_json_path}",
-                    file=sys.stderr,
-                )
-            except TimeoutException:
-                log_debug("⚠️ Scout BAML parse TIMED OUT after 90s", working_directory)
-                print(
-                    "⚠️  Scout BAML parse timed out after 90s - continuing without scout_report.json",
-                    file=sys.stderr,
-                )
-            except Exception as e:
-                log_debug(f"⚠️ Scout BAML parse FAILED: {str(e)}", working_directory)
-                print(
-                    f"⚠️  Failed to parse Scout markdown to JSON: {e}",
-                    file=sys.stderr,
-                )
+            if scout_json_path.exists():
+                try:
+                    scout_json = json.loads(scout_json_path.read_text())
+                except Exception:
+                    pass
         else:
-            log_debug(
-                "⚠️ Scout markdown missing, skipping BAML parse", working_directory
+            # Check timeout before starting phase
+            timeout_result = check_timeout("Scout")
+            if timeout_result:
+                return timeout_result
+
+            print("\n" + "=" * 60, file=sys.stderr)
+            print("PHASE 1: SCOUT", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+
+            # Mark phase as started for visibility
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Scout")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            # Check Scout cache (if incremental)
+            scout_cached = False
+            if incremental:
+                scout_cached = _check_scout_cache(
+                    task, task_config["mode"], working_directory
+                )
+
+            if not scout_cached:
+                # FIX #4: Use module-relative path
+                scout_prompt = MODULE_DIR / "prompts" / "phases" / "phase_scout.txt"
+
+                # ═══════════════════════════════════════════════════════════════════════
+                # PRE-QUERY CODEX FOR FLOWISE BUILDS
+                # ═══════════════════════════════════════════════════════════════════════
+                # Scout spawns as a separate claude CLI without MCP access, so we must
+                # pre-query Codex and inject results into the task description
+                scout_task = task
+                if flowise_mode:
+                    codex_results = _pre_query_codex_for_flowise()
+                    if codex_results:
+                        scout_task = f"{task}\n\n{codex_results}"
+                        print(
+                            "📚 Injected Codex patterns into Scout task",
+                            file=sys.stderr,
+                        )
+
+                scout_instruction = (
+                    "Read .context-foundry/scout-report.md (or scout_report.json if present) "
+                    "and produce scout-report.md with findings."
+                )
+                scout_result = run_phase(
+                    "Scout",
+                    scout_prompt,
+                    f"{scout_instruction}\n\n{scout_task}",
+                    working_directory,
+                    phase_timeout=600,  # 10 min
+                    validator=PhaseValidator.validate_scout,
+                    project_type=project_type,
+                )
+
+                results["scout"] = scout_result
+
+                if scout_result.status != "completed":
+                    # Persist failure state
+                    if pipeline_state:
+                        pipeline_state.mark_failed(
+                            "Scout", scout_result.error or "Scout phase failed"
+                        )
+                        save_pipeline_state(pipeline_state, working_directory)
+                    return {
+                        "status": "failed",
+                        "phase_failed": "Scout",
+                        "error": scout_result.error,
+                        "start_time": start_time.isoformat(),
+                        "duration_seconds": (
+                            datetime.now() - start_time
+                        ).total_seconds(),
+                        "phases_completed": phases_completed,
+                        "test_iterations": test_iteration,
+                    }
+
+                # Save to cache
+                if incremental:
+                    _save_scout_cache(task, task_config["mode"], working_directory)
+
+            # Mark Scout complete (not already in list when skipped)
+            if "Scout" not in phases_completed:
+                phases_completed.append("Scout")
+                # Persist phase completion
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Scout")
+                    save_pipeline_state(pipeline_state, working_directory)
+
+            # Check if we should pause after Scout
+            pause_result = _check_and_handle_pause(
+                "Scout",
+                working_directory,
+                pipeline_state,
+                phases_completed,
+                start_time,
+                test_iteration,
+                task_config,
             )
+            if pause_result:
+                return pause_result
+
+        # Structured Scout JSON (BAML parse) - only if Scout was not skipped
+        # (when skipped, we already loaded scout_json from the existing file above)
+        if not scout_skipped:
+            scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
+            scout_json_path = (
+                working_directory / ".context-foundry" / "scout_report.json"
+            )
+            scout_json = None
+            if scout_md_path.exists():
+                try:
+                    scout_md = scout_md_path.read_text()
+                    log_debug(
+                        f"Attempting to parse Scout markdown ({len(scout_md)} bytes) with BAML",
+                        working_directory,
+                    )
+
+                    # BAML parse with timeout (90 seconds max)
+                    with baml_timeout(90, "Scout BAML Parse"):
+                        scout_json = parse_scout_markdown_baml(scout_md)
+
+                    scout_json_path.write_text(json.dumps(scout_json, indent=2))
+                    log_debug("✅ Scout BAML parse successful", working_directory)
+                    print(
+                        f"✅ Parsed Scout markdown to JSON: {scout_json_path}",
+                        file=sys.stderr,
+                    )
+                except TimeoutException:
+                    log_debug(
+                        "⚠️ Scout BAML parse TIMED OUT after 90s", working_directory
+                    )
+                    print(
+                        "⚠️  Scout BAML parse timed out after 90s - continuing without scout_report.json",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    log_debug(f"⚠️ Scout BAML parse FAILED: {str(e)}", working_directory)
+                    print(
+                        f"⚠️  Failed to parse Scout markdown to JSON: {e}",
+                        file=sys.stderr,
+                    )
+            else:
+                log_debug(
+                    "⚠️ Scout markdown missing, skipping BAML parse", working_directory
+                )
 
         # ═══════════════════════════════════════════════════════════════════════
         # FLOWISE CODEX VALIDATION - Enforce pattern queries
@@ -1157,72 +1418,124 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 2: ARCHITECT
         # ═══════════════════════════════════════════════════════════════════════
-        # Check timeout before starting phase
-        timeout_result = check_timeout("Architect")
-        if timeout_result:
-            return timeout_result
-
-        print("\n" + "=" * 60, file=sys.stderr)
-        print("PHASE 2: ARCHITECT", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-
-        # FIX #4: Use module-relative path
-        architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
-
-        architect_instruction = (
-            "Use the provided structured Scout JSON (ignore markdown unless JSON is missing). "
-            "Create architecture.md.\n\n"
+        # Check if phase should be skipped (already completed or resuming from later phase)
+        architect_skipped = _should_skip_phase(
+            "Architect", pipeline_state, resume_from_phase
         )
-        if scout_json:
-            architect_instruction += "SCOUT_JSON:\n" + json.dumps(scout_json, indent=2)
+
+        if architect_skipped:
+            print("⏭️  Skipping Architect phase (already completed)", file=sys.stderr)
+            # Load architecture_json from existing file for Builder
+            architecture_json = None
+            arch_json_path = (
+                working_directory / ".context-foundry" / "architecture.json"
+            )
+            if arch_json_path.exists():
+                try:
+                    architecture_json = json.loads(arch_json_path.read_text())
+                except Exception:
+                    pass
         else:
+            # Check timeout before starting phase
+            timeout_result = check_timeout("Architect")
+            if timeout_result:
+                return timeout_result
+
+            print("\n" + "=" * 60, file=sys.stderr)
+            print("PHASE 2: ARCHITECT", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+
+            # Mark phase as started for visibility
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Architect")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            # FIX #4: Use module-relative path
+            architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
+
             architect_instruction = (
-                "Read .context-foundry/scout-report.md (scout_report.json missing). "
-                "Create architecture.md."
+                "Use the provided structured Scout JSON (ignore markdown unless JSON is missing). "
+                "Create architecture.md.\n\n"
+            )
+            if scout_json:
+                architect_instruction += "SCOUT_JSON:\n" + json.dumps(
+                    scout_json, indent=2
+                )
+            else:
+                architect_instruction = (
+                    "Read .context-foundry/scout-report.md (scout_report.json missing). "
+                    "Create architecture.md."
+                )
+
+            architect_result = run_phase(
+                "Architect",
+                architect_prompt,
+                architect_instruction,
+                working_directory,
+                phase_timeout=900,  # 15 min
+                validator=PhaseValidator.validate_architect,
+                project_type=project_type,
             )
 
-        architect_result = run_phase(
-            "Architect",
-            architect_prompt,
-            architect_instruction,
-            working_directory,
-            phase_timeout=900,  # 15 min
-            validator=PhaseValidator.validate_architect,
-            project_type=project_type,
-        )
+            results["architect"] = architect_result
 
-        results["architect"] = architect_result
+            print(
+                f"[TRACE] Architect phase result: status={architect_result.status}, "
+                f"exit_code={architect_result.exit_code}, duration={architect_result.duration_seconds:.1f}s",
+                file=sys.stderr,
+            )
 
-        print(
-            f"[TRACE] Architect phase result: status={architect_result.status}, "
-            f"exit_code={architect_result.exit_code}, duration={architect_result.duration_seconds:.1f}s",
-            file=sys.stderr,
-        )
+            if architect_result.status != "completed":
+                # Persist failure state
+                if pipeline_state:
+                    pipeline_state.mark_failed(
+                        "Architect", architect_result.error or "Architect phase failed"
+                    )
+                    save_pipeline_state(pipeline_state, working_directory)
+                return {
+                    "status": "failed",
+                    "phase_failed": "Architect",
+                    "error": architect_result.error,
+                    "start_time": start_time.isoformat(),
+                    "duration_seconds": (datetime.now() - start_time).total_seconds(),
+                    "phases_completed": phases_completed,
+                    "test_iterations": test_iteration,
+                }
 
-        if architect_result.status != "completed":
-            return {
-                "status": "failed",
-                "phase_failed": "Architect",
-                "error": architect_result.error,
-                "start_time": start_time.isoformat(),
-                "duration_seconds": (datetime.now() - start_time).total_seconds(),
-                "phases_completed": phases_completed,
-                "test_iterations": test_iteration,
-            }
+            # Mark Architect complete
+            if "Architect" not in phases_completed:
+                phases_completed.append("Architect")
+                # Persist phase completion
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Architect")
+                    save_pipeline_state(pipeline_state, working_directory)
 
-        phases_completed.append("Architect")
+            print(
+                "[TRACE] Architect phase marked completed, entering post-processing",
+                file=sys.stderr,
+            )
 
-        print(
-            "[TRACE] Architect phase marked completed, entering post-processing",
-            file=sys.stderr,
-        )
+            # Check if we should pause after Architect
+            pause_result = _check_and_handle_pause(
+                "Architect",
+                working_directory,
+                pipeline_state,
+                phases_completed,
+                start_time,
+                test_iteration,
+                task_config,
+            )
+            if pause_result:
+                return pause_result
 
-        # Breathing buffer before next BAML call
-        if scout_json is not None:  # Only add buffer if Scout BAML succeeded
-            baml_breathing_buffer(3.0)
+        # Post-processing only when Architect was not skipped
+        if not architect_skipped:
+            # Breathing buffer before next BAML call
+            if scout_json is not None:  # Only add buffer if Scout BAML succeeded
+                baml_breathing_buffer(3.0)
 
-        # Structured Architecture JSON (BAML parse) - extracted to testable function
-        architecture_json = parse_and_save_architecture_json(working_directory)
+            # Structured Architecture JSON (BAML parse) - extracted to testable function
+            architecture_json = parse_and_save_architecture_json(working_directory)
 
         # ═══════════════════════════════════════════════════════════════════════
         # BAML BUILD PLAN GENERATION (Phase 2 of BAML Migration)
@@ -1412,69 +1725,113 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 3: BUILDER
         # ═══════════════════════════════════════════════════════════════════════
-        # Check timeout before starting phase
-        timeout_result = check_timeout("Builder")
-        if timeout_result:
-            return timeout_result
-
-        print("\n" + "=" * 60, file=sys.stderr)
-        print("PHASE 3: BUILDER", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
-
-        # FIX #4: Use module-relative path
-        builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
-
-        builder_instruction = (
-            "Use the provided structured architecture JSON (ignore markdown unless JSON is missing). "
-            "Implement the project accordingly.\n\n"
+        # Check if phase should be skipped (already completed or resuming from later phase)
+        builder_skipped = _should_skip_phase(
+            "Builder", pipeline_state, resume_from_phase
         )
-        if architecture_json:
-            log_debug("Providing architecture.json to Builder", working_directory)
-            builder_instruction += "ARCHITECTURE_JSON:\n" + json.dumps(
-                architecture_json, indent=2
-            )
+
+        if builder_skipped:
+            print("⏭️  Skipping Builder phase (already completed)", file=sys.stderr)
         else:
-            log_debug(
-                "Providing architecture.md to Builder (JSON missing)", working_directory
-            )
+            # Check timeout before starting phase
+            timeout_result = check_timeout("Builder")
+            if timeout_result:
+                return timeout_result
+
+            print("\n" + "=" * 60, file=sys.stderr)
+            print("PHASE 3: BUILDER", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+
+            # Mark phase as started for visibility
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Builder")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            # FIX #4: Use module-relative path
+            builder_prompt = MODULE_DIR / "prompts" / "phases" / "phase_builder.txt"
+
             builder_instruction = (
-                "Read .context-foundry/architecture.md (architecture.json missing). "
-                "Implement the project accordingly."
+                "Use the provided structured architecture JSON (ignore markdown unless JSON is missing). "
+                "Implement the project accordingly.\n\n"
+            )
+            if architecture_json:
+                log_debug("Providing architecture.json to Builder", working_directory)
+                builder_instruction += "ARCHITECTURE_JSON:\n" + json.dumps(
+                    architecture_json, indent=2
+                )
+            else:
+                log_debug(
+                    "Providing architecture.md to Builder (JSON missing)",
+                    working_directory,
+                )
+                builder_instruction = (
+                    "Read .context-foundry/architecture.md (architecture.json missing). "
+                    "Implement the project accordingly."
+                )
+
+            builder_result = run_builder_phase(
+                builder_prompt,
+                builder_instruction,
+                working_directory,
+                project_type,
+                flowise_mode=flowise_mode,
+                use_parallel=use_parallel,
             )
 
-        builder_result = run_builder_phase(
-            builder_prompt,
-            builder_instruction,
-            working_directory,
-            project_type,
-            flowise_mode=flowise_mode,
-            use_parallel=use_parallel,
-        )
+            results["builder"] = builder_result
 
-        results["builder"] = builder_result
+            if builder_result.status != "completed":
+                # Persist failure state
+                if pipeline_state:
+                    pipeline_state.mark_failed(
+                        "Builder", builder_result.error or "Builder phase failed"
+                    )
+                    save_pipeline_state(pipeline_state, working_directory)
+                return {
+                    "status": "failed",
+                    "phase_failed": "Builder",
+                    "error": builder_result.error,
+                    "start_time": start_time.isoformat(),
+                    "duration_seconds": (datetime.now() - start_time).total_seconds(),
+                    "phases_completed": phases_completed,
+                    "test_iterations": test_iteration,
+                }
 
-        if builder_result.status != "completed":
-            return {
-                "status": "failed",
-                "phase_failed": "Builder",
-                "error": builder_result.error,
-                "start_time": start_time.isoformat(),
-                "duration_seconds": (datetime.now() - start_time).total_seconds(),
-                "phases_completed": phases_completed,
-                "test_iterations": test_iteration,
-            }
+            # Mark Builder complete
+            if "Builder" not in phases_completed:
+                phases_completed.append("Builder")
+                # Persist phase completion
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Builder")
+                    save_pipeline_state(pipeline_state, working_directory)
 
-        phases_completed.append("Builder")
+            # Check if we should pause after Builder
+            pause_result = _check_and_handle_pause(
+                "Builder",
+                working_directory,
+                pipeline_state,
+                phases_completed,
+                start_time,
+                test_iteration,
+                task_config,
+            )
+            if pause_result:
+                return pause_result
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4: TEST (with self-healing loop)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check timeout before starting test phase
-        timeout_result = check_timeout("Test")
-        if timeout_result:
-            return timeout_result
+        # Check if phase should be skipped (already completed or resuming from later phase)
+        test_skipped = _should_skip_phase("Test", pipeline_state, resume_from_phase)
 
-        if enable_test_loop:
+        if test_skipped:
+            print("⏭️  Skipping Test phase (already completed)", file=sys.stderr)
+        elif enable_test_loop:
+            # Check timeout before starting test phase
+            timeout_result = check_timeout("Test")
+            if timeout_result:
+                return timeout_result
+
             test_passed = False
             architect_file = ".context-foundry/architecture.md"
 
@@ -1490,6 +1847,11 @@ def execute_build_with_phase_spawning(
                 print("\n" + "=" * 60, file=sys.stderr)
                 print(f"PHASE 4: TEST (Iteration {test_iteration})", file=sys.stderr)
                 print("=" * 60, file=sys.stderr)
+
+                # Mark phase as started for visibility (only on first iteration)
+                if test_iteration == 0 and pipeline_state:
+                    pipeline_state.mark_phase_started("Test")
+                    save_pipeline_state(pipeline_state, working_directory)
 
                 test_file = f".context-foundry/test-report{'-' + str(test_iteration) if test_iteration > 0 else ''}.md"
 
@@ -1618,11 +1980,18 @@ def execute_build_with_phase_spawning(
                         "\n💡 Architect should ONLY create a fix plan document, not implement code!",
                         file=sys.stderr,
                     )
+                    # Persist failure state
+                    error_msg = f"Architect fix validation failed: {'; '.join(validation_errors)}"
+                    if pipeline_state:
+                        pipeline_state.mark_failed(
+                            "Architect (fix validation)", error_msg
+                        )
+                        save_pipeline_state(pipeline_state, working_directory)
                     # Return explicit error instead of generic "Test failed"
                     return {
                         "status": "failed",
                         "phase_failed": "Architect (fix validation)",
-                        "error": f"Architect fix validation failed: {'; '.join(validation_errors)}",
+                        "error": error_msg,
                         "start_time": start_time.isoformat(),
                         "duration_seconds": (
                             datetime.now() - start_time
@@ -1692,9 +2061,21 @@ def execute_build_with_phase_spawning(
                 # Update file names for next iteration
                 architect_file = architect_fix_file
 
-            phases_completed.append("Test")
+            # Mark Test complete
+            if "Test" not in phases_completed:
+                phases_completed.append("Test")
+                # Persist phase completion
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Test")
+                    save_pipeline_state(pipeline_state, working_directory)
 
             if not test_passed:
+                # Persist failure state
+                if pipeline_state:
+                    pipeline_state.mark_failed(
+                        "Test", f"Tests failed after {test_iteration} iteration(s)"
+                    )
+                    save_pipeline_state(pipeline_state, working_directory)
                 return {
                     "status": "failed",
                     "phase_failed": "Test",
@@ -1705,145 +2086,258 @@ def execute_build_with_phase_spawning(
                     "phases_completed": phases_completed,
                 }
 
+            # Check if we should pause after Test
+            pause_result = _check_and_handle_pause(
+                "Test",
+                working_directory,
+                pipeline_state,
+                phases_completed,
+                start_time,
+                test_iteration,
+                task_config,
+            )
+            if pause_result:
+                return pause_result
+
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4.5: SCREENSHOT (Visual Documentation)
         # ═══════════════════════════════════════════════════════════════════════
-        # Screenshot phase ALWAYS runs after Test completes (has its own 10-min timeout)
-        print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
-        screenshot_timeout_result = check_timeout("Screenshot")
-        if screenshot_timeout_result:
-            print(
-                "⚠️  Build timeout exceeded, but running Screenshot anyway (max 10 min)",
-                file=sys.stderr,
-            )
-
-        screenshot_prompt = MODULE_DIR / "prompts" / "phase_4_5_screenshot.md"
-        screenshot_instruction = (
-            "Capture screenshots of the application for documentation.\n"
-            "Install Playwright, start the app, capture hero + feature screenshots.\n"
-            "Save to docs/screenshots/ directory. Gracefully skip if not applicable."
+        # Check if phase should be skipped
+        screenshot_skipped = _should_skip_phase(
+            "Screenshot", pipeline_state, resume_from_phase
         )
 
-        screenshot_result = run_phase(
-            "Screenshot",
-            screenshot_prompt,
-            screenshot_instruction,
-            working_directory,
-            phase_timeout=600,  # 10 min
-            project_type=project_type,
-        )
-
-        # Screenshot is optional - don't fail build if it doesn't work
-        if screenshot_result.status == "completed":
-            phases_completed.append("Screenshot")
-            print("✅ Screenshots captured", file=sys.stderr)
+        if screenshot_skipped:
+            print("⏭️  Skipping Screenshot phase (already completed)", file=sys.stderr)
         else:
-            print(
-                f"⚠️  Screenshot capture skipped: {screenshot_result.error or 'N/A'}",
-                file=sys.stderr,
+            # Screenshot phase ALWAYS runs after Test completes (has its own 10-min timeout)
+            print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
+
+            # Mark phase as started for visibility
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Screenshot")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            screenshot_timeout_result = check_timeout("Screenshot")
+            if screenshot_timeout_result:
+                print(
+                    "⚠️  Build timeout exceeded, but running Screenshot anyway (max 10 min)",
+                    file=sys.stderr,
+                )
+
+            screenshot_prompt = MODULE_DIR / "prompts" / "phase_4_5_screenshot.md"
+            screenshot_instruction = (
+                "Capture screenshots of the application for documentation.\n"
+                "Install Playwright, start the app, capture hero + feature screenshots.\n"
+                "Save to docs/screenshots/ directory. Gracefully skip if not applicable."
             )
-            # Continue anyway - screenshots are optional
+
+            screenshot_result = run_phase(
+                "Screenshot",
+                screenshot_prompt,
+                screenshot_instruction,
+                working_directory,
+                phase_timeout=600,  # 10 min
+                project_type=project_type,
+            )
+
+            # Screenshot is optional - don't fail build if it doesn't work
+            if screenshot_result.status == "completed":
+                if "Screenshot" not in phases_completed:
+                    phases_completed.append("Screenshot")
+                    # Persist phase completion
+                    if pipeline_state:
+                        pipeline_state.mark_phase_completed("Screenshot")
+                        save_pipeline_state(pipeline_state, working_directory)
+                print("✅ Screenshots captured", file=sys.stderr)
+
+                # Check if we should pause after Screenshot
+                pause_result = _check_and_handle_pause(
+                    "Screenshot",
+                    working_directory,
+                    pipeline_state,
+                    phases_completed,
+                    start_time,
+                    test_iteration,
+                    task_config,
+                )
+                if pause_result:
+                    return pause_result
+            else:
+                print(
+                    f"⚠️  Screenshot capture skipped: {screenshot_result.error or 'N/A'}",
+                    file=sys.stderr,
+                )
+                # Continue anyway - screenshots are optional
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 5: DOCUMENTATION (README Generation)
         # ═══════════════════════════════════════════════════════════════════════
-        # Documentation phase ALWAYS runs after Screenshot completes (has its own 10-min timeout)
-        print("\n📝 Running Documentation phase...", file=sys.stderr)
-        doc_timeout_result = check_timeout("Documentation")
-        if doc_timeout_result:
+        # Check if phase should be skipped
+        docs_skipped = _should_skip_phase(
+            "Documentation", pipeline_state, resume_from_phase
+        )
+
+        if docs_skipped:
             print(
-                "⚠️  Build timeout exceeded, but running Documentation anyway (max 10 min)",
-                file=sys.stderr,
+                "⏭️  Skipping Documentation phase (already completed)", file=sys.stderr
             )
-
-        docs_prompt = MODULE_DIR / "prompts" / "phase_5_documentation.md"
-        docs_instruction = (
-            "Generate comprehensive README.md with:\n"
-            "- Project overview and features\n"
-            "- Installation instructions\n"
-            "- Usage examples\n"
-            "- Screenshots (from docs/screenshots/ if available)\n"
-            "- API documentation\n"
-            "- Contributing guidelines\n"
-            "- License and badges"
-        )
-
-        docs_result = run_phase(
-            "Documentation",
-            docs_prompt,
-            docs_instruction,
-            working_directory,
-            phase_timeout=600,  # 10 min
-            project_type=project_type,
-        )
-
-        if docs_result.status == "completed":
-            phases_completed.append("Documentation")
-            print("✅ Documentation generated", file=sys.stderr)
         else:
-            print(
-                f"⚠️  Documentation generation failed: {docs_result.error}",
-                file=sys.stderr,
+            # Documentation phase ALWAYS runs after Screenshot completes (has its own 10-min timeout)
+            print("\n📝 Running Documentation phase...", file=sys.stderr)
+
+            # Mark phase as started for visibility
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Documentation")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            doc_timeout_result = check_timeout("Documentation")
+            if doc_timeout_result:
+                print(
+                    "⚠️  Build timeout exceeded, but running Documentation anyway (max 10 min)",
+                    file=sys.stderr,
+                )
+
+            docs_prompt = MODULE_DIR / "prompts" / "phase_5_documentation.md"
+            docs_instruction = (
+                "Generate comprehensive README.md with:\n"
+                "- Project overview and features\n"
+                "- Installation instructions\n"
+                "- Usage examples\n"
+                "- Screenshots (from docs/screenshots/ if available)\n"
+                "- API documentation\n"
+                "- Contributing guidelines\n"
+                "- License and badges"
             )
-            # Continue to deployment even if docs fail
+
+            docs_result = run_phase(
+                "Documentation",
+                docs_prompt,
+                docs_instruction,
+                working_directory,
+                phase_timeout=600,  # 10 min
+                project_type=project_type,
+            )
+
+            if docs_result.status == "completed":
+                if "Documentation" not in phases_completed:
+                    phases_completed.append("Documentation")
+                    # Persist phase completion
+                    if pipeline_state:
+                        pipeline_state.mark_phase_completed("Documentation")
+                        save_pipeline_state(pipeline_state, working_directory)
+                print("✅ Documentation generated", file=sys.stderr)
+
+                # Check if we should pause after Documentation
+                pause_result = _check_and_handle_pause(
+                    "Documentation",
+                    working_directory,
+                    pipeline_state,
+                    phases_completed,
+                    start_time,
+                    test_iteration,
+                    task_config,
+                )
+                if pause_result:
+                    return pause_result
+            else:
+                print(
+                    f"⚠️  Documentation generation failed: {docs_result.error}",
+                    file=sys.stderr,
+                )
+                # Continue to deployment even if docs fail
 
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 6: DEPLOY (GitHub)
         # ═══════════════════════════════════════════════════════════════════════
-        # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
-        print("\n🚀 Running Deploy phase...", file=sys.stderr)
-        deploy_timeout_result = check_timeout("Deploy")
-        if deploy_timeout_result:
+        deploy_skipped = _should_skip_phase("Deploy", pipeline_state, resume_from_phase)
+        if deploy_skipped:
             print(
-                "⚠️  Build timeout exceeded, but running Deploy anyway (max 10 min)",
-                file=sys.stderr,
+                "⏭️  Skipping Deploy phase (resuming from later phase)", file=sys.stderr
             )
-
-        deploy_prompt = MODULE_DIR / "prompts" / "phase_6_deployment.md"
-
-        # Determine repository name
-        github_repo_name = task_config.get("github_repo_name")
-        repo_name = github_repo_name or working_directory.name
-
-        deploy_instruction = (
-            f"Deploy to GitHub:\n"
-            f"1. Check if gh CLI is available and authenticated\n"
-            f"2. Initialize git repo (if not already)\n"
-            f"3. Stage all files: git add .\n"
-            f"4. Commit: git commit -m 'feat: {task[:60]}'\n"
-            f"5. Create GitHub repo: gh repo create {repo_name} --public --source=. --push\n"
-            f"6. Push to main branch\n"
-            f"7. Update session-summary.json with repo URL\n\n"
-            f"If gh CLI not available, print instructions and exit with code 10 (build success, deploy skipped)."
-        )
-
-        deploy_result = run_phase(
-            "Deploy",
-            deploy_prompt,
-            deploy_instruction,
-            working_directory,
-            phase_timeout=600,  # 10 min
-            project_type=project_type,
-        )
-
-        # Deploy is optional - don't fail build if GitHub unavailable
-        if deploy_result.status == "completed":
             phases_completed.append("Deploy")
-            print("✅ Deployed to GitHub", file=sys.stderr)
-        elif deploy_result.exit_code == 10:
-            # Exit code 10 = build success, deployment skipped
-            print("⚠️  Deployment skipped (GitHub CLI not available)", file=sys.stderr)
         else:
-            print(
-                f"⚠️  Deployment failed: {deploy_result.error or 'Unknown error'}",
-                file=sys.stderr,
+            # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
+            print("\n🚀 Running Deploy phase...", file=sys.stderr)
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Deploy")
+                save_pipeline_state(pipeline_state, working_directory)
+
+            deploy_timeout_result = check_timeout("Deploy")
+            if deploy_timeout_result:
+                print(
+                    "⚠️  Build timeout exceeded, but running Deploy anyway (max 10 min)",
+                    file=sys.stderr,
+                )
+
+            deploy_prompt = MODULE_DIR / "prompts" / "phase_6_deployment.md"
+
+            # Determine repository name
+            github_repo_name = task_config.get("github_repo_name")
+            repo_name = github_repo_name or working_directory.name
+
+            deploy_instruction = (
+                f"Deploy to GitHub:\n"
+                f"1. Check if gh CLI is available and authenticated\n"
+                f"2. Initialize git repo (if not already)\n"
+                f"3. Stage all files: git add .\n"
+                f"4. Commit: git commit -m 'feat: {task[:60]}'\n"
+                f"5. Create GitHub repo: gh repo create {repo_name} --public --source=. --push\n"
+                f"6. Push to main branch\n"
+                f"7. Update session-summary.json with repo URL\n\n"
+                f"If gh CLI not available, print instructions and exit with code 10 (build success, deploy skipped)."
             )
-            # Continue anyway - deployment is optional
+
+            deploy_result = run_phase(
+                "Deploy",
+                deploy_prompt,
+                deploy_instruction,
+                working_directory,
+                phase_timeout=600,  # 10 min
+                project_type=project_type,
+            )
+
+            # Deploy is optional - don't fail build if GitHub unavailable
+            if deploy_result.status == "completed":
+                phases_completed.append("Deploy")
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Deploy")
+                    save_pipeline_state(pipeline_state, working_directory)
+                print("✅ Deployed to GitHub", file=sys.stderr)
+
+                # Check for pause after Deploy
+                pause_result = _check_and_handle_pause(
+                    "Deploy",
+                    working_directory,
+                    pipeline_state,
+                    phases_completed,
+                    start_time,
+                    test_iteration,
+                    task_config,
+                )
+                if pause_result:
+                    return pause_result
+            elif deploy_result.exit_code == 10:
+                # Exit code 10 = build success, deployment skipped
+                print(
+                    "⚠️  Deployment skipped (GitHub CLI not available)", file=sys.stderr
+                )
+            else:
+                print(
+                    f"⚠️  Deployment failed: {deploy_result.error or 'Unknown error'}",
+                    file=sys.stderr,
+                )
+                # Continue anyway - deployment is optional
 
         # ═══════════════════════════════════════════════════════════════════════
         # SUCCESS
         # ═══════════════════════════════════════════════════════════════════════
         duration = (datetime.now() - start_time).total_seconds()
+
+        # Mark pipeline as completed
+        if pipeline_state:
+            pipeline_state.state = PipelineState.COMPLETED
+            save_pipeline_state(pipeline_state, working_directory)
 
         print(f"\n{'=' * 60}", file=sys.stderr)
         print("[TRACE] execute_build_with_phase_spawning COMPLETING", file=sys.stderr)
@@ -1859,6 +2353,7 @@ def execute_build_with_phase_spawning(
             "start_time": start_time.isoformat(),
             "duration_seconds": duration,
             "message": f"Build completed successfully in {duration:.1f}s",
+            "pipeline_id": pipeline_state.pipeline_id if pipeline_state else None,
         }
 
         print(
@@ -1872,6 +2367,11 @@ def execute_build_with_phase_spawning(
 
     except Exception as e:
         duration = (datetime.now() - start_time).total_seconds()
+        # Persist failure state
+        if pipeline_state:
+            current_phase = pipeline_state.current_phase or "Unknown"
+            pipeline_state.mark_failed(current_phase, str(e))
+            save_pipeline_state(pipeline_state, working_directory)
         return {
             "status": "error",
             "error": str(e),
