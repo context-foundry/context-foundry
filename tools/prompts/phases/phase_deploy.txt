@@ -21,7 +21,8 @@ HANDOFF CONTRACT
 
 **🚨 SCOPE CONSTRAINT - CRITICAL:**
 - Work ONLY within the CURRENT WORKING DIRECTORY
-- Do NOT create or modify files outside the project directory
+- Use RELATIVE paths only (NOT `/tmp/` or absolute paths)
+- NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
 - The project directory IS your sandbox - stay within it
 
 ═══════════════════════════════════════════════════════════
