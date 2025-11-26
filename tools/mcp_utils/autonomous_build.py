@@ -1382,6 +1382,87 @@ def execute_build_with_phase_spawning(
             }
         return None
 
+    def check_approval_gate(phase_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Check if approval is required for a phase.
+        Returns waiting_approval dict if paused, None to proceed.
+        Handles expired requests by re-requesting approval.
+        """
+        skip_approval = task_config.get("skip_approval", False)
+        if skip_approval:
+            return None
+
+        require_approval_phases = task_config.get("require_approval_phases", ["Deploy"])
+        approval_config = ApprovalGateConfig(
+            require_approval_phases=require_approval_phases
+        )
+
+        if not check_approval_required(phase_name, config=approval_config):
+            return None
+
+        # Check if approval already granted
+        existing_approval = None
+        if pipeline_state:
+            existing_approval = check_approval_status(
+                pipeline_state.pipeline_id, phase_name
+            )
+
+        if existing_approval:
+            # Check for expiration first
+            if existing_approval.is_expired():
+                print(
+                    "⏰ Previous approval request expired, requesting new approval...",
+                    file=sys.stderr,
+                )
+                existing_approval = None  # Force re-request
+
+            elif existing_approval.status == ApprovalStatus.APPROVED:
+                print(
+                    f"✅ {phase_name} approval granted, proceeding...", file=sys.stderr
+                )
+                return None  # Proceed
+
+            elif existing_approval.status == ApprovalStatus.DENIED:
+                # Approval was denied - skip phase
+                print(
+                    f"❌ {phase_name} approval denied, skipping phase", file=sys.stderr
+                )
+                phases_completed.append(phase_name)
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed(phase_name)
+                    save_pipeline_state(pipeline_state, working_directory)
+                return {"skip_phase": True}  # Special marker to skip
+
+        # No valid approval yet - request it and pause
+        print(f"\n🔐 {phase_name} phase requires approval...", file=sys.stderr)
+
+        if pipeline_state:
+            # Create approval request
+            approval_request = request_approval_for_phase(
+                phase=phase_name,
+                pipeline_state=pipeline_state,
+                task_summary=task[:200],
+                risk_description=get_default_risk_description(phase_name),
+                changes_summary=f"Phases completed: {', '.join(phases_completed)}",
+            )
+            save_pipeline_state(pipeline_state, working_directory)
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+            return {
+                "status": "waiting_approval",
+                "phases_completed": phases_completed,
+                "waiting_phase": phase_name,
+                "approval_request_id": approval_request.request_id,
+                "message": f"{phase_name} phase requires approval. Run: cfd approve {approval_request.request_id[:8]}",
+                "resume_command": pipeline_state.get_resume_command(working_directory),
+                "working_directory": str(working_directory),
+                "elapsed_seconds": elapsed,
+            }
+        else:
+            # No pipeline state - skip approval in autonomous mode
+            print("⚠️  No pipeline state, skipping approval check", file=sys.stderr)
+            return None
+
     # ═══════════════════════════════════════════════════════════════════════
     # EMERGENCY STOP CHECK: Before any phases run
     # ═══════════════════════════════════════════════════════════════════════
@@ -1413,6 +1494,14 @@ def execute_build_with_phase_spawning(
             emergency_result = check_emergency_stop("Scout")
             if emergency_result:
                 return emergency_result
+
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Scout")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
 
             # Check timeout before starting phase
             timeout_result = check_timeout("Scout")
@@ -1618,6 +1707,14 @@ def execute_build_with_phase_spawning(
             emergency_result = check_emergency_stop("Architect")
             if emergency_result:
                 return emergency_result
+
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Architect")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
 
             # Check timeout before starting phase
             timeout_result = check_timeout("Architect")
@@ -1933,6 +2030,14 @@ def execute_build_with_phase_spawning(
             if emergency_result:
                 return emergency_result
 
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Builder")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
+
             # Check timeout before starting phase
             timeout_result = check_timeout("Builder")
             if timeout_result:
@@ -2043,6 +2148,14 @@ def execute_build_with_phase_spawning(
             emergency_result = check_emergency_stop("Test")
             if emergency_result:
                 return emergency_result
+
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Test")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
 
             # Check timeout before starting test phase
             timeout_result = check_timeout("Test")
@@ -2358,6 +2471,14 @@ def execute_build_with_phase_spawning(
             if emergency_result:
                 return emergency_result
 
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Screenshot")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
+
             # Screenshot phase ALWAYS runs after Test completes (has its own 10-min timeout)
             print("\n🖼️  Running Screenshot phase...", file=sys.stderr)
 
@@ -2448,6 +2569,14 @@ def execute_build_with_phase_spawning(
             emergency_result = check_emergency_stop("Documentation")
             if emergency_result:
                 return emergency_result
+
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Documentation")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
+                else:
+                    return approval_result  # Waiting for approval
 
             # Documentation phase ALWAYS runs after Screenshot completes (has its own 10-min timeout)
             print("\n📝 Running Documentation phase...", file=sys.stderr)
@@ -2541,78 +2670,13 @@ def execute_build_with_phase_spawning(
             if emergency_result:
                 return emergency_result
 
-            # Check if approval is required for Deploy phase (Milestone 5)
-            skip_approval = task_config.get("skip_approval", False)
-            require_approval_phases = task_config.get(
-                "require_approval_phases", ["Deploy"]
-            )
-            approval_config = ApprovalGateConfig(
-                require_approval_phases=require_approval_phases
-            )
-
-            if not skip_approval and check_approval_required(
-                "Deploy", config=approval_config
-            ):
-                # Check if approval already granted
-                existing_approval = None
-                if pipeline_state:
-                    existing_approval = check_approval_status(
-                        pipeline_state.pipeline_id, "Deploy"
-                    )
-
-                if (
-                    existing_approval
-                    and existing_approval.status == ApprovalStatus.APPROVED
-                ):
-                    print("✅ Deploy approval granted, proceeding...", file=sys.stderr)
-                elif (
-                    existing_approval
-                    and existing_approval.status == ApprovalStatus.DENIED
-                ):
-                    # Approval was denied - skip deployment
-                    print(
-                        "❌ Deploy approval denied, skipping deployment",
-                        file=sys.stderr,
-                    )
-                    # Don't fail the build, just skip Deploy
-                    phases_completed.append("Deploy")
-                    if pipeline_state:
-                        pipeline_state.mark_phase_completed("Deploy")
-                        save_pipeline_state(pipeline_state, working_directory)
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Deploy")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue to next
                 else:
-                    # No approval yet - request it and pause
-                    print("\n🔐 Deploy phase requires approval...", file=sys.stderr)
-
-                    if pipeline_state:
-                        # Create approval request
-                        approval_request = request_approval_for_phase(
-                            phase="Deploy",
-                            pipeline_state=pipeline_state,
-                            task_summary=task[:200],
-                            risk_description=get_default_risk_description("Deploy"),
-                            changes_summary=f"Phases completed: {', '.join(phases_completed)}",
-                        )
-                        save_pipeline_state(pipeline_state, working_directory)
-
-                        elapsed = (datetime.now() - start_time).total_seconds()
-                        return {
-                            "status": "waiting_approval",
-                            "phases_completed": phases_completed,
-                            "waiting_phase": "Deploy",
-                            "approval_request_id": approval_request.request_id,
-                            "message": f"Deploy phase requires approval. Run: cfd approve {approval_request.request_id[:8]}",
-                            "resume_command": pipeline_state.get_resume_command(
-                                working_directory
-                            ),
-                            "working_directory": str(working_directory),
-                            "elapsed_seconds": elapsed,
-                        }
-                    else:
-                        # No pipeline state - skip approval in autonomous mode
-                        print(
-                            "⚠️  No pipeline state, skipping approval check",
-                            file=sys.stderr,
-                        )
+                    return approval_result  # Waiting for approval
 
             # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
             print("\n🚀 Running Deploy phase...", file=sys.stderr)
