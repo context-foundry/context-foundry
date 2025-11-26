@@ -1400,11 +1400,31 @@ def cmd_approve(args):
 
 def cmd_pending_approvals(args):
     """List pending approval requests"""
+    from datetime import datetime
+
     try:
         from tools.mcp_utils.approval_gates import ApprovalManager
     except ImportError:
         print("Error: Approval gates module not available", file=sys.stderr)
         return 1
+
+    def time_until_expiry(expires_at_str: str) -> str:
+        """Return human-readable time until expiry"""
+        try:
+            expires = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+            now = datetime.utcnow()
+            if expires.tzinfo:
+                now = now.replace(tzinfo=expires.tzinfo)
+            delta = expires - now
+            if delta.total_seconds() <= 0:
+                return "EXPIRED"
+            hours = int(delta.total_seconds() // 3600)
+            minutes = int((delta.total_seconds() % 3600) // 60)
+            if hours > 0:
+                return f"{hours}h {minutes}m remaining"
+            return f"{minutes}m remaining"
+        except Exception:
+            return expires_at_str[:19]
 
     manager = ApprovalManager()
 
@@ -1423,8 +1443,8 @@ def cmd_pending_approvals(args):
         print(json.dumps([r.to_dict() for r in requests], indent=2))
         return 0
 
-    print(f"{title} ({len(requests)} shown):")
-    print("-" * 70)
+    print(f"\n{title} ({len(requests)} shown):")
+    print("=" * 70)
 
     for request in requests:
         status_icons = {
@@ -1436,27 +1456,51 @@ def cmd_pending_approvals(args):
         }
         icon = status_icons.get(request.status.value, "  ")
 
-        print(
-            f"{icon} {request.request_id[:8]} | {request.phase} | {request.status.value.upper()}"
-        )
-        print(f"   Project: {request.working_directory}")
+        # Header line with phase prominently displayed
+        print(f"\n{icon} [{request.phase.upper()}] {request.status.value.upper()}")
+        print(f"   ID: {request.request_id[:8]}")
+
+        # Project context
+        project_name = Path(request.working_directory).name
+        print(f"   Project: {project_name} ({request.working_directory})")
+
+        # Task summary
         if request.task_summary:
-            print(f"   Task: {request.task_summary[:60]}...")
+            summary = request.task_summary[:80]
+            if len(request.task_summary) > 80:
+                summary += "..."
+            print(f"   Task: {summary}")
+
+        # Risk description - important for understanding what the phase will do
+        if request.risk_description:
+            print(f"   ⚠️  Risk: {request.risk_description}")
+
+        # Changes summary - shows progress context
+        if request.changes_summary:
+            print(f"   Progress: {request.changes_summary}")
+
+        # Timing info
         print(f"   Requested: {request.requested_at[:19]}")
 
         if request.status.value == "pending" and request.expires_at:
-            print(f"   Expires: {request.expires_at[:19]}")
+            expiry_display = time_until_expiry(request.expires_at)
+            print(f"   Expires: {expiry_display}")
+            # Show approval command prominently for pending requests
+            print(f"   → Approve: cfd approve {request.request_id[:8]}")
+            print(f"   → Deny:    cfd approve {request.request_id[:8]} --deny")
 
         if request.responded_at:
             print(f"   Responded: {request.responded_at[:19]} by {request.approved_by}")
             if request.response_reason:
                 print(f"   Reason: {request.response_reason}")
 
-        print()
+    print("\n" + "=" * 70)
 
-    if any(r.status.value == "pending" for r in requests):
-        print("To approve a request: cfd approve <request-id>")
-        print("To deny a request:    cfd approve <request-id> --deny")
+    pending_count = sum(1 for r in requests if r.status.value == "pending")
+    if pending_count > 0:
+        print(f"\n📋 {pending_count} request(s) awaiting approval")
+        print("   Usage: cfd approve <id>        - Approve a request")
+        print("          cfd approve <id> --deny - Deny a request")
 
     return 0
 
