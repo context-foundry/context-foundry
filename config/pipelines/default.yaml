@@ -1,0 +1,159 @@
+# Default Pipeline Configuration for Context Foundry
+# Part of Milestone 2: Selective Phase Execution
+#
+# This file defines the default pipeline phases, their dependencies,
+# timeouts, and input/output contracts.
+
+name: default-build
+description: Standard build pipeline with all phases
+version: "1.0"
+
+# Global settings
+settings:
+  # Default timeout for phases without explicit timeout (seconds)
+  default_timeout: 600
+
+  # Whether to enforce contracts strictly (warnings become errors)
+  strict_contracts: false
+
+  # Whether to auto-skip phases that can be skipped when inputs suggest
+  auto_skip: true
+
+  # Number of retries for failed phases (0 = no retry)
+  default_retries: 0
+
+# Phase definitions
+# NOTE: System uses both .md (human-readable) and .json (machine/BAML) files:
+# - Scout: outputs scout-report.md (+ optional scout_report.json from BAML)
+# - Architect: reads scout-report.md, outputs architecture.md + architecture.json (BAML)
+# - Builder: reads architecture.json (preferred) or architecture.md (fallback)
+phases:
+  - id: scout
+    name: Scout
+    description: Research and analyze the task, existing codebase, and requirements
+    timeout: 600
+    depends_on: []
+    required_inputs: []
+    required_outputs:
+      - ".context-foundry/scout-report.md"  # scout_report.json is optional
+    can_skip: false
+    retry_count: 0
+
+  - id: architect
+    name: Architect
+    description: Design the solution architecture and implementation plan
+    timeout: 900
+    depends_on:
+      - scout
+    required_inputs:
+      - ".context-foundry/scout-report.md"  # or scout_report.json
+    required_outputs:
+      - ".context-foundry/architecture.json"  # BAML-parsed JSON is the contract
+    can_skip: false
+    retry_count: 0
+
+  - id: builder
+    name: Builder
+    description: Implement the solution based on the architecture
+    timeout: 1800
+    depends_on:
+      - architect
+    required_inputs:
+      - ".context-foundry/architecture.json"  # Falls back to .md
+    required_outputs: []  # Validated by checking for source files
+    can_skip: false
+    retry_count: 0
+
+  - id: test
+    name: Test
+    description: Run tests and fix any failures (self-healing loop)
+    timeout: 1200
+    depends_on:
+      - builder
+    required_inputs: []  # Source files must exist
+    required_outputs:
+      - ".context-foundry/test-report.md"
+    can_skip: true  # Can skip if no testable code
+    retry_count: 3  # Test phase retries on failure
+
+  - id: screenshot
+    name: Screenshot
+    description: Capture visual documentation of the application
+    timeout: 300
+    depends_on:
+      - test
+    required_inputs: []
+    required_outputs: []  # Screenshots in docs/ or .context-foundry/
+    can_skip: true  # Can skip for non-UI projects
+    retry_count: 0
+
+  - id: documentation
+    name: Documentation
+    description: Generate README and documentation
+    timeout: 600
+    depends_on:
+      - screenshot
+    required_inputs: []
+    required_outputs:
+      - "README.md"
+    can_skip: true
+    retry_count: 0
+
+  - id: deploy
+    name: Deploy
+    description: Deploy to GitHub or target environment
+    timeout: 900
+    depends_on:
+      - documentation
+    required_inputs:
+      - "README.md"
+    required_outputs: []  # .git directory or deployment manifest
+    approval_required: true  # Requires human approval by default
+    can_skip: true
+    retry_count: 0
+
+  - id: feedback
+    name: Feedback
+    description: Capture learnings and update patterns
+    timeout: 300
+    depends_on:
+      - deploy
+    required_inputs: []
+    required_outputs: []
+    can_skip: true
+    retry_count: 0
+
+# Predefined pipeline variants
+variants:
+  # Quick build - skip optional phases
+  quick:
+    description: Fast build without screenshots or documentation
+    skip_phases:
+      - screenshot
+      - documentation
+      - feedback
+
+  # Development mode - pause after architect for review
+  development:
+    description: Development mode with pause after architecture
+    pause_after:
+      - architect
+
+  # Safe mode - require approval before deploy
+  safe:
+    description: Safe mode with approval gate before deployment
+    approval_required:
+      - deploy
+
+  # Test-only - just run tests on existing code
+  test-only:
+    description: Run only the test phase
+    phases:
+      - test
+
+  # CI mode - no deployment
+  ci:
+    description: CI pipeline without deployment
+    skip_phases:
+      - deploy
+      - feedback

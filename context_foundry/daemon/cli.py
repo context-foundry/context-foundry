@@ -922,6 +922,134 @@ def cmd_pipeline_status(args):
     return 0
 
 
+def cmd_run_phase(args):
+    """Run specific phase(s) with contract validation"""
+    # Import phase registry and contracts
+    try:
+        from tools.mcp_utils.phase_registry import (
+            get_registry,
+            PHASE_ORDER as REGISTRY_PHASE_ORDER,
+        )
+        from tools.mcp_utils.contracts import validate_phase_inputs
+    except ImportError as e:
+        print(f"Error: Phase registry module not available: {e}", file=sys.stderr)
+        return 1
+
+    project_dir = Path(args.dir).resolve()
+    if not project_dir.exists():
+        print(f"Error: Directory does not exist: {project_dir}", file=sys.stderr)
+        return 1
+
+    # Parse phase names
+    phase_names = args.phases
+    if not phase_names:
+        print("Error: No phases specified", file=sys.stderr)
+        print("Usage: cfd run-phase Scout [Architect Builder ...]", file=sys.stderr)
+        return 1
+
+    registry = get_registry()
+
+    # Resolve phase names to PhaseIds
+    phases, error = registry.resolve_phase_list(phase_names)
+    if error:
+        print(f"Error: {error}", file=sys.stderr)
+        valid_phases = [p.value for p in REGISTRY_PHASE_ORDER]
+        print(f"Valid phases: {', '.join(valid_phases)}", file=sys.stderr)
+        return 1
+
+    # If --with-deps flag, include all dependencies
+    if args.with_deps:
+        phases = registry.get_required_phases_for(phases)
+        print(f"Including dependencies: {', '.join(p.value for p in phases)}")
+
+    # Validate input contracts unless --skip-contracts
+    if not args.skip_contracts:
+        for phase_id in phases:
+            phase_def = registry.get_phase(phase_id)
+            if phase_def and phase_def.required_inputs:
+                result = validate_phase_inputs(
+                    phase_def.name, project_dir, phase_def.required_inputs
+                )
+                if not result.passed:
+                    print(f"Error: Input contract failed for {phase_def.name}:")
+                    for v in result.violations:
+                        print(f"  - {v.message}")
+                        if v.suggestion:
+                            print(f"    Suggestion: {v.suggestion}")
+                    if not args.force:
+                        return 1
+                    print("Continuing anyway (--force specified)...")
+
+    print(f"Running phases: {', '.join(p.value for p in phases)}")
+    print(f"Working directory: {project_dir}")
+    print()
+
+    config = Config.load(args.config)
+
+    # Build task config for selective execution
+    task_config = {
+        "task": f"Run phases: {', '.join(p.value for p in phases)}",
+        "working_directory": str(project_dir),
+        "mode": "selective",
+        "target_phases": [p.value for p in phases],
+        "skip_contracts": args.skip_contracts,
+        "timeout_minutes": args.timeout or 90,
+    }
+
+    # Check if daemon is running
+    if not get_running_daemon_pid(config):
+        print("Warning: Daemon is not running. Starting phase execution directly...")
+
+        # Import and run directly
+        from tools.mcp_utils.autonomous_build import execute_build_with_phase_spawning
+
+        result = execute_build_with_phase_spawning(
+            task=task_config["task"],
+            working_directory=project_dir,
+            task_config=task_config,
+            enable_test_loop="Test" in [p.value for p in phases],
+            max_test_iterations=3,
+            flowise_mode=False,
+            project_type="unknown",
+            incremental=True,
+            use_parallel=None,
+            timeout_minutes=task_config["timeout_minutes"],
+            target_phases=[p.value for p in phases],
+        )
+
+        if result.get("status") == "completed":
+            print("\n✅ Phases completed successfully")
+            return 0
+        else:
+            print(f"\n❌ Phases failed: {result.get('error', 'Unknown error')}")
+            return 1
+
+    # Submit to daemon
+    store = Store(config.db_path)
+    from .jobs import JobManager
+
+    job_manager = JobManager(config, store, runner=None)
+    job = job_manager.submit_job(
+        job_type=JobType.AUTONOMOUS_BUILD,
+        params=task_config,
+        priority=args.priority,
+    )
+
+    print()
+    print(f"Job submitted: {job.id}")
+    print(f"  Type: {job.type.value}")
+    print(f"  Phases: {', '.join(p.value for p in phases)}")
+    print(f"  Status: {job.status.value}")
+    print()
+    print(f"Monitor with: cfd logs {job.id} --phases")
+
+    # If --wait, block until complete
+    if args.wait:
+        return _wait_for_job(config, job.id, args.timeout)
+
+    return 0
+
+
 def cmd_resume(args):
     """Resume a paused pipeline"""
     if not PIPELINE_STATE_AVAILABLE:
@@ -1205,6 +1333,55 @@ def main():
         help="Project directory (default: current directory)",
     )
 
+    # Run-phase command (Milestone 2: Selective Phase Execution)
+    run_phase_parser = subparsers.add_parser(
+        "run-phase", help="Run specific phase(s) with contract validation"
+    )
+    run_phase_parser.add_argument(
+        "phases",
+        nargs="*",
+        help="Phase(s) to run (e.g., Scout, Architect Builder Test)",
+    )
+    run_phase_parser.add_argument(
+        "--dir",
+        "-d",
+        type=str,
+        default=".",
+        help="Project directory (default: current directory)",
+    )
+    run_phase_parser.add_argument(
+        "--with-deps",
+        action="store_true",
+        help="Include all dependency phases",
+    )
+    run_phase_parser.add_argument(
+        "--skip-contracts",
+        action="store_true",
+        help="Skip input contract validation",
+    )
+    run_phase_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Continue even if contracts fail",
+    )
+    run_phase_parser.add_argument(
+        "--priority",
+        type=int,
+        default=5,
+        help="Job priority when submitting to daemon (1-10)",
+    )
+    run_phase_parser.add_argument(
+        "--timeout",
+        type=int,
+        help="Timeout in minutes (default: 90)",
+    )
+    run_phase_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for job to complete",
+    )
+
     # Resume command
     resume_parser = subparsers.add_parser("resume", help="Resume a paused pipeline")
     resume_parser.add_argument(
@@ -1257,6 +1434,7 @@ def main():
         "cleanup": cmd_cleanup,
         "killall": cmd_killall,
         "pipeline-status": cmd_pipeline_status,
+        "run-phase": cmd_run_phase,
         "resume": cmd_resume,
     }
 
