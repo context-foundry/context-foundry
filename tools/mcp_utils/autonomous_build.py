@@ -1259,14 +1259,17 @@ def execute_build_with_phase_spawning(
             return None
         else:
             failures = [{"name": f.name, "message": f.message} for f in result.failures]
+            error_msg = f"Preflight checks failed: {result.failures[0].message}"
             audit_preflight_failed(phase_name, str(working_directory), failures)
+            audit_phase_failed(phase_name, str(working_directory), error_msg)
+            audit_pipeline_failed(str(working_directory), error_msg, phase_name)
             print(f"❌ Preflight failed for {phase_name}:", file=sys.stderr)
             for failure in result.failures:
                 print(f"   - {failure.message}", file=sys.stderr)
             return {
                 "status": "failed",
                 "phase_failed": phase_name,
-                "error": f"Preflight checks failed: {result.failures[0].message}",
+                "error": error_msg,
                 "preflight_failures": failures,
             }
 
@@ -1281,6 +1284,9 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_failed(phase_name, error_msg)
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase and pipeline failed due to timeout
+                audit_phase_failed(phase_name, str(working_directory), error_msg)
+                audit_pipeline_failed(str(working_directory), error_msg, phase_name)
                 return {
                     "status": "failed",
                     "phase_failed": phase_name,
@@ -1377,16 +1383,18 @@ def execute_build_with_phase_spawning(
                 results["scout"] = scout_result
 
                 if scout_result.status != "completed":
+                    error_msg = scout_result.error or "Scout phase failed"
                     # Persist failure state
                     if pipeline_state:
-                        pipeline_state.mark_failed(
-                            "Scout", scout_result.error or "Scout phase failed"
-                        )
+                        pipeline_state.mark_failed("Scout", error_msg)
                         save_pipeline_state(pipeline_state, working_directory)
+                    # Audit: Phase and pipeline failed
+                    audit_phase_failed("Scout", str(working_directory), error_msg)
+                    audit_pipeline_failed(str(working_directory), error_msg, "Scout")
                     return {
                         "status": "failed",
                         "phase_failed": "Scout",
-                        "error": scout_result.error,
+                        "error": error_msg,
                         "start_time": start_time.isoformat(),
                         "duration_seconds": (
                             datetime.now() - start_time
@@ -1475,10 +1483,14 @@ def execute_build_with_phase_spawning(
             try:
                 PhaseValidator.validate_flowise_codex_queries(working_directory)
             except ValueError as e:
+                error_msg = str(e)
+                # Audit: Phase and pipeline failed
+                audit_phase_failed("Scout", str(working_directory), error_msg)
+                audit_pipeline_failed(str(working_directory), error_msg, "Scout")
                 return {
                     "status": "failed",
                     "phase_failed": "Scout",
-                    "error": str(e),
+                    "error": error_msg,
                     "start_time": start_time.isoformat(),
                     "duration_seconds": (datetime.now() - start_time).total_seconds(),
                     "phases_completed": phases_completed,
@@ -1564,16 +1576,18 @@ def execute_build_with_phase_spawning(
             )
 
             if architect_result.status != "completed":
+                error_msg = architect_result.error or "Architect phase failed"
                 # Persist failure state
                 if pipeline_state:
-                    pipeline_state.mark_failed(
-                        "Architect", architect_result.error or "Architect phase failed"
-                    )
+                    pipeline_state.mark_failed("Architect", error_msg)
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase and pipeline failed
+                audit_phase_failed("Architect", str(working_directory), error_msg)
+                audit_pipeline_failed(str(working_directory), error_msg, "Architect")
                 return {
                     "status": "failed",
                     "phase_failed": "Architect",
-                    "error": architect_result.error,
+                    "error": error_msg,
                     "start_time": start_time.isoformat(),
                     "duration_seconds": (datetime.now() - start_time).total_seconds(),
                     "phases_completed": phases_completed,
@@ -1869,16 +1883,18 @@ def execute_build_with_phase_spawning(
             results["builder"] = builder_result
 
             if builder_result.status != "completed":
+                error_msg = builder_result.error or "Builder phase failed"
                 # Persist failure state
                 if pipeline_state:
-                    pipeline_state.mark_failed(
-                        "Builder", builder_result.error or "Builder phase failed"
-                    )
+                    pipeline_state.mark_failed("Builder", error_msg)
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase and pipeline failed
+                audit_phase_failed("Builder", str(working_directory), error_msg)
+                audit_pipeline_failed(str(working_directory), error_msg, "Builder")
                 return {
                     "status": "failed",
                     "phase_failed": "Builder",
-                    "error": builder_result.error,
+                    "error": error_msg,
                     "start_time": start_time.isoformat(),
                     "duration_seconds": (datetime.now() - start_time).total_seconds(),
                     "phases_completed": phases_completed,
@@ -2085,6 +2101,13 @@ def execute_build_with_phase_spawning(
                             "Architect (fix validation)", error_msg
                         )
                         save_pipeline_state(pipeline_state, working_directory)
+                    # Audit: Phase and pipeline failed
+                    audit_phase_failed(
+                        "Architect (fix validation)", str(working_directory), error_msg
+                    )
+                    audit_pipeline_failed(
+                        str(working_directory), error_msg, "Architect (fix validation)"
+                    )
                     # Return explicit error instead of generic "Test failed"
                     return {
                         "status": "failed",
@@ -2170,22 +2193,18 @@ def execute_build_with_phase_spawning(
                 audit_phase_completed("Test", str(working_directory))
 
             if not test_passed:
-                # Audit: Phase failed
-                audit_phase_failed(
-                    "Test",
-                    str(working_directory),
-                    f"Tests failed after {test_iteration} iteration(s)",
-                )
+                error_msg = f"Tests failed after {test_iteration} iteration(s)"
+                # Audit: Phase and pipeline failed
+                audit_phase_failed("Test", str(working_directory), error_msg)
+                audit_pipeline_failed(str(working_directory), error_msg, "Test")
                 # Persist failure state
                 if pipeline_state:
-                    pipeline_state.mark_failed(
-                        "Test", f"Tests failed after {test_iteration} iteration(s)"
-                    )
+                    pipeline_state.mark_failed("Test", error_msg)
                     save_pipeline_state(pipeline_state, working_directory)
                 return {
                     "status": "failed",
                     "phase_failed": "Test",
-                    "error": f"Tests failed after {test_iteration} iteration(s)",
+                    "error": error_msg,
                     "test_iterations": test_iteration,
                     "start_time": start_time.isoformat(),
                     "duration_seconds": (datetime.now() - start_time).total_seconds(),
@@ -2223,6 +2242,8 @@ def execute_build_with_phase_spawning(
             if pipeline_state:
                 pipeline_state.mark_phase_started("Screenshot")
                 save_pipeline_state(pipeline_state, working_directory)
+            # Audit: Phase started
+            audit_phase_started("Screenshot", str(working_directory))
 
             screenshot_timeout_result = check_timeout("Screenshot")
             if screenshot_timeout_result:
@@ -2255,6 +2276,8 @@ def execute_build_with_phase_spawning(
                     if pipeline_state:
                         pipeline_state.mark_phase_completed("Screenshot")
                         save_pipeline_state(pipeline_state, working_directory)
+                    # Audit: Phase completed
+                    audit_phase_completed("Screenshot", str(working_directory))
                 print("✅ Screenshots captured", file=sys.stderr)
 
                 # Check if we should pause after Screenshot
@@ -2296,6 +2319,8 @@ def execute_build_with_phase_spawning(
             if pipeline_state:
                 pipeline_state.mark_phase_started("Documentation")
                 save_pipeline_state(pipeline_state, working_directory)
+            # Audit: Phase started
+            audit_phase_started("Documentation", str(working_directory))
 
             doc_timeout_result = check_timeout("Documentation")
             if doc_timeout_result:
@@ -2332,6 +2357,8 @@ def execute_build_with_phase_spawning(
                     if pipeline_state:
                         pipeline_state.mark_phase_completed("Documentation")
                         save_pipeline_state(pipeline_state, working_directory)
+                    # Audit: Phase completed
+                    audit_phase_completed("Documentation", str(working_directory))
                 print("✅ Documentation generated", file=sys.stderr)
 
                 # Check if we should pause after Documentation
@@ -2368,6 +2395,8 @@ def execute_build_with_phase_spawning(
             if pipeline_state:
                 pipeline_state.mark_phase_started("Deploy")
                 save_pipeline_state(pipeline_state, working_directory)
+            # Audit: Phase started
+            audit_phase_started("Deploy", str(working_directory))
 
             deploy_timeout_result = check_timeout("Deploy")
             if deploy_timeout_result:
@@ -2409,6 +2438,8 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_phase_completed("Deploy")
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase completed
+                audit_phase_completed("Deploy", str(working_directory))
                 print("✅ Deployed to GitHub", file=sys.stderr)
 
                 # Check for pause after Deploy
