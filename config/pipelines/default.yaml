@@ -24,9 +24,10 @@ settings:
 
 # Phase definitions
 # NOTE: System uses both .md (human-readable) and .json (machine/BAML) files:
-# - Scout: outputs scout-report.md + scout_report.json (BAML) - JSON is the contract
-# - Architect: reads scout_report.json, outputs architecture.md + architecture.json (BAML)
-# - Builder: reads architecture.json (preferred) or architecture.md (fallback)
+# - Scout: outputs scout-report.md + scout_report.json. JSON preferred, MD fallback.
+# - Architect: reads scout_report.json (or scout-report.md fallback), outputs architecture.json
+# - Builder: reads architecture.json (or architecture.md fallback)
+# Fallbacks exist for resilience when BAML parsing fails. Contract validation warns but doesn't fail.
 phases:
   - id: scout
     name: Scout
@@ -35,7 +36,7 @@ phases:
     depends_on: []
     required_inputs: []
     required_outputs:
-      - ".context-foundry/scout_report.json"  # BAML-parsed JSON is the contract
+      - ".context-foundry/scout_report.json"  # JSON preferred; MD fallback if BAML fails
     can_skip: false
     retry_count: 0
 
@@ -46,9 +47,9 @@ phases:
     depends_on:
       - scout
     required_inputs:
-      - ".context-foundry/scout_report.json"  # BAML JSON contract
+      - ".context-foundry/scout_report.json"  # Falls back to scout-report.md
     required_outputs:
-      - ".context-foundry/architecture.json"  # BAML-parsed JSON is the contract
+      - ".context-foundry/architecture.json"  # JSON preferred; MD fallback if BAML fails
     can_skip: false
     retry_count: 0
 

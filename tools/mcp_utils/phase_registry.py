@@ -55,9 +55,10 @@ class PhaseDefinition:
 
 # Default phase definitions
 # NOTE: The system uses both .md (human-readable) and .json (machine/BAML) files:
-# - Scout: outputs scout-report.md + scout_report.json (BAML) - JSON is the contract
-# - Architect: reads scout_report.json, outputs architecture.md + architecture.json (BAML)
-# - Builder: reads architecture.json (preferred) or architecture.md (fallback)
+# - Scout: outputs scout-report.md + scout_report.json (BAML). JSON preferred, MD fallback.
+# - Architect: reads scout_report.json (or scout-report.md fallback), outputs architecture.json
+# - Builder: reads architecture.json (or architecture.md fallback)
+# Fallbacks exist for resilience when BAML parsing fails. Contract validation warns but doesn't fail.
 DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
     PhaseId.SCOUT: PhaseDefinition(
         id=PhaseId.SCOUT,
@@ -68,7 +69,7 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         required_inputs=[],
         required_outputs=[
             ".context-foundry/scout_report.json"
-        ],  # BAML-parsed JSON is the contract
+        ],  # JSON preferred; MD fallback if BAML fails
         can_skip=False,
     ),
     PhaseId.ARCHITECT: PhaseDefinition(
@@ -77,10 +78,12 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         description="Design the solution architecture and implementation plan",
         depends_on=[PhaseId.SCOUT],
         timeout_seconds=900,
-        required_inputs=[".context-foundry/scout_report.json"],  # BAML JSON contract
+        required_inputs=[
+            ".context-foundry/scout_report.json"
+        ],  # Falls back to scout-report.md
         required_outputs=[
             ".context-foundry/architecture.json"
-        ],  # BAML-parsed JSON is the contract
+        ],  # JSON preferred; MD fallback if BAML fails
         can_skip=False,
     ),
     PhaseId.BUILDER: PhaseDefinition(
@@ -91,7 +94,7 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         timeout_seconds=1800,
         required_inputs=[
             ".context-foundry/architecture.json"
-        ],  # Uses JSON, falls back to .md
+        ],  # Falls back to architecture.md
         required_outputs=[],  # Source files - validated by presence of any code files
         can_skip=False,
     ),
