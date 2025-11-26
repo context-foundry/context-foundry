@@ -7,6 +7,7 @@ Provides commands for start/stop/status/submit/list/logs/cancel.
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -1329,6 +1330,137 @@ def cmd_audit_log(args):
     return 0
 
 
+def cmd_approve(args):
+    """Approve a pending approval request"""
+    try:
+        from tools.mcp_utils.approval_gates import (
+            ApprovalManager,
+            ApprovalStatus,
+        )
+    except ImportError:
+        print("Error: Approval gates module not available", file=sys.stderr)
+        return 1
+
+    manager = ApprovalManager()
+
+    # Find request by ID prefix
+    request_id = args.request_id
+    request = None
+
+    # Try to find by prefix match
+    all_requests = manager.list_all_requests(limit=100)
+    matches = [r for r in all_requests if r.request_id.startswith(request_id)]
+
+    if len(matches) == 0:
+        print(
+            f"Error: No approval request found matching '{request_id}'", file=sys.stderr
+        )
+        return 1
+    elif len(matches) > 1:
+        print(f"Error: Multiple requests match '{request_id}':", file=sys.stderr)
+        for r in matches:
+            print(f"  - {r.request_id[:8]} ({r.phase}, {r.status.value})")
+        return 1
+    else:
+        request = matches[0]
+
+    if request.status != ApprovalStatus.PENDING:
+        print(
+            f"Request {request_id[:8]} is already {request.status.value}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Get approver name
+    approver = args.approver or os.environ.get("USER", "unknown")
+
+    if args.deny:
+        result = manager.deny_request(request.request_id, approver, args.reason)
+        if result:
+            print(f"❌ Denied request {result.request_id[:8]} for {result.phase}")
+            print(f"   Working directory: {result.working_directory}")
+            if args.reason:
+                print(f"   Reason: {args.reason}")
+        else:
+            print("Error: Failed to deny request", file=sys.stderr)
+            return 1
+    else:
+        result = manager.approve_request(request.request_id, approver, args.reason)
+        if result:
+            print(f"✅ Approved request {result.request_id[:8]} for {result.phase}")
+            print(f"   Working directory: {result.working_directory}")
+            print("\nTo continue the pipeline, run:")
+            print(f"   cfd resume --dir {result.working_directory}")
+        else:
+            print("Error: Failed to approve request", file=sys.stderr)
+            return 1
+
+    return 0
+
+
+def cmd_pending_approvals(args):
+    """List pending approval requests"""
+    try:
+        from tools.mcp_utils.approval_gates import ApprovalManager
+    except ImportError:
+        print("Error: Approval gates module not available", file=sys.stderr)
+        return 1
+
+    manager = ApprovalManager()
+
+    if args.all:
+        requests = manager.list_all_requests(limit=args.limit)
+        title = "All Approval Requests"
+    else:
+        requests = manager.list_pending_requests()
+        title = "Pending Approval Requests"
+
+    if not requests:
+        print("No approval requests found")
+        return 0
+
+    if args.json:
+        print(json.dumps([r.to_dict() for r in requests], indent=2))
+        return 0
+
+    print(f"{title} ({len(requests)} shown):")
+    print("-" * 70)
+
+    for request in requests:
+        status_icons = {
+            "pending": "⏳",
+            "approved": "✅",
+            "denied": "❌",
+            "expired": "⌛",
+            "cancelled": "🚫",
+        }
+        icon = status_icons.get(request.status.value, "  ")
+
+        print(
+            f"{icon} {request.request_id[:8]} | {request.phase} | {request.status.value.upper()}"
+        )
+        print(f"   Project: {request.working_directory}")
+        if request.task_summary:
+            print(f"   Task: {request.task_summary[:60]}...")
+        print(f"   Requested: {request.requested_at[:19]}")
+
+        if request.status.value == "pending" and request.expires_at:
+            print(f"   Expires: {request.expires_at[:19]}")
+
+        if request.responded_at:
+            print(f"   Responded: {request.responded_at[:19]} by {request.approved_by}")
+            if request.response_reason:
+                print(f"   Reason: {request.response_reason}")
+
+        print()
+
+    if any(r.status.value == "pending" for r in requests):
+        print("To approve a request: cfd approve <request-id>")
+        print("To deny a request:    cfd approve <request-id> --deny")
+
+    return 0
+
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -1610,6 +1742,55 @@ def main():
         help="Show event details",
     )
 
+    # Approve command (Milestone 5: Human Approval Gates)
+    approve_parser = subparsers.add_parser(
+        "approve", help="Approve or deny a pending approval request"
+    )
+    approve_parser.add_argument(
+        "request_id",
+        type=str,
+        help="Approval request ID (or prefix)",
+    )
+    approve_parser.add_argument(
+        "--deny",
+        action="store_true",
+        help="Deny the request instead of approving",
+    )
+    approve_parser.add_argument(
+        "--reason",
+        "-r",
+        type=str,
+        help="Reason for approval or denial",
+    )
+    approve_parser.add_argument(
+        "--approver",
+        type=str,
+        help="Name of approver (default: $USER)",
+    )
+
+    # Pending-approvals command
+    pending_approvals_parser = subparsers.add_parser(
+        "pending-approvals", help="List pending approval requests"
+    )
+    pending_approvals_parser.add_argument(
+        "--all",
+        "-a",
+        action="store_true",
+        help="Show all requests (not just pending)",
+    )
+    pending_approvals_parser.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=50,
+        help="Maximum number to show (default: 50)",
+    )
+    pending_approvals_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1635,6 +1816,8 @@ def main():
         "run-phase": cmd_run_phase,
         "resume": cmd_resume,
         "audit-log": cmd_audit_log,
+        "approve": cmd_approve,
+        "pending-approvals": cmd_pending_approvals,
     }
 
     return commands[args.command](args)

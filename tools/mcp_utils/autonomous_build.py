@@ -79,6 +79,14 @@ from tools.mcp_utils.emergency_stop import (
     is_emergency_stop_active,
     get_emergency_stop_status,
 )
+from tools.mcp_utils.approval_gates import (
+    ApprovalGateConfig,
+    ApprovalStatus,
+    check_approval_required,
+    request_approval_for_phase,
+    check_approval_status,
+    get_default_risk_description,
+)
 
 # Get module directory for path resolution
 MODULE_DIR = Path(__file__).parent.parent  # tools/ directory
@@ -2532,6 +2540,79 @@ def execute_build_with_phase_spawning(
             emergency_result = check_emergency_stop("Deploy")
             if emergency_result:
                 return emergency_result
+
+            # Check if approval is required for Deploy phase (Milestone 5)
+            skip_approval = task_config.get("skip_approval", False)
+            require_approval_phases = task_config.get(
+                "require_approval_phases", ["Deploy"]
+            )
+            approval_config = ApprovalGateConfig(
+                require_approval_phases=require_approval_phases
+            )
+
+            if not skip_approval and check_approval_required(
+                "Deploy", config=approval_config
+            ):
+                # Check if approval already granted
+                existing_approval = None
+                if pipeline_state:
+                    existing_approval = check_approval_status(
+                        pipeline_state.pipeline_id, "Deploy"
+                    )
+
+                if (
+                    existing_approval
+                    and existing_approval.status == ApprovalStatus.APPROVED
+                ):
+                    print("✅ Deploy approval granted, proceeding...", file=sys.stderr)
+                elif (
+                    existing_approval
+                    and existing_approval.status == ApprovalStatus.DENIED
+                ):
+                    # Approval was denied - skip deployment
+                    print(
+                        "❌ Deploy approval denied, skipping deployment",
+                        file=sys.stderr,
+                    )
+                    # Don't fail the build, just skip Deploy
+                    phases_completed.append("Deploy")
+                    if pipeline_state:
+                        pipeline_state.mark_phase_completed("Deploy")
+                        save_pipeline_state(pipeline_state, working_directory)
+                else:
+                    # No approval yet - request it and pause
+                    print("\n🔐 Deploy phase requires approval...", file=sys.stderr)
+
+                    if pipeline_state:
+                        # Create approval request
+                        approval_request = request_approval_for_phase(
+                            phase="Deploy",
+                            pipeline_state=pipeline_state,
+                            task_summary=task[:200],
+                            risk_description=get_default_risk_description("Deploy"),
+                            changes_summary=f"Phases completed: {', '.join(phases_completed)}",
+                        )
+                        save_pipeline_state(pipeline_state, working_directory)
+
+                        elapsed = (datetime.now() - start_time).total_seconds()
+                        return {
+                            "status": "waiting_approval",
+                            "phases_completed": phases_completed,
+                            "waiting_phase": "Deploy",
+                            "approval_request_id": approval_request.request_id,
+                            "message": f"Deploy phase requires approval. Run: cfd approve {approval_request.request_id[:8]}",
+                            "resume_command": pipeline_state.get_resume_command(
+                                working_directory
+                            ),
+                            "working_directory": str(working_directory),
+                            "elapsed_seconds": elapsed,
+                        }
+                    else:
+                        # No pipeline state - skip approval in autonomous mode
+                        print(
+                            "⚠️  No pipeline state, skipping approval check",
+                            file=sys.stderr,
+                        )
 
             # Deploy phase ALWAYS runs after Documentation completes (has its own 15-min timeout)
             print("\n🚀 Running Deploy phase...", file=sys.stderr)
