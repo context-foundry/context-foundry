@@ -102,8 +102,9 @@ jobs:
         run: |
           DATE=$(date +'%Y%m%d')
           TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S UTC')
+          UNIQUE_ID=$(date +'%Y%m%d-%H%M%S')
           SYNC_TAG="pattern-sync-${DATE}"
-          BRANCH_NAME="automated-patterns/sync-${DATE}"
+          BRANCH_NAME="automated-patterns/sync-${UNIQUE_ID}"
 
           echo "date=$DATE" >> $GITHUB_OUTPUT
           echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
