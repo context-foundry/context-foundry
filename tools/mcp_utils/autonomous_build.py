@@ -61,8 +61,11 @@ from tools.mcp_utils.pipeline_state import (
 # Import safety mechanisms (Milestone 3)
 from tools.mcp_utils.audit import (
     audit_pipeline_started,
+    audit_pipeline_completed,
+    audit_pipeline_failed,
     audit_phase_started,
     audit_phase_completed,
+    audit_phase_failed,
     audit_preflight_started,
     audit_preflight_passed,
     audit_preflight_failed,
@@ -1940,6 +1943,14 @@ def execute_build_with_phase_spawning(
                     pipeline_state.mark_phase_started("Test")
                     save_pipeline_state(pipeline_state, working_directory)
 
+                    # Run preflight checks (only on first iteration)
+                    preflight_error = run_preflight_for_phase("Test")
+                    if preflight_error:
+                        return preflight_error
+
+                    # Audit: Phase started
+                    audit_phase_started("Test", str(working_directory))
+
                 test_file = f".context-foundry/test-report{'-' + str(test_iteration) if test_iteration > 0 else ''}.md"
 
                 # FIX #3: Pass expected test file to run_phase for validation
@@ -2155,8 +2166,16 @@ def execute_build_with_phase_spawning(
                 if pipeline_state:
                     pipeline_state.mark_phase_completed("Test")
                     save_pipeline_state(pipeline_state, working_directory)
+                # Audit: Phase completed
+                audit_phase_completed("Test", str(working_directory))
 
             if not test_passed:
+                # Audit: Phase failed
+                audit_phase_failed(
+                    "Test",
+                    str(working_directory),
+                    f"Tests failed after {test_iteration} iteration(s)",
+                )
                 # Persist failure state
                 if pipeline_state:
                     pipeline_state.mark_failed(
@@ -2426,6 +2445,9 @@ def execute_build_with_phase_spawning(
             pipeline_state.state = PipelineState.COMPLETED
             save_pipeline_state(pipeline_state, working_directory)
 
+        # Audit: Pipeline completed
+        audit_pipeline_completed(str(working_directory), phases_completed)
+
         print(f"\n{'=' * 60}", file=sys.stderr)
         print("[TRACE] execute_build_with_phase_spawning COMPLETING", file=sys.stderr)
         print(f"[TRACE] Timestamp: {datetime.now().isoformat()}", file=sys.stderr)
@@ -2454,11 +2476,14 @@ def execute_build_with_phase_spawning(
 
     except Exception as e:
         duration = (datetime.now() - start_time).total_seconds()
+        current_phase = None
         # Persist failure state
         if pipeline_state:
             current_phase = pipeline_state.current_phase or "Unknown"
             pipeline_state.mark_failed(current_phase, str(e))
             save_pipeline_state(pipeline_state, working_directory)
+        # Audit: Pipeline failed
+        audit_pipeline_failed(str(working_directory), str(e), current_phase)
         return {
             "status": "error",
             "error": str(e),
