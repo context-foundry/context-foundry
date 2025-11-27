@@ -1,0 +1,318 @@
+{
+  "patterns": [
+    {
+      "id": "validation-api-key-format",
+      "name": "Always Validate API Key Format",
+      "category": "Security",
+      "module": "Integration",
+      "applies_to": ["hcm", "financials", "integration"],
+      "description": "Validate API key format at application startup to prevent runtime authentication errors. Ensures keys follow expected patterns (e.g., 'sk-' prefix for OpenAI) and provides clear error messages with remediation steps.",
+      "best_practices": [
+        "Validate API keys during application initialization, not at first use",
+        "Provide clear error messages with links to credential management",
+        "Use environment variable validation libraries like zod or joi",
+        "Log validation failures with non-sensitive details for debugging",
+        "Implement graceful degradation when optional API keys are missing"
+      ],
+      "anti_patterns": [
+        "Skipping validation and waiting for first API call to fail",
+        "Exposing actual API key values in error messages or logs",
+        "Using generic 'Invalid API key' messages without remediation guidance"
+      ],
+      "examples": [
+        "OpenAI API keys must start with 'sk-' prefix",
+        "AWS credentials should match IAM key format patterns",
+        "Validate key length and character sets before making requests"
+      ],
+      "related_patterns": ["validation-framework-structure", "error-handling-graceful"],
+      "tags": ["security", "validation", "api", "configuration"],
+      "difficulty": "beginner",
+      "estimated_time_minutes": 15
+    },
+    {
+      "id": "validation-framework-structure",
+      "name": "Validate Framework-Specific Project Structure",
+      "category": "Architecture",
+      "module": "Project Setup",
+      "applies_to": ["all"],
+      "description": "Verify framework-specific directory structures and conventions before build or runtime. For Next.js 14, ensure 'app/' directory exists (not 'pages/'), proper Server/Client Component separation, and correct route file naming.",
+      "best_practices": [
+        "Create pre-build validation scripts that check directory structure",
+        "Document required directory conventions in project README",
+        "Use framework CLI tools for project initialization to ensure correct structure",
+        "Implement build-time checks that fail fast with helpful error messages",
+        "Validate both structure and file naming conventions (e.g., page.tsx, layout.tsx)"
+      ],
+      "anti_patterns": [
+        "Mixing app/ and pages/ directories in Next.js 13+",
+        "Creating custom directory structures that conflict with framework expectations",
+        "Ignoring framework migration guides when upgrading major versions"
+      ],
+      "examples": [
+        "Next.js 14: app/page.tsx for routes, not pages/index.tsx",
+        "React: public/ for static assets, src/ for components",
+        "Vue 3: src/views/ for pages, src/components/ for reusable components"
+      ],
+      "related_patterns": ["validation-api-key-format", "test-driven-development-e2e"],
+      "tags": ["architecture", "validation", "nextjs", "structure"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 20
+    },
+    {
+      "id": "cost-management-three-tier-cache",
+      "name": "Three-Tier Caching for API Cost Optimization",
+      "category": "Performance",
+      "module": "Caching",
+      "applies_to": ["integration", "api", "performance"],
+      "description": "Implement multi-level caching strategy to minimize external API costs. Tier 1 (build-time static generation), Tier 2 (client-side IndexedDB), and Tier 3 (server-side key-value store) work together to serve content with minimal API calls.",
+      "best_practices": [
+        "Generate static content at build time for predictable data",
+        "Use IndexedDB or LocalStorage for client-side caching with TTL",
+        "Implement server-side deduplication using Redis or Vercel KV",
+        "Set appropriate cache expiration policies per tier (static: forever, client: 7 days, server: 30 days)",
+        "Monitor cache hit rates and API costs to validate effectiveness",
+        "Include cache metadata (source, timestamp) in responses for debugging"
+      ],
+      "anti_patterns": [
+        "Relying solely on server-side caching without client optimization",
+        "Setting cache TTLs too short, negating cost benefits",
+        "Caching sensitive or user-specific data in shared tiers",
+        "Ignoring cache invalidation strategies when source data changes"
+      ],
+      "examples": [
+        "Pre-generate AI content for 169 patterns at build time (Tier 1)",
+        "Cache API responses in IndexedDB with 7-day expiration (Tier 2)",
+        "Deduplicate identical prompts across users with Vercel KV (Tier 3)"
+      ],
+      "related_patterns": ["cost-tracker-monitoring", "validation-api-key-format"],
+      "tags": ["performance", "caching", "cost-optimization", "api"],
+      "difficulty": "advanced",
+      "estimated_time_minutes": 45
+    },
+    {
+      "id": "content-validation-pipeline",
+      "name": "AI Content Validation Pipeline",
+      "category": "Quality Assurance",
+      "module": "Validation",
+      "applies_to": ["ai", "quality", "content"],
+      "description": "Implement automated validation to prevent AI hallucination and ensure factual accuracy. Cross-reference all AI-generated content with authoritative source data using rule-based and statistical checks.",
+      "best_practices": [
+        "Define validation rules based on source data schema and domain requirements",
+        "Implement automated checks for factual accuracy (e.g., matching key terms from source)",
+        "Use statistical validation (e.g., sentence similarity scores) to detect drift",
+        "Create manual review workflows for flagged content",
+        "Log validation results for continuous improvement",
+        "Implement fallback to template-based content when validation fails"
+      ],
+      "anti_patterns": [
+        "Trusting AI-generated content without validation",
+        "Using overly strict validation that flags correct content as errors",
+        "Skipping validation for 'simple' content generation tasks",
+        "Failing to provide human review mechanisms for edge cases"
+      ],
+      "examples": [
+        "Validate quiz questions mention at least 2 best practices from source pattern",
+        "Check scenario outcomes reference specific anti-patterns from source data",
+        "Ensure generated images don't contain hallucinated Workday UI elements"
+      ],
+      "related_patterns": ["test-driven-development-e2e", "cost-management-three-tier-cache"],
+      "tags": ["quality", "ai", "validation", "accuracy"],
+      "difficulty": "advanced",
+      "estimated_time_minutes": 40
+    },
+    {
+      "id": "mobile-first-responsive-design",
+      "name": "Mobile-First Responsive Design",
+      "category": "UI/UX",
+      "module": "Design",
+      "applies_to": ["frontend", "ui", "mobile"],
+      "description": "Design and develop interfaces starting with mobile constraints (375px width), progressively enhancing for larger screens. Ensures usability across all devices with appropriate touch targets and layout adaptations.",
+      "best_practices": [
+        "Start CSS with mobile styles, add breakpoints for tablet/desktop",
+        "Use min-width media queries for progressive enhancement",
+        "Ensure touch targets are minimum 44x44px for mobile accessibility",
+        "Test interactive components on actual mobile devices, not just browser emulation",
+        "Implement responsive typography using clamp() or fluid scales",
+        "Optimize images with srcset for different screen densities"
+      ],
+      "anti_patterns": [
+        "Designing desktop-first and trying to 'squeeze' content onto mobile",
+        "Using hover-only interactions without touch alternatives",
+        "Setting touch targets smaller than 44px",
+        "Relying solely on browser dev tools for mobile testing"
+      ],
+      "examples": [
+        "Quiz buttons: 48px height with 12px padding on mobile",
+        "Responsive navigation: hamburger menu on mobile, full navbar on desktop",
+        "Card layouts: single column on mobile, grid on tablet/desktop"
+      ],
+      "related_patterns": ["test-driven-development-e2e", "wcag-accessibility-compliance"],
+      "tags": ["ui", "mobile", "responsive", "accessibility"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 30
+    },
+    {
+      "id": "test-driven-development-e2e",
+      "name": "Test-Driven Development with E2E Coverage",
+      "category": "Testing",
+      "module": "Quality Assurance",
+      "applies_to": ["all"],
+      "description": "Implement comprehensive testing strategy with unit tests (80%+ coverage), integration tests (90%+ coverage), and end-to-end tests for critical user flows. Ensures reliability and prevents regressions.",
+      "best_practices": [
+        "Write unit tests for pure functions and business logic",
+        "Use integration tests for API routes and database interactions",
+        "Implement E2E tests with Playwright or Cypress for critical user journeys",
+        "Mock external APIs (e.g., OpenAI) in tests using MSW or similar",
+        "Run tests in CI/CD pipeline before deployment",
+        "Test error scenarios and edge cases, not just happy paths",
+        "Measure and maintain coverage thresholds"
+      ],
+      "anti_patterns": [
+        "Writing tests after implementation (missing edge cases)",
+        "Testing implementation details instead of behavior",
+        "Skipping E2E tests because they're 'slow'",
+        "Using production APIs in test suites"
+      ],
+      "examples": [
+        "Unit test: Pattern parser correctly filters by category",
+        "Integration test: /api/generate/quiz returns valid quiz structure",
+        "E2E test: User completes quiz, sees score, progress persists after refresh"
+      ],
+      "related_patterns": ["validation-framework-structure", "content-validation-pipeline"],
+      "tags": ["testing", "quality", "e2e", "ci-cd"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 50
+    },
+    {
+      "id": "wcag-accessibility-compliance",
+      "name": "WCAG 2.1 AA Accessibility Compliance",
+      "category": "Accessibility",
+      "module": "UI/UX",
+      "applies_to": ["frontend", "ui", "accessibility"],
+      "description": "Ensure web application meets WCAG 2.1 Level AA standards for accessibility. Includes keyboard navigation, screen reader support, sufficient color contrast, and semantic HTML.",
+      "best_practices": [
+        "Use semantic HTML elements (button, nav, main, article) for proper structure",
+        "Ensure all interactive elements are keyboard accessible (Tab, Enter, Space)",
+        "Provide ARIA labels and descriptions for screen readers",
+        "Maintain color contrast ratio of 4.5:1 for text, 3:1 for UI components",
+        "Test with screen readers (NVDA, JAWS, VoiceOver)",
+        "Include skip-to-content links for keyboard users",
+        "Ensure focus indicators are visible and high-contrast"
+      ],
+      "anti_patterns": [
+        "Using div/span with onClick instead of button elements",
+        "Relying solely on color to convey information",
+        "Removing focus outlines without providing alternatives",
+        "Creating keyboard traps in modal dialogs or dropdowns"
+      ],
+      "examples": [
+        "Quiz options: <button> elements with aria-pressed state",
+        "Progress dashboard: aria-live regions for dynamic updates",
+        "Navigation: skip link to main content for keyboard users"
+      ],
+      "related_patterns": ["mobile-first-responsive-design", "test-driven-development-e2e"],
+      "tags": ["accessibility", "wcag", "a11y", "ui"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 35
+    },
+    {
+      "id": "error-handling-graceful",
+      "name": "Graceful Error Handling with User Feedback",
+      "category": "Error Handling",
+      "module": "Reliability",
+      "applies_to": ["all"],
+      "description": "Implement comprehensive error handling that provides clear user feedback, logs errors for debugging, and degrades gracefully when services fail.",
+      "best_practices": [
+        "Catch and handle errors at appropriate boundaries (API routes, component boundaries)",
+        "Provide user-friendly error messages without exposing technical details",
+        "Log errors with context (user action, request ID, timestamp) for debugging",
+        "Implement retry logic with exponential backoff for transient failures",
+        "Use React Error Boundaries to prevent full application crashes",
+        "Provide fallback UI when components fail to render"
+      ],
+      "anti_patterns": [
+        "Showing technical stack traces to end users",
+        "Swallowing errors silently without logging",
+        "Using generic 'Something went wrong' messages without guidance",
+        "Failing to implement retry logic for known transient errors"
+      ],
+      "examples": [
+        "OpenAI rate limit: retry after delay, show 'Generating content...' message",
+        "Network failure: show cached content with banner 'Showing offline version'",
+        "Component error: Error Boundary shows 'Unable to load this section' with refresh button"
+      ],
+      "related_patterns": ["validation-api-key-format", "cost-tracker-monitoring"],
+      "tags": ["error-handling", "reliability", "ux"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 25
+    },
+    {
+      "id": "cost-tracker-monitoring",
+      "name": "API Cost Tracking and Budget Alerts",
+      "category": "Monitoring",
+      "module": "Observability",
+      "applies_to": ["api", "cost-optimization"],
+      "description": "Monitor external API usage and costs with automated budget alerts. Track token consumption, estimate costs per operation, and trigger warnings before exceeding budgets.",
+      "best_practices": [
+        "Log every API call with token counts and cost estimation",
+        "Calculate costs using current API pricing (e.g., GPT-4o: $5/1M input tokens)",
+        "Set daily and monthly budget thresholds with alert mechanisms",
+        "Aggregate costs by operation type (quiz generation, scenarios, hints)",
+        "Create dashboard for cost analysis and optimization opportunities",
+        "Implement rate limiting when approaching budget thresholds"
+      ],
+      "anti_patterns": [
+        "Discovering high costs only when bill arrives",
+        "Estimating costs without tracking actual token usage",
+        "Setting unrealistic budgets that break features when exceeded",
+        "Failing to differentiate between essential and optional API calls"
+      ],
+      "examples": [
+        "Log: 'Quiz generation: 1,234 tokens, est. $0.006, cache hit: false'",
+        "Alert: 'Daily budget 80% consumed, consider enabling aggressive caching'",
+        "Dashboard: 'This month: $8.42 / $10.00 budget, 842 API calls, 68% cache hit rate'"
+      ],
+      "related_patterns": ["cost-management-three-tier-cache", "error-handling-graceful"],
+      "tags": ["monitoring", "cost", "observability", "api"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 30
+    },
+    {
+      "id": "progressive-enhancement",
+      "name": "Progressive Enhancement for Core Functionality",
+      "category": "Reliability",
+      "module": "Frontend",
+      "applies_to": ["frontend", "ui"],
+      "description": "Ensure core functionality works without JavaScript, progressively enhancing with interactive features. Provides baseline usability for all users regardless of browser capabilities or network conditions.",
+      "best_practices": [
+        "Render critical content on server (SSR/SSG) for no-JS scenarios",
+        "Use form submissions for core actions, enhance with JavaScript",
+        "Provide noscript fallbacks for JavaScript-dependent features",
+        "Test application with JavaScript disabled to verify core functionality",
+        "Use semantic HTML that works without CSS or JavaScript",
+        "Lazy load non-critical JavaScript to improve initial load time"
+      ],
+      "anti_patterns": [
+        "Building SPAs that show blank page without JavaScript",
+        "Relying on client-side routing without server-side fallbacks",
+        "Requiring JavaScript for content that could be server-rendered",
+        "Ignoring users with JavaScript disabled or outdated browsers"
+      ],
+      "examples": [
+        "Pattern browsing: Server-rendered list works without JS, filters enhanced with JS",
+        "Quiz: Form submission works without JS, instant feedback requires JS",
+        "Navigation: HTML links work, client-side routing enhances experience"
+      ],
+      "related_patterns": ["mobile-first-responsive-design", "wcag-accessibility-compliance"],
+      "tags": ["progressive-enhancement", "reliability", "frontend"],
+      "difficulty": "intermediate",
+      "estimated_time_minutes": 25
+    }
+  ],
+  "metadata": {
+    "total_count": 10,
+    "categories": ["Security", "Architecture", "Performance", "Quality Assurance", "UI/UX", "Testing", "Accessibility", "Error Handling", "Monitoring", "Reliability"],
+    "modules": ["Integration", "Project Setup", "Caching", "Validation", "Design", "Quality Assurance", "UI/UX", "Reliability", "Observability", "Frontend"],
+    "last_updated": "2025-01-15T00:00:00Z"
+  }
+}

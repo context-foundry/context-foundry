@@ -584,9 +584,6 @@ class CFDaemon:
             iteration_count = 0
             last_stats_minute = -1  # Track which minute we last logged stats
 
-            # MOTD refresh tracking (refresh every 4 hours)
-            last_motd_refresh_hour = -1
-
             # Main loop - just keep alive while JobManager workers run
             logger.info("[DEBUG] Entering main loop, watchdog monitoring heartbeat")
             while self.running:
@@ -654,26 +651,6 @@ class CFDaemon:
                                     )
                             except Exception:
                                 pass  # Don't let emergency stop check crash daemon
-
-                        # MOTD refresh every 4 hours (at hour 0, 4, 8, 12, 16, 20)
-                        try:
-                            now = datetime.now()
-                            # Calculate 4-hour block (0-5 representing 6 blocks per day)
-                            current_block = now.hour // 4
-                            if current_block != last_motd_refresh_hour:
-                                last_motd_refresh_hour = current_block
-                                # Import here to avoid circular imports
-                                try:
-                                    from tools.motd import refresh_motd
-
-                                    refresh_motd()
-                                    logger.info(
-                                        f"MOTD refreshed (4-hour block {current_block})"
-                                    )
-                                except ImportError:
-                                    pass  # MOTD module not available
-                        except Exception:
-                            pass  # Don't let MOTD refresh crash daemon
 
                     time.sleep(1)
 

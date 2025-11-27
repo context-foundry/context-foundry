@@ -1,5 +1,7 @@
 // LLM Client Configurations for Context Foundry
 // Multi-provider support with fallbacks
+// Claude clients removed
+
 
 client<llm> GPT4 {
   provider openai

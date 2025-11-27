@@ -230,20 +230,20 @@ class CostCalculator:
         Returns:
             Dict with daily and monthly budget status
         """
-        now = datetime.now()
+        now = datetime.utcnow()
 
         # Daily budget
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_end = now
         daily_summary = db.get_cost_summary(
-            today_start.isoformat(), today_end.isoformat()
+            today_start.isoformat(sep=" "), today_end.isoformat(sep=" ")
         )
         daily_cost = daily_summary.get("total_cost", 0.0)
         daily_budget = self.estimate_remaining_budget(daily_cost, "daily")
 
         # Monthly budget
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_summary = db.get_cost_summary(month_start.isoformat(), now.isoformat())
+        monthly_summary = db.get_cost_summary(month_start.isoformat(sep=" "), now.isoformat(sep=" "))
         monthly_cost = monthly_summary.get("total_cost", 0.0)
         monthly_budget = self.estimate_remaining_budget(monthly_cost, "monthly")
 

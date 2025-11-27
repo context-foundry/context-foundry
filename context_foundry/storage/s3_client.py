@@ -82,11 +82,6 @@ class S3PatternClient:
             prefix: S3 prefix for patterns (defaults to DEFAULT_PREFIX)
             aws_region: AWS region (defaults to us-east-1)
         """
-        if not BOTO3_AVAILABLE:
-            logger.warning("boto3 not available - S3 sync disabled")
-            self.enabled = False
-            return
-
         self.bucket_name = bucket_name or os.getenv(
             "CONTEXT_FOUNDRY_S3_BUCKET", self.DEFAULT_BUCKET
         )
@@ -94,6 +89,11 @@ class S3PatternClient:
             "CONTEXT_FOUNDRY_S3_PREFIX", self.DEFAULT_PREFIX
         )
         self.aws_region = aws_region
+
+        if not BOTO3_AVAILABLE:
+            logger.warning("boto3 not available - S3 sync disabled")
+            self.enabled = False
+            return
 
         try:
             self.s3_client = boto3.client("s3", region_name=aws_region)

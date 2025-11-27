@@ -52,6 +52,11 @@ class Config:
     github_token: Optional[str] = None
     github_repo: Optional[str] = None
 
+    # S3 (optional - for private storage)
+    s3_bucket_name: Optional[str] = None
+    s3_region: str = "us-east-1"
+    s3_prefix: str = "context-foundry/"
+
     @classmethod
     def load(cls, config_path: Optional[Path] = None) -> "Config":
         """

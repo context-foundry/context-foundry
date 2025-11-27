@@ -44,8 +44,6 @@ except ImportError:
     print("", file=sys.stderr)
     sys.exit(1)
 
-from tools.motd import get_motd, format_motd_banner
-
 # Import modularized utilities (Phase 2 refactoring - Phases 1-5 complete)
 # These maintain backward compatibility via re-exports below
 from tools.mcp_utils.output_utils import truncate_output, create_output_summary
@@ -1574,9 +1572,6 @@ if __name__ == "__main__":
 
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
-    # Show MOTD with colored logo and context-aware message
-    motd_message = get_motd()
-    print(format_motd_banner(motd_message), file=sys.stderr)
     print("Available tools:", file=sys.stderr)
     print("   - context_foundry_status: Get server status", file=sys.stderr)
     print(

@@ -295,6 +295,10 @@ class MetricsDatabase:
             fields = ["build_id", "phase_name"]
             values = [build_id, phase_name]
 
+            # Default started_at if not provided
+            if "started_at" not in kwargs:
+                kwargs["started_at"] = datetime.utcnow().isoformat(sep=" ")
+
             for key, value in kwargs.items():
                 if key in [
                     "phase_number",
@@ -462,7 +466,7 @@ class MetricsDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        since_date = (datetime.now() - timedelta(days=days)).isoformat()
+        since_date = (datetime.utcnow() - timedelta(days=days)).isoformat(sep=" ")
 
         cursor.execute(
             """
@@ -529,7 +533,7 @@ class MetricsDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        since_date = (datetime.now() - timedelta(days=days)).isoformat()
+        since_date = (datetime.utcnow() - timedelta(days=days)).isoformat(sep=" ")
 
         cursor.execute(
             """
@@ -581,11 +585,11 @@ class MetricsDatabase:
             """
             SELECT
                 COUNT(*) as build_count,
-                SUM(total_tokens_input + total_tokens_output) as total_tokens,
-                SUM(total_cost) as total_cost,
-                AVG(total_cost) as avg_cost_per_build,
-                MIN(total_cost) as min_cost,
-                MAX(total_cost) as max_cost
+                COALESCE(SUM(total_tokens_input + total_tokens_output), 0) as total_tokens,
+                COALESCE(SUM(total_cost), 0.0) as total_cost,
+                COALESCE(AVG(total_cost), 0.0) as avg_cost_per_build,
+                COALESCE(MIN(total_cost), 0.0) as min_cost,
+                COALESCE(MAX(total_cost), 0.0) as max_cost
             FROM builds
             WHERE created_at >= ? AND created_at <= ?
         """,
@@ -619,7 +623,7 @@ class MetricsDatabase:
         with self._transaction() as conn:
             cursor = conn.cursor()
 
-            cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+            cutoff_date = (datetime.utcnow() - timedelta(days=days)).isoformat(sep=" ")
 
             # Delete old builds (cascades to phases and api_calls)
             cursor.execute(
@@ -655,7 +659,7 @@ class MetricsDatabase:
             "builds": builds,
             "phases": phases,
             "api_calls": api_calls,
-            "exported_at": datetime.now().isoformat(),
+            "exported_at": datetime.utcnow().isoformat(sep=" "),
         }
 
 

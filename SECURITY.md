@@ -2,20 +2,23 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| 2.4.x   | :white_check_mark: |
+| 2.3.x   | :white_check_mark: |
+| < 2.3   | :x:                |
+
+## Security Model
+
+Context Foundry runs **entirely on your local machine**. No data is sent to external servers beyond the Claude API calls you explicitly make.
+
+**Key points:**
+- Spawned Claude instances inherit your local permissions
+- Code execution happens in your environment with your credentials
+- GitHub deployments use your configured authentication
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+Report security issues via [GitHub Security Advisories](https://github.com/context-foundry/context-foundry/security/advisories/new).
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+We aim to respond within 48 hours and will work with you to understand and address the issue before any public disclosure.

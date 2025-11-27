@@ -17,7 +17,7 @@ Benefits:
 import json
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from context_foundry.daemon.config import Config
 from context_foundry.daemon.jobs import JobManager
@@ -71,6 +71,8 @@ def submit_autonomous_build_to_daemon(
     use_parallel: bool = False,
     incremental: bool = False,
     force_rebuild: bool = False,
+    pause_after_phases: Optional[List[str]] = None,
+    execution_mode: str = "autonomous",
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -88,6 +90,8 @@ def submit_autonomous_build_to_daemon(
         use_parallel: Enable parallel builders
         incremental: Enable incremental builds
         force_rebuild: Force full rebuild
+        pause_after_phases: Phases to pause after (e.g., ["Scout", "Architect"])
+        execution_mode: "autonomous", "interactive", or "selective"
 
     Returns:
         JSON string with job submission result
@@ -146,6 +150,8 @@ def submit_autonomous_build_to_daemon(
         "use_parallel": use_parallel,
         "incremental": incremental,
         "force_rebuild": force_rebuild,
+        "pause_after_phases": pause_after_phases or [],
+        "execution_mode": execution_mode,
     }
 
     # Submit job to daemon queue

@@ -6,6 +6,7 @@ Provides commands for start/stop/status/submit/list/logs/cancel.
 """
 
 import argparse
+import concurrent.futures
 import json
 import os
 import sys
@@ -30,6 +31,59 @@ try:
     PIPELINE_STATE_AVAILABLE = True
 except ImportError:
     PIPELINE_STATE_AVAILABLE = False
+
+
+def cmd_setup(args):
+    """Interactive setup for Context Foundry"""
+    print("Welcome to Context Foundry Setup!")
+    print("This will configure your local environment.\n")
+
+    config = Config.load(args.config)
+    
+    # 1. GitHub Configuration
+    print("--- GitHub Configuration ---")
+    print("Context Foundry uses GitHub to create and manage repositories for you.")
+    
+    current_token = config.github_token or ""
+    masked_token = f"{current_token[:4]}...{current_token[-4:]}" if len(current_token) > 8 else "Not set"
+    
+    print(f"Current Token: {masked_token}")
+    new_token = input("GitHub Token (press Enter to keep current): ").strip()
+    if new_token:
+        config.github_token = new_token
+        
+    current_repo = config.github_repo or "Not set"
+    print(f"Current Repo: {current_repo}")
+    new_repo = input("GitHub Repo (owner/name) (press Enter to keep current): ").strip()
+    if new_repo:
+        config.github_repo = new_repo
+
+    # 2. S3 Configuration
+    print("\n--- S3 Configuration (Optional) ---")
+    print("Configure an S3 bucket to sync your patterns and skills.")
+    print("This allows your build history and learned patterns to follow you across different environments.")
+    
+    current_bucket = config.s3_bucket_name or "Not set"
+    print(f"Current Bucket: {current_bucket}")
+    new_bucket = input("S3 Bucket Name (press Enter to keep current): ").strip()
+    if new_bucket:
+        config.s3_bucket_name = new_bucket
+        
+    current_region = config.s3_region or "us-east-1"
+    print(f"Current Region: {current_region}")
+    new_region = input(f"AWS Region [{current_region}]: ").strip()
+    if new_region:
+        config.s3_region = new_region
+        
+    # Save configuration
+    try:
+        config.save(args.config)
+        print(f"\n✅ Configuration saved successfully to {config.data_dir / 'config.json'}")
+        return 0
+    except Exception as e:
+        print(f"\n❌ Failed to save configuration: {e}", file=sys.stderr)
+        return 1
+
 
 
 def cmd_start(args):
@@ -140,7 +194,25 @@ def cmd_status(args):
     print("ALL RELATED PROCESSES:")
     print("═══════════════════════════════════════════════════════════")
 
-    related_processes = _find_all_related_processes(pid)
+    related_processes = []
+    process_scan_timeout = 5  # seconds
+
+    # NOTE: Do NOT use 'with' statement - its __exit__ calls shutdown(wait=True)
+    # which blocks until hung threads complete, defeating the timeout purpose
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(_find_all_related_processes, pid)
+        try:
+            related_processes = future.result(timeout=process_scan_timeout)
+        except concurrent.futures.TimeoutError:
+            print(
+                f"  ⚠️  Process enumeration timed out after {process_scan_timeout}s; skipping scan"
+            )
+        except Exception as e:
+            print(f"  ⚠️  Process enumeration failed: {e}")
+    finally:
+        executor.shutdown(wait=False)  # Don't wait for hung threads
+
     if related_processes:
         for proc in related_processes:
             print(f"  [{proc['type']}] PID {proc['pid']}: {proc['cmd'][:80]}")
@@ -150,17 +222,16 @@ def cmd_status(args):
     else:
         print("  ✓ No related processes found (only daemon running)")
 
-    # Check for zombie processes
-    from .zombies import find_zombies, format_zombie_list, PSUTIL_AVAILABLE
+    # Check for zombie processes (with timeout to prevent hanging)
+    from .zombies import format_zombie_list, PSUTIL_AVAILABLE
+    import threading
 
     if PSUTIL_AVAILABLE:
-        zombies = find_zombies(exclude_pids=[pid])
-        if zombies:
-            print("\n⚠️  Zombie Processes Detected:")
-            print(format_zombie_list(zombies))
-            print("\nRun 'cfd cleanup' to remove these processes")
-        elif args.verbose:
-            print("\n✓ No zombie processes detected")
+        # Use a simple approach: skip zombie detection entirely in status
+        # It's too risky with psutil hanging on macOS
+        # Users can run 'cfd cleanup' directly if they want zombie detection
+        if args.verbose:
+            print("\n💡 Run 'cfd cleanup' to check for zombie processes")
     elif args.verbose:
         print("\n⚠️  psutil not available - cannot detect zombie processes")
 
@@ -175,7 +246,9 @@ def _find_all_related_processes(daemon_pid):
 
     try:
         # Get all processes
-        ps_output = subprocess.check_output(["ps", "aux"], text=True)
+        ps_output = subprocess.check_output(
+            ["ps", "aux"], text=True, timeout=5  # avoid hangs on macOS privacy-locked processes
+        )
 
         for line in ps_output.splitlines()[1:]:  # Skip header
             parts = line.split(None, 10)
@@ -223,6 +296,8 @@ def _find_all_related_processes(daemon_pid):
             if proc_type:
                 related.append({"pid": proc_pid, "type": proc_type, "cmd": cmd})
 
+    except subprocess.TimeoutExpired:
+        print("Warning: Process enumeration timed out (skipping)")
     except Exception as e:
         print(f"Warning: Could not enumerate processes: {e}")
 
@@ -720,7 +795,23 @@ def cmd_cleanup(args):
         return 1
 
     # Find zombies
-    zombies = find_zombies()
+    # NOTE: Do NOT use 'with' statement - its __exit__ calls shutdown(wait=True)
+    # which blocks until hung threads complete, defeating the timeout purpose
+    zombies = []
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    try:
+        future = executor.submit(find_zombies)
+        zombies = future.result(timeout=5)
+    except concurrent.futures.TimeoutError:
+        print("⚠️  Zombie detection timed out; skipping", file=sys.stderr)
+        executor.shutdown(wait=False)
+        return 1
+    except Exception as e:
+        print(f"⚠️  Zombie detection failed: {e}", file=sys.stderr)
+        executor.shutdown(wait=False)
+        return 1
+    finally:
+        executor.shutdown(wait=False)
 
     if not zombies:
         print("✓ No zombie processes detected")
@@ -1547,6 +1638,9 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
+    # Setup command
+    setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
+
     # Start command
     start_parser = subparsers.add_parser("start", help="Start the daemon")
     start_parser.add_argument(
@@ -1890,6 +1984,7 @@ def main():
         "audit-log": cmd_audit_log,
         "approve": cmd_approve,
         "pending-approvals": cmd_pending_approvals,
+        "setup": cmd_setup,
     }
 
     return commands[args.command](args)

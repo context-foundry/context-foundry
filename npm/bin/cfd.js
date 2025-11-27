@@ -3,7 +3,9 @@
 /**
  * Context Foundry Daemon CLI - npm wrapper for Python engine
  *
- * This is a thin shim that delegates to the Python `cfd` command.
+ * This shim delegates to the Python CLI via `python3 -m context_foundry.daemon.cli`.
+ * We invoke the module directly to avoid PATH conflicts (the npm-installed `cfd`
+ * command would otherwise find itself via `which cfd`, causing infinite recursion).
  */
 
 const { spawn, spawnSync } = require('child_process');
@@ -27,9 +29,9 @@ function log(msg, color = '') {
 }
 
 /**
- * Check if Python 3.10+ is available
+ * Find Python 3.10+ command
  */
-function checkPython() {
+function findPython() {
   const pythonCommands = ['python3', 'python'];
 
   for (const cmd of pythonCommands) {
@@ -54,48 +56,44 @@ function checkPython() {
 }
 
 /**
- * Get the path to cfd from the Python package
+ * Check if context-foundry Python package is installed
  */
-function getCfdPath() {
-  // First try: check if cfd is in PATH
-  const which = spawnSync('which', ['cfd'], { encoding: 'utf-8' });
-  if (which.status === 0) {
-    return 'cfd';
-  }
-
-  // Second try: use the tools/cfd script directly if we're in the repo
-  const localCfd = require('path').join(__dirname, '../../tools/cfd');
-  try {
-    require('fs').accessSync(localCfd, require('fs').constants.X_OK);
-    return localCfd;
-  } catch (e) {
-    // Not in repo or not executable
-  }
-
-  return null;
+function checkPythonPackage(pythonCmd) {
+  const result = spawnSync(pythonCmd, ['-c', 'import context_foundry.daemon.cli'], {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe']
+  });
+  return result.status === 0;
 }
 
 /**
- * Run the Python cfd command with all arguments passed through
+ * Install context-foundry via pip
  */
-function runCfd(cfdPath, args) {
-  const cfd = spawn(cfdPath, args, {
+function installPackage(pythonCmd) {
+  log(`${colors.yellow}Installing context-foundry Python package...${colors.reset}`);
+  const pip = spawnSync(pythonCmd, ['-m', 'pip', 'install', 'context-foundry'], {
+    stdio: 'inherit'
+  });
+  return pip.status === 0;
+}
+
+/**
+ * Run the Python CLI module with all arguments
+ */
+function runPythonCli(pythonCmd, args) {
+  // Call the Python module directly - this avoids PATH issues entirely
+  const proc = spawn(pythonCmd, ['-m', 'context_foundry.daemon.cli', ...args], {
     stdio: 'inherit',
     env: process.env
   });
 
-  cfd.on('error', (err) => {
-    if (err.code === 'ENOENT') {
-      error('The `cfd` command is not found.');
-      log('\nTry running:', colors.cyan);
-      log('  pip install context-foundry', colors.bold);
-      process.exit(1);
-    }
-    throw err;
+  proc.on('error', (err) => {
+    error(`Failed to start Python: ${err.message}`);
+    process.exit(1);
   });
 
-  cfd.on('close', (code) => {
-    process.exit(code);
+  proc.on('close', (code) => {
+    process.exit(code || 0);
   });
 }
 
@@ -121,33 +119,31 @@ ${colors.yellow}More Info:${colors.reset}
 function main() {
   const args = process.argv.slice(2);
 
-  // Check Python availability
-  const python = checkPython();
+  // Find Python 3.10+
+  const python = findPython();
   if (!python) {
     error('Python 3.10+ is required but not found.');
+    log('\nPlease install Python 3.10 or later:', colors.yellow);
+    log('  brew install python@3.12', colors.cyan);
     process.exit(1);
   }
 
-  // Find cfd command
-  const cfdPath = getCfdPath();
-  if (!cfdPath) {
-    log(`${colors.yellow}The 'cfd' command is not installed.${colors.reset}`);
-    log(`Installing context-foundry via pip...`);
+  // Check if context-foundry is installed
+  if (!checkPythonPackage(python.cmd)) {
+    log(`${colors.yellow}context-foundry Python package not found.${colors.reset}`);
 
-    const pip = spawnSync(python.cmd, ['-m', 'pip', 'install', 'context-foundry'], {
-      stdio: 'inherit'
-    });
-
-    if (pip.status !== 0) {
+    if (!installPackage(python.cmd)) {
       error('Failed to install context-foundry via pip.');
+      log('\nTry manually:', colors.yellow);
+      log('  pip install context-foundry', colors.cyan);
       process.exit(1);
     }
 
     log(`${colors.green}Successfully installed!${colors.reset}\n`);
   }
 
-  // Run cfd with all arguments
-  runCfd(cfdPath || 'cfd', args);
+  // Run the Python CLI
+  runPythonCli(python.cmd, args);
 }
 
 main();

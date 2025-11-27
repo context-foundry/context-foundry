@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+from context_foundry.daemon.config import Config
+
 
 def read_global_patterns_impl(pattern_type: str = "common-issues") -> Dict[str, Any]:
     """
@@ -468,7 +470,12 @@ def merge_project_patterns_impl(
         try:
             from context_foundry.storage import S3PatternClient
 
-            client = S3PatternClient()
+            config = Config.load()
+            client = S3PatternClient(
+                bucket_name=config.s3_bucket_name,
+                prefix=config.s3_prefix,
+                aws_region=config.s3_region
+            )
             if client.enabled:
                 s3_sync_result = client.upload_pattern(pattern_type, force=False)
                 if not s3_sync_result.get("success"):

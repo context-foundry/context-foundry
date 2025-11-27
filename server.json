@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.context-foundry/context-foundry",
+  "description": "Recursive Claude spawning for autonomous project builds with self-healing test loops",
+  "repository": {
+    "url": "https://github.com/context-foundry/context-foundry",
+    "source": "github"
+  },
+  "version": "2.2.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "context-foundry",
+      "version": "2.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "description": "Your Anthropic API key for Claude API access (required for delegation features)",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

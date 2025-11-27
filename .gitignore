@@ -1,3 +1,19 @@
+
+# Privacy & Secrets
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+config.json
+mcp_config.json
+secrets.json
+credentials.json
+**/.env*
+# Private/Local
+archive/
+examples/
+**/private/
+context_foundry/daemon/config.json
+
 # Python
 __pycache__/
 *.py[cod]
