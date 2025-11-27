@@ -26,14 +26,14 @@ def main():
     if sys.version_info < (3, 10):
         print(
             f"""
-❌ Error: Python 3.10 or higher required
+Error: Python 3.10 or higher required
 
 Your current Python version: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}
 Context Foundry requires: Python 3.10+
 
 Why? Context Foundry uses Python 3.10+ exclusive features:
-  • Structural pattern matching (match statements)
-  • Advanced type hints (TypeAlias, ParamSpec, etc.)
+  - Structural pattern matching (match statements)
+  - Advanced type hints (TypeAlias, ParamSpec, etc.)
 
 Solutions:
   1. Upgrade Python: brew install python@3.11 (macOS)
@@ -84,14 +84,42 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         launch_context_foundry()
 
 
+def get_setup_banner():
+    """Get colored ASCII art banner for setup screen"""
+    import random
+
+    try:
+        from context_foundry.daemon.art import get_lava_lamp_art
+
+        # Use random frame for color variety each time
+        frame = random.randint(0, 359)
+        return get_lava_lamp_art(frame)
+    except ImportError:
+        # Fallback to plain text if daemon module not available
+        return r"""
+   ______            __            __
+  / ____/___  ____  / /____  _  __/ /_
+ / /   / __ \/ __ \/ __/ _ \| |/_/ __/
+/ /___/ /_/ / / / / /_/  __/>  </ /_
+\____/\____/_/ /_/\__/\___/_/|_|\__/
+    ______                      __
+   / ____/___  __  ______  ____/ /______  __
+  / /_  / __ \/ / / / __ \/ __  / ___/ / / /
+ / __/ / /_/ / /_/ / / / / /_/ / /  / /_/ /
+/_/    \____/\__,_/_/ /_/\__,_/_/   \__, /
+                                   /____/
+"""
+
+
 def setup_claude_code():
     """Configure Claude Code MCP integration automatically"""
-    print("🔧 Setting up Context Foundry for Claude Code...\n")
+    print(get_setup_banner())
+    print("\nSetting up Context Foundry for Claude Code...\n")
 
     # Find the MCP server path
     mcp_server_path = Path(__file__).parent / "mcp_server.py"
     if not mcp_server_path.exists():
-        print(f"❌ Error: MCP server not found at {mcp_server_path}", file=sys.stderr)
+        print(f"Error: MCP server not found at {mcp_server_path}", file=sys.stderr)
         sys.exit(1)
 
     mcp_server_path = mcp_server_path.resolve()
@@ -106,7 +134,7 @@ def setup_claude_code():
                 settings = json.load(f)
         except json.JSONDecodeError:
             print(
-                f"⚠️  Warning: Invalid JSON in {claude_settings_path}, creating backup..."
+                f"Warning: Invalid JSON in {claude_settings_path}, creating backup..."
             )
             backup_path = claude_settings_path.with_suffix(".json.backup")
             claude_settings_path.rename(backup_path)
@@ -131,10 +159,10 @@ def setup_claude_code():
     with open(claude_settings_path, "w") as f:
         json.dump(settings, f, indent=2)
 
-    print("✅ Claude Code configured successfully!\n")
+    print("Claude Code configured successfully!\n")
     print(f"   Settings file: {claude_settings_path}")
     print(f"   MCP server:    {mcp_server_path}\n")
-    print("🚀 You can now use Context Foundry in Claude Code!")
+    print("You can now use Context Foundry in Claude Code!")
     print('   Just ask: "Use CF to build a todo app"\n')
 
 
@@ -150,7 +178,7 @@ def launch_context_foundry():
     except ImportError as e:
         print(
             f"""
-❌ Error: Missing dependencies
+Error: Missing dependencies
 
 Context Foundry requires additional Python packages to run.
 
@@ -165,13 +193,13 @@ Error details: {e}
         sys.exit(1)
 
     except KeyboardInterrupt:
-        print("\n\nGoodbye! 👋")
+        print("\n\nGoodbye!")
         sys.exit(0)
 
     except Exception as e:
         print(
             f"""
-❌ Error launching Context Foundry
+Error launching Context Foundry
 
 {str(e)}
 
