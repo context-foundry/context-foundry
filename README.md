@@ -80,39 +80,38 @@ Create an extension by adding domain-specific patterns, example implementations,
 
 ## Architecture
 
-```
-                                    Context Foundry
-    ┌─────────────────────────────────────────────────────────────────┐
-    │                                                                 │
-    │   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐        │
-    │   │  MCP Server │    │   Daemon    │    │  CLI / TUI  │        │
-    │   │             │    │   (cfd)     │    │             │        │
-    │   │ - Build API │    │ - Queue     │    │ - Monitor   │        │
-    │   │ - Patterns  │    │ - Watchdog  │    │ - Dashboard │        │
-    │   │ - Skills    │    │ - Resources │    │ - Logs      │        │
-    │   └──────┬──────┘    └──────┬──────┘    └─────────────┘        │
-    │          │                  │                                   │
-    │          └────────┬─────────┘                                   │
-    │                   │                                             │
-    │          ┌────────▼────────┐                                    │
-    │          │  Phase Executor │                                    │
-    │          │                 │                                    │
-    │          │ Scout ──────────┼──▶ scout_report.json              │
-    │          │ Architect ──────┼──▶ architecture.json              │
-    │          │ Builder ────────┼──▶ source code                    │
-    │          │ Test ───────────┼──▶ test-report.md                 │
-    │          │ Deploy ─────────┼──▶ GitHub repo                    │
-    │          └────────┬────────┘                                    │
-    │                   │                                             │
-    │          ┌────────▼────────┐                                    │
-    │          │   Validators    │  ◀── Deterministic Enforcement    │
-    │          │                 │                                    │
-    │          │ - File checks   │                                    │
-    │          │ - Checksums     │                                    │
-    │          │ - BAML schemas  │                                    │
-    │          └─────────────────┘                                    │
-    │                                                                 │
-    └─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Context_Foundry [Context Foundry]
+        direction TB
+        
+        subgraph Core_Components [Core Components]
+            MCP[MCP Server<br/>Build API, Patterns, Skills]
+            Daemon[Daemon cfd<br/>Queue, Watchdog, Resources]
+            CLI[CLI / TUI<br/>Monitor, Dashboard, Logs]
+        end
+
+        MCP --> PhaseExec[Phase Executor]
+        Daemon --> PhaseExec
+        
+        subgraph Phase_Executor [Phase Executor]
+            Scout[Scout Phase] -->|scout_report.json| Architect[Architect Phase]
+            Architect -->|architecture.json| Builder[Builder Phase]
+            Builder -->|source code| Test[Test Phase]
+            Test -->|test-report.md| Deploy[Deploy Phase]
+            Deploy -->|GitHub repo| Done((Done))
+        end
+
+        PhaseExec --> Validators[Validators<br/>Deterministic Enforcement]
+        Validators -->|File checks| PhaseExec
+        Validators -->|Checksums| PhaseExec
+        Validators -->|BAML schemas| PhaseExec
+    end
+
+    style Context_Foundry fill:transparent,stroke:#333,stroke-width:2px
+    style Core_Components fill:transparent,stroke:none
+    style Phase_Executor fill:transparent,stroke:#666,stroke-dasharray: 5 5
+    style Validators fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
 Each phase spawns a **fresh Claude instance** with isolated context, preventing token bloat and ensuring consistent quality across long builds.
