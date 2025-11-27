@@ -1,0 +1,5 @@
+include __version__.py
+include README.md
+include LICENSE
+recursive-include context_foundry *.py
+recursive-include tools *.py *.css
