@@ -5953,36 +5953,7 @@ User Code → MCP Delegation → Spawn Claude Instance → Agent Skills FREE!
     Fresh 200K context per spawn
 ```
 
-### Architecture Comparison
 
-**Traditional BAML + Skills (API-based):**
-```mermaid
-graph LR
-    A[Your Code] -->|BAML function| B[API Client]
-    B -->|HTTP POST| C[Anthropic API]
-    C -->|$$$| D[Agent Skills]
-    D -->|Response| C
-    C -->|Response| B
-    B -->|Result| A
-
-    style C fill:#ff6b6b,stroke:#c92a2a,color:#fff
-    style D fill:#ff6b6b,stroke:#c92a2a,color:#fff
-```
-
-**Context Foundry + Skills (Meta-MCP):**
-```mermaid
-graph LR
-    A[Your Code] -->|BAML schema| B[MCP Tool]
-    B -->|Spawn| C[Fresh Claude Instance]
-    C -->|Built-in| D[Agent Skills]
-    D -->|Response| C
-    C -->|JSON| B
-    B -->|$0| A
-
-    style B fill:#4ecdc4,stroke:#0d7377,color:#fff
-    style C fill:#51cf66,stroke:#2f9e44,color:#fff
-    style D fill:#51cf66,stroke:#2f9e44,color:#fff
-```
 
 ### Implementation Example
 
