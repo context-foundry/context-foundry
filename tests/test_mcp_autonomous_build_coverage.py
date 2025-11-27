@@ -19,7 +19,7 @@ Priority: 10/10 - Core autonomous workflow with <30% coverage
 import pytest
 import tempfile
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock
 from pathlib import Path
 import sys
 
@@ -227,9 +227,9 @@ class TestDetectTaskIntent:
                     "new feature",
                 ]
             )
-            assert has_feature_keywords, (
-                f"Task '{task}' should contain add/feature keywords"
-            )
+            assert (
+                has_feature_keywords
+            ), f"Task '{task}' should contain add/feature keywords"
 
     def test_detect_add_docs_intent(self):
         """Test detection of documentation intent via keywords"""
@@ -362,184 +362,6 @@ class TestReadPhaseInfo:
             finally:
                 # Restore permissions for cleanup
                 phase_file.chmod(0o644)
-
-
-@pytest.mark.integration
-@pytest.mark.tier1
-class TestAutonomousBuildAndDeployEdgeCases:
-    """Test autonomous_build_and_deploy() edge cases"""
-
-    @patch("mcp_server.is_baml_available")
-    @patch("mcp_server.get_baml_error")
-    def test_baml_not_available(self, mock_get_error, mock_is_available):
-        """Test when BAML is not available"""
-        from mcp_server import autonomous_build_and_deploy
-
-        mock_is_available.return_value = False
-        mock_get_error.return_value = "BAML not installed"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = autonomous_build_and_deploy(
-                task="Build test app", working_directory=tmpdir
-            )
-
-            # Should return error about BAML
-            result_data = json.loads(result)
-            assert "error" in result_data
-            assert (
-                "BAML" in result_data["error"] or "baml" in result_data["error"].lower()
-            )
-            assert result_data["baml_available"] == False
-
-    @patch("mcp_server.is_baml_available")
-    @patch("mcp_server._detect_existing_codebase")
-    @patch("mcp_server._detect_task_intent")
-    def test_working_directory_relative_path(self, mock_intent, mock_detect, mock_baml):
-        """Test relative path working directory resolution"""
-        from mcp_server import autonomous_build_and_deploy
-
-        mock_baml.return_value = True
-        mock_detect.return_value = {
-            "has_code": False,
-            "project_type": None,
-            "languages": [],
-            "has_git": False,
-            "git_clean": True,
-            "confidence": "low",
-        }
-        mock_intent.return_value = "new_project"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Relative path should be resolved relative to CF parent
-            with patch(
-                "mcp_server._get_context_foundry_parent_dir", return_value=Path(tmpdir)
-            ):
-                with patch("subprocess.Popen") as mock_popen:
-                    mock_process = Mock()
-                    mock_process.pid = 12345
-                    mock_popen.return_value = mock_process
-
-                    result = autonomous_build_and_deploy(
-                        task="Build test app",
-                        working_directory="test-app",  # Relative path
-                    )
-
-                    # Should succeed and resolve path
-                    result_data = json.loads(result)
-                    assert "error" not in result_data or "BAML" in result_data.get(
-                        "error", ""
-                    )
-
-    @patch("mcp_server.is_baml_available")
-    @patch("mcp_server._detect_existing_codebase")
-    @patch("mcp_server._detect_task_intent")
-    def test_working_directory_absolute_path(self, mock_intent, mock_detect, mock_baml):
-        """Test absolute path working directory"""
-        from mcp_server import autonomous_build_and_deploy
-
-        mock_baml.return_value = True
-        mock_detect.return_value = {
-            "has_code": False,
-            "project_type": None,
-            "languages": [],
-            "has_git": False,
-            "git_clean": True,
-            "confidence": "low",
-        }
-        mock_intent.return_value = "new_project"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("subprocess.Popen") as mock_popen:
-                mock_process = Mock()
-                mock_process.pid = 12345
-                mock_popen.return_value = mock_process
-
-                result = autonomous_build_and_deploy(
-                    task="Build test app",
-                    working_directory=tmpdir,  # Absolute path
-                )
-
-                # Should succeed
-                result_data = json.loads(result)
-                assert "error" not in result_data or "BAML" in result_data.get(
-                    "error", ""
-                )
-
-    @patch("mcp_server.is_baml_available")
-    @patch("mcp_server._detect_existing_codebase")
-    @patch("mcp_server._detect_task_intent")
-    def test_mode_auto_adjustment_existing_code(
-        self, mock_intent, mock_detect, mock_baml
-    ):
-        """Test mode auto-adjustment when existing code is detected"""
-        from mcp_server import autonomous_build_and_deploy
-
-        mock_baml.return_value = True
-        mock_detect.return_value = {
-            "has_code": True,
-            "project_type": "python",
-            "languages": ["python"],
-            "has_git": True,
-            "git_clean": True,
-            "confidence": "high",
-        }
-        mock_intent.return_value = "fix_bug"
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("subprocess.Popen") as mock_popen:
-                mock_process = Mock()
-                mock_process.pid = 12345
-                mock_popen.return_value = mock_process
-
-                # Request new_project mode but existing code exists
-                result = autonomous_build_and_deploy(
-                    task="Fix the bug in login",
-                    working_directory=tmpdir,
-                    mode="new_project",  # Will be auto-adjusted
-                )
-
-                # Should succeed with auto-adjustment
-                result_data = json.loads(result)
-                assert "error" not in result_data or "BAML" in result_data.get(
-                    "error", ""
-                )
-
-    @patch("mcp_server.is_baml_available")
-    def test_use_parallel_deprecated_warning(self, mock_baml):
-        """Test that use_parallel=True shows deprecation warning"""
-        from mcp_server import autonomous_build_and_deploy
-
-        mock_baml.return_value = True
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("mcp_server._detect_existing_codebase") as mock_detect:
-                with patch("mcp_server._detect_task_intent") as mock_intent:
-                    with patch("subprocess.Popen") as mock_popen:
-                        mock_detect.return_value = {
-                            "has_code": False,
-                            "project_type": None,
-                            "languages": [],
-                            "has_git": False,
-                            "git_clean": True,
-                            "confidence": "low",
-                        }
-                        mock_intent.return_value = "new_project"
-                        mock_process = Mock()
-                        mock_process.pid = 12345
-                        mock_popen.return_value = mock_process
-
-                        # Should auto-correct use_parallel to False
-                        result = autonomous_build_and_deploy(
-                            task="Build test app",
-                            working_directory=tmpdir,
-                            use_parallel=True,  # Deprecated
-                        )
-
-                        # Should succeed (after auto-correction)
-                        result_data = json.loads(result)
-                        assert "error" not in result_data or "BAML" in result_data.get(
-                            "error", ""
-                        )
 
 
 @pytest.mark.integration

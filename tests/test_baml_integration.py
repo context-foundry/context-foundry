@@ -535,7 +535,7 @@ class TestFallbackBehavior:
 
         captured = capsys.readouterr()
         assert "BAML test_operation failed" in captured.err
-        assert "JSON fallback" in captured.err
+        assert "BAML is required" in captured.err
 
 
 class TestBAMLRequired:

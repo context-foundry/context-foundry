@@ -109,6 +109,50 @@ def _validate_scout_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError(f"Scout payload failed schema validation: {exc}") from exc
 
 
+def _validate_architecture_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate an Architecture payload against the BAML-generated Pydantic model.
+    """
+    try:
+        from tools.baml_client.baml_client.types import ArchitectureBlueprint
+    except Exception as exc:
+        raise RuntimeError(
+            f"Failed to import ArchitectureBlueprint for validation: {exc}"
+        ) from exc
+
+    try:
+        if hasattr(ArchitectureBlueprint, "model_validate"):  # Pydantic v2
+            validated = ArchitectureBlueprint.model_validate(payload)
+            return validated.model_dump()
+        validated = ArchitectureBlueprint.parse_obj(payload)  # Pydantic v1
+        return validated.dict()
+    except Exception as exc:
+        raise RuntimeError(
+            f"Architecture payload failed schema validation: {exc}"
+        ) from exc
+
+
+def _validate_phase_info_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Validate a PhaseInfo payload against the BAML-generated Pydantic model.
+    """
+    try:
+        from tools.baml_client.baml_client.types import PhaseInfo
+    except Exception as exc:
+        raise RuntimeError(f"Failed to import PhaseInfo for validation: {exc}") from exc
+
+    try:
+        if hasattr(PhaseInfo, "model_validate"):  # Pydantic v2
+            validated = PhaseInfo.model_validate(payload)
+            return validated.model_dump()
+        validated = PhaseInfo.parse_obj(payload)  # Pydantic v1
+        return validated.dict()
+    except Exception as exc:
+        raise RuntimeError(
+            f"PhaseInfo payload failed schema validation: {exc}"
+        ) from exc
+
+
 def _run_claude_cli_json(prompt: str, timeout_seconds: int = 180) -> Dict[str, Any]:
     """
     Execute Claude CLI with a prompt and parse the JSON response.
@@ -383,6 +427,13 @@ def normalize_phase_info(phase_data: Dict[str, Any]) -> Dict[str, Any]:
         elif "current_phase" in phase_data:
             phase_data["phase"] = phase_data["current_phase"]
 
+    # Ensure current_phase exists (for backward compatibility)
+    if "current_phase" not in phase_data:
+        if "currentPhase" in phase_data:
+            phase_data["current_phase"] = phase_data["currentPhase"]
+        elif "phase" in phase_data:
+            phase_data["current_phase"] = phase_data["phase"]
+
     return phase_data
 
 
@@ -409,6 +460,42 @@ def update_phase_with_baml(
     Raises:
         RuntimeError: If BAML is unavailable (required dependency)
     """
+    # Prefer Claude CLI (subscription)
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            prompt = f"""Create phase tracking information for Context Foundry build:
+
+Session ID: {session_id}
+Current Phase: {phase}
+Status: {status}
+Progress Detail: {detail}
+Test Iteration: {iteration}
+
+Generate a complete PhaseInfo object with appropriate timestamps and phase completion tracking.
+
+Return ONLY valid JSON matching the PhaseInfo schema:
+{{
+  "session_id": "string",
+  "current_phase": "PhaseType",
+  "phase_number": "string",
+  "status": "PhaseStatus",
+  "progress_detail": "string",
+  "test_iteration": int,
+  "phases_completed": ["PhaseType"],
+  "started_at": "ISO timestamp",
+  "last_updated": "ISO timestamp"
+}}
+"""
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=60)
+            normalized = normalize_phase_info(cli_payload)
+            with_timestamps = inject_real_timestamps(normalized)
+            return _validate_phase_info_payload(with_timestamps)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Phase update failed, falling back to BAML: {cli_exc}",
+                file=sys.stderr,
+            )
+
     # Try BAML first
     if is_baml_available():
         try:
@@ -554,7 +641,33 @@ def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
     Raises:
         RuntimeError: If BAML unavailable or validation fails
     """
-    # BAML is required for validation
+    # Prefer Claude CLI (subscription)
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            prompt = f"""Validate and parse this phase tracking JSON from Context Foundry:
+
+{phase_info_json}
+
+Convert it to a valid PhaseInfo object. If any fields are missing or invalid,
+use sensible defaults:
+- session_id: "unknown" if missing
+- test_iteration: 0 if missing
+- phases_completed: [] if missing
+- timestamps: current time if missing
+
+Return ONLY valid JSON matching the PhaseInfo schema.
+"""
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=60)
+            normalized = normalize_phase_info(cli_payload)
+            with_timestamps = inject_real_timestamps(normalized)
+            return _validate_phase_info_payload(with_timestamps)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Phase validation failed, falling back to BAML: {cli_exc}",
+                file=sys.stderr,
+            )
+
+    # BAML is required for validation fallback
     if not is_baml_available():
         error_msg = (
             "BAML is required but not available. "
@@ -562,6 +675,32 @@ def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
             f"Error: {get_baml_error()}"
         )
         raise RuntimeError(error_msg)
+
+    # Prefer Claude CLI (subscription)
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            prompt = f"""Validate and parse this phase tracking JSON from Context Foundry:
+
+{phase_info_json}
+
+Convert it to a valid PhaseInfo object. If any fields are missing or invalid,
+use sensible defaults:
+- session_id: "unknown" if missing
+- test_iteration: 0 if missing
+- phases_completed: [] if missing
+- timestamps: current time if missing
+
+Return ONLY valid JSON matching the PhaseInfo schema.
+"""
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=60)
+            normalized = normalize_phase_info(cli_payload)
+            with_timestamps = inject_real_timestamps(normalized)
+            return _validate_phase_info_payload(with_timestamps)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Phase validation failed, falling back to BAML: {cli_exc}",
+                file=sys.stderr,
+            )
 
     try:
         client = get_baml_client()
@@ -735,6 +874,44 @@ def generate_architecture_baml(
     Raises:
         RuntimeError: If BAML unavailable or generation fails
     """
+    # Prefer Claude CLI (subscription)
+    if BAML_USE_CLAUDE_CLI:
+        try:
+            risks_formatted = "\n".join([f"- {risk}" for risk in flagged_risks])
+            prompt = f"""You are the Architect agent for Context Foundry, designing the system architecture.
+
+SCOUT FINDINGS:
+{scout_report_json}
+
+FLAGGED RISKS TO ADDRESS:
+{risks_formatted}
+
+Your job is to:
+1. Design complete system architecture
+2. Define file and directory structure
+3. Break down into modules with clear responsibilities
+4. Apply proven patterns from pattern library
+5. Include preventive measures for all flagged risks
+6. Create step-by-step implementation plan
+7. Design comprehensive test strategy
+
+CRITICAL REQUIREMENTS:
+- All flagged risks must have preventive measures
+- Test plan must include unit, integration, AND e2e tests
+- Implementation steps must be ordered and actionable
+- Module boundaries must be clear
+
+Return detailed technical architecture as ArchitectureBlueprint JSON.
+Do not include markdown or prose outside the JSON.
+"""
+            cli_payload = _run_claude_cli_json(prompt, timeout_seconds=300)
+            return _validate_architecture_payload(cli_payload)
+        except Exception as cli_exc:
+            print(
+                f"[BAML LOG] Claude CLI Architecture generation failed, falling back to BAML: {cli_exc}",
+                file=sys.stderr,
+            )
+
     if not is_baml_available():
         raise RuntimeError(
             f"BAML is required but not available. Error: {get_baml_error()}"

@@ -202,7 +202,7 @@ class TestBAMLFunctionCalls:
                         "status": "researching",
                     }
                 )
-                valid, phase_info, error = validate_phase_info(test_json)
+                phase_info = validate_phase_info(test_json)
 
                 # Verify BAML was called
                 assert mock_runtime.call_function_sync.called
