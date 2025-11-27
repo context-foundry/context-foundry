@@ -1,6 +1,6 @@
 {
   "name": "context-foundry",
-  "version": "2.5.2",
+  "version": "2.5.3",
   "description": "AI agent pattern-learning system - npm wrapper for the Python engine",
   "keywords": [
     "ai",
