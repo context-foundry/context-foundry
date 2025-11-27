@@ -275,20 +275,33 @@ class FileTreeWidget(VerticalScroll):
             file_count = 0
             folder_count = 0
             latest_mtime = 0
+            
+            # Directories to ignore
+            IGNORE_DIRS = {
+                "node_modules", "venv", ".git", "__pycache__", 
+                ".pytest_cache", ".mypy_cache", "dist", "build",
+                "coverage", ".context-foundry"
+            }
+
             try:
-                for item in build_dir.rglob("*"):
-                    if item.name.startswith("."):
-                        continue
-                    if item.is_file():
-                        file_count += 1
+                # Use os.walk for better control over traversal
+                import os
+                for root, dirs, files in os.walk(build_dir):
+                    # Modify dirs in-place to skip ignored directories
+                    dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
+                    
+                    folder_count += len(dirs)
+                    file_count += len(files)
+                    
+                    for file in files:
+                        if file.startswith("."):
+                            continue
                         try:
-                            mtime = item.stat().st_mtime
+                            mtime = os.path.getmtime(os.path.join(root, file))
                             if mtime > latest_mtime:
                                 latest_mtime = mtime
                         except OSError:
                             pass
-                    elif item.is_dir():
-                        folder_count += 1
             except OSError:
                 pass
 
@@ -943,10 +956,11 @@ class DetailsModal(ModalScreen):
         """Load detailed results via MCP wrapper"""
         try:
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
+            import shutil
+            python_cmd = sys.executable or shutil.which("python3")
 
-            if not Path(python_cmd).exists():
-                self.result_text = "❌ Python 3.13 not found"
+            if not python_cmd:
+                self.result_text = "❌ Python not found"
                 return
 
             process = await asyncio.create_subprocess_exec(
@@ -1042,10 +1056,11 @@ class PatternsModal(ModalScreen):
         """Load global patterns via MCP wrapper"""
         try:
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
+            import shutil
+            python_cmd = sys.executable or shutil.which("python3")
 
-            if not Path(python_cmd).exists():
-                self.patterns_text = "❌ Python 3.13 not found"
+            if not python_cmd:
+                self.patterns_text = "❌ Python not found"
                 return
 
             process = await asyncio.create_subprocess_exec(
@@ -1503,13 +1518,13 @@ class MissionControlApp(App):
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
 
             # Require python3.13 (has MCP deps installed)
-            python_cmd = "/opt/homebrew/bin/python3.13"
-            if not Path(python_cmd).exists():
+            # Use current python executable or find python3
+            import shutil
+            python_cmd = sys.executable or shutil.which("python3")
+            if not python_cmd:
                 return (
-                    "❌ Python 3.13 not found\n\n"
-                    "Context Foundry requires Python 3.13+.\n\n"
-                    "Install: brew install python@3.13\n"
-                    "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
+                    "❌ Python not found\n\n"
+                    "Context Foundry requires Python 3.10+."
                 )
 
             # Call status command
@@ -1680,13 +1695,13 @@ class MissionControlApp(App):
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
 
             # Require python3.13 (has MCP deps installed)
-            python_cmd = "/opt/homebrew/bin/python3.13"
-            if not Path(python_cmd).exists():
+            # Use current python executable or find python3
+            import shutil
+            python_cmd = sys.executable or shutil.which("python3")
+            if not python_cmd:
                 return (
-                    "❌ Python 3.13 not found\n\n"
-                    "Context Foundry requires Python 3.13+.\n\n"
-                    "Install: brew install python@3.13\n"
-                    "Then: /opt/homebrew/bin/python3.13 -m pip install -r requirements-mcp.txt"
+                    "❌ Python not found\n\n"
+                    "Context Foundry requires Python 3.10+."
                 )
 
             # Start the build and wait for task ID (fast - just returns delegation info)
@@ -1953,7 +1968,8 @@ class MissionControlApp(App):
 
             # Call cancel via MCP wrapper
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
-            python_cmd = "/opt/homebrew/bin/python3.13"
+            import shutil
+            python_cmd = sys.executable or shutil.which("python3")
 
             if Path(python_cmd).exists():
                 process = await asyncio.create_subprocess_exec(
