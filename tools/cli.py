@@ -4,12 +4,14 @@ Context Foundry CLI Entry Point
 
 Usage:
     cf              # Launch Context Foundry TUI
+    cf setup        # Configure Claude Code MCP integration
     cf --version    # Show version
     cf --help       # Show help
 """
 
 import sys
 import argparse
+import json
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -54,6 +56,7 @@ For more help: https://github.com/context-foundry/context-foundry/blob/main/INST
         epilog="""
 Examples:
   cf              Launch Context Foundry TUI
+  cf setup        Configure Claude Code MCP integration
   cf --version    Show version information
   cf --help       Show this help message
 
@@ -65,10 +68,74 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         "--version", action="version", version=f"Context Foundry {__version__}"
     )
 
+    parser.add_argument(
+        "command",
+        nargs="?",
+        choices=["setup"],
+        help="Command to run (default: launch TUI)",
+    )
+
     args = parser.parse_args()
 
-    # Default action: Launch Context Foundry TUI
-    launch_context_foundry()
+    if args.command == "setup":
+        setup_claude_code()
+    else:
+        # Default action: Launch Context Foundry TUI
+        launch_context_foundry()
+
+
+def setup_claude_code():
+    """Configure Claude Code MCP integration automatically"""
+    print("🔧 Setting up Context Foundry for Claude Code...\n")
+
+    # Find the MCP server path
+    mcp_server_path = Path(__file__).parent / "mcp_server.py"
+    if not mcp_server_path.exists():
+        print(f"❌ Error: MCP server not found at {mcp_server_path}", file=sys.stderr)
+        sys.exit(1)
+
+    mcp_server_path = mcp_server_path.resolve()
+
+    # Claude Code settings file
+    claude_settings_path = Path.home() / ".claude" / "mcp_settings.json"
+
+    # Load existing settings or create new
+    if claude_settings_path.exists():
+        try:
+            with open(claude_settings_path) as f:
+                settings = json.load(f)
+        except json.JSONDecodeError:
+            print(
+                f"⚠️  Warning: Invalid JSON in {claude_settings_path}, creating backup..."
+            )
+            backup_path = claude_settings_path.with_suffix(".json.backup")
+            claude_settings_path.rename(backup_path)
+            settings = {}
+    else:
+        settings = {}
+
+    # Ensure mcpServers key exists
+    if "mcpServers" not in settings:
+        settings["mcpServers"] = {}
+
+    # Add or update context-foundry config
+    settings["mcpServers"]["context-foundry"] = {
+        "command": "python",
+        "args": [str(mcp_server_path)],
+    }
+
+    # Create directory if needed
+    claude_settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write settings
+    with open(claude_settings_path, "w") as f:
+        json.dump(settings, f, indent=2)
+
+    print("✅ Claude Code configured successfully!\n")
+    print(f"   Settings file: {claude_settings_path}")
+    print(f"   MCP server:    {mcp_server_path}\n")
+    print("🚀 You can now use Context Foundry in Claude Code!")
+    print('   Just ask: "Use CF to build a todo app"\n')
 
 
 def launch_context_foundry():

@@ -122,8 +122,20 @@ function main() {
   const installed = installPythonPackage(python.cmd);
 
   if (installed) {
-    log(`\n${colors.green}Installation complete!${colors.reset}`);
-    log(`\nRun ${colors.cyan}cf${colors.reset} to launch Context Foundry.\n`);
+    log(`\n${colors.green}Python package installed!${colors.reset}`);
+
+    // Run cf setup to configure Claude Code
+    log(`\nConfiguring Claude Code integration...`);
+    const setup = spawnSync('cf', ['setup'], {
+      stdio: 'inherit',
+      timeout: 30000
+    });
+
+    if (setup.status === 0) {
+      log(`\n${colors.green}Setup complete!${colors.reset}`);
+    } else {
+      log(`\n${colors.yellow}Note: Run 'cf setup' manually to configure Claude Code.${colors.reset}`);
+    }
   } else {
     error(`\nFailed to install Python package.`);
     log(`\nTry installing manually:`);
