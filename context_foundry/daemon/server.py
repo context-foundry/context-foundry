@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from datetime import datetime
+
 from .config import Config
 from .store import Store
 from .jobs import JobManager
@@ -582,6 +584,9 @@ class CFDaemon:
             iteration_count = 0
             last_stats_minute = -1  # Track which minute we last logged stats
 
+            # MOTD refresh tracking (refresh once per day)
+            last_motd_day = -1
+
             # Main loop - just keep alive while JobManager workers run
             logger.info("[DEBUG] Entering main loop, watchdog monitoring heartbeat")
             while self.running:
@@ -643,12 +648,29 @@ class CFDaemon:
                             try:
                                 if is_emergency_stop_active():
                                     logger.warning(
-                                        "🛑 EMERGENCY STOP ACTIVE - New builds will be blocked, "
+                                        "EMERGENCY STOP ACTIVE - New builds will be blocked, "
                                         "running builds will stop at next phase boundary. "
                                         "Run 'cfd emergency-resume' to clear."
                                     )
                             except Exception:
                                 pass  # Don't let emergency stop check crash daemon
+
+                        # Daily MOTD refresh (regenerate once per day at 6 AM)
+                        try:
+                            now = datetime.now()
+                            current_day = now.timetuple().tm_yday
+                            if current_day != last_motd_day and now.hour >= 6:
+                                last_motd_day = current_day
+                                # Import here to avoid circular imports
+                                try:
+                                    from tools.motd import refresh_motd
+
+                                    refresh_motd()
+                                    logger.info("Daily MOTD refreshed")
+                                except ImportError:
+                                    pass  # MOTD module not available
+                        except Exception:
+                            pass  # Don't let MOTD refresh crash daemon
 
                     time.sleep(1)
 

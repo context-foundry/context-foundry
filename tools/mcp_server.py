@@ -44,7 +44,7 @@ except ImportError:
     print("", file=sys.stderr)
     sys.exit(1)
 
-from tools.banner import print_banner
+from tools.motd import get_motd, format_motd_banner
 
 # Import modularized utilities (Phase 2 refactoring - Phases 1-5 complete)
 # These maintain backward compatibility via re-exports below
@@ -542,6 +542,10 @@ def autonomous_build_and_deploy(
     ] = None,  # None = let Scout decide; True/False = user override
     incremental: bool = False,
     force_rebuild: bool = False,
+    pause_after_phases: Optional[
+        List[str]
+    ] = None,  # Phases to pause after (e.g., ["Scout", "Architect"])
+    execution_mode: str = "autonomous",  # "autonomous", "interactive", or "selective"
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -575,6 +579,8 @@ def autonomous_build_and_deploy(
         use_parallel=use_parallel,
         incremental=incremental,
         force_rebuild=force_rebuild,
+        pause_after_phases=pause_after_phases,
+        execution_mode=execution_mode,
     )
 
 
@@ -1568,9 +1574,10 @@ if __name__ == "__main__":
 
     # Run the MCP server
     # This uses stdio transport which is standard for Claude Desktop
-    print_banner(version="1.0.0")
-    print("", file=sys.stderr)
-    print("📋 Available tools:", file=sys.stderr)
+    # Show MOTD with colored logo and context-aware message
+    motd_message = get_motd()
+    print(format_motd_banner(motd_message), file=sys.stderr)
+    print("Available tools:", file=sys.stderr)
     print("   - context_foundry_status: Get server status", file=sys.stderr)
     print(
         "   - delegate_to_claude_code: Delegate tasks to fresh Claude instances (synchronous)",
