@@ -83,17 +83,17 @@ Create an extension by adding domain-specific patterns, example implementations,
 ```mermaid
 graph LR
     subgraph User_Interface [User Interface]
-        CLI[CLI / TUI]
+        CLI["CLI / TUI"]
         Claude[Claude Code]
     end
 
     subgraph Core_System [Context Foundry Core]
-        Daemon[Daemon Service<br/>(cfd)]
+        Daemon["Daemon Service<br/>(cfd)"]
         MCP[MCP Server]
         
         subgraph Data_Layer [Data & Knowledge]
-            Codex[(Context Codex<br/>SQLite)]
-            Skills[(Skills Library)]
+            Codex[("Context Codex<br/>SQLite")]
+            Skills[("Skills Library")]
         end
     end
 
