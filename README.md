@@ -8,7 +8,7 @@
 
 **Autonomous AI development platform** that spawns fresh Claude instances to research, design, build, test, and deploy complete software projects. Walk away and come back to production-ready code.
 
-**Version 2.4.0** | [Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Features](docs/FEATURES.md)
+**Version 2.5.0** | [Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Features](docs/FEATURES.md)
 
 ---
 
@@ -58,10 +58,8 @@ This hybrid approach makes autonomous operation reliable. See [Architecture](doc
 
 | Feature | Description |
 |---------|-------------|
-| **Global Patterns** | Cross-project knowledge stored in `~/.context-foundry/patterns/` |
 | **Context Codex** | SQLite database tracking issues, solutions, and build metrics |
 | **Skills Library** | Reusable code implementations with success rate tracking |
-| **S3 Sync** | Share patterns with the community via AWS S3 |
 
 ### Infrastructure
 
@@ -74,11 +72,9 @@ This hybrid approach makes autonomous operation reliable. See [Architecture](doc
 
 ### Extensions
 
-| Extension | Domain |
-|-----------|--------|
-| **Roblox** | Luau scripting, world generation, asset management |
-| **Flowise** | AI workflow automation |
-| **Workday** | Enterprise integration |
+Extensions let you specialize Context Foundry for specific domains. Think of them as giving the AI a business case, architectural blueprints, and success criteria before asking it to build something complex.
+
+Create an extension by adding domain-specific patterns, example implementations, and validation rules to `extensions/<your-domain>/`. The AI will reference these during builds to produce domain-appropriate solutions.
 
 ---
 
@@ -128,35 +124,20 @@ Each phase spawns a **fresh Claude instance** with isolated context, preventing 
 ### 1. Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/context-foundry/context-foundry.git
-cd context-foundry
-
-# Install dependencies
-pip install -e .
+npm install -g context-foundry
 ```
 
-### 2. Configure Claude Code
+This installs the package and automatically configures Claude Code. (Alternative: `pip install context-foundry && cf setup`)
 
-Add to your Claude Code MCP settings (`~/.claude/mcp_settings.json`):
+### 2. Build Something
 
-```json
-{
-  "mcpServers": {
-    "context-foundry": {
-      "command": "python",
-      "args": ["/path/to/context-foundry/tools/mcp_server.py"]
-    }
-  }
-}
+In Claude Code, just ask in natural language:
+
+```
+"Use CF to build a weather dashboard with React"
 ```
 
-### 3. Run a Build
-
-In Claude Code:
-```
-Use mcp__context-foundry__autonomous_build_and_deploy to build a todo app with React
-```
+Walk away. Come back to deployed code on GitHub.
 
 See [Quick Start Guide](QUICKSTART.md) for detailed setup instructions.
 
@@ -164,30 +145,20 @@ See [Quick Start Guide](QUICKSTART.md) for detailed setup instructions.
 
 ## CLI Tools
 
-### Daemon Management
-
-```bash
-# Start the daemon
-./tools/cfd start
-
-# Check status
-./tools/cfd status
-
-# View build logs
-./tools/cfd logs <job-id> --follow
-
-# List active builds
-./tools/cfd list
-
-# Stop the daemon
-./tools/cfd stop
-```
-
 ### Mission Control TUI
 
 ```bash
-# Launch terminal interface
-python tools/cli.py
+cf                    # Launch interactive terminal UI
+```
+
+### Daemon Management
+
+```bash
+cfd start             # Start the daemon
+cfd status            # Check status
+cfd logs <job-id>     # View build logs
+cfd list              # List active builds
+cfd stop              # Stop the daemon
 ```
 
 ---
@@ -199,12 +170,8 @@ python tools/cli.py
 | `autonomous_build_and_deploy` | Full build pipeline: research -> design -> build -> test -> deploy |
 | `delegate_to_claude_code` | Spawn fresh Claude instance for subtasks |
 | `delegate_to_claude_code_async` | Non-blocking delegation with progress tracking |
-| `read_global_patterns` | Read learned patterns by type |
-| `save_global_patterns` | Save new patterns to global storage |
 | `search_skills` | Find reusable code implementations |
 | `save_skill` | Save successful implementation as reusable skill |
-| `sync_patterns_to_s3` | Upload patterns to community S3 bucket |
-| `pull_patterns_from_s3` | Download community patterns |
 | `create_evolution_task` | Create self-improvement task |
 | `get_daemon_status` | Check daemon health and resource usage |
 
@@ -236,14 +203,10 @@ context-foundry/
 │   ├── mcp_utils/             # Build orchestration, delegation, patterns
 │   ├── prompts/phases/        # Phase-specific system prompts
 │   ├── evolution/             # Daemon, self-improvement, safety
-│   ├── tui/                   # Mission Control terminal interface
-│   ├── baml_schemas/          # Type-safe output schemas
-│   ├── metrics/               # Cost and performance tracking
+│   ├── cli.py                 # Main CLI (cf command)
 │   └── cfd                    # Daemon CLI script
-├── extensions/
-│   ├── roblox/                # Roblox game development
-│   ├── flowise/               # AI workflow automation
-│   └── workday/               # Enterprise integration
+├── extensions/                # Domain-specific extensions
+├── npm/                       # npm package wrapper
 ├── docs/                      # Documentation
 └── CLAUDE.md                  # Instructions for AI agents
 ```
