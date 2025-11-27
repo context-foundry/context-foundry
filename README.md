@@ -81,52 +81,54 @@ Create an extension by adding domain-specific patterns, example implementations,
 ## Architecture
 
 ```mermaid
-graph LR
-    subgraph User_Interface [User Interface]
-        CLI["CLI / TUI"]
-        Claude[Claude Code]
+sequenceDiagram
+    participant U as User
+    participant O as Orchestrator
+    participant S as Scout Agent
+    participant A as Architect Agent
+    participant B as Builder Agent
+    participant T as Test Agent
+    participant FS as .context-foundry/
+
+    U->>O: Task Description
+
+    rect rgb(225, 245, 254)
+        Note over O,S: Scout Phase
+        O->>S: spawn claude --system-prompt phase_scout.txt
+        S->>FS: Write scout_report.json
+        S->>O: Return scout-report.md
+        O->>O: Parse MD -> SCOUT_JSON
     end
 
-    subgraph Core_System [Context Foundry Core]
-        Daemon["Daemon Service<br/>(cfd)"]
-        MCP[MCP Server]
-        
-        subgraph Data_Layer [Data & Knowledge]
-            Codex[("Context Codex<br/>SQLite")]
-            Skills[("Skills Library")]
-        end
+    rect rgb(232, 245, 233)
+        Note over O,A: Architect Phase
+        O->>A: spawn claude --system-prompt phase_architect.txt<br/>+ SCOUT_JSON injected
+        A->>FS: Write architecture.json
+        A->>O: Return architecture.md
+        O->>O: Parse MD -> ARCHITECTURE_JSON
     end
 
-    subgraph Build_Pipeline [Autonomous Build Pipeline]
-        direction TB
-        Scout[1. Scout] --> Architect[2. Architect]
-        Architect --> Builder[3. Builder]
-        Builder --> Test[4. Test]
-        Test --> Deploy[5. Deploy]
-        
-        Validators{Validators}
+    rect rgb(255, 243, 224)
+        Note over O,B: Builder Phase
+        O->>B: spawn claude --system-prompt phase_builder.txt<br/>+ ARCHITECTURE_JSON injected
+        B->>FS: Write build-tasks.json
+        B->>FS: Write source code files
+        B->>O: Return completion status
     end
 
-    %% Connections
-    CLI -->|Monitor| Daemon
-    Claude -->|Tools| MCP
-    MCP -->|Spawns| Build_Pipeline
-    Daemon -->|Manages| Build_Pipeline
-    
-    Build_Pipeline -->|Enforce| Validators
-    Validators -->|Feedback| Build_Pipeline
-    
-    Build_Pipeline -.->|Read/Write| Codex
-    Build_Pipeline -.->|Use| Skills
+    rect rgb(252, 228, 236)
+        Note over O,T: Test Phase
+        O->>T: spawn claude --system-prompt phase_test.txt<br/>+ ARCHITECTURE_JSON.test_plan
+        T->>FS: Write test-report-N.md
+        T->>O: Return PASSED/FAILED
+    end
 
-    %% Styling
-    classDef primary fill:#2563eb,stroke:#1d4ed8,color:white;
-    classDef secondary fill:#4b5563,stroke:#374151,color:white;
-    classDef database fill:#059669,stroke:#047857,color:white;
-    
-    class CLI,Claude primary;
-    class Daemon,MCP secondary;
-    class Codex,Skills database;
+    alt Tests PASSED
+        O->>U: Build Complete
+    else Tests FAILED
+        O->>A: Re-run with failure context
+        Note over A,T: Loop: Architect Fix -> Builder Fix -> Test
+    end
 ```
 
 Each phase spawns a **fresh Claude instance** with isolated context, preventing token bloat and ensuring consistent quality across long builds.
