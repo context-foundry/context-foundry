@@ -1552,8 +1552,8 @@ def execute_build_with_phase_spawning(
                         )
 
                 scout_instruction = (
-                    "Read .context-foundry/scout-report.md (or scout_report.json if present) "
-                    "and produce scout-report.md with findings."
+                    "Analyze the project requirements and create a scout report. "
+                    "Output: .context-foundry/scout_report.json (preferred) and .context-foundry/scout-report.md"
                 )
                 scout_result = run_phase(
                     "Scout",
@@ -1563,6 +1563,7 @@ def execute_build_with_phase_spawning(
                     phase_timeout=600,  # 10 min
                     validator=PhaseValidator.validate_scout,
                     project_type=project_type,
+                    task_config=task_config,
                 )
 
                 results["scout"] = scout_result
@@ -1763,6 +1764,7 @@ def execute_build_with_phase_spawning(
                 phase_timeout=900,  # 15 min
                 validator=PhaseValidator.validate_architect,
                 project_type=project_type,
+                task_config=task_config,
             )
 
             results["architect"] = architect_result
@@ -2089,6 +2091,7 @@ def execute_build_with_phase_spawning(
                 project_type,
                 flowise_mode=flowise_mode,
                 use_parallel=use_parallel,
+                task_config=task_config,
             )
 
             results["builder"] = builder_result
@@ -2210,6 +2213,7 @@ def execute_build_with_phase_spawning(
                     validator=lambda wd: _validate_test_with_filename(wd, test_file),
                     iteration=test_iteration,
                     project_type=project_type,
+                    task_config=task_config,
                 )
 
                 results[f"test_{test_iteration}"] = test_result
@@ -2270,6 +2274,7 @@ def execute_build_with_phase_spawning(
                     phase_timeout=900,
                     iteration=test_iteration,
                     project_type=project_type,
+                    task_config=task_config,
                 )
 
                 if architect_fix_result.status != "completed":
@@ -2385,6 +2390,7 @@ def execute_build_with_phase_spawning(
                     flowise_mode=flowise_mode,
                     use_parallel=False,  # Fixes are small
                     iteration=test_iteration,
+                    task_config=task_config,
                 )
 
                 if builder_fix_result.status != "completed":
@@ -2513,6 +2519,7 @@ def execute_build_with_phase_spawning(
                 working_directory,
                 phase_timeout=600,  # 10 min
                 project_type=project_type,
+                task_config=task_config,
             )
 
             # Screenshot is optional - don't fail build if it doesn't work
@@ -2617,6 +2624,7 @@ def execute_build_with_phase_spawning(
                 working_directory,
                 phase_timeout=600,  # 10 min
                 project_type=project_type,
+                task_config=task_config,
             )
 
             if docs_result.status == "completed":
@@ -2721,6 +2729,7 @@ def execute_build_with_phase_spawning(
                 working_directory,
                 phase_timeout=600,  # 10 min
                 project_type=project_type,
+                task_config=task_config,
             )
 
             # Deploy is optional - don't fail build if GitHub unavailable

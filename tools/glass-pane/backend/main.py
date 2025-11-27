@@ -19,6 +19,7 @@ from api import (
     artifacts_router,
     chat_router,
     builds_router,
+    agent_events_router,
 )
 
 # Configure logging
@@ -69,6 +70,7 @@ app.include_router(sse_router)
 app.include_router(artifacts_router)
 app.include_router(chat_router)
 app.include_router(builds_router)
+app.include_router(agent_events_router)
 
 
 @app.get("/")

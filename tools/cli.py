@@ -68,17 +68,56 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         "--version", action="version", version=f"Context Foundry {__version__}"
     )
 
-    parser.add_argument(
-        "command",
-        nargs="?",
-        choices=["setup"],
-        help="Command to run (default: launch TUI)",
+    subparsers = parser.add_subparsers(dest="command", help="Commands")
+
+    # Setup command
+    subparsers.add_parser("setup", help="Configure Claude Code MCP integration")
+
+    # Watch command - watch agent conversations in real-time
+    watch_parser = subparsers.add_parser(
+        "watch", help="Watch agent conversation in real-time"
+    )
+    watch_parser.add_argument(
+        "job_id", nargs="?", help="Job ID (optional - uses most recent if omitted)"
+    )
+    watch_parser.add_argument(
+        "--follow", "-f", action="store_true", help="Follow conversation in real-time"
+    )
+    watch_parser.add_argument(
+        "--lines", "-n", type=int, default=50, help="Number of lines to show"
+    )
+    watch_parser.add_argument(
+        "--dir", "-d", help="Project directory to watch (instead of job_id)"
+    )
+
+    # Conversations command - list conversation logs
+    conv_parser = subparsers.add_parser(
+        "conversations", help="List all conversation logs"
+    )
+    conv_parser.add_argument(
+        "job_id", nargs="?", help="Job ID (optional - lists all if omitted)"
+    )
+    conv_parser.add_argument("--dir", "-d", help="Project directory to search")
+
+    # Jobs command - list recent jobs (alias for cfd list)
+    jobs_parser = subparsers.add_parser("jobs", help="List recent daemon jobs")
+    jobs_parser.add_argument(
+        "--status", help="Filter by status (running, succeeded, failed)"
+    )
+    jobs_parser.add_argument(
+        "--limit", type=int, default=10, help="Maximum jobs to show"
     )
 
     args = parser.parse_args()
 
     if args.command == "setup":
         setup_claude_code()
+    elif args.command == "watch":
+        cmd_watch(args)
+    elif args.command == "conversations":
+        cmd_conversations(args)
+    elif args.command == "jobs":
+        cmd_jobs(args)
     else:
         # Default action: Launch Context Foundry TUI
         launch_context_foundry()
@@ -209,6 +248,264 @@ https://github.com/context-foundry/context-foundry/issues
             file=sys.stderr,
         )
         sys.exit(1)
+
+
+def cmd_watch(args):
+    """Watch agent conversation in real-time"""
+    import subprocess
+
+    # Determine where to look for conversations
+    if args.dir:
+        working_dir = Path(args.dir)
+    elif args.job_id:
+        # Look up job from daemon store
+        working_dir = get_working_dir_for_job(args.job_id)
+        if not working_dir:
+            print(f"Job not found: {args.job_id}", file=sys.stderr)
+            print("\nTip: Use 'cf jobs' to list recent jobs", file=sys.stderr)
+            sys.exit(1)
+    else:
+        # Find most recent conversation in current dir or homelab
+        working_dir = find_most_recent_conversation_dir()
+        if not working_dir:
+            print("No recent conversations found.", file=sys.stderr)
+            print("\nTip: Specify a job ID or directory:", file=sys.stderr)
+            print("  cf watch <job_id>", file=sys.stderr)
+            print("  cf watch --dir /path/to/project", file=sys.stderr)
+            sys.exit(1)
+
+    conversations_dir = working_dir / ".context-foundry" / "conversations"
+
+    if not conversations_dir.exists():
+        print(f"No conversation logs found at {conversations_dir}")
+        print("\nConversation logging requires streaming mode.")
+        sys.exit(1)
+
+    # Find the most recent conversation log
+    log_files = list(conversations_dir.glob("conversation-*.log"))
+    if not log_files:
+        print(f"No conversation logs found in {conversations_dir}")
+        sys.exit(1)
+
+    # Sort by modification time, get most recent
+    latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
+
+    print(f"📺 Watching: {latest_log.name}")
+    print(f"📂 Project: {working_dir.name}")
+    print("-" * 60)
+
+    if args.follow:
+        # Use tail -f for real-time following
+        try:
+            tail_cmd = ["tail", "-n", str(args.lines), "-f", str(latest_log)]
+            process = subprocess.Popen(tail_cmd)
+            process.wait()
+        except KeyboardInterrupt:
+            print("\n\nStopped watching conversation")
+            if process.poll() is None:
+                process.terminate()
+    else:
+        # Just show last N lines
+        with open(latest_log) as f:
+            lines = f.readlines()
+            for line in lines[-args.lines :]:
+                print(line, end="")
+
+
+def cmd_conversations(args):
+    """List all conversation logs"""
+    from datetime import datetime
+
+    # Determine where to look
+    if args.dir:
+        search_dirs = [Path(args.dir)]
+    elif args.job_id:
+        working_dir = get_working_dir_for_job(args.job_id)
+        if not working_dir:
+            print(f"Job not found: {args.job_id}", file=sys.stderr)
+            sys.exit(1)
+        search_dirs = [working_dir]
+    else:
+        # Search common locations
+        search_dirs = find_all_project_dirs()
+
+    conversations = []
+    for project_dir in search_dirs:
+        conv_dir = project_dir / ".context-foundry" / "conversations"
+        if not conv_dir.exists():
+            continue
+
+        for log_file in conv_dir.glob("conversation-*.log"):
+            stat = log_file.stat()
+            task_id = log_file.stem.replace("conversation-", "")
+            jsonl_file = conv_dir / f"conversation-{task_id}.jsonl"
+
+            # Count events in JSONL
+            event_count = 0
+            if jsonl_file.exists():
+                with open(jsonl_file) as f:
+                    event_count = sum(1 for _ in f)
+
+            conversations.append(
+                {
+                    "project": project_dir.name,
+                    "task_id": task_id,
+                    "log_file": log_file,
+                    "modified": stat.st_mtime,
+                    "size_kb": stat.st_size / 1024,
+                    "event_count": event_count,
+                }
+            )
+
+    if not conversations:
+        print("No conversation logs found.")
+        print("\nTip: Start a build with streaming to create logs:")
+        print("  Use delegate_to_claude_code_streaming() via MCP")
+        return
+
+    # Sort by modification time
+    conversations.sort(key=lambda x: x["modified"], reverse=True)
+
+    print("📂 Recent Conversations\n")
+    for conv in conversations[:20]:  # Show last 20
+        modified = datetime.fromtimestamp(conv["modified"]).strftime("%Y-%m-%d %H:%M")
+        print(f"  {conv['project']}/{conv['task_id'][:8]}...")
+        print(
+            f"    📊 {conv['event_count']} events | {conv['size_kb']:.1f} KB | {modified}"
+        )
+        print()
+
+    print("To watch a conversation:")
+    print(f"  cf watch --dir {conversations[0]['log_file'].parent.parent.parent}")
+
+
+def cmd_jobs(args):
+    """List recent daemon jobs"""
+    try:
+        from context_foundry.daemon.config import Config
+        from context_foundry.daemon.store import Store
+        from context_foundry.daemon.models import JobStatus
+    except ImportError:
+        print(
+            "Daemon module not available. Is Context Foundry installed?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    config = Config.load()
+    store = Store(config.db_path)
+
+    # Get jobs
+    status_filter = None
+    if args.status:
+        try:
+            status_filter = JobStatus(args.status.upper())
+        except ValueError:
+            print(f"Unknown status: {args.status}", file=sys.stderr)
+            print("Valid values: running, succeeded, failed, cancelled, pending")
+            sys.exit(1)
+
+    jobs = store.get_jobs(status=status_filter, limit=args.limit)
+
+    if not jobs:
+        print("No jobs found.")
+        return
+
+    print("📋 Recent Jobs\n")
+    for job in jobs:
+        status_emoji = {
+            "RUNNING": "🔄",
+            "SUCCEEDED": "✅",
+            "FAILED": "❌",
+            "CANCELLED": "⏹️",
+            "PENDING": "⏳",
+        }.get(job.status.value, "❓")
+
+        working_dir = job.params.get(
+            "working_directory", job.params.get("project_path", "")
+        )
+        project_name = Path(working_dir).name if working_dir else "unknown"
+
+        print(f"  {status_emoji} {job.id[:8]}... | {project_name}")
+        if job.created_at:
+            created = job.created_at.strftime("%Y-%m-%d %H:%M")
+            print(f"     Created: {created} | Status: {job.status.value}")
+        print()
+
+    print("To watch a job's conversation:")
+    print(f"  cf watch {jobs[0].id[:8]}")
+
+
+def get_working_dir_for_job(job_id: str) -> Path:
+    """Look up working directory for a job from daemon store"""
+    try:
+        from context_foundry.daemon.config import Config
+        from context_foundry.daemon.store import Store
+
+        config = Config.load()
+        store = Store(config.db_path)
+
+        # Try full ID first
+        job = store.get_job(job_id)
+
+        # If not found, try prefix match
+        if not job:
+            jobs = store.get_jobs(limit=100)
+            for j in jobs:
+                if j.id.startswith(job_id):
+                    job = j
+                    break
+
+        if job:
+            working_dir = job.params.get(
+                "working_directory", job.params.get("project_path")
+            )
+            if working_dir:
+                return Path(working_dir)
+
+    except Exception:
+        pass
+
+    return None
+
+
+def find_most_recent_conversation_dir() -> Path:
+    """Find the most recently modified conversation directory"""
+    search_dirs = find_all_project_dirs()
+
+    most_recent = None
+    most_recent_time = 0
+
+    for project_dir in search_dirs:
+        conv_dir = project_dir / ".context-foundry" / "conversations"
+        if not conv_dir.exists():
+            continue
+
+        for log_file in conv_dir.glob("conversation-*.log"):
+            mtime = log_file.stat().st_mtime
+            if mtime > most_recent_time:
+                most_recent_time = mtime
+                most_recent = project_dir
+
+    return most_recent
+
+
+def find_all_project_dirs() -> list:
+    """Find all project directories that might have conversation logs"""
+    dirs = []
+
+    # Current directory
+    dirs.append(Path.cwd())
+
+    # Check homelab if it exists
+    homelab = Path.home() / "homelab"
+    if homelab.exists():
+        # Add immediate subdirectories
+        for subdir in homelab.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith("."):
+                dirs.append(subdir)
+
+    return dirs
 
 
 if __name__ == "__main__":

@@ -1,0 +1,4078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cf</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --border: #30363d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-purple: #8b5cf6;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-yellow: #d29922;
+            --accent-red: #f85149;
+            --accent-cyan: #39c5cf;
+            --accent-orange: #f97316;
+            --accent-pink: #ec4899;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 16px; }
+
+        .logo { font-size: 18px; font-weight: 600; color: var(--accent-purple); }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+        }
+
+        .status-dot.connected {
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .header-right { display: flex; align-items: center; gap: 8px; }
+
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn:hover { background: var(--border); }
+        .btn.active { background: var(--accent-purple); border-color: var(--accent-purple); }
+
+        select.btn {
+            appearance: none;
+            padding-right: 24px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+        }
+
+        /* Main Layout - Three columns when activity panel is visible */
+        .main {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            height: calc(100vh - 53px);
+        }
+
+        .main.with-activity-panel {
+            grid-template-columns: 320px 1fr minmax(0, 400px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .sidebar-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .agent-count {
+            background: var(--accent-purple);
+            color: white;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        /* Filter Bar */
+        .filter-bar {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .filter-btn:hover { border-color: var(--text-muted); }
+        .filter-btn.active { background: var(--accent-purple); border-color: var(--accent-purple); color: white; }
+        .filter-btn.running.active { background: var(--accent-green); border-color: var(--accent-green); }
+        .filter-btn.succeeded.active { background: var(--accent-blue); border-color: var(--accent-blue); }
+        .filter-btn.failed.active { background: var(--accent-red); border-color: var(--accent-red); }
+        .filter-btn.cancelled.active { background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000; }
+
+        /* Sort & Type Row */
+        .sort-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .sort-row select {
+            flex: 1;
+            padding: 4px 8px;
+            font-size: 11px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 6px;
+        }
+
+        /* Agent List */
+        .agent-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .group-header {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 8px 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .group-header::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .agent-card {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .agent-card:hover { border-color: var(--accent-purple); }
+        .agent-card.selected { border-color: var(--accent-purple); background: rgba(139, 92, 246, 0.1); }
+        .agent-card.running { border-left: 3px solid var(--accent-green); }
+        .agent-card.failed { border-left: 3px solid var(--accent-red); }
+        .agent-card.succeeded { border-left: 3px solid var(--accent-blue); }
+        .agent-card.cancelled { border-left: 3px solid var(--accent-yellow); }
+        .agent-card.waiting_approval { border-left: 3px solid var(--accent-orange); }
+        .agent-card.paused { border-left: 3px solid var(--accent-orange); }
+
+        .agent-top-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .agent-name {
+            font-weight: 600;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .agent-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .agent-status.running { color: var(--accent-green); background: rgba(63, 185, 80, 0.15); }
+        .agent-status.succeeded { color: var(--accent-blue); background: rgba(88, 166, 255, 0.15); }
+        .agent-status.failed { color: var(--accent-red); background: rgba(248, 81, 73, 0.15); }
+        .agent-status.cancelled { color: var(--accent-yellow); background: rgba(210, 153, 34, 0.15); }
+        .agent-status.queued { color: var(--text-muted); background: var(--bg-primary); }
+        .agent-status.waiting_approval { color: var(--accent-yellow); background: rgba(210, 153, 34, 0.15); }
+        .agent-status.paused { color: var(--accent-orange); background: rgba(249, 115, 22, 0.15); }
+
+        .agent-meta {
+            display: flex;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        /* Phase Pipeline */
+        .phase-pipeline {
+            display: flex;
+            gap: 2px;
+            margin-top: 6px;
+        }
+
+        .phase-step {
+            flex: 1;
+            height: 4px;
+            background: var(--bg-primary);
+            border-radius: 2px;
+            position: relative;
+        }
+
+        .phase-step.completed { background: var(--accent-green); }
+        .phase-step.active { background: var(--accent-blue); animation: phase-pulse 1s infinite; }
+        .phase-step.failed { background: var(--accent-red); }
+
+        @keyframes phase-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .phase-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-align: center;
+        }
+
+        /* Content Area */
+        .content {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .context-header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-secondary);
+        }
+
+        .context-title { font-size: 16px; font-weight: 600; }
+
+        .context-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 24px;
+        }
+
+        /* Job Detail View */
+        .job-detail {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .job-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .job-detail-title { font-size: 18px; font-weight: 600; }
+        .job-detail-id { font-size: 12px; color: var(--text-muted); font-family: monospace; }
+
+        .job-detail-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .meta-item {
+            background: var(--bg-primary);
+            padding: 10px 12px;
+            border-radius: 8px;
+        }
+
+        .meta-label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; }
+        .meta-value { font-size: 14px; font-weight: 500; }
+
+        /* Phase Progress Bar */
+        .phase-progress {
+            margin-bottom: 16px;
+        }
+
+        .phase-progress-bar {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .phase-segment {
+            flex: 1;
+            height: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .phase-segment.done { background: var(--accent-green); }
+        .phase-segment.current { background: var(--accent-blue); }
+        .phase-segment.error { background: var(--accent-red); }
+
+        .phase-segment::after {
+            content: attr(data-label);
+            position: absolute;
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .phase-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Clickable Phase Tabs */
+        .phase-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .phase-tab {
+            padding: 8px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .phase-tab:hover { border-color: var(--accent-purple); }
+        .phase-tab.active { background: var(--accent-purple); border-color: var(--accent-purple); color: white; }
+        .phase-tab.completed { border-color: var(--accent-green); }
+        .phase-tab.completed::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); }
+        .phase-tab.current { border-color: var(--accent-blue); }
+        .phase-tab.current::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-blue); animation: pulse 1s infinite; }
+        .phase-tab.failed { border-color: var(--accent-red); }
+        .phase-tab.failed::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-red); }
+        .phase-tab.pending { opacity: 0.5; }
+
+        /* Phase Detail Panel */
+        .phase-detail {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .phase-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .phase-detail-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Artifacts Section */
+        .artifacts-section {
+            margin-bottom: 16px;
+        }
+
+        .artifacts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 8px;
+        }
+
+        .artifact-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .artifact-card:hover { border-color: var(--accent-cyan); }
+        .artifact-card.disabled { opacity: 0.5; cursor: not-allowed; }
+        .artifact-card.disabled:hover { border-color: var(--border); }
+
+        .artifact-name {
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .artifact-icon { color: var(--accent-cyan); }
+        .artifact-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+        /* Artifact Preview Modal */
+        .artifact-preview {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .artifact-preview-header {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .artifact-preview-content {
+            padding: 12px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+
+        /* Phase Stats */
+        .phase-stats {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .phase-stat {
+            background: var(--bg-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .phase-stat-label { color: var(--text-muted); font-size: 10px; }
+        .phase-stat-value { font-weight: 500; }
+
+        /* Artifact Viewer Modal */
+        .artifact-viewer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .artifact-viewer.active { display: flex; }
+
+        .artifact-viewer-header {
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .artifact-viewer-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .artifact-viewer-close {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .artifact-viewer-close:hover { background: var(--accent-red); }
+
+        .artifact-viewer-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .artifact-edit-btn {
+            background: var(--accent-purple);
+            border: 1px solid var(--accent-purple);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.15s;
+        }
+
+        .artifact-edit-btn:hover { background: #7c3aed; }
+        .artifact-edit-btn.save { background: var(--accent-green); border-color: var(--accent-green); }
+        .artifact-edit-btn.save:hover { background: #2ea043; }
+        .artifact-edit-btn.cancel { background: var(--bg-tertiary); border-color: var(--border); color: var(--text-primary); }
+
+        /* Edit Mode */
+        .artifact-editor {
+            width: 100%;
+            height: 100%;
+            min-height: 400px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            color: var(--text-primary);
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
+        .artifact-editor:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+        }
+
+        .edit-mode-notice {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid var(--accent-purple);
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: var(--accent-purple);
+        }
+
+        /* Approval Banner */
+        .approval-banner {
+            background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(210, 153, 34, 0.1));
+            border: 1px solid var(--accent-orange);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
+
+        .approval-banner-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .approval-banner-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--accent-orange);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .approval-banner-phase {
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--bg-primary);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .approval-banner-message {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .approval-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .approval-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .approval-btn.approve {
+            background: var(--accent-green);
+            border: 1px solid var(--accent-green);
+            color: white;
+        }
+
+        .approval-btn.approve:hover { background: #2ea043; }
+
+        .approval-btn.deny {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+
+        .approval-btn.deny:hover { background: var(--accent-red); border-color: var(--accent-red); }
+
+        /* Phase Prompt Viewer/Editor */
+        .prompt-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 16px;
+            overflow: hidden;
+        }
+
+        .prompt-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .prompt-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .prompt-state {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* NEW STATE BADGES for Manual Workflow */
+        .prompt-state.sleeping {
+            background: rgba(110, 118, 129, 0.2);
+            color: var(--text-muted);
+        }
+        .prompt-state.ready {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+            animation: ready-pulse 2s infinite;
+        }
+        .prompt-state.under_review {
+            background: rgba(249, 115, 22, 0.2);
+            color: var(--accent-orange);
+        }
+        .prompt-state.ready_edit {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--accent-yellow);
+        }
+        .prompt-state.processing {
+            background: rgba(88, 166, 255, 0.2);
+            color: var(--accent-blue);
+        }
+        .prompt-state.processing::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border: 2px solid var(--accent-blue);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        .prompt-state.complete {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+        .prompt-state.failed {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+
+        /* Legacy state mappings for backward compat */
+        .prompt-state.pending { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+        .prompt-state.editing { background: rgba(249, 115, 22, 0.2); color: var(--accent-orange); }
+        .prompt-state.approved { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+        .prompt-state.injected { background: rgba(88, 166, 255, 0.2); color: var(--accent-blue); }
+        .prompt-state.completed { background: rgba(63, 185, 80, 0.2); color: var(--accent-green); }
+
+        @keyframes ready-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.4); }
+            50% { box-shadow: 0 0 0 4px rgba(63, 185, 80, 0); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .prompt-content {
+            padding: 16px;
+        }
+
+        .prompt-field {
+            margin-bottom: 16px;
+        }
+
+        .prompt-field-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .prompt-field-content {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            max-height: 200px;
+            overflow: auto;
+            white-space: pre-wrap;
+        }
+
+        .prompt-field-content.editable {
+            cursor: text;
+        }
+
+        .prompt-field-textarea {
+            width: 100%;
+            min-height: 150px;
+            background: var(--bg-primary);
+            border: 1px solid var(--accent-purple);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            resize: vertical;
+        }
+
+        .prompt-field-textarea:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        }
+
+        .prompt-actions {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+        }
+
+        .prompt-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid var(--border);
+        }
+
+        .prompt-btn.edit {
+            background: var(--accent-purple);
+            border-color: var(--accent-purple);
+            color: white;
+        }
+
+        .prompt-btn.edit:hover { background: #7c3aed; }
+
+        .prompt-btn.inject {
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: white;
+        }
+
+        .prompt-btn.inject:hover { background: #2ea043; }
+
+        /* New Acknowledge button - prominent green */
+        .prompt-btn.acknowledge {
+            background: linear-gradient(135deg, var(--accent-green), #2ea043);
+            border-color: var(--accent-green);
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(63, 185, 80, 0.3);
+        }
+
+        .prompt-btn.acknowledge:hover {
+            background: linear-gradient(135deg, #2ea043, #238636);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(63, 185, 80, 0.4);
+        }
+
+        .prompt-btn.cancel {
+            background: var(--bg-primary);
+            color: var(--text-secondary);
+        }
+
+        /* Token estimate badge */
+        .token-estimate {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-left: 8px;
+            padding: 2px 6px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .prompt-btn.cancel:hover { background: var(--bg-tertiary); }
+
+        /* DUAL-PANE PROMPT EDITOR STYLES */
+        .prompt-editor-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .prompt-editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .prompt-editor-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .prompt-editor-title h3 {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .prompt-editor-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .download-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 12px;
+            font-size: 11px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .download-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .download-btn svg {
+            width: 12px;
+            height: 12px;
+        }
+
+        /* Dual-pane layout */
+        .prompt-dual-pane {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            padding: 16px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .prompt-pane {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .prompt-pane-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .prompt-pane-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .prompt-char-count {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .prompt-char-count.warning {
+            color: var(--accent-yellow);
+        }
+
+        .prompt-char-count.danger {
+            color: var(--accent-red);
+        }
+
+        .prompt-pane-content {
+            flex: 1;
+            padding: 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .prompt-pane-textarea {
+            flex: 1;
+            width: 100%;
+            padding: 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.6;
+            background: var(--bg-primary);
+            border: none;
+            color: var(--text-primary);
+            resize: none;
+        }
+
+        .prompt-pane-textarea:focus {
+            outline: none;
+            box-shadow: inset 0 0 0 2px rgba(139, 92, 246, 0.3);
+        }
+
+        /* Prompt editor footer */
+        .prompt-editor-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+        }
+
+        .prompt-footer-left {
+            display: flex;
+            gap: 8px;
+        }
+
+        .prompt-footer-right {
+            display: flex;
+            gap: 8px;
+        }
+
+        .prompt-stats {
+            display: flex;
+            gap: 16px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .prompt-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .prompt-stat-value {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Reset button */
+        .prompt-btn.reset {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .prompt-btn.reset:hover {
+            background: var(--bg-primary);
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+        }
+
+        /* Disabled state for buttons */
+        .prompt-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .prompt-btn:disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* ACTIVITY PANEL STYLES */
+        .activity-panel {
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .activity-panel-header {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .activity-panel-title {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .activity-live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        .activity-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 16px;
+        }
+
+        .activity-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        /* Token Usage Section */
+        .activity-section {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .activity-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .token-usage-bar {
+            height: 8px;
+            background: var(--bg-primary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .token-usage-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            transition: width 0.3s ease;
+        }
+
+        .token-usage-fill.warning {
+            background: linear-gradient(90deg, var(--accent-yellow), var(--accent-orange));
+        }
+
+        .token-usage-fill.danger {
+            background: linear-gradient(90deg, var(--accent-orange), var(--accent-red));
+        }
+
+        .token-usage-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .token-usage-value {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Current Action */
+        .current-action {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+        }
+
+        .action-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--accent-blue);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .action-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .action-tool-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent-blue);
+            margin-bottom: 2px;
+        }
+
+        .action-input {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Tool Calls List */
+        .tool-calls-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 16px;
+        }
+
+        .tool-call-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .tool-call-item:last-child {
+            border-bottom: none;
+        }
+
+        .tool-call-timestamp {
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+
+        .tool-call-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .tool-call-name {
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .tool-call-name.read { color: var(--accent-cyan); }
+        .tool-call-name.write { color: var(--accent-purple); }
+        .tool-call-name.edit { color: var(--accent-purple); }
+        .tool-call-name.bash { color: var(--accent-yellow); }
+        .tool-call-name.grep { color: var(--accent-blue); }
+        .tool-call-name.glob { color: var(--accent-blue); }
+
+        .tool-call-detail {
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tool-call-status {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        .tool-call-status.success {
+            background: rgba(63, 185, 80, 0.2);
+            color: var(--accent-green);
+        }
+
+        .tool-call-status.error {
+            background: rgba(248, 81, 73, 0.2);
+            color: var(--accent-red);
+        }
+
+        /* Agent Summary */
+        .agent-summary {
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+        }
+
+        .agent-summary-text {
+            font-size: 12px;
+            font-style: italic;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* No activity message */
+        .activity-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .activity-empty-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .activity-empty-text {
+            font-size: 13px;
+        }
+
+        .prompt-edited-badge {
+            font-size: 10px;
+            color: var(--accent-purple);
+            background: rgba(139, 92, 246, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+
+        .artifact-viewer-tabs {
+            display: flex;
+            gap: 2px;
+            padding: 8px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .artifact-tab {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 6px 6px 0 0;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .artifact-tab:hover { background: var(--border); }
+        .artifact-tab.active { background: var(--bg-primary); border-bottom-color: var(--bg-primary); color: var(--text-primary); }
+
+        .artifact-viewer-content {
+            flex: 1;
+            overflow: auto;
+            padding: 24px;
+            background: var(--bg-primary);
+        }
+
+        /* Markdown Rendered Content */
+        .markdown-body {
+            color: var(--text-primary);
+            font-size: 14px;
+            line-height: 1.7;
+            max-width: 900px;
+        }
+
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        .markdown-body h1 { font-size: 24px; }
+        .markdown-body h2 { font-size: 20px; }
+        .markdown-body h3 { font-size: 16px; }
+
+        .markdown-body p { margin-bottom: 16px; }
+
+        .markdown-body code {
+            background: var(--bg-tertiary);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 13px;
+        }
+
+        .markdown-body pre {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 16px;
+        }
+
+        .markdown-body pre code {
+            background: none;
+            padding: 0;
+        }
+
+        .markdown-body ul, .markdown-body ol {
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .markdown-body li { margin-bottom: 4px; }
+
+        .markdown-body blockquote {
+            border-left: 4px solid var(--accent-purple);
+            padding-left: 16px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .markdown-body table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        .markdown-body th, .markdown-body td {
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .markdown-body th { background: var(--bg-tertiary); }
+
+        /* JSON Viewer */
+        .json-viewer {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+
+        .json-key { color: var(--accent-cyan); }
+        .json-string { color: var(--accent-green); }
+        .json-number { color: var(--accent-orange); }
+        .json-boolean { color: var(--accent-purple); }
+        .json-null { color: var(--text-muted); }
+
+        /* Prompt Display */
+        .prompt-display {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .prompt-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .prompt-content {
+            font-size: 14px;
+            white-space: pre-wrap;
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* Test Results */
+        .test-results {
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .test-summary {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .test-stat {
+            padding: 12px 16px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .test-stat.passed { border-left: 3px solid var(--accent-green); }
+        .test-stat.failed { border-left: 3px solid var(--accent-red); }
+        .test-stat.skipped { border-left: 3px solid var(--accent-yellow); }
+
+        .test-stat-value { font-size: 24px; font-weight: 600; }
+        .test-stat-label { font-size: 11px; color: var(--text-muted); }
+
+        /* Event Items */
+        .event-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+        }
+
+        .event-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .event-icon { font-size: 14px; }
+
+        .event-type {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        .event-source {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .event-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+
+        .event-content {
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            padding: 10px 12px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: var(--text-secondary);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 8px 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .stat-item { display: flex; align-items: center; gap: 6px; }
+        .stat-value { color: var(--text-primary); font-weight: 500; }
+
+        /* ENHANCED STATS DASHBOARD */
+        .stats-dashboard {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: stretch;
+            gap: 16px;
+        }
+
+        .stats-card {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            min-width: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .stats-card-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stats-card-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .stats-card-value.duration { color: var(--accent-blue); }
+        .stats-card-value.tokens { color: var(--accent-purple); }
+        .stats-card-value.cost { color: var(--accent-green); }
+        .stats-card-value.success { color: var(--accent-green); }
+        .stats-card-value.failed { color: var(--accent-red); }
+
+        .stats-card-detail {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
+        /* Phase Progress Pipeline */
+        .phase-pipeline {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .phase-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .phase-dot.sleeping { background: var(--bg-tertiary); border-color: var(--border); }
+        .phase-dot.ready { background: var(--accent-green); border-color: var(--accent-green); box-shadow: 0 0 6px rgba(63, 185, 80, 0.5); }
+        .phase-dot.under_review { background: var(--accent-orange); border-color: var(--accent-orange); }
+        .phase-dot.processing { background: var(--accent-blue); border-color: var(--accent-blue); animation: pulse 1.5s infinite; }
+        .phase-dot.complete { background: var(--accent-green); border-color: var(--accent-green); }
+        .phase-dot.failed { background: var(--accent-red); border-color: var(--accent-red); }
+
+        .phase-connector {
+            width: 16px;
+            height: 2px;
+            background: var(--border);
+        }
+
+        .phase-connector.active {
+            background: var(--accent-green);
+        }
+
+        .phase-label {
+            font-size: 8px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            text-align: center;
+        }
+
+        .phase-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Transaction stats row */
+        .transaction-stats {
+            display: flex;
+            gap: 16px;
+            padding: 8px 24px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .transaction-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .transaction-stat-value {
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Empty State */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 40px;
+        }
+
+        .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+        .empty-title { font-size: 18px; color: var(--text-secondary); margin-bottom: 8px; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        @media (max-width: 900px) {
+            .main { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">cf</div>
+            <div class="connection-status">
+                <div class="status-dot" id="connectionDot"></div>
+                <span id="connectionText">Connecting...</span>
+            </div>
+        </div>
+        <div class="header-right">
+            <button class="btn" onclick="reconnect()">Reconnect</button>
+        </div>
+    </header>
+
+    <main class="main">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-title-row">
+                    <span class="sidebar-title">Jobs</span>
+                    <span class="agent-count" id="agentCount">0</span>
+                </div>
+                <div class="filter-bar" id="filterBar">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn running" data-filter="running">Running</button>
+                    <button class="filter-btn succeeded" data-filter="succeeded">Done</button>
+                    <button class="filter-btn failed" data-filter="failed">Failed</button>
+                    <button class="filter-btn cancelled" data-filter="cancelled">Cancelled</button>
+                </div>
+                <div class="sort-row">
+                    <select id="sortSelect" onchange="applyFilters()">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="status">By Status</option>
+                    </select>
+                    <select id="typeSelect" onchange="applyFilters()">
+                        <option value="all">All Types</option>
+                        <option value="autonomous_build">Builds</option>
+                        <option value="testing">Tests</option>
+                    </select>
+                </div>
+            </div>
+            <div class="agent-list" id="agentList"></div>
+        </aside>
+
+        <section class="content">
+            <div class="context-header">
+                <div class="context-title" id="contextAgentName">Select a job</div>
+            </div>
+            <div class="context-body" id="eventList">
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon" style="font-size:32px;opacity:0.3;">[  ]</div>
+                    <div class="empty-title">Select a job to view details</div>
+                </div>
+            </div>
+            <!-- Enhanced Stats Dashboard -->
+            <div class="stats-dashboard" id="statsDashboard">
+                <!-- Duration Card -->
+                <div class="stats-card">
+                    <span class="stats-card-label">Duration</span>
+                    <span class="stats-card-value duration" id="jobDuration">--</span>
+                    <span class="stats-card-detail" id="jobDurationDetail">Not started</span>
+                </div>
+
+                <!-- Tokens Card -->
+                <div class="stats-card">
+                    <span class="stats-card-label">Total Tokens</span>
+                    <span class="stats-card-value tokens" id="totalTokens">0</span>
+                    <span class="stats-card-detail" id="tokenBreakdown">Input: 0 | Output: 0</span>
+                </div>
+
+                <!-- Cost Estimate Card -->
+                <div class="stats-card">
+                    <span class="stats-card-label">Est. Cost</span>
+                    <span class="stats-card-value cost" id="estCost">$0.00</span>
+                    <span class="stats-card-detail" id="costModel">Claude Sonnet</span>
+                </div>
+
+                <!-- Success Rate Card -->
+                <div class="stats-card">
+                    <span class="stats-card-label">Success Rate</span>
+                    <span class="stats-card-value success" id="successRateValue">--%</span>
+                    <span class="stats-card-detail" id="successDetail">0 of 0 jobs</span>
+                </div>
+
+                <!-- Phase Progress Pipeline -->
+                <div class="phase-pipeline" id="phasePipeline">
+                    <div class="phase-step">
+                        <div class="phase-dot sleeping" id="phaseDot-Scout" title="Scout"></div>
+                        <span class="phase-label">Scout</span>
+                    </div>
+                    <div class="phase-connector" id="phaseConn-1"></div>
+                    <div class="phase-step">
+                        <div class="phase-dot sleeping" id="phaseDot-Architect" title="Architect"></div>
+                        <span class="phase-label">Arch</span>
+                    </div>
+                    <div class="phase-connector" id="phaseConn-2"></div>
+                    <div class="phase-step">
+                        <div class="phase-dot sleeping" id="phaseDot-Builder" title="Builder"></div>
+                        <span class="phase-label">Build</span>
+                    </div>
+                    <div class="phase-connector" id="phaseConn-3"></div>
+                    <div class="phase-step">
+                        <div class="phase-dot sleeping" id="phaseDot-Test" title="Test"></div>
+                        <span class="phase-label">Test</span>
+                    </div>
+                    <div class="phase-connector" id="phaseConn-4"></div>
+                    <div class="phase-step">
+                        <div class="phase-dot sleeping" id="phaseDot-Deploy" title="Deploy"></div>
+                        <span class="phase-label">Deploy</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Legacy stats bar for global stats -->
+            <div class="stats-bar" style="display: none;">
+                <div class="stat-item">
+                    <span>Jobs:</span>
+                    <span class="stat-value" id="jobCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Running:</span>
+                    <span class="stat-value" id="runningCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Success Rate:</span>
+                    <span class="stat-value" id="successRate">--%</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Activity Panel (third column) -->
+        <aside class="activity-panel" id="activityPanel" style="display: none;">
+            <div class="activity-panel-header">
+                <div class="activity-panel-title">
+                    <span class="activity-live-dot" id="activityLiveDot"></span>
+                    <span>Agent Activity</span>
+                </div>
+                <button class="activity-close-btn" onclick="toggleActivityPanel()" title="Close panel">&times;</button>
+            </div>
+
+            <!-- Token Usage Section -->
+            <div class="activity-section">
+                <div class="activity-section-title">Token Usage</div>
+                <div class="token-usage-bar">
+                    <div class="token-usage-fill" id="tokenUsageFill" style="width: 0%"></div>
+                </div>
+                <div class="token-usage-stats">
+                    <span>Input: <span class="token-usage-value" id="inputTokensUsed">0</span></span>
+                    <span>Output: <span class="token-usage-value" id="outputTokensUsed">0</span></span>
+                    <span><span class="token-usage-value" id="contextPercentUsed">0%</span> of context</span>
+                </div>
+            </div>
+
+            <!-- Current Action Section -->
+            <div class="activity-section">
+                <div class="activity-section-title">Current Action</div>
+                <div class="current-action" id="currentAction">
+                    <div class="activity-empty">
+                        <div class="activity-empty-text">No active action</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tool Calls List -->
+            <div class="tool-calls-list" id="toolCallsList">
+                <div class="activity-empty">
+                    <div class="activity-empty-icon">&#9881;</div>
+                    <div class="activity-empty-text">Tool calls will appear here during execution</div>
+                </div>
+            </div>
+
+            <!-- Agent Summary Footer -->
+            <div class="agent-summary" id="agentSummary">
+                <div class="activity-section-title">Agent Thinking</div>
+                <div class="agent-summary-text" id="agentSummaryText">
+                    Waiting for agent activity...
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Artifact Viewer Modal -->
+    <div class="artifact-viewer" id="artifactViewer">
+        <div class="artifact-viewer-header">
+            <div class="artifact-viewer-title">
+                <span style="color:var(--accent-cyan)">></span>
+                <span id="artifactViewerTitle">Loading...</span>
+            </div>
+            <div class="artifact-viewer-actions">
+                <button class="artifact-edit-btn" id="artifactEditBtn" onclick="toggleEditMode()">Edit</button>
+                <button class="artifact-edit-btn save" id="artifactSaveBtn" onclick="saveArtifact()" style="display:none;">Save</button>
+                <button class="artifact-edit-btn cancel" id="artifactCancelBtn" onclick="cancelEdit()" style="display:none;">Cancel</button>
+                <button class="artifact-viewer-close" onclick="closeArtifactViewer()">Close (Esc)</button>
+            </div>
+        </div>
+        <div class="artifact-viewer-tabs" id="artifactViewerTabs"></div>
+        <div class="artifact-viewer-content" id="artifactViewerContent">
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            sseEndpoint: '/events',
+            statusEndpoint: '/status',
+            reconnectDelay: 3000,
+        };
+
+        const PHASES = ['Scout', 'Architect', 'Builder', 'Test', 'Deploy'];
+
+        let state = {
+            connected: false,
+            selectedJob: null,
+            selectedPhase: null,
+            jobs: [],
+            rawJobs: [],
+            filter: 'all',
+            sort: 'newest',
+            typeFilter: 'all',
+            eventSource: null,
+            artifactContent: {},
+            // Edit mode state
+            editMode: false,
+            currentArtifactPath: null,
+            currentArtifactContent: null,
+            originalArtifactContent: null,
+            pendingApprovals: [],
+            // Auth token for destructive operations
+            authToken: null,
+            // Activity panel state
+            activityPanelVisible: false,
+            activityEventSource: null,
+            activityData: {
+                inputTokens: 0,
+                outputTokens: 0,
+                contextPercent: 0,
+                currentAction: null,
+                toolCalls: [],
+                summary: '',
+            },
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupFilterButtons();
+            setupJobListClicks();
+            await fetchAuthToken();  // Get auth token first
+            connect();
+            fetchSnapshot();
+            fetchPendingApprovals();
+            // Refresh approvals periodically
+            setInterval(fetchPendingApprovals, 5000);
+        });
+
+        async function fetchAuthToken() {
+            // Auth token must be fetched directly from daemon (localhost only)
+            // The proxy intentionally does NOT forward /auth-token for security
+            console.log('[Auth] Fetching auth token from daemon...');
+            try {
+                const res = await fetch('http://127.0.0.1:8420/auth-token');
+                console.log('[Auth] Response status:', res.status);
+                if (res.ok) {
+                    const data = await res.json();
+                    state.authToken = data.token;
+                    console.log('[Auth] Token acquired:', state.authToken?.slice(0, 10) + '...');
+                    return;
+                }
+                console.warn('[Auth] Non-OK response:', res.status);
+            } catch (err) {
+                console.warn('[Auth] Fetch failed (expected if not localhost):', err.message);
+            }
+            // No token = read-only mode (can view but not modify)
+            console.log('[Auth] Token not available - dashboard is read-only');
+        }
+
+        function setupFilterButtons() {
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    state.filter = btn.dataset.filter;
+                    applyFilters();
+                });
+            });
+        }
+
+        // Event delegation for job card clicks
+        function setupJobListClicks() {
+            const container = document.getElementById('agentList');
+            container.addEventListener('click', (e) => {
+                const card = e.target.closest('.agent-card');
+                if (card && card.dataset.jobId) {
+                    selectJob(card.dataset.jobId);
+                }
+            });
+        }
+
+        async function fetchSnapshot() {
+            try {
+                const res = await fetch(CONFIG.statusEndpoint);
+                if (!res.ok) return;
+                const payload = await res.json();
+                handleSnapshot(payload);
+            } catch (err) {
+                console.error('Could not fetch /status', err);
+            }
+        }
+
+        function connect() {
+            if (state.eventSource) state.eventSource.close();
+
+            try {
+                state.eventSource = new EventSource(CONFIG.sseEndpoint);
+
+                state.eventSource.onopen = () => {
+                    state.connected = true;
+                    updateConnectionStatus();
+                };
+
+                state.eventSource.onmessage = (e) => {
+                    try {
+                        handleSnapshot(JSON.parse(e.data));
+                    } catch (err) {
+                        console.error('Parse error:', err);
+                    }
+                };
+
+                state.eventSource.onerror = () => {
+                    state.connected = false;
+                    updateConnectionStatus();
+                    state.eventSource.close();
+                    setTimeout(connect, CONFIG.reconnectDelay);
+                };
+            } catch (err) {
+                console.error('Connection error:', err);
+                setTimeout(connect, CONFIG.reconnectDelay);
+            }
+        }
+
+        function handleSnapshot(snapshot) {
+            state.rawJobs = (snapshot.jobs || []).map(job => ({
+                ...job,
+                created: new Date(job.created_at),
+                phase: job.latest_phase?.phase || null,
+                phaseStatus: job.latest_phase?.status || null,
+            }));
+            applyFilters();
+            updateStats();
+        }
+
+        function applyFilters() {
+            let jobs = [...state.rawJobs];
+
+            // Filter by status
+            if (state.filter !== 'all') {
+                jobs = jobs.filter(j => j.status === state.filter);
+            }
+
+            // Filter by type
+            state.typeFilter = document.getElementById('typeSelect').value;
+            if (state.typeFilter !== 'all') {
+                jobs = jobs.filter(j => j.type === state.typeFilter);
+            }
+
+            // Sort
+            state.sort = document.getElementById('sortSelect').value;
+            if (state.sort === 'newest') {
+                jobs.sort((a, b) => b.created - a.created);
+            } else if (state.sort === 'oldest') {
+                jobs.sort((a, b) => a.created - b.created);
+            } else if (state.sort === 'status') {
+                const order = { running: 0, queued: 1, failed: 2, succeeded: 3, cancelled: 4 };
+                jobs.sort((a, b) => (order[a.status] || 5) - (order[b.status] || 5));
+            }
+
+            state.jobs = jobs;
+            renderJobList();
+
+            // Update selected job view if still in list
+            if (state.selectedJob) {
+                const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                if (job) renderJobDetail(job);
+            }
+        }
+
+        function renderJobList() {
+            const container = document.getElementById('agentList');
+            document.getElementById('agentCount').textContent = state.jobs.length;
+
+            if (!state.jobs.length) {
+                container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">No jobs match filters</div>`;
+                return;
+            }
+
+            // Group running jobs at top
+            const running = state.jobs.filter(j => j.status === 'running');
+            const others = state.jobs.filter(j => j.status !== 'running');
+
+            let html = '';
+
+            if (running.length && state.filter === 'all') {
+                html += `<div class="group-header">Running Now (${running.length})</div>`;
+                html += running.map(j => renderJobCard(j)).join('');
+                if (others.length) {
+                    html += `<div class="group-header">History</div>`;
+                }
+            }
+
+            html += (state.filter === 'all' ? others : state.jobs.filter(j => state.filter === 'all' || j.status === state.filter))
+                .map(j => renderJobCard(j)).join('');
+
+            container.innerHTML = html;
+        }
+
+        function renderJobCard(job) {
+            const selected = state.selectedJob === job.id ? 'selected' : '';
+
+            // Check if this job has pending approval
+            const hasPendingApproval = state.pendingApprovals.some(
+                a => a.pipeline_id === job.id ||
+                     (job.metadata?.working_directory && a.working_directory === job.metadata.working_directory)
+            );
+
+            const statusIcon = {
+                running: '<span style="color:var(--accent-green)">●</span>',
+                succeeded: '<span style="color:var(--accent-blue)">●</span>',
+                failed: '<span style="color:var(--accent-red)">●</span>',
+                cancelled: '<span style="color:var(--accent-yellow)">●</span>',
+                timed_out: '<span style="color:var(--accent-orange)">●</span>',
+                waiting_approval: '<span style="color:var(--accent-orange)">⏸</span>',
+                paused: '<span style="color:var(--accent-orange)">⏸</span>',
+                queued: '<span style="color:var(--text-muted)">○</span>'
+            }[job.status] || (hasPendingApproval ? '<span style="color:var(--accent-orange)">⏸</span>' : '○');
+
+            // Use project name from metadata if available
+            const projectName = job.metadata?.project_name || (job.type === 'autonomous_build' ? 'Build' : job.type);
+            const displayName = formatProjectName(projectName);
+
+            const phaseHtml = renderPhaseProgress(job);
+            const timeAgo = formatTimeAgo(job.created);
+
+            // Add waiting_approval class if has pending approval
+            const cardClass = hasPendingApproval ? 'waiting_approval' : job.status;
+
+            return `
+                <div class="agent-card ${cardClass} ${selected}" data-job-id="${job.id}">
+                    <div class="agent-top-row">
+                        <div class="agent-name">
+                            ${statusIcon}
+                            <span>${displayName}</span>
+                            ${hasPendingApproval ? '<span style="font-size:10px;color:var(--accent-orange);margin-left:4px;">AWAITING</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="agent-meta">
+                        <span>${job.id.slice(0, 8)}</span>
+                        <span>${timeAgo}</span>
+                        ${job.phase ? `<span>@ ${job.phase}</span>` : ''}
+                    </div>
+                    ${phaseHtml}
+                </div>
+            `;
+        }
+
+        function formatProjectName(name) {
+            if (!name) return 'Build';
+            // Convert kebab-case or snake_case to Title Case
+            return name
+                .replace(/[-_]/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function findArtifactPath(artifacts, filename) {
+            // Search through all phase artifacts to find the path for a given filename
+            if (!artifacts) return null;
+            for (const phaseName of Object.keys(artifacts)) {
+                if (phaseName === '_session') continue;
+                const phase = artifacts[phaseName];
+                if (phase && phase.outputs) {
+                    for (const [fname, info] of Object.entries(phase.outputs)) {
+                        if (fname === filename && info.path) {
+                            return info.path;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        function renderPhaseProgress(job) {
+            if (job.type !== 'autonomous_build') return '';
+
+            const currentPhase = job.phase;
+            const currentIdx = PHASES.indexOf(currentPhase);
+            const failed = job.status === 'failed';
+            const done = job.status === 'succeeded';
+
+            return `
+                <div class="phase-pipeline">
+                    ${PHASES.map((p, i) => {
+                        let cls = '';
+                        if (done || i < currentIdx) cls = 'completed';
+                        else if (i === currentIdx) cls = failed ? 'failed' : 'active';
+                        return `<div class="phase-step ${cls}" title="${p}"></div>`;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        async function selectJob(jobId) {
+            state.selectedJob = jobId;
+            state.selectedPhase = null;  // Reset phase selection
+            const job = state.rawJobs.find(j => j.id === jobId);
+            if (job) {
+                // Load phase prompts for this job (async)
+                await loadPhasePromptsForJob(jobId);
+                renderJobDetail(job);
+            }
+            renderJobList();
+        }
+
+        function renderJobDetail(job) {
+            const container = document.getElementById('eventList');
+
+            // Extract task/prompt info from metadata
+            const projectName = job.metadata?.project_name || 'Unknown Project';
+            const displayName = formatProjectName(projectName);
+            const buildType = job.metadata?.build_type || job.metadata?.mode || 'autonomous';
+            const workingDir = job.metadata?.working_directory || '';
+
+            // Update sidebar header with project name
+            document.getElementById('contextAgentName').textContent = displayName;
+
+            const duration = job.duration_seconds ? formatDuration(job.duration_seconds) : '--';
+            const agents = job.agents || { active_count: 0, total_spawned: 0 };
+
+            // Check for pending approval
+            const pendingApproval = getJobPendingApproval(job);
+            const approvalBannerHtml = pendingApproval ? renderApprovalBanner(pendingApproval) : '';
+
+            // Phase tabs (clickable)
+            const phaseTabsHtml = job.type === 'autonomous_build' ? renderPhaseTabs(job) : '';
+
+            // Phase detail panel (if phase selected)
+            const phaseDetailHtml = state.selectedPhase ? renderPhaseDetail(job, state.selectedPhase) : '';
+
+            // Logs filtered by selected phase
+            const logs = job.recent_logs || [];
+            const filteredLogs = state.selectedPhase
+                ? logs.filter(l => l.phase === state.selectedPhase || !l.phase)
+                : logs;
+
+            const logsHtml = filteredLogs.length ? filteredLogs.map(log => `
+                <div class="event-item">
+                    <div class="event-header">
+                        <span class="event-icon" style="color:${log.level === 'ERROR' ? 'var(--accent-red)' : 'var(--text-muted)'}">></span>
+                        <span class="event-type">${log.phase || 'log'}</span>
+                        <span class="event-source">${log.source || 'daemon'}</span>
+                        <span class="event-time">${formatTime(log.timestamp)}</span>
+                    </div>
+                    <div class="event-content">${escapeHtml(log.message)}</div>
+                </div>
+            `).join('') : '<div style="color: var(--text-muted); text-align: center; padding: 20px;">No logs yet</div>';
+
+            // Build success result info
+            const resultInfo = job.result && job.status === 'succeeded' ? `
+                <div class="prompt-display" style="border-left: 3px solid var(--accent-green);">
+                    <div class="prompt-label">Build Result</div>
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                        ${job.result.phases_completed ? `<div><strong>Phases:</strong> ${job.result.phases_completed.join(' > ')}</div>` : ''}
+                        ${job.result.test_iterations !== undefined ? `<div><strong>Test Iterations:</strong> ${job.result.test_iterations}</div>` : ''}
+                        ${job.result.duration_seconds ? `<div><strong>Build Time:</strong> ${formatDuration(job.result.duration_seconds)}</div>` : ''}
+                    </div>
+                </div>
+            ` : '';
+
+            // Get phase prompts for this job
+            const phasePrompts = state.phasePrompts[job.id] || [];
+            const promptContent = renderPhasePromptsSection(job.id, phasePrompts, state.selectedPhase);
+            // Show phase prompts section for autonomous_build jobs if there's content or a warning
+            const phasePromptsHtml = (job.type === 'autonomous_build' && (promptContent || state.phasePromptsWarning))
+                ? `
+                    <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+                        ${state.selectedPhase ? `${state.selectedPhase} Prompt` : 'Phase Prompts'}
+                    </h3>
+                    ${promptContent || renderPhasePromptsSection(job.id, [], state.selectedPhase)}
+                `
+                : '';
+
+            container.innerHTML = `
+                ${approvalBannerHtml}
+                <div class="job-detail">
+                    <div class="job-detail-header">
+                        <div>
+                            <div class="job-detail-title">${displayName}</div>
+                            <div class="job-detail-id">${job.id.slice(0, 8)} · ${buildType}</div>
+                        </div>
+                        <div class="agent-status ${job.status}" style="font-size: 12px; padding: 4px 10px;">${job.status.toUpperCase()}</div>
+                    </div>
+
+                    <div class="job-detail-meta">
+                        <div class="meta-item">
+                            <div class="meta-label">Created</div>
+                            <div class="meta-value">${formatDateTime(job.created_at)}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label">Duration</div>
+                            <div class="meta-value">${duration}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label">Current Phase</div>
+                            <div class="meta-value">${job.phase || '--'}</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-label">Agents</div>
+                            <div class="meta-value">${agents && agents.total_spawned ? `${agents.active_count} active / ${agents.total_spawned} spawned` : '--'}</div>
+                        </div>
+                    </div>
+
+                    ${resultInfo}
+
+                    ${job.error ? `<div class="event-content" style="border-left: 3px solid var(--accent-red); color: var(--accent-red); margin-bottom: 16px;">${escapeHtml(job.error)}</div>` : ''}
+                </div>
+
+                ${phaseTabsHtml ? `
+                    <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">Build Phases</h3>
+                    ${phaseTabsHtml}
+                    ${phaseDetailHtml}
+                ` : ''}
+
+                ${phasePromptsHtml}
+
+                <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+                    ${state.selectedPhase ? `${state.selectedPhase} Logs` : 'Recent Logs'}
+                </h3>
+                ${logsHtml}
+            `;
+
+            // Setup phase tab click handlers
+            setupPhaseTabClicks();
+        }
+
+        function renderPhaseTabs(job) {
+            const currentIdx = PHASES.indexOf(job.phase);
+            const done = job.status === 'succeeded';
+            const failed = job.status === 'failed';
+            const artifacts = job.phase_artifacts || {};
+
+            return `
+                <div class="phase-tabs">
+                    ${PHASES.map((p, i) => {
+                        let cls = '';
+                        const hasArtifacts = artifacts[p] && Object.keys(artifacts[p].outputs || {}).length > 0;
+
+                        if (done || i < currentIdx) cls = 'completed';
+                        else if (i === currentIdx) cls = failed ? 'failed' : 'current';
+                        else cls = 'pending';
+
+                        if (state.selectedPhase === p) cls += ' active';
+
+                        return `
+                            <div class="phase-tab ${cls}" data-phase="${p}">
+                                <span>${p}</span>
+                                ${hasArtifacts ? '<span style="color:var(--accent-cyan);font-size:10px;">[files]</span>' : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function renderPhaseDetail(job, phaseName) {
+            const artifacts = job.phase_artifacts || {};
+            const phaseArtifacts = artifacts[phaseName] || {};
+            const outputs = phaseArtifacts.outputs || {};
+
+            // Get phase event data if available
+            const phaseEvents = job.all_phases || [];
+            const phaseEvent = phaseEvents.find(e => e && e.phase === phaseName);
+
+            const outputFiles = Object.keys(outputs);
+
+            // Define what files each phase should have
+            const PHASE_FILE_MAP = {
+                Scout: { outputs: ['scout-report.md', 'scout_report.json'] },
+                Architect: { inputs: ['scout_report.json'], outputs: ['architecture.md', 'architecture.json'] },
+                Builder: { inputs: ['architecture.json'] },
+                Test: { outputs: ['test-report.md'] },
+            };
+
+            const phaseFileInfo = PHASE_FILE_MAP[phaseName] || {};
+
+            return `
+                <div class="phase-detail">
+                    <div class="phase-detail-header">
+                        <div class="phase-detail-title">
+                            <span style="color:var(--accent-purple)">></span>
+                            ${phaseName} Phase
+                        </div>
+                        ${phaseEvent ? `<span class="agent-status ${phaseEvent.status === 'completed' ? 'succeeded' : phaseEvent.status}">${phaseEvent.status}</span>` : ''}
+                    </div>
+
+                    ${phaseEvent ? `
+                        <div class="phase-stats">
+                            ${phaseEvent.duration_seconds ? `
+                                <div class="phase-stat">
+                                    <div class="phase-stat-label">Duration</div>
+                                    <div class="phase-stat-value">${Math.round(phaseEvent.duration_seconds)}s</div>
+                                </div>
+                            ` : ''}
+                            ${phaseEvent.tokens_used ? `
+                                <div class="phase-stat">
+                                    <div class="phase-stat-label">Tokens</div>
+                                    <div class="phase-stat-value">${formatNumber(phaseEvent.tokens_used)}</div>
+                                </div>
+                            ` : ''}
+                            ${phaseEvent.context_percent ? `
+                                <div class="phase-stat">
+                                    <div class="phase-stat-label">Context Used</div>
+                                    <div class="phase-stat-value">${Math.round(phaseEvent.context_percent)}%</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
+
+                    ${phaseFileInfo.inputs ? `
+                        <div class="artifacts-section">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">Inputs</div>
+                            <div class="artifacts-grid">
+                                ${phaseFileInfo.inputs.map(fname => {
+                                    // Try to find the path from artifacts (it might be an output of a previous phase)
+                                    const inputPath = findArtifactPath(artifacts, fname);
+                                    return `
+                                        <div class="artifact-card ${inputPath ? '' : 'disabled'}" data-artifact="${fname}" data-path="${inputPath || ''}" data-job="${job.id}">
+                                            <div class="artifact-name">
+                                                <span class="artifact-icon">></span>
+                                                ${fname}
+                                            </div>
+                                            <div class="artifact-meta">${inputPath ? 'Click to view' : 'Not found'}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    ${outputFiles.length ? `
+                        <div class="artifacts-section">
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">Outputs</div>
+                            <div class="artifacts-grid">
+                                ${outputFiles.map(fname => {
+                                    const info = outputs[fname];
+                                    return `
+                                        <div class="artifact-card" data-artifact="${fname}" data-path="${info.path}" data-job="${job.id}">
+                                            <div class="artifact-name">
+                                                <span class="artifact-icon">></span>
+                                                ${fname}
+                                            </div>
+                                            <div class="artifact-meta">${formatFileSize(info.size)} - ${formatTime(info.modified)}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : `
+                        <div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 16px;">
+                            No output files yet for this phase
+                        </div>
+                    `}
+
+                    <div id="artifactPreview"></div>
+                </div>
+            `;
+        }
+
+        function setupPhaseTabClicks() {
+            document.querySelectorAll('.phase-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const phase = tab.dataset.phase;
+                    state.selectedPhase = state.selectedPhase === phase ? null : phase;
+                    const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                    if (job) renderJobDetail(job);
+                });
+            });
+
+            // Artifact card clicks
+            document.querySelectorAll('.artifact-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const path = card.dataset.path;
+                    const fname = card.dataset.artifact;
+                    if (path) {
+                        // Could fetch file content via API if available
+                        showArtifactPreview(fname, path);
+                    }
+                });
+            });
+        }
+
+        function showArtifactPreview(fname, path) {
+            openArtifactViewer(fname, path);
+        }
+
+        // ===== Artifact Viewer =====
+
+        async function openArtifactViewer(fname, path) {
+            const viewer = document.getElementById('artifactViewer');
+            const title = document.getElementById('artifactViewerTitle');
+            const content = document.getElementById('artifactViewerContent');
+            const tabs = document.getElementById('artifactViewerTabs');
+
+            viewer.classList.add('active');
+            title.textContent = fname;
+            content.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Loading...</div>';
+            tabs.innerHTML = '';
+
+            // Reset edit mode state
+            state.editMode = false;
+            state.currentArtifactPath = path;
+            state.currentArtifactContent = null;
+            document.getElementById('artifactEditBtn').style.display = 'inline-block';
+            document.getElementById('artifactSaveBtn').style.display = 'none';
+            document.getElementById('artifactCancelBtn').style.display = 'none';
+            tabs.style.display = 'flex';
+
+            // Escape key to close
+            document.addEventListener('keydown', handleViewerEscape);
+
+            try {
+                const res = await fetch(`/artifact?path=${encodeURIComponent(path)}`, {
+                    headers: { 'X-CF-Auth': state.authToken || '' },
+                });
+                if (!res.ok) {
+                    throw new Error(`Failed to load: ${res.status} ${res.statusText}`);
+                }
+                const data = await res.json();
+
+                // Store content in state for edit mode
+                state.currentArtifactContent = data.content;
+
+                // Render tabs based on content type
+                const isMarkdown = data.content_type === 'text/markdown' || fname.endsWith('.md');
+                const isJson = data.content_type === 'application/json' || fname.endsWith('.json');
+
+                if (isMarkdown) {
+                    tabs.innerHTML = `
+                        <button class="artifact-tab active" data-view="rendered">Rendered</button>
+                        <button class="artifact-tab" data-view="raw">Raw</button>
+                    `;
+                    renderMarkdown(data.content, content);
+                } else if (isJson) {
+                    tabs.innerHTML = `
+                        <button class="artifact-tab active" data-view="formatted">Formatted</button>
+                        <button class="artifact-tab" data-view="raw">Raw</button>
+                    `;
+                    renderJson(data.content, content);
+                } else {
+                    content.innerHTML = `<pre class="json-viewer">${escapeHtml(data.content)}</pre>`;
+                }
+
+                // Tab click handlers
+                tabs.querySelectorAll('.artifact-tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        tabs.querySelectorAll('.artifact-tab').forEach(t => t.classList.remove('active'));
+                        tab.classList.add('active');
+                        const view = tab.dataset.view;
+                        if (view === 'raw') {
+                            content.innerHTML = `<pre class="json-viewer">${escapeHtml(data.content)}</pre>`;
+                        } else if (view === 'rendered' && isMarkdown) {
+                            renderMarkdown(data.content, content);
+                        } else if (view === 'formatted' && isJson) {
+                            renderJson(data.content, content);
+                        }
+                    });
+                });
+
+            } catch (err) {
+                content.innerHTML = `<div style="color: var(--accent-red); padding: 20px;">Error: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function closeArtifactViewer() {
+            const viewer = document.getElementById('artifactViewer');
+            viewer.classList.remove('active');
+            document.removeEventListener('keydown', handleViewerEscape);
+        }
+
+        function handleViewerEscape(e) {
+            if (e.key === 'Escape') closeArtifactViewer();
+        }
+
+        function renderMarkdown(content, container) {
+            if (typeof marked !== 'undefined') {
+                container.innerHTML = `<div class="markdown-body">${marked.parse(content)}</div>`;
+            } else {
+                // Fallback: basic rendering
+                container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
+            }
+        }
+
+        function renderJson(content, container) {
+            try {
+                const obj = JSON.parse(content);
+                const formatted = JSON.stringify(obj, null, 2);
+                container.innerHTML = `<pre class="json-viewer">${syntaxHighlightJson(formatted)}</pre>`;
+            } catch {
+                container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
+            }
+        }
+
+        function syntaxHighlightJson(json) {
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                        match = match.slice(0, -1) + '</span>:';
+                        return `<span class="${cls}">${escapeHtml(match.slice(0, -9))}</span>:`;
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return `<span class="${cls}">${escapeHtml(match)}</span>`;
+            });
+        }
+
+        // ===== Edit Mode Functions =====
+
+        function toggleEditMode() {
+            if (!state.currentArtifactContent) return;
+
+            state.editMode = true;
+            state.originalArtifactContent = state.currentArtifactContent;
+
+            // Update buttons
+            document.getElementById('artifactEditBtn').style.display = 'none';
+            document.getElementById('artifactSaveBtn').style.display = 'inline-block';
+            document.getElementById('artifactCancelBtn').style.display = 'inline-block';
+
+            // Hide tabs during edit
+            document.getElementById('artifactViewerTabs').style.display = 'none';
+
+            // Show editor
+            const content = document.getElementById('artifactViewerContent');
+            content.innerHTML = `
+                <div class="edit-mode-notice">
+                    Editing mode - Changes will be saved to the artifact file. Use Save to persist or Cancel to discard.
+                </div>
+                <textarea class="artifact-editor" id="artifactEditorTextarea">${escapeHtml(state.currentArtifactContent)}</textarea>
+            `;
+        }
+
+        function cancelEdit() {
+            state.editMode = false;
+            state.currentArtifactContent = state.originalArtifactContent;
+
+            // Reset buttons
+            document.getElementById('artifactEditBtn').style.display = 'inline-block';
+            document.getElementById('artifactSaveBtn').style.display = 'none';
+            document.getElementById('artifactCancelBtn').style.display = 'none';
+            document.getElementById('artifactViewerTabs').style.display = 'flex';
+
+            // Re-render original content
+            const fname = document.getElementById('artifactViewerTitle').textContent;
+            renderArtifactContent(fname, state.currentArtifactContent);
+        }
+
+        async function saveArtifact() {
+            if (!state.currentArtifactPath) {
+                alert('No artifact path set');
+                return;
+            }
+
+            const textarea = document.getElementById('artifactEditorTextarea');
+            if (!textarea) {
+                alert('Editor not found');
+                return;
+            }
+
+            const newContent = textarea.value;
+
+            // Show saving state
+            const saveBtn = document.getElementById('artifactSaveBtn');
+            saveBtn.textContent = 'Saving...';
+            saveBtn.disabled = true;
+
+            try {
+                const res = await fetch('/artifact', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        path: state.currentArtifactPath,
+                        content: newContent,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || `Save failed: ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                // Success - update state and exit edit mode
+                state.currentArtifactContent = newContent;
+                state.editMode = false;
+
+                // Reset buttons
+                document.getElementById('artifactEditBtn').style.display = 'inline-block';
+                document.getElementById('artifactSaveBtn').style.display = 'none';
+                document.getElementById('artifactCancelBtn').style.display = 'none';
+                document.getElementById('artifactViewerTabs').style.display = 'flex';
+
+                // Re-render with new content
+                const fname = document.getElementById('artifactViewerTitle').textContent;
+                renderArtifactContent(fname, newContent);
+
+                // Show success message briefly
+                const content = document.getElementById('artifactViewerContent');
+                const successMsg = document.createElement('div');
+                successMsg.className = 'edit-mode-notice';
+                successMsg.style.borderColor = 'var(--accent-green)';
+                successMsg.style.color = 'var(--accent-green)';
+                successMsg.textContent = `Saved successfully (${data.size} bytes)`;
+                content.insertBefore(successMsg, content.firstChild);
+                setTimeout(() => successMsg.remove(), 3000);
+
+            } catch (err) {
+                alert(`Error saving artifact: ${err.message}`);
+                saveBtn.textContent = 'Save';
+                saveBtn.disabled = false;
+            }
+        }
+
+        function renderArtifactContent(fname, content) {
+            const container = document.getElementById('artifactViewerContent');
+            const tabs = document.getElementById('artifactViewerTabs');
+
+            const isMarkdown = fname.endsWith('.md');
+            const isJson = fname.endsWith('.json');
+
+            if (isMarkdown) {
+                tabs.innerHTML = `
+                    <button class="artifact-tab active" data-view="rendered">Rendered</button>
+                    <button class="artifact-tab" data-view="raw">Raw</button>
+                `;
+                renderMarkdown(content, container);
+            } else if (isJson) {
+                tabs.innerHTML = `
+                    <button class="artifact-tab active" data-view="formatted">Formatted</button>
+                    <button class="artifact-tab" data-view="raw">Raw</button>
+                `;
+                renderJson(content, container);
+            } else {
+                container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
+            }
+
+            // Re-setup tab click handlers
+            tabs.querySelectorAll('.artifact-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.querySelectorAll('.artifact-tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const view = tab.dataset.view;
+                    if (view === 'raw') {
+                        container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
+                    } else if (view === 'rendered' && isMarkdown) {
+                        renderMarkdown(content, container);
+                    } else if (view === 'formatted' && isJson) {
+                        renderJson(content, container);
+                    }
+                });
+            });
+        }
+
+        // ===== Approval Functions =====
+
+        async function fetchPendingApprovals() {
+            try {
+                const res = await fetch('/pending-approvals');
+                if (!res.ok) return;
+                const data = await res.json();
+                state.pendingApprovals = data.approvals || [];
+
+                // Refresh job detail if viewing a job with pending approval
+                if (state.selectedJob) {
+                    const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                    if (job) {
+                        const hasApproval = state.pendingApprovals.some(
+                            a => a.pipeline_id === job.id || a.working_directory?.includes(job.id.slice(0, 8))
+                        );
+                        if (hasApproval) {
+                            renderJobDetail(job);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch pending approvals:', err);
+            }
+        }
+
+        function getJobPendingApproval(job) {
+            // Find pending approval for this job
+            return state.pendingApprovals.find(
+                a => a.pipeline_id === job.id ||
+                     (job.metadata?.working_directory && a.working_directory === job.metadata.working_directory)
+            );
+        }
+
+        async function approvePhase(requestId) {
+            try {
+                const res = await fetch('/approve', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        request_id: requestId,
+                        approved_by: 'dashboard_user',
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Approval failed');
+                }
+
+                // Refresh approvals
+                await fetchPendingApprovals();
+
+                // Refresh job view
+                if (state.selectedJob) {
+                    const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                    if (job) renderJobDetail(job);
+                }
+
+            } catch (err) {
+                alert(`Error approving phase: ${err.message}`);
+            }
+        }
+
+        async function denyPhase(requestId) {
+            const reason = prompt('Reason for denial (optional):');
+
+            try {
+                const res = await fetch('/deny', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        request_id: requestId,
+                        denied_by: 'dashboard_user',
+                        reason: reason || undefined,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Denial failed');
+                }
+
+                // Refresh
+                await fetchPendingApprovals();
+
+                if (state.selectedJob) {
+                    const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                    if (job) renderJobDetail(job);
+                }
+
+            } catch (err) {
+                alert(`Error denying phase: ${err.message}`);
+            }
+        }
+
+        function renderApprovalBanner(approval) {
+            return `
+                <div class="approval-banner">
+                    <div class="approval-banner-header">
+                        <div class="approval-banner-title">
+                            <span style="font-size: 16px;">⏸</span>
+                            Waiting for Approval
+                            <span class="approval-banner-phase">${approval.phase}</span>
+                        </div>
+                    </div>
+                    <div class="approval-banner-message">
+                        ${approval.task_summary || `The ${approval.phase} phase is ready to proceed. Review the output files and approve to continue.`}
+                        ${approval.risk_description ? `<br><strong>Risk:</strong> ${approval.risk_description}` : ''}
+                    </div>
+                    <div class="approval-actions">
+                        <button class="approval-btn approve" onclick="approvePhase('${approval.request_id}')">
+                            Approve & Continue
+                        </button>
+                        <button class="approval-btn deny" onclick="denyPhase('${approval.request_id}')">
+                            Deny
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ===== Phase Prompt Functions =====
+
+        // State for phase prompts
+        state.phasePrompts = {};
+        state.editingPrompt = null;
+        state.phasePromptsWarning = null;
+
+        async function fetchPhasePrompts(jobId) {
+            console.log('[PhasePrompts] Fetching for job:', jobId, 'authToken:', state.authToken ? 'present' : 'missing');
+            try {
+                const res = await fetch(`/phase-prompts?job_id=${encodeURIComponent(jobId)}`, {
+                    headers: { 'X-CF-Auth': state.authToken || '' },
+                });
+                console.log('[PhasePrompts] Response status:', res.status);
+                if (!res.ok) {
+                    if (res.status === 401) {
+                        console.warn('[PhasePrompts] Auth required, re-fetching token');
+                        await fetchAuthToken();
+                        // Retry with new token
+                        const retryRes = await fetch(`/phase-prompts?job_id=${encodeURIComponent(jobId)}`, {
+                            headers: { 'X-CF-Auth': state.authToken || '' },
+                        });
+                        if (retryRes.ok) {
+                            const data = await retryRes.json();
+                            state.phasePrompts[jobId] = data.prompts || [];
+                            state.phasePromptsWarning = data.warning || null;
+                            console.log('[PhasePrompts] Retry successful, prompts:', state.phasePrompts[jobId].length);
+                            return state.phasePrompts[jobId];
+                        }
+                    }
+                    console.warn('[PhasePrompts] Failed:', res.status);
+                    state.phasePromptsWarning = `Failed to fetch prompts (${res.status})`;
+                    return [];
+                }
+                const data = await res.json();
+                state.phasePrompts[jobId] = data.prompts || [];
+                state.phasePromptsWarning = data.warning || null;
+                console.log('[PhasePrompts] Success! Prompts:', state.phasePrompts[jobId].length, 'Warning:', state.phasePromptsWarning);
+                return state.phasePrompts[jobId];
+            } catch (err) {
+                console.error('[PhasePrompts] Error:', err);
+                state.phasePromptsWarning = `Error: ${err.message}`;
+                return [];
+            }
+        }
+
+        function renderPhasePromptsSection(jobId, prompts, selectedPhase) {
+            // Only show warning if no prompts available
+            if ((!prompts || prompts.length === 0) && state.phasePromptsWarning) {
+                return `
+                    <div class="prompt-section" style="border-color: var(--accent-yellow);">
+                        <div class="prompt-section-header">
+                            <div class="prompt-section-title">Phase Prompts</div>
+                            <span class="prompt-state pending">unavailable</span>
+                        </div>
+                        <div class="prompt-content" style="color: var(--accent-yellow);">
+                            ${escapeHtml(state.phasePromptsWarning)}
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (!prompts || prompts.length === 0) {
+                return '';
+            }
+
+            // Filter to selected phase if any
+            const filteredPrompts = selectedPhase
+                ? prompts.filter(p => p.phase === selectedPhase)
+                : prompts;
+
+            if (filteredPrompts.length === 0) {
+                return '';
+            }
+
+            return filteredPrompts.map(prompt => {
+                const stateClass = (prompt.state || 'ready').toLowerCase();
+                const hasEdits = prompt.system_prompt_edited || prompt.input_instruction_edited;
+
+                // Determine which content to show
+                const effectiveSystemPrompt = prompt.system_prompt_edited || prompt.system_prompt || '';
+                const effectiveInputInstruction = prompt.input_instruction_edited || prompt.input_instruction || '';
+
+                // Character counts for display
+                const systemCharCount = effectiveSystemPrompt.length;
+                const inputCharCount = effectiveInputInstruction.length;
+
+                // NEW STATE LOGIC for Manual Workflow
+                // States: sleeping, ready, under_review, ready_edit, processing, complete, failed
+                const canEdit = ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(stateClass);
+                const canAcknowledge = ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(stateClass);
+                const canReset = hasEdits && canEdit;
+                const isProcessing = stateClass === 'processing';
+                const isComplete = ['complete', 'completed'].includes(stateClass);
+                const isFailed = stateClass === 'failed';
+                const isSleeping = stateClass === 'sleeping';
+
+                // Token metrics display
+                const tokenMetrics = prompt.token_metrics || {};
+                const estimatedInputTokens = tokenMetrics.estimated_input_tokens || Math.ceil((systemCharCount + inputCharCount) / 4);
+                const estimatedOutputBudget = tokenMetrics.estimated_output_budget || 0;
+                const contextPercent = tokenMetrics.context_percent || (estimatedInputTokens / 200000 * 100);
+
+                // State label with human-readable names
+                const stateLabels = {
+                    'sleeping': 'Sleeping',
+                    'ready': 'Ready',
+                    'under_review': 'Under Review',
+                    'ready_edit': 'Ready (Edited)',
+                    'processing': 'Processing',
+                    'complete': 'Complete',
+                    'completed': 'Complete',
+                    'failed': 'Failed',
+                    // Legacy mappings
+                    'pending': 'Ready',
+                    'editing': 'Under Review',
+                    'approved': 'Processing',
+                    'injected': 'Processing',
+                };
+                const stateLabel = stateLabels[stateClass] || stateClass;
+
+                // Download icon SVG
+                const downloadIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>`;
+
+                return `
+                    <div class="prompt-section prompt-editor-container" data-prompt-id="${prompt.id}" data-phase="${prompt.phase}" data-job-id="${jobId}">
+                        <!-- Header with title, state badge, and download buttons -->
+                        <div class="prompt-editor-header">
+                            <div class="prompt-editor-title">
+                                <h3>${prompt.phase} Phase</h3>
+                                <span class="prompt-state ${stateClass}">${stateLabel}</span>
+                                ${hasEdits ? '<span class="prompt-edited-badge">Edited</span>' : ''}
+                            </div>
+                            <div class="prompt-editor-actions">
+                                <button class="download-btn" onclick="downloadPromptAsJSON('${jobId}', '${prompt.phase}')" title="Download as JSON">
+                                    ${downloadIcon} JSON
+                                </button>
+                                <button class="download-btn" onclick="downloadPromptAsMarkdown('${jobId}', '${prompt.phase}')" title="Download as Markdown">
+                                    ${downloadIcon} MD
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Dual-pane content area -->
+                        <div class="prompt-dual-pane">
+                            <!-- System Prompt Pane -->
+                            <div class="prompt-pane" data-pane="system">
+                                <div class="prompt-pane-header">
+                                    <span class="prompt-pane-label">System Prompt</span>
+                                    <span class="prompt-char-count ${systemCharCount > 50000 ? 'warning' : ''}" id="system-char-count-${prompt.phase}">
+                                        ${formatNumber(systemCharCount)} chars
+                                    </span>
+                                </div>
+                                <div class="prompt-pane-content" id="system-prompt-${prompt.phase}">${escapeHtml(effectiveSystemPrompt)}</div>
+                            </div>
+
+                            <!-- Input Instruction Pane -->
+                            <div class="prompt-pane" data-pane="input">
+                                <div class="prompt-pane-header">
+                                    <span class="prompt-pane-label">Input Instruction</span>
+                                    <span class="prompt-char-count ${inputCharCount > 50000 ? 'warning' : ''}" id="input-char-count-${prompt.phase}">
+                                        ${formatNumber(inputCharCount)} chars
+                                    </span>
+                                </div>
+                                <div class="prompt-pane-content" id="input-instruction-${prompt.phase}">${escapeHtml(effectiveInputInstruction)}</div>
+                            </div>
+                        </div>
+
+                        <!-- Footer with stats and action buttons -->
+                        <div class="prompt-editor-footer">
+                            <div class="prompt-footer-left">
+                                <div class="prompt-stats">
+                                    <div class="prompt-stat">
+                                        <span>Est. Input:</span>
+                                        <span class="prompt-stat-value">${formatNumber(estimatedInputTokens)} tokens</span>
+                                    </div>
+                                    <div class="prompt-stat">
+                                        <span>Output Budget:</span>
+                                        <span class="prompt-stat-value">${formatNumber(estimatedOutputBudget)} tokens</span>
+                                    </div>
+                                    <div class="prompt-stat">
+                                        <span>Context:</span>
+                                        <span class="prompt-stat-value">${contextPercent.toFixed(1)}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="prompt-footer-right">
+                                ${isSleeping ? `
+                                    <span style="color: var(--text-muted); font-size: 12px;">
+                                        Waiting for previous phase...
+                                    </span>
+                                ` : ''}
+                                ${canReset ? `
+                                    <button class="prompt-btn reset" onclick="resetPhasePrompt('${jobId}', '${prompt.phase}')" title="Reset to original">
+                                        Reset
+                                    </button>
+                                ` : ''}
+                                ${canEdit ? `
+                                    <button class="prompt-btn edit" onclick="editPhasePrompt('${jobId}', '${prompt.phase}')">
+                                        Edit
+                                    </button>
+                                ` : ''}
+                                ${canAcknowledge ? `
+                                    <button class="prompt-btn acknowledge" onclick="acknowledgePhasePrompt('${jobId}', '${prompt.phase}')">
+                                        Acknowledge & Start
+                                    </button>
+                                ` : ''}
+                                ${isProcessing ? `
+                                    <span style="color: var(--accent-blue); font-size: 12px;">
+                                        Agent executing... ${prompt.processing_started_at ? formatTime(prompt.processing_started_at) : ''}
+                                    </span>
+                                ` : ''}
+                                ${isComplete ? `
+                                    <span style="color: var(--accent-green); font-size: 12px;">
+                                        Completed ${prompt.completed_at ? formatTime(prompt.completed_at) : ''}
+                                    </span>
+                                ` : ''}
+                                ${isFailed ? `
+                                    <span style="color: var(--accent-red); font-size: 12px;">
+                                        Failed: ${prompt.error || 'Unknown error'}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function editPhasePrompt(jobId, phase) {
+            const prompts = state.phasePrompts[jobId] || [];
+            const prompt = prompts.find(p => p.phase === phase);
+            if (!prompt) {
+                alert(`No prompt found for phase: ${phase}`);
+                return;
+            }
+
+            state.editingPrompt = { jobId, phase, prompt };
+
+            // Get the prompt section element
+            const section = document.querySelector(`.prompt-section[data-phase="${phase}"]`);
+            if (!section) return;
+
+            const systemPrompt = prompt.system_prompt_edited || prompt.system_prompt || '';
+            const inputInstruction = prompt.input_instruction_edited || prompt.input_instruction || '';
+
+            // Replace the dual-pane content with textareas
+            const dualPane = section.querySelector('.prompt-dual-pane');
+            if (dualPane) {
+                dualPane.innerHTML = `
+                    <!-- System Prompt Pane (Edit Mode) -->
+                    <div class="prompt-pane" data-pane="system">
+                        <div class="prompt-pane-header">
+                            <span class="prompt-pane-label">System Prompt</span>
+                            <span class="prompt-char-count" id="system-char-count-${phase}">
+                                ${formatNumber(systemPrompt.length)} chars
+                            </span>
+                        </div>
+                        <textarea class="prompt-pane-textarea" id="edit-system-prompt-${phase}"
+                                  oninput="updateCharCount('system', '${phase}', this.value.length)">${escapeHtml(systemPrompt)}</textarea>
+                    </div>
+
+                    <!-- Input Instruction Pane (Edit Mode) -->
+                    <div class="prompt-pane" data-pane="input">
+                        <div class="prompt-pane-header">
+                            <span class="prompt-pane-label">Input Instruction</span>
+                            <span class="prompt-char-count" id="input-char-count-${phase}">
+                                ${formatNumber(inputInstruction.length)} chars
+                            </span>
+                        </div>
+                        <textarea class="prompt-pane-textarea" id="edit-input-instruction-${phase}"
+                                  oninput="updateCharCount('input', '${phase}', this.value.length)">${escapeHtml(inputInstruction)}</textarea>
+                    </div>
+                `;
+            }
+
+            // Update footer buttons
+            const footer = section.querySelector('.prompt-editor-footer');
+            if (footer) {
+                const footerRight = footer.querySelector('.prompt-footer-right');
+                if (footerRight) {
+                    footerRight.innerHTML = `
+                        <button class="prompt-btn cancel" onclick="cancelPromptEdit('${jobId}')">
+                            Cancel
+                        </button>
+                        <button class="prompt-btn inject" onclick="savePhasePromptEdits('${jobId}', '${phase}')">
+                            Save Changes
+                        </button>
+                    `;
+                }
+            }
+
+            // Update state badge
+            const stateBadge = section.querySelector('.prompt-state');
+            if (stateBadge) {
+                stateBadge.textContent = 'Editing';
+                stateBadge.className = 'prompt-state under_review';
+            }
+        }
+
+        // Helper to update character count in real-time
+        function updateCharCount(type, phase, count) {
+            const countEl = document.getElementById(`${type}-char-count-${phase}`);
+            if (countEl) {
+                countEl.textContent = `${formatNumber(count)} chars`;
+                // Add warning class for large content
+                countEl.classList.toggle('warning', count > 50000);
+                countEl.classList.toggle('danger', count > 100000);
+            }
+            // Also update token estimate in footer
+            updateTokenEstimate(phase);
+        }
+
+        // Update token estimate when editing
+        function updateTokenEstimate(phase) {
+            const systemEl = document.getElementById(`edit-system-prompt-${phase}`);
+            const inputEl = document.getElementById(`edit-input-instruction-${phase}`);
+            if (!systemEl || !inputEl) return;
+
+            const totalChars = systemEl.value.length + inputEl.value.length;
+            const estimatedTokens = Math.ceil(totalChars / 4);
+            const contextPercent = (estimatedTokens / 200000 * 100).toFixed(1);
+
+            // Find the stats container and update
+            const section = document.querySelector(`.prompt-section[data-phase="${phase}"]`);
+            if (section) {
+                const stats = section.querySelectorAll('.prompt-stat-value');
+                if (stats.length >= 1) {
+                    stats[0].textContent = `${formatNumber(estimatedTokens)} tokens`;
+                }
+                if (stats.length >= 3) {
+                    stats[2].textContent = `${contextPercent}%`;
+                }
+            }
+        }
+
+        async function savePhasePromptEdits(jobId, phase) {
+            const systemPromptEl = document.getElementById(`edit-system-prompt-${phase}`);
+            const inputInstructionEl = document.getElementById(`edit-input-instruction-${phase}`);
+
+            if (!systemPromptEl || !inputInstructionEl) {
+                alert('Editor elements not found');
+                return;
+            }
+
+            const systemPrompt = systemPromptEl.value;
+            const inputInstruction = inputInstructionEl.value;
+
+            try {
+                const res = await fetch('/phase-prompts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                        system_prompt: systemPrompt,
+                        input_instruction: inputInstruction,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    let errMsg = errData.error || `HTTP ${res.status}`;
+                    if (res.status === 404) {
+                        errMsg = `Phase prompt endpoint not found. Ensure the daemon is running the latest version.`;
+                    } else if (res.status === 401) {
+                        errMsg = `Authentication failed. Try refreshing the page.`;
+                    } else if (res.status === 409) {
+                        errMsg = errData.error || `Cannot edit prompt - it has already been approved or processed.`;
+                    } else if (res.status === 413) {
+                        errMsg = `Prompt content too large. Maximum size is 500KB.`;
+                    }
+                    throw new Error(errMsg);
+                }
+
+                const data = await res.json();
+
+                // Update local state
+                const prompts = state.phasePrompts[jobId] || [];
+                const idx = prompts.findIndex(p => p.phase === phase);
+                if (idx >= 0 && data.prompt) {
+                    prompts[idx] = data.prompt;
+                }
+
+                state.editingPrompt = null;
+
+                // Re-render the job detail
+                const job = state.rawJobs.find(j => j.id === jobId);
+                if (job) {
+                    renderJobDetail(job);
+                }
+
+            } catch (err) {
+                alert(`Error saving prompt: ${err.message}`);
+            }
+        }
+
+        function cancelPromptEdit(jobId) {
+            state.editingPrompt = null;
+            const job = state.rawJobs.find(j => j.id === jobId);
+            if (job) {
+                renderJobDetail(job);
+            }
+        }
+
+        async function approveAndInjectPrompt(jobId, phase) {
+            if (!confirm(`Approve and inject the ${phase} phase prompt? The agent will proceed with execution.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/phase-inject', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    let errMsg = errData.error || `HTTP ${res.status}`;
+                    if (res.status === 404) {
+                        errMsg = `Phase inject endpoint not found. Ensure the daemon is running the latest version.`;
+                    } else if (res.status === 401) {
+                        errMsg = `Authentication failed. Try refreshing the page.`;
+                    } else if (res.status === 409) {
+                        errMsg = errData.error || `Cannot approve prompt - it has already been approved or processed.`;
+                    }
+                    throw new Error(errMsg);
+                }
+
+                const data = await res.json();
+
+                // Update local state
+                const prompts = state.phasePrompts[jobId] || [];
+                const idx = prompts.findIndex(p => p.phase === phase);
+                if (idx >= 0) {
+                    prompts[idx].state = 'approved';
+                    prompts[idx].approved_at = new Date().toISOString();
+                }
+
+                // Re-render
+                const job = state.rawJobs.find(j => j.id === jobId);
+                if (job) {
+                    renderJobDetail(job);
+                }
+
+                // Show success message
+                alert(`${phase} phase prompt approved. Agent will proceed with execution.`);
+
+            } catch (err) {
+                alert(`Error injecting prompt: ${err.message}`);
+            }
+        }
+
+        // NEW: Acknowledge phase prompt - triggers agent to start execution
+        async function acknowledgePhasePrompt(jobId, phase) {
+            if (!confirm(`Acknowledge the ${phase} phase prompt?\n\nThe agent will immediately start processing. Make sure you've reviewed the prompts.`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch('/phase-acknowledge', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                        acknowledged_by: 'dashboard_user',
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    let errMsg = errData.error || `HTTP ${res.status}`;
+                    if (res.status === 404) {
+                        errMsg = `Phase acknowledge endpoint not found. Ensure the daemon is running the latest version.`;
+                    } else if (res.status === 401) {
+                        errMsg = `Authentication failed. Try refreshing the page.`;
+                    } else if (res.status === 409) {
+                        errMsg = errData.error || `Cannot acknowledge - phase is in an invalid state.`;
+                    }
+                    throw new Error(errMsg);
+                }
+
+                const data = await res.json();
+
+                // Update local state to processing
+                const prompts = state.phasePrompts[jobId] || [];
+                const idx = prompts.findIndex(p => p.phase === phase);
+                if (idx >= 0) {
+                    prompts[idx].state = 'processing';
+                    prompts[idx].acknowledged_at = new Date().toISOString();
+                    prompts[idx].processing_started_at = new Date().toISOString();
+                }
+
+                // Re-render
+                const job = state.rawJobs.find(j => j.id === jobId);
+                if (job) {
+                    renderJobDetail(job);
+                }
+
+                console.log(`[Acknowledge] ${phase} phase acknowledged - agent starting execution`);
+
+            } catch (err) {
+                alert(`Error acknowledging prompt: ${err.message}`);
+            }
+        }
+
+        // Download prompt as JSON
+        function downloadPromptAsJSON(jobId, phase) {
+            const prompts = state.phasePrompts[jobId] || [];
+            const prompt = prompts.find(p => p.phase === phase);
+            if (!prompt) {
+                alert(`No prompt found for phase: ${phase}`);
+                return;
+            }
+
+            const exportData = {
+                job_id: jobId,
+                phase: phase,
+                state: prompt.state,
+                system_prompt: prompt.system_prompt_edited || prompt.system_prompt || '',
+                input_instruction: prompt.input_instruction_edited || prompt.input_instruction || '',
+                has_edits: !!(prompt.system_prompt_edited || prompt.input_instruction_edited),
+                original_system_prompt: prompt.system_prompt || '',
+                original_input_instruction: prompt.input_instruction || '',
+                token_metrics: prompt.token_metrics || {},
+                created_at: prompt.created_at,
+                updated_at: prompt.updated_at,
+                exported_at: new Date().toISOString(),
+            };
+
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${phase.toLowerCase()}-phase-prompt-${jobId.slice(0, 8)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Download prompt as Markdown
+        function downloadPromptAsMarkdown(jobId, phase) {
+            const prompts = state.phasePrompts[jobId] || [];
+            const prompt = prompts.find(p => p.phase === phase);
+            if (!prompt) {
+                alert(`No prompt found for phase: ${phase}`);
+                return;
+            }
+
+            const systemPrompt = prompt.system_prompt_edited || prompt.system_prompt || '';
+            const inputInstruction = prompt.input_instruction_edited || prompt.input_instruction || '';
+            const hasEdits = !!(prompt.system_prompt_edited || prompt.input_instruction_edited);
+            const tokenMetrics = prompt.token_metrics || {};
+
+            let markdown = `# ${phase} Phase Prompt\n\n`;
+            markdown += `**Job ID:** \`${jobId}\`\n`;
+            markdown += `**State:** ${prompt.state}\n`;
+            markdown += `**Has Edits:** ${hasEdits ? 'Yes' : 'No'}\n`;
+            markdown += `**Exported:** ${new Date().toISOString()}\n\n`;
+
+            if (tokenMetrics.estimated_input_tokens) {
+                markdown += `## Token Metrics\n\n`;
+                markdown += `- **Estimated Input Tokens:** ${formatNumber(tokenMetrics.estimated_input_tokens)}\n`;
+                markdown += `- **Output Budget:** ${formatNumber(tokenMetrics.estimated_output_budget || 0)}\n`;
+                markdown += `- **Context Usage:** ${(tokenMetrics.context_percent || 0).toFixed(1)}%\n\n`;
+            }
+
+            markdown += `## System Prompt\n\n`;
+            markdown += `\`\`\`\n${systemPrompt}\n\`\`\`\n\n`;
+
+            markdown += `## Input Instruction\n\n`;
+            markdown += `\`\`\`\n${inputInstruction}\n\`\`\`\n`;
+
+            if (hasEdits) {
+                markdown += `\n---\n\n## Original Prompts (Before Edits)\n\n`;
+                markdown += `### Original System Prompt\n\n`;
+                markdown += `\`\`\`\n${prompt.system_prompt || ''}\n\`\`\`\n\n`;
+                markdown += `### Original Input Instruction\n\n`;
+                markdown += `\`\`\`\n${prompt.input_instruction || ''}\n\`\`\`\n`;
+            }
+
+            const blob = new Blob([markdown], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${phase.toLowerCase()}-phase-prompt-${jobId.slice(0, 8)}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // Reset prompt to original (discard edits)
+        async function resetPhasePrompt(jobId, phase) {
+            if (!confirm(`Reset the ${phase} phase prompt to original?\n\nAll edits will be discarded.`)) {
+                return;
+            }
+
+            const prompts = state.phasePrompts[jobId] || [];
+            const prompt = prompts.find(p => p.phase === phase);
+            if (!prompt) {
+                alert(`No prompt found for phase: ${phase}`);
+                return;
+            }
+
+            try {
+                // Save with original values to clear edits
+                const res = await fetch('/phase-prompts', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                        system_prompt: prompt.system_prompt || '',
+                        input_instruction: prompt.input_instruction || '',
+                        reset_to_original: true,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || `HTTP ${res.status}`);
+                }
+
+                const data = await res.json();
+
+                // Update local state
+                const idx = prompts.findIndex(p => p.phase === phase);
+                if (idx >= 0 && data.prompt) {
+                    prompts[idx] = data.prompt;
+                    // Clear edited fields
+                    delete prompts[idx].system_prompt_edited;
+                    delete prompts[idx].input_instruction_edited;
+                }
+
+                // Re-render
+                const job = state.rawJobs.find(j => j.id === jobId);
+                if (job) {
+                    renderJobDetail(job);
+                }
+
+            } catch (err) {
+                alert(`Error resetting prompt: ${err.message}`);
+            }
+        }
+
+        // Helper function to format numbers (with K/M abbreviations for large numbers)
+        function formatNumber(num) {
+            if (!num && num !== 0) return '0';
+            if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+            if (num >= 10000) return `${(num / 1000).toFixed(1)}K`;
+            return num.toLocaleString();
+        }
+
+        // Load phase prompts when job is selected
+        async function loadPhasePromptsForJob(jobId) {
+            if (!jobId) return;
+
+            // Check if we already have prompts cached
+            if (!state.phasePrompts[jobId]) {
+                await fetchPhasePrompts(jobId);
+            }
+        }
+
+        // ===== Job Prompt Loading =====
+
+        async function loadJobPrompt(jobId) {
+            try {
+                const res = await fetch(`/job-prompt?job_id=${encodeURIComponent(jobId)}`);
+                if (!res.ok) return null;
+                return await res.json();
+            } catch {
+                return null;
+            }
+        }
+
+        function updateStats() {
+            const jobs = state.rawJobs;
+            const running = jobs.filter(j => j.status === 'running').length;
+            const completed = jobs.filter(j => j.status === 'succeeded' || j.status === 'failed');
+            const succeeded = completed.filter(j => j.status === 'succeeded').length;
+            const rate = completed.length ? Math.round((succeeded / completed.length) * 100) : 0;
+
+            // Update legacy stats (hidden)
+            document.getElementById('jobCount').textContent = jobs.length;
+            document.getElementById('runningCount').textContent = running;
+            document.getElementById('successRate').textContent = `${rate}%`;
+
+            // Update enhanced stats dashboard
+            updateEnhancedStats();
+        }
+
+        // Update enhanced stats dashboard
+        function updateEnhancedStats() {
+            const job = state.selectedJob ? state.rawJobs.find(j => j.id === state.selectedJob) : null;
+
+            // Update duration
+            if (job) {
+                const duration = job.duration || 0;
+                const durationStr = formatDuration(duration);
+                document.getElementById('jobDuration').textContent = durationStr;
+
+                if (job.status === 'running') {
+                    document.getElementById('jobDurationDetail').textContent = 'In progress...';
+                } else if (job.status === 'succeeded') {
+                    document.getElementById('jobDurationDetail').textContent = 'Completed';
+                } else if (job.status === 'failed') {
+                    document.getElementById('jobDurationDetail').textContent = 'Failed';
+                } else {
+                    document.getElementById('jobDurationDetail').textContent = 'Pending';
+                }
+            } else {
+                document.getElementById('jobDuration').textContent = '--';
+                document.getElementById('jobDurationDetail').textContent = 'Select a job';
+            }
+
+            // Update tokens and cost (from phase prompts if available)
+            const prompts = job ? (state.phasePrompts[job.id] || []) : [];
+            let totalInputTokens = 0;
+            let totalOutputTokens = 0;
+
+            prompts.forEach(p => {
+                if (p.token_metrics) {
+                    totalInputTokens += p.token_metrics.actual_input_tokens || p.token_metrics.estimated_input_tokens || 0;
+                    totalOutputTokens += p.token_metrics.actual_output_tokens || 0;
+                }
+            });
+
+            const totalTokens = totalInputTokens + totalOutputTokens;
+            document.getElementById('totalTokens').textContent = formatNumber(totalTokens);
+            document.getElementById('tokenBreakdown').textContent = `Input: ${formatNumber(totalInputTokens)} | Output: ${formatNumber(totalOutputTokens)}`;
+
+            // Estimate cost (Sonnet pricing: $3/1M input, $15/1M output)
+            const inputCost = (totalInputTokens / 1000000) * 3;
+            const outputCost = (totalOutputTokens / 1000000) * 15;
+            const totalCost = inputCost + outputCost;
+            document.getElementById('estCost').textContent = `$${totalCost.toFixed(2)}`;
+
+            // Update success rate
+            const jobs = state.rawJobs;
+            const completed = jobs.filter(j => j.status === 'succeeded' || j.status === 'failed');
+            const succeeded = completed.filter(j => j.status === 'succeeded').length;
+            const rate = completed.length ? Math.round((succeeded / completed.length) * 100) : 0;
+
+            const rateEl = document.getElementById('successRateValue');
+            rateEl.textContent = `${rate}%`;
+            rateEl.className = 'stats-card-value ' + (rate >= 80 ? 'success' : rate >= 50 ? '' : 'failed');
+            document.getElementById('successDetail').textContent = `${succeeded} of ${completed.length} jobs`;
+
+            // Update phase pipeline
+            updatePhasePipeline(prompts);
+        }
+
+        // Update phase progress pipeline dots
+        function updatePhasePipeline(prompts) {
+            const phases = ['Scout', 'Architect', 'Builder', 'Test', 'Deploy'];
+            let lastCompletedIdx = -1;
+
+            phases.forEach((phase, idx) => {
+                const dot = document.getElementById(`phaseDot-${phase}`);
+                if (!dot) return;
+
+                const prompt = prompts.find(p => p.phase === phase);
+                const phaseState = prompt?.state || 'sleeping';
+
+                // Reset classes
+                dot.className = 'phase-dot';
+
+                // Map state to CSS class
+                if (['complete', 'completed'].includes(phaseState)) {
+                    dot.classList.add('complete');
+                    lastCompletedIdx = idx;
+                } else if (phaseState === 'processing') {
+                    dot.classList.add('processing');
+                } else if (['ready', 'pending'].includes(phaseState)) {
+                    dot.classList.add('ready');
+                } else if (['under_review', 'editing'].includes(phaseState)) {
+                    dot.classList.add('under_review');
+                } else if (phaseState === 'failed') {
+                    dot.classList.add('failed');
+                } else {
+                    dot.classList.add('sleeping');
+                }
+            });
+
+            // Update connectors
+            for (let i = 1; i <= 4; i++) {
+                const conn = document.getElementById(`phaseConn-${i}`);
+                if (conn) {
+                    conn.className = 'phase-connector' + (i <= lastCompletedIdx + 1 ? ' active' : '');
+                }
+            }
+        }
+
+        // Format duration nicely
+        function formatDuration(seconds) {
+            if (!seconds || seconds < 0) return '--';
+            if (seconds < 60) return `${Math.round(seconds)}s`;
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = Math.round(seconds % 60);
+                return `${m}m ${s}s`;
+            }
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return `${h}h ${m}m`;
+        }
+
+        function updateConnectionStatus() {
+            const dot = document.getElementById('connectionDot');
+            const text = document.getElementById('connectionText');
+            if (state.connected) {
+                dot.classList.add('connected');
+                text.textContent = 'Live';
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'Disconnected';
+            }
+        }
+
+        function reconnect() {
+            connect();
+            fetchSnapshot();
+        }
+
+        // Helpers
+        function formatTime(ts) {
+            try {
+                return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch { return '--'; }
+        }
+
+        function formatDateTime(ts) {
+            try {
+                const d = new Date(ts);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+                       d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } catch { return '--'; }
+        }
+
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            if (seconds < 60) return 'just now';
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+            return `${Math.floor(seconds / 86400)}d ago`;
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '--';
+            if (seconds < 60) return `${Math.round(seconds)}s`;
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = Math.round(seconds % 60);
+                return `${m}m ${s}s`;
+            }
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return `${h}h ${m}m`;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            let unitIndex = 0;
+            let size = bytes;
+            while (size >= 1024 && unitIndex < units.length - 1) {
+                size /= 1024;
+                unitIndex++;
+            }
+            return `${size.toFixed(unitIndex > 0 ? 1 : 0)} ${units[unitIndex]}`;
+        }
+
+        // ===== ACTIVITY PANEL FUNCTIONS =====
+
+        // Toggle activity panel visibility
+        function toggleActivityPanel() {
+            state.activityPanelVisible = !state.activityPanelVisible;
+            const panel = document.getElementById('activityPanel');
+            const main = document.querySelector('.main');
+
+            if (state.activityPanelVisible) {
+                panel.style.display = 'flex';
+                main.classList.add('with-activity-panel');
+                // Connect to activity stream if we have a processing job
+                if (state.selectedJob) {
+                    connectActivityStream(state.selectedJob);
+                }
+            } else {
+                panel.style.display = 'none';
+                main.classList.remove('with-activity-panel');
+                disconnectActivityStream();
+            }
+        }
+
+        // Show activity panel for a specific job
+        function showActivityPanel(jobId) {
+            state.activityPanelVisible = true;
+            const panel = document.getElementById('activityPanel');
+            const main = document.querySelector('.main');
+            panel.style.display = 'flex';
+            main.classList.add('with-activity-panel');
+            connectActivityStream(jobId);
+        }
+
+        // Connect to the agent activity SSE stream
+        function connectActivityStream(jobId) {
+            disconnectActivityStream();
+
+            if (!jobId) return;
+
+            console.log(`[Activity] Connecting to activity stream for job: ${jobId}`);
+
+            // Reset activity data
+            state.activityData = {
+                inputTokens: 0,
+                outputTokens: 0,
+                contextPercent: 0,
+                currentAction: null,
+                toolCalls: [],
+                summary: '',
+            };
+            renderActivityPanel();
+
+            // Connect to SSE endpoint (pass auth as query param since EventSource doesn't support headers)
+            const authParam = state.authToken ? `&auth=${encodeURIComponent(state.authToken)}` : '';
+            const url = `/agent-activity?job_id=${encodeURIComponent(jobId)}${authParam}`;
+            state.activityEventSource = new EventSource(url);
+
+            state.activityEventSource.onopen = () => {
+                console.log('[Activity] SSE connection opened');
+                const dot = document.getElementById('activityLiveDot');
+                if (dot) dot.style.background = 'var(--accent-green)';
+            };
+
+            state.activityEventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleActivityEvent(data);
+                } catch (err) {
+                    console.warn('[Activity] Failed to parse event:', err);
+                }
+            };
+
+            state.activityEventSource.onerror = (err) => {
+                console.warn('[Activity] SSE error:', err);
+                const dot = document.getElementById('activityLiveDot');
+                if (dot) dot.style.background = 'var(--accent-yellow)';
+            };
+        }
+
+        // Disconnect from activity stream
+        function disconnectActivityStream() {
+            if (state.activityEventSource) {
+                state.activityEventSource.close();
+                state.activityEventSource = null;
+            }
+        }
+
+        // Handle incoming activity events
+        function handleActivityEvent(event) {
+            switch (event.type) {
+                case 'token_update':
+                    state.activityData.inputTokens = event.input_tokens || 0;
+                    state.activityData.outputTokens = event.output_tokens || 0;
+                    state.activityData.contextPercent = event.context_percent || 0;
+                    updateTokenUsageDisplay();
+                    break;
+
+                case 'tool_start':
+                    state.activityData.currentAction = {
+                        tool: event.tool_name,
+                        input: event.input_preview || '',
+                        startTime: new Date(),
+                    };
+                    updateCurrentActionDisplay();
+                    break;
+
+                case 'tool_complete':
+                    // Add to tool calls list
+                    state.activityData.toolCalls.unshift({
+                        tool: event.tool_name,
+                        input: event.input_preview || '',
+                        success: event.success !== false,
+                        error: event.error || null,
+                        timestamp: new Date(),
+                    });
+                    // Keep only last 50 tool calls
+                    if (state.activityData.toolCalls.length > 50) {
+                        state.activityData.toolCalls.pop();
+                    }
+                    state.activityData.currentAction = null;
+                    updateCurrentActionDisplay();
+                    updateToolCallsDisplay();
+                    break;
+
+                case 'summary_update':
+                    state.activityData.summary = event.summary || '';
+                    updateSummaryDisplay();
+                    break;
+
+                case 'phase_complete':
+                    state.activityData.currentAction = null;
+                    updateCurrentActionDisplay();
+                    const dot = document.getElementById('activityLiveDot');
+                    if (dot) dot.style.background = 'var(--text-muted)';
+                    break;
+
+                default:
+                    console.log('[Activity] Unknown event type:', event.type);
+            }
+        }
+
+        // Update token usage display
+        function updateTokenUsageDisplay() {
+            const { inputTokens, outputTokens, contextPercent } = state.activityData;
+            const maxContext = 200000;
+
+            document.getElementById('inputTokensUsed').textContent = formatNumber(inputTokens);
+            document.getElementById('outputTokensUsed').textContent = formatNumber(outputTokens);
+            document.getElementById('contextPercentUsed').textContent = `${contextPercent.toFixed(1)}%`;
+
+            const fill = document.getElementById('tokenUsageFill');
+            fill.style.width = `${Math.min(contextPercent, 100)}%`;
+            fill.classList.toggle('warning', contextPercent > 50);
+            fill.classList.toggle('danger', contextPercent > 80);
+        }
+
+        // Update current action display
+        function updateCurrentActionDisplay() {
+            const container = document.getElementById('currentAction');
+            const { currentAction } = state.activityData;
+
+            if (!currentAction) {
+                container.innerHTML = `
+                    <div class="activity-empty">
+                        <div class="activity-empty-text">No active action</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="action-spinner"></div>
+                <div class="action-details">
+                    <div class="action-tool-name">${escapeHtml(currentAction.tool)}</div>
+                    <div class="action-input">${escapeHtml(currentAction.input)}</div>
+                </div>
+            `;
+        }
+
+        // Update tool calls display
+        function updateToolCallsDisplay() {
+            const container = document.getElementById('toolCallsList');
+            const { toolCalls } = state.activityData;
+
+            if (toolCalls.length === 0) {
+                container.innerHTML = `
+                    <div class="activity-empty">
+                        <div class="activity-empty-icon">&#9881;</div>
+                        <div class="activity-empty-text">Tool calls will appear here during execution</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = toolCalls.map(call => {
+                const toolClass = call.tool.toLowerCase().replace(/[^a-z]/g, '');
+                const statusClass = call.success ? 'success' : 'error';
+                const statusText = call.success ? 'success' : (call.error || 'error');
+                const timeStr = call.timestamp.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                return `
+                    <div class="tool-call-item">
+                        <span class="tool-call-timestamp">${timeStr}</span>
+                        <div class="tool-call-content">
+                            <div class="tool-call-name ${toolClass}">${escapeHtml(call.tool)}</div>
+                            <div class="tool-call-detail">${escapeHtml(call.input)}</div>
+                            <span class="tool-call-status ${statusClass}">${statusText}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update summary display
+        function updateSummaryDisplay() {
+            const container = document.getElementById('agentSummaryText');
+            const { summary } = state.activityData;
+            container.textContent = summary || 'Waiting for agent activity...';
+        }
+
+        // Render full activity panel
+        function renderActivityPanel() {
+            updateTokenUsageDisplay();
+            updateCurrentActionDisplay();
+            updateToolCallsDisplay();
+            updateSummaryDisplay();
+        }
+
+        // Auto-show activity panel when a phase enters processing
+        function checkAndShowActivityPanel(jobId, prompts) {
+            const processingPrompt = prompts?.find(p => p.state === 'processing');
+            if (processingPrompt && !state.activityPanelVisible) {
+                showActivityPanel(jobId);
+            }
+        }
+    </script>
+</body>
+</html>

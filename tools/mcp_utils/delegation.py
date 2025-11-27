@@ -15,10 +15,17 @@ import sys
 import time
 import traceback
 import uuid
+import threading
 import psutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+# Import conversation logger for transparent agent visibility
+try:
+    from tools.mcp_utils.conversation_logger import ConversationLogger
+except ImportError:
+    ConversationLogger = None
 
 
 def _write_delegation_metadata(task_id: str, metadata: dict) -> None:
@@ -406,6 +413,275 @@ def delegate_to_claude_code_async_impl(
                 "traceback": traceback.format_exc(),
                 "task_id": None,
                 "status": "failed",
+            },
+            indent=2,
+        )
+
+
+def delegate_to_claude_code_streaming_impl(
+    task: str,
+    working_directory: Optional[str],
+    timeout_minutes: float,
+    additional_flags: Optional[str],
+    active_tasks: Dict[str, Dict[str, Any]],
+    enable_conversation_logging: bool = True,
+) -> str:
+    """
+    Implementation of streaming delegation with full conversation visibility.
+
+    Uses --output-format stream-json to capture structured events including:
+    - Assistant messages (what the agent is saying)
+    - Tool use (every tool being called)
+    - Tool results (outcomes of tool calls)
+    - Errors and completions
+
+    Events are written to:
+    - .context-foundry/conversations/conversation-{task_id}.jsonl (structured)
+    - .context-foundry/conversations/conversation-{task_id}.log (human-readable)
+
+    Args:
+        task: The task/prompt to give to the new Claude Code instance
+        working_directory: Directory where claude should run (defaults to current directory)
+        timeout_minutes: Maximum execution time in minutes
+        additional_flags: Additional CLI flags as a string
+        active_tasks: Reference to active_tasks dict from mcp_server
+        enable_conversation_logging: If True, log conversation to files
+
+    Returns:
+        JSON string with task_id, status, and conversation_log paths
+    """
+    try:
+        # Build command with stream-json for full visibility
+        cmd = [
+            "claude",
+            "--print",
+            "--output-format",
+            "stream-json",  # KEY: Enables structured event output
+            "--verbose",  # Additional diagnostic info
+            "--permission-mode",
+            "bypassPermissions",
+            "--strict-mcp-config",
+            "--settings",
+            '{"thinkingMode": "off"}',
+        ]
+
+        # Add additional flags if provided
+        if additional_flags:
+            flags = shlex.split(additional_flags)
+            cmd.extend(flags)
+
+        # Add the task
+        cmd.append(task)
+
+        # Determine working directory
+        cwd = working_directory if working_directory else os.getcwd()
+
+        # Validate working directory exists
+        if not os.path.isdir(cwd):
+            return json.dumps(
+                {
+                    "error": f"Working directory does not exist: {cwd}",
+                    "task_id": None,
+                    "status": "failed",
+                }
+            )
+
+        # Generate unique task ID
+        task_id = str(uuid.uuid4())
+
+        # Initialize conversation logger
+        conversation_logger = None
+        if enable_conversation_logging and ConversationLogger:
+            conversation_logger = ConversationLogger(task_id, cwd)
+
+        # Start the process (non-blocking)
+        process = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            bufsize=1,  # Line buffered for real-time output
+            env={
+                **os.environ,
+                "PYTHONUNBUFFERED": "1",
+            },
+        )
+
+        # Store task info with conversation logger
+        active_tasks[task_id] = {
+            "process": process,
+            "cmd": cmd,
+            "cwd": cwd,
+            "task": task,
+            "start_time": datetime.now(),
+            "timeout_minutes": timeout_minutes,
+            "status": "running",
+            "result": None,
+            "stdout": None,
+            "stderr": None,
+            "duration": None,
+            "conversation_logger": conversation_logger,
+            "streaming_mode": True,  # Flag to indicate stream-json mode
+        }
+
+        # Start background thread to process streaming output
+        if conversation_logger:
+
+            def process_stream():
+                """Background thread to process stream-json output"""
+                for event in conversation_logger.stream_from_sync_process(process):
+                    # Events are automatically logged to files
+                    # Could also push to a queue for real-time monitoring
+                    pass
+
+            stream_thread = threading.Thread(target=process_stream, daemon=True)
+            stream_thread.start()
+            active_tasks[task_id]["stream_thread"] = stream_thread
+
+        # Write delegation info to shared disk location
+        metadata = {
+            "task_id": task_id,
+            "status": "running",
+            "task": task,
+            "working_directory": cwd,
+            "start_time": datetime.now().isoformat(),
+            "timeout_minutes": timeout_minutes,
+            "pid": process.pid,
+            "streaming_mode": True,
+        }
+
+        if conversation_logger:
+            metadata["conversation_jsonl"] = str(conversation_logger.jsonl_file)
+            metadata["conversation_log"] = str(conversation_logger.readable_file)
+
+        _write_delegation_metadata(task_id, metadata)
+
+        result = {
+            "task_id": task_id,
+            "status": "started",
+            "task": task,
+            "working_directory": cwd,
+            "timeout_minutes": timeout_minutes,
+            "streaming_mode": True,
+            "message": f"Task started with conversation logging. Use get_delegation_result('{task_id}') to check status.",
+        }
+
+        if conversation_logger:
+            result["conversation_logs"] = {
+                "jsonl": str(conversation_logger.jsonl_file),
+                "readable": str(conversation_logger.readable_file),
+                "watch_command": f"tail -f {conversation_logger.readable_file}",
+            }
+
+        return json.dumps(result, indent=2)
+
+    except Exception as e:
+        return json.dumps(
+            {
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+                "task_id": None,
+                "status": "failed",
+            },
+            indent=2,
+        )
+
+
+def get_conversation_events_impl(
+    task_id: str,
+    active_tasks: Dict[str, Dict[str, Any]],
+    event_type: Optional[str] = None,
+    last_n: int = 50,
+) -> str:
+    """
+    Get conversation events from a streaming delegation task.
+
+    Args:
+        task_id: The task ID to get events for
+        active_tasks: Reference to active_tasks dict from mcp_server
+        event_type: Filter by event type (e.g., "tool_use", "assistant")
+        last_n: Number of recent events to return
+
+    Returns:
+        JSON string with conversation events
+    """
+    try:
+        # Check if task exists
+        if task_id not in active_tasks:
+            # Try to load from disk
+            logs_dir = Path.home() / ".context-foundry" / "delegations"
+            task_file = logs_dir / f"task-{task_id}.json"
+
+            if task_file.exists():
+                metadata = json.loads(task_file.read_text())
+                jsonl_path = metadata.get("conversation_jsonl")
+                if jsonl_path and Path(jsonl_path).exists():
+                    # Load conversation from file
+                    if ConversationLogger:
+                        logger_instance = ConversationLogger.load_from_file(
+                            Path(jsonl_path)
+                        )
+                        events = logger_instance.get_events(
+                            event_type=event_type, last_n=last_n
+                        )
+                        return json.dumps(
+                            {
+                                "status": "success",
+                                "task_id": task_id,
+                                "source": "disk",
+                                "event_count": len(events),
+                                "events": [e.to_dict() for e in events],
+                                "conversation_text": logger_instance.get_conversation_text()[
+                                    -2000:
+                                ],
+                            },
+                            indent=2,
+                        )
+
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": f"Task ID '{task_id}' not found or no conversation logs available",
+                },
+                indent=2,
+            )
+
+        task_info = active_tasks[task_id]
+        conversation_logger = task_info.get("conversation_logger")
+
+        if not conversation_logger:
+            return json.dumps(
+                {
+                    "status": "error",
+                    "error": "Task is not using streaming mode - no conversation events available",
+                    "hint": "Use delegate_to_claude_code_streaming() for conversation visibility",
+                },
+                indent=2,
+            )
+
+        events = conversation_logger.get_events(event_type=event_type, last_n=last_n)
+
+        return json.dumps(
+            {
+                "status": "success",
+                "task_id": task_id,
+                "source": "memory",
+                "is_running": task_info["process"].poll() is None,
+                "event_count": len(events),
+                "events": [e.to_dict() for e in events],
+                "conversation_text": "\n".join(e.to_log_line() for e in events),
+            },
+            indent=2,
+        )
+
+    except Exception as e:
+        return json.dumps(
+            {
+                "status": "error",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
             },
             indent=2,
         )

@@ -712,6 +712,7 @@ result = execute_build_with_phase_spawning(
         "pause_after_phases": {repr(pause_after_phases)},
         "execution_mode": {repr(execution_mode)},
         "timeout_minutes": {timeout_minutes},
+        "job_id": {repr(str(job.id))},
     }},
     enable_test_loop={enable_test_loop},
     max_test_iterations={max_test_iterations},

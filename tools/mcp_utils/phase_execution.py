@@ -641,6 +641,8 @@ def run_phase(
     project_type: str = "unknown",
     provider: str = "claude",
     model: str = None,
+    task_config: dict = None,
+    job_id: str = None,
 ) -> PhaseResult:
     """
     Execute a build phase using an AI agent (Claude or Gemini).
@@ -656,9 +658,93 @@ def run_phase(
         project_type: Project type
         provider: AI provider to use ("claude" or "gemini")
         model: Optional model override (e.g., "claude-opus-4-20250514")
+        task_config: Optional task configuration (enables human-in-the-loop if present)
+        job_id: Optional job ID for tracking
 
     Returns:
         PhaseResult with metrics
+    """
+    # Extract job_id from task_config if not explicitly provided
+    if job_id is None and task_config:
+        job_id = task_config.get("job_id")
+
+    # Check for human-in-the-loop mode
+    if task_config:
+        from tools.mcp_utils.phase_prompts import (
+            get_phase_prompt_config,
+            is_human_in_the_loop_enabled,
+            run_phase_with_prompt_management,
+        )
+
+        execution_mode = task_config.get("execution_mode", "autonomous")
+        print(
+            f"[HITL DEBUG] run_phase called for {phase_name}, execution_mode={execution_mode}",
+            flush=True,
+        )
+
+        if is_human_in_the_loop_enabled(task_config):
+            config = get_phase_prompt_config(task_config, phase_name)
+            print(
+                f"[HITL DEBUG] human_in_the_loop_enabled=True, config.human_in_the_loop={config.human_in_the_loop}",
+                flush=True,
+            )
+
+            if config.human_in_the_loop:
+                logger.info(f"Human-in-the-loop mode enabled for {phase_name} phase")
+                print(
+                    f"[HITL DEBUG] Calling run_phase_with_prompt_management for {phase_name}",
+                    flush=True,
+                )
+
+                # Use the wrapper that handles prompt management
+                return run_phase_with_prompt_management(
+                    phase_name=phase_name,
+                    phase_prompt_path=phase_prompt_path,
+                    input_instruction=input_instruction,
+                    working_directory=working_directory,
+                    config=config,
+                    job_id=job_id,
+                    run_phase_func=_run_phase_internal,
+                    phase_timeout=phase_timeout,
+                    validator=validator,
+                    iteration=iteration,
+                    project_type=project_type,
+                    provider=provider,
+                    model=model,
+                )
+
+    # Standard execution (no human-in-the-loop)
+    return _run_phase_internal(
+        phase_name=phase_name,
+        phase_prompt_path=phase_prompt_path,
+        input_instruction=input_instruction,
+        working_directory=working_directory,
+        phase_timeout=phase_timeout,
+        validator=validator,
+        iteration=iteration,
+        project_type=project_type,
+        provider=provider,
+        model=model,
+    )
+
+
+def _run_phase_internal(
+    phase_name: str,
+    phase_prompt_path: Path,
+    input_instruction: str,
+    working_directory: Path,
+    phase_timeout: int = 600,
+    validator: Callable[[Path, str], bool] = None,
+    iteration: int = 0,
+    project_type: str = "unknown",
+    provider: str = "claude",
+    model: str = None,
+) -> PhaseResult:
+    """
+    Internal implementation of phase execution.
+
+    This is the actual phase runner, separated to allow the human-in-the-loop
+    wrapper to call it after prompt approval.
     """
     print(f"\n{'=' * 60}", file=sys.stderr)
     print(f"🚀 STARTING PHASE: {phase_name} (Fresh Context)", file=sys.stderr)
@@ -1238,6 +1324,7 @@ def run_builder_phase(
     flowise_mode: bool = False,
     use_parallel: bool = True,
     iteration: int = 0,
+    task_config: dict = None,
 ) -> PhaseResult:
     """
     Run Builder phase with conditional parallelization.
@@ -1257,6 +1344,7 @@ def run_builder_phase(
         flowise_mode: True if Flowise workflow project
         use_parallel: Allow parallelization (can be disabled)
         iteration: Fix iteration number (0 for initial build, >0 for fixes)
+        task_config: Optional task configuration (enables human-in-the-loop if present)
 
     Returns:
         PhaseResult with metrics
@@ -1376,6 +1464,7 @@ def run_builder_phase(
         validator=lambda wd, pt=project_type: PhaseValidator.validate_builder(wd, pt),
         iteration=iteration,
         project_type=project_type,
+        task_config=task_config,
     )
 
 

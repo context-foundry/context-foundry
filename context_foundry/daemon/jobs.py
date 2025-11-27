@@ -783,9 +783,15 @@ class JobManager:
             if working_dir and lock_acquired:
                 self._workdir_lock.release(working_dir, job_id)
 
-            # Clean up agent tracker
+            # Persist agent tracker stats to job metadata before cleanup
             with self._agent_trackers_lock:
-                self._agent_trackers.pop(job_id, None)
+                tracker = self._agent_trackers.pop(job_id, None)
+                if tracker:
+                    # Save final agent stats to job for historical visibility
+                    job = self.store.get_job(job_id)
+                    if job:
+                        job.metadata["agent_stats"] = tracker.to_dict()
+                        self.store.save_job(job)
 
             # Remove from running jobs
             with self._running_jobs_lock:

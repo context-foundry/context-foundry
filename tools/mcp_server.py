@@ -22,6 +22,12 @@ from tools.version import get_version
 # Import S3 client for community pattern sync
 from context_foundry.storage import S3PatternClient
 
+# Import streaming delegation for conversation visibility
+from tools.mcp_utils.delegation import (
+    delegate_to_claude_code_streaming_impl,
+    get_conversation_events_impl,
+)
+
 # Check if FastMCP is available
 try:
     from fastmcp import FastMCP, Context  # noqa: F401
@@ -478,6 +484,98 @@ def stream_delegation_output(
         filter_pattern=filter_pattern,
         active_tasks=active_tasks,
         read_phase_info_func=_read_phase_info,
+    )
+
+
+# ANCHOR: delegate_to_claude_code_streaming
+# New streaming delegation with full conversation visibility
+# (imports moved to top of file)
+
+
+@mcp.tool()
+def delegate_to_claude_code_streaming(
+    task: str,
+    working_directory: Optional[str] = None,
+    timeout_minutes: float = 10.0,
+    additional_flags: Optional[str] = None,
+) -> str:
+    """
+    Delegate a task with FULL CONVERSATION VISIBILITY.
+
+    This is the enhanced version of delegate_to_claude_code_async that captures
+    the complete agent conversation including:
+    - Every message the agent says
+    - Every tool call and its inputs
+    - Every tool result
+    - Errors and completions
+
+    Conversation is logged to:
+    - .context-foundry/conversations/conversation-{task_id}.jsonl (structured events)
+    - .context-foundry/conversations/conversation-{task_id}.log (human-readable)
+
+    Watch in real-time with: tail -f <conversation.log>
+
+    Args:
+        task: The task/prompt to give to the new Claude Code instance
+        working_directory: Directory where claude should run (defaults to current directory)
+        timeout_minutes: Maximum execution time in minutes (default: 10 minutes)
+        additional_flags: Additional CLI flags as a string
+
+    Returns:
+        JSON with task_id, status, and conversation_logs paths
+
+    Examples:
+        # Start a task with full visibility
+        result = delegate_to_claude_code_streaming("Analyze and fix the bug in auth.py")
+
+        # Then watch the conversation
+        # tail -f /path/to/.context-foundry/conversations/conversation-{task_id}.log
+    """
+    return delegate_to_claude_code_streaming_impl(
+        task=task,
+        working_directory=working_directory,
+        timeout_minutes=timeout_minutes,
+        additional_flags=additional_flags,
+        active_tasks=active_tasks,
+        enable_conversation_logging=True,
+    )
+
+
+@mcp.tool()
+def get_conversation_events(
+    task_id: str,
+    event_type: Optional[str] = None,
+    last_n: int = 50,
+) -> str:
+    """
+    Get conversation events from a streaming delegation task.
+
+    Returns the actual conversation happening in the agent - messages,
+    tool calls, results, and errors.
+
+    Args:
+        task_id: The task ID from delegate_to_claude_code_streaming()
+        event_type: Filter by event type: "assistant", "tool_use", "tool_result", "error"
+        last_n: Number of recent events to return (default: 50)
+
+    Returns:
+        JSON with conversation events and human-readable transcript
+
+    Examples:
+        # Get all recent events
+        events = get_conversation_events("abc-123-def-456")
+
+        # Get only tool calls
+        tools = get_conversation_events("abc-123-def-456", event_type="tool_use")
+
+        # Get only assistant messages
+        messages = get_conversation_events("abc-123-def-456", event_type="assistant")
+    """
+    return get_conversation_events_impl(
+        task_id=task_id,
+        active_tasks=active_tasks,
+        event_type=event_type,
+        last_n=last_n,
     )
 
 

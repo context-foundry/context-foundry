@@ -13,8 +13,9 @@ import LogFeed from './LogFeed';
 import MarkdownViewer from './MarkdownViewer';
 import CodexBrowser from './CodexBrowser';
 import Forge from './Forge';
+import AgentActivity from './AgentActivity';
 
-type TabType = 'build' | 'browse' | 'logs' | 'codex' | 'forge';
+type TabType = 'build' | 'browse' | 'logs' | 'codex' | 'forge' | 'agents';
 
 // Funny rotating subtitles about Context Foundry
 const FORGE_SUBTITLES = [
@@ -262,6 +263,16 @@ export default function Dashboard() {
             >
               Codex
             </button>
+            <button
+              onClick={() => setActiveTab('agents')}
+              className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                activeTab === 'agents'
+                  ? 'text-cyan-400 border-b-2 border-cyan-400'
+                  : 'text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              Agents
+            </button>
           </div>
         </div>
       </header>
@@ -338,6 +349,12 @@ export default function Dashboard() {
         {activeTab === 'forge' && (
           <div className="bg-gray-900 border border-gray-800 rounded-lg h-[calc(100vh-200px)]">
             <Forge />
+          </div>
+        )}
+
+        {activeTab === 'agents' && (
+          <div className="bg-gray-900 border border-gray-800 rounded-lg h-[calc(100vh-200px)]">
+            <AgentActivity />
           </div>
         )}
       </div>

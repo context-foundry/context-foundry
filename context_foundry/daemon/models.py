@@ -341,7 +341,135 @@ class AgentTracker:
         return cls(**data)
 
 
+class PromptInjectionState(str, Enum):
+    """States for phase prompt injection tracking"""
+
+    PENDING = "pending"  # Prompt prepared, awaiting approval
+    EDITING = "editing"  # User is actively editing
+    APPROVED = "approved"  # User approved, ready for injection
+    INJECTED = "injected"  # Prompt has been sent to agent
+    COMPLETED = "completed"  # Agent finished processing
+    FAILED = "failed"  # Agent or phase failed
+    SKIPPED = "skipped"  # Phase was skipped (cache hit, etc.)
+
+
+@dataclass
+class PhasePrompt:
+    """
+    Tracks a phase's prompt content and injection state.
+
+    For human-in-the-loop mode, prompts go through:
+    pending → editing → approved → injected → completed
+
+    For autonomous mode:
+    pending → injected → completed
+    """
+
+    id: str
+    job_id: str
+    phase: str  # Scout, Architect, Builder, Test, Deploy
+    state: PromptInjectionState
+    system_prompt: str  # The system prompt (from phase_*.txt)
+    input_instruction: str  # The user instruction/task
+    system_prompt_edited: Optional[str] = None  # User-edited version
+    input_instruction_edited: Optional[str] = None  # User-edited version
+    created_at: datetime = field(default_factory=datetime.now)
+    edited_at: Optional[datetime] = None
+    approved_at: Optional[datetime] = None
+    injected_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    edited_by: Optional[str] = None  # Who edited (dashboard_user, etc.)
+    approved_by: Optional[str] = None
+
+    @classmethod
+    def create(
+        cls,
+        job_id: str,
+        phase: str,
+        system_prompt: str,
+        input_instruction: str,
+    ) -> "PhasePrompt":
+        """Factory to create a new pending phase prompt"""
+        return cls(
+            id=str(uuid.uuid4()),
+            job_id=job_id,
+            phase=phase,
+            state=PromptInjectionState.PENDING,
+            system_prompt=system_prompt,
+            input_instruction=input_instruction,
+        )
+
+    def get_effective_system_prompt(self) -> str:
+        """Get the prompt that will be/was injected (edited or original)"""
+        return self.system_prompt_edited or self.system_prompt
+
+    def get_effective_input_instruction(self) -> str:
+        """Get the instruction that will be/was injected (edited or original)"""
+        return self.input_instruction_edited or self.input_instruction
+
+    def mark_editing(self, edited_by: str = "dashboard_user") -> None:
+        """Mark prompt as being edited"""
+        self.state = PromptInjectionState.EDITING
+        self.edited_by = edited_by
+
+    def save_edits(
+        self,
+        system_prompt: Optional[str] = None,
+        input_instruction: Optional[str] = None,
+    ) -> None:
+        """Save edited prompt content"""
+        if system_prompt is not None:
+            self.system_prompt_edited = system_prompt
+        if input_instruction is not None:
+            self.input_instruction_edited = input_instruction
+        self.edited_at = datetime.now()
+        self.state = PromptInjectionState.PENDING
+
+    def approve(self, approved_by: str = "dashboard_user") -> None:
+        """Approve prompt for injection"""
+        self.state = PromptInjectionState.APPROVED
+        self.approved_by = approved_by
+        self.approved_at = datetime.now()
+
+    def mark_injected(self) -> None:
+        """Mark prompt as injected into agent context"""
+        self.state = PromptInjectionState.INJECTED
+        self.injected_at = datetime.now()
+
+    def mark_completed(self) -> None:
+        """Mark prompt/phase as completed"""
+        self.state = PromptInjectionState.COMPLETED
+        self.completed_at = datetime.now()
+
+    def mark_failed(self) -> None:
+        """Mark prompt/phase as failed"""
+        self.state = PromptInjectionState.FAILED
+        self.completed_at = datetime.now()
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        data = asdict(self)
+        data["state"] = self.state.value
+        data["created_at"] = self.created_at.isoformat()
+        for dt_field in ["edited_at", "approved_at", "injected_at", "completed_at"]:
+            if data.get(dt_field):
+                data[dt_field] = data[dt_field].isoformat()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PhasePrompt":
+        """Create from dictionary"""
+        data = data.copy()
+        data["state"] = PromptInjectionState(data["state"])
+        data["created_at"] = datetime.fromisoformat(data["created_at"])
+        for dt_field in ["edited_at", "approved_at", "injected_at", "completed_at"]:
+            if data.get(dt_field):
+                data[dt_field] = datetime.fromisoformat(data[dt_field])
+        return cls(**data)
+
+
 # Type aliases for convenience
 JobID = str
 PhaseEventID = str
 LogEntryID = str
+PhasePromptID = str

@@ -24,6 +24,10 @@ class Config:
     log_level: str = "INFO"
     enable_github_integration: bool = True
     enable_resource_monitoring: bool = True
+    enable_dashboard: bool = True
+    dashboard_host: str = "127.0.0.1"
+    dashboard_port: int = 8420
+    dashboard_refresh_interval: float = 2.0
 
     # Resource limits
     max_cpu_percent: float = 80.0
@@ -83,15 +87,23 @@ class Config:
             "CFD_MAX_CPU": "max_cpu_percent",
             "CFD_MAX_MEMORY_GB": "max_memory_gb",
             "GITHUB_TOKEN": "github_token",
+            "CFD_DASHBOARD_PORT": "dashboard_port",
+            "CFD_DASHBOARD_HOST": "dashboard_host",
+            "CFD_ENABLE_DASHBOARD": "enable_dashboard",
+            "CFD_DASHBOARD_REFRESH_SECONDS": "dashboard_refresh_interval",
         }
 
         for env_var, config_key in env_overrides.items():
             if env_var in os.environ:
                 value = os.environ[env_var]
                 # Type conversion
-                if config_key.endswith(("_seconds", "_jobs", "_minutes", "_retries")):
+                if config_key.startswith("enable_"):
+                    value = str(value).lower() in ("1", "true", "yes", "on")
+                elif config_key.endswith(
+                    ("_seconds", "_jobs", "_minutes", "_retries", "_port")
+                ):
                     value = int(value)
-                elif config_key.endswith(("_percent", "_gb")):
+                elif config_key.endswith(("_percent", "_gb", "_interval")):
                     value = float(value)
                 config_data[config_key] = value
 

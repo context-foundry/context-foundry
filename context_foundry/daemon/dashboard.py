@@ -1,0 +1,2004 @@
+"""
+Lightweight dashboard server for the CF daemon.
+
+Serves a single-page HTML dashboard and streams daemon status via SSE.
+The goal is minimal dependencies (stdlib only) and fast startup.
+"""
+
+import json
+import logging
+import os
+import secrets
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse
+
+from .jobs import JobManager
+from .models import Job, JobStatus, PhaseEvent
+from .store import Store
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DashboardContext:
+    """Shared context for dashboard requests."""
+
+    job_manager: JobManager
+    store: Store
+    html: str
+    refresh_interval: float = 2.0
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    # Auth token for destructive operations (generated at startup)
+    auth_token: str = field(default_factory=lambda: secrets.token_urlsafe(32))
+
+
+def _build_phase_snapshot(event: Optional[PhaseEvent]) -> Optional[Dict[str, Any]]:
+    """Serialize the latest phase event if present."""
+    if not event:
+        return None
+    return {
+        "phase": event.phase,
+        "status": event.status,
+        "timestamp": event.timestamp.isoformat(),
+        "details": event.details,
+        "duration_seconds": event.duration_seconds,
+        "tokens_used": event.tokens_used,
+        "context_percent": event.context_percent,
+    }
+
+
+def _read_conversation_preview(
+    job: Job, max_lines: int = 12
+) -> Optional[Dict[str, Any]]:
+    """
+    Read the tail of the most recent conversation log for a job.
+
+    Returns None if no log is available (e.g., streaming disabled).
+    """
+    working_dir = job.params.get("working_directory") or job.params.get("project_path")
+    if not working_dir:
+        return None
+
+    conversations_dir = Path(working_dir) / ".context-foundry" / "conversations"
+    if not conversations_dir.exists():
+        return None
+
+    log_files = list(conversations_dir.glob("conversation-*.log"))
+    if not log_files:
+        return None
+
+    latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
+
+    try:
+        lines = latest_log.read_text(errors="ignore").splitlines()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("Failed to read conversation log %s: %s", latest_log, exc)
+        return None
+
+    tail = [line[:400] for line in lines[-max_lines:]]
+    return {
+        "file": latest_log.name,
+        "path": str(latest_log),
+        "lines": tail,
+    }
+
+
+def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
+    """
+    Get phase artifact files for a job.
+
+    Returns dict with artifact info for each phase:
+    - Scout: scout-report.md, scout_report.json
+    - Architect: architecture.md, architecture.json
+    - Builder: (project files)
+    - Test: test-report.md
+    """
+    working_dir = job.params.get("working_directory") or job.params.get("project_path")
+    if not working_dir:
+        return {}
+
+    cf_dir = Path(working_dir) / ".context-foundry"
+    if not cf_dir.exists():
+        return {}
+
+    artifacts = {}
+
+    # Scout artifacts
+    scout_files = {}
+    for fname in ["scout-report.md", "scout_report.json"]:
+        fpath = cf_dir / fname
+        if fpath.exists():
+            try:
+                stat = fpath.stat()
+                scout_files[fname] = {
+                    "path": str(fpath),
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            except Exception:
+                pass
+    if scout_files:
+        artifacts["Scout"] = {"outputs": scout_files}
+
+    # Architect artifacts
+    architect_files = {}
+    for fname in ["architecture.md", "architecture.json"]:
+        fpath = cf_dir / fname
+        if fpath.exists():
+            try:
+                stat = fpath.stat()
+                architect_files[fname] = {
+                    "path": str(fpath),
+                    "size": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            except Exception:
+                pass
+    if architect_files:
+        artifacts["Architect"] = {"outputs": architect_files}
+
+    # Test artifacts (may have iterations)
+    test_files = {}
+    for fpath in cf_dir.glob("test-report*.md"):
+        try:
+            stat = fpath.stat()
+            test_files[fpath.name] = {
+                "path": str(fpath),
+                "size": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+        except Exception:
+            pass
+    if test_files:
+        artifacts["Test"] = {"outputs": test_files}
+
+    # Session summary (overall build info)
+    session_file = cf_dir / "session-summary.json"
+    if session_file.exists():
+        try:
+            with open(session_file) as f:
+                import json
+
+                session = json.load(f)
+                artifacts["_session"] = {
+                    "phases": session.get("phases", {}),
+                    "configuration": session.get("configuration", {}),
+                }
+        except Exception:
+            pass
+
+    return artifacts
+
+
+def _serialize_job(context: DashboardContext, job: Job) -> Dict[str, Any]:
+    """Serialize a job plus lightweight runtime metadata for the dashboard."""
+    tracker = context.job_manager.get_agent_tracker(job.id)
+    phase_events = context.store.get_phase_events(job.id)
+    last_phase = phase_events[-1] if phase_events else None
+    logs = context.store.get_logs(job.id, limit=40)
+    log_tail = logs[-10:] if logs else []
+
+    preview = _read_conversation_preview(job)
+
+    # Get agent stats: prefer live tracker, fallback to persisted metadata
+    if tracker:
+        agent_stats = tracker.to_dict()
+    else:
+        agent_stats = job.metadata.get("agent_stats")
+
+    # Build phase artifacts info
+    phase_artifacts = _get_phase_artifacts(job)
+
+    return {
+        "id": job.id,
+        "type": job.type.value,
+        "status": job.status.value,
+        "priority": job.priority,
+        "created_at": job.created_at.isoformat(),
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "result": job.result,
+        "error": job.error,
+        "metadata": job.metadata,
+        "params": job.params,  # Include params for working_directory, etc.
+        "duration_seconds": job.duration(),
+        "agents": agent_stats,
+        "latest_phase": _build_phase_snapshot(last_phase),
+        "all_phases": [_build_phase_snapshot(e) for e in phase_events],
+        "phase_artifacts": phase_artifacts,
+        "recent_logs": [
+            {
+                "id": log.id,
+                "timestamp": log.timestamp.isoformat(),
+                "level": log.level,
+                "message": log.message,
+                "phase": log.phase,
+                "source": log.source,
+            }
+            for log in log_tail
+        ],
+        "context_preview": preview,
+    }
+
+
+def build_status_payload(context: DashboardContext) -> Dict[str, Any]:
+    """Create a status snapshot for JSON + SSE responses."""
+    jobs = context.store.list_jobs(limit=50)
+    serialized_jobs = [_serialize_job(context, job) for job in jobs]
+
+    counts: Dict[str, int] = {}
+    for job in jobs:
+        counts[job.status.value] = counts.get(job.status.value, 0) + 1
+
+    running_agents = 0
+    for job in jobs:
+        tracker = context.job_manager.get_agent_tracker(job.id)
+        if tracker:
+            running_agents += tracker.active_count
+
+    return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "summary": {
+            "total_jobs": len(jobs),
+            "by_status": counts,
+            "running_agents": running_agents,
+            "running_jobs": counts.get(JobStatus.RUNNING.value, 0),
+        },
+        "jobs": serialized_jobs,
+    }
+
+
+class DashboardRequestHandler(BaseHTTPRequestHandler):
+    """Serve the dashboard HTML, JSON status, and SSE stream."""
+
+    server: "DashboardHTTPServer"
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
+        logger.debug("Dashboard HTTP %s - %s", self.address_string(), format % args)
+
+    def _validate_artifact_path(self, file_path: str) -> Optional[Path]:
+        """
+        Validate and normalize an artifact file path.
+
+        Returns the resolved Path if valid, None if invalid.
+        Security: Prevents path traversal by requiring the resolved path
+        to actually be inside a .context-foundry directory.
+        """
+        try:
+            # Resolve to absolute path, following symlinks
+            resolved = Path(os.path.realpath(file_path))
+
+            # Check that .context-foundry is actually a directory component
+            # in the resolved path (not just a substring match)
+            parts = resolved.parts
+            if ".context-foundry" not in parts:
+                return None
+
+            # Find the index of .context-foundry
+            cf_idx = parts.index(".context-foundry")
+
+            # Ensure there's at least one component after .context-foundry
+            # (we're inside the directory, not at the root)
+            if cf_idx >= len(parts) - 1:
+                return None
+
+            return resolved
+        except (ValueError, OSError):
+            return None
+
+    def _check_auth(self) -> bool:
+        """
+        Check if the request has a valid auth token.
+
+        Token must be provided in X-CF-Auth header.
+        Returns True if authorized, False otherwise.
+        """
+        provided_token = self.headers.get("X-CF-Auth", "")
+        expected_token = self.server.context.auth_token
+        return secrets.compare_digest(provided_token, expected_token)
+
+    def _add_cors_headers(self) -> None:
+        """Add CORS headers for localhost origins (dashboard UI on different ports)."""
+        origin = self.headers.get("Origin", "")
+        if origin and ("localhost" in origin or "127.0.0.1" in origin):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-CF-Auth")
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path in ("/", "/dashboard"):
+            self._serve_html()
+        elif parsed.path == "/status":
+            self._serve_status()
+        elif parsed.path == "/events":
+            self._serve_events()
+        elif parsed.path == "/artifact":
+            self._serve_artifact(parsed.query)
+        elif parsed.path == "/job-prompt":
+            self._serve_job_prompt(parsed.query)
+        elif parsed.path == "/pending-approvals":
+            self._serve_pending_approvals()
+        elif parsed.path == "/auth-token":
+            self._serve_auth_token()
+        elif parsed.path == "/phase-prompts":
+            self._serve_phase_prompts(parsed.query)
+        elif parsed.path == "/phase-state":
+            self._serve_phase_state(parsed.query)
+        elif parsed.path == "/transaction-stats":
+            self._serve_transaction_stats(parsed.query)
+        elif parsed.path == "/agent-activity":
+            self._serve_agent_activity(parsed.query)
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if parsed.path == "/artifact":
+            self._save_artifact()
+        elif parsed.path == "/approve":
+            self._approve_phase()
+        elif parsed.path == "/deny":
+            self._deny_phase()
+        elif parsed.path == "/phase-prompts":
+            self._save_phase_prompt()
+        elif parsed.path == "/phase-inject":
+            self._inject_phase_prompt()
+        elif parsed.path == "/phase-start-review":
+            self._start_phase_review()
+        elif parsed.path == "/phase-acknowledge":
+            self._acknowledge_phase()
+        else:
+            self.send_error(404, "Not Found")
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        """Handle CORS preflight requests for cross-origin requests."""
+        origin = self.headers.get("Origin", "")
+        # Allow CORS from localhost (any port) for the dashboard UI
+        if origin and ("localhost" in origin or "127.0.0.1" in origin):
+            self.send_response(204)  # No Content
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-CF-Auth")
+            self.send_header(
+                "Access-Control-Max-Age", "86400"
+            )  # Cache preflight for 24h
+            self.end_headers()
+        else:
+            self.send_error(403, "CORS not allowed from this origin")
+
+    def _serve_html(self) -> None:
+        html = self.server.context.html
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(html.encode("utf-8"))
+
+    def _serve_status(self) -> None:
+        payload = build_status_payload(self.server.context)
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_events(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        try:
+            while not self.server.context.stop_event.is_set():
+                payload = build_status_payload(self.server.context)
+                message = f"data: {json.dumps(payload)}\n\n"
+                self.wfile.write(message.encode("utf-8"))
+                self.wfile.flush()
+                time.sleep(self.server.context.refresh_interval)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected; ignore.
+            return
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Dashboard SSE loop error: %s", exc)
+
+    def _serve_auth_token(self) -> None:
+        """Serve the auth token for the UI to use in subsequent requests."""
+        # Only allow from localhost for security
+        client_host = self.client_address[0]
+        if client_host not in ("127.0.0.1", "::1", "localhost"):
+            self.send_error(403, "Auth token only available from localhost")
+            return
+
+        body = json.dumps(
+            {
+                "token": self.server.context.auth_token,
+            }
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self._add_cors_headers()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_artifact(self, query: str) -> None:
+        """Serve artifact file content. Query: path=<filepath>"""
+        # Require auth for reading artifacts (contains potentially sensitive build data)
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        file_path = params.get("path", [None])[0]
+
+        if not file_path:
+            self.send_error(400, "Missing 'path' parameter")
+            return
+
+        # Security: validate and normalize path to prevent traversal
+        path = self._validate_artifact_path(file_path)
+        if path is None:
+            self.send_error(
+                403, "Invalid path: must be inside a .context-foundry directory"
+            )
+            return
+
+        try:
+            if not path.exists():
+                self.send_error(404, f"File not found: {file_path}")
+                return
+
+            # Limit file size to 1MB
+            if path.stat().st_size > 1_000_000:
+                self.send_error(413, "File too large (max 1MB)")
+                return
+
+            content = path.read_text(encoding="utf-8", errors="replace")
+
+            # Determine content type
+            suffix = path.suffix.lower()
+            content_type = {
+                ".md": "text/markdown",
+                ".json": "application/json",
+                ".txt": "text/plain",
+                ".log": "text/plain",
+            }.get(suffix, "text/plain")
+
+            body = json.dumps(
+                {
+                    "path": str(path),
+                    "name": path.name,
+                    "content": content,
+                    "size": len(content),
+                    "content_type": content_type,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except Exception as exc:
+            logger.warning("Error serving artifact %s: %s", file_path, exc)
+            self.send_error(500, str(exc))
+
+    def _serve_job_prompt(self, query: str) -> None:
+        """Serve the original prompt/task that started a job. Query: job_id=<id>"""
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        job_id = params.get("job_id", [None])[0]
+
+        if not job_id:
+            self.send_error(400, "Missing 'job_id' parameter")
+            return
+
+        job = self.server.context.store.get_job(job_id)
+        if not job:
+            self.send_error(404, f"Job not found: {job_id}")
+            return
+
+        # Extract prompt/task info from job params
+        prompt_info = {
+            "job_id": job.id,
+            "task": job.params.get("task"),
+            "working_directory": job.params.get("working_directory"),
+            "mode": job.params.get("mode"),
+            "project_type": job.params.get("project_type"),
+            "github_repo": job.params.get("github_repo_name"),
+            "metadata": job.metadata,
+            "created_at": job.created_at.isoformat(),
+        }
+
+        body = json.dumps(prompt_info).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_pending_approvals(self) -> None:
+        """List all pending approval requests."""
+        try:
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.approval_gates import ApprovalManager
+
+            manager = ApprovalManager()
+            pending = manager.list_pending_requests()
+
+            approvals = [req.to_dict() for req in pending]
+            body = json.dumps({"approvals": approvals}).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except ImportError as exc:
+            # Module not available - return empty list with warning
+            logger.warning("approval_gates module not available: %s", exc)
+            body = json.dumps(
+                {
+                    "approvals": [],
+                    "warning": "Approval system not available",
+                }
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            logger.warning("Error listing pending approvals: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _save_artifact(self) -> None:
+        """Save edited artifact file content. POST body: {path, content}"""
+        # Require auth for destructive operations
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 2_000_000:  # 2MB limit
+                self.send_error(413, "Request body too large (max 2MB)")
+                return
+
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            file_path = data.get("path")
+            content = data.get("content")
+
+            if not file_path or content is None:
+                self.send_error(400, "Missing 'path' or 'content' in request body")
+                return
+
+            # Security: validate and normalize path to prevent traversal
+            path = self._validate_artifact_path(file_path)
+            if path is None:
+                self.send_error(
+                    403, "Invalid path: must be inside a .context-foundry directory"
+                )
+                return
+
+            if not path.parent.exists():
+                self.send_error(404, f"Parent directory does not exist: {path.parent}")
+                return
+
+            # Write the file
+            path.write_text(content, encoding="utf-8")
+            logger.info("Artifact saved: %s (%d bytes)", path, len(content))
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "path": str(path),
+                    "size": len(content),
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error saving artifact: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _approve_phase(self) -> None:
+        """Approve a pending phase request. POST body: {request_id, approved_by?, reason?}"""
+        # Require auth for destructive operations
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            request_id = data.get("request_id")
+            if not request_id:
+                self.send_error(400, "Missing 'request_id' in request body")
+                return
+
+            approved_by = data.get("approved_by", "dashboard_user")
+            reason = data.get("reason")
+
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.approval_gates import approve_phase
+
+            result = approve_phase(request_id, approved_by, reason)
+
+            if result:
+                response = json.dumps(
+                    {
+                        "success": True,
+                        "request_id": request_id,
+                        "status": result.status.value,
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+            else:
+                response = json.dumps(
+                    {
+                        "success": False,
+                        "error": "Request not found",
+                    }
+                ).encode("utf-8")
+                self.send_response(404)
+
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except ImportError as exc:
+            logger.warning("approval_gates module not available: %s", exc)
+            self.send_error(503, "Approval system not available")
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error approving phase: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _deny_phase(self) -> None:
+        """Deny a pending phase request. POST body: {request_id, denied_by?, reason?}"""
+        # Require auth for destructive operations
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            request_id = data.get("request_id")
+            if not request_id:
+                self.send_error(400, "Missing 'request_id' in request body")
+                return
+
+            denied_by = data.get("denied_by", "dashboard_user")
+            reason = data.get("reason")
+
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.approval_gates import deny_phase
+
+            result = deny_phase(request_id, denied_by, reason)
+
+            if result:
+                response = json.dumps(
+                    {
+                        "success": True,
+                        "request_id": request_id,
+                        "status": result.status.value,
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+            else:
+                response = json.dumps(
+                    {
+                        "success": False,
+                        "error": "Request not found",
+                    }
+                ).encode("utf-8")
+                self.send_response(404)
+
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except ImportError as exc:
+            logger.warning("approval_gates module not available: %s", exc)
+            self.send_error(503, "Approval system not available")
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error denying phase: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _serve_phase_prompts(self, query: str) -> None:
+        """Get phase prompts for a job. Query: job_id=<id>"""
+        # Require auth (prompts may contain sensitive build instructions)
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        job_id = params.get("job_id", [None])[0]
+
+        if not job_id:
+            self.send_error(400, "Missing 'job_id' parameter")
+            return
+
+        try:
+            # Find the job's working directory
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                body = json.dumps(
+                    {"prompts": [], "warning": "No working directory for job"}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # Look for phase prompt files in .context-foundry/phase-prompts/
+            prompts_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
+            prompts = []
+
+            if prompts_dir.exists():
+                for prompt_file in prompts_dir.glob("*.json"):
+                    try:
+                        prompt_data = json.loads(prompt_file.read_text())
+                        prompts.append(prompt_data)
+                    except (json.JSONDecodeError, IOError) as e:
+                        logger.warning(
+                            "Failed to read prompt file %s: %s", prompt_file, e
+                        )
+
+            # Sort by phase order
+            phase_order = {
+                "Scout": 0,
+                "Architect": 1,
+                "Builder": 2,
+                "Test": 3,
+                "Deploy": 4,
+            }
+            prompts.sort(key=lambda p: phase_order.get(p.get("phase", ""), 99))
+
+            body = json.dumps({"prompts": prompts}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except Exception as exc:
+            logger.warning("Error serving phase prompts: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _save_phase_prompt(self) -> None:
+        """Save edited phase prompt. POST body: {job_id, phase, system_prompt?, input_instruction?}"""
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            # Size limit: 500KB max for prompt edits
+            if content_length > 500_000:
+                self.send_error(413, "Request body too large (max 500KB for prompts)")
+                return
+
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+
+            if not job_id or not phase:
+                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
+                return
+
+            # Find job and validate
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_error(400, "Job has no working directory")
+                return
+
+            # Load existing prompt or create new
+            prompts_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+            prompt_file = prompts_dir / f"{phase.lower()}-prompt.json"
+
+            if prompt_file.exists():
+                prompt_data = json.loads(prompt_file.read_text())
+            else:
+                self.send_error(404, f"No prompt found for phase: {phase}")
+                return
+
+            # State guard: block edits after processing/completion
+            current_state = prompt_data.get("state", "ready")
+            # New states: processing, complete, failed are terminal for editing
+            terminal_states = {"processing", "complete", "failed"}
+            if current_state in terminal_states:
+                self.send_error(
+                    409,
+                    f"Cannot edit prompt in state '{current_state}'. Phase is already being executed or complete.",
+                )
+                return
+
+            # Update with edits
+            if "system_prompt" in data:
+                prompt_data["system_prompt_edited"] = data["system_prompt"]
+            if "input_instruction" in data:
+                prompt_data["input_instruction_edited"] = data["input_instruction"]
+
+            prompt_data["edited_at"] = datetime.now().isoformat()
+            prompt_data["edited_by"] = data.get("edited_by", "dashboard_user")
+            # Transition to ready_edit state (user has made edits)
+            prompt_data["state"] = "ready_edit"
+
+            # Save
+            prompt_file.write_text(json.dumps(prompt_data, indent=2))
+            logger.info("Phase prompt saved: %s/%s", job_id[:8], phase)
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "prompt": prompt_data,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error saving phase prompt: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _inject_phase_prompt(self) -> None:
+        """Approve and mark phase prompt for injection. POST body: {job_id, phase}
+
+        NOTE: This is the legacy approval endpoint. For the new HITL workflow,
+        use /phase-acknowledge instead. Both endpoints now use consistent state constants.
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+
+            if not job_id or not phase:
+                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
+                return
+
+            # Find job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_error(400, "Job has no working directory")
+                return
+
+            # Load prompt
+            prompt_file = (
+                Path(working_dir)
+                / ".context-foundry"
+                / "phase-prompts"
+                / f"{phase.lower()}-prompt.json"
+            )
+            if not prompt_file.exists():
+                self.send_error(404, f"No prompt found for phase: {phase}")
+                return
+
+            prompt_data = json.loads(prompt_file.read_text())
+
+            # Import state constants for consistency with new state machine
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.phase_prompts import (
+                STATE_READY,
+                STATE_PROCESSING,
+                STATE_COMPLETE,
+                STATE_FAILED,
+            )
+
+            # State guard: block approval if already processing or in terminal state
+            current_state = prompt_data.get("state", STATE_READY)
+            if current_state == STATE_PROCESSING:
+                self.send_error(409, "Prompt is already approved and being processed")
+                return
+            if current_state in {STATE_COMPLETE, STATE_FAILED}:
+                self.send_error(
+                    409,
+                    f"Cannot approve prompt in state '{current_state}'. Phase has already been processed.",
+                )
+                return
+
+            # Mark as processing (approved) - consistent with new state machine
+            prompt_data["state"] = STATE_PROCESSING
+            prompt_data["approved_at"] = datetime.now().isoformat()
+            prompt_data["approved_by"] = data.get("approved_by", "dashboard_user")
+
+            # Save
+            prompt_file.write_text(json.dumps(prompt_data, indent=2))
+            logger.info("Phase prompt approved: %s/%s", job_id[:8], phase)
+
+            # The runner will detect the processing state and proceed with injection
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "state": STATE_PROCESSING,
+                    "message": f"Phase {phase} prompt approved for injection",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error injecting phase prompt: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _start_phase_review(self) -> None:
+        """
+        Start reviewing a phase prompt. POST body: {job_id, phase, reviewed_by?}
+        Transitions state: ready -> under_review
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+
+            if not job_id or not phase:
+                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
+                return
+
+            # Find job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_error(400, "Job has no working directory")
+                return
+
+            # Import phase_prompts module
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.phase_prompts import (
+                read_phase_prompt,
+                update_prompt_state,
+                STATE_READY,
+                STATE_UNDER_REVIEW,
+            )
+
+            # Read current prompt
+            prompt_data = read_phase_prompt(Path(working_dir), phase)
+            if not prompt_data:
+                self.send_error(404, f"No prompt found for phase: {phase}")
+                return
+
+            current_state = prompt_data.get("state", STATE_READY)
+
+            # Only allow transition from ready state
+            if current_state != STATE_READY:
+                self.send_error(
+                    409,
+                    f"Cannot start review from state '{current_state}'. Must be in 'ready' state.",
+                )
+                return
+
+            # Transition to under_review
+            success = update_prompt_state(
+                Path(working_dir),
+                phase,
+                STATE_UNDER_REVIEW,
+                reviewed_by=data.get("reviewed_by", "dashboard_user"),
+            )
+
+            if not success:
+                self.send_error(500, "Failed to update prompt state")
+                return
+
+            # Re-read to get updated data
+            prompt_data = read_phase_prompt(Path(working_dir), phase)
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "state": STATE_UNDER_REVIEW,
+                    "prompt": prompt_data,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error starting phase review: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _acknowledge_phase(self) -> None:
+        """
+        Acknowledge a phase prompt, allowing the agent to start execution.
+        POST body: {job_id, phase, acknowledged_by?}
+        Transitions state: under_review/ready_edit -> processing
+
+        This is the "clean plate" mechanism - the agent is blocked waiting
+        for this state transition before it can start.
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+
+            if not job_id or not phase:
+                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
+                return
+
+            # Find job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_error(400, "Job has no working directory")
+                return
+
+            # Import phase_prompts module
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.phase_prompts import (
+                read_phase_prompt,
+                update_prompt_state,
+                STATE_READY,
+                STATE_UNDER_REVIEW,
+                STATE_READY_EDIT,
+                STATE_PROCESSING,
+            )
+
+            # Read current prompt
+            prompt_data = read_phase_prompt(Path(working_dir), phase)
+            if not prompt_data:
+                self.send_error(404, f"No prompt found for phase: {phase}")
+                return
+
+            current_state = prompt_data.get("state", STATE_READY)
+
+            # Allow acknowledge from ready, under_review, or ready_edit states
+            valid_states = {STATE_READY, STATE_UNDER_REVIEW, STATE_READY_EDIT}
+            if current_state not in valid_states:
+                self.send_error(
+                    409,
+                    f"Cannot acknowledge from state '{current_state}'. "
+                    f"Must be in one of: {', '.join(valid_states)}",
+                )
+                return
+
+            # Transition to processing - this wakes up the waiting agent
+            success = update_prompt_state(
+                Path(working_dir),
+                phase,
+                STATE_PROCESSING,
+                validate_transition=False,  # Allow direct transition for user acknowledgment
+                acknowledged_by=data.get("acknowledged_by", "dashboard_user"),
+            )
+
+            if not success:
+                self.send_error(500, "Failed to update prompt state")
+                return
+
+            logger.info(
+                "Phase prompt acknowledged: %s/%s - agent will start execution",
+                job_id[:8],
+                phase,
+            )
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "state": STATE_PROCESSING,
+                    "message": f"Phase {phase} acknowledged. Agent starting execution.",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except Exception as exc:
+            logger.warning("Error acknowledging phase: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _serve_phase_state(self, query: str) -> None:
+        """
+        Get phase states for a job. Query: job_id=<id>&phase=<phase>?
+        If phase is omitted, returns all phases.
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        job_id = params.get("job_id", [None])[0]
+        phase = params.get("phase", [None])[0]
+
+        if not job_id:
+            self.send_error(400, "Missing 'job_id' parameter")
+            return
+
+        try:
+            # Find job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                body = json.dumps(
+                    {"phases": {}, "warning": "No working directory for job"}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # Import phase_prompts module
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.phase_prompts import (
+                read_phase_prompt,
+                read_all_phase_prompts,
+            )
+
+            if phase:
+                # Single phase
+                prompt_data = read_phase_prompt(Path(working_dir), phase)
+                if not prompt_data:
+                    self.send_error(404, f"No prompt found for phase: {phase}")
+                    return
+
+                result = {
+                    "phase": phase,
+                    "state": prompt_data.get("state", "sleeping"),
+                    "token_metrics": prompt_data.get("token_metrics", {}),
+                    "timestamps": {
+                        "created_at": prompt_data.get("created_at"),
+                        "ready_at": prompt_data.get("ready_at"),
+                        "review_started_at": prompt_data.get("review_started_at"),
+                        "edited_at": prompt_data.get("edited_at"),
+                        "acknowledged_at": prompt_data.get("acknowledged_at"),
+                        "processing_started_at": prompt_data.get(
+                            "processing_started_at"
+                        ),
+                        "completed_at": prompt_data.get("completed_at"),
+                    },
+                    "has_edits": bool(
+                        prompt_data.get("system_prompt_edited")
+                        or prompt_data.get("input_instruction_edited")
+                    ),
+                }
+            else:
+                # All phases
+                all_prompts = read_all_phase_prompts(Path(working_dir))
+                result = {
+                    "phases": {
+                        name: {
+                            "state": data.get("state", "sleeping"),
+                            "token_metrics": data.get("token_metrics", {}),
+                            "has_edits": bool(
+                                data.get("system_prompt_edited")
+                                or data.get("input_instruction_edited")
+                            ),
+                        }
+                        for name, data in all_prompts.items()
+                    }
+                }
+
+            body = json.dumps(result).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except Exception as exc:
+            logger.warning("Error serving phase state: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _serve_transaction_stats(self, query: str) -> None:
+        """
+        Get overall transaction statistics for a job. Query: job_id=<id>
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        job_id = params.get("job_id", [None])[0]
+
+        if not job_id:
+            self.send_error(400, "Missing 'job_id' parameter")
+            return
+
+        try:
+            # Find job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                body = json.dumps(
+                    {"stats": {}, "warning": "No working directory for job"}
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            # Import phase_prompts module
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.phase_prompts import get_transaction_stats
+
+            stats = get_transaction_stats(Path(working_dir))
+
+            # Add job-level info
+            stats["job_id"] = job_id
+            stats["job_status"] = job.status.value
+            stats["job_created_at"] = job.created_at.isoformat()
+            if job.started_at:
+                stats["job_started_at"] = job.started_at.isoformat()
+            if job.completed_at:
+                stats["job_completed_at"] = job.completed_at.isoformat()
+            stats["job_duration_seconds"] = job.duration()
+
+            body = json.dumps(stats).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        except Exception as exc:
+            logger.warning("Error serving transaction stats: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _serve_agent_activity(self, query: str) -> None:
+        """
+        SSE endpoint for real-time agent activity during phase execution.
+        Streams tool calls, token updates, and summaries.
+        Query: job_id=<id>&auth=<token>
+        """
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+
+        # Require auth - conversation logs may contain sensitive data
+        # Accept token from header OR query param (EventSource doesn't support headers)
+        query_auth = params.get("auth", [None])[0]
+        header_auth = self.headers.get("X-CF-Auth", "")
+        expected_token = self.server.context.auth_token
+
+        auth_valid = False
+        if header_auth and secrets.compare_digest(header_auth, expected_token):
+            auth_valid = True
+        elif query_auth and secrets.compare_digest(query_auth, expected_token):
+            auth_valid = True
+
+        if not auth_valid:
+            self.send_error(401, "Unauthorized: missing or invalid auth token")
+            return
+
+        job_id = params.get("job_id", [None])[0]
+
+        if not job_id:
+            self.send_error(400, "Missing 'job_id' parameter")
+            return
+
+        # Find job
+        job = self.server.context.store.get_job(job_id)
+        if not job:
+            self.send_error(404, f"Job not found: {job_id}")
+            return
+
+        working_dir = job.params.get("working_directory")
+        if not working_dir:
+            self.send_error(400, "No working directory for job")
+            return
+
+        # Set up SSE response
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("X-Accel-Buffering", "no")
+        self._add_cors_headers()
+        self.end_headers()
+
+        # Find conversation log file
+        conversations_dir = Path(working_dir) / ".context-foundry" / "conversations"
+        jsonl_pattern = "conversation-*.jsonl"
+
+        last_position = 0
+        last_event_count = 0
+        input_tokens = 0
+        output_tokens = 0
+
+        try:
+            while not self.server.context.stop_event.is_set():
+                # Check if job is still running
+                job = self.server.context.store.get_job(job_id)
+                if job and job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                    # Send completion event
+                    event = {
+                        "type": "phase_complete",
+                        "status": job.status.value,
+                    }
+                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                    self.wfile.flush()
+                    break
+
+                # Find latest JSONL file
+                if conversations_dir.exists():
+                    jsonl_files = list(conversations_dir.glob(jsonl_pattern))
+                    if jsonl_files:
+                        latest_jsonl = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+
+                        try:
+                            with open(latest_jsonl, "r") as f:
+                                f.seek(last_position)
+                                new_content = f.read()
+                                last_position = f.tell()
+
+                            if new_content:
+                                # Process each line (JSONL format)
+                                for line in new_content.strip().split("\n"):
+                                    if not line.strip():
+                                        continue
+                                    try:
+                                        event_data = json.loads(line)
+                                        # Transform to activity event format
+                                        activity_event = (
+                                            self._transform_conversation_event(
+                                                event_data, input_tokens, output_tokens
+                                            )
+                                        )
+                                        if activity_event:
+                                            # Update token counts from event
+                                            if (
+                                                activity_event.get("type")
+                                                == "token_update"
+                                            ):
+                                                input_tokens = activity_event.get(
+                                                    "input_tokens", input_tokens
+                                                )
+                                                output_tokens = activity_event.get(
+                                                    "output_tokens", output_tokens
+                                                )
+
+                                            self.wfile.write(
+                                                f"data: {json.dumps(activity_event)}\n\n".encode()
+                                            )
+                                            self.wfile.flush()
+                                            last_event_count += 1
+                                    except json.JSONDecodeError:
+                                        continue
+
+                        except Exception as exc:
+                            logger.debug("Error reading conversation log: %s", exc)
+
+                # Send periodic token update even without new events
+                if last_event_count > 0:
+                    token_event = {
+                        "type": "token_update",
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "context_percent": (input_tokens / 200000) * 100
+                        if input_tokens
+                        else 0,
+                    }
+                    self.wfile.write(f"data: {json.dumps(token_event)}\n\n".encode())
+                    self.wfile.flush()
+
+                time.sleep(0.5)  # Poll every 500ms for lower latency
+
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected
+            return
+        except Exception as exc:
+            logger.warning("Agent activity SSE error: %s", exc)
+
+    def _transform_conversation_event(
+        self, event_data: Dict[str, Any], input_tokens: int, output_tokens: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Transform a conversation log event to an activity event for the dashboard.
+        """
+        event_type = event_data.get("type", "")
+
+        if event_type == "tool_use":
+            tool_name = event_data.get("tool", "unknown")
+            tool_input = event_data.get("input", {})
+
+            # Create a preview of the input
+            input_preview = ""
+            if isinstance(tool_input, dict):
+                if "file_path" in tool_input:
+                    input_preview = tool_input["file_path"]
+                elif "pattern" in tool_input:
+                    input_preview = tool_input["pattern"]
+                elif "command" in tool_input:
+                    cmd = tool_input["command"]
+                    input_preview = cmd[:100] + "..." if len(cmd) > 100 else cmd
+                elif "query" in tool_input:
+                    input_preview = tool_input["query"]
+                else:
+                    # Take first key-value as preview
+                    for k, v in tool_input.items():
+                        if isinstance(v, str) and len(v) < 100:
+                            input_preview = f"{k}: {v}"
+                            break
+
+            return {
+                "type": "tool_start",
+                "tool_name": tool_name,
+                "input_preview": input_preview[:200] if input_preview else "",
+            }
+
+        elif event_type == "tool_result":
+            tool_name = event_data.get("tool", "unknown")
+            is_error = event_data.get("is_error", False)
+            content = event_data.get("content", "")
+
+            # Create output preview
+            output_preview = ""
+            if isinstance(content, str):
+                output_preview = (
+                    content[:100] + "..." if len(content) > 100 else content
+                )
+
+            return {
+                "type": "tool_complete",
+                "tool_name": tool_name,
+                "success": not is_error,
+                "error": content[:200] if is_error else None,
+                "input_preview": output_preview,
+            }
+
+        elif event_type == "assistant":
+            # Assistant message - extract any summary/thinking
+            text = event_data.get("text", "")
+            if text:
+                # Take first paragraph as summary
+                summary = text.split("\n\n")[0][:500]
+                return {
+                    "type": "summary_update",
+                    "summary": summary,
+                }
+
+        elif event_type == "usage":
+            # Token usage update
+            return {
+                "type": "token_update",
+                "input_tokens": event_data.get("input_tokens", input_tokens),
+                "output_tokens": event_data.get("output_tokens", output_tokens),
+                "context_percent": (event_data.get("input_tokens", 0) / 200000) * 100,
+            }
+
+        return None
+
+
+class DashboardHTTPServer(ThreadingHTTPServer):
+    """HTTP server with attached dashboard context."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, server_address, RequestHandlerClass, context: DashboardContext):
+        super().__init__(server_address, RequestHandlerClass)
+        self.context = context
+
+
+class DashboardServer:
+    """Wrapper to manage the dashboard HTTP server lifecycle."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        job_manager: JobManager,
+        store: Store,
+        html: str,
+        refresh_interval: float = 2.0,
+    ):
+        self.host = host
+        self.port = port
+        self._thread: Optional[threading.Thread] = None
+        self.context = DashboardContext(
+            job_manager=job_manager,
+            store=store,
+            html=html,
+            refresh_interval=refresh_interval,
+        )
+        handler = DashboardRequestHandler
+        self.httpd = DashboardHTTPServer(
+            (self.host, self.port), handler, context=self.context
+        )
+
+    def start(self) -> None:
+        """Start the HTTP server in a background thread."""
+        if self._thread and self._thread.is_alive():
+            return
+
+        def _serve() -> None:
+            logger.info(
+                "Dashboard server listening on http://%s:%s", self.host, self.port
+            )
+            try:
+                self.httpd.serve_forever()
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Dashboard server stopped unexpectedly: %s", exc)
+
+        self._thread = threading.Thread(
+            target=_serve, name="DashboardServer", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Shutdown the HTTP server."""
+        self.context.stop_event.set()
+        try:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Error shutting down dashboard server: %s", exc)
+
+        if self._thread:
+            self._thread.join(timeout=5.0)
+
+
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Foundry Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161922;
+      --card: #1d2130;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #7dd3fc;
+      --accent-2: #a5b4fc;
+      --danger: #fca5a5;
+      --success: #86efac;
+      --warn: #fcd34d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SFMono-Regular", "Input Mono", Menlo, Consolas, monospace;
+      background: radial-gradient(120% 120% at 10% 20%, #111827, #0b0d12 65%, #06070b);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1f2937;
+      background: linear-gradient(135deg, rgba(125,211,252,0.08), rgba(165,180,252,0.08));
+    }
+    .title { font-size: 18px; letter-spacing: 0.4px; }
+    .pill {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+    main { padding: 20px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 12px 14px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .label { color: var(--muted); font-size: 12px; letter-spacing: 0.2px; }
+    .value { font-size: 20px; margin-top: 4px; }
+    .layout {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 16px;
+      margin-top: 16px;
+    }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    .job-list { display: grid; gap: 10px; }
+    .job-card {
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .job-card:hover { border-color: var(--accent-2); transform: translateY(-1px); }
+    .job-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(125,211,252,0.25); }
+    .job-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .job-meta { color: var(--muted); font-size: 12px; }
+    .status {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 1px solid #1f2937;
+    }
+    .status.running { background: rgba(125,211,252,0.15); color: var(--accent); border-color: rgba(125,211,252,0.4); }
+    .status.queued { background: rgba(252,211,77,0.12); color: var(--warn); border-color: rgba(252,211,77,0.35); }
+    .status.failed { background: rgba(252,165,165,0.15); color: var(--danger); border-color: rgba(252,165,165,0.35); }
+    .status.succeeded { background: rgba(134,239,172,0.15); color: var(--success); border-color: rgba(134,239,172,0.35); }
+    .status.timed_out { background: rgba(252,165,165,0.15); color: var(--danger); border-color: rgba(252,165,165,0.35); }
+    .pill-mini { padding: 3px 8px; border-radius: 999px; background: #0b0d12; border: 1px solid #1f2937; color: var(--muted); font-size: 11px; }
+    .context-panel {
+      background: var(--panel);
+      border: 1px solid #1f2937;
+      border-radius: 12px;
+      padding: 14px;
+      min-height: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .monospace {
+      font-family: "SFMono-Regular", "Input Mono", Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      background: #0b0d12;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 10px;
+      color: var(--text);
+      min-height: 180px;
+    }
+    .muted { color: var(--muted); }
+    .agent-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .log-line { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1f2937; }
+    .log-line:last-child { border-bottom: none; }
+    .badge { padding: 2px 6px; border-radius: 6px; font-size: 11px; background: #0b0d12; border: 1px solid #1f2937; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title">Context Foundry — Agent Dashboard</div>
+    <div class="pill" id="connection-state">
+      <span>Connecting…</span>
+    </div>
+  </header>
+  <main>
+    <div class="grid" id="summary-cards"></div>
+    <div class="layout">
+      <div>
+        <div class="job-list" id="job-list"></div>
+      </div>
+      <div>
+        <div class="context-panel">
+          <div class="job-header">
+            <div>
+              <div class="label">Focused Agent</div>
+              <div id="focus-title" class="value" style="font-size:16px;">Select a running job</div>
+            </div>
+            <div id="focus-status" class="status queued">--</div>
+          </div>
+          <div class="muted" id="phase-line">Phase: --</div>
+          <div class="monospace" id="context-window">Waiting for data…</div>
+          <div>
+            <div class="label">Recent logs</div>
+            <div id="log-list"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script>
+    const summaryEl = document.getElementById('summary-cards');
+    const jobListEl = document.getElementById('job-list');
+    const connectionEl = document.getElementById('connection-state');
+    const contextEl = document.getElementById('context-window');
+    const focusTitleEl = document.getElementById('focus-title');
+    const focusStatusEl = document.getElementById('focus-status');
+    const phaseLineEl = document.getElementById('phase-line');
+    const logListEl = document.getElementById('log-list');
+
+    let state = { selectedJobId: null };
+    let evtSource = null;
+
+    function setConnection(status, detail) {
+      const map = {
+        live: { text: 'Live', color: 'var(--success)' },
+        connecting: { text: 'Connecting…', color: 'var(--warn)' },
+        lost: { text: 'Disconnected', color: 'var(--danger)' }
+      };
+      const info = map[status] || map.connecting;
+      connectionEl.style.borderColor = info.color;
+      connectionEl.style.color = info.color;
+      connectionEl.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${info.color};"></span>${info.text}${detail ? ' · ' + detail : ''}`;
+    }
+
+    function renderSummary(payload) {
+      const byStatus = payload.summary.by_status || {};
+      const cards = [
+        { label: 'Running Jobs', value: byStatus['running'] || 0 },
+        { label: 'Queued', value: byStatus['queued'] || 0 },
+        { label: 'Active Agents', value: payload.summary.running_agents || 0 },
+        { label: 'Total Jobs (last 50)', value: payload.summary.total_jobs || 0 }
+      ];
+      summaryEl.innerHTML = cards.map(card => `
+        <div class="card">
+          <div class="label">${card.label}</div>
+          <div class="value">${card.value}</div>
+        </div>
+      `).join('');
+    }
+
+    function statusClass(status) {
+      return ['running','queued','failed','succeeded','timed_out'].includes(status) ? status : 'queued';
+    }
+
+    function renderJobs(payload) {
+      const jobs = payload.jobs || [];
+      if (!state.selectedJobId && jobs.length) {
+        const running = jobs.find(j => j.status === 'running');
+        state.selectedJobId = (running || jobs[0]).id;
+      }
+      jobListEl.innerHTML = jobs.map(job => {
+        const selected = job.id === state.selectedJobId ? 'selected' : '';
+        const agents = job.agents || { active_count: 0, total_spawned: 0 };
+        const phase = job.latest_phase ? `${job.latest_phase.phase} · ${job.latest_phase.status}` : 'No phase yet';
+        return `
+          <div class="job-card ${selected}" data-id="${job.id}">
+            <div class="job-header">
+              <div>
+                <div class="job-meta">${job.id.slice(0, 8)} · ${job.type}</div>
+                <div class="label">${phase}</div>
+              </div>
+              <div class="status ${statusClass(job.status)}">${job.status}</div>
+            </div>
+            <div class="agent-row" style="margin-top:8px;">
+              <div class="pill-mini">Agents: ${agents.active_count || 0} active / ${agents.total_spawned || 0} spawned</div>
+              <div class="pill-mini">Priority: ${job.priority}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      Array.from(document.querySelectorAll('.job-card')).forEach(el => {
+        el.onclick = () => {
+          state.selectedJobId = el.dataset.id;
+          renderJobs(payload);
+          renderFocus(payload);
+        };
+      });
+    }
+
+    function renderFocus(payload) {
+      const job = (payload.jobs || []).find(j => j.id === state.selectedJobId);
+      if (!job) {
+        focusTitleEl.textContent = 'Select a running job';
+        focusStatusEl.textContent = '--';
+        focusStatusEl.className = 'status queued';
+        contextEl.textContent = 'Waiting for data…';
+        phaseLineEl.textContent = 'Phase: --';
+        logListEl.innerHTML = '';
+        return;
+      }
+
+      focusTitleEl.textContent = `${job.type} · ${job.id.slice(0,8)}`;
+      focusStatusEl.textContent = job.status;
+      focusStatusEl.className = `status ${statusClass(job.status)}`;
+      phaseLineEl.textContent = job.latest_phase ? `Phase: ${job.latest_phase.phase} (${job.latest_phase.status})` : 'Phase: --';
+
+      if (job.context_preview && job.context_preview.lines && job.context_preview.lines.length) {
+        contextEl.textContent = job.context_preview.lines.join('\\n');
+      } else {
+        contextEl.textContent = 'No context window yet. Waiting for conversation logs...';
+      }
+
+      const logs = job.recent_logs || [];
+      logListEl.innerHTML = logs.map(log => `
+        <div class="log-line">
+          <div>
+            <div class="muted" style="font-size:11px;">${log.timestamp.slice(11,19)} · ${log.phase || log.source || 'daemon'}</div>
+            <div>${log.message}</div>
+          </div>
+          <div class="badge">${log.level}</div>
+        </div>
+      `).join('');
+    }
+
+    function render(payload) {
+      renderSummary(payload);
+      renderJobs(payload);
+      renderFocus(payload);
+    }
+
+    function connect() {
+      setConnection('connecting');
+      evtSource = new EventSource('/events');
+      evtSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          render(payload);
+          setConnection('live');
+        } catch (err) {
+          console.error('Failed to parse payload', err);
+        }
+      };
+      evtSource.onerror = () => {
+        setConnection('lost', 'retrying');
+        evtSource.close();
+        setTimeout(connect, 2000);
+      };
+    }
+
+    async function fallbackPoll() {
+      try {
+        const res = await fetch('/status');
+        const payload = await res.json();
+        render(payload);
+      } catch (err) {
+        console.error('Status poll failed', err);
+      }
+    }
+
+    connect();
+    setInterval(fallbackPoll, 10000);
+  </script>
+</body>
+</html>
+"""

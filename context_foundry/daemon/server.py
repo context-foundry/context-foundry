@@ -16,12 +16,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from datetime import datetime
 
 from .config import Config
 from .store import Store
 from .jobs import JobManager
 from .runner import create_runner
+from .dashboard import DashboardServer, DASHBOARD_HTML
 
 # Import emergency stop for daemon monitoring
 try:
@@ -80,6 +80,7 @@ class CFDaemon:
 
         self.running = False
         self._logging_configured = False
+        self.dashboard_server: Optional[DashboardServer] = None
 
         # Watchdog: shared state for external monitoring
         self._main_loop_heartbeat = time.time()
@@ -412,6 +413,21 @@ class CFDaemon:
             self._report_status(False, error_msg)
             return False
 
+        # Start lightweight dashboard server (best-effort)
+        if self.config.enable_dashboard:
+            try:
+                self.dashboard_server = DashboardServer(
+                    host=self.config.dashboard_host,
+                    port=self.config.dashboard_port,
+                    job_manager=self.job_manager,
+                    store=self.store,
+                    html=DASHBOARD_HTML,
+                    refresh_interval=self.config.dashboard_refresh_interval,
+                )
+                self.dashboard_server.start()
+            except Exception as e:
+                logger.error(f"Failed to start dashboard server: {e}")
+
         self.running = True
 
         logger.info(
@@ -677,6 +693,13 @@ class CFDaemon:
         logger.info("Stopping Context Foundry Daemon...")
         self.running = False
 
+        if self.dashboard_server:
+            logger.info("Stopping dashboard server...")
+            try:
+                self.dashboard_server.stop()
+            finally:
+                self.dashboard_server = None
+
         # Stop watchdog thread
         if self._watchdog_thread and self._watchdog_thread.is_alive():
             logger.info("Stopping watchdog thread...")
@@ -722,8 +745,12 @@ class CFDaemon:
                 "log_dir": str(self.config.log_dir),
                 "db_path": str(self.config.db_path),
                 "max_concurrent_jobs": self.config.max_concurrent_jobs,
+                "dashboard_host": self.config.dashboard_host,
+                "dashboard_port": self.config.dashboard_port,
+                "dashboard_enabled": self.config.enable_dashboard,
             },
             "job_manager": self.job_manager.get_stats() if self.running else None,
+            "dashboard_running": bool(self.dashboard_server),
         }
 
     @staticmethod

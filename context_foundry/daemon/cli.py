@@ -39,19 +39,23 @@ def cmd_setup(args):
     print("This will configure your local environment.\n")
 
     config = Config.load(args.config)
-    
+
     # 1. GitHub Configuration
     print("--- GitHub Configuration ---")
     print("Context Foundry uses GitHub to create and manage repositories for you.")
-    
+
     current_token = config.github_token or ""
-    masked_token = f"{current_token[:4]}...{current_token[-4:]}" if len(current_token) > 8 else "Not set"
-    
+    masked_token = (
+        f"{current_token[:4]}...{current_token[-4:]}"
+        if len(current_token) > 8
+        else "Not set"
+    )
+
     print(f"Current Token: {masked_token}")
     new_token = input("GitHub Token (press Enter to keep current): ").strip()
     if new_token:
         config.github_token = new_token
-        
+
     current_repo = config.github_repo or "Not set"
     print(f"Current Repo: {current_repo}")
     new_repo = input("GitHub Repo (owner/name) (press Enter to keep current): ").strip()
@@ -61,29 +65,32 @@ def cmd_setup(args):
     # 2. S3 Configuration
     print("\n--- S3 Configuration (Optional) ---")
     print("Configure an S3 bucket to sync your patterns and skills.")
-    print("This allows your build history and learned patterns to follow you across different environments.")
-    
+    print(
+        "This allows your build history and learned patterns to follow you across different environments."
+    )
+
     current_bucket = config.s3_bucket_name or "Not set"
     print(f"Current Bucket: {current_bucket}")
     new_bucket = input("S3 Bucket Name (press Enter to keep current): ").strip()
     if new_bucket:
         config.s3_bucket_name = new_bucket
-        
+
     current_region = config.s3_region or "us-east-1"
     print(f"Current Region: {current_region}")
     new_region = input(f"AWS Region [{current_region}]: ").strip()
     if new_region:
         config.s3_region = new_region
-        
+
     # Save configuration
     try:
         config.save(args.config)
-        print(f"\n✅ Configuration saved successfully to {config.data_dir / 'config.json'}")
+        print(
+            f"\n✅ Configuration saved successfully to {config.data_dir / 'config.json'}"
+        )
         return 0
     except Exception as e:
         print(f"\n❌ Failed to save configuration: {e}", file=sys.stderr)
         return 1
-
 
 
 def cmd_start(args):
@@ -223,8 +230,7 @@ def cmd_status(args):
         print("  ✓ No related processes found (only daemon running)")
 
     # Check for zombie processes (with timeout to prevent hanging)
-    from .zombies import format_zombie_list, PSUTIL_AVAILABLE
-    import threading
+    from .zombies import PSUTIL_AVAILABLE
 
     if PSUTIL_AVAILABLE:
         # Use a simple approach: skip zombie detection entirely in status
@@ -247,7 +253,9 @@ def _find_all_related_processes(daemon_pid):
     try:
         # Get all processes
         ps_output = subprocess.check_output(
-            ["ps", "aux"], text=True, timeout=5  # avoid hangs on macOS privacy-locked processes
+            ["ps", "aux"],
+            text=True,
+            timeout=5,  # avoid hangs on macOS privacy-locked processes
         )
 
         for line in ps_output.splitlines()[1:]:  # Skip header
@@ -754,6 +762,201 @@ def cmd_logs(args):
 
         except KeyboardInterrupt:
             print("\nStopped following logs")
+
+    return 0
+
+
+def cmd_watch(args):
+    """Watch agent conversation in real-time"""
+    from pathlib import Path
+
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    job = store.get_job(args.job_id)
+    if not job:
+        print(f"Job not found: {args.job_id}", file=sys.stderr)
+        return 1
+
+    # Get working directory from job params
+    working_dir = job.params.get("working_directory", job.params.get("project_path"))
+    if not working_dir:
+        print(
+            f"Could not determine working directory for job {args.job_id}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Look for conversation logs
+    conversations_dir = Path(working_dir) / ".context-foundry" / "conversations"
+
+    if not conversations_dir.exists():
+        print(f"No conversation logs found at {conversations_dir}")
+        print("\nConversation logging requires streaming mode.")
+        print("Falling back to phase logs...")
+        # Fall back to regular logs
+        args.follow = True
+        args.level = None
+        args.limit = 100
+        args.phases = False
+        return cmd_logs(args)
+
+    # Find the most recent conversation log
+    log_files = list(conversations_dir.glob("conversation-*.log"))
+    if not log_files:
+        print(f"No conversation logs found in {conversations_dir}")
+        return 1
+
+    # Sort by modification time, get most recent
+    latest_log = max(log_files, key=lambda p: p.stat().st_mtime)
+
+    print(f"📺 Watching conversation: {latest_log.name}")
+    print(f"📂 Working directory: {working_dir}")
+    print("-" * 60)
+
+    if args.follow:
+        # Use tail -f for real-time following
+        import subprocess
+
+        try:
+            # Show last N lines then follow
+            tail_cmd = ["tail", "-n", str(args.lines), "-f", str(latest_log)]
+            process = subprocess.Popen(tail_cmd)
+            process.wait()
+        except KeyboardInterrupt:
+            print("\n\nStopped watching conversation")
+            if process.poll() is None:
+                process.terminate()
+    else:
+        # Just show last N lines
+        with open(latest_log) as f:
+            lines = f.readlines()
+            for line in lines[-args.lines :]:
+                print(line, end="")
+
+    return 0
+
+
+def _stream_dashboard_events(url: str) -> int:
+    """
+    Stream SSE dashboard events to stdout.
+
+    Uses stdlib urllib to avoid extra deps.
+    """
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(url) as resp:
+            for raw_line in resp:
+                line = raw_line.decode(errors="ignore").rstrip("\r\n")
+                if not line or line.startswith(":"):
+                    continue
+                # Strip leading "data: " if present for readability
+                if line.startswith("data: "):
+                    line = line[len("data: ") :]
+                print(line)
+    except KeyboardInterrupt:
+        print("\nStopped streaming events")
+        return 0
+    except Exception as exc:
+        print(f"Failed to stream events: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_dashboard(args):
+    """Show dashboard URL and optionally stream events"""
+    import webbrowser
+
+    config = Config.load(args.config)
+
+    if not config.enable_dashboard:
+        print("Dashboard disabled. Enable with enable_dashboard=true in config.")
+        return 1
+
+    pid = get_running_daemon_pid(config)
+    if not pid:
+        print("Daemon is not running. Start it with: cfd start")
+        return 1
+
+    base_url = f"http://{config.dashboard_host}:{config.dashboard_port}"
+    print(f"Dashboard available at: {base_url}")
+    print("HTML: {}/dashboard  •  SSE: {}/events".format(base_url, base_url))
+
+    if args.open:
+        try:
+            opened = webbrowser.open(base_url + "/dashboard")
+            if not opened:
+                print("Unable to auto-open browser. Visit the URL above.")
+        except Exception as exc:
+            print(f"Could not open browser: {exc}", file=sys.stderr)
+
+    if args.follow:
+        return _stream_dashboard_events(base_url + "/events")
+
+    return 0
+
+
+def cmd_conversations(args):
+    """List all conversation logs for a job"""
+    from pathlib import Path
+    from datetime import datetime
+
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    job = store.get_job(args.job_id)
+    if not job:
+        print(f"Job not found: {args.job_id}", file=sys.stderr)
+        return 1
+
+    # Get working directory from job params
+    working_dir = job.params.get("working_directory", job.params.get("project_path"))
+    if not working_dir:
+        print(
+            f"Could not determine working directory for job {args.job_id}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Look for conversation logs
+    conversations_dir = Path(working_dir) / ".context-foundry" / "conversations"
+
+    if not conversations_dir.exists():
+        print(f"No conversation logs directory found at {conversations_dir}")
+        return 1
+
+    # List all conversations
+    log_files = list(conversations_dir.glob("conversation-*.log"))
+
+    if not log_files:
+        print("No conversation logs found")
+        return 0
+
+    print(f"📂 Conversations for job {args.job_id[:8]}...\n")
+
+    for log_file in sorted(log_files, key=lambda p: p.stat().st_mtime, reverse=True):
+        stat = log_file.stat()
+        task_id = log_file.stem.replace("conversation-", "")
+        jsonl_file = conversations_dir / f"conversation-{task_id}.jsonl"
+
+        # Count events in JSONL
+        event_count = 0
+        if jsonl_file.exists():
+            with open(jsonl_file) as f:
+                event_count = sum(1 for _ in f)
+
+        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        size_kb = stat.st_size / 1024
+
+        print(f"  {task_id[:8]}...")
+        print(f"    📄 Log: {log_file.name} ({size_kb:.1f} KB)")
+        print(f"    📊 Events: {event_count}")
+        print(f"    🕐 Modified: {modified}")
+        print()
+
+    print("\nTo watch a conversation in real-time:")
+    print(f"  cfd watch {args.job_id} --follow")
 
     return 0
 
@@ -1639,7 +1842,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Setup command
-    setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
+    _setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
 
     # Start command
     start_parser = subparsers.add_parser("start", help="Start the daemon")
@@ -1741,6 +1944,24 @@ def main():
         action="store_true",
         help="Show phase breakdown with status and durations",
     )
+
+    # Watch command (agent conversations)
+    watch_parser = subparsers.add_parser(
+        "watch", help="Watch agent conversation in real-time"
+    )
+    watch_parser.add_argument("job_id", help="Job ID")
+    watch_parser.add_argument(
+        "--follow", "-f", action="store_true", help="Follow conversation in real-time"
+    )
+    watch_parser.add_argument(
+        "--lines", "-n", type=int, default=50, help="Number of lines to show"
+    )
+
+    # Conversations command (list all conversation logs)
+    conv_parser = subparsers.add_parser(
+        "conversations", help="List all conversation logs for a job"
+    )
+    conv_parser.add_argument("job_id", help="Job ID")
 
     # Cancel command
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a job")
@@ -1957,6 +2178,23 @@ def main():
         help="Output as JSON",
     )
 
+    # Dashboard command (lightweight web view)
+    dashboard_parser = subparsers.add_parser(
+        "dashboard", help="Show dashboard URL or stream events"
+    )
+    dashboard_parser.add_argument(
+        "--open",
+        "-o",
+        action="store_true",
+        help="Open dashboard in default browser",
+    )
+    dashboard_parser.add_argument(
+        "--follow",
+        "-f",
+        action="store_true",
+        help="Stream SSE events to stdout (curl-like)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -1973,6 +2211,8 @@ def main():
         "list": cmd_list,
         "show": cmd_show,
         "logs": cmd_logs,
+        "watch": cmd_watch,
+        "conversations": cmd_conversations,
         "cancel": cmd_cancel,
         "cleanup": cmd_cleanup,
         "killall": cmd_killall,
@@ -1985,6 +2225,7 @@ def main():
         "approve": cmd_approve,
         "pending-approvals": cmd_pending_approvals,
         "setup": cmd_setup,
+        "dashboard": cmd_dashboard,
     }
 
     return commands[args.command](args)

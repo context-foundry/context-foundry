@@ -99,7 +99,8 @@ class TabBar(Label):
 
     def __init__(self, **kwargs):
         super().__init__("", **kwargs)
-        self._update_display()
+        # Don't call _update_display() here - wait for on_mount()
+        # Calling it before mount causes NoActiveAppError
 
     def _build_tab_text(self) -> Text:
         """Build the styled tab text"""
@@ -275,24 +276,36 @@ class FileTreeWidget(VerticalScroll):
             file_count = 0
             folder_count = 0
             latest_mtime = 0
-            
+
             # Directories to ignore
             IGNORE_DIRS = {
-                "node_modules", "venv", ".git", "__pycache__", 
-                ".pytest_cache", ".mypy_cache", "dist", "build",
-                "coverage", ".context-foundry"
+                "node_modules",
+                "venv",
+                ".git",
+                "__pycache__",
+                ".pytest_cache",
+                ".mypy_cache",
+                "dist",
+                "build",
+                "coverage",
+                ".context-foundry",
             }
 
             try:
                 # Use os.walk for better control over traversal
                 import os
+
                 for root, dirs, files in os.walk(build_dir):
                     # Modify dirs in-place to skip ignored directories
-                    dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
-                    
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if d not in IGNORE_DIRS and not d.startswith(".")
+                    ]
+
                     folder_count += len(dirs)
                     file_count += len(files)
-                    
+
                     for file in files:
                         if file.startswith("."):
                             continue
@@ -425,8 +438,9 @@ class DirectoryTabbedPanel(Static):
 
     async def on_mount(self) -> None:
         """Start monitoring builds"""
+        # Don't call sync_build_tabs immediately - let interval handle it
+        # Calling it during mount with many delegations causes startup hang
         self.set_interval(2.0, self.sync_build_tabs)
-        await self.sync_build_tabs()
 
     async def sync_build_tabs(self) -> None:
         """Synchronize tabs with active builds"""
@@ -435,9 +449,13 @@ class DirectoryTabbedPanel(Static):
             if not delegations_dir.exists():
                 return
 
-            # Get current builds
+            # Get current builds - limit to most recent 5 to avoid slowdown
+            MAX_BUILD_TABS = 5
             current_builds = {}
+            count = 0
             for task_file in sorted(delegations_dir.glob("task-*.json"), reverse=True):
+                if count >= MAX_BUILD_TABS:
+                    break
                 try:
                     metadata = json.loads(task_file.read_text())
                     task_id = metadata.get("task_id")
@@ -454,6 +472,7 @@ class DirectoryTabbedPanel(Static):
                             "project": project_name,
                             "status": status,
                         }
+                        count += 1
                 except (json.JSONDecodeError, OSError):
                     continue
 
@@ -491,8 +510,9 @@ class DirectoryTabbedPanel(Static):
                                 style="dim italic",
                             )
                         )
-                        await pane.mount(placeholder)
+                        # Add pane first, then mount content (correct order)
                         tabbed_content.add_pane(pane)
+                        await pane.mount(placeholder)
                 except Exception:
                     pass
             else:
@@ -957,6 +977,7 @@ class DetailsModal(ModalScreen):
         try:
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
             import shutil
+
             python_cmd = sys.executable or shutil.which("python3")
 
             if not python_cmd:
@@ -1057,6 +1078,7 @@ class PatternsModal(ModalScreen):
         try:
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
             import shutil
+
             python_cmd = sys.executable or shutil.which("python3")
 
             if not python_cmd:
@@ -1520,11 +1542,11 @@ class MissionControlApp(App):
             # Require python3.13 (has MCP deps installed)
             # Use current python executable or find python3
             import shutil
+
             python_cmd = sys.executable or shutil.which("python3")
             if not python_cmd:
                 return (
-                    "❌ Python not found\n\n"
-                    "Context Foundry requires Python 3.10+."
+                    "❌ Python not found\n\n" "Context Foundry requires Python 3.10+."
                 )
 
             # Call status command
@@ -1697,11 +1719,11 @@ class MissionControlApp(App):
             # Require python3.13 (has MCP deps installed)
             # Use current python executable or find python3
             import shutil
+
             python_cmd = sys.executable or shutil.which("python3")
             if not python_cmd:
                 return (
-                    "❌ Python not found\n\n"
-                    "Context Foundry requires Python 3.10+."
+                    "❌ Python not found\n\n" "Context Foundry requires Python 3.10+."
                 )
 
             # Start the build and wait for task ID (fast - just returns delegation info)
@@ -1969,6 +1991,7 @@ class MissionControlApp(App):
             # Call cancel via MCP wrapper
             wrapper_path = Path(__file__).parent / "mcp_wrapper.py"
             import shutil
+
             python_cmd = sys.executable or shutil.which("python3")
 
             if Path(python_cmd).exists():

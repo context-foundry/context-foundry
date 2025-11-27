@@ -223,7 +223,7 @@ class Store:
             query += " AND type = ?"
             params.append(job_type.value)
 
-        query += " ORDER BY priority DESC, created_at ASC LIMIT ? OFFSET ?"
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         with self._get_connection() as conn:

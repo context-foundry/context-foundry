@@ -9,6 +9,7 @@ from .sse import router as sse_router
 from .artifacts import router as artifacts_router
 from .chat import router as chat_router
 from .builds import router as builds_router
+from .agent_events import router as agent_events_router
 
 __all__ = [
     "jobs_router",
@@ -18,4 +19,5 @@ __all__ = [
     "artifacts_router",
     "chat_router",
     "builds_router",
+    "agent_events_router",
 ]
