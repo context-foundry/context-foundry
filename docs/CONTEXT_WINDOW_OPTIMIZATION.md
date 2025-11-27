@@ -116,7 +116,7 @@ Results are saved to `.context-foundry/session-summary.json`.
 Monitor real-time usage (if using TUI):
 
 ```bash
-cf-monitor
+cf
 ```
 
 The dashboard shows live token usage gauges.

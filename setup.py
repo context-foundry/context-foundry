@@ -70,6 +70,7 @@ setup(
     entry_points={
         "console_scripts": [
             "cf=tools.cli:main",
+            "cfd=context_foundry.daemon.cli:main",
         ],
     },
     classifiers=[

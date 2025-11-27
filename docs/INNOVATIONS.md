@@ -4810,7 +4810,7 @@ User: "Did tests pass?"
 
 **Real-time TUI dashboard:**
 ```
-$ cf-monitor
+$ cf
 
 ╭─────────────────────── Context Foundry Monitor ───────────────────────╮
 │                                                                        │
@@ -5130,7 +5130,7 @@ Use ↑↓ to switch between builds
 
 **Launch TUI:**
 ```bash
-$ cf-monitor
+$ cf
 
 # Or via Python
 $ python3 -m tools.tui.app
