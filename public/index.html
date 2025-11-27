@@ -25,9 +25,9 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
 
   <!-- Stylesheets -->
-  <link rel="stylesheet" href="/css/reset.css?v=2.4.1">
-  <link rel="stylesheet" href="/css/variables.css?v=2.4.1">
-  <link rel="stylesheet" href="/css/styles.css?v=2.4.1">
+  <link rel="stylesheet" href="/css/reset.css?v=2.4.2">
+  <link rel="stylesheet" href="/css/variables.css?v=2.4.2">
+  <link rel="stylesheet" href="/css/styles.css?v=2.4.2">
 </head>
 <body>
 
@@ -173,12 +173,6 @@
       <div class="features-category">
         <h3 class="category-title">Pattern Learning</h3>
         <div class="features-grid">
-          <article class="feature-card">
-            <h4 class="feature-title">Global Patterns</h4>
-            <p class="feature-description">
-              Cross-project knowledge stored in ~/.context-foundry/patterns/. Common issues, architecture patterns, test patterns.
-            </p>
-          </article>
 
           <article class="feature-card">
             <h4 class="feature-title">Context Codex</h4>
@@ -194,12 +188,6 @@
             </p>
           </article>
 
-          <article class="feature-card">
-            <h4 class="feature-title">S3 Community Sync</h4>
-            <p class="feature-description">
-              Share patterns with the community via AWS S3. Bidirectional sync with version tracking.
-            </p>
-          </article>
         </div>
       </div>
 
@@ -227,12 +215,6 @@
             </p>
           </article>
 
-          <article class="feature-card">
-            <h4 class="feature-title">Extensions</h4>
-            <p class="feature-description">
-              Domain-specific extensions: Roblox (Luau scripting), Flowise (AI workflows), Workday (enterprise).
-            </p>
-          </article>
         </div>
       </div>
 
@@ -332,15 +314,15 @@
 
       <div class="cli-examples">
         <div class="code-block">
-          <pre><code><span class="comment"># Daemon management</span>
-./tools/cfd start           <span class="comment"># Start the daemon</span>
-./tools/cfd status          <span class="comment"># Check daemon health</span>
-./tools/cfd logs &lt;job-id&gt; --follow  <span class="comment"># Stream build logs</span>
-./tools/cfd list            <span class="comment"># List active builds</span>
-./tools/cfd stop            <span class="comment"># Stop the daemon</span>
+          <pre><code><span class="comment"># Mission Control TUI</span>
+cf                          <span class="comment"># Launch interactive terminal UI</span>
 
-<span class="comment"># Mission Control TUI</span>
-python tools/cli.py         <span class="comment"># Launch terminal interface</span></code></pre>
+<span class="comment"># Daemon management</span>
+cfd start                   <span class="comment"># Start the daemon</span>
+cfd status                  <span class="comment"># Check daemon health</span>
+cfd logs &lt;job-id&gt; --follow  <span class="comment"># Stream build logs</span>
+cfd list                    <span class="comment"># List active builds</span>
+cfd stop                    <span class="comment"># Stop the daemon</span></code></pre>
         </div>
       </div>
     </div>
@@ -362,13 +344,12 @@ python tools/cli.py         <span class="comment"># Launch terminal interface</s
           <div class="step-number">1</div>
           <h3 class="step-title">Install</h3>
           <div class="code-block">
-            <pre><code><span class="comment"># Clone the repository</span>
-git clone https://github.com/context-foundry/context-foundry.git
-cd context-foundry
+            <pre><code><span class="comment"># Option A: npm (recommended)</span>
+npm install -g context-foundry
 
-<span class="comment"># Install dependencies</span>
-pip install -e .</code></pre>
-            <button class="copy-button" aria-label="Copy code" data-copy="git clone https://github.com/context-foundry/context-foundry.git&#10;cd context-foundry&#10;pip install -e .">
+<span class="comment"># Option B: pip</span>
+pip install context-foundry</code></pre>
+            <button class="copy-button" aria-label="Copy code" data-copy="npm install -g context-foundry">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -513,13 +494,13 @@ to build a todo app with React
 
     <div class="footer-copyright">
       <p>2025 Context Foundry. Open source under MIT License.</p>
-      <p>Version 2.4.0</p>
+      <p>Version 2.4.2</p>
     </div>
   </footer>
 
   <!-- Scripts -->
-  <script src="/js/navigation.js?v=2.4.1" defer></script>
-  <script src="/js/main.js?v=2.4.1" defer></script>
+  <script src="/js/navigation.js?v=2.4.2" defer></script>
+  <script src="/js/main.js?v=2.4.2" defer></script>
 
 </body>
 </html>

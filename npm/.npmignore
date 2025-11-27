@@ -1,0 +1,15 @@
+# Development files
+.git
+.gitignore
+node_modules/
+.DS_Store
+
+# Test files
+*.test.js
+__tests__/
+
+# Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
