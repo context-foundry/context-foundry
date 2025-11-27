@@ -360,11 +360,77 @@ body {
 }
 
 /* ========================================
+   Components Section
+   ======================================== */
+
+.components-section {
+  padding: var(--space-16) 0;
+  background: var(--color-bg-secondary);
+}
+
+.components-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .components-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+.component-card {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  transition: all var(--transition-base);
+}
+
+.component-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 20px rgba(0, 217, 255, 0.2);
+  transform: translateY(-4px);
+}
+
+.component-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-2);
+  color: var(--color-primary);
+}
+
+.component-description {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-relaxed);
+}
+
+/* ========================================
    Features Section
    ======================================== */
 
 .features-section {
   padding: var(--space-16) 0;
+}
+
+.features-category {
+  margin-bottom: var(--space-10);
+}
+
+.features-category:last-child {
+  margin-bottom: 0;
+}
+
+.category-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .features-grid {
@@ -534,6 +600,19 @@ body {
   font-size: var(--font-size-base);
   color: var(--color-text-secondary);
   line-height: var(--line-height-relaxed);
+}
+
+/* ========================================
+   CLI Section
+   ======================================== */
+
+.cli-section {
+  padding: var(--space-16) 0;
+}
+
+.cli-examples {
+  max-width: 700px;
+  margin: 0 auto;
 }
 
 /* ========================================
