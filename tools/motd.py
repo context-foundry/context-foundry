@@ -15,7 +15,7 @@ import random
 
 # MOTD cache location
 MOTD_CACHE_PATH = Path.home() / ".context-foundry" / "motd.json"
-MOTD_CACHE_MAX_AGE_HOURS = 24
+MOTD_CACHE_MAX_AGE_HOURS = 4  # Refresh every 4 hours for variety
 
 
 def get_context() -> dict:
