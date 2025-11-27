@@ -4,21 +4,21 @@
   <!-- Meta & SEO -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Context Foundry - Autonomous AI Development | Build Complete Software While You Sleep</title>
-  <meta name="description" content="AI that autonomously codes, tests, and deploys. From idea to GitHub in 7-15 minutes. Self-healing tests, parallel execution, fresh contexts.">
+  <title>Context Foundry - Autonomous AI Development Platform</title>
+  <meta name="description" content="Autonomous AI development platform. Spawns fresh Claude instances to research, design, build, test, and deploy complete software projects. Generate probabilistically, validate deterministically.">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://contextfoundry.dev/">
-  <meta property="og:title" content="Context Foundry - Autonomous AI Development">
-  <meta property="og:description" content="Build complete software while you sleep. AI that codes, tests, and deploys autonomously.">
+  <meta property="og:title" content="Context Foundry - Autonomous AI Development Platform">
+  <meta property="og:description" content="Generate probabilistically, validate deterministically. Walk away and come back to production-ready code.">
   <meta property="og:image" content="https://contextfoundry.dev/images/og-image.png">
 
   <!-- Twitter -->
   <meta property="twitter:card" content="summary_large_image">
   <meta property="twitter:url" content="https://contextfoundry.dev/">
-  <meta property="twitter:title" content="Context Foundry - Autonomous AI Development">
-  <meta property="twitter:description" content="Build complete software while you sleep. AI that codes, tests, and deploys autonomously.">
+  <meta property="twitter:title" content="Context Foundry - Autonomous AI Development Platform">
+  <meta property="twitter:description" content="Generate probabilistically, validate deterministically. Walk away and come back to production-ready code.">
   <meta property="twitter:image" content="https://contextfoundry.dev/images/og-image.png">
 
   <!-- Favicon -->
@@ -47,10 +47,11 @@
       </button>
 
       <ul class="nav-menu">
+        <li><a href="#components" class="nav-link">Components</a></li>
         <li><a href="#features" class="nav-link">Features</a></li>
         <li><a href="#how-it-works" class="nav-link">How It Works</a></li>
-        <li><a href="/docs/" class="nav-link">Docs</a></li>
         <li><a href="#quick-start" class="nav-link">Quick Start</a></li>
+        <li><a href="/docs/" class="nav-link">Docs</a></li>
         <li><a href="https://github.com/context-foundry/context-foundry" class="nav-link" target="_blank" rel="noopener">GitHub</a></li>
       </ul>
     </nav>
@@ -60,26 +61,27 @@
   <section id="hero" class="hero-section">
     <div class="hero-content">
       <h1 class="hero-headline">
-        Build Complete Software <span class="gradient-text" id="rotating-tagline">while you sleep</span>
+        Autonomous AI Development Platform
       </h1>
 
+      <p class="hero-tagline">
+        <em>"Generate probabilistically, validate deterministically."</em>
+      </p>
+
       <p class="hero-subheadline">
-        AI that autonomously codes, tests, and deploys—from idea to GitHub in 7-15 minutes
+        Spawns fresh Claude instances to research, design, build, test, and deploy complete software projects. Walk away and come back to production-ready code.
       </p>
 
       <div class="hero-cta-group">
         <a href="#quick-start" class="btn btn-primary">
           Get Started
         </a>
-        <a href="interactive-tour.html" class="btn btn-secondary" target="_blank" rel="noopener">
-          Tour the Foundry
-        </a>
         <a href="https://github.com/context-foundry/context-foundry" class="btn btn-secondary" target="_blank" rel="noopener">
           View on GitHub
         </a>
       </div>
 
-      <a href="#features" class="scroll-indicator" aria-label="Scroll to features">
+      <a href="#components" class="scroll-indicator" aria-label="Scroll to components">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -89,67 +91,152 @@
     <div class="hero-background" aria-hidden="true"></div>
   </section>
 
-  <!-- Features Section -->
-  <section id="features" class="features-section">
+  <!-- Components Section -->
+  <section id="components" class="components-section">
     <div class="section-container">
       <header class="section-header">
-        <h2 class="section-title">Why Context Foundry?</h2>
+        <h2 class="section-title">Three Core Components</h2>
         <p class="section-subtitle">
-          The only AI that truly works autonomously. Walk away and come back to production-ready software.
+          More than just an MCP server - a complete autonomous development platform
         </p>
       </header>
 
-      <div class="features-grid">
+      <div class="components-grid">
 
-        <!-- Feature 1 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Autonomous Build</h3>
-          <p class="feature-description">
-            Describe what you want, then walk away. Come back to complete, tested, deployed applications.
+        <article class="component-card">
+          <h3 class="component-title">MCP Server</h3>
+          <p class="component-description">
+            Model Context Protocol server that exposes build tools to Claude Code. Provides 50+ MCP tools for builds, patterns, skills, and delegation.
           </p>
         </article>
 
-        <!-- Feature 2 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Self-Healing Tests</h3>
-          <p class="feature-description">
-            Tests fail? Context Foundry automatically fixes them. Up to 3 retry attempts with intelligent debugging.
+        <article class="component-card">
+          <h3 class="component-title">Daemon (cfd)</h3>
+          <p class="component-description">
+            Background service managing build queues, resource limits, and process monitoring. Task queue with persistent storage, watchdog enforcement.
           </p>
         </article>
 
-        <!-- Feature 3 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Parallel Execution</h3>
-          <p class="feature-description">
-            2-8 concurrent builders working simultaneously. 3x faster than sequential builds.
-          </p>
-        </article>
-
-        <!-- Feature 4 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Fresh Contexts</h3>
-          <p class="feature-description">
-            Each spawned agent gets a clean 200K token window. No context pollution, no token accumulation.
-          </p>
-        </article>
-
-        <!-- Feature 5 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Pattern Learning</h3>
-          <p class="feature-description">
-            Captures successful patterns automatically. Gets smarter with every build you run.
-          </p>
-        </article>
-
-        <!-- Feature 6 -->
-        <article class="feature-card">
-          <h3 class="feature-title">Auto-Deploy</h3>
-          <p class="feature-description">
-            Automatically creates GitHub repos, commits code, pushes changes. Zero manual deployment.
+        <article class="component-card">
+          <h3 class="component-title">CLI / TUI</h3>
+          <p class="component-description">
+            Terminal interface for monitoring builds and managing the system. Mission Control TUI with real-time phase progress and multi-build support.
           </p>
         </article>
 
       </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="features-section">
+    <div class="section-container">
+      <header class="section-header">
+        <h2 class="section-title">Key Features</h2>
+        <p class="section-subtitle">
+          Everything you need for autonomous software development
+        </p>
+      </header>
+
+      <div class="features-category">
+        <h3 class="category-title">Build Pipeline</h3>
+        <div class="features-grid">
+          <article class="feature-card">
+            <h4 class="feature-title">8-Phase Workflow</h4>
+            <p class="feature-description">
+              Scout, Architect, Builder, Test, Docs, Deploy, Feedback - each phase spawns fresh Claude instances with isolated context.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Self-Healing Tests</h4>
+            <p class="feature-description">
+              Automatically fixes test failures through redesign/rebuild cycles. Up to 3 retry attempts with intelligent debugging.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Parallel Execution</h4>
+            <p class="feature-description">
+              AI decides when to spawn parallel agents for faster builds. 2-8 concurrent workers, 3x faster than sequential.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Incremental Builds</h4>
+            <p class="feature-description">
+              Smart change detection rebuilds only what changed. Caches scout analysis and test impact analysis.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div class="features-category">
+        <h3 class="category-title">Pattern Learning</h3>
+        <div class="features-grid">
+          <article class="feature-card">
+            <h4 class="feature-title">Global Patterns</h4>
+            <p class="feature-description">
+              Cross-project knowledge stored in ~/.context-foundry/patterns/. Common issues, architecture patterns, test patterns.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Context Codex</h4>
+            <p class="feature-description">
+              SQLite database tracking issues, solutions, and build metrics. Full-text search and confidence scoring.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Skills Library</h4>
+            <p class="feature-description">
+              Reusable code implementations with success rate tracking. Search by query, filter by project type.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">S3 Community Sync</h4>
+            <p class="feature-description">
+              Share patterns with the community via AWS S3. Bidirectional sync with version tracking.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div class="features-category">
+        <h3 class="category-title">Infrastructure</h3>
+        <div class="features-grid">
+          <article class="feature-card">
+            <h4 class="feature-title">Deterministic Enforcement</h4>
+            <p class="feature-description">
+              Post-phase validators, checksum verification, state machine. Code-level compliance wrapping probabilistic generation.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">BAML Type Safety</h4>
+            <p class="feature-description">
+              Structured JSON outputs with schema validation. Reduces parsing errors from 5% to less than 1%.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Context Isolation</h4>
+            <p class="feature-description">
+              Each phase spawns fresh 200K token windows. No context pollution, no token accumulation.
+            </p>
+          </article>
+
+          <article class="feature-card">
+            <h4 class="feature-title">Extensions</h4>
+            <p class="feature-description">
+              Domain-specific extensions: Roblox (Luau scripting), Flowise (AI workflows), Workday (enterprise).
+            </p>
+          </article>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -159,66 +246,61 @@
       <header class="section-header">
         <h2 class="section-title">The Autonomous Pipeline</h2>
         <p class="section-subtitle">
-          Five specialized agents working in sequence, each with fresh context
+          Eight specialized phases, each with fresh context and deterministic validation
         </p>
       </header>
 
       <div class="pipeline-flow">
 
-        <!-- Stage 1 -->
         <article class="pipeline-stage">
           <div class="stage-number" aria-hidden="true">1</div>
           <h3 class="stage-title">Scout</h3>
           <p class="stage-description">
-            Researches requirements, analyzes technical constraints, recommends architecture
+            Researches requirements, analyzes technical constraints, queries pattern library
           </p>
           <div class="stage-output">
-            Output: <code>scout-report.md</code>
+            Output: <code>scout_report.json</code>
           </div>
         </article>
 
-        <!-- Stage 2 -->
         <article class="pipeline-stage">
           <div class="stage-number" aria-hidden="true">2</div>
           <h3 class="stage-title">Architect</h3>
           <p class="stage-description">
-            Designs complete system architecture, file structure, testing strategy
+            Designs system architecture, file structure, test strategy from SCOUT_JSON
           </p>
           <div class="stage-output">
-            Output: <code>architecture.md</code>
+            Output: <code>architecture.json</code>
           </div>
         </article>
 
-        <!-- Stage 3 -->
         <article class="pipeline-stage">
           <div class="stage-number" aria-hidden="true">3</div>
           <h3 class="stage-title">Builder</h3>
           <p class="stage-description">
-            Implements code in parallel with 2-8 concurrent workers
+            Implements code from ARCHITECTURE_JSON with 2-8 parallel workers
           </p>
           <div class="stage-output">
-            Output: <code>working code</code>
+            Output: <code>source code + build-tasks.json</code>
           </div>
         </article>
 
-        <!-- Stage 4 -->
         <article class="pipeline-stage">
           <div class="stage-number" aria-hidden="true">4</div>
-          <h3 class="stage-title">Tester</h3>
+          <h3 class="stage-title">Test</h3>
           <p class="stage-description">
-            Runs all tests, self-heals failures, validates against requirements
+            Runs tests, self-heals failures, validates against requirements
           </p>
           <div class="stage-output">
             Output: <code>test-report.md</code>
           </div>
         </article>
 
-        <!-- Stage 5 -->
         <article class="pipeline-stage">
           <div class="stage-number" aria-hidden="true">5</div>
           <h3 class="stage-title">Deploy</h3>
           <p class="stage-description">
-            Creates GitHub repo, commits code, pushes to main, generates docs
+            Creates GitHub repo, commits code, pushes to remote
           </p>
           <div class="stage-output">
             Output: <code>github.com/repo</code>
@@ -228,13 +310,40 @@
       </div>
 
       <div class="innovation-callout">
-        <h4>Key Innovation: Task Delegation</h4>
+        <h4>Core Innovation: Deterministic Compliance Layer</h4>
         <p>
-          Each agent spawns with a fresh Claude instance using MCP tools.
-          Clean 200K token windows prevent context pollution and enable true parallelism.
+          Each phase spawns a fresh Claude instance via subprocess with rules injected at spawn time.
+          Post-phase validators verify outputs exist, checksums detect unauthorized modifications,
+          and BAML schemas enforce type safety. Generate probabilistically, validate deterministically.
         </p>
       </div>
 
+    </div>
+  </section>
+
+  <!-- CLI Section -->
+  <section id="cli" class="cli-section">
+    <div class="section-container">
+      <header class="section-header">
+        <h2 class="section-title">Command Line Tools</h2>
+        <p class="section-subtitle">
+          Manage builds and monitor progress from your terminal
+        </p>
+      </header>
+
+      <div class="cli-examples">
+        <div class="code-block">
+          <pre><code><span class="comment"># Daemon management</span>
+./tools/cfd start           <span class="comment"># Start the daemon</span>
+./tools/cfd status          <span class="comment"># Check daemon health</span>
+./tools/cfd logs &lt;job-id&gt; --follow  <span class="comment"># Stream build logs</span>
+./tools/cfd list            <span class="comment"># List active builds</span>
+./tools/cfd stop            <span class="comment"># Stop the daemon</span>
+
+<span class="comment"># Mission Control TUI</span>
+python tools/cli.py         <span class="comment"># Launch terminal interface</span></code></pre>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -244,24 +353,23 @@
       <header class="section-header">
         <h2 class="section-title">Get Started in 3 Steps</h2>
         <p class="section-subtitle">
-          Ready to build autonomously? Install takes less than 5 minutes.
+          Install takes less than 5 minutes
         </p>
       </header>
 
       <div class="quickstart-steps">
 
-        <!-- Step 1 -->
         <article class="quickstart-step">
           <div class="step-number">1</div>
-          <h3 class="step-title">Install MCP Server</h3>
+          <h3 class="step-title">Install</h3>
           <div class="code-block">
             <pre><code><span class="comment"># Clone the repository</span>
 git clone https://github.com/context-foundry/context-foundry.git
 cd context-foundry
 
 <span class="comment"># Install dependencies</span>
-pip install -r requirements-mcp.txt</code></pre>
-            <button class="copy-button" aria-label="Copy code" data-copy="git clone https://github.com/context-foundry/context-foundry.git&#10;cd context-foundry&#10;pip install -r requirements-mcp.txt">
+pip install -e .</code></pre>
+            <button class="copy-button" aria-label="Copy code" data-copy="git clone https://github.com/context-foundry/context-foundry.git&#10;cd context-foundry&#10;pip install -e .">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -270,16 +378,20 @@ pip install -r requirements-mcp.txt</code></pre>
           </div>
         </article>
 
-        <!-- Step 2 -->
         <article class="quickstart-step">
           <div class="step-number">2</div>
           <h3 class="step-title">Configure Claude Code</h3>
           <div class="code-block">
-            <pre><code><span class="comment"># Add MCP server to Claude Code</span>
-claude mcp add context-foundry \
-  --command python \
-  --args /path/to/context-foundry/mcp_server.py</code></pre>
-            <button class="copy-button" aria-label="Copy code" data-copy="claude mcp add context-foundry --command python --args /path/to/context-foundry/mcp_server.py">
+            <pre><code><span class="comment"># Add to ~/.claude/mcp_settings.json</span>
+{
+  "mcpServers": {
+    "context-foundry": {
+      "command": "python",
+      "args": ["/path/to/context-foundry/tools/mcp_server.py"]
+    }
+  }
+}</code></pre>
+            <button class="copy-button" aria-label="Copy code">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -288,21 +400,15 @@ claude mcp add context-foundry \
           </div>
         </article>
 
-        <!-- Step 3 -->
         <article class="quickstart-step">
           <div class="step-number">3</div>
-          <h3 class="step-title">Build Something Amazing</h3>
+          <h3 class="step-title">Build Something</h3>
           <div class="code-block">
-            <pre><code><span class="comment"># Just ask naturally in Claude Code</span>
-<span class="string">"Build a todo app with React and TypeScript"</span>
+            <pre><code><span class="comment"># In Claude Code, just ask:</span>
+Use mcp__context-foundry__autonomous_build_and_deploy
+to build a todo app with React
 
 <span class="comment"># Walk away. Come back to deployed code.</span></code></pre>
-            <button class="copy-button" aria-label="Copy code" data-copy='"Build a todo app with React and TypeScript"'>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-              </svg>
-            </button>
           </div>
         </article>
 
@@ -313,7 +419,7 @@ claude mcp add context-foundry \
           Need detailed setup instructions? Check the
           <a href="https://github.com/context-foundry/context-foundry/blob/main/QUICKSTART.md" target="_blank" rel="noopener">Quick Start Guide</a>
           or
-          <a href="https://github.com/context-foundry/context-foundry/blob/main/USER_GUIDE.md" target="_blank" rel="noopener">User Guide</a>
+          <a href="https://github.com/context-foundry/context-foundry/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener">User Guide</a>
         </p>
       </div>
 
@@ -326,8 +432,8 @@ claude mcp add context-foundry \
       <div class="metrics-grid">
 
         <div class="metric-card">
-          <div class="metric-value">7-15 min</div>
-          <div class="metric-label">Average Build Time</div>
+          <div class="metric-value">8</div>
+          <div class="metric-label">Build Phases</div>
         </div>
 
         <div class="metric-card">
@@ -336,13 +442,13 @@ claude mcp add context-foundry \
         </div>
 
         <div class="metric-card">
-          <div class="metric-value">3x</div>
-          <div class="metric-label">Faster with Parallel</div>
+          <div class="metric-value">50+</div>
+          <div class="metric-label">MCP Tools</div>
         </div>
 
         <div class="metric-card">
-          <div class="metric-value">100%</div>
-          <div class="metric-label">Autonomous</div>
+          <div class="metric-value">3</div>
+          <div class="metric-label">Extensions</div>
         </div>
 
       </div>
@@ -353,14 +459,14 @@ claude mcp add context-foundry \
   <section id="cta" class="cta-section">
     <div class="section-container">
       <h2 class="cta-headline">Ready to Build Autonomously?</h2>
-      <p class="cta-subheadline">Join developers who ship complete projects while they sleep</p>
+      <p class="cta-subheadline">Generate probabilistically, validate deterministically</p>
 
       <div class="cta-button-group">
         <a href="#quick-start" class="btn btn-primary btn-large">
           Get Started Now
         </a>
         <a href="https://github.com/context-foundry/context-foundry" class="btn btn-secondary btn-large" target="_blank" rel="noopener">
-          Star on GitHub ⭐
+          Star on GitHub
         </a>
       </div>
     </div>
@@ -370,24 +476,21 @@ claude mcp add context-foundry \
   <footer class="footer" role="contentinfo">
     <div class="footer-container">
 
-      <!-- Column 1: Brand -->
       <div class="footer-column">
         <h4 class="footer-heading">Context Foundry</h4>
-        <p class="footer-tagline">Build complete software autonomously</p>
+        <p class="footer-tagline">Autonomous AI development platform</p>
       </div>
 
-      <!-- Column 2: Documentation -->
       <div class="footer-column">
         <h4 class="footer-heading">Documentation</h4>
         <ul class="footer-links">
           <li><a href="https://github.com/context-foundry/context-foundry/blob/main/QUICKSTART.md" target="_blank" rel="noopener">Quick Start</a></li>
-          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/USER_GUIDE.md" target="_blank" rel="noopener">User Guide</a></li>
-          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/docs/TECHNICAL_INNOVATIONS.md" target="_blank" rel="noopener">Technical Innovations</a></li>
-          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></li>
+          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/docs/USER_GUIDE.md" target="_blank" rel="noopener">User Guide</a></li>
+          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/docs/ARCHITECTURE.md" target="_blank" rel="noopener">Architecture</a></li>
+          <li><a href="https://github.com/context-foundry/context-foundry/blob/main/docs/INNOVATIONS.md" target="_blank" rel="noopener">Innovations</a></li>
         </ul>
       </div>
 
-      <!-- Column 3: Resources -->
       <div class="footer-column">
         <h4 class="footer-heading">Resources</h4>
         <ul class="footer-links">
@@ -398,7 +501,6 @@ claude mcp add context-foundry \
         </ul>
       </div>
 
-      <!-- Column 4: Connect -->
       <div class="footer-column">
         <h4 class="footer-heading">Connect</h4>
         <ul class="footer-links">
@@ -410,10 +512,9 @@ claude mcp add context-foundry \
 
     </div>
 
-    <!-- Copyright Bar -->
     <div class="footer-copyright">
-      <p>© 2025 Context Foundry. Open source under MIT License.</p>
-      <p>Version 2.1.0</p>
+      <p>2025 Context Foundry. Open source under MIT License.</p>
+      <p>Version 2.4.0</p>
     </div>
   </footer>
 
