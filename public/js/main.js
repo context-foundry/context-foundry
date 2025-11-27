@@ -20,6 +20,7 @@
     initCopyButtons();
     initScrollAnimations();
     initExternalLinks();
+    initDynamicVersion();
   }
 
   /**
@@ -284,6 +285,34 @@
 
       link.setAttribute('rel', relParts.join(' '));
     });
+  }
+
+  /**
+   * Fetch version from npm registry and update footer
+   * Falls back to static version if fetch fails
+   */
+  function initDynamicVersion() {
+    const versionElement = document.getElementById('footer-version');
+    if (!versionElement) {
+      return;
+    }
+
+    // Fetch latest version from npm registry
+    fetch('https://registry.npmjs.org/context-foundry/latest')
+      .then(function(response) {
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        return response.json();
+      })
+      .then(function(data) {
+        if (data.version) {
+          versionElement.textContent = 'Version ' + data.version;
+        }
+      })
+      .catch(function(error) {
+        // Keep static version on error - no console.error to avoid noise
+      });
   }
 
 })();
