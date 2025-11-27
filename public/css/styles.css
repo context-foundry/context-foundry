@@ -694,6 +694,11 @@ body {
   color: var(--color-text-muted);
 }
 
+.rotating-example {
+  transition: opacity 0.3s ease-in-out;
+  color: var(--color-secondary);
+}
+
 .code-block .string {
   color: var(--color-secondary);
 }

@@ -15,6 +15,7 @@
 
   function init() {
     initRotatingTagline();
+    initRotatingExamples();
     initSmoothScroll();
     initCopyButtons();
     initScrollAnimations();
@@ -85,6 +86,45 @@
     }, 3000);
 
     console.log('[Rotation] setInterval established, will rotate every 3 seconds');
+  }
+
+  /**
+   * Rotate through build examples with fade animation
+   */
+  function initRotatingExamples() {
+    const examples = [
+      'Use CF to build a mass text messaging app',
+      'Use CF to build a real-time stock portfolio tracker',
+      'Use CF to build a multiplayer trivia game with WebSockets',
+      'Use CF to build a CLI tool for managing Docker containers',
+      'Use CF to build a recipe finder with dietary filters',
+      'Use CF to build a markdown blog with syntax highlighting',
+      'Use CF to build a kanban board with drag-and-drop',
+      'Use CF to build an invoice generator with PDF export',
+      'Use CF to build a habit tracker with streak notifications',
+      'Use CF to build a URL shortener with analytics',
+      'Use CF to build a weather dashboard with 5-day forecast',
+      'Use CF to build a pomodoro timer with ambient sounds'
+    ];
+
+    const exampleElement = document.getElementById('rotating-example');
+    if (!exampleElement) {
+      return;
+    }
+
+    let currentIndex = 0;
+    exampleElement.textContent = examples[currentIndex];
+
+    // Rotate every 4 seconds (slightly slower than hero tagline)
+    setInterval(function() {
+      exampleElement.style.opacity = '0';
+
+      setTimeout(function() {
+        currentIndex = (currentIndex + 1) % examples.length;
+        exampleElement.textContent = examples[currentIndex];
+        exampleElement.style.opacity = '1';
+      }, 300);
+    }, 4000);
   }
 
   /**
