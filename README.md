@@ -81,37 +81,52 @@ Create an extension by adding domain-specific patterns, example implementations,
 ## Architecture
 
 ```mermaid
-graph TD
-    subgraph Context_Foundry [Context Foundry]
-        direction TB
-        
-        subgraph Core_Components [Core Components]
-            MCP[MCP Server<br/>Build API, Patterns, Skills]
-            Daemon[Daemon cfd<br/>Queue, Watchdog, Resources]
-            CLI[CLI / TUI<br/>Monitor, Dashboard, Logs]
-        end
-
-        MCP --> PhaseExec[Phase Executor]
-        Daemon --> PhaseExec
-        
-        subgraph Phase_Executor [Phase Executor]
-            Scout[Scout Phase] -->|scout_report.json| Architect[Architect Phase]
-            Architect -->|architecture.json| Builder[Builder Phase]
-            Builder -->|source code| Test[Test Phase]
-            Test -->|test-report.md| Deploy[Deploy Phase]
-            Deploy -->|GitHub repo| Done((Done))
-        end
-
-        PhaseExec --> Validators[Validators<br/>Deterministic Enforcement]
-        Validators -->|File checks| PhaseExec
-        Validators -->|Checksums| PhaseExec
-        Validators -->|BAML schemas| PhaseExec
+graph LR
+    subgraph User_Interface [User Interface]
+        CLI[CLI / TUI]
+        Claude[Claude Code]
     end
 
-    style Context_Foundry fill:transparent,stroke:#333,stroke-width:2px
-    style Core_Components fill:transparent,stroke:none
-    style Phase_Executor fill:transparent,stroke:#666,stroke-dasharray: 5 5
-    style Validators fill:#f9f,stroke:#333,stroke-width:2px
+    subgraph Core_System [Context Foundry Core]
+        Daemon[Daemon Service<br/>(cfd)]
+        MCP[MCP Server]
+        
+        subgraph Data_Layer [Data & Knowledge]
+            Codex[(Context Codex<br/>SQLite)]
+            Skills[(Skills Library)]
+        end
+    end
+
+    subgraph Build_Pipeline [Autonomous Build Pipeline]
+        direction TB
+        Scout[1. Scout] --> Architect[2. Architect]
+        Architect --> Builder[3. Builder]
+        Builder --> Test[4. Test]
+        Test --> Deploy[5. Deploy]
+        
+        Validators{Validators}
+    end
+
+    %% Connections
+    CLI -->|Monitor| Daemon
+    Claude -->|Tools| MCP
+    MCP -->|Spawns| Build_Pipeline
+    Daemon -->|Manages| Build_Pipeline
+    
+    Build_Pipeline -->|Enforce| Validators
+    Validators -->|Feedback| Build_Pipeline
+    
+    Build_Pipeline -.->|Read/Write| Codex
+    Build_Pipeline -.->|Use| Skills
+
+    %% Styling
+    classDef primary fill:#2563eb,stroke:#1d4ed8,color:white;
+    classDef secondary fill:#4b5563,stroke:#374151,color:white;
+    classDef database fill:#059669,stroke:#047857,color:white;
+    
+    class CLI,Claude primary;
+    class Daemon,MCP secondary;
+    class Codex,Skills database;
 ```
 
 Each phase spawns a **fresh Claude instance** with isolated context, preventing token bloat and ensuring consistent quality across long builds.
