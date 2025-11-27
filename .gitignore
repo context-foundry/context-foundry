@@ -111,14 +111,15 @@ smoke_test_*.txt
 #   the complete Flowise extension for easy deployment
 #
 # ═══════════════════════════════════════════════════════════
-# extensions/  # Commented out for private repo - extensions now committed
-docs/assets/SatoshiChoreTracker.gif
+# Private extensions (local only, not for public GitHub)
+extensions/flowise/
+extensions/roblox/
 
-# Flowise documentation and articles (keep private)
-extensions/flowise/**/*.md
-
-# Workday transcripts (keep private)
+# Workday extension (keep transcripts private)
 extensions/workday/**/*.txt
 
-# Extension dependencies (large/untracked)
+# Extension dependencies
 extensions/*/node_modules/
+
+# Other assets
+docs/assets/SatoshiChoreTracker.gif
