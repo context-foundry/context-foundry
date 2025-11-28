@@ -2900,7 +2900,7 @@
                 if (state.selectedPhase === p) cls += ' active';
 
                 return `
-                            <div class="phase-tab ${cls}" data-phase="${p}" onclick="state.selectedPhase = '${p}'; renderJobDetail(state.rawJobs.find(j => j.id === '${job.id}'));">
+                            <div class="phase-tab ${cls}" data-phase="${p}" data-job="${job.id}">
                                 <span>${p}</span>
                                 ${hasArtifacts ? '<span style="color:var(--accent-cyan);font-size:10px;">[files]</span>' : ''}
                             </div>
