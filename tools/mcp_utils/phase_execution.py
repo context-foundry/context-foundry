@@ -116,14 +116,22 @@ class PhaseValidator:
 
     @staticmethod
     def validate_scout(working_dir: Path) -> bool:
-        """Scout must create scout-report.md."""
-        required = working_dir / ".context-foundry" / "scout-report.md"
-        if not required.exists():
-            raise FileNotFoundError(f"Scout failed to create {required}")
+        """Scout must create scout-report.md OR scout_report.json."""
+        md_report = working_dir / ".context-foundry" / "scout-report.md"
+        json_report = working_dir / ".context-foundry" / "scout_report.json"
 
-        # Verify non-empty
-        if required.stat().st_size < 100:
+        if not md_report.exists() and not json_report.exists():
+            raise FileNotFoundError(
+                f"Scout failed to create {md_report} or {json_report}"
+            )
+
+        # Verify non-empty if MD exists
+        if md_report.exists() and md_report.stat().st_size < 100:
             raise ValueError("scout-report.md is too small (< 100 bytes)")
+
+        # Verify non-empty if JSON exists
+        if json_report.exists() and json_report.stat().st_size < 100:
+            raise ValueError("scout_report.json is too small (< 100 bytes)")
 
         return True
 
@@ -725,6 +733,7 @@ def run_phase(
         project_type=project_type,
         provider=provider,
         model=model,
+        job_id=job_id,
     )
 
 
@@ -739,6 +748,7 @@ def _run_phase_internal(
     project_type: str = "unknown",
     provider: str = "claude",
     model: str = None,
+    job_id: str = None,
 ) -> PhaseResult:
     """
     Internal implementation of phase execution.
@@ -819,7 +829,9 @@ def _run_phase_internal(
             "--permission-mode",
             "bypassPermissions",
             "--strict-mcp-config",  # Prevents loading user MCP servers
-            # Note: DO NOT add --print here - it prevents tool execution!
+            "--print",  # Required for non-interactive execution
+            "--output-format",
+            "stream-json",  # Enable structured logging
             "--settings",
             '{"thinkingMode": "off"}',
             "--system-prompt",
@@ -865,6 +877,27 @@ Environment: Running in daemon? Check daemon's PATH configuration.
     print(f"   Timeout: {phase_timeout}s", file=sys.stderr)
     print(f"   Working directory: {working_directory}", file=sys.stderr)
 
+    # Initialize conversation logger if available
+    # This captures the stream-json output for the dashboard
+    conversation_logger = None
+    try:
+        from tools.mcp_utils.conversation_logger import ConversationLogger
+        import uuid
+
+        # Use job_id if available, otherwise generate a temporary ID
+        task_id = job_id if job_id else f"temp-{uuid.uuid4()}"
+        conversation_logger = ConversationLogger(task_id, working_directory)
+        print(
+            f"📝 Logging conversation to {conversation_logger.log_dir}", file=sys.stderr
+        )
+    except ImportError:
+        print(
+            "⚠️  ConversationLogger not available - skipping detailed logs",
+            file=sys.stderr,
+        )
+    except Exception as e:
+        print(f"⚠️  Failed to initialize ConversationLogger: {e}", file=sys.stderr)
+
     try:
         process = subprocess.Popen(
             cmd,
@@ -872,12 +905,42 @@ Environment: Running in daemon? Check daemon's PATH configuration.
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            bufsize=1,  # Line buffered for streaming
             env={**dict(os.environ), "PYTHONUNBUFFERED": "1"},
         )
 
-        try:
-            stdout, stderr = process.communicate(timeout=phase_timeout)
-        except subprocess.TimeoutExpired:
+        # Stream output if logger is available
+        if conversation_logger:
+            import threading
+
+            def stream_logger():
+                for event in conversation_logger.stream_from_sync_process(process):
+                    # Reconstruct stdout for legacy compatibility
+                    # Note: stream-json output is NOT the actual content, so we don't append it to stdout_content
+                    # Instead, we rely on the logger to save the structured data
+                    pass
+
+            # Start logger thread
+            log_thread = threading.Thread(target=stream_logger, daemon=True)
+            log_thread.start()
+
+            # Wait for process
+            try:
+                process.wait(timeout=phase_timeout)
+            except subprocess.TimeoutExpired:
+                # Handled below
+                pass
+
+            # Read any remaining stderr
+            stderr = process.stderr.read()
+            stdout = ""  # stdout is consumed by logger
+        else:
+            # Legacy blocking execution
+            try:
+                stdout, stderr = process.communicate(timeout=phase_timeout)
+            except subprocess.TimeoutExpired:
+                # Handled below
+                pass
             duration = (datetime.now() - start).total_seconds()
             print(
                 f"⏱️  {phase_name} TIMEOUT after {duration:.1f}s - killing process",
@@ -931,7 +994,13 @@ Environment: Running in daemon? Check daemon's PATH configuration.
         # Estimate context usage
         phase_files = []
         if phase_name == "Scout":
-            phase_files = [working_directory / ".context-foundry" / "scout-report.md"]
+            phase_files = []
+            md_report = working_directory / ".context-foundry" / "scout-report.md"
+            json_report = working_directory / ".context-foundry" / "scout_report.json"
+            if md_report.exists():
+                phase_files.append(md_report)
+            if json_report.exists():
+                phase_files.append(json_report)
         elif phase_name == "Architect":
             if iteration > 0:
                 # Fix iteration N: reads test report from PREVIOUS iteration (N-1)
@@ -949,9 +1018,16 @@ Environment: Running in daemon? Check daemon's PATH configuration.
                     / f"architecture-fix-{iteration}.md",
                 ]
             else:
-                # Initial architecture: reads scout-report.md, writes architecture.md
+                # Initial architecture: reads scout-report.md (or json), writes architecture.md
+                scout_md = working_directory / ".context-foundry" / "scout-report.md"
+                scout_json = (
+                    working_directory / ".context-foundry" / "scout_report.json"
+                )
+
+                scout_file = scout_md if scout_md.exists() else scout_json
+
                 phase_files = [
-                    working_directory / ".context-foundry" / "scout-report.md",
+                    scout_file,
                     working_directory / ".context-foundry" / "architecture.md",
                 ]
         elif phase_name == "Builder":

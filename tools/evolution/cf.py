@@ -27,7 +27,7 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
     """Serve cf.html and proxy /events + /status to the daemon."""
 
     daemon_base: str = "http://127.0.0.1:8420"
-    html_path: Path = Path(__file__).parent / "cf.html"
+    html_path: Path = Path(__file__).resolve().parent / "cf.html"
 
     # Endpoints to proxy (GET and POST)
     # NOTE: /auth-token is NOT proxied - it must be fetched directly from daemon (localhost only)
@@ -41,6 +41,11 @@ class ProxyHandler(http.server.SimpleHTTPRequestHandler):
         "/deny",
         "/phase-prompts",
         "/phase-inject",
+        "/phase-start-review",
+        "/phase-acknowledge",
+        "/phase-state",
+        "/transaction-stats",
+        "/agent-activity",
     )
 
     def log_message(self, fmt, *args):

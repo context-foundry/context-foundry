@@ -155,6 +155,38 @@ def create_phase_prompt_file(
 
     prompt_file = prompts_dir / f"{phase_name.lower()}-prompt.json"
 
+    # Check if file exists and content matches
+    if prompt_file.exists():
+        try:
+            existing_data = json.loads(prompt_file.read_text())
+            # Check if original prompts match
+            if (
+                existing_data.get("system_prompt") == system_prompt
+                and existing_data.get("input_instruction") == input_instruction
+            ):
+                # If the previous attempt failed, reset to READY so it can be retried
+                if existing_data.get("state") == STATE_FAILED:
+                    logger.info(
+                        f"Phase prompt for {phase_name} was in FAILED state. Resetting to READY for retry."
+                    )
+                    existing_data["state"] = STATE_READY
+                    existing_data["error"] = None
+                    # Reset timestamps for retry
+                    existing_data["ready_at"] = datetime.now().isoformat()
+                    existing_data["processing_started_at"] = None
+                    existing_data["completed_at"] = None
+                    existing_data["acknowledged_at"] = None
+
+                    prompt_file.write_text(json.dumps(existing_data, indent=2))
+                    return prompt_file
+
+                logger.info(
+                    f"Phase prompt file already exists for {phase_name} with matching content. Preserving state."
+                )
+                return prompt_file
+        except Exception as e:
+            logger.warning(f"Failed to read existing prompt file: {e}")
+
     # Calculate token estimates
     estimated_input = estimate_tokens(system_prompt) + estimate_tokens(
         input_instruction
@@ -591,6 +623,7 @@ def run_phase_with_prompt_management(
                 phase_prompt_path=temp_prompt_path,
                 input_instruction=effective_input,
                 working_directory=working_directory,
+                job_id=job_id,
                 **run_phase_kwargs,
             )
         finally:
@@ -605,6 +638,7 @@ def run_phase_with_prompt_management(
             if effective_input != input_instruction
             else input_instruction,
             working_directory=working_directory,
+            job_id=job_id,
             **run_phase_kwargs,
         )
 
