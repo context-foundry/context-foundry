@@ -8,6 +8,7 @@ The goal is minimal dependencies (stdlib only) and fast startup.
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -268,27 +269,35 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         Returns the resolved Path if valid, None if invalid.
         Security: Prevents path traversal by requiring the resolved path
-        to actually be inside a .context-foundry directory.
+        to be either:
+        1. Inside a .context-foundry directory, OR
+        2. Inside a project directory that contains a .context-foundry folder
         """
         try:
             # Resolve to absolute path, following symlinks
             resolved = Path(os.path.realpath(file_path))
-
-            # Check that .context-foundry is actually a directory component
-            # in the resolved path (not just a substring match)
             parts = resolved.parts
-            if ".context-foundry" not in parts:
-                return None
 
-            # Find the index of .context-foundry
-            cf_idx = parts.index(".context-foundry")
+            # Case 1: Path is inside a .context-foundry directory
+            if ".context-foundry" in parts:
+                cf_idx = parts.index(".context-foundry")
+                # Ensure there's at least one component after .context-foundry
+                if cf_idx < len(parts) - 1:
+                    return resolved
 
-            # Ensure there's at least one component after .context-foundry
-            # (we're inside the directory, not at the root)
-            if cf_idx >= len(parts) - 1:
-                return None
+            # Case 2: Path is within a project that has a .context-foundry folder
+            # Walk up parent directories to find a project root with .context-foundry
+            for parent in resolved.parents:
+                cf_dir = parent / ".context-foundry"
+                if cf_dir.is_dir():
+                    # Verify resolved path is actually under this parent (no escaping)
+                    try:
+                        resolved.relative_to(parent)
+                        return resolved
+                    except ValueError:
+                        continue
 
-            return resolved
+            return None
         except (ValueError, OSError):
             return None
 
@@ -309,6 +318,16 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if origin and ("localhost" in origin or "127.0.0.1" in origin):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-CF-Auth")
+
+    def _send_json_error(self, status_code: int, message: str) -> None:
+        """Send a JSON-formatted error response for API endpoints."""
+        body = json.dumps({"error": message, "status": status_code}).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json")
+        self._add_cors_headers()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -353,6 +372,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._start_phase_review()
         elif parsed.path == "/phase-acknowledge":
             self._acknowledge_phase()
+        elif parsed.path == "/save-system-prompt-to-disk":
+            self._save_system_prompt_to_disk()
+        elif parsed.path == "/save-input-instruction-to-disk":
+            self._save_input_instruction_to_disk()
         else:
             self.send_error(404, "Not Found")
 
@@ -436,7 +459,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Serve artifact file content. Query: path=<filepath>"""
         # Require auth for reading artifacts (contains potentially sensitive build data)
         if not self._check_auth():
-            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            self._send_json_error(
+                401, "Unauthorized: missing or invalid X-CF-Auth header"
+            )
             return
 
         from urllib.parse import parse_qs
@@ -445,25 +470,26 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         file_path = params.get("path", [None])[0]
 
         if not file_path:
-            self.send_error(400, "Missing 'path' parameter")
+            self._send_json_error(400, "Missing 'path' parameter")
             return
 
         # Security: validate and normalize path to prevent traversal
         path = self._validate_artifact_path(file_path)
         if path is None:
-            self.send_error(
-                403, "Invalid path: must be inside a .context-foundry directory"
+            self._send_json_error(
+                403,
+                f"Invalid path: must be inside a project with .context-foundry (got: {file_path})",
             )
             return
 
         try:
             if not path.exists():
-                self.send_error(404, f"File not found: {file_path}")
+                self._send_json_error(404, f"File not found: {file_path}")
                 return
 
             # Limit file size to 1MB
             if path.stat().st_size > 1_000_000:
-                self.send_error(413, "File too large (max 1MB)")
+                self._send_json_error(413, "File too large (max 1MB)")
                 return
 
             content = path.read_text(encoding="utf-8", errors="replace")
@@ -489,6 +515,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -496,7 +523,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         except Exception as exc:
             logger.warning("Error serving artifact %s: %s", file_path, exc)
-            self.send_error(500, str(exc))
+            self._send_json_error(500, str(exc))
 
     def _serve_job_prompt(self, query: str) -> None:
         """Serve the original prompt/task that started a job. Query: job_id=<id>"""
@@ -577,13 +604,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Save edited artifact file content. POST body: {path, content}"""
         # Require auth for destructive operations
         if not self._check_auth():
-            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            self._send_json_error(
+                401, "Unauthorized: missing or invalid X-CF-Auth header"
+            )
             return
 
         try:
             content_length = int(self.headers.get("Content-Length", 0))
             if content_length > 2_000_000:  # 2MB limit
-                self.send_error(413, "Request body too large (max 2MB)")
+                self._send_json_error(413, "Request body too large (max 2MB)")
                 return
 
             body_raw = self.rfile.read(content_length)
@@ -593,19 +622,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             content = data.get("content")
 
             if not file_path or content is None:
-                self.send_error(400, "Missing 'path' or 'content' in request body")
+                self._send_json_error(
+                    400, "Missing 'path' or 'content' in request body"
+                )
                 return
 
             # Security: validate and normalize path to prevent traversal
             path = self._validate_artifact_path(file_path)
             if path is None:
-                self.send_error(
-                    403, "Invalid path: must be inside a .context-foundry directory"
+                self._send_json_error(
+                    403,
+                    f"Invalid path: must be inside a project with .context-foundry (got: {file_path})",
                 )
                 return
 
             if not path.parent.exists():
-                self.send_error(404, f"Parent directory does not exist: {path.parent}")
+                self._send_json_error(
+                    404, f"Parent directory does not exist: {path.parent}"
+                )
                 return
 
             # Write the file
@@ -622,15 +656,16 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response)
 
         except json.JSONDecodeError as exc:
-            self.send_error(400, f"Invalid JSON: {exc}")
+            self._send_json_error(400, f"Invalid JSON: {exc}")
         except Exception as exc:
             logger.warning("Error saving artifact: %s", exc)
-            self.send_error(500, str(exc))
+            self._send_json_error(500, str(exc))
 
     def _approve_phase(self) -> None:
         """Approve a pending phase request. POST body: {request_id, approved_by?, reason?}"""
@@ -1117,11 +1152,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def _acknowledge_phase(self) -> None:
         """
         Acknowledge a phase prompt, allowing the agent to start execution.
-        POST body: {job_id, phase, acknowledged_by?}
-        Transitions state: under_review/ready_edit -> processing
+        POST body: {job_id, phase, acknowledged_by?, was_edited?}
+        Transitions state: draft/under_review -> acknowledged_edited/acknowledged_unedited -> processing
 
         This is the "clean plate" mechanism - the agent is blocked waiting
         for this state transition before it can start.
+
+        The was_edited flag creates a permanent record of whether the human
+        edited the prompts before submission.
         """
         if not self._check_auth():
             self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
@@ -1134,6 +1172,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             job_id = data.get("job_id")
             phase = data.get("phase")
+            was_edited = data.get("was_edited", False)
 
             if not job_id or not phase:
                 self.send_error(400, "Missing 'job_id' or 'phase' in request body")
@@ -1157,10 +1196,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             from tools.mcp_utils.phase_prompts import (
                 read_phase_prompt,
                 update_prompt_state,
+                STATE_DRAFT,
                 STATE_READY,
                 STATE_UNDER_REVIEW,
                 STATE_READY_EDIT,
-                STATE_PROCESSING,
+                STATE_ACKNOWLEDGED_EDITED,
+                STATE_ACKNOWLEDGED_UNEDITED,
             )
 
             # Read current prompt
@@ -1169,10 +1210,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(404, f"No prompt found for phase: {phase}")
                 return
 
-            current_state = prompt_data.get("state", STATE_READY)
+            current_state = prompt_data.get("state", STATE_DRAFT)
 
-            # Allow acknowledge from ready, under_review, or ready_edit states
-            valid_states = {STATE_READY, STATE_UNDER_REVIEW, STATE_READY_EDIT}
+            # Allow acknowledge from draft, ready, under_review, or ready_edit states
+            valid_states = {
+                STATE_DRAFT,
+                STATE_READY,
+                STATE_UNDER_REVIEW,
+                STATE_READY_EDIT,
+            }
             if current_state not in valid_states:
                 self.send_error(
                     409,
@@ -1181,21 +1227,42 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            # Transition to processing - this wakes up the waiting agent
+            # Transition to acknowledged state (records edit status permanently)
+            # The agent is waiting for this state - it will transition to processing when it starts
+            acknowledged_state = (
+                STATE_ACKNOWLEDGED_EDITED if was_edited else STATE_ACKNOWLEDGED_UNEDITED
+            )
+
+            # Pass explicit edit flags from request (handles temp edits that aren't in file yet)
+            # These override the file-derived values in update_prompt_state
+            system_prompt_was_edited = data.get("system_prompt_was_edited", False)
+            input_instruction_was_edited = data.get(
+                "input_instruction_was_edited", False
+            )
+
             success = update_prompt_state(
                 Path(working_dir),
                 phase,
-                STATE_PROCESSING,
+                acknowledged_state,
                 validate_transition=False,  # Allow direct transition for user acknowledgment
                 acknowledged_by=data.get("acknowledged_by", "dashboard_user"),
+                system_prompt_was_edited=system_prompt_was_edited,
+                input_instruction_was_edited=input_instruction_was_edited,
             )
 
             if not success:
-                self.send_error(500, "Failed to update prompt state")
+                self.send_error(500, "Failed to update prompt state to acknowledged")
                 return
 
+            # NOTE: We do NOT transition to processing here.
+            # The agent is polling for acknowledged_edited/acknowledged_unedited states.
+            # When the agent sees the acknowledged state, IT will transition to processing
+            # when it actually starts execution. This makes the acknowledged state observable.
+
+            edit_status = "with edits" if was_edited else "unedited"
             logger.info(
-                "Phase prompt acknowledged: %s/%s - agent will start execution",
+                "Phase prompt acknowledged (%s): %s/%s - agent will wake up and start",
+                edit_status,
                 job_id[:8],
                 phase,
             )
@@ -1205,8 +1272,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     "success": True,
                     "job_id": job_id,
                     "phase": phase,
-                    "state": STATE_PROCESSING,
-                    "message": f"Phase {phase} acknowledged. Agent starting execution.",
+                    "state": acknowledged_state,
+                    "was_edited": was_edited,
+                    "message": f"Phase {phase} acknowledged ({edit_status}). Agent will start execution.",
                 }
             ).encode("utf-8")
 
@@ -1221,6 +1289,278 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_error(400, f"Invalid JSON: {exc}")
         except Exception as exc:
             logger.warning("Error acknowledging phase: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _save_system_prompt_to_disk(self) -> None:
+        """
+        Save system prompt edits back to the source file on disk.
+        POST body: {job_id, phase, content}
+        Writes to: tools/prompts/phases/phase_{phase}.txt
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+            content = data.get("content")
+
+            if not job_id or not phase or content is None:
+                self.send_error(400, "Missing required fields: job_id, phase, content")
+                return
+
+            # Validate phase name (prevent path traversal)
+            # Allow alphanumeric, underscore, hyphen only
+            phase_lower = phase.lower()
+            if not re.match(r"^[a-z0-9_-]+$", phase_lower):
+                self.send_error(
+                    400,
+                    f"Invalid phase name '{phase}'. Phase names must contain only "
+                    "letters, numbers, underscores, and hyphens.",
+                )
+                return
+
+            if len(phase_lower) > 50:
+                self.send_error(400, "Phase name too long (max 50 characters)")
+                return
+
+            # Find the Context Foundry installation root
+            # Dashboard is at: context_foundry/daemon/dashboard.py
+            # Prompts are at: tools/prompts/phases/phase_*.txt
+            cf_root = Path(__file__).parent.parent.parent
+            prompts_dir = cf_root / "tools" / "prompts" / "phases"
+
+            # Validate directory exists and is writable
+            if not prompts_dir.exists():
+                self.send_error(
+                    404,
+                    f"Prompts directory not found at expected location: {prompts_dir}. "
+                    "This may indicate a non-standard installation layout.",
+                )
+                return
+
+            if not os.access(prompts_dir, os.W_OK):
+                self.send_error(
+                    403,
+                    f"No write permission to prompts directory: {prompts_dir}. "
+                    "Check file system permissions.",
+                )
+                return
+
+            prompt_file = prompts_dir / f"phase_{phase_lower}.txt"
+
+            # Create backup if file exists
+            if prompt_file.exists():
+                backup_file = prompts_dir / f"phase_{phase_lower}.txt.bak"
+                try:
+                    import shutil
+
+                    shutil.copy2(prompt_file, backup_file)
+                except Exception as backup_err:
+                    logger.warning("Could not create backup: %s", backup_err)
+
+            # Write the content to disk
+            prompt_file.write_text(content, encoding="utf-8")
+
+            logger.info(
+                "System prompt saved to disk: %s/%s -> %s (%d bytes)",
+                job_id[:8],
+                phase,
+                prompt_file,
+                len(content),
+            )
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "file_path": str(prompt_file),
+                    "bytes_written": len(content),
+                    "message": f"System prompt saved to {prompt_file.name}",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except PermissionError as exc:
+            self.send_error(
+                403,
+                f"Permission denied writing to file. Check that the process has write "
+                f"access to tools/prompts/phases/. Error: {exc}",
+            )
+        except OSError as exc:
+            self.send_error(
+                500,
+                f"File system error while saving: {exc}. "
+                "Check disk space and file system state.",
+            )
+        except Exception as exc:
+            logger.warning("Error saving system prompt to disk: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _save_input_instruction_to_disk(self) -> None:
+        """
+        Save input instruction to disk in the project's .context-foundry directory.
+        Only allowed for HITL (Human-in-the-Loop) jobs.
+        POST body: {job_id, phase, content}
+        Writes to: {working_dir}/.context-foundry/input-instructions/{phase}-input.txt
+        """
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body.decode("utf-8"))
+
+            job_id = data.get("job_id")
+            phase = data.get("phase")
+            content = data.get("content")
+
+            if not job_id or not phase or content is None:
+                self.send_error(400, "Missing required fields: job_id, phase, content")
+                return
+
+            # Validate phase name (prevent path traversal)
+            # Allow alphanumeric, underscore, hyphen only
+            phase_lower = phase.lower()
+            if not re.match(r"^[a-z0-9_-]+$", phase_lower):
+                self.send_error(
+                    400,
+                    f"Invalid phase name '{phase}'. Phase names must contain only "
+                    "letters, numbers, underscores, and hyphens.",
+                )
+                return
+
+            if len(phase_lower) > 50:
+                self.send_error(400, "Phase name too long (max 50 characters)")
+                return
+
+            # Find job to get working directory and execution mode
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self.send_error(404, f"Job not found: {job_id}")
+                return
+
+            # HITL mode guard: only allow saving input instructions for HITL jobs
+            # Accept various HITL aliases (case-insensitive)
+            execution_mode = job.params.get("execution_mode", "autonomous")
+            hitl_aliases = {
+                "hitl",
+                "human_in_the_loop",
+                "human-in-the-loop",
+                "manual",
+                "interactive",
+            }
+            is_hitl_mode = execution_mode.lower() in hitl_aliases
+            if not is_hitl_mode:
+                self.send_error(
+                    403,
+                    f"Input instruction saving is only allowed for HITL jobs. "
+                    f"This job has execution_mode='{execution_mode}'. "
+                    f"Valid HITL modes: {', '.join(sorted(hitl_aliases))}. "
+                    "Autonomous jobs do not support persisting input instructions.",
+                )
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self.send_error(
+                    400,
+                    "Job has no working directory configured. "
+                    "Cannot determine where to save input instruction.",
+                )
+                return
+
+            working_path = Path(working_dir)
+            if not working_path.exists():
+                self.send_error(
+                    404,
+                    f"Working directory does not exist: {working_dir}. "
+                    "The project may have been moved or deleted.",
+                )
+                return
+
+            if not os.access(working_path, os.W_OK):
+                self.send_error(
+                    403,
+                    f"No write permission to working directory: {working_dir}. "
+                    "Check file system permissions.",
+                )
+                return
+
+            # Create input-instructions directory if needed
+            input_dir = working_path / ".context-foundry" / "input-instructions"
+            try:
+                input_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as mkdir_err:
+                self.send_error(
+                    500,
+                    f"Could not create input-instructions directory: {mkdir_err}",
+                )
+                return
+
+            # Write the input instruction to disk
+            input_file = input_dir / f"{phase_lower}-input.txt"
+            input_file.write_text(content, encoding="utf-8")
+
+            logger.info(
+                "Input instruction saved to disk: %s/%s -> %s (%d bytes, HITL mode)",
+                job_id[:8],
+                phase,
+                input_file,
+                len(content),
+            )
+
+            response = json.dumps(
+                {
+                    "success": True,
+                    "job_id": job_id,
+                    "phase": phase,
+                    "file_path": str(input_file),
+                    "bytes_written": len(content),
+                    "execution_mode": execution_mode,
+                    "message": f"Input instruction saved to {input_file.name}",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except json.JSONDecodeError as exc:
+            self.send_error(400, f"Invalid JSON: {exc}")
+        except PermissionError as exc:
+            self.send_error(
+                403,
+                f"Permission denied writing to file. Check that the process has write "
+                f"access to the project's .context-foundry directory. Error: {exc}",
+            )
+        except OSError as exc:
+            self.send_error(
+                500,
+                f"File system error while saving: {exc}. "
+                "Check disk space and file system state.",
+            )
+        except Exception as exc:
+            logger.warning("Error saving input instruction to disk: %s", exc)
             self.send_error(500, str(exc))
 
     def _serve_phase_state(self, query: str) -> None:

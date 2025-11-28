@@ -64,8 +64,9 @@
         }
 
         .logo img {
-            height: 28px;
+            height: 32px;
             width: auto;
+            display: block;
         }
 
         .connection-status {
@@ -339,6 +340,26 @@
             font-weight: 500;
         }
 
+        .execution-mode-badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .execution-mode-badge.autonomous {
+            color: var(--accent-purple);
+            background: rgba(168, 85, 247, 0.15);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+        }
+
+        .execution-mode-badge.hitl {
+            color: var(--accent-orange);
+            background: rgba(249, 115, 22, 0.15);
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+
         .agent-status.running {
             color: var(--accent-green);
             background: rgba(63, 185, 80, 0.15);
@@ -481,6 +502,14 @@
             font-size: 12px;
             color: var(--text-muted);
             font-family: monospace;
+        }
+
+        .build-path-banner {
+            font-family: monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            word-break: break-all;
         }
 
         .job-detail-meta {
@@ -651,6 +680,27 @@
             display: flex;
             align-items: center;
             gap: 8px;
+        }
+
+        .human-edited-badge {
+            font-size: 10px;
+            padding: 2px 8px;
+            background: rgba(249, 115, 22, 0.15);
+            color: var(--accent-orange);
+            border-radius: 4px;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .human-edited-badge.unsaved {
+            background: rgba(234, 179, 8, 0.2);
+            color: var(--accent-yellow);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
         }
 
         /* Artifacts Section */
@@ -984,9 +1034,26 @@
             color: var(--text-muted);
         }
 
-        .prompt-state.ready {
+        .prompt-state.draft {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--accent-yellow);
+            animation: ready-pulse 2s infinite;
+        }
+
+        .prompt-state.acknowledged_edited {
+            background: rgba(249, 115, 22, 0.2);
+            color: var(--accent-orange);
+        }
+
+        .prompt-state.acknowledged_unedited {
             background: rgba(63, 185, 80, 0.2);
             color: var(--accent-green);
+        }
+
+        /* Legacy: ready maps to draft */
+        .prompt-state.ready {
+            background: rgba(210, 153, 34, 0.2);
+            color: var(--accent-yellow);
             animation: ready-pulse 2s infinite;
         }
 
@@ -2752,13 +2819,18 @@
             const buildType = rawBuildType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             const workingDir = job.metadata?.working_directory || '';
 
-            // Update sidebar header with project name and working directory
-            document.getElementById('contextAgentName').innerHTML = `
-                ${displayName}
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px; font-weight: normal; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${workingDir}">
-                    ${workingDir}
-                </div>
-            `;
+            // Determine execution mode (HITL vs Autonomous) - case-insensitive matching
+            // Keep this alias list in sync with backend (dashboard.py) and prompt render paths
+            const hitlAliasesJob = ['hitl', 'human_in_the_loop', 'human-in-the-loop', 'manual', 'interactive'];
+            const executionMode = (job.params?.execution_mode || 'autonomous').toLowerCase();
+            const isHITL = hitlAliasesJob.includes(executionMode) ||
+                          (job.params?.pause_after_phases && job.params.pause_after_phases.length > 0) ||
+                          (job.metadata?.execution_mode && hitlAliasesJob.includes(job.metadata.execution_mode.toLowerCase()));
+            const executionModeLabel = isHITL ? 'HITL' : 'Autonomous';
+            const executionModeClass = isHITL ? 'hitl' : 'autonomous';
+
+            // Update sidebar header with project name
+            document.getElementById('contextAgentName').textContent = displayName;
 
             const duration = job.duration_seconds ? formatDuration(job.duration_seconds) : '--';
             const agents = job.agents || { active_count: 0, total_spawned: 0 };
@@ -2806,15 +2878,72 @@
             // Get phase prompts for this job
             const phasePrompts = state.phasePrompts[job.id] || [];
             const promptContent = renderPhasePromptsSection(job.id, phasePrompts, state.selectedPhase, job.status);
-            // Show phase prompts section for autonomous_build jobs if there's content or a warning
-            const phasePromptsHtml = (job.type === 'autonomous_build' && (promptContent || state.phasePromptsWarning))
-                ? `
-                    <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
-                        ${state.selectedPhase ? `${state.selectedPhase} Prompt` : 'Phase Prompts'}
-                    </h3>
-                    ${promptContent || renderPhasePromptsSection(job.id, [], state.selectedPhase, job.status)}
-                `
-                : '';
+
+            // Check if any prompts were edited by human (including unsaved temp edits)
+            const anyPromptsEdited = phasePrompts.some(p =>
+                p.system_prompt_edited || p.input_instruction_edited ||
+                p.system_prompt_edited_temp !== undefined || p.input_instruction_edited_temp !== undefined
+            );
+
+            // Check if job has ANY prompts (regardless of selected phase)
+            const hasAnyPrompts = phasePrompts.length > 0;
+
+            // Check if selected phase specifically has no prompt (but other phases might)
+            const selectedPhaseHasNoPrompt = state.selectedPhase &&
+                hasAnyPrompts &&
+                !phasePrompts.some(p => p.phase === state.selectedPhase);
+
+            // Show phase prompts section for autonomous_build jobs
+            let phasePromptsHtml = '';
+            if (job.type === 'autonomous_build') {
+                if (promptContent) {
+                    // Has prompts for this phase - show them
+                    phasePromptsHtml = `
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+                            ${state.selectedPhase ? `${state.selectedPhase} Prompt` : 'Phase Prompts'}
+                            ${anyPromptsEdited ? '<span style="font-size: 10px; color: var(--accent-orange); margin-left: 8px;">✏️ Contains Human Edits</span>' : ''}
+                        </h3>
+                        ${promptContent}
+                    `;
+                } else if (selectedPhaseHasNoPrompt) {
+                    // Selected phase has no prompt, but other phases do
+                    phasePromptsHtml = `
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
+                            ${state.selectedPhase} Prompt
+                            ${anyPromptsEdited ? '<span style="font-size: 10px; color: var(--accent-orange); margin-left: 8px;">✏️ Contains Human Edits</span>' : ''}
+                        </h3>
+                        <div class="prompt-section" style="border-color: var(--border);">
+                            <div class="prompt-content" style="color: var(--text-muted); text-align: center; padding: 20px;">
+                                <div style="margin-bottom: 8px;">📋 No prompt stored for ${state.selectedPhase} phase</div>
+                                <div style="font-size: 11px;">This phase may have run before prompt storage was enabled, or prompts were cleared</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (state.phasePromptsWarning) {
+                    // Has warning
+                    phasePromptsHtml = `
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">Phase Prompts</h3>
+                        ${renderPhasePromptsSection(job.id, [], state.selectedPhase, job.status)}
+                    `;
+                } else {
+                    // No prompts available at all - show appropriate message
+                    const message = isHITL
+                        ? 'System prompts not available (may have been cleared after build)'
+                        : 'System prompts not saved for this build';
+                    const hint = isHITL
+                        ? 'Check .context-foundry/phase-prompts/ directory'
+                        : 'Phase outputs (scout_report.json, architecture.md, etc.) are available in Build Phases above. Use HITL mode to capture system prompts.';
+                    phasePromptsHtml = `
+                        <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">Phase Prompts</h3>
+                        <div class="prompt-section" style="border-color: var(--border);">
+                            <div class="prompt-content" style="color: var(--text-muted); text-align: center; padding: 20px;">
+                                <div style="margin-bottom: 8px;">📋 ${message}</div>
+                                <div style="font-size: 11px;">${hint}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
 
             container.innerHTML = `
                 ${approvalBannerHtml}
@@ -2825,9 +2954,14 @@
                             <div class="job-detail-id">${job.id.slice(0, 8)} · ${buildType}</div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="execution-mode-badge ${executionModeClass}">${executionModeLabel}</div>
                             <div class="agent-status ${job.status}" style="font-size: 12px; padding: 4px 10px;">${job.status.toUpperCase()}</div>
                         </div>
                     </div>
+
+                    ${(job.metadata?.working_directory || job.working_directory) ? `
+                    <div class="build-path-banner">${job.metadata?.working_directory || job.working_directory}</div>
+                    ` : ''}
 
                     <div class="job-detail-meta">
                         <div class="meta-item">
@@ -2924,6 +3058,19 @@
                 phaseEvent = { ...phaseEvent, status: 'failed' };
             }
 
+            // Check if prompts were edited (HITL mode) - include saved AND unsaved temp edits
+            const prompts = state.phasePrompts[job.id] || [];
+            const phasePrompt = prompts.find(p => p.phase === phaseName);
+            const wasPromptEdited = phasePrompt && (
+                phasePrompt.system_prompt_edited || phasePrompt.input_instruction_edited ||
+                phasePrompt.system_prompt_edited_temp !== undefined || phasePrompt.input_instruction_edited_temp !== undefined
+            );
+            const hasUnsavedEdits = phasePrompt && (
+                phasePrompt.system_prompt_edited_temp !== undefined || phasePrompt.input_instruction_edited_temp !== undefined
+            );
+            const editedBy = phasePrompt?.edited_by || 'human';
+            const editedAt = phasePrompt?.edited_at;
+
             const outputFiles = Object.keys(outputs);
 
             // Define what files each phase should have
@@ -2942,6 +3089,7 @@
                         <div class="phase-detail-title">
                             <span style="color:var(--accent-purple)">></span>
                             ${phaseName} Phase
+                            ${wasPromptEdited ? `<span class="human-edited-badge ${hasUnsavedEdits ? 'unsaved' : ''}" title="${hasUnsavedEdits ? 'Has unsaved changes' : 'Prompt was edited by ' + editedBy + (editedAt ? ' at ' + formatTime(editedAt) : '')}">${hasUnsavedEdits ? '✏️ Unsaved Edits' : '✏️ Edited'}</span>` : ''}
                         </div>
                         ${phaseEvent ? `<span class="agent-status ${phaseEvent.status === 'completed' ? 'succeeded' : phaseEvent.status}">${phaseEvent.status}</span>` : ''}
                     </div>
@@ -3035,9 +3183,11 @@
                     e.stopPropagation();
                     const path = card.dataset.path;
                     const fname = card.dataset.artifact;
+                    console.log('[ArtifactCard] Clicked:', fname, 'path:', path);
                     if (path) {
-                        // Could fetch file content via API if available
                         showArtifactPreview(fname, path);
+                    } else {
+                        console.warn('[ArtifactCard] No path for artifact:', fname);
                     }
                 });
             });
@@ -3073,13 +3223,22 @@
             document.addEventListener('keydown', handleViewerEscape);
 
             try {
-                const res = await fetch(`/artifact?path=${encodeURIComponent(path)}`, {
+                console.log('[ArtifactViewer] Fetching:', path);
+                console.log('[ArtifactViewer] URL:', `${CONFIG.dashboardApiBase}/artifact?path=${encodeURIComponent(path)}`);
+                console.log('[ArtifactViewer] Auth token:', state.authToken ? 'present' : 'missing');
+
+                const res = await fetch(`${CONFIG.dashboardApiBase}/artifact?path=${encodeURIComponent(path)}`, {
                     headers: { 'X-CF-Auth': state.authToken || '' },
                 });
+                console.log('[ArtifactViewer] Response status:', res.status);
+
                 if (!res.ok) {
-                    throw new Error(`Failed to load: ${res.status} ${res.statusText}`);
+                    const errData = await res.json().catch(() => ({}));
+                    console.error('[ArtifactViewer] Error response:', errData);
+                    throw new Error(errData.error || `Failed to load: ${res.status} ${res.statusText}`);
                 }
                 const data = await res.json();
+                console.log('[ArtifactViewer] Data received, content length:', data.content?.length);
 
                 // Store content in state for edit mode
                 state.currentArtifactContent = data.content;
@@ -3137,7 +3296,13 @@
 
         function renderMarkdown(content, container) {
             if (typeof marked !== 'undefined') {
-                container.innerHTML = `<div class="markdown-body">${marked.parse(content)}</div>`;
+                try {
+                    container.innerHTML = `<div class="markdown-body">${marked.parse(content)}</div>`;
+                } catch (err) {
+                    console.error('[Markdown] Parse error:', err);
+                    // Fallback to raw display on parse error
+                    container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
+                }
             } else {
                 // Fallback: basic rendering
                 container.innerHTML = `<pre class="json-viewer">${escapeHtml(content)}</pre>`;
@@ -3235,7 +3400,7 @@
             saveBtn.disabled = true;
 
             try {
-                const res = await fetch('/artifact', {
+                const res = await fetch(`${CONFIG.dashboardApiBase}/artifact`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -3477,7 +3642,21 @@
                         });
                         if (retryRes.ok) {
                             const data = await retryRes.json();
-                            state.phasePrompts[jobId] = data.prompts || [];
+                            const newPrompts = data.prompts || [];
+                            // Preserve temp edits on retry too
+                            const existingPrompts = state.phasePrompts[jobId] || [];
+                            for (const newPrompt of newPrompts) {
+                                const existing = existingPrompts.find(p => p.phase === newPrompt.phase);
+                                if (existing) {
+                                    if (existing.system_prompt_edited_temp !== undefined) {
+                                        newPrompt.system_prompt_edited_temp = existing.system_prompt_edited_temp;
+                                    }
+                                    if (existing.input_instruction_edited_temp !== undefined) {
+                                        newPrompt.input_instruction_edited_temp = existing.input_instruction_edited_temp;
+                                    }
+                                }
+                            }
+                            state.phasePrompts[jobId] = newPrompts;
                             state.phasePromptsWarning = data.warning || null;
                             console.log('[PhasePrompts] Retry successful, prompts:', state.phasePrompts[jobId].length);
                             return state.phasePrompts[jobId];
@@ -3488,7 +3667,24 @@
                     return [];
                 }
                 const data = await res.json();
-                state.phasePrompts[jobId] = data.prompts || [];
+                const newPrompts = data.prompts || [];
+
+                // Preserve any temp edits from user typing (prevents SSE updates from wiping edits)
+                const existingPrompts = state.phasePrompts[jobId] || [];
+                for (const newPrompt of newPrompts) {
+                    const existing = existingPrompts.find(p => p.phase === newPrompt.phase);
+                    if (existing) {
+                        // Preserve temp edits if they exist
+                        if (existing.system_prompt_edited_temp !== undefined) {
+                            newPrompt.system_prompt_edited_temp = existing.system_prompt_edited_temp;
+                        }
+                        if (existing.input_instruction_edited_temp !== undefined) {
+                            newPrompt.input_instruction_edited_temp = existing.input_instruction_edited_temp;
+                        }
+                    }
+                }
+
+                state.phasePrompts[jobId] = newPrompts;
                 state.phasePromptsWarning = data.warning || null;
                 console.log('[PhasePrompts] Success! Prompts:', state.phasePrompts[jobId].length, 'Warning:', state.phasePromptsWarning);
 
@@ -3548,18 +3744,58 @@
                     ? prompt.input_instruction_edited_temp
                     : (prompt.input_instruction_edited || prompt.input_instruction || '');
 
+                // Extract user's original request from input_instruction
+                // Try multiple delimiters: double newline, "Build ", "Create ", "Implement ", etc.
+                const originalInputInstruction = prompt.input_instruction || '';
+                let userOriginalRequest = '';
+
+                // First try: split on double newline (most common format)
+                const doubleNewlineParts = originalInputInstruction.split('\n\n');
+                if (doubleNewlineParts.length > 1) {
+                    userOriginalRequest = doubleNewlineParts.slice(1).join('\n\n').trim();
+                } else {
+                    // Second try: look for common task prefixes after the template
+                    const taskPrefixes = ['Build ', 'Create ', 'Implement ', 'Add ', 'Fix ', 'Update ', 'Design ', 'Develop '];
+                    for (const prefix of taskPrefixes) {
+                        const prefixIndex = originalInputInstruction.indexOf(prefix);
+                        // Only use if prefix is not at the very start (meaning there's template before it)
+                        if (prefixIndex > 50) {
+                            userOriginalRequest = originalInputInstruction.slice(prefixIndex).trim();
+                            break;
+                        }
+                    }
+                }
+
+                // If still empty but we have input instruction, show a note
+                const hasInputInstruction = originalInputInstruction.length > 0;
+                const userRequestDisplay = userOriginalRequest || (hasInputInstruction ? '(Could not extract user request from input instruction)' : '');
+                const userRequestIsPlaceholder = !userOriginalRequest && hasInputInstruction;
+
                 // Character counts for display
                 const systemCharCount = effectiveSystemPrompt.length;
                 const inputCharCount = effectiveInputInstruction.length;
 
                 // NEW STATE LOGIC for Manual Workflow
-                // States: sleeping, ready, under_review, ready_edit, processing, complete, failed
-                const canEdit = ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(stateClass);
+                // States: sleeping, draft, under_review, acknowledged_edited, acknowledged_unedited, processing, complete, failed
+                const isDraft = stateClass === 'draft';
+                const isUnderReview = stateClass === 'under_review';
+                const isAcknowledgedEdited = stateClass === 'acknowledged_edited';
+                const isAcknowledgedUnedited = stateClass === 'acknowledged_unedited';
+                const isAcknowledged = isAcknowledgedEdited || isAcknowledgedUnedited;
+                const canEdit = ['draft', 'under_review', 'ready', 'ready_edit', 'pending', 'editing'].includes(stateClass);
                 const canReset = hasEdits && canEdit;
                 const isProcessing = stateClass === 'processing';
                 const isComplete = ['complete', 'completed'].includes(stateClass);
                 const isFailed = stateClass === 'failed';
                 const isSleeping = stateClass === 'sleeping';
+
+                // Permanent record: was prompt edited before submission?
+                const wasEditedBeforeSubmission = prompt.was_edited_before_submission || false;
+                const systemWasEdited = prompt.system_prompt_was_edited || false;
+                const inputWasEdited = prompt.input_instruction_was_edited || false;
+                const executionMode = prompt.execution_mode || 'autonomous';
+                const hitlAliases = ['hitl', 'human_in_the_loop', 'human-in-the-loop', 'manual', 'interactive'];
+                const isHITLMode = hitlAliases.includes(executionMode.toLowerCase());
 
                 // Token metrics display
                 const tokenMetrics = prompt.token_metrics || {};
@@ -3570,15 +3806,18 @@
                 // State label with human-readable names
                 const stateLabels = {
                     'sleeping': 'Sleeping',
-                    'ready': 'Ready',
+                    'draft': 'Draft',
                     'under_review': 'Under Review',
-                    'ready_edit': 'Ready (Edited)',
+                    'acknowledged_edited': 'Saved (Edited)',
+                    'acknowledged_unedited': 'Saved (Unedited)',
                     'processing': 'Processing',
                     'complete': 'Complete',
                     'completed': 'Complete',
                     'failed': 'Failed',
                     // Legacy mappings
-                    'pending': 'Ready',
+                    'ready': 'Draft',
+                    'ready_edit': 'Under Review',
+                    'pending': 'Draft',
                     'editing': 'Under Review',
                     'approved': 'Processing',
                     'injected': 'Processing',
@@ -3588,6 +3827,31 @@
                 // Download icon SVG
                 const downloadIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>`;
 
+                // Status badge showing edit status
+                // Based on permanent flags (was_edited_before_submission) not transient state
+                // Shows for: acknowledged states, processing, complete
+                let editStatusBadge = '';
+                const showEditStatus = isComplete || isProcessing || isAcknowledged;
+
+                if (showEditStatus) {
+                    if (wasEditedBeforeSubmission) {
+                        // Human edited the prompts before submission
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-orange); color: white;">✏️ Sent with Edits</span>`;
+                    } else if (isHITLMode) {
+                        // HITL mode but no edits - human reviewed and approved as-is
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-green); color: white;">✓ Sent Unedited</span>`;
+                    } else {
+                        // Autonomous mode - no human review
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--text-muted); color: white;">Auto</span>`;
+                    }
+                } else if (isAcknowledgedEdited) {
+                    // Just acknowledged with edits (before processing)
+                    editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-orange); color: white;">✏️ Acknowledged (Edited)</span>`;
+                } else if (isAcknowledgedUnedited) {
+                    // Just acknowledged without edits (before processing)
+                    editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-green); color: white;">✓ Acknowledged (Unedited)</span>`;
+                }
+
                 return `
                     <div class="prompt-section prompt-editor-container" data-prompt-id="${prompt.id}" data-phase="${prompt.phase}" data-job-id="${jobId}">
                         <!-- Header with title, state badge, and download buttons -->
@@ -3595,10 +3859,14 @@
                             <div class="prompt-editor-title">
                                 <h3>${prompt.phase} Phase</h3>
                                 <span class="prompt-state ${stateClass}">${stateLabel}</span>
-                                ${hasEdits ? '<span class="prompt-edited-badge">Edited</span>' : ''}
+                                ${editStatusBadge}
+                                ${hasEdits && canEdit ? '<span class="prompt-edited-badge">Pending Edits</span>' : ''}
                                 <span class="prompt-unsaved-badge" id="unsaved-badge-${prompt.phase}" style="display:none; background: var(--accent-yellow); color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 8px;">Unsaved</span>
                             </div>
                             <div class="prompt-editor-actions">
+                                <span style="font-size: 10px; color: var(--text-muted); margin-right: 8px;">
+                                    ${isHITLMode ? '👤 HITL' : '🤖 Auto'}
+                                </span>
                                 <button class="download-btn" onclick="downloadPromptAsJSON('${jobId}', '${prompt.phase}')" title="Download as JSON">
                                     ${downloadIcon} JSON
                                 </button>
@@ -3608,15 +3876,35 @@
                             </div>
                         </div>
 
+                        <!-- User's Original Request Section (collapsible) -->
+                        ${hasInputInstruction ? `
+                        <div class="user-request-section" style="margin-bottom: 12px;">
+                            <div class="user-request-header" onclick="toggleUserRequest('${prompt.phase}')" style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
+                                <span class="user-request-toggle" id="user-request-toggle-${prompt.phase}" style="font-size: 10px; transition: transform 0.2s;">▶</span>
+                                <span style="font-weight: 600; font-size: 12px; color: var(--accent-purple);">User's Original Request</span>
+                                ${userOriginalRequest ? `<span style="font-size: 10px; color: var(--text-muted);">(${userOriginalRequest.length} chars)</span>` : `<span style="font-size: 10px; color: var(--accent-yellow);">(not detected)</span>`}
+                            </div>
+                            <div class="user-request-content" id="user-request-content-${prompt.phase}" style="display: none; margin-top: 8px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid ${userRequestIsPlaceholder ? 'var(--accent-yellow)' : 'var(--accent-purple)'}; font-size: 13px; line-height: 1.5; white-space: pre-wrap; max-height: 200px; overflow-y: auto; ${userRequestIsPlaceholder ? 'color: var(--text-muted); font-style: italic;' : ''}">
+                                ${escapeHtml(userRequestDisplay)}
+                            </div>
+                        </div>
+                        ` : ''}
+
                         <!-- Dual-pane content area -->
                         <div class="prompt-dual-pane">
                             <!-- System Prompt Pane -->
                             <div class="prompt-pane" data-pane="system">
                                 <div class="prompt-pane-header">
-                                    <span class="prompt-pane-label">System Prompt</span>
-                                    <span class="prompt-char-count ${systemCharCount > 50000 ? 'warning' : ''}" id="system-char-count-${prompt.phase}">
-                                        ${formatNumber(systemCharCount)} chars
-                                    </span>
+                                    <span class="prompt-pane-label">System Prompt <span style="font-size: 9px; color: var(--text-muted); font-weight: normal;">(deterministic)</span></span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="prompt-char-count ${systemCharCount > 50000 ? 'warning' : ''}" id="system-char-count-${prompt.phase}">
+                                            ${formatNumber(systemCharCount)} chars ${systemWasEdited ? '✏️' : ''}
+                                        </span>
+                                        <button class="save-to-disk-btn" id="save-system-disk-${prompt.phase}" onclick="saveSystemPromptToDisk('${jobId}', '${prompt.phase}')" title="Save system prompt to tools/prompts/phases/phase_${prompt.phase.toLowerCase()}.txt" style="font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-muted);">
+                                            💾 Save to Disk
+                                        </button>
+                                        <span id="save-system-status-${prompt.phase}" style="font-size: 9px; color: var(--text-muted); display: none;"></span>
+                                    </div>
                                 </div>
                                 ${canEdit ? `
                                     <textarea class="prompt-editor-textarea"
@@ -3631,10 +3919,18 @@
                             <!-- Input Instruction Pane -->
                             <div class="prompt-pane" data-pane="input">
                                 <div class="prompt-pane-header">
-                                    <span class="prompt-pane-label">Input Instruction</span>
-                                    <span class="prompt-char-count ${inputCharCount > 50000 ? 'warning' : ''}" id="input-char-count-${prompt.phase}">
-                                        ${formatNumber(inputCharCount)} chars
-                                    </span>
+                                    <span class="prompt-pane-label">Input Instruction <span style="font-size: 9px; color: var(--text-muted); font-weight: normal;">(AI-generated)</span></span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="prompt-char-count ${inputCharCount > 50000 ? 'warning' : ''}" id="input-char-count-${prompt.phase}">
+                                            ${formatNumber(inputCharCount)} chars ${inputWasEdited ? '✏️' : ''}
+                                        </span>
+                                        ${isHITLMode ? `
+                                        <button class="save-to-disk-btn" id="save-input-disk-${prompt.phase}" onclick="saveInputInstructionToDisk('${jobId}', '${prompt.phase}')" title="Save input instruction to .context-foundry/input-instructions/${prompt.phase.toLowerCase()}-input.txt" style="font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-muted);">
+                                            💾 Save to Disk
+                                        </button>
+                                        <span id="save-input-status-${prompt.phase}" style="font-size: 9px; color: var(--text-muted); display: none;"></span>
+                                        ` : ''}
+                                    </div>
                                 </div>
                                 ${canEdit ? `
                                     <textarea class="prompt-editor-textarea"
@@ -3691,9 +3987,9 @@
                                         Phase Complete ${prompt.completed_at ? formatTime(prompt.completed_at) : ''}
                                     </span>
                                 ` : ''}
-                                ${!isJobTerminal && ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(prompt.state.toLowerCase()) ? `
+                                ${!isJobTerminal && ['draft', 'under_review', 'ready', 'ready_edit', 'pending', 'editing'].includes(prompt.state.toLowerCase()) ? `
                                     <button class="prompt-btn acknowledge" onclick="acknowledgePhasePrompt('${jobId}', '${prompt.phase}')" style="padding: 6px 16px; font-size: 13px; background: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                        Approve
+                                        ${hasEdits ? 'Acknowledge (with edits)' : 'Acknowledge'}
                                     </button>
                                 ` : ''}
                                 ${isFailed ? `
@@ -3750,18 +4046,58 @@
                     ? prompt.input_instruction_edited_temp
                     : (prompt.input_instruction_edited || prompt.input_instruction || '');
 
+                // Extract user's original request from input_instruction
+                // Try multiple delimiters: double newline, "Build ", "Create ", "Implement ", etc.
+                const originalInputInstruction = prompt.input_instruction || '';
+                let userOriginalRequest = '';
+
+                // First try: split on double newline (most common format)
+                const doubleNewlineParts = originalInputInstruction.split('\n\n');
+                if (doubleNewlineParts.length > 1) {
+                    userOriginalRequest = doubleNewlineParts.slice(1).join('\n\n').trim();
+                } else {
+                    // Second try: look for common task prefixes after the template
+                    const taskPrefixes = ['Build ', 'Create ', 'Implement ', 'Add ', 'Fix ', 'Update ', 'Design ', 'Develop '];
+                    for (const prefix of taskPrefixes) {
+                        const prefixIndex = originalInputInstruction.indexOf(prefix);
+                        // Only use if prefix is not at the very start (meaning there's template before it)
+                        if (prefixIndex > 50) {
+                            userOriginalRequest = originalInputInstruction.slice(prefixIndex).trim();
+                            break;
+                        }
+                    }
+                }
+
+                // If still empty but we have input instruction, show a note
+                const hasInputInstruction = originalInputInstruction.length > 0;
+                const userRequestDisplay = userOriginalRequest || (hasInputInstruction ? '(Could not extract user request from input instruction)' : '');
+                const userRequestIsPlaceholder = !userOriginalRequest && hasInputInstruction;
+
                 // Character counts for display
                 const systemCharCount = effectiveSystemPrompt.length;
                 const inputCharCount = effectiveInputInstruction.length;
 
                 // NEW STATE LOGIC for Manual Workflow
-                // States: sleeping, ready, under_review, ready_edit, processing, complete, failed
-                const canEdit = ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(stateClass);
+                // States: sleeping, draft, under_review, acknowledged_edited, acknowledged_unedited, processing, complete, failed
+                const isDraft = stateClass === 'draft';
+                const isUnderReview = stateClass === 'under_review';
+                const isAcknowledgedEdited = stateClass === 'acknowledged_edited';
+                const isAcknowledgedUnedited = stateClass === 'acknowledged_unedited';
+                const isAcknowledged = isAcknowledgedEdited || isAcknowledgedUnedited;
+                const canEdit = ['draft', 'under_review', 'ready', 'ready_edit', 'pending', 'editing'].includes(stateClass);
                 const canReset = hasEdits && canEdit;
                 const isProcessing = stateClass === 'processing';
                 const isComplete = ['complete', 'completed'].includes(stateClass);
                 const isFailed = stateClass === 'failed';
                 const isSleeping = stateClass === 'sleeping';
+
+                // Permanent record: was prompt edited before submission?
+                const wasEditedBeforeSubmission = prompt.was_edited_before_submission || false;
+                const systemWasEdited = prompt.system_prompt_was_edited || false;
+                const inputWasEdited = prompt.input_instruction_was_edited || false;
+                const executionMode = prompt.execution_mode || 'autonomous';
+                const hitlAliases = ['hitl', 'human_in_the_loop', 'human-in-the-loop', 'manual', 'interactive'];
+                const isHITLMode = hitlAliases.includes(executionMode.toLowerCase());
 
                 // Token metrics display
                 const tokenMetrics = prompt.token_metrics || {};
@@ -3772,15 +4108,18 @@
                 // State label with human-readable names
                 const stateLabels = {
                     'sleeping': 'Sleeping',
-                    'ready': 'Ready',
+                    'draft': 'Draft',
                     'under_review': 'Under Review',
-                    'ready_edit': 'Ready (Edited)',
+                    'acknowledged_edited': 'Saved (Edited)',
+                    'acknowledged_unedited': 'Saved (Unedited)',
                     'processing': 'Processing',
                     'complete': 'Complete',
                     'completed': 'Complete',
                     'failed': 'Failed',
                     // Legacy mappings
-                    'pending': 'Ready',
+                    'ready': 'Draft',
+                    'ready_edit': 'Under Review',
+                    'pending': 'Draft',
                     'editing': 'Under Review',
                     'approved': 'Processing',
                     'injected': 'Processing',
@@ -3790,6 +4129,31 @@
                 // Download icon SVG
                 const downloadIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>`;
 
+                // Status badge showing edit status
+                // Based on permanent flags (was_edited_before_submission) not transient state
+                // Shows for: acknowledged states, processing, complete
+                let editStatusBadge = '';
+                const showEditStatus = isComplete || isProcessing || isAcknowledged;
+
+                if (showEditStatus) {
+                    if (wasEditedBeforeSubmission) {
+                        // Human edited the prompts before submission
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-orange); color: white;">✏️ Sent with Edits</span>`;
+                    } else if (isHITLMode) {
+                        // HITL mode but no edits - human reviewed and approved as-is
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-green); color: white;">✓ Sent Unedited</span>`;
+                    } else {
+                        // Autonomous mode - no human review
+                        editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--text-muted); color: white;">Auto</span>`;
+                    }
+                } else if (isAcknowledgedEdited) {
+                    // Just acknowledged with edits (before processing)
+                    editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-orange); color: white;">✏️ Acknowledged (Edited)</span>`;
+                } else if (isAcknowledgedUnedited) {
+                    // Just acknowledged without edits (before processing)
+                    editStatusBadge = `<span class="prompt-edited-badge" style="background: var(--accent-green); color: white;">✓ Acknowledged (Unedited)</span>`;
+                }
+
                 return `
                     <div class="prompt-section prompt-editor-container" data-prompt-id="${prompt.id}" data-phase="${prompt.phase}" data-job-id="${jobId}">
                         <!-- Header with title, state badge, and download buttons -->
@@ -3797,10 +4161,14 @@
                             <div class="prompt-editor-title">
                                 <h3>${prompt.phase} Phase</h3>
                                 <span class="prompt-state ${stateClass}">${stateLabel}</span>
-                                ${hasEdits ? '<span class="prompt-edited-badge">Edited</span>' : ''}
+                                ${editStatusBadge}
+                                ${hasEdits && canEdit ? '<span class="prompt-edited-badge">Pending Edits</span>' : ''}
                                 <span class="prompt-unsaved-badge" id="unsaved-badge-${prompt.phase}" style="display:none; background: var(--accent-yellow); color: #000; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 8px;">Unsaved</span>
                             </div>
                             <div class="prompt-editor-actions">
+                                <span style="font-size: 10px; color: var(--text-muted); margin-right: 8px;">
+                                    ${isHITLMode ? '👤 HITL' : '🤖 Auto'}
+                                </span>
                                 <button class="download-btn" onclick="downloadPromptAsJSON('${jobId}', '${prompt.phase}')" title="Download as JSON">
                                     ${downloadIcon} JSON
                                 </button>
@@ -3810,15 +4178,35 @@
                             </div>
                         </div>
 
+                        <!-- User's Original Request Section (collapsible) -->
+                        ${hasInputInstruction ? `
+                        <div class="user-request-section" style="margin-bottom: 12px;">
+                            <div class="user-request-header" onclick="toggleUserRequest('${prompt.phase}')" style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
+                                <span class="user-request-toggle" id="user-request-toggle-${prompt.phase}" style="font-size: 10px; transition: transform 0.2s;">▶</span>
+                                <span style="font-weight: 600; font-size: 12px; color: var(--accent-purple);">User's Original Request</span>
+                                ${userOriginalRequest ? `<span style="font-size: 10px; color: var(--text-muted);">(${userOriginalRequest.length} chars)</span>` : `<span style="font-size: 10px; color: var(--accent-yellow);">(not detected)</span>`}
+                            </div>
+                            <div class="user-request-content" id="user-request-content-${prompt.phase}" style="display: none; margin-top: 8px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid ${userRequestIsPlaceholder ? 'var(--accent-yellow)' : 'var(--accent-purple)'}; font-size: 13px; line-height: 1.5; white-space: pre-wrap; max-height: 200px; overflow-y: auto; ${userRequestIsPlaceholder ? 'color: var(--text-muted); font-style: italic;' : ''}">
+                                ${escapeHtml(userRequestDisplay)}
+                            </div>
+                        </div>
+                        ` : ''}
+
                         <!-- Dual-pane content area -->
                         <div class="prompt-dual-pane">
                             <!-- System Prompt Pane -->
                             <div class="prompt-pane" data-pane="system">
                                 <div class="prompt-pane-header">
-                                    <span class="prompt-pane-label">System Prompt</span>
-                                    <span class="prompt-char-count ${systemCharCount > 50000 ? 'warning' : ''}" id="system-char-count-${prompt.phase}">
-                                        ${formatNumber(systemCharCount)} chars
-                                    </span>
+                                    <span class="prompt-pane-label">System Prompt <span style="font-size: 9px; color: var(--text-muted); font-weight: normal;">(deterministic)</span></span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="prompt-char-count ${systemCharCount > 50000 ? 'warning' : ''}" id="system-char-count-${prompt.phase}">
+                                            ${formatNumber(systemCharCount)} chars ${systemWasEdited ? '✏️' : ''}
+                                        </span>
+                                        <button class="save-to-disk-btn" id="save-system-disk-${prompt.phase}" onclick="saveSystemPromptToDisk('${jobId}', '${prompt.phase}')" title="Save system prompt to tools/prompts/phases/phase_${prompt.phase.toLowerCase()}.txt" style="font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-muted);">
+                                            💾 Save to Disk
+                                        </button>
+                                        <span id="save-system-status-${prompt.phase}" style="font-size: 9px; color: var(--text-muted); display: none;"></span>
+                                    </div>
                                 </div>
                                 ${canEdit ? `
                                     <textarea class="prompt-editor-textarea"
@@ -3833,10 +4221,18 @@
                             <!-- Input Instruction Pane -->
                             <div class="prompt-pane" data-pane="input">
                                 <div class="prompt-pane-header">
-                                    <span class="prompt-pane-label">Input Instruction</span>
-                                    <span class="prompt-char-count ${inputCharCount > 50000 ? 'warning' : ''}" id="input-char-count-${prompt.phase}">
-                                        ${formatNumber(inputCharCount)} chars
-                                    </span>
+                                    <span class="prompt-pane-label">Input Instruction <span style="font-size: 9px; color: var(--text-muted); font-weight: normal;">(AI-generated)</span></span>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="prompt-char-count ${inputCharCount > 50000 ? 'warning' : ''}" id="input-char-count-${prompt.phase}">
+                                            ${formatNumber(inputCharCount)} chars ${inputWasEdited ? '✏️' : ''}
+                                        </span>
+                                        ${isHITLMode ? `
+                                        <button class="save-to-disk-btn" id="save-input-disk-${prompt.phase}" onclick="saveInputInstructionToDisk('${jobId}', '${prompt.phase}')" title="Save input instruction to .context-foundry/input-instructions/${prompt.phase.toLowerCase()}-input.txt" style="font-size: 10px; padding: 2px 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; color: var(--text-muted);">
+                                            💾 Save to Disk
+                                        </button>
+                                        <span id="save-input-status-${prompt.phase}" style="font-size: 9px; color: var(--text-muted); display: none;"></span>
+                                        ` : ''}
+                                    </div>
                                 </div>
                                 ${canEdit ? `
                                     <textarea class="prompt-editor-textarea"
@@ -4141,7 +4537,26 @@
 
         // NEW: Acknowledge phase prompt - triggers agent to start execution
         async function acknowledgePhasePrompt(jobId, phase) {
-            if (!confirm(`Acknowledge the ${phase} phase prompt?\n\nThe agent will immediately start processing. Make sure you've reviewed the prompts.`)) {
+            // Check if any edits were made (including unsaved temp edits)
+            const prompts = state.phasePrompts[jobId] || [];
+            const prompt = prompts.find(p => p.phase === phase);
+
+            // Check each field for edits (saved or temp)
+            const systemPromptWasEdited = prompt && (
+                prompt.system_prompt_edited !== null && prompt.system_prompt_edited !== undefined ||
+                prompt.system_prompt_edited_temp !== undefined
+            );
+            const inputInstructionWasEdited = prompt && (
+                prompt.input_instruction_edited !== null && prompt.input_instruction_edited !== undefined ||
+                prompt.input_instruction_edited_temp !== undefined
+            );
+            const hasEdits = systemPromptWasEdited || inputInstructionWasEdited;
+
+            const confirmMsg = hasEdits
+                ? `Acknowledge the ${phase} phase prompt WITH YOUR EDITS?\n\nThe agent will start processing with your modified prompts.`
+                : `Acknowledge the ${phase} phase prompt?\n\nThe agent will start processing with the original prompts (unedited).`;
+
+            if (!confirm(confirmMsg)) {
                 return;
             }
 
@@ -4156,6 +4571,10 @@
                         job_id: jobId,
                         phase: phase,
                         acknowledged_by: 'dashboard_user',
+                        was_edited: hasEdits,
+                        // Send explicit flags for which fields were edited (including temp edits)
+                        system_prompt_was_edited: systemPromptWasEdited,
+                        input_instruction_was_edited: inputInstructionWasEdited,
                     }),
                 });
 
@@ -4174,22 +4593,29 @@
 
                 const data = await res.json();
 
-                // Update local state to processing
-                const prompts = state.phasePrompts[jobId] || [];
+                // Update local state with the acknowledged state (NOT processing)
+                // The agent will transition to processing when it starts execution
+                // This makes the acknowledged state observable in the UI
                 const idx = prompts.findIndex(p => p.phase === phase);
                 if (idx >= 0) {
-                    prompts[idx].state = 'processing';
+                    const acknowledgedState = hasEdits ? 'acknowledged_edited' : 'acknowledged_unedited';
+                    prompts[idx].state = acknowledgedState;
                     prompts[idx].acknowledged_at = new Date().toISOString();
-                    prompts[idx].processing_started_at = new Date().toISOString();
+                    // Set permanent flags for edit status record
+                    // Use the same values we sent to the backend
+                    prompts[idx].was_edited_before_submission = hasEdits;
+                    prompts[idx].system_prompt_was_edited = systemPromptWasEdited;
+                    prompts[idx].input_instruction_was_edited = inputInstructionWasEdited;
                 }
 
-                // Re-render
+                // Re-render to show the acknowledged state
                 const job = state.rawJobs.find(j => j.id === jobId);
                 if (job) {
                     renderJobDetail(job);
                 }
 
-                console.log(`[Acknowledge] ${phase} phase acknowledged - agent starting execution`);
+                const editStatus = hasEdits ? '(with edits)' : '(unedited)';
+                console.log(`[Acknowledge] ${phase} phase acknowledged ${editStatus} - agent will pick this up and start execution`);
 
             } catch (err) {
                 alert(`Error acknowledging prompt: ${err.message}`);
@@ -4998,6 +5424,203 @@
                     saveBtn.textContent = 'Save';
                     saveBtn.disabled = false;
                 }
+            }
+        }
+
+        // Toggle user's original request section visibility
+        function toggleUserRequest(phase) {
+            const toggle = document.getElementById(`user-request-toggle-${phase}`);
+            const content = document.getElementById(`user-request-content-${phase}`);
+            if (!toggle || !content) return;
+
+            const isHidden = content.style.display === 'none';
+            content.style.display = isHidden ? 'block' : 'none';
+            toggle.textContent = isHidden ? '▼' : '▶';
+            toggle.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(0deg)';
+        }
+
+        // Helper to format time for save status
+        function formatSaveTime(date) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Save system prompt to disk (tools/prompts/phases/phase_*.txt)
+        async function saveSystemPromptToDisk(jobId, phase) {
+            const btn = document.getElementById(`save-system-disk-${phase}`);
+            const status = document.getElementById(`save-system-status-${phase}`);
+            const systemTextarea = document.getElementById(`system-prompt-${phase}`);
+            const systemDiv = document.getElementById(`system-prompt-${phase}`);
+            const content = systemTextarea ? systemTextarea.value : (systemDiv ? systemDiv.textContent : '');
+
+            if (!content) {
+                if (status) {
+                    status.textContent = '⚠️ No content';
+                    status.style.color = 'var(--accent-yellow)';
+                    status.style.display = 'inline';
+                }
+                return;
+            }
+
+            // Set loading state
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Saving...';
+                btn.style.opacity = '0.6';
+            }
+            if (status) {
+                status.style.display = 'none';
+            }
+
+            try {
+                const res = await fetch(`${CONFIG.dashboardApiBase}/save-system-prompt-to-disk`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                        content: content,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const error = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${error}`);
+                }
+
+                const data = await res.json();
+
+                // Success state
+                if (btn) {
+                    btn.textContent = '✓ Saved';
+                    btn.style.background = 'var(--accent-green)';
+                    btn.style.color = 'white';
+                    btn.style.opacity = '1';
+                    setTimeout(() => {
+                        btn.textContent = '💾 Save to Disk';
+                        btn.style.background = 'var(--bg-tertiary)';
+                        btn.style.color = 'var(--text-muted)';
+                        btn.disabled = false;
+                    }, 2000);
+                }
+                if (status) {
+                    status.textContent = `Saved ${formatSaveTime(new Date())}`;
+                    status.style.color = 'var(--accent-green)';
+                    status.style.display = 'inline';
+                }
+
+            } catch (err) {
+                // Error state
+                if (btn) {
+                    btn.textContent = '❌ Failed';
+                    btn.style.background = 'var(--accent-red)';
+                    btn.style.color = 'white';
+                    btn.style.opacity = '1';
+                    setTimeout(() => {
+                        btn.textContent = '💾 Save to Disk';
+                        btn.style.background = 'var(--bg-tertiary)';
+                        btn.style.color = 'var(--text-muted)';
+                        btn.disabled = false;
+                    }, 3000);
+                }
+                if (status) {
+                    status.textContent = `⚠️ ${err.message.slice(0, 50)}`;
+                    status.style.color = 'var(--accent-red)';
+                    status.style.display = 'inline';
+                }
+                console.error('Save system prompt error:', err);
+            }
+        }
+
+        // Save input instruction to disk (.context-foundry/input-instructions/*.txt)
+        async function saveInputInstructionToDisk(jobId, phase) {
+            const btn = document.getElementById(`save-input-disk-${phase}`);
+            const status = document.getElementById(`save-input-status-${phase}`);
+            const inputTextarea = document.getElementById(`input-instruction-${phase}`);
+            const inputDiv = document.getElementById(`input-instruction-${phase}`);
+            const content = inputTextarea ? inputTextarea.value : (inputDiv ? inputDiv.textContent : '');
+
+            if (!content) {
+                if (status) {
+                    status.textContent = '⚠️ No content';
+                    status.style.color = 'var(--accent-yellow)';
+                    status.style.display = 'inline';
+                }
+                return;
+            }
+
+            // Set loading state
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '⏳ Saving...';
+                btn.style.opacity = '0.6';
+            }
+            if (status) {
+                status.style.display = 'none';
+            }
+
+            try {
+                const res = await fetch(`${CONFIG.dashboardApiBase}/save-input-instruction-to-disk`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        phase: phase,
+                        content: content,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const error = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${error}`);
+                }
+
+                const data = await res.json();
+
+                // Success state
+                if (btn) {
+                    btn.textContent = '✓ Saved';
+                    btn.style.background = 'var(--accent-green)';
+                    btn.style.color = 'white';
+                    btn.style.opacity = '1';
+                    setTimeout(() => {
+                        btn.textContent = '💾 Save to Disk';
+                        btn.style.background = 'var(--bg-tertiary)';
+                        btn.style.color = 'var(--text-muted)';
+                        btn.disabled = false;
+                    }, 2000);
+                }
+                if (status) {
+                    status.textContent = `Saved ${formatSaveTime(new Date())}`;
+                    status.style.color = 'var(--accent-green)';
+                    status.style.display = 'inline';
+                }
+
+            } catch (err) {
+                // Error state
+                if (btn) {
+                    btn.textContent = '❌ Failed';
+                    btn.style.background = 'var(--accent-red)';
+                    btn.style.color = 'white';
+                    btn.style.opacity = '1';
+                    setTimeout(() => {
+                        btn.textContent = '💾 Save to Disk';
+                        btn.style.background = 'var(--bg-tertiary)';
+                        btn.style.color = 'var(--text-muted)';
+                        btn.disabled = false;
+                    }, 3000);
+                }
+                if (status) {
+                    status.textContent = `⚠️ ${err.message.slice(0, 50)}`;
+                    status.style.color = 'var(--accent-red)';
+                    status.style.display = 'inline';
+                }
+                console.error('Save input instruction error:', err);
             }
         }
 
