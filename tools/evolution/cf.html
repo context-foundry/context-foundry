@@ -3538,7 +3538,8 @@
                 state.pendingApprovals = data.approvals || [];
 
                 // Refresh job detail if viewing a job with pending approval
-                if (state.selectedJob) {
+                // Skip if user is editing to prevent wiping their changes
+                if (state.selectedJob && !isEditingPromptTextarea()) {
                     const job = state.rawJobs.find(j => j.id === state.selectedJob);
                     if (job) {
                         const hasApproval = state.pendingApprovals.some(
@@ -5239,8 +5240,8 @@
                     updateCurrentActionDisplay();
                     const dot = document.getElementById('activityLiveDot');
                     if (dot) dot.style.background = 'var(--text-muted)';
-                    // Refresh phase prompts to update UI state
-                    if (state.selectedJob) {
+                    // Refresh phase prompts to update UI state (skip if editing)
+                    if (state.selectedJob && !isEditingPromptTextarea()) {
                         fetchPhasePrompts(state.selectedJob).then(() => {
                             const job = state.rawJobs.find(j => j.id === state.selectedJob);
                             if (job) renderJobDetail(job);
