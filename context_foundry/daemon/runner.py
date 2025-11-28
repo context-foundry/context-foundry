@@ -323,6 +323,29 @@ class Runner:
                         "test_iterations": result.get("test_iterations", 0),
                         "duration_seconds": result.get("duration_seconds", 0),
                     }
+                elif result.get("status") == "paused":
+                    # HITL mode: Build paused after a phase, waiting for approval
+                    paused_after = result.get("paused_after", "unknown")
+                    self._emit_log(
+                        job.id,
+                        "INFO",
+                        f"Build paused after {paused_after} phase, waiting for approval",
+                        paused_after,
+                    )
+                    logger.info(
+                        f"[TRACE] Job {job.id} paused after {paused_after}, returning paused result"
+                    )
+
+                    # Return paused status - job stays in running state
+                    # The approval system will handle resuming
+                    return {
+                        "success": True,
+                        "paused": True,
+                        "paused_after": paused_after,
+                        "phases_completed": result.get("phases_completed", []),
+                        "phases_remaining": result.get("phases_remaining", []),
+                        "duration_seconds": result.get("duration_seconds", 0),
+                    }
                 else:
                     error_msg = result.get("error", "Autonomous build failed")
                     self._emit_log(job.id, "ERROR", error_msg, None)

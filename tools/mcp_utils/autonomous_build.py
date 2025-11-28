@@ -222,6 +222,14 @@ def _initialize_pipeline_state(
     pause_after_phases = task_config.get("pause_after_phases", [])
     target_phases = task_config.get("target_phases", [])
 
+    # HITL mode: automatically pause after every phase for human approval
+    if execution_mode == "hitl" and not pause_after_phases:
+        pause_after_phases = ["Scout", "Architect", "Builder", "Test", "Deploy"]
+        print(
+            "🔧 HITL mode: will pause after each phase for human approval",
+            file=sys.stderr,
+        )
+
     # Check for resume
     if resume_from_phase:
         existing_state = get_pipeline_state(working_directory)
@@ -251,6 +259,7 @@ def _initialize_pipeline_state(
     mode_desc = {
         "autonomous": "Full autonomous mode",
         "interactive": "Interactive mode (pause after each phase)",
+        "hitl": "Human-in-the-Loop mode (pause after each phase for approval)",
         "selective": f"Selective mode (phases: {', '.join(target_phases)})",
     }.get(execution_mode, execution_mode)
 

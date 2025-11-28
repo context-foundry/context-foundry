@@ -163,7 +163,7 @@ def submit_autonomous_build_to_daemon(
             max_retries=3,  # Retry up to 3 times on failure
             metadata={
                 "source": "mcp_server",
-                "build_type": "autonomous",
+                "build_type": mode,  # Use actual mode (new_project, enhancement, etc.)
                 "project_name": github_repo_name or final_working_dir.name,
             },
         )

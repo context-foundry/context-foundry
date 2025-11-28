@@ -671,9 +671,9 @@ def is_human_in_the_loop_enabled(task_config: dict) -> bool:
     Returns:
         True if human-in-the-loop is enabled
     """
-    # Check execution_mode
+    # Check execution_mode - accept both "human_in_the_loop" and "hitl" aliases
     execution_mode = task_config.get("execution_mode", "autonomous")
-    if execution_mode == "human_in_the_loop":
+    if execution_mode in ("human_in_the_loop", "hitl"):
         return True
 
     # Check pause_after_phases (legacy support)
@@ -702,7 +702,8 @@ def get_phase_prompt_config(task_config: dict, phase_name: str) -> PhasePromptCo
     # Check if this phase should wait for acknowledgment
     human_in_the_loop = False
 
-    if execution_mode == "human_in_the_loop":
+    # Accept both "human_in_the_loop" and "hitl" aliases
+    if execution_mode in ("human_in_the_loop", "hitl"):
         # All phases wait for acknowledgment
         human_in_the_loop = True
     elif phase_name in pause_after_phases:

@@ -830,6 +830,7 @@ def _run_phase_internal(
             "bypassPermissions",
             "--strict-mcp-config",  # Prevents loading user MCP servers
             "--print",  # Required for non-interactive execution
+            "--verbose",  # Required for stream-json with --print (Claude CLI 2.x)
             "--output-format",
             "stream-json",  # Enable structured logging
             "--settings",

@@ -59,9 +59,13 @@
         }
 
         .logo {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--accent-purple);
+            display: flex;
+            align-items: center;
+        }
+
+        .logo img {
+            height: 28px;
+            width: auto;
         }
 
         .connection-status {
@@ -2191,7 +2195,7 @@
 <body>
     <header class="header">
         <div class="header-left">
-            <div class="logo">cf</div>
+            <div class="logo"><img src="https://contextfoundry.dev/cf_logo_gray_2025.png" alt="Context Foundry"></div>
             <div class="connection-status">
                 <div class="status-dot" id="connectionDot"></div>
                 <span id="connectionText">Connecting...</span>
@@ -2743,7 +2747,9 @@
             // Extract task/prompt info from metadata
             const projectName = job.metadata?.project_name || 'Unknown Project';
             const displayName = formatProjectName(projectName);
-            const buildType = job.metadata?.build_type || job.metadata?.mode || 'autonomous';
+            // Format build type nicely: new_project -> "New Project", enhancement -> "Enhancement"
+            const rawBuildType = job.metadata?.build_type || job.params?.mode || 'build';
+            const buildType = rawBuildType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
             const workingDir = job.metadata?.working_directory || '';
 
             // Update sidebar header with project name and working directory

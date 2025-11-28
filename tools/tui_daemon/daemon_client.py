@@ -242,13 +242,16 @@ class DaemonClient:
                 total_jobs=0, active_jobs=0, success_rate=0.0, avg_duration_seconds=0.0
             )
 
-    def submit_job(self, job_type: str, params: Dict) -> Optional[Job]:
+    def submit_job(
+        self, job_type: str, params: Dict, metadata: Optional[Dict] = None
+    ) -> Optional[Job]:
         """
         Submit a new job via JobManager.
 
         Args:
             job_type: Type of job (autonomous_build, test, etc.)
             params: Job parameters dictionary
+            metadata: Optional metadata dictionary for display purposes
 
         Returns:
             Created Job object or None on error
@@ -257,7 +260,18 @@ class DaemonClient:
             return None
 
         try:
-            job = self.job_manager.submit_job(job_type, params)
+            # Auto-generate metadata if not provided
+            if metadata is None:
+                from pathlib import Path
+
+                working_dir = params.get("working_directory", "")
+                project_name = Path(working_dir).name if working_dir else "Unknown"
+                metadata = {
+                    "source": "tui",
+                    "build_type": params.get("mode", "new_project"),
+                    "project_name": project_name,
+                }
+            job = self.job_manager.submit_job(job_type, params, metadata=metadata)
             return job
         except Exception:
             return None

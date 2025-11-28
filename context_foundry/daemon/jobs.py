@@ -698,6 +698,23 @@ class JobManager:
             else:
                 raise RuntimeError("Job execution completed but no result returned")
 
+            # Check if job is paused (HITL mode) - don't mark as succeeded
+            if result.get("paused"):
+                paused_after = result.get("paused_after", "unknown")
+                log = LogEntry.create(
+                    job_id=job_id,
+                    level="INFO",
+                    message=f"Job paused after {paused_after} phase, waiting for approval",
+                    source="job_manager",
+                    phase=paused_after,
+                )
+                self.store.save_log(log)
+                logger.info(
+                    f"Job {job_id} paused after {paused_after}, awaiting approval"
+                )
+                # Job stays in RUNNING status, will be resumed via approval
+                return
+
             # Mark as succeeded
             self.store.update_job_status(
                 job_id,

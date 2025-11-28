@@ -1394,6 +1394,11 @@ def cmd_run_phase(args):
         job_type=JobType.AUTONOMOUS_BUILD,
         params=task_config,
         priority=args.priority,
+        metadata={
+            "source": "cli",
+            "build_type": task_config.get("mode", "selective"),
+            "project_name": project_dir.name,
+        },
     )
 
     print()
@@ -1505,6 +1510,11 @@ def cmd_resume(args):
             job_type=JobType.AUTONOMOUS_BUILD,
             params=task_config,
             priority=args.priority,
+            metadata={
+                "source": "cli",
+                "build_type": f"resume_{resume_from.lower()}",
+                "project_name": project_dir.name,
+            },
         )
 
         print(f"\nJob submitted: {job.id}")
