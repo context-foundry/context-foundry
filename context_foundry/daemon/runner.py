@@ -344,6 +344,9 @@ class Runner:
 
                     logger.info(f"[TRACE] Job {job.id} marked as FAILED")
 
+                    # Cleanup phase prompts to prevent stale UI state
+                    self._cleanup_phase_prompts_on_failure(working_dir, error_msg)
+
                     # Send Discord notification: Build failed
                     try:
                         project_name = Path(working_dir).name
@@ -746,13 +749,15 @@ print(json.dumps(result))
             script_path = f.name
 
         try:
-            # Start subprocess
+            # Start subprocess in new session to isolate from daemon's process group
+            # This prevents signal propagation from child to parent
             process = subprocess.Popen(
                 [sys.executable, script_path],
                 cwd=str(Path(__file__).parent.parent.parent),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                start_new_session=True,  # Isolate subprocess from daemon
             )
 
             # Track in active_tasks for timeout enforcement
@@ -1043,6 +1048,44 @@ print(json.dumps(result))
                 "test_iterations": 0,
                 "duration_seconds": 0,
             }
+
+    def _cleanup_phase_prompts_on_failure(self, working_dir: str, error_message: str):
+        """
+        Mark all phase-prompt files as failed when a job fails.
+
+        This prevents stale "processing" state from showing in the dashboard
+        after a job fails unexpectedly (e.g., subprocess killed by signal).
+        """
+        try:
+            phase_prompts_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
+            if not phase_prompts_dir.exists():
+                return
+
+            import json
+
+            for prompt_file in phase_prompts_dir.glob("*-prompt.json"):
+                try:
+                    with open(prompt_file) as f:
+                        data = json.load(f)
+
+                    current_state = data.get("state", "ready")
+
+                    # Only update if in a non-terminal state
+                    if current_state not in ("complete", "failed"):
+                        data["state"] = "failed"
+                        data["error"] = error_message
+                        data["failed_at"] = datetime.now().isoformat()
+
+                        with open(prompt_file, "w") as f:
+                            json.dump(data, f, indent=2)
+
+                        logger.info(
+                            f"Marked phase prompt {prompt_file.name} as failed (was: {current_state})"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to update phase prompt {prompt_file}: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup phase prompts: {e}")
 
     def _merge_patterns(self, job_id: str, working_dir: str):
         """

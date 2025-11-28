@@ -1461,7 +1461,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             while not self.server.context.stop_event.is_set():
                 # Check if job is still running
                 job = self.server.context.store.get_job(job_id)
-                if job and job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                if job and job.status not in (JobStatus.QUEUED, JobStatus.RUNNING):
                     # Send completion event
                     event = {
                         "type": "phase_complete",

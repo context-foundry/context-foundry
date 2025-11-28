@@ -2799,14 +2799,14 @@
 
             // Get phase prompts for this job
             const phasePrompts = state.phasePrompts[job.id] || [];
-            const promptContent = renderPhasePromptsSection(job.id, phasePrompts, state.selectedPhase);
+            const promptContent = renderPhasePromptsSection(job.id, phasePrompts, state.selectedPhase, job.status);
             // Show phase prompts section for autonomous_build jobs if there's content or a warning
             const phasePromptsHtml = (job.type === 'autonomous_build' && (promptContent || state.phasePromptsWarning))
                 ? `
                     <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
                         ${state.selectedPhase ? `${state.selectedPhase} Prompt` : 'Phase Prompts'}
                     </h3>
-                    ${promptContent || renderPhasePromptsSection(job.id, [], state.selectedPhase)}
+                    ${promptContent || renderPhasePromptsSection(job.id, [], state.selectedPhase, job.status)}
                 `
                 : '';
 
@@ -2855,9 +2855,19 @@
 
                 ${phasePromptsHtml}
 
-                <h3 style="font-size: 14px; color: var(--text-secondary); margin-bottom: 12px;">
-                    ${state.selectedPhase ? `${state.selectedPhase} Logs` : 'Recent Logs'}
-                </h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="font-size: 14px; color: var(--text-secondary); margin: 0;">
+                        ${state.selectedPhase ? `${state.selectedPhase} Logs` : 'Recent Logs'}
+                    </h3>
+                    <button onclick="copyLogsToClipboard('${job.id}')"
+                            style="background: var(--panel-bg); border: 1px solid var(--border); border-radius: 4px;
+                                   padding: 4px 10px; cursor: pointer; font-size: 12px; color: var(--text-secondary);
+                                   display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
+                            onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'"
+                            onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--text-secondary)'">
+                        <span style="font-size: 14px;">&#x1F4CB;</span> Copy
+                    </button>
+                </div>
                 ${logsHtml}
             `;
 
@@ -2901,7 +2911,12 @@
 
             // Get phase event data if available
             const phaseEvents = job.all_phases || [];
-            const phaseEvent = phaseEvents.find(e => e && e.phase === phaseName);
+            let phaseEvent = phaseEvents.find(e => e && e.phase === phaseName);
+
+            // Override phase status if job failed and phase was in_progress
+            if (phaseEvent && job.status === 'failed' && phaseEvent.status === 'in_progress') {
+                phaseEvent = { ...phaseEvent, status: 'failed' };
+            }
 
             const outputFiles = Object.keys(outputs);
 
@@ -3482,7 +3497,10 @@
             }
         }
 
-        function renderPhasePromptsSection(jobId, prompts, selectedPhase) {
+        function renderPhasePromptsSection(jobId, prompts, selectedPhase, jobStatus) {
+            // Hide approve buttons for failed/cancelled jobs
+            const isJobTerminal = ['failed', 'cancelled', 'timed_out'].includes(jobStatus);
+
             // Only show warning if no prompts available
             if ((!prompts || prompts.length === 0) && state.phasePromptsWarning) {
                 return `
@@ -3667,7 +3685,7 @@
                                         Phase Complete ${prompt.completed_at ? formatTime(prompt.completed_at) : ''}
                                     </span>
                                 ` : ''}
-                                ${['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(prompt.state.toLowerCase()) ? `
+                                ${!isJobTerminal && ['ready', 'under_review', 'ready_edit', 'pending', 'editing'].includes(prompt.state.toLowerCase()) ? `
                                     <button class="prompt-btn acknowledge" onclick="acknowledgePhasePrompt('${jobId}', '${prompt.phase}')" style="padding: 6px 16px; font-size: 13px; background: var(--accent-green); color: white; border: none; border-radius: 4px; cursor: pointer;">
                                         Approve
                                     </button>
@@ -4546,6 +4564,58 @@
             const div = document.createElement('div');
             div.textContent = str;
             return div.innerHTML;
+        }
+
+        function copyLogsToClipboard(jobId) {
+            const job = state.rawJobs.find(j => j.id === jobId);
+            if (!job) return;
+
+            const logs = job.recent_logs || [];
+            const filteredLogs = state.selectedPhase
+                ? logs.filter(l => l.phase === state.selectedPhase || !l.phase)
+                : logs;
+
+            if (!filteredLogs.length) {
+                showToast('No logs to copy', 'warning');
+                return;
+            }
+
+            const text = filteredLogs.map(log => {
+                const time = formatTime(log.timestamp);
+                const phase = log.phase || 'log';
+                const level = log.level || 'INFO';
+                return `[${time}] [${level}] [${phase}] ${log.message}`;
+            }).join('\n');
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('Logs copied to clipboard!', 'success');
+            }).catch(err => {
+                console.error('Failed to copy logs:', err);
+                showToast('Failed to copy logs', 'error');
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 6px;
+                color: white;
+                font-size: 14px;
+                z-index: 10000;
+                animation: slideIn 0.3s ease;
+                background: ${type === 'success' ? 'var(--accent-green)' : type === 'error' ? 'var(--accent-red)' : 'var(--accent-cyan)'};
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
         }
 
         function formatFileSize(bytes) {

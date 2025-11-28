@@ -6,7 +6,9 @@ Uses WAL mode for better concurrency.
 """
 
 import json
+import logging
 import sqlite3
+import threading
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from contextlib import contextmanager
@@ -35,14 +37,31 @@ class Store:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Cached connection for read-only operations (like get_stats)
+        # This avoids creating a new connection for frequent read operations
+        self._read_conn = None
+        self._read_conn_lock = None  # Lazy init to avoid import issues
+
         # Initialize database
         self._init_db()
 
     @contextmanager
     def _get_connection(self):
-        """Get database connection with proper settings"""
-        conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        """Get database connection with proper settings
+
+        Uses explicit timeout to prevent indefinite hangs on lock contention.
+        Default sqlite3 timeout is 5s, but we use 10s for better resilience.
+        """
+        # timeout=10.0 prevents indefinite blocking on locked database
+        conn = sqlite3.connect(
+            str(self.db_path),
+            check_same_thread=False,
+            timeout=10.0,  # 10 second timeout for lock contention
+        )
         conn.row_factory = sqlite3.Row  # Return rows as dicts
+        # Set busy_timeout to handle concurrent access more gracefully
+        # This is in milliseconds - 10000ms = 10 seconds
+        conn.execute("PRAGMA busy_timeout = 10000")
         try:
             yield conn
             conn.commit()
@@ -52,12 +71,50 @@ class Store:
         finally:
             conn.close()
 
+    def _get_read_connection(self):
+        """Get a cached read-only connection for frequent read operations.
+
+        This avoids the overhead of creating new connections for operations
+        like get_stats() that are called every minute. The connection is
+        thread-safe via a lock.
+
+        Returns:
+            A sqlite3 connection configured for reads
+        """
+        if self._read_conn_lock is None:
+            self._read_conn_lock = threading.Lock()
+
+        with self._read_conn_lock:
+            if self._read_conn is None:
+                logger = logging.getLogger(__name__)
+                logger.info("[DB] Creating cached read connection")
+                self._read_conn = sqlite3.connect(
+                    str(self.db_path), check_same_thread=False, timeout=10.0
+                )
+                self._read_conn.row_factory = sqlite3.Row
+                self._read_conn.execute("PRAGMA busy_timeout = 10000")
+                # Use query_only mode for read connection
+                self._read_conn.execute("PRAGMA query_only = ON")
+            return self._read_conn
+
+    def close(self):
+        """Close any cached connections."""
+        if self._read_conn is not None:
+            try:
+                self._read_conn.close()
+            except Exception:
+                pass
+            self._read_conn = None
+
     def _init_db(self):
         """Initialize database schema with tables and indexes"""
         with self._get_connection() as conn:
             # Enable WAL mode for better concurrency
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
+            # Increase autocheckpoint threshold to reduce checkpoint frequency
+            # Default is 1000 pages, we use 2000 to reduce blocking
+            conn.execute("PRAGMA wal_autocheckpoint = 2000")
 
             # Jobs table
             conn.execute("""
@@ -499,19 +556,23 @@ class Store:
         """
         Get job statistics
 
+        Uses cached read connection to avoid creating new connections
+        for this frequently-called operation (every minute).
+
         Returns:
             Dictionary with counts per status
         """
         import time
-        import logging
 
         logger = logging.getLogger(__name__)
         logger.info(
-            f"[HANG-DEBUG] get_job_stats(): About to acquire DB connection at {time.time():.3f}"
+            f"[HANG-DEBUG] get_job_stats(): About to get read connection at {time.time():.3f}"
         )
-        with self._get_connection() as conn:
+
+        try:
+            conn = self._get_read_connection()
             logger.info(
-                f"[HANG-DEBUG] get_job_stats(): Acquired DB connection, executing query at {time.time():.3f}"
+                f"[HANG-DEBUG] get_job_stats(): Got read connection, executing query at {time.time():.3f}"
             )
             cursor = conn.execute("""
                 SELECT status, COUNT(*) as count
@@ -527,6 +588,20 @@ class Store:
             )
 
             return {row["status"]: row["count"] for row in rows}
+        except sqlite3.DatabaseError as e:
+            # If cached connection is stale, reset it and retry with fresh connection
+            logger.warning(
+                f"[HANG-DEBUG] get_job_stats(): Database error, resetting connection: {e}"
+            )
+            self._read_conn = None
+            with self._get_connection() as conn:
+                cursor = conn.execute("""
+                    SELECT status, COUNT(*) as count
+                    FROM jobs
+                    GROUP BY status
+                """)
+                rows = cursor.fetchall()
+                return {row["status"]: row["count"] for row in rows}
 
     def cleanup_old_jobs(self, days: int = 30) -> int:
         """
