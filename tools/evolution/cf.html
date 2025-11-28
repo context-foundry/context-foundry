@@ -2515,12 +2515,17 @@
             if (state.promptEditingPhase) {
                 return true;
             }
-            // Also check active focus as backup
+            // Also check active focus as backup - covers both edit modes:
+            // 1. New HITL editor: .prompt-editor-textarea, system-prompt-*, input-instruction-*
+            // 2. Legacy "Edit Prompt" mode: .prompt-pane-textarea, edit-system-prompt-*, edit-input-instruction-*
             const activeEl = document.activeElement;
             return activeEl && (
                 activeEl.classList.contains('prompt-editor-textarea') ||
+                activeEl.classList.contains('prompt-pane-textarea') ||
                 activeEl.id?.includes('system-prompt-') ||
-                activeEl.id?.includes('input-instruction-')
+                activeEl.id?.includes('input-instruction-') ||
+                activeEl.id?.includes('edit-system-prompt-') ||
+                activeEl.id?.includes('edit-input-instruction-')
             );
         }
 
@@ -3585,8 +3590,8 @@
                 // Refresh approvals
                 await fetchPendingApprovals();
 
-                // Refresh job view
-                if (state.selectedJob) {
+                // Refresh job view (skip if user is editing to prevent wiping changes)
+                if (state.selectedJob && !isEditingPromptTextarea()) {
                     const job = state.rawJobs.find(j => j.id === state.selectedJob);
                     if (job) renderJobDetail(job);
                 }
@@ -3618,10 +3623,10 @@
                     throw new Error(errData.error || 'Denial failed');
                 }
 
-                // Refresh
+                // Refresh (skip re-render if user is editing to prevent wiping changes)
                 await fetchPendingApprovals();
 
-                if (state.selectedJob) {
+                if (state.selectedJob && !isEditingPromptTextarea()) {
                     const job = state.rawJobs.find(j => j.id === state.selectedJob);
                     if (job) renderJobDetail(job);
                 }
@@ -4370,7 +4375,7 @@
                             </span>
                         </div>
                         <textarea class="prompt-pane-textarea" id="edit-system-prompt-${phase}"
-                                  oninput="updateCharCount('system', '${phase}', this.value.length)">${escapeHtml(systemPrompt)}</textarea>
+                                  oninput="updateCharCount('system', '${phase}', this.value.length); setPromptEditing('${phase}')">${escapeHtml(systemPrompt)}</textarea>
                     </div>
 
                     <!-- Input Instruction Pane (Edit Mode) -->
@@ -4382,7 +4387,7 @@
                             </span>
                         </div>
                         <textarea class="prompt-pane-textarea" id="edit-input-instruction-${phase}"
-                                  oninput="updateCharCount('input', '${phase}', this.value.length)">${escapeHtml(inputInstruction)}</textarea>
+                                  oninput="updateCharCount('input', '${phase}', this.value.length); setPromptEditing('${phase}')">${escapeHtml(inputInstruction)}</textarea>
                     </div>
                 `;
             }
