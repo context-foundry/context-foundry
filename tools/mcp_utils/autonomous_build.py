@@ -222,11 +222,13 @@ def _initialize_pipeline_state(
     pause_after_phases = task_config.get("pause_after_phases", [])
     target_phases = task_config.get("target_phases", [])
 
-    # HITL mode: automatically pause after every phase for human approval
+    # HITL mode: AUTO-HANDOFF between phases
+    # Human approval happens BEFORE each phase (via wait_for_acknowledgment)
+    # but phases auto-trigger after the previous phase completes
+    # pause_after_phases is NOT set - no pausing AFTER phases
     if execution_mode == "hitl" and not pause_after_phases:
-        pause_after_phases = ["Scout", "Architect", "Builder", "Test", "Deploy"]
         print(
-            "🔧 HITL mode: will pause after each phase for human approval",
+            "🔧 HITL mode: auto-handoff enabled (approve prompts BEFORE each phase)",
             file=sys.stderr,
         )
 
@@ -259,7 +261,7 @@ def _initialize_pipeline_state(
     mode_desc = {
         "autonomous": "Full autonomous mode",
         "interactive": "Interactive mode (pause after each phase)",
-        "hitl": "Human-in-the-Loop mode (pause after each phase for approval)",
+        "hitl": "Human-in-the-Loop mode (approve prompts before each phase, auto-handoff between phases)",
         "selective": f"Selective mode (phases: {', '.join(target_phases)})",
     }.get(execution_mode, execution_mode)
 
@@ -274,6 +276,7 @@ def _should_skip_phase(
     phase_name: str,
     pipeline_state: Optional[PipelineStateSnapshot],
     resume_from_phase: Optional[str],
+    working_directory: Optional[Path] = None,
 ) -> bool:
     """
     Check if a phase should be skipped (already completed or before resume point).
@@ -282,6 +285,7 @@ def _should_skip_phase(
         phase_name: Phase to check
         pipeline_state: Current pipeline state
         resume_from_phase: Phase to resume from (if resuming)
+        working_directory: Working directory to check for existing outputs
 
     Returns:
         True if phase should be skipped
@@ -297,6 +301,33 @@ def _should_skip_phase(
                 return True
         except ValueError:
             pass  # Phase not in order, don't skip
+
+    # Safety net: Check for existing phase outputs to avoid re-running completed work
+    # This runs BEFORE pipeline_state check so it works even on fresh restarts
+    # This handles cases where pipeline_state doesn't reflect reality (e.g., after crash/resume)
+    if working_directory:
+        cf_dir = working_directory / ".context-foundry"
+        if phase_name == "Scout":
+            # Scout is complete if scout_report.json OR scout-report.md exists with content
+            scout_json = cf_dir / "scout_report.json"
+            scout_md = cf_dir / "scout-report.md"
+            if (scout_json.exists() and scout_json.stat().st_size > 100) or (
+                scout_md.exists() and scout_md.stat().st_size > 100
+            ):
+                print("⏭️ Skipping Scout: output files already exist", file=sys.stderr)
+                return True
+        elif phase_name == "Architect":
+            # Architect is complete if architecture.md OR architecture.json exists with content
+            arch_md = cf_dir / "architecture.md"
+            arch_json = cf_dir / "architecture.json"
+            if (arch_md.exists() and arch_md.stat().st_size > 100) or (
+                arch_json.exists() and arch_json.stat().st_size > 100
+            ):
+                print(
+                    "⏭️ Skipping Architect: architecture output already exists",
+                    file=sys.stderr,
+                )
+                return True
 
     if pipeline_state is None:
         return False
@@ -549,14 +580,15 @@ def parse_and_save_architecture_json(
     working_directory: Path,
 ) -> Optional[Dict[str, Any]]:
     """
-    Parse architecture.md to architecture.json using Claude CLI with BAML fallback.
+    Load architecture.json - prefer existing JSON, fallback to parsing architecture.md.
 
     This is the production code path that:
-    1. Reads .context-foundry/architecture.md
-    2. Tries to parse with Claude CLI (free, uses desktop subscription)
-    3. Falls back to BAML if Claude CLI fails/unavailable
-    4. Saves result to .context-foundry/architecture.json
-    5. Handles timeouts and errors gracefully
+    1. PREFER: Checks if .context-foundry/architecture.json already exists (Architect may create it directly)
+    2. FALLBACK: Reads .context-foundry/architecture.md and parses it
+       - Tries to parse with Claude CLI (free, uses desktop subscription)
+       - Falls back to BAML if Claude CLI fails/unavailable
+    3. Saves result to .context-foundry/architecture.json
+    4. Handles timeouts and errors gracefully
 
     Returns:
         Dict with parsed architecture if successful, None if parsing failed or file missing
@@ -568,9 +600,26 @@ def parse_and_save_architecture_json(
     architecture_md = None
     architecture_json = None
 
+    # PREFER: Check if architecture.json already exists (Architect agent may create it directly)
+    if architecture_json_path.exists() and architecture_json_path.stat().st_size > 100:
+        try:
+            architecture_json = json.loads(architecture_json_path.read_text())
+            log_debug(
+                "✅ Loaded existing architecture.json (preferred)", working_directory
+            )
+            print(
+                "✅ Using existing architecture.json (preferred over .md)",
+                file=sys.stderr,
+            )
+            return architecture_json
+        except Exception as e:
+            log_debug(f"⚠️ Failed to load architecture.json: {e}", working_directory)
+            # Fall through to BAML parse
+
+    # FALLBACK: Parse architecture.md to JSON
     if not architecture_md_path.exists():
         log_debug(
-            "⚠️ Architecture markdown missing, skipping BAML parse",
+            "⚠️ Architecture outputs missing (no .json or .md), skipping parse",
             working_directory,
         )
         return None
@@ -1486,7 +1535,9 @@ def execute_build_with_phase_spawning(
         # PHASE 1: SCOUT
         # ═══════════════════════════════════════════════════════════════════════
         # Check if phase should be skipped (already completed or resuming from later phase)
-        scout_skipped = _should_skip_phase("Scout", pipeline_state, resume_from_phase)
+        scout_skipped = _should_skip_phase(
+            "Scout", pipeline_state, resume_from_phase, working_directory
+        )
 
         if scout_skipped:
             print("⏭️  Skipping Scout phase (already completed)", file=sys.stderr)
@@ -1627,15 +1678,35 @@ def execute_build_with_phase_spawning(
             if pause_result:
                 return pause_result
 
-        # Structured Scout JSON (BAML parse) - only if Scout was not skipped
-        # (when skipped, we already loaded scout_json from the existing file above)
+        # Structured Scout JSON - prefer existing JSON, fallback to BAML parse from .md
+        # (when Scout was skipped, we already loaded scout_json from the existing file above)
         if not scout_skipped:
             scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
             scout_json_path = (
                 working_directory / ".context-foundry" / "scout_report.json"
             )
             scout_json = None
-            if scout_md_path.exists():
+
+            # PREFER: Check if scout_report.json already exists (Scout agent may create it directly)
+            if scout_json_path.exists() and scout_json_path.stat().st_size > 100:
+                try:
+                    scout_json = json.loads(scout_json_path.read_text())
+                    log_debug(
+                        "✅ Loaded existing scout_report.json (preferred)",
+                        working_directory,
+                    )
+                    print(
+                        "✅ Using existing scout_report.json (preferred over .md)",
+                        file=sys.stderr,
+                    )
+                except Exception as e:
+                    log_debug(
+                        f"⚠️ Failed to load scout_report.json: {e}", working_directory
+                    )
+                    scout_json = None  # Fall through to BAML parse
+
+            # FALLBACK: Parse scout-report.md to JSON using BAML
+            if scout_json is None and scout_md_path.exists():
                 try:
                     scout_md = scout_md_path.read_text()
                     log_debug(
@@ -1667,9 +1738,10 @@ def execute_build_with_phase_spawning(
                         f"⚠️  Failed to parse Scout markdown to JSON: {e}",
                         file=sys.stderr,
                     )
-            else:
+            elif scout_json is None:
                 log_debug(
-                    "⚠️ Scout markdown missing, skipping BAML parse", working_directory
+                    "⚠️ Scout outputs missing (no .json or .md), skipping BAML parse",
+                    working_directory,
                 )
 
         # ═══════════════════════════════════════════════════════════════════════
@@ -1699,7 +1771,7 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # Check if phase should be skipped (already completed or resuming from later phase)
         architect_skipped = _should_skip_phase(
-            "Architect", pipeline_state, resume_from_phase
+            "Architect", pipeline_state, resume_from_phase, working_directory
         )
 
         if architect_skipped:
@@ -2196,6 +2268,11 @@ def execute_build_with_phase_spawning(
 
             # FIX #4: Use module-relative path
             test_prompt = MODULE_DIR / "prompts" / "phases" / "phase_test.txt"
+
+            # FIX: Define architect_prompt here so it's available for self-healing loop
+            # (When resuming from Builder/Test, Architect phase is skipped, so architect_prompt
+            # wasn't defined. But the self-healing loop needs it to run Architect fixes.)
+            architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
 
             while test_iteration <= max_test_iterations:
                 # Check emergency stop at start of each test iteration

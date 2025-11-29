@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import traceback
 from dataclasses import dataclass
 from datetime import datetime
@@ -116,6 +117,52 @@ class PhaseValidator:
         Return the pattern directory for a given extension relative to the Context Foundry root.
         """
         return CF_ROOT / "extensions" / extension_name / "patterns"
+
+    @staticmethod
+    def check_no_nested_context_foundry(working_dir: Path) -> None:
+        """
+        Verify no nested .context-foundry directories exist inside subdirectories.
+
+        Agents sometimes incorrectly create project-named subdirectories with their own
+        .context-foundry/ folders instead of writing to the project root .context-foundry/.
+
+        This causes phase outputs (test-report.md, architecture.md, etc.) to be
+        written to the wrong location and not found by the orchestrator.
+
+        Args:
+            working_dir: Project root directory
+
+        Raises:
+            ValueError: If nested .context-foundry directories are found
+        """
+        root_cf = working_dir / ".context-foundry"
+
+        # Find all .context-foundry directories recursively
+        nested_cf_dirs = []
+        for cf_dir in working_dir.rglob(".context-foundry"):
+            # Skip the root .context-foundry directory
+            if cf_dir == root_cf:
+                continue
+            # Skip if inside external dependency directories (NOT agent-created dirs)
+            # Note: We intentionally DO NOT skip dist/build - agents might incorrectly
+            # create .context-foundry there and we want to catch that
+            path_parts = cf_dir.parts
+            skip_dirs = {"node_modules", "venv", ".venv", ".git", "__pycache__"}
+            if any(part in skip_dirs for part in path_parts):
+                continue
+            nested_cf_dirs.append(cf_dir)
+
+        if nested_cf_dirs:
+            nested_list = "\n  - ".join(
+                str(d.relative_to(working_dir)) for d in nested_cf_dirs
+            )
+            raise ValueError(
+                f"Found nested .context-foundry directories (agent error):\n  - {nested_list}\n\n"
+                f"All phase outputs MUST be written to the project root .context-foundry/ directory.\n"
+                f"The agent incorrectly created subdirectories. This phase must be retried.\n\n"
+                f"Expected: {root_cf}\n"
+                f"Found: {nested_cf_dirs[0]}"
+            )
 
     @staticmethod
     def validate_baml_tracking(working_dir: Path, phase_name: str) -> bool:
@@ -506,40 +553,54 @@ class PhaseValidator:
         passed at runtime. A misconfigured session could bypass those guards even though
         this validator detects the flow later. Consider centralizing Flowise detection.
         """
-        # Check build plan exists
+        # First, check for nested .context-foundry directories (common agent error)
+        PhaseValidator.check_no_nested_context_foundry(working_dir)
+
+        # Check build plan exists (OPTIONAL - Builder may skip this)
         build_tasks = working_dir / ".context-foundry" / "build-tasks.json"
-        if not build_tasks.exists():
-            raise FileNotFoundError("Builder failed to create build-tasks.json")
+        plan = None
+        if build_tasks.exists():
+            try:
+                # Parse task plan to check for parallel mode
+                with open(build_tasks) as f:
+                    plan = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to parse build-tasks.json: {e}")
+        else:
+            # build-tasks.json is optional - Builder may create files directly
+            logger.info(
+                "build-tasks.json not found - checking for source files directly"
+            )
 
-        # Parse task plan to check for parallel mode
-        with open(build_tasks) as f:
-            plan = json.load(f)
+        # Only check parallel completion if we have a valid build plan
+        if plan:
+            # Normalize schema to support legacy builds and avoid KeyErrors downstream
+            plan, _, warnings = _normalize_build_tasks_schema(plan)
+            for warning in warnings:
+                logger.warning(f"Build plan warning: {warning}")
 
-        # Normalize schema to support legacy builds and avoid KeyErrors downstream
-        plan, _, warnings = _normalize_build_tasks_schema(plan)
-        for warning in warnings:
-            logger.warning(f"Build plan warning: {warning}")
+            # Check each task completed (if parallel mode enabled)
+            # The parallel builder now writes .done markers for persistent tracking
+            if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
+                for task in plan.get("tasks", []):
+                    # Support both old schema (id) and new schema (task_id)
+                    task_id = task.get("task_id") or task.get("id")
+                    if not task_id:
+                        raise ValueError(
+                            f"Task missing required 'task_id' field: {task}"
+                        )
 
-        # Check each task completed (if parallel mode enabled)
-        # The parallel builder now writes .done markers for persistent tracking
-        if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
-            for task in plan.get("tasks", []):
-                # Support both old schema (id) and new schema (task_id)
-                task_id = task.get("task_id") or task.get("id")
-                if not task_id:
-                    raise ValueError(f"Task missing required 'task_id' field: {task}")
-
-                done_file = (
-                    working_dir
-                    / ".context-foundry"
-                    / "builder-logs"
-                    / f"{task_id}.done"
-                )
-                if not done_file.exists():
-                    raise RuntimeError(
-                        f"Builder task {task_id} did not complete.\n"
-                        f"Expected completion marker at: {done_file}"
+                    done_file = (
+                        working_dir
+                        / ".context-foundry"
+                        / "builder-logs"
+                        / f"{task_id}.done"
                     )
+                    if not done_file.exists():
+                        raise RuntimeError(
+                            f"Builder task {task_id} did not complete.\n"
+                            f"Expected completion marker at: {done_file}"
+                        )
 
         # Smoke check: verify SOME source files created
         # Check session config for Flowise mode (more reliable than project_type)
@@ -672,6 +733,9 @@ class PhaseValidator:
             working_dir: Project directory
             iteration: Test iteration number (0 = test-report.md, N = test-report-N.md)
         """
+        # First, check for nested .context-foundry directories (common agent error)
+        PhaseValidator.check_no_nested_context_foundry(working_dir)
+
         # Iteration-aware filename
         test_filename = f"test-report{'-' + str(iteration) if iteration > 0 else ''}.md"
         required = working_dir / ".context-foundry" / test_filename
@@ -737,6 +801,26 @@ def run_phase(
     # Extract job_id from task_config if not explicitly provided
     if job_id is None and task_config:
         job_id = task_config.get("job_id")
+
+    # ==========================================================================
+    # WORKING DIRECTORY ENFORCEMENT
+    # Ensure working_directory is absolute and .context-foundry exists at root
+    # ==========================================================================
+    working_directory = Path(working_directory).resolve()
+    if not working_directory.exists():
+        raise ValueError(f"Working directory does not exist: {working_directory}")
+
+    root_cf = working_directory / ".context-foundry"
+    if not root_cf.exists():
+        logger.info(f"Creating .context-foundry at project root: {root_cf}")
+        root_cf.mkdir(parents=True, exist_ok=True)
+
+    # Log the resolved working directory for debugging
+    logger.info(f"Phase {phase_name} running with cwd={working_directory}")
+    print(
+        f"[CWD] {phase_name} phase using working_directory: {working_directory}",
+        flush=True,
+    )
 
     # Check for human-in-the-loop mode
     if task_config:
@@ -823,6 +907,12 @@ def _run_phase_internal(
         skip_prompt_save: If True, skip saving phase prompt file (used when called
                          from run_phase_with_prompt_management which already saved it)
     """
+    # ==========================================================================
+    # WORKING DIRECTORY ENFORCEMENT (defense in depth)
+    # Ensure working_directory is absolute path - agents MUST run from project root
+    # ==========================================================================
+    working_directory = Path(working_directory).resolve()
+
     # ==========================================================================
     # STATE MACHINE: Initialize task tracking
     # ==========================================================================
@@ -1705,8 +1795,47 @@ def run_builder_phase(
     Returns:
         PhaseResult with metrics
     """
-    # Prefer structured architecture JSON if available; append to instruction once
+    # Wait for architecture.json from Architect phase (up to 5 minutes)
+    # Typically produced in 2-3 minutes; fall back to architecture.md if timeout
     arch_json_path = working_directory / ".context-foundry" / "architecture.json"
+    arch_md_path = working_directory / ".context-foundry" / "architecture.md"
+
+    MAX_WAIT_SECONDS = 300  # 5 minutes
+    POLL_INTERVAL = 10  # 10 seconds
+
+    if not arch_json_path.exists():
+        print(
+            f"⏳ Waiting for architecture.json (up to {MAX_WAIT_SECONDS}s)...",
+            file=sys.stderr,
+        )
+        waited = 0
+        while waited < MAX_WAIT_SECONDS and not arch_json_path.exists():
+            time.sleep(POLL_INTERVAL)
+            waited += POLL_INTERVAL
+            if waited % 60 == 0:  # Log every minute
+                print(
+                    f"⏳ Still waiting for architecture.json ({waited}s elapsed)...",
+                    file=sys.stderr,
+                )
+
+        if not arch_json_path.exists():
+            if arch_md_path.exists():
+                print(
+                    f"⚠️ Timeout after {waited}s - falling back to architecture.md",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"⚠️ Timeout after {waited}s - no architecture files found",
+                    file=sys.stderr,
+                )
+        else:
+            print(
+                f"✅ architecture.json found after {waited}s",
+                file=sys.stderr,
+            )
+
+    # Prefer structured architecture JSON if available; append to instruction once
     if arch_json_path.exists() and "ARCHITECTURE_JSON:" not in instruction:
         try:
             arch_json = arch_json_path.read_text()

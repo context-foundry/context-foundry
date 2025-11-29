@@ -227,19 +227,26 @@ def create_phase_prompt_file(
                 )
                 existing_data["completed_at"] = None
 
-                # For HITL, reset acknowledgment so human reviews again
+                # For HITL: Only reset acknowledgment if NOT already acknowledged
+                # This preserves acknowledgment on retries so user doesn't re-approve
                 # For autonomous, set acknowledged immediately
                 if execution_mode == "hitl":
-                    existing_data["acknowledged_at"] = None
-                    existing_data["draft_at"] = datetime.now().isoformat()
-                    # Clear the permanent edit record for new run
-                    existing_data["was_edited_before_submission"] = False
-                    existing_data["system_prompt_was_edited"] = False
-                    existing_data["input_instruction_was_edited"] = False
-                    # IMPORTANT: Also clear the actual edited content fields
-                    # Otherwise update_prompt_state will incorrectly derive edit flags
-                    existing_data["system_prompt_edited"] = None
-                    existing_data["input_instruction_edited"] = None
+                    # Preserve acknowledgment if user already approved this phase
+                    if existing_data.get("acknowledged_at") is None:
+                        existing_data["draft_at"] = datetime.now().isoformat()
+                        # Clear the permanent edit record for new run
+                        existing_data["was_edited_before_submission"] = False
+                        existing_data["system_prompt_was_edited"] = False
+                        existing_data["input_instruction_was_edited"] = False
+                        # IMPORTANT: Also clear the actual edited content fields
+                        # Otherwise update_prompt_state will incorrectly derive edit flags
+                        existing_data["system_prompt_edited"] = None
+                        existing_data["input_instruction_edited"] = None
+                    else:
+                        logger.info(
+                            f"Preserving existing acknowledgment for {phase_name} "
+                            f"(acknowledged at {existing_data.get('acknowledged_at')})"
+                        )
                 else:
                     existing_data["acknowledged_at"] = datetime.now().isoformat()
                     existing_data["acknowledged_by"] = "autonomous"

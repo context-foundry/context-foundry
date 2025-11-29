@@ -13,7 +13,7 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -145,7 +145,9 @@ def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
         artifacts["Architect"] = {"outputs": architect_files}
 
     # Test artifacts (may have iterations)
+    # Also search nested .context-foundry directories (agents sometimes create files in subdirs)
     test_files = {}
+    # First check root .context-foundry
     for fpath in cf_dir.glob("test-report*.md"):
         try:
             stat = fpath.stat()
@@ -156,6 +158,24 @@ def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
             }
         except Exception:
             pass
+    # Also check nested .context-foundry directories (fallback for agent behavior)
+    if not test_files:
+        working_path = Path(working_dir)
+        for nested_cf in working_path.glob("**/.context-foundry"):
+            if nested_cf == cf_dir:
+                continue  # Skip root, already checked
+            for fpath in nested_cf.glob("test-report*.md"):
+                try:
+                    stat = fpath.stat()
+                    # Include relative path in name to distinguish nested files
+                    rel_path = fpath.relative_to(working_path)
+                    test_files[str(rel_path)] = {
+                        "path": str(fpath),
+                        "size": stat.st_size,
+                        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    }
+                except Exception:
+                    pass
     if test_files:
         artifacts["Test"] = {"outputs": test_files}
 
@@ -742,8 +762,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # Verify this is a HITL-enabled pipeline (has pause_after_phases configured)
+            # Check both top-level and task_config for pause_after_phases (top-level takes precedence)
             task_config = state.get("task_config", {})
-            if not task_config.get("pause_after_phases"):
+            pause_after_phases = state.get("pause_after_phases") or task_config.get(
+                "pause_after_phases"
+            )
+            execution_mode = state.get("execution_mode") or task_config.get(
+                "execution_mode"
+            )
+
+            # Allow resume if either: has pause_after_phases OR is in hitl execution mode
+            if not pause_after_phases and execution_mode != "hitl":
                 self._send_json_error(
                     400,
                     "Pipeline is not in HITL mode (no pause_after_phases configured)",
@@ -877,33 +906,34 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json_error(404, f"Job not found: {job_id}")
             return
 
-        # Locate conversation file
+        # Locate conversation files
         working_dir = job.params.get("working_directory")
         if not working_dir:
             self._send_json_error(404, "Job has no working directory")
             return
 
-        conv_file = (
-            Path(working_dir)
-            / ".context-foundry"
-            / "conversations"
-            / f"conversation-{job_id}.jsonl"
-        )
-        if not conv_file.exists():
-            # Try finding any conversation file if exact ID match fails (e.g. resumed jobs might use different ID internally?)
-            # But usually job_id should match. If not found, return empty.
+        conversations_dir = Path(working_dir) / ".context-foundry" / "conversations"
+        if not conversations_dir.exists():
+            self._send_json_error(404, "Conversation logs not found")
+            return
+
+        # Read ALL conversation files in the directory (for resumed jobs, phases may be in different files)
+        # This ensures Scout phase from original job is included when viewing resumed job
+        all_conv_files = sorted(conversations_dir.glob("conversation-*.jsonl"))
+        if not all_conv_files:
             self._send_json_error(404, "Conversation logs not found")
             return
 
         try:
             messages = []
-            with open(conv_file, "r") as f:
-                for line in f:
-                    if line.strip():
-                        try:
-                            messages.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            pass
+            for conv_file in all_conv_files:
+                with open(conv_file, "r") as f:
+                    for line in f:
+                        if line.strip():
+                            try:
+                                messages.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                pass
         except Exception as exc:
             self._send_json_error(500, f"Error reading conversation logs: {exc}")
             return
@@ -923,6 +953,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 # Skip events with None timestamps
                 # Note: PhaseEvent has 'timestamp' not 'started_at'
                 if p.timestamp is None:
+                    continue
+                # Skip job-level events (like job_stalled, job_running, etc.)
+                # These have phase="_job" and are not actual phase executions
+                if p.phase == "_job":
                     continue
                 phase_timings.append(
                     {
@@ -970,6 +1004,124 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 except TypeError as e:
                     logger.warning(f"Error sorting fallback phase timings: {e}")
                     phase_timings = []
+
+        # ALWAYS check pipeline-state.json to add active/failed phase even if we have some timings from logs
+        # This is critical because logs may only contain completed phases but not the current/running one
+        if working_dir:
+            pipeline_state_path = (
+                Path(working_dir) / ".context-foundry" / "pipeline-state.json"
+            )
+            if pipeline_state_path.exists():
+                try:
+                    with open(pipeline_state_path) as f:
+                        pipeline_state = json.load(f)
+
+                    # Get phases_completed from pipeline state
+                    phases_completed = pipeline_state.get("phases_completed", [])
+                    started_at = pipeline_state.get("started_at")
+                    resumed_at = pipeline_state.get("resumed_at")
+
+                    # Also get current/running phase from phases_remaining or current_phase
+                    current_phase = pipeline_state.get("current_phase")
+                    phases_remaining = pipeline_state.get("phases_remaining", [])
+                    failed_phase = pipeline_state.get("failed_phase")
+
+                    # Determine the active phase FIRST (before timestamp-dependent logic)
+                    # This is critical: the active phase should be added regardless of started_at
+                    active_phase = (
+                        current_phase
+                        or failed_phase
+                        or (phases_remaining[0] if phases_remaining else None)
+                    )
+
+                    # Parse timestamps with fallbacks
+                    first_phase_start = datetime.now(timezone.utc)  # Default fallback
+                    active_phase_start = first_phase_start
+
+                    if started_at:
+                        try:
+                            first_phase_start = datetime.fromisoformat(
+                                started_at.replace("Z", "+00:00")
+                            )
+                            active_phase_start = first_phase_start
+                        except (ValueError, TypeError):
+                            pass
+
+                    if resumed_at:
+                        try:
+                            active_phase_start = datetime.fromisoformat(
+                                resumed_at.replace("Z", "+00:00")
+                            )
+                        except (ValueError, TypeError):
+                            pass
+
+                    # If we have no phase timings at all, add completed phases
+                    if not phase_timings:
+                        for i, phase in enumerate(phases_completed):
+                            phase_timings.append(
+                                {
+                                    "phase": phase,
+                                    "start": first_phase_start,
+                                    "end": None,
+                                }
+                            )
+
+                    # Get existing phases in phase_timings to avoid duplicates
+                    existing_phases = {pt["phase"] for pt in phase_timings}
+
+                    # IMPORTANT: Also add the current/running/failed phase so its messages are grouped
+                    # This ensures Builder (or any active phase) shows up in the conversation UI
+                    # Use resumed_at for the active phase if available (for HITL resumed jobs)
+                    if active_phase and active_phase not in existing_phases:
+                        phase_timings.append(
+                            {
+                                "phase": active_phase,
+                                "start": active_phase_start,
+                                "end": None,
+                            }
+                        )
+                        logger.debug(
+                            f"Added active phase {active_phase} to phase timings"
+                        )
+
+                except Exception as e:
+                    logger.warning(f"Error reading pipeline-state.json: {e}")
+
+        # Sort phase_timings by known PHASE_ORDER to ensure proper ordering
+        # This is critical when multiple phases have the same start time (e.g., from pipeline-state.json)
+        PHASE_ORDER = [
+            "Scout",
+            "Architect",
+            "Builder",
+            "Test",
+            "Screenshot",
+            "Documentation",
+            "Deploy",
+            "Feedback",
+        ]
+
+        def phase_sort_key(pt):
+            phase = pt["phase"]
+            try:
+                return (PHASE_ORDER.index(phase), pt["start"])
+            except ValueError:
+                return (len(PHASE_ORDER), pt["start"])  # Unknown phases go last
+
+        phase_timings.sort(key=phase_sort_key)
+
+        # Ensure start times are monotonically increasing after sorting by phase order
+        # This fixes issues where:
+        # 1. Phases have identical start times (window becomes [start, start) = empty)
+        # 2. Later phases have earlier start times (window becomes invalid with end < start)
+        from datetime import timedelta
+
+        for i in range(1, len(phase_timings)):
+            if phase_timings[i]["start"] <= phase_timings[i - 1]["start"]:
+                # Ensure this phase starts after the previous one
+                # Add 1 hour offset to create proper windows
+                phase_timings[i]["start"] = phase_timings[i - 1]["start"] + timedelta(
+                    hours=1
+                )
 
         grouped_conversations = {}
 

@@ -29,10 +29,18 @@ YOU ARE A SPECIALIZED BUILDER AGENT
 - Log each task completion with .done marker
 
 **🚨 SCOPE CONSTRAINT - CRITICAL:**
-- ALL files MUST be created in the CURRENT WORKING DIRECTORY
+- ALL files MUST be created in the CURRENT WORKING DIRECTORY (project root)
 - Use RELATIVE paths only (e.g., `src/`, `lib/`, NOT `/tmp/` or absolute paths)
 - NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
 - The project directory IS your sandbox - stay within it
+
+**🚨 DIRECTORY STRUCTURE - CRITICAL:**
+- Create source files DIRECTLY in project root or standard subdirs (src/, lib/, app/)
+- NEVER create a project-named subdirectory (e.g., DON'T create `snake-game/` for a snake game)
+- There is ONLY ONE `.context-foundry/` directory - at the PROJECT ROOT
+- NEVER create nested `.context-foundry/` directories inside subdirectories
+- Example CORRECT: `./index.html`, `./src/game.js`, `./.context-foundry/build-tasks.json`
+- Example WRONG: `./snake-game/index.html`, `./snake-game/.context-foundry/`
 
 ═══════════════════════════════════════════════════════════
 BUILDER PHASE INSTRUCTIONS

@@ -27,10 +27,18 @@ YOU ARE A SPECIALIZED TEST AGENT
 - Determine PASS/FAIL status clearly
 
 **🚨 SCOPE CONSTRAINT - CRITICAL:**
-- ALL files MUST be created in the CURRENT WORKING DIRECTORY
+- ALL files MUST be created in the CURRENT WORKING DIRECTORY (project root)
 - Use RELATIVE paths only (e.g., `.context-foundry/`, `tests/`, NOT `/tmp/` or absolute paths)
 - NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
 - The project directory IS your sandbox - stay within it
+
+**🚨 DIRECTORY STRUCTURE - CRITICAL:**
+- test-report.md MUST be written to `./.context-foundry/test-report.md` at PROJECT ROOT
+- There is ONLY ONE `.context-foundry/` directory - at the PROJECT ROOT
+- NEVER create nested `.context-foundry/` directories inside subdirectories
+- If source files are in a subdirectory (e.g., `snake-game/`), still write outputs to ROOT `.context-foundry/`
+- Example CORRECT: `./.context-foundry/test-report.md`
+- Example WRONG: `./snake-game/.context-foundry/test-report.md`
 
 ═══════════════════════════════════════════════════════════
 TEST PHASE INSTRUCTIONS
