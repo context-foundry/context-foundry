@@ -1213,11 +1213,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             current_state = prompt_data.get("state", STATE_DRAFT)
 
             # Allow acknowledge from draft, ready, under_review, or ready_edit states
+            # Note: Include both constant values AND literal "ready_edit" string
+            # because the save endpoint uses literal "ready_edit" but STATE_READY_EDIT = "under_review"
             valid_states = {
                 STATE_DRAFT,
                 STATE_READY,
                 STATE_UNDER_REVIEW,
                 STATE_READY_EDIT,
+                "ready_edit",  # Literal string used by save endpoint
             }
             if current_state not in valid_states:
                 self.send_error(
@@ -1887,7 +1890,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """
         Transform a conversation log event to an activity event for the dashboard.
         """
-        event_type = event_data.get("type", "")
+        # Support both "type" and "event_type" keys (conversation logs use "event_type")
+        event_type = event_data.get("type") or event_data.get("event_type", "")
 
         if event_type == "tool_use":
             tool_name = event_data.get("tool", "unknown")
