@@ -3,10 +3,22 @@ Phase Prompt Management for Manual Workflow Mode
 
 This module handles:
 - Creating phase prompt files before execution
-- State machine for phase lifecycle (Sleeping -> Ready -> Under Review -> Processing -> Complete)
+- State machine for phase lifecycle with clear human edit tracking
 - Waiting for user acknowledgment before agent execution ("clean plate" mechanism)
 - Reading effective prompts (edited or original)
 - Token estimation for prompts
+
+State Machine (HITL mode):
+  Draft -> Under Review -> Acknowledged (Edited/Unedited) -> Processing -> Complete/Failed
+
+State Machine (Autonomous mode):
+  Processing -> Complete/Failed
+
+The key insight is that prompts have two origins:
+  - System prompt: Deterministic (from prompt file)
+  - Input instruction: AI-generated (probabilistic)
+
+When a human acknowledges, we permanently record whether they edited before submission.
 """
 
 import json
@@ -21,30 +33,42 @@ import uuid
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# NEW STATE MACHINE
+# STATE MACHINE
 # =============================================================================
-# Phase states for manual workflow
+# Phase states for workflow tracking
 STATE_SLEEPING = "sleeping"  # Waiting for previous phase to complete
-STATE_READY = "ready"  # Prompt prepared, awaiting user acknowledgment
-STATE_UNDER_REVIEW = "under_review"  # User is reviewing the prompt
-STATE_READY_EDIT = "ready_edit"  # User has edited, awaiting final approval
+STATE_DRAFT = "draft"  # Initial state: prompts generated, awaiting human review
+STATE_UNDER_REVIEW = "under_review"  # Human is actively reviewing the prompt
+STATE_ACKNOWLEDGED_UNEDITED = "acknowledged_unedited"  # Human approved without changes
+STATE_ACKNOWLEDGED_EDITED = "acknowledged_edited"  # Human approved WITH changes
 STATE_PROCESSING = "processing"  # Agent is executing
 STATE_COMPLETE = "complete"  # Phase completed successfully
 STATE_FAILED = "failed"  # Phase failed
 
-# Valid state transitions
+# Valid state transitions (HITL mode)
 VALID_TRANSITIONS: Dict[str, List[str]] = {
-    STATE_SLEEPING: [STATE_READY],
-    STATE_READY: [STATE_UNDER_REVIEW, STATE_SLEEPING],
-    STATE_UNDER_REVIEW: [STATE_READY_EDIT, STATE_PROCESSING, STATE_READY],
-    STATE_READY_EDIT: [STATE_PROCESSING, STATE_UNDER_REVIEW],
+    STATE_SLEEPING: [STATE_DRAFT],
+    STATE_DRAFT: [
+        STATE_UNDER_REVIEW,
+        STATE_SLEEPING,
+        STATE_PROCESSING,
+    ],  # Can auto-acknowledge
+    STATE_UNDER_REVIEW: [
+        STATE_ACKNOWLEDGED_EDITED,
+        STATE_ACKNOWLEDGED_UNEDITED,
+        STATE_DRAFT,
+    ],
+    STATE_ACKNOWLEDGED_UNEDITED: [STATE_PROCESSING],
+    STATE_ACKNOWLEDGED_EDITED: [STATE_PROCESSING],
     STATE_PROCESSING: [STATE_COMPLETE, STATE_FAILED],
     STATE_COMPLETE: [],  # Terminal state
-    STATE_FAILED: [STATE_SLEEPING],  # Can retry
+    STATE_FAILED: [STATE_DRAFT, STATE_SLEEPING],  # Can retry
 }
 
 # Legacy state mappings for backward compatibility
-STATE_PENDING = STATE_READY  # Legacy alias
+STATE_READY = STATE_DRAFT  # Legacy alias
+STATE_PENDING = STATE_DRAFT  # Legacy alias
+STATE_READY_EDIT = STATE_UNDER_REVIEW  # Legacy alias
 STATE_APPROVED = STATE_PROCESSING  # Legacy alias
 STATE_INJECTED = STATE_PROCESSING  # Legacy alias
 STATE_COMPLETED = STATE_COMPLETE  # Legacy alias
@@ -124,6 +148,9 @@ def get_phase_output_budget(phase_name: str) -> int:
 
 def can_transition(from_state: str, to_state: str) -> bool:
     """Check if a state transition is valid."""
+    # Allow idempotent transitions (same state to same state) for resume scenarios
+    if from_state == to_state:
+        return True
     valid_targets = VALID_TRANSITIONS.get(from_state, [])
     return to_state in valid_targets
 
@@ -134,18 +161,25 @@ def create_phase_prompt_file(
     system_prompt: str,
     input_instruction: str,
     job_id: Optional[str] = None,
-    initial_state: str = STATE_READY,
+    initial_state: str = STATE_DRAFT,
+    execution_mode: str = "hitl",
+    force_new: bool = False,
 ) -> Path:
     """
-    Create a phase prompt file for human-in-the-loop review.
+    Create a phase prompt file for tracking prompts sent to agents.
+
+    For HITL builds: Creates in DRAFT state, awaiting human review.
+    For Autonomous builds: Creates in PROCESSING state (auto-acknowledged).
 
     Args:
         working_directory: Project working directory
         phase_name: Name of the phase (e.g., "Scout", "Architect")
-        system_prompt: The system prompt content
-        input_instruction: The user instruction content
+        system_prompt: The system prompt content (deterministic, from file)
+        input_instruction: The user instruction content (AI-generated)
         job_id: Optional job ID for tracking
-        initial_state: Initial state (default: ready)
+        initial_state: Initial state (default: draft for HITL, processing for autonomous)
+        execution_mode: "hitl" or "autonomous"
+        force_new: If True, always create a new file (for reruns)
 
     Returns:
         Path to the created prompt file
@@ -155,35 +189,64 @@ def create_phase_prompt_file(
 
     prompt_file = prompts_dir / f"{phase_name.lower()}-prompt.json"
 
-    # Check if file exists and content matches
-    if prompt_file.exists():
+    # Handle existing file
+    # Note: We ALWAYS reset to initial_state when this function is called.
+    # The caller (phase execution) calls this at the start of each phase run,
+    # so existing states are always stale from a previous run.
+    if prompt_file.exists() and not force_new:
         try:
             existing_data = json.loads(prompt_file.read_text())
+            existing_state = existing_data.get("state", "")
+
             # Check if original prompts match
-            if (
+            content_matches = (
                 existing_data.get("system_prompt") == system_prompt
                 and existing_data.get("input_instruction") == input_instruction
-            ):
-                # If the previous attempt failed, reset to READY so it can be retried
-                if existing_data.get("state") == STATE_FAILED:
-                    logger.info(
-                        f"Phase prompt for {phase_name} was in FAILED state. Resetting to READY for retry."
-                    )
-                    existing_data["state"] = STATE_READY
-                    existing_data["error"] = None
-                    # Reset timestamps for retry
-                    existing_data["ready_at"] = datetime.now().isoformat()
-                    existing_data["processing_started_at"] = None
-                    existing_data["completed_at"] = None
-                    existing_data["acknowledged_at"] = None
+            )
 
-                    prompt_file.write_text(json.dumps(existing_data, indent=2))
-                    return prompt_file
-
+            if content_matches:
+                # Always reset state for a new run, preserving history
+                # This fixes the auditor issue where stale states were preserved
                 logger.info(
-                    f"Phase prompt file already exists for {phase_name} with matching content. Preserving state."
+                    f"Phase prompt for {phase_name} exists (state: {existing_state}). "
+                    f"Resetting to {initial_state} for new run."
                 )
+
+                # Preserve edit history but reset state for new run
+                existing_data["state"] = initial_state
+                existing_data["error"] = None
+                existing_data["rerun_count"] = existing_data.get("rerun_count", 0) + 1
+                existing_data["last_rerun_at"] = datetime.now().isoformat()
+                existing_data["execution_mode"] = execution_mode
+
+                # Reset execution timestamps for this run
+                existing_data["processing_started_at"] = (
+                    datetime.now().isoformat()
+                    if initial_state == STATE_PROCESSING
+                    else None
+                )
+                existing_data["completed_at"] = None
+
+                # For HITL, reset acknowledgment so human reviews again
+                # For autonomous, set acknowledged immediately
+                if execution_mode == "hitl":
+                    existing_data["acknowledged_at"] = None
+                    existing_data["draft_at"] = datetime.now().isoformat()
+                    # Clear the permanent edit record for new run
+                    existing_data["was_edited_before_submission"] = False
+                    existing_data["system_prompt_was_edited"] = False
+                    existing_data["input_instruction_was_edited"] = False
+                    # IMPORTANT: Also clear the actual edited content fields
+                    # Otherwise update_prompt_state will incorrectly derive edit flags
+                    existing_data["system_prompt_edited"] = None
+                    existing_data["input_instruction_edited"] = None
+                else:
+                    existing_data["acknowledged_at"] = datetime.now().isoformat()
+                    existing_data["acknowledged_by"] = "autonomous"
+
+                prompt_file.write_text(json.dumps(existing_data, indent=2))
                 return prompt_file
+
         except Exception as e:
             logger.warning(f"Failed to read existing prompt file: {e}")
 
@@ -193,31 +256,42 @@ def create_phase_prompt_file(
     )
     estimated_output = get_phase_output_budget(phase_name)
 
+    now = datetime.now().isoformat()
+
     prompt_data = {
         "id": str(uuid.uuid4()),
         "job_id": job_id,
         "phase": phase_name,
         "state": initial_state,
-        # Original prompts
+        "execution_mode": execution_mode,  # "hitl" or "autonomous"
+        # Original prompts (as generated)
         "system_prompt": system_prompt,
         "input_instruction": input_instruction,
-        # Edited versions (null until user edits)
+        # Edited versions (null until user edits, permanent record)
         "system_prompt_edited": None,
         "input_instruction_edited": None,
+        # Whether prompts were edited before submission to agent
+        # This is the permanent record the user wants
+        "was_edited_before_submission": False,
+        "system_prompt_was_edited": False,
+        "input_instruction_was_edited": False,
+        # Prompt origins (for UI clarity)
+        "prompt_origins": {
+            "system_prompt": "deterministic",  # From prompt file
+            "input_instruction": "ai_generated",  # Generated by previous phase/orchestrator
+        },
         # Timestamps
-        "created_at": datetime.now().isoformat(),
-        "ready_at": datetime.now().isoformat()
-        if initial_state == STATE_READY
-        else None,
+        "created_at": now,
+        "draft_at": now if initial_state == STATE_DRAFT else None,
         "review_started_at": None,
         "edited_at": None,
-        "acknowledged_at": None,
-        "processing_started_at": None,
+        "acknowledged_at": now if execution_mode == "autonomous" else None,
+        "processing_started_at": now if initial_state == STATE_PROCESSING else None,
         "completed_at": None,
         # User tracking
         "reviewed_by": None,
         "edited_by": None,
-        "acknowledged_by": None,
+        "acknowledged_by": "autonomous" if execution_mode == "autonomous" else None,
         # Token metrics
         "token_metrics": {
             "estimated_input_tokens": estimated_input,
@@ -229,6 +303,9 @@ def create_phase_prompt_file(
         },
         # Error tracking
         "error": None,
+        # Rerun tracking
+        "rerun_count": 0,
+        "last_rerun_at": None,
     }
 
     prompt_file.write_text(json.dumps(prompt_data, indent=2))
@@ -364,9 +441,10 @@ def update_prompt_state(
 
         # Update timestamp fields based on state
         timestamp_map = {
-            STATE_READY: "ready_at",
+            STATE_DRAFT: "draft_at",
             STATE_UNDER_REVIEW: "review_started_at",
-            STATE_READY_EDIT: "edited_at",
+            STATE_ACKNOWLEDGED_EDITED: "acknowledged_at",
+            STATE_ACKNOWLEDGED_UNEDITED: "acknowledged_at",
             STATE_PROCESSING: "processing_started_at",
             STATE_COMPLETE: "completed_at",
             STATE_FAILED: "completed_at",
@@ -375,9 +453,32 @@ def update_prompt_state(
         if new_state in timestamp_map:
             prompt_data[timestamp_map[new_state]] = now
 
-        # For processing state, also set acknowledged_at
-        if new_state == STATE_PROCESSING:
-            prompt_data["acknowledged_at"] = now
+        # For acknowledged states, record whether edits were made
+        # IMPORTANT: Use explicit kwargs if provided (from dashboard request)
+        # rather than deriving from file fields (which may be stale or miss temp edits)
+        if new_state == STATE_ACKNOWLEDGED_EDITED:
+            prompt_data["was_edited_before_submission"] = True
+            # Use explicit values from kwargs if provided, otherwise derive from file
+            if "system_prompt_was_edited" in kwargs:
+                prompt_data["system_prompt_was_edited"] = kwargs.pop(
+                    "system_prompt_was_edited"
+                )
+            else:
+                prompt_data["system_prompt_was_edited"] = (
+                    prompt_data.get("system_prompt_edited") is not None
+                )
+            if "input_instruction_was_edited" in kwargs:
+                prompt_data["input_instruction_was_edited"] = kwargs.pop(
+                    "input_instruction_was_edited"
+                )
+            else:
+                prompt_data["input_instruction_was_edited"] = (
+                    prompt_data.get("input_instruction_edited") is not None
+                )
+        elif new_state == STATE_ACKNOWLEDGED_UNEDITED:
+            prompt_data["was_edited_before_submission"] = False
+            prompt_data["system_prompt_was_edited"] = False
+            prompt_data["input_instruction_was_edited"] = False
 
         # Apply any additional kwargs
         for key, value in kwargs.items():
@@ -413,13 +514,16 @@ def wait_for_acknowledgment(
     This is the "clean plate" mechanism - the agent blocks here until
     the user explicitly acknowledges the prompt in the dashboard.
 
-    Flow:
-    1. Prompt file created (state: ready)
+    Flow (HITL mode):
+    1. Prompt file created (state: draft)
     2. Agent waits here polling the file
     3. User opens dashboard, reviews prompt (state: under_review)
-    4. User optionally edits (state: ready_edit)
-    5. User clicks Acknowledge (state: processing)
-    6. This function returns, agent proceeds
+    4. User optionally edits prompts
+    5. User clicks Acknowledge (state: acknowledged_edited or acknowledged_unedited)
+    6. This function sees the acknowledged state, transitions to processing, and returns
+    7. Agent proceeds with execution
+
+    The acknowledged state is observable in the UI before the agent transitions to processing.
 
     Args:
         working_directory: Project working directory
@@ -433,7 +537,7 @@ def wait_for_acknowledgment(
         # Autonomous mode - auto-acknowledge and proceed immediately
         prompt_data = read_phase_prompt(working_directory, phase_name)
         if prompt_data:
-            # Skip straight to processing
+            # Skip straight to processing (no human review)
             update_prompt_state(
                 working_directory,
                 phase_name,
@@ -487,15 +591,41 @@ def wait_for_acknowledgment(
             logger.error(f"Prompt file disappeared for {phase_name}")
             return False, None, None
 
-        state = prompt_data.get("state", STATE_READY)
+        state = prompt_data.get("state", STATE_DRAFT)
 
-        # Check if user has acknowledged (state transitioned to processing)
-        if state == STATE_PROCESSING:
-            logger.info(f"{phase_name} phase prompt acknowledged!")
+        # Check if user has acknowledged
+        # Dashboard sets state to acknowledged_edited or acknowledged_unedited
+        # We also accept processing for backward compatibility
+        acknowledged_states = [
+            STATE_ACKNOWLEDGED_EDITED,
+            STATE_ACKNOWLEDGED_UNEDITED,
+            STATE_PROCESSING,  # Backward compatibility
+        ]
+
+        if state in acknowledged_states:
+            was_edited = prompt_data.get("was_edited_before_submission", False)
+            edit_status = "WITH EDITS" if was_edited else "without edits"
+
+            logger.info(f"{phase_name} phase prompt acknowledged {edit_status}!")
             print(
-                f"ACKNOWLEDGED: {phase_name} prompt acknowledged by {prompt_data.get('acknowledged_by', 'user')}",
+                f"ACKNOWLEDGED: {phase_name} prompt acknowledged by {prompt_data.get('acknowledged_by', 'user')} ({edit_status})",
                 flush=True,
             )
+
+            # Now the AGENT transitions to processing (not the dashboard)
+            # This makes the acknowledged state observable in the UI
+            if state != STATE_PROCESSING:
+                print(
+                    f"   State: {state} -> transitioning to processing...", flush=True
+                )
+                update_prompt_state(
+                    working_directory,
+                    phase_name,
+                    STATE_PROCESSING,
+                    validate_transition=False,
+                )
+                prompt_data["state"] = STATE_PROCESSING
+
             print("Agent starting execution...", flush=True)
 
             metrics = TokenMetrics(
@@ -539,11 +669,17 @@ def run_phase_with_prompt_management(
     Run a phase with human-in-the-loop prompt management.
 
     This wrapper:
-    1. Creates the phase prompt file (state: ready)
-    2. Waits for user acknowledgment (state: processing)
+    1. Creates the phase prompt file (state: draft - awaiting human review)
+    2. Waits for user acknowledgment (transitions to acknowledged_edited or acknowledged_unedited)
     3. Uses edited prompts if available
-    4. Runs the phase
+    4. Runs the phase (state: processing)
     5. Updates prompt state based on result (complete/failed)
+
+    The key insight is that prompts have two origins:
+    - System prompt: Deterministic (from prompt file)
+    - Input instruction: AI-generated (probabilistic)
+
+    When a human acknowledges, we permanently record whether they edited before submission.
 
     Args:
         phase_name: Name of the phase
@@ -567,14 +703,15 @@ def run_phase_with_prompt_management(
 
     system_prompt = phase_prompt_path.read_text()
 
-    # Create the prompt file for human review (starts in READY state)
+    # Create the prompt file for human review (starts in DRAFT state)
     create_phase_prompt_file(
         working_directory=working_directory,
         phase_name=phase_name,
         system_prompt=system_prompt,
         input_instruction=input_instruction,
         job_id=job_id,
-        initial_state=STATE_READY,
+        initial_state=STATE_DRAFT,
+        execution_mode="hitl",
     )
 
     # Wait for user acknowledgment (blocks until state == processing)
@@ -624,6 +761,7 @@ def run_phase_with_prompt_management(
                 input_instruction=effective_input,
                 working_directory=working_directory,
                 job_id=job_id,
+                skip_prompt_save=True,  # We already saved the prompt above
                 **run_phase_kwargs,
             )
         finally:
@@ -639,6 +777,7 @@ def run_phase_with_prompt_management(
             else input_instruction,
             working_directory=working_directory,
             job_id=job_id,
+            skip_prompt_save=True,  # We already saved the prompt above
             **run_phase_kwargs,
         )
 
