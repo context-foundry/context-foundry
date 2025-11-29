@@ -175,6 +175,7 @@ class JobManager:
         priority: int = 5,
         max_retries: Optional[int] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        job_id: Optional[str] = None,
     ) -> Job:
         """
         Submit a new job for execution
@@ -185,6 +186,7 @@ class JobManager:
             priority: Job priority (1-10, default 5)
             max_retries: Maximum retry attempts (default from config)
             metadata: Optional metadata dictionary
+            job_id: Optional specific job ID (for resuming)
 
         Returns:
             Created Job instance
@@ -200,6 +202,7 @@ class JobManager:
             priority=priority,
             max_retries=max_retries,
             metadata=metadata,
+            id=job_id,
         )
 
         # Persist to database
@@ -428,6 +431,27 @@ class JobManager:
             )
             self.store.save_log(log)
 
+            # Fix pipeline state if needed
+            try:
+                working_dir = job.params.get("working_directory")
+                if working_dir:
+                    from tools.mcp_utils.pipeline_state import (
+                        get_pipeline_state,
+                        save_pipeline_state,
+                        PipelineState,
+                    )
+
+                    project_dir = Path(working_dir)
+                    state = get_pipeline_state(project_dir)
+                    if state and state.state == PipelineState.RUNNING:
+                        logger.info(f"Fixing pipeline state for orphaned job {job.id} (RUNNING -> FAILED)")
+                        state.state = PipelineState.FAILED
+                        state.error = "Job was interrupted by daemon restart"
+                        state.failed_phase = state.current_phase or "Unknown"
+                        save_pipeline_state(state, project_dir)
+            except Exception as e:
+                logger.warning(f"Failed to fix pipeline state for orphaned job {job.id}: {e}")
+
         logger.info(f"Cleaned up {len(running_jobs)} orphaned RUNNING jobs")
 
         # Clean up stale working directory locks
@@ -602,10 +626,11 @@ class JobManager:
             )
 
             # Emit log
+            execution_mode = job.params.get("execution_mode", "autonomous")
             log = LogEntry.create(
                 job_id=job_id,
                 level="INFO",
-                message=f"Job execution started: {job.type.value}",
+                message=f"Job execution started: {job.type.value} (Mode: {execution_mode})",
                 source="job_manager",
             )
             self.store.save_log(log)

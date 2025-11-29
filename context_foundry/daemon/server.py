@@ -13,6 +13,7 @@ import signal
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -22,6 +23,8 @@ from .store import Store
 from .jobs import JobManager
 from .runner import create_runner
 from .dashboard import DashboardServer, DASHBOARD_HTML
+from .http_api import APIServer
+from .metrics import get_metrics, log_structured, init_metrics
 
 
 def _load_dashboard_html() -> str:
@@ -99,11 +102,19 @@ class CFDaemon:
         self.running = False
         self._logging_configured = False
         self.dashboard_server: Optional[DashboardServer] = None
+        self.http_api_server: Optional[APIServer] = None
 
         # Watchdog: shared state for external monitoring
         self._main_loop_heartbeat = time.time()
         self._watchdog_thread = None
         self._watchdog_stop_event = threading.Event()
+
+        # Task watchdog: monitors for stale tasks and enforces timeouts
+        self._task_watchdog_thread = None
+        self._task_watchdog_stop_event = threading.Event()
+
+        # State machine for centralized state transitions
+        self._state_machine = None  # Lazy init after store is ready
 
         # Enable faulthandler for thread dump capability
         faulthandler.enable()
@@ -446,7 +457,23 @@ class CFDaemon:
             except Exception as e:
                 logger.error(f"Failed to start dashboard server: {e}")
 
+        # Start HTTP API server (best-effort)
+        if self.config.enable_http_api:
+            try:
+                self.http_api_server = APIServer(
+                    store=self.store,
+                    host=self.config.http_api_host,
+                    port=self.config.http_api_port,
+                )
+                self.http_api_server.start()
+                logger.info(f"HTTP API available at {self.http_api_server.url}")
+            except Exception as e:
+                logger.error(f"Failed to start HTTP API server: {e}")
+
         self.running = True
+
+        # Initialize metrics system
+        init_metrics(enable=True)
 
         logger.info(
             f"CF Daemon started (PID {os.getpid()}, "
@@ -468,6 +495,14 @@ class CFDaemon:
         )
         self._watchdog_thread.start()
         logger.info("Watchdog thread started")
+
+        # Start task watchdog thread to monitor stale tasks/jobs
+        self._task_watchdog_stop_event.clear()
+        self._task_watchdog_thread = threading.Thread(
+            target=self._task_watchdog_loop, name="CFDaemonTaskWatchdog", daemon=False
+        )
+        self._task_watchdog_thread.start()
+        logger.info("Task watchdog thread started")
 
         # Report success to parent
         self._report_status(True)
@@ -609,6 +644,219 @@ class CFDaemon:
 
         logger.info("[WATCHDOG] Watchdog thread stopped")
 
+    def _task_watchdog_loop(self):
+        """
+        Task watchdog thread that monitors for stale tasks and jobs.
+
+        This implements Critical Fix #1 (per-phase heartbeat detection) and
+        Critical Fix #3 (watchdog enforcement).
+
+        Runs periodically to:
+        - Detect tasks with stale heartbeats (no activity for > threshold)
+        - Detect jobs that have exceeded their timeout
+        - Mark stale tasks/jobs as TIMED_OUT
+        - Attempt graceful termination of stuck processes
+        """
+        from .state_machine import get_state_machine
+        from .models import JobStatus
+
+        logger.info("[TASK-WATCHDOG] Starting task watchdog thread")
+
+        # Get state machine (lazy init)
+        if self._state_machine is None:
+            self._state_machine = get_state_machine(self.store)
+
+        # Configuration
+        heartbeat_timeout = 300  # 5 minutes without heartbeat = stale
+        job_timeout_grace = 60  # Extra grace period before marking job timed out
+        check_interval = 30  # Check every 30 seconds
+
+        while not self._task_watchdog_stop_event.is_set():
+            try:
+                # Wait so we can exit promptly when stop signal arrives
+                if self._task_watchdog_stop_event.wait(check_interval):
+                    break
+
+                # Skip if daemon is stopping
+                if not self.running:
+                    continue
+
+                # --- Check for stale tasks ---
+                metrics = get_metrics()
+                metrics.inc_watchdog_iterations()
+
+                try:
+                    stale_tasks = self._state_machine.get_stale_tasks(heartbeat_timeout)
+                    for task in stale_tasks:
+                        log_structured(
+                            logger,
+                            logging.WARNING,
+                            f"[TASK-WATCHDOG] Detected stale task: {task.name}",
+                            event="stale_task_detected",
+                            job_id=task.job_id,
+                            task_id=task.id,
+                            phase=task.name,
+                            last_heartbeat=str(task.last_heartbeat)
+                            if task.last_heartbeat
+                            else None,
+                            reason="heartbeat_timeout",
+                        )
+                        metrics.inc_watchdog_stale_tasks_detected()
+
+                        # Mark task as timed out
+                        try:
+                            self._state_machine.timeout_task(task.id)
+                            log_structured(
+                                logger,
+                                logging.INFO,
+                                f"[TASK-WATCHDOG] Marked task {task.name} as TIMED_OUT",
+                                event="task_timed_out_by_watchdog",
+                                job_id=task.job_id,
+                                task_id=task.id,
+                                phase=task.name,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"[TASK-WATCHDOG] Failed to timeout task {task.id}: {e}"
+                            )
+
+                except Exception as e:
+                    logger.error(f"[TASK-WATCHDOG] Error checking stale tasks: {e}")
+
+                # --- Check for stale/timed-out jobs ---
+                try:
+                    # Get jobs that have exceeded their timeout
+                    running_jobs = self.store.list_jobs(
+                        status=JobStatus.RUNNING, limit=100
+                    )
+
+                    for job in running_jobs:
+                        if not job.started_at:
+                            continue
+
+                        # Get job timeout (from params or default)
+                        timeout_minutes = job.params.get(
+                            "timeout_minutes", self.config.default_job_timeout_minutes
+                        )
+                        timeout_seconds = (timeout_minutes * 60) + job_timeout_grace
+
+                        elapsed = (datetime.now() - job.started_at).total_seconds()
+
+                        if elapsed > timeout_seconds:
+                            logger.warning(
+                                f"[TASK-WATCHDOG] Job {job.id[:8]} exceeded timeout "
+                                f"({int(elapsed)}s > {timeout_seconds}s)"
+                            )
+
+                            # Attempt to terminate any running processes
+                            if self.runner:
+                                terminate_fn = getattr(
+                                    self.runner, "terminate_job_processes", None
+                                )
+                                if callable(terminate_fn):
+                                    try:
+                                        logger.info(
+                                            f"[TASK-WATCHDOG] Terminating processes for job {job.id[:8]}"
+                                        )
+                                        terminate_fn(job.id)
+                                    except Exception as term_err:
+                                        logger.error(
+                                            f"[TASK-WATCHDOG] Failed to terminate job processes: {term_err}"
+                                        )
+
+                            # Mark job as timed out via state machine
+                            try:
+                                self._state_machine.timeout_job(job.id)
+                                logger.info(
+                                    f"[TASK-WATCHDOG] Marked job {job.id[:8]} as TIMED_OUT"
+                                )
+                            except Exception as e:
+                                logger.error(
+                                    f"[TASK-WATCHDOG] Failed to timeout job {job.id}: {e}"
+                                )
+
+                except Exception as e:
+                    logger.error(f"[TASK-WATCHDOG] Error checking stale jobs: {e}")
+
+                # --- Check for stalled jobs (no activity but not timed out) ---
+                stall_threshold = 600  # 10 minutes without heartbeat = stalled
+                try:
+                    stalled_jobs = self._state_machine.get_stale_jobs(stall_threshold)
+                    for job in stalled_jobs:
+                        log_structured(
+                            logger,
+                            logging.WARNING,
+                            f"[TASK-WATCHDOG] Detected stalled job: {job.id[:8]}",
+                            event="stalled_job_detected",
+                            job_id=job.id,
+                            stall_threshold_seconds=stall_threshold,
+                            reason="no_heartbeat",
+                        )
+                        metrics.inc_watchdog_stale_jobs_detected()
+
+                        # Mark job as stalled
+                        try:
+                            self._state_machine.stall_job(
+                                job.id,
+                                reason=f"No task activity for {stall_threshold}s",
+                            )
+                            log_structured(
+                                logger,
+                                logging.INFO,
+                                f"[TASK-WATCHDOG] Marked job {job.id[:8]} as STALLED",
+                                event="job_stalled_by_watchdog",
+                                job_id=job.id,
+                                old_status="running",
+                                new_status="stalled",
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"[TASK-WATCHDOG] Failed to stall job {job.id}: {e}"
+                            )
+
+                except Exception as e:
+                    logger.error(f"[TASK-WATCHDOG] Error checking stalled jobs: {e}")
+
+                # --- Check for completable jobs (all tasks terminal) ---
+                try:
+                    running_jobs = self.store.list_jobs(
+                        status=JobStatus.RUNNING, limit=100
+                    )
+
+                    for job in running_jobs:
+                        # Try to complete job if all required phases are done
+                        try:
+                            updated = self._state_machine.try_complete_job(job.id)
+                            if updated:
+                                log_structured(
+                                    logger,
+                                    logging.INFO,
+                                    f"[TASK-WATCHDOG] Job {job.id[:8]} auto-completed with status {updated.status.value}",
+                                    event="job_auto_completed",
+                                    job_id=job.id,
+                                    old_status="running",
+                                    new_status=updated.status.value,
+                                    reason="all_required_phases_complete",
+                                )
+                                metrics.inc_watchdog_auto_completions()
+                        except Exception as e:
+                            logger.error(
+                                f"[TASK-WATCHDOG] Error trying to complete job {job.id}: {e}"
+                            )
+
+                except Exception as e:
+                    logger.error(
+                        f"[TASK-WATCHDOG] Error checking completable jobs: {e}"
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"[TASK-WATCHDOG] Error in task watchdog thread: {e}", exc_info=True
+                )
+                time.sleep(check_interval)
+
+        logger.info("[TASK-WATCHDOG] Task watchdog thread stopped")
+
     def _run_foreground(self):
         """Run daemon in foreground"""
         try:
@@ -718,6 +966,13 @@ class CFDaemon:
             finally:
                 self.dashboard_server = None
 
+        if self.http_api_server:
+            logger.info("Stopping HTTP API server...")
+            try:
+                self.http_api_server.stop()
+            finally:
+                self.http_api_server = None
+
         # Stop watchdog thread
         if self._watchdog_thread and self._watchdog_thread.is_alive():
             logger.info("Stopping watchdog thread...")
@@ -727,6 +982,16 @@ class CFDaemon:
                 logger.warning("Watchdog thread did not stop gracefully")
             else:
                 logger.info("Watchdog thread stopped")
+
+        # Stop task watchdog thread
+        if self._task_watchdog_thread and self._task_watchdog_thread.is_alive():
+            logger.info("Stopping task watchdog thread...")
+            self._task_watchdog_stop_event.set()
+            self._task_watchdog_thread.join(timeout=5.0)
+            if self._task_watchdog_thread.is_alive():
+                logger.warning("Task watchdog thread did not stop gracefully")
+            else:
+                logger.info("Task watchdog thread stopped")
 
         # Clean up any active subprocess tasks before stopping workers
         logger.info("Cleaning up active subprocess tasks...")

@@ -533,6 +533,348 @@ def cmd_show(args):
     return 0
 
 
+def cmd_gates(args):
+    """Show phase gates status for a job"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    job = store.get_job(args.job_id)
+    if not job:
+        print(f"Job not found: {args.job_id}", file=sys.stderr)
+        return 1
+
+    # Import gate manager
+    from .gates import GateManager
+
+    gate_mgr = GateManager(store)
+    report = gate_mgr.get_gate_report(args.job_id)
+
+    # Display gate report
+    print(f"\nGate Status for Job {args.job_id[:8]}...")
+    print(f"Job Status: {job.status.value}")
+    print("=" * 60)
+
+    # Status icons
+    status_icons = {
+        "pending": "○",
+        "active": "►",
+        "passed": "✓",
+        "failed": "✗",
+        "skipped": "─",
+    }
+
+    for gate in report.gates:
+        icon = status_icons.get(gate.status.value, "?")
+        status_str = gate.status.value.upper()
+
+        # Build phase line
+        line = f"  {icon} {gate.phase:<14} [{status_str:<8}]"
+
+        # Add duration if available
+        if gate.duration_seconds:
+            minutes = int(gate.duration_seconds // 60)
+            seconds = int(gate.duration_seconds % 60)
+            line += f"  {minutes}m {seconds}s"
+
+        print(line)
+
+        # Show error if failed
+        if gate.status.value == "failed" and gate.error:
+            print(f"      Error: {gate.error[:60]}")
+
+    print("=" * 60)
+
+    # Summary
+    print(f"\nCurrent Gate: {report.current_gate or 'None'}")
+    print(f"Next Gate:    {report.next_gate or 'Complete'}")
+    print(f"Last Passed:  {report.highest_passed_gate or 'None'}")
+
+    if report.all_required_passed:
+        print("\n✓ All required gates passed")
+    elif report.has_failures:
+        print("\n✗ Has failed gates")
+    else:
+        print("\n… In progress")
+
+    return 0
+
+
+def cmd_timeline(args):
+    """Show event timeline for a job"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    job = store.get_job(args.job_id)
+    if not job:
+        print(f"Job not found: {args.job_id}", file=sys.stderr)
+        return 1
+
+    # Get timeline
+    events = store.get_job_timeline(
+        args.job_id,
+        include_heartbeats=args.heartbeats,
+        limit=args.limit,
+    )
+
+    if not events:
+        print("No events found")
+        return 0
+
+    if args.json:
+        print(json.dumps(events, indent=2))
+        return 0
+
+    # Display timeline
+    print(f"\nTimeline for Job {args.job_id[:8]}...")
+    print(f"Job Status: {job.status.value}")
+    print("=" * 70)
+
+    # Event type icons
+    event_icons = {
+        "task_created": "+",
+        "task_running": "►",
+        "task_succeeded": "✓",
+        "task_failed": "✗",
+        "task_timed_out": "⏱",
+        "job_running": "▶",
+        "job_succeeded": "✓",
+        "job_failed": "✗",
+        "job_stalled": "⚠",
+        "gate_passed": "►",
+        "gate_failed": "✗",
+        "heartbeat": "♥",
+    }
+
+    for event in events:
+        ts = event["timestamp"][:19]  # Truncate microseconds
+        status = event.get("status", "")
+        phase = event.get("phase", "")
+        icon = event_icons.get(status, "·")
+
+        # Build event line
+        line = f"  {ts}  {icon} {status:<16}"
+        if phase and phase != "_job":
+            line += f" [{phase}]"
+
+        print(line)
+
+        # Show details if verbose
+        if args.verbose and event.get("details"):
+            details = event["details"]
+            # Show select details
+            if "reason" in details:
+                print(f"                        Reason: {details['reason']}")
+            if "error" in details:
+                print(f"                        Error: {details['error'][:50]}")
+
+    print("=" * 70)
+    print(f"Total events: {len(events)}")
+
+    return 0
+
+
+def cmd_recent_events(args):
+    """Show recent events across all jobs"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    # Parse event types filter
+    event_types = None
+    if args.type:
+        event_types = [args.type]
+
+    events = store.get_recent_events(
+        limit=args.limit,
+        event_types=event_types,
+    )
+
+    if not events:
+        print("No recent events found")
+        return 0
+
+    if args.json:
+        print(json.dumps(events, indent=2))
+        return 0
+
+    # Display events
+    print(f"Recent Events ({len(events)} shown)")
+    print("=" * 80)
+
+    # Event type icons
+    event_icons = {
+        "task_created": "+",
+        "task_running": "►",
+        "task_succeeded": "✓",
+        "task_failed": "✗",
+        "task_timed_out": "⏱",
+        "job_running": "▶",
+        "job_succeeded": "✓",
+        "job_failed": "✗",
+        "job_stalled": "⚠",
+        "gate_passed": "►",
+        "gate_failed": "✗",
+    }
+
+    for event in events:
+        ts = event["timestamp"][:19]
+        job_id = event["job_id"][:8]
+        status = event.get("status") or ""
+        phase = event.get("phase") or "_job"  # Show "_job" for job-level events
+        task = (event.get("job_task") or "")[:30]
+        event_type = event.get("event_type") or status
+        icon = event_icons.get(event_type, event_icons.get(status, "·"))
+
+        print(f"  {ts}  {icon} {event_type:<16} [{job_id}] {phase:<10} {task}")
+
+    print("=" * 80)
+
+    return 0
+
+
+def cmd_reconstruct(args):
+    """Reconstruct job state from events"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    result = store.reconstruct_job_state(args.job_id)
+
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0
+
+    # Display reconstructed state
+    print(f"\nReconstructed State for Job {args.job_id[:8]}...")
+    print(f"Current Status: {result['current_status']}")
+    print(f"Total Events: {result['total_events']}")
+    print("=" * 60)
+
+    # Show task states
+    print("\nTask States:")
+    for phase, state in result.get("task_states", {}).items():
+        print(f"  {phase:<14} → {state['status']}")
+
+    # Show state changes
+    print("\nState Changes:")
+    for change in result.get("state_changes", [])[-10:]:  # Last 10
+        ts = change["timestamp"][:19]
+        change_type = change.get("type", "")
+
+        if change_type == "job_status":
+            print(f"  {ts}  JOB: {change.get('from')} → {change.get('to')}")
+        elif change_type == "task_status":
+            phase = change.get("phase", "")
+            print(f"  {ts}  TASK [{phase}]: {change.get('from')} → {change.get('to')}")
+        elif change_type == "gate":
+            phase = change.get("phase", "")
+            status = change.get("status", "")
+            print(f"  {ts}  GATE [{phase}]: {status}")
+
+    print("=" * 60)
+
+    return 0
+
+
+def cmd_phase_summary(args):
+    """Show phase progress summary for a job"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    summary = store.get_job_phase_summary(args.job_id)
+
+    if "error" in summary:
+        print(f"Error: {summary['error']}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(summary, indent=2))
+        return 0
+
+    # Display summary
+    print(f"\nPhase Summary for Job {args.job_id[:8]}...")
+    print(f"Job Status: {summary['job_status']}")
+    print("=" * 60)
+
+    # Progress bar
+    progress = summary.get("progress", {})
+    total = progress.get("total", 0)
+    completed = progress.get("completed", 0)
+    failed = progress.get("failed", 0)
+    running = progress.get("running", 0)
+
+    if total > 0:
+        pct = (completed / total) * 100
+        bar_len = 30
+        filled = int(bar_len * completed / total)
+        bar = "█" * filled + "░" * (bar_len - filled)
+        print(f"\nProgress: [{bar}] {pct:.0f}%")
+        print(f"  Completed: {completed}/{total}  Running: {running}  Failed: {failed}")
+
+    # Phase details
+    print("\nPhases:")
+    status_icons = {
+        "succeeded": "✓",
+        "failed": "✗",
+        "timed_out": "⏱",
+        "running": "►",
+        "created": "○",
+        "queued": "○",
+    }
+
+    for phase, data in summary.get("phases", {}).items():
+        status = data.get("status", "unknown")
+        icon = status_icons.get(status, "?")
+
+        line = f"  {icon} {phase:<14} [{status:<10}]"
+
+        # Add duration
+        if data.get("duration_seconds"):
+            minutes = int(data["duration_seconds"] // 60)
+            seconds = int(data["duration_seconds"] % 60)
+            line += f"  {minutes}m {seconds}s"
+
+        # Add tokens
+        if data.get("tokens_used"):
+            line += f"  {data['tokens_used']:,} tokens"
+
+        print(line)
+
+        # Show error
+        if data.get("error"):
+            print(f"      Error: {data['error'][:50]}")
+
+    print("=" * 60)
+
+    return 0
+
+
+def cmd_tree(args):
+    """Show job tree view (phases + tasks hierarchy)"""
+    config = Config.load(args.config)
+    store = Store(config.db_path)
+
+    # Import tree helper
+    from .http_api import get_job_tree, format_job_tree_ascii
+
+    tree = get_job_tree(store, args.job_id)
+
+    if "error" in tree:
+        print(f"Error: {tree['error']}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(tree, indent=2))
+        return 0
+
+    # ASCII tree format
+    print(format_job_tree_ascii(tree))
+
+    return 0
+
+
 def display_phase_breakdown(job, store):
     """Display detailed phase breakdown for a job"""
 
@@ -1429,8 +1771,27 @@ def cmd_resume(args):
 
     # Check if pipeline can be resumed
     can_resume, reason = can_resume_pipeline(project_dir)
+
+    if not can_resume:
+        if args.force:
+            print(
+                f"Warning: Pipeline not in resumable state ({reason}). Forcing resume...",
+                file=sys.stderr,
+            )
+            # Force reset state to PAUSED
+            state = get_pipeline_state(project_dir)
+            if state:
+                state.state = PipelineState.PAUSED
+                save_pipeline_state(state, project_dir)
+                # Re-check (should pass now)
+                can_resume, reason = can_resume_pipeline(project_dir)
+
     if not can_resume:
         print(f"Error: Cannot resume pipeline: {reason}", file=sys.stderr)
+        print(
+            "Tip: Use --force to override this check if you are sure the job is not running.",
+            file=sys.stderr,
+        )
         return 1
 
     state = get_pipeline_state(project_dir)
@@ -1505,6 +1866,9 @@ def cmd_resume(args):
         # Add resume_from_phase to task config
         task_config["resume_from_phase"] = resume_from
 
+        # Try to reuse existing job ID if available
+        job_id = task_config.get("job_id")
+
         job_manager = JobManager(config, store, runner=None)
         job = job_manager.submit_job(
             job_type=JobType.AUTONOMOUS_BUILD,
@@ -1515,6 +1879,7 @@ def cmd_resume(args):
                 "build_type": f"resume_{resume_from.lower()}",
                 "project_name": project_dir.name,
             },
+            job_id=job_id,
         )
 
         print(f"\nJob submitted: {job.id}")
@@ -1938,6 +2303,96 @@ def main():
     show_parser = subparsers.add_parser("show", help="Show job details")
     show_parser.add_argument("job_id", help="Job ID")
 
+    # Gates command (introspection)
+    gates_parser = subparsers.add_parser(
+        "gates", help="Show phase gates status for a job"
+    )
+    gates_parser.add_argument("job_id", help="Job ID")
+
+    # Timeline command (introspection)
+    timeline_parser = subparsers.add_parser(
+        "timeline", help="Show event timeline for a job"
+    )
+    timeline_parser.add_argument("job_id", help="Job ID")
+    timeline_parser.add_argument(
+        "--heartbeats",
+        action="store_true",
+        help="Include heartbeat events",
+    )
+    timeline_parser.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=100,
+        help="Maximum events to show (default: 100)",
+    )
+    timeline_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+    timeline_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show event details",
+    )
+
+    # Recent events command (introspection)
+    events_parser = subparsers.add_parser(
+        "events", help="Show recent events across all jobs"
+    )
+    events_parser.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=50,
+        help="Maximum events to show (default: 50)",
+    )
+    events_parser.add_argument(
+        "--type",
+        "-t",
+        help="Filter by event type (e.g., task_failed, job_succeeded)",
+    )
+    events_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # Reconstruct command (introspection)
+    reconstruct_parser = subparsers.add_parser(
+        "reconstruct", help="Reconstruct job state from events"
+    )
+    reconstruct_parser.add_argument("job_id", help="Job ID")
+    reconstruct_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # Phase summary command (introspection)
+    phase_summary_parser = subparsers.add_parser(
+        "phase-summary", help="Show phase progress summary for a job"
+    )
+    phase_summary_parser.add_argument("job_id", help="Job ID")
+    phase_summary_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
+
+    # Tree command (introspection)
+    tree_parser = subparsers.add_parser(
+        "tree", help="Show job tree view (phases + tasks hierarchy)"
+    )
+    tree_parser.add_argument("job_id", help="Job ID")
+    tree_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output as JSON instead of ASCII tree",
+    )
+
     # Logs command
     logs_parser = subparsers.add_parser("logs", help="Show job logs")
     logs_parser.add_argument("job_id", help="Job ID")
@@ -2103,6 +2558,11 @@ def main():
         type=int,
         help="Timeout for --wait (seconds)",
     )
+    resume_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force resume even if pipeline state says it's running",
+    )
 
     # Audit-log command
     audit_log_parser = subparsers.add_parser(
@@ -2220,6 +2680,12 @@ def main():
         "submit": cmd_submit,
         "list": cmd_list,
         "show": cmd_show,
+        "gates": cmd_gates,
+        "timeline": cmd_timeline,
+        "events": cmd_recent_events,
+        "reconstruct": cmd_reconstruct,
+        "phase-summary": cmd_phase_summary,
+        "tree": cmd_tree,
         "logs": cmd_logs,
         "watch": cmd_watch,
         "conversations": cmd_conversations,

@@ -353,6 +353,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._serve_transaction_stats(parsed.query)
         elif parsed.path == "/agent-activity":
             self._serve_agent_activity(parsed.query)
+        elif parsed.path == "/job-conversation":
+            self._serve_job_conversation(parsed.query)
         else:
             self.send_error(404, "Not Found")
 
@@ -598,7 +600,151 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except Exception as exc:
             logger.warning("Error listing pending approvals: %s", exc)
-            self.send_error(500, str(exc))
+            self._send_json_error(500, str(exc))
+
+    def _serve_job_conversation(self, query: str) -> None:
+        """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>"""
+        from urllib.parse import parse_qs
+
+        params = parse_qs(query)
+        job_id = params.get("job_id", [None])[0]
+
+        if not job_id:
+            self._send_json_error(400, "Missing 'job_id' parameter")
+            return
+
+        job = self.server.context.store.get_job(job_id)
+        if not job:
+            self._send_json_error(404, f"Job not found: {job_id}")
+            return
+
+        # Locate conversation file
+        working_dir = job.params.get("working_directory")
+        if not working_dir:
+            self._send_json_error(404, "Job has no working directory")
+            return
+
+        conv_file = (
+            Path(working_dir)
+            / ".context-foundry"
+            / "conversations"
+            / f"conversation-{job_id}.jsonl"
+        )
+        if not conv_file.exists():
+            # Try finding any conversation file if exact ID match fails (e.g. resumed jobs might use different ID internally?)
+            # But usually job_id should match. If not found, return empty.
+            self._send_json_error(404, "Conversation logs not found")
+            return
+
+        try:
+            messages = []
+            with open(conv_file, "r") as f:
+                for line in f:
+                    if line.strip():
+                        try:
+                            messages.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+        except Exception as exc:
+            self._send_json_error(500, f"Error reading conversation logs: {exc}")
+            return
+
+        # Group by phase
+        # We need phase timing info. Try PhaseEvents first.
+        phase_events = self.server.context.store.get_phase_events(job.id)
+
+        # If PhaseEvents are missing (e.g. resumed job issue), try to infer from Logs
+        phase_timings = []
+        if phase_events:
+            for p in phase_events:
+                phase_timings.append(
+                    {
+                        "phase": p.phase,
+                        "start": p.started_at,
+                        # Use next phase start as end, or completed_at if last
+                        "end": None,
+                    }
+                )
+            phase_timings.sort(key=lambda x: x["start"])
+        else:
+            # Fallback: Infer from logs
+            logs = self.server.context.store.get_logs(job.id, limit=10000)
+            # Group logs by phase to find start/end
+            phase_map = {}
+            for log in logs:
+                if log.phase:
+                    if log.phase not in phase_map:
+                        phase_map[log.phase] = {
+                            "start": log.timestamp,
+                            "end": log.timestamp,
+                        }
+                    else:
+                        if log.timestamp < phase_map[log.phase]["start"]:
+                            phase_map[log.phase]["start"] = log.timestamp
+                        if log.timestamp > phase_map[log.phase]["end"]:
+                            phase_map[log.phase]["end"] = log.timestamp
+
+            # Convert to list
+            for phase, times in phase_map.items():
+                phase_timings.append(
+                    {"phase": phase, "start": times["start"], "end": times["end"]}
+                )
+            phase_timings.sort(key=lambda x: x["start"])
+
+        grouped_conversations = {}
+
+        # Helper to parse timestamp from message
+        def parse_msg_time(msg):
+            ts = msg.get("timestamp")
+            if not ts:
+                return None
+            try:
+                return datetime.fromisoformat(ts)
+            except ValueError:
+                return None
+
+        # Assign messages to phases
+        for msg in messages:
+            msg_time = parse_msg_time(msg)
+            if not msg_time:
+                continue
+
+            assigned_phase = "Unknown"
+
+            # Find which phase this message belongs to
+            for i, pt in enumerate(phase_timings):
+                phase_start = pt["start"]
+                # Determine end of this phase window
+                # If we have a next phase, use its start as the boundary
+                if i + 1 < len(phase_timings):
+                    phase_end = phase_timings[i + 1]["start"]
+                else:
+                    # For the last phase, use its inferred end + buffer, or just open-ended
+                    phase_end = datetime.max
+
+                if phase_start <= msg_time < phase_end:
+                    assigned_phase = pt["phase"]
+                    break
+
+            # Handle messages before first phase (e.g. Scout)
+            if assigned_phase == "Unknown" and phase_timings:
+                if msg_time < phase_timings[0]["start"]:
+                    assigned_phase = phase_timings[0][
+                        "phase"
+                    ]  # Attribute pre-start messages to first phase
+
+            if assigned_phase not in grouped_conversations:
+                grouped_conversations[assigned_phase] = []
+
+            grouped_conversations[assigned_phase].append(msg)
+
+        body = json.dumps({"phases": grouped_conversations}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self._add_cors_headers()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def _save_artifact(self) -> None:
         """Save edited artifact file content. POST body: {path, content}"""
@@ -1288,11 +1434,64 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response)
 
+            # Auto-resume pipeline if paused
+            self._resume_pipeline_if_paused(job_id, working_dir)
+
         except json.JSONDecodeError as exc:
             self.send_error(400, f"Invalid JSON: {exc}")
         except Exception as exc:
             logger.warning("Error acknowledging phase: %s", exc)
             self.send_error(500, str(exc))
+
+    def _resume_pipeline_if_paused(self, job_id: str, working_dir: str) -> None:
+        """Resume pipeline if it's in a paused state"""
+        try:
+            # Import pipeline state
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.pipeline_state import get_pipeline_state
+            from .models import JobStatus, JobType
+
+            project_dir = Path(working_dir)
+            state = get_pipeline_state(project_dir)
+
+            if not state or not state.phases_remaining:
+                return
+
+            # Check if job is already running
+            job = self.server.context.store.get_job(job_id)
+            if job and job.status == JobStatus.RUNNING:
+                logger.info(f"Job {job_id} is still running, not resuming")
+                return
+
+            # Submit resume job
+            resume_from = state.phases_remaining[0]
+
+            task_config = {
+                "task": f"Resume build from {resume_from}",
+                "working_directory": str(project_dir),
+                "mode": "resume",
+                "resume_from_phase": resume_from,
+                "timeout_minutes": 90,
+            }
+
+            logger.info(f"Auto-resuming job {job_id} from phase {resume_from}")
+
+            self.server.job_manager.submit_job(
+                job_type=JobType.AUTONOMOUS_BUILD,
+                params=task_config,
+                priority=10,
+                metadata={
+                    "source": "dashboard",
+                    "build_type": f"resume_{resume_from.lower()}",
+                    "project_name": project_dir.name,
+                },
+                job_id=job_id,  # Reuse ID to maintain history
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to auto-resume pipeline: {e}")
 
     def _save_system_prompt_to_disk(self) -> None:
         """
@@ -2155,6 +2354,80 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .log-line { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1f2937; }
     .log-line:last-child { border-bottom: none; }
     .badge { padding: 2px 6px; border-radius: 6px; font-size: 11px; background: #0b0d12; border: 1px solid #1f2937; }
+    /* Gate pipeline visualization */
+    .gate-pipeline {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .gate-node {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border: 1px solid #1f2937;
+      background: #111827;
+      color: var(--muted);
+      transition: all 0.3s ease;
+    }
+    .gate-node.passed { background: rgba(134,239,172,0.15); color: var(--success); border-color: rgba(134,239,172,0.4); }
+    .gate-node.running { background: rgba(125,211,252,0.15); color: var(--accent); border-color: rgba(125,211,252,0.4); animation: pulse 2s infinite; }
+    .gate-node.failed { background: rgba(252,165,165,0.15); color: var(--danger); border-color: rgba(252,165,165,0.4); }
+    .gate-node.pending { background: #111827; color: var(--muted); }
+    .gate-arrow { color: var(--muted); font-size: 14px; }
+    .gate-info { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    /* Timeline visualization */
+    .timeline-view {
+      background: #0b0d12;
+      border: 1px solid #1f2937;
+      border-radius: 10px;
+      padding: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .timeline-event {
+      display: flex;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid #1f2937;
+    }
+    .timeline-event:last-child { border-bottom: none; }
+    .timeline-time {
+      font-size: 11px;
+      color: var(--muted);
+      white-space: nowrap;
+      min-width: 70px;
+    }
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .timeline-dot.job { background: var(--accent-2); }
+    .timeline-dot.task { background: var(--accent); }
+    .timeline-dot.gate { background: var(--success); }
+    .timeline-dot.error { background: var(--danger); }
+    .timeline-content { flex: 1; }
+    .timeline-type { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .timeline-message { font-size: 12px; color: var(--text); margin-top: 2px; }
+    /* Metrics panel */
+    .metrics-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .metric-chip {
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: #111827;
+      border: 1px solid #1f2937;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .metric-chip .value { color: var(--accent); margin-left: 4px; }
   </style>
 </head>
 <body>
@@ -2180,8 +2453,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <div id="focus-status" class="status queued">--</div>
           </div>
           <div class="muted" id="phase-line">Phase: --</div>
-          <div class="monospace" id="context-window">Waiting for data…</div>
-          <div>
+          <div class="tab-bar">
+            <button class="tab-btn active" data-tab="context">Context</button>
+            <button class="tab-btn" data-tab="tree">Tree</button>
+            <button class="tab-btn" data-tab="gates">Gates</button>
+            <button class="tab-btn" data-tab="timeline">Timeline</button>
+            <button class="tab-btn" data-tab="logs">Logs</button>
+          </div>
+          <div id="tab-context" class="tab-content active">
+            <div class="monospace" id="context-window">Waiting for data…</div>
+          </div>
+          <div id="tab-tree" class="tab-content">
+            <div class="tree-view" id="tree-view">Select a job to view tree…</div>
+          </div>
+          <div id="tab-gates" class="tab-content">
+            <div class="gates-view" id="gates-view">Select a job to view gates…</div>
+          </div>
+          <div id="tab-timeline" class="tab-content">
+            <div class="timeline-view" id="timeline-view">Select a job to view timeline…</div>
+          </div>
+          <div id="tab-logs" class="tab-content">
             <div class="label">Recent logs</div>
             <div id="log-list"></div>
           </div>
@@ -2198,9 +2489,204 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     const focusStatusEl = document.getElementById('focus-status');
     const phaseLineEl = document.getElementById('phase-line');
     const logListEl = document.getElementById('log-list');
+    const treeViewEl = document.getElementById('tree-view');
+    const gatesViewEl = document.getElementById('gates-view');
+    const timelineViewEl = document.getElementById('timeline-view');
 
-    let state = { selectedJobId: null };
+    let state = { selectedJobId: null, activeTab: 'context' };
     let evtSource = null;
+    let cachedTree = null;
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const tab = btn.dataset.tab;
+        state.activeTab = tab;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + tab).classList.add('active');
+        if (state.selectedJobId) {
+          if (tab === 'tree') fetchAndRenderTree(state.selectedJobId);
+          if (tab === 'gates') fetchAndRenderGates(state.selectedJobId);
+          if (tab === 'timeline') fetchAndRenderTimeline(state.selectedJobId);
+        }
+      });
+    });
+
+    async function fetchAndRenderTree(jobId) {
+      if (!jobId) {
+        treeViewEl.innerHTML = 'Select a job to view tree…';
+        return;
+      }
+      treeViewEl.innerHTML = 'Loading tree…';
+      try {
+        const res = await fetch('/job-tree?job_id=' + jobId);
+        if (!res.ok) {
+          treeViewEl.innerHTML = 'Failed to load tree';
+          return;
+        }
+        const tree = await res.json();
+        cachedTree = tree;
+        renderTree(tree);
+      } catch (err) {
+        console.error('Failed to fetch tree', err);
+        treeViewEl.innerHTML = 'Error loading tree';
+      }
+    }
+
+    function renderTree(tree) {
+      if (!tree || tree.error) {
+        treeViewEl.innerHTML = tree?.error || 'No tree data';
+        return;
+      }
+      const statusBadge = (s) => `<span class="tree-status ${s.toLowerCase()}">${s}</span>`;
+      let html = `<div class="tree-node"><span class="tree-label">Job ${tree.job_id.slice(0,8)}</span>${statusBadge(tree.status)}</div>`;
+
+      (tree.phases || []).forEach((phase, i) => {
+        const isLast = i === tree.phases.length - 1;
+        const prefix = isLast ? '└── ' : '├── ';
+        html += `<div class="tree-phase"><span class="tree-prefix">${prefix}</span><span class="tree-label">Phase: ${phase.phase}</span>${statusBadge(phase.status)}</div>`;
+
+        (phase.tasks || []).forEach((task, j) => {
+          const taskPrefix = isLast ? '    ' : '│   ';
+          const taskBranch = j === phase.tasks.length - 1 ? '└── ' : '├── ';
+          html += `<div class="tree-task"><span class="tree-prefix">${taskPrefix}${taskBranch}</span><span class="tree-label">Task ${task.task_id.slice(0,8)}</span>${statusBadge(task.status)}</div>`;
+        });
+      });
+
+      treeViewEl.innerHTML = html;
+    }
+
+    // Gates functions
+    async function fetchAndRenderGates(jobId) {
+      if (!jobId) {
+        gatesViewEl.innerHTML = 'Select a job to view gates…';
+        return;
+      }
+      gatesViewEl.innerHTML = 'Loading gates…';
+      try {
+        const res = await fetch('/job-gates?job_id=' + jobId);
+        if (!res.ok) {
+          gatesViewEl.innerHTML = 'Failed to load gates';
+          return;
+        }
+        const data = await res.json();
+        renderGates(data);
+      } catch (err) {
+        console.error('Failed to fetch gates', err);
+        gatesViewEl.innerHTML = 'Error loading gates';
+      }
+    }
+
+    function renderGates(data) {
+      if (!data || data.error) {
+        gatesViewEl.innerHTML = data?.error || 'No gate data';
+        return;
+      }
+      const gates = data.gates || [];
+      if (!gates.length) {
+        gatesViewEl.innerHTML = '<div class="gate-info">No phases started yet</div>';
+        return;
+      }
+
+      let html = '<div class="gate-pipeline">';
+      gates.forEach((gate, i) => {
+        // Map 'active' status to 'running' for CSS styling
+        let status = gate.status.toLowerCase();
+        if (status === 'active') status = 'running';
+        const duration = gate.duration_seconds ? `${Math.round(gate.duration_seconds)}s` : '--';
+        html += `<div class="gate-node ${status}">
+          <div style="font-weight:600;">${gate.phase}</div>
+          <div style="font-size:11px;margin-top:4px;">${gate.status}</div>
+          <div style="font-size:10px;color:var(--muted);">${duration}</div>
+        </div>`;
+        if (i < gates.length - 1) {
+          html += '<span class="gate-arrow">→</span>';
+        }
+      });
+      html += '</div>';
+
+      // Gate summary info
+      html += '<div class="gate-info">';
+      if (data.current_gate) html += `Current: <strong>${data.current_gate}</strong> · `;
+      if (data.next_gate) html += `Next: <strong>${data.next_gate}</strong> · `;
+      html += data.all_required_passed ? '<span style="color:var(--success)">✓ All required passed</span>' : '<span style="color:var(--muted)">In progress</span>';
+      if (data.has_failures) html += ' · <span style="color:var(--danger)">Has failures</span>';
+      html += '</div>';
+
+      gatesViewEl.innerHTML = html;
+    }
+
+    // Timeline functions
+    async function fetchAndRenderTimeline(jobId) {
+      if (!jobId) {
+        timelineViewEl.innerHTML = 'Select a job to view timeline…';
+        return;
+      }
+      timelineViewEl.innerHTML = 'Loading timeline…';
+      try {
+        const res = await fetch('/job-timeline?job_id=' + jobId + '&limit=100');
+        if (!res.ok) {
+          timelineViewEl.innerHTML = 'Failed to load timeline';
+          return;
+        }
+        const data = await res.json();
+        renderTimeline(data);
+      } catch (err) {
+        console.error('Failed to fetch timeline', err);
+        timelineViewEl.innerHTML = 'Error loading timeline';
+      }
+    }
+
+    function renderTimeline(data) {
+      if (!data || data.error) {
+        timelineViewEl.innerHTML = data?.error || 'No timeline data';
+        return;
+      }
+      const events = data.events || [];
+      if (!events.length) {
+        timelineViewEl.innerHTML = '<div style="color:var(--muted);padding:16px;">No events yet</div>';
+        return;
+      }
+
+      // Color map for status-based coloring
+      const statusColors = {
+        'started': 'var(--accent)',
+        'running': 'var(--accent)',
+        'completed': 'var(--success)',
+        'succeeded': 'var(--success)',
+        'passed': 'var(--success)',
+        'failed': 'var(--danger)',
+        'timed_out': 'var(--danger)',
+        'created': 'var(--muted)',
+        'queued': 'var(--muted)',
+        'pending': 'var(--muted)',
+      };
+
+      let html = '';
+      events.forEach(event => {
+        // Build event_type from type + status (e.g., "phase_event" + "started" -> "phase started")
+        const eventType = event.event_type || (event.type ? `${event.type.replace('_event', '')} ${event.status || ''}`.trim() : event.status || 'event');
+        const status = event.status || '';
+        const color = statusColors[status.toLowerCase()] || 'var(--muted)';
+        const ts = event.timestamp ? event.timestamp.slice(11, 19) : '--:--:--';
+        const phase = event.phase ? ` · ${event.phase}` : '';
+        const details = event.details && Object.keys(event.details).length ? ` — ${JSON.stringify(event.details).slice(0,80)}` : '';
+
+        html += `<div class="timeline-event">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+            <span style="color:var(--muted);font-size:11px;min-width:60px;">${ts}</span>
+            <span style="font-weight:500;">${eventType.replace(/_/g, ' ')}</span>
+            <span style="color:var(--muted);font-size:12px;">${phase}${details}</span>
+          </div>
+        </div>`;
+      });
+
+      timelineViewEl.innerHTML = html;
+    }
 
     function setConnection(status, detail) {
       const map = {
@@ -2214,6 +2700,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       connectionEl.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;display:inline-block;background:${info.color};"></span>${info.text}${detail ? ' · ' + detail : ''}`;
     }
 
+    let metricsCache = null;
+
+    async function fetchMetrics() {
+      try {
+        const res = await fetch('/metrics');
+        if (res.ok) {
+          metricsCache = await res.json();
+        }
+      } catch (err) {
+        console.error('Failed to fetch metrics', err);
+      }
+    }
+
     function renderSummary(payload) {
       const byStatus = payload.summary.by_status || {};
       const cards = [
@@ -2222,6 +2721,24 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         { label: 'Active Agents', value: payload.summary.running_agents || 0 },
         { label: 'Total Jobs (last 50)', value: payload.summary.total_jobs || 0 }
       ];
+
+      // Add metrics data if available (metrics are nested in counters/gauges/timings)
+      if (metricsCache && metricsCache.metrics && metricsCache.metrics.counters) {
+        const counters = metricsCache.metrics.counters;
+        const succeeded = counters['daemon.jobs.succeeded'] || 0;
+        // Aggregate all failed counters (may have tags like daemon.jobs.failed{reason=...})
+        let failed = 0;
+        for (const [key, value] of Object.entries(counters)) {
+          if (key === 'daemon.jobs.failed' || key.startsWith('daemon.jobs.failed{')) {
+            failed += value;
+          }
+        }
+        if (succeeded > 0 || failed > 0) {
+          cards.push({ label: 'Succeeded', value: succeeded });
+          cards.push({ label: 'Failed', value: failed });
+        }
+      }
+
       summaryEl.innerHTML = cards.map(card => `
         <div class="card">
           <div class="label">${card.label}</div>
@@ -2266,6 +2783,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           state.selectedJobId = el.dataset.id;
           renderJobs(payload);
           renderFocus(payload);
+          // Auto-fetch data based on active tab
+          if (state.activeTab === 'tree') fetchAndRenderTree(state.selectedJobId);
+          if (state.activeTab === 'gates') fetchAndRenderGates(state.selectedJobId);
+          if (state.activeTab === 'timeline') fetchAndRenderTimeline(state.selectedJobId);
         };
       });
     }
@@ -2279,6 +2800,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         contextEl.textContent = 'Waiting for data…';
         phaseLineEl.textContent = 'Phase: --';
         logListEl.innerHTML = '';
+        treeViewEl.innerHTML = 'Select a job to view tree…';
+        gatesViewEl.innerHTML = 'Select a job to view gates…';
+        timelineViewEl.innerHTML = 'Select a job to view timeline…';
         return;
       }
 
@@ -2341,7 +2865,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     connect();
+    fetchMetrics();  // Initial metrics fetch
     setInterval(fallbackPoll, 10000);
+    setInterval(fetchMetrics, 30000);  // Refresh metrics every 30s
   </script>
 </body>
 </html>

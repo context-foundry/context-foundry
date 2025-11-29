@@ -21,11 +21,47 @@ class JobStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
+    WAITING_APPROVAL = "waiting_approval"  # HITL: waiting for human approval
+    STALLED = "stalled"  # No progress/heartbeats beyond threshold
 
     @classmethod
     def terminal_states(cls) -> set:
         """Return set of terminal states that release locks/capacity"""
-        return {cls.SUCCEEDED, cls.FAILED, cls.CANCELLED, cls.TIMED_OUT}
+        return {cls.SUCCEEDED, cls.FAILED, cls.CANCELLED, cls.TIMED_OUT, cls.STALLED}
+
+    @classmethod
+    def active_states(cls) -> set:
+        """Return set of states where job is actively processing"""
+        return {cls.RUNNING, cls.WAITING_APPROVAL}
+
+    @classmethod
+    def recoverable_states(cls) -> set:
+        """Return set of non-terminal states that might be recovered"""
+        return {cls.STALLED}
+
+
+class TaskStatus(str, Enum):
+    """Task/Phase lifecycle states"""
+
+    CREATED = "created"  # Task defined but not started
+    QUEUED = "queued"  # Waiting to run
+    RUNNING = "running"  # Currently executing
+    SUCCEEDED = "succeeded"  # Completed successfully
+    FAILED = "failed"  # Failed with error
+    CANCELLED = "cancelled"  # Cancelled by user/system
+    TIMED_OUT = "timed_out"  # Exceeded timeout
+    WAITING_APPROVAL = "waiting_approval"  # HITL: waiting for human approval
+    SKIPPED = "skipped"  # Skipped (e.g., cache hit, not needed)
+
+    @classmethod
+    def terminal_states(cls) -> set:
+        """Return set of terminal states"""
+        return {cls.SUCCEEDED, cls.FAILED, cls.CANCELLED, cls.TIMED_OUT, cls.SKIPPED}
+
+    @classmethod
+    def active_states(cls) -> set:
+        """Return set of states where task is actively processing"""
+        return {cls.RUNNING, cls.WAITING_APPROVAL}
 
 
 class JobType(str, Enum):
@@ -71,6 +107,7 @@ class Job:
         priority: int = 5,
         max_retries: int = 3,
         metadata: Optional[Dict[str, Any]] = None,
+        id: Optional[str] = None,
     ) -> "Job":
         """
         Factory method to create a new job
@@ -81,12 +118,13 @@ class Job:
             priority: Job priority (1-10, default 5)
             max_retries: Maximum retry attempts (default 3)
             metadata: Optional metadata dictionary
+            id: Optional specific job ID (for resuming)
 
         Returns:
             New Job instance
         """
         return cls(
-            id=str(uuid.uuid4()),
+            id=id or str(uuid.uuid4()),
             type=job_type,
             status=JobStatus.QUEUED,
             priority=max(1, min(10, priority)),  # Clamp to [1, 10]
@@ -130,6 +168,120 @@ class Job:
             return None
         end_time = self.completed_at or datetime.now()
         return (end_time - self.started_at).total_seconds()
+
+
+@dataclass
+class Task:
+    """
+    A Task represents a unit of work within a Job (typically a phase).
+
+    Tasks provide first-class DB representation for phases like Scout, Architect,
+    Builder, Test, Deploy. This enables:
+    - Persistent phase state across daemon restarts
+    - Per-phase heartbeat tracking
+    - Parent-child relationships for future recursive tasks
+    """
+
+    id: str
+    job_id: str
+    name: str  # Phase name: Scout, Architect, Builder, Test, Deploy, or subtask
+    status: TaskStatus
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_heartbeat: Optional[datetime] = None  # For liveness detection
+    error: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    parent_task_id: Optional[str] = None  # For hierarchical tasks (future)
+    sequence: int = 0  # Order within parent job (0=Scout, 1=Architect, etc.)
+    timeout_seconds: Optional[int] = None  # Per-task timeout
+
+    # Phase-specific metrics
+    tokens_used: Optional[int] = None
+    context_percent: Optional[float] = None
+
+    @classmethod
+    def create(
+        cls,
+        job_id: str,
+        name: str,
+        sequence: int = 0,
+        parent_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        timeout_seconds: Optional[int] = None,
+    ) -> "Task":
+        """Factory method to create a new task"""
+        return cls(
+            id=str(uuid.uuid4()),
+            job_id=job_id,
+            name=name,
+            status=TaskStatus.CREATED,
+            created_at=datetime.now(),
+            sequence=sequence,
+            parent_task_id=parent_task_id,
+            metadata=metadata or {},
+            timeout_seconds=timeout_seconds,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert task to dictionary"""
+        data = asdict(self)
+        data["status"] = self.status.value
+        data["created_at"] = self.created_at.isoformat()
+        if self.started_at:
+            data["started_at"] = self.started_at.isoformat()
+        if self.completed_at:
+            data["completed_at"] = self.completed_at.isoformat()
+        if self.last_heartbeat:
+            data["last_heartbeat"] = self.last_heartbeat.isoformat()
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Task":
+        """Create task from dictionary"""
+        data = data.copy()
+        data["status"] = TaskStatus(data["status"])
+        data["created_at"] = datetime.fromisoformat(data["created_at"])
+        if data.get("started_at"):
+            data["started_at"] = datetime.fromisoformat(data["started_at"])
+        if data.get("completed_at"):
+            data["completed_at"] = datetime.fromisoformat(data["completed_at"])
+        if data.get("last_heartbeat"):
+            data["last_heartbeat"] = datetime.fromisoformat(data["last_heartbeat"])
+        return cls(**data)
+
+    def duration(self) -> Optional[float]:
+        """Get task duration in seconds (if started)"""
+        if not self.started_at:
+            return None
+        end_time = self.completed_at or datetime.now()
+        return (end_time - self.started_at).total_seconds()
+
+    def is_stale(self, heartbeat_timeout_seconds: float = 300) -> bool:
+        """
+        Check if task appears stale (no heartbeat for too long).
+
+        Args:
+            heartbeat_timeout_seconds: Time without heartbeat to consider stale
+
+        Returns:
+            True if task is running but heartbeat is stale
+        """
+        if self.status not in TaskStatus.active_states():
+            return False
+        if not self.last_heartbeat:
+            # No heartbeat ever recorded - check started_at
+            if not self.started_at:
+                return False
+            elapsed = (datetime.now() - self.started_at).total_seconds()
+        else:
+            elapsed = (datetime.now() - self.last_heartbeat).total_seconds()
+        return elapsed > heartbeat_timeout_seconds
+
+    def record_heartbeat(self) -> None:
+        """Update last heartbeat timestamp"""
+        self.last_heartbeat = datetime.now()
 
 
 @dataclass
@@ -470,6 +622,7 @@ class PhasePrompt:
 
 # Type aliases for convenience
 JobID = str
+TaskID = str
 PhaseEventID = str
 LogEntryID = str
 PhasePromptID = str

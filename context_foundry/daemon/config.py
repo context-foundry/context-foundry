@@ -29,6 +29,11 @@ class Config:
     dashboard_port: int = 8420
     dashboard_refresh_interval: float = 2.0
 
+    # HTTP API settings
+    enable_http_api: bool = True
+    http_api_host: str = "127.0.0.1"
+    http_api_port: int = 8421
+
     # Resource limits
     max_cpu_percent: float = 80.0
     max_memory_gb: float = 16.0
@@ -91,6 +96,9 @@ class Config:
             "CFD_DASHBOARD_HOST": "dashboard_host",
             "CFD_ENABLE_DASHBOARD": "enable_dashboard",
             "CFD_DASHBOARD_REFRESH_SECONDS": "dashboard_refresh_interval",
+            "CFD_HTTP_API_PORT": "http_api_port",
+            "CFD_HTTP_API_HOST": "http_api_host",
+            "CFD_ENABLE_HTTP_API": "enable_http_api",
         }
 
         for env_var, config_key in env_overrides.items():

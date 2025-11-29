@@ -1,0 +1,636 @@
+"""
+HTTP/JSON Status API for Context Foundry Daemon.
+
+Provides read-only REST endpoints for job/task/gate introspection.
+Uses Python stdlib http.server for minimal dependencies.
+
+Endpoints:
+    GET /health                   - Health check
+    GET /jobs                     - List jobs
+    GET /jobs/{job_id}           - Job details
+    GET /jobs/{job_id}/timeline  - Job event timeline
+    GET /jobs/{job_id}/gates     - Job gate status
+    GET /jobs/{job_id}/tree      - Job tree view (phases + tasks)
+    GET /events/recent           - Recent events across all jobs
+    GET /metrics                 - Metrics snapshot (if enabled)
+"""
+
+import json
+import logging
+import re
+import threading
+from dataclasses import dataclass, field
+from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs, urlparse
+
+from .gates import GateManager
+from .metrics import get_metrics, log_structured
+from .models import JobStatus, Task, TaskStatus
+from .store import Store
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# API CONTEXT
+# =============================================================================
+
+
+@dataclass
+class APIContext:
+    """Shared context for API requests."""
+
+    store: Store
+    start_time: datetime = field(default_factory=datetime.now)
+    stop_event: threading.Event = field(default_factory=threading.Event)
+
+
+# =============================================================================
+# JOB TREE HELPER
+# =============================================================================
+
+
+def get_job_tree(store: Store, job_id: str) -> Dict[str, Any]:
+    """
+    Build a hierarchical tree view of a job's phases and tasks.
+
+    Returns:
+        {
+            "job_id": "...",
+            "status": "RUNNING",
+            "created_at": "...",
+            "phases": [
+                {
+                    "phase": "Scout",
+                    "status": "SUCCEEDED",
+                    "sequence": 0,
+                    "tasks": [
+                        {"task_id": "...", "status": "SUCCEEDED", ...}
+                    ]
+                },
+                ...
+            ]
+        }
+    """
+    job = store.get_job(job_id)
+    if not job:
+        return {"error": f"Job not found: {job_id}"}
+
+    # Get all tasks for this job
+    tasks = store.get_tasks_for_job(job_id)
+
+    # Group tasks by phase
+    tasks_by_phase: Dict[str, List[Task]] = {}
+    for task in tasks:
+        phase = task.name  # Task name is the phase name
+        if phase not in tasks_by_phase:
+            tasks_by_phase[phase] = []
+        tasks_by_phase[phase].append(task)
+
+    # Define standard phase order (for sorting known phases)
+    standard_phase_order = [
+        "Scout",
+        "Architect",
+        "Builder",
+        "Test",
+        "Feedback",
+        "Deploy",
+    ]
+
+    # Get all phases that actually have tasks
+    all_phases = set(tasks_by_phase.keys())
+
+    # Sort phases: standard phases first (in order), then custom phases alphabetically
+    def phase_sort_key(phase_name: str) -> tuple:
+        if phase_name in standard_phase_order:
+            return (0, standard_phase_order.index(phase_name))
+        return (1, phase_name)
+
+    sorted_phases = sorted(all_phases, key=phase_sort_key)
+
+    # Build phases list - only include phases that have tasks
+    phases = []
+    for seq, phase_name in enumerate(sorted_phases):
+        phase_tasks = tasks_by_phase.get(phase_name, [])
+
+        # Skip phases with no tasks (dynamic discovery means we only show actual phases)
+        if not phase_tasks:
+            continue
+
+        # Determine phase status from tasks
+        if all(t.status == TaskStatus.SUCCEEDED for t in phase_tasks):
+            phase_status = "succeeded"
+        elif any(
+            t.status in (TaskStatus.FAILED, TaskStatus.TIMED_OUT) for t in phase_tasks
+        ):
+            phase_status = "failed"
+        elif any(t.status == TaskStatus.RUNNING for t in phase_tasks):
+            phase_status = "running"
+        else:
+            phase_status = "pending"
+
+        # Serialize tasks
+        serialized_tasks = []
+        for task in sorted(phase_tasks, key=lambda t: t.created_at):
+            serialized_tasks.append(
+                {
+                    "task_id": task.id,
+                    "status": task.status.value,
+                    "created_at": task.created_at.isoformat()
+                    if task.created_at
+                    else None,
+                    "started_at": task.started_at.isoformat()
+                    if task.started_at
+                    else None,
+                    "completed_at": task.completed_at.isoformat()
+                    if task.completed_at
+                    else None,
+                    "last_heartbeat": task.last_heartbeat.isoformat()
+                    if task.last_heartbeat
+                    else None,
+                }
+            )
+
+        phases.append(
+            {
+                "phase": phase_name,
+                "status": phase_status,
+                "sequence": seq,
+                "tasks": serialized_tasks,
+            }
+        )
+
+    return {
+        "job_id": job.id,
+        "status": job.status.value,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "started_at": job.started_at.isoformat() if job.started_at else None,
+        "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        "phases": phases,
+    }
+
+
+def format_job_tree_ascii(tree: Dict[str, Any]) -> str:
+    """
+    Format a job tree as ASCII art for CLI display.
+
+    Example output:
+        Job e0fc0679 (SUCCEEDED)
+        +-- Phase: Scout (SUCCEEDED)
+        |   +-- Task b916d083 (SUCCEEDED)
+        +-- Phase: Builder (RUNNING)
+        |   +-- Task a1b2c3d4 (RUNNING)
+        +-- Phase: Feedback (PENDING)
+    """
+    if "error" in tree:
+        return f"Error: {tree['error']}"
+
+    lines = []
+
+    # Job header
+    job_id = tree["job_id"][:8]
+    status = tree["status"].upper()
+    lines.append(f"Job {job_id} ({status})")
+
+    phases = tree.get("phases", [])
+    total_phases = len(phases)
+
+    for i, phase in enumerate(phases):
+        is_last_phase = i == total_phases - 1
+        phase_prefix = "+-- " if not is_last_phase else "+-- "
+        child_prefix = "|   " if not is_last_phase else "    "
+
+        phase_name = phase["phase"]
+        phase_status = phase["status"].upper()
+        lines.append(f"{phase_prefix}Phase: {phase_name} ({phase_status})")
+
+        tasks = phase.get("tasks", [])
+        total_tasks = len(tasks)
+
+        for j, task in enumerate(tasks):
+            is_last_task = j == total_tasks - 1
+            task_prefix = "+-- " if not is_last_task else "+-- "
+
+            task_id = task["task_id"][:8]
+            task_status = task["status"].upper()
+            lines.append(f"{child_prefix}{task_prefix}Task {task_id} ({task_status})")
+
+    return "\n".join(lines)
+
+
+# =============================================================================
+# HTTP REQUEST HANDLER
+# =============================================================================
+
+
+class APIRequestHandler(BaseHTTPRequestHandler):
+    """HTTP request handler for the status API."""
+
+    # Suppress default logging
+    def log_message(self, format: str, *args) -> None:
+        logger.debug("HTTP: %s", format % args)
+
+    def _send_json(self, data: Any, status: int = 200) -> None:
+        """Send a JSON response."""
+        body = json.dumps(data, indent=2, default=str).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_error(self, status: int, message: str) -> None:
+        """Send a JSON error response."""
+        self._send_json({"error": message}, status)
+
+    def _get_context(self) -> APIContext:
+        """Get the shared API context."""
+        return self.server.api_context  # type: ignore
+
+    def _parse_query_params(self) -> Dict[str, str]:
+        """Parse query string parameters."""
+        parsed = urlparse(self.path)
+        params = parse_qs(parsed.query)
+        # Convert list values to single values
+        return {k: v[0] if len(v) == 1 else v for k, v in params.items()}
+
+    def do_GET(self) -> None:
+        """Handle GET requests."""
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        try:
+            # Route to appropriate handler
+            if path == "/health":
+                self._handle_health()
+            elif path == "/jobs":
+                self._handle_list_jobs()
+            elif path == "/events/recent":
+                self._handle_recent_events()
+            elif path == "/metrics":
+                self._handle_metrics()
+            elif re.match(r"^/jobs/[^/]+$", path):
+                job_id = path.split("/")[2]
+                self._handle_get_job(job_id)
+            elif re.match(r"^/jobs/[^/]+/timeline$", path):
+                job_id = path.split("/")[2]
+                self._handle_job_timeline(job_id)
+            elif re.match(r"^/jobs/[^/]+/gates$", path):
+                job_id = path.split("/")[2]
+                self._handle_job_gates(job_id)
+            elif re.match(r"^/jobs/[^/]+/tree$", path):
+                job_id = path.split("/")[2]
+                self._handle_job_tree(job_id)
+            else:
+                self._send_error(404, f"Not found: {path}")
+
+        except Exception as e:
+            logger.exception("Error handling request: %s", path)
+            self._send_error(500, f"Internal server error: {str(e)}")
+
+    # =========================================================================
+    # ENDPOINT HANDLERS
+    # =========================================================================
+
+    def _handle_health(self) -> None:
+        """GET /health - Health check."""
+        ctx = self._get_context()
+
+        # Calculate uptime
+        uptime = (datetime.now() - ctx.start_time).total_seconds()
+
+        # Get job counts
+        try:
+            stats = ctx.store.get_job_stats()
+            active_jobs = stats.get("running", 0)
+            queued_jobs = stats.get("queued", 0)
+        except Exception:
+            active_jobs = 0
+            queued_jobs = 0
+
+        self._send_json(
+            {
+                "status": "ok",
+                "uptime_seconds": round(uptime, 2),
+                "active_jobs": active_jobs,
+                "queued_jobs": queued_jobs,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+        log_structured(
+            logger,
+            logging.DEBUG,
+            "Health check",
+            event="api_health_check",
+            uptime_seconds=uptime,
+        )
+
+    def _handle_list_jobs(self) -> None:
+        """GET /jobs - List jobs with optional filters."""
+        ctx = self._get_context()
+        params = self._parse_query_params()
+
+        # Parse filters
+        status_filter = None
+        if "status" in params:
+            try:
+                status_filter = JobStatus(params["status"])
+            except ValueError:
+                self._send_error(400, f"Invalid status: {params['status']}")
+                return
+
+        limit = int(params.get("limit", 50))
+        offset = int(params.get("offset", 0))
+
+        # Get gate manager for current_phase
+        gate_mgr = GateManager(ctx.store)
+
+        # Get jobs
+        jobs = ctx.store.list_jobs(status=status_filter, limit=limit, offset=offset)
+
+        # Serialize
+        serialized = []
+        for job in jobs:
+            current_phase = gate_mgr.get_current_phase(job.id)
+            serialized.append(
+                {
+                    "job_id": job.id,
+                    "type": job.type.value,
+                    "status": job.status.value,
+                    "priority": job.priority,
+                    "current_phase": current_phase,
+                    "created_at": job.created_at.isoformat()
+                    if job.created_at
+                    else None,
+                    "started_at": job.started_at.isoformat()
+                    if job.started_at
+                    else None,
+                    "completed_at": job.completed_at.isoformat()
+                    if job.completed_at
+                    else None,
+                }
+            )
+
+        self._send_json(
+            {
+                "jobs": serialized,
+                "count": len(serialized),
+                "limit": limit,
+                "offset": offset,
+            }
+        )
+
+    def _handle_get_job(self, job_id: str) -> None:
+        """GET /jobs/{job_id} - Get job details."""
+        ctx = self._get_context()
+
+        job = ctx.store.get_job(job_id)
+        if not job:
+            self._send_error(404, f"Job not found: {job_id}")
+            return
+
+        # Get gate info
+        gate_mgr = GateManager(ctx.store)
+        current_phase = gate_mgr.get_current_phase(job_id)
+        next_phase = gate_mgr.get_next_phase(job_id)
+
+        # Get phase summary
+        phase_summary = ctx.store.get_job_phase_summary(job_id)
+
+        self._send_json(
+            {
+                "job_id": job.id,
+                "type": job.type.value,
+                "status": job.status.value,
+                "priority": job.priority,
+                "current_phase": current_phase,
+                "next_phase": next_phase,
+                "params": job.params,
+                "result": job.result,
+                "error": job.error,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "started_at": job.started_at.isoformat() if job.started_at else None,
+                "completed_at": job.completed_at.isoformat()
+                if job.completed_at
+                else None,
+                "retry_count": job.retry_count,
+                "max_retries": job.max_retries,
+                "phase_summary": phase_summary,
+            }
+        )
+
+    def _handle_job_timeline(self, job_id: str) -> None:
+        """GET /jobs/{job_id}/timeline - Get job event timeline."""
+        ctx = self._get_context()
+        params = self._parse_query_params()
+
+        # Verify job exists
+        job = ctx.store.get_job(job_id)
+        if not job:
+            self._send_error(404, f"Job not found: {job_id}")
+            return
+
+        include_heartbeats = params.get("heartbeats", "false").lower() == "true"
+        limit = int(params.get("limit", 100))
+
+        events = ctx.store.get_job_timeline(
+            job_id,
+            include_heartbeats=include_heartbeats,
+            limit=limit,
+        )
+
+        self._send_json(
+            {
+                "job_id": job_id,
+                "events": events,
+                "count": len(events),
+            }
+        )
+
+    def _handle_job_gates(self, job_id: str) -> None:
+        """GET /jobs/{job_id}/gates - Get job gate status."""
+        ctx = self._get_context()
+
+        # Verify job exists
+        job = ctx.store.get_job(job_id)
+        if not job:
+            self._send_error(404, f"Job not found: {job_id}")
+            return
+
+        gate_mgr = GateManager(ctx.store)
+        report = gate_mgr.get_gate_report(job_id)
+
+        # Serialize gate report
+        gates = []
+        for gate in report.gates:
+            gates.append(
+                {
+                    "phase": gate.phase,
+                    "status": gate.status.value,
+                    "duration_seconds": gate.duration_seconds,
+                    "error": gate.error,
+                }
+            )
+
+        self._send_json(
+            {
+                "job_id": job_id,
+                "job_status": job.status.value,
+                "gates": gates,
+                "current_gate": report.current_gate,
+                "next_gate": report.next_gate,
+                "highest_passed_gate": report.highest_passed_gate,
+                "all_required_passed": report.all_required_passed,
+                "has_failures": report.has_failures,
+            }
+        )
+
+    def _handle_job_tree(self, job_id: str) -> None:
+        """GET /jobs/{job_id}/tree - Get job tree view."""
+        ctx = self._get_context()
+
+        tree = get_job_tree(ctx.store, job_id)
+
+        if "error" in tree:
+            self._send_error(404, tree["error"])
+            return
+
+        self._send_json(tree)
+
+    def _handle_recent_events(self) -> None:
+        """GET /events/recent - Get recent events across all jobs."""
+        ctx = self._get_context()
+        params = self._parse_query_params()
+
+        limit = int(params.get("limit", 50))
+        event_type = params.get("type")
+
+        event_types = [event_type] if event_type else None
+
+        events = ctx.store.get_recent_events(limit=limit, event_types=event_types)
+
+        self._send_json(
+            {
+                "events": events,
+                "count": len(events),
+            }
+        )
+
+    def _handle_metrics(self) -> None:
+        """GET /metrics - Get metrics snapshot."""
+        metrics = get_metrics()
+        stats = metrics.get_stats()
+
+        self._send_json(
+            {
+                "metrics": stats,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+
+
+# =============================================================================
+# API SERVER
+# =============================================================================
+
+
+class APIServer:
+    """
+    HTTP API server for the CF daemon.
+
+    Runs in a separate thread and provides REST endpoints for introspection.
+    """
+
+    def __init__(
+        self,
+        store: Store,
+        host: str = "127.0.0.1",
+        port: int = 8421,
+    ):
+        self.store = store
+        self.host = host
+        self.port = port
+        self._server: Optional[ThreadingHTTPServer] = None
+        self._thread: Optional[threading.Thread] = None
+        self._context = APIContext(store=store)
+
+    def start(self) -> bool:
+        """Start the API server in a background thread."""
+        if self._server is not None:
+            logger.warning("API server already running")
+            return False
+
+        try:
+            self._server = ThreadingHTTPServer(
+                (self.host, self.port),
+                APIRequestHandler,
+            )
+            self._server.api_context = self._context  # type: ignore
+            # Set socket timeout so handle_request() doesn't block forever
+            self._server.socket.settimeout(1.0)
+
+            self._thread = threading.Thread(
+                target=self._run,
+                name="http-api-server",
+                daemon=True,
+            )
+            self._thread.start()
+
+            logger.info(f"HTTP API server started at http://{self.host}:{self.port}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to start HTTP API server: {e}")
+            return False
+
+    def _run(self) -> None:
+        """Server main loop."""
+        if self._server is None:
+            return
+
+        while not self._context.stop_event.is_set():
+            try:
+                self._server.handle_request()
+            except Exception:
+                # Socket timeout or other error - just continue if not stopping
+                pass
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stop the API server."""
+        if self._server is None:
+            return
+
+        logger.info("Stopping HTTP API server...")
+        self._context.stop_event.set()
+
+        # Wait for thread to exit (will happen after socket timeout)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=timeout)
+
+        # Close the server socket
+        try:
+            self._server.server_close()
+        except Exception as e:
+            logger.warning(f"Error closing server: {e}")
+
+        self._server = None
+        self._thread = None
+        logger.info("HTTP API server stopped")
+
+    @property
+    def is_running(self) -> bool:
+        """Check if server is running."""
+        return (
+            self._server is not None
+            and self._thread is not None
+            and self._thread.is_alive()
+        )
+
+    @property
+    def url(self) -> str:
+        """Get the server URL."""
+        return f"http://{self.host}:{self.port}"
