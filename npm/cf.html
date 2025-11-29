@@ -2844,6 +2844,9 @@
             // Track job detail scroll position (updated on scroll events, not just before render)
             jobDetailScrollTop: 0,
             jobDetailScrollTracked: false,  // Flag to prevent tracking after programmatic scroll
+            // Track conversation log scroll position per job/phase
+            conversationScrollTop: 0,
+            conversationScrollTracked: false,
         };
 
         // Helper: Check if user is currently editing a prompt textarea
@@ -3199,8 +3202,9 @@
             }
 
             state.selectedJob = jobId;
-            // Reset scroll position when selecting a new job
+            // Reset scroll positions when selecting a new job
             state.jobDetailScrollTop = 0;
+            state.conversationScrollTop = 0;
             const job = state.rawJobs.find(j => j.id === jobId);
 
             // Default to current phase if available
@@ -3379,6 +3383,7 @@
             // Use the tracked scroll position from state (updated on actual user scroll events)
             // This is more reliable than reading container.scrollTop which may have been reset
             const savedScrollTop = state.jobDetailScrollTop;
+            const savedConversationScrollTop = state.conversationScrollTop;
 
             container.innerHTML = `
                 ${approvalBannerHtml}
@@ -3453,6 +3458,16 @@
             // Setup phase tab click handlers
             setupPhaseTabClicks();
 
+            // Setup conversation log scroll listener (if it exists after this render)
+            const conversationLog = document.getElementById('conversationLog');
+            if (conversationLog) {
+                conversationLog.addEventListener('scroll', () => {
+                    if (!state.conversationScrollTracked) {
+                        state.conversationScrollTop = conversationLog.scrollTop;
+                    }
+                }, { passive: true });
+            }
+
             // Restore scroll position after re-rendering (use double-RAF to ensure layout is complete)
             if (savedScrollTop > 0) {
                 // Set flag to prevent scroll event from overwriting state during programmatic restore
@@ -3463,6 +3478,19 @@
                         // Clear flag after a brief delay to resume tracking user scrolls
                         setTimeout(() => {
                             state.jobDetailScrollTracked = false;
+                        }, 50);
+                    });
+                });
+            }
+
+            // Restore conversation log scroll position
+            if (savedConversationScrollTop > 0 && conversationLog) {
+                state.conversationScrollTracked = true;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        conversationLog.scrollTop = savedConversationScrollTop;
+                        setTimeout(() => {
+                            state.conversationScrollTracked = false;
                         }, 50);
                     });
                 });
@@ -3649,7 +3677,7 @@
                     return `
                         <div class="artifacts-section" style="margin-top: 20px;">
                             <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">Agent Conversation</div>
-                            <div class="conversation-log" style="background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto; padding: 12px;">
+                            <div id="conversationLog" class="conversation-log" style="background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto; padding: 12px;">
                                 ${conversations.map(msg => {
                         const isUser = msg.event_type === 'user';
                         const isSystem = msg.event_type === 'system';
