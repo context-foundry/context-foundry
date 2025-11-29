@@ -19,6 +19,23 @@ python3 -m tools.evolution.daemon start
 python3 -m tools.evolution.daemon start --foreground
 ```
 
+### Web Dashboard
+
+The web dashboard runs via Docker on port 8421:
+
+```bash
+# Start the dashboard
+docker-compose up -d
+
+# Stop the dashboard
+docker-compose down
+
+# Rebuild after changes to cf.html
+docker-compose build && docker-compose up -d
+```
+
+Access the dashboard at: http://localhost:8421/
+
 ### Monitor the System
 
 ```bash

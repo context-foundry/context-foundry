@@ -2529,8 +2529,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         event_type = event_data.get("type") or event_data.get("event_type", "")
 
         if event_type == "tool_use":
-            tool_name = event_data.get("tool", "unknown")
-            tool_input = event_data.get("input", {})
+            # ConversationEvent uses 'tool_name' and 'tool_input'
+            tool_name = event_data.get("tool_name") or event_data.get("tool", "unknown")
+            tool_input = event_data.get("tool_input") or event_data.get("input", {})
 
             # Create a preview of the input
             input_preview = ""
@@ -2550,6 +2551,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         if isinstance(v, str) and len(v) < 100:
                             input_preview = f"{k}: {v}"
                             break
+            elif isinstance(tool_input, str):
+                input_preview = tool_input[:100]
 
             return {
                 "type": "tool_start",
@@ -2558,9 +2561,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             }
 
         elif event_type == "tool_result":
-            tool_name = event_data.get("tool", "unknown")
+            # ConversationEvent uses 'tool_name' and 'text' (for content)
+            tool_name = event_data.get("tool_name") or event_data.get("tool", "unknown")
             is_error = event_data.get("is_error", False)
-            content = event_data.get("content", "")
+            content = event_data.get("text") or event_data.get("content", "")
 
             # Create output preview
             output_preview = ""
@@ -2589,7 +2593,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 }
 
         elif event_type == "usage":
-            # Token usage update
+            # Token usage update (from ConversationEvent.USAGE)
             return {
                 "type": "token_update",
                 "input_tokens": event_data.get("input_tokens", input_tokens),

@@ -35,6 +35,7 @@ class EventType(str, Enum):
     RESULT = "result"
     ERROR = "error"
     SYSTEM = "system"
+    USAGE = "usage"
 
 
 @dataclass
@@ -52,6 +53,10 @@ class ConversationEvent:
     tool_id: Optional[str] = None  # For tool_use/tool_result
     is_error: bool = False
     exit_code: Optional[int] = None  # For result events
+
+    # Token usage
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
 
     # Raw event for debugging
     raw: Optional[Dict] = field(default=None, repr=False)
@@ -90,6 +95,11 @@ class ConversationEvent:
             )
             return f"[{ts}] {status}"
 
+        elif self.event_type == EventType.USAGE:
+            return (
+                f"[{ts}] 📊 USAGE: +{self.input_tokens} in / +{self.output_tokens} out"
+            )
+
         else:
             return f"[{ts}] {self.event_type.upper()}: {self.text or '(no content)'}"
 
@@ -127,44 +137,151 @@ class ConversationLogger:
         self.events: List[ConversationEvent] = []
         self.current_tool_calls: Dict[str, str] = {}  # id -> tool_name
 
-    def parse_event(self, line: str) -> Optional[ConversationEvent]:
-        """Parse a JSON line from stream-json output"""
+    def parse_event(self, line: str) -> List[ConversationEvent]:
+        """Parse a JSON line from stream-json output into one or more events"""
+        events = []
         try:
             data = json.loads(line.strip())
             event_type = data.get("type", "unknown")
 
-            event = ConversationEvent(
-                timestamp=datetime.now().isoformat(),
-                event_type=event_type,
-                task_id=self.task_id,
-                raw=data,
-            )
+            # Common fields
+            timestamp = datetime.now().isoformat()
+            task_id = self.task_id
+
+            # Check for usage in any event and emit separate usage event
+            usage = data.get("usage")
+            if usage:
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.USAGE,
+                        task_id=task_id,
+                        input_tokens=usage.get("input_tokens"),
+                        output_tokens=usage.get("output_tokens"),
+                        raw=data,
+                    )
+                )
 
             if event_type == "assistant":
-                # Extract text content from message
+                # Extract content blocks
                 message = data.get("message", {})
                 content = message.get("content", [])
-                texts = []
+
+                # Group text blocks to avoid spamming multiple text events
+                text_buffer = []
+
                 for block in content:
-                    if block.get("type") == "text":
-                        texts.append(block.get("text", ""))
-                event.text = "\n".join(texts)
+                    block_type = block.get("type")
+
+                    if block_type == "text":
+                        text_buffer.append(block.get("text", ""))
+
+                    elif block_type == "tool_use":
+                        # Flush text buffer first
+                        if text_buffer:
+                            events.append(
+                                ConversationEvent(
+                                    timestamp=timestamp,
+                                    event_type=EventType.ASSISTANT,
+                                    task_id=task_id,
+                                    text="\n".join(text_buffer),
+                                    raw=data,  # Attach raw to first event of the group
+                                )
+                            )
+                            text_buffer = []
+
+                        # Create tool use event
+                        tool_id = block.get("id")
+                        tool_name = block.get("name")
+                        tool_input = block.get("input", {})
+
+                        if tool_id:
+                            self.current_tool_calls[tool_id] = tool_name
+
+                        events.append(
+                            ConversationEvent(
+                                timestamp=timestamp,
+                                event_type=EventType.TOOL_USE,
+                                task_id=task_id,
+                                tool_name=tool_name,
+                                tool_input=tool_input,
+                                tool_id=tool_id,
+                                raw=data,
+                            )
+                        )
+
+                # Flush remaining text
+                if text_buffer:
+                    events.append(
+                        ConversationEvent(
+                            timestamp=timestamp,
+                            event_type=EventType.ASSISTANT,
+                            task_id=task_id,
+                            text="\n".join(text_buffer),
+                            raw=data,
+                        )
+                    )
+
+            elif event_type == "user":
+                # Check for tool results
+                message = data.get("message", {})
+                content = message.get("content", [])
+
+                for block in content:
+                    if block.get("type") == "tool_result":
+                        tool_id = block.get("tool_use_id")
+                        tool_name = self.current_tool_calls.get(tool_id)
+                        is_error = block.get("is_error", False)
+
+                        # Extract text content
+                        result_content = block.get("content", [])
+                        texts = []
+                        if isinstance(result_content, list):
+                            for c in result_content:
+                                if isinstance(c, dict) and c.get("type") == "text":
+                                    texts.append(c.get("text", ""))
+                                elif isinstance(c, str):
+                                    texts.append(c)
+                        elif isinstance(result_content, str):
+                            texts.append(result_content)
+
+                        events.append(
+                            ConversationEvent(
+                                timestamp=timestamp,
+                                event_type=EventType.TOOL_RESULT,
+                                task_id=task_id,
+                                tool_id=tool_id,
+                                tool_name=tool_name,
+                                is_error=is_error,
+                                text="\n".join(texts)[:2000],  # Truncate long results
+                                raw=data,
+                            )
+                        )
 
             elif event_type == "tool_use":
-                event.tool_name = data.get("name")
-                event.tool_input = data.get("input", {})
-                event.tool_id = data.get("id")
-                # Track tool call for matching results
-                if event.tool_id:
-                    self.current_tool_calls[event.tool_id] = event.tool_name
+                # Legacy/Top-level tool use
+                tool_id = data.get("id")
+                tool_name = data.get("name")
+                if tool_id:
+                    self.current_tool_calls[tool_id] = tool_name
+
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.TOOL_USE,
+                        task_id=task_id,
+                        tool_name=tool_name,
+                        tool_input=data.get("input", {}),
+                        tool_id=tool_id,
+                        raw=data,
+                    )
+                )
 
             elif event_type == "tool_result":
-                event.tool_id = data.get("tool_use_id")
-                event.is_error = data.get("is_error", False)
-                # Look up tool name
-                if event.tool_id:
-                    event.tool_name = self.current_tool_calls.get(event.tool_id)
-                # Extract text from content
+                # Legacy/Top-level tool result
+                tool_id = data.get("tool_use_id")
+                tool_name = self.current_tool_calls.get(tool_id)
+
                 content = data.get("content", [])
                 texts = []
                 for block in content:
@@ -172,32 +289,66 @@ class ConversationLogger:
                         texts.append(block.get("text", ""))
                     elif isinstance(block, str):
                         texts.append(block)
-                event.text = "\n".join(texts)[:500]  # Truncate long results
+
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.TOOL_RESULT,
+                        task_id=task_id,
+                        tool_id=tool_id,
+                        tool_name=tool_name,
+                        is_error=data.get("is_error", False),
+                        text="\n".join(texts)[:2000],
+                        raw=data,
+                    )
+                )
 
             elif event_type == "result":
-                event.is_error = data.get("is_error", False)
                 subtype = data.get("subtype", "")
-                event.text = data.get("result", subtype)
-                # Try to get exit code from various locations
-                event.exit_code = 0 if subtype == "success" else 1
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.RESULT,
+                        task_id=task_id,
+                        text=data.get("result", subtype),
+                        exit_code=0 if subtype == "success" else 1,
+                        is_error=data.get("is_error", False),
+                        raw=data,
+                    )
+                )
 
             elif event_type == "error":
                 error_info = data.get("error", {})
-                event.text = error_info.get("message", str(data))
-                event.is_error = True
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.ERROR,
+                        task_id=task_id,
+                        text=error_info.get("message", str(data)),
+                        is_error=True,
+                        raw=data,
+                    )
+                )
 
             elif event_type == "system":
                 subtype = data.get("subtype", "")
-                event.text = f"[{subtype}]"
+                events.append(
+                    ConversationEvent(
+                        timestamp=timestamp,
+                        event_type=EventType.SYSTEM,
+                        task_id=task_id,
+                        text=f"[{subtype}]",
+                        raw=data,
+                    )
+                )
 
-            return event
+            return events
 
         except json.JSONDecodeError:
-            # Not valid JSON - might be plain text output
-            return None
+            return []
         except Exception as e:
             logger.warning(f"Failed to parse event: {e}")
-            return None
+            return []
 
     def log_event(self, event: ConversationEvent):
         """Write event to log files"""
@@ -217,16 +368,6 @@ class ConversationLogger:
     ) -> AsyncGenerator[ConversationEvent, None]:
         """
         Read stream-json output from a process and yield parsed events.
-
-        Usage:
-            process = await asyncio.create_subprocess_exec(
-                "claude", "--print", "--output-format", "stream-json",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            async for event in logger.stream_from_process(process):
-                print(event.to_log_line())
         """
         if process.stdout is None:
             return
@@ -237,8 +378,8 @@ class ConversationLogger:
                 if not line_str:
                     continue
 
-                event = self.parse_event(line_str)
-                if event:
+                events = self.parse_event(line_str)
+                for event in events:
                     self.log_event(event)
                     yield event
 
@@ -252,19 +393,6 @@ class ConversationLogger:
     ):
         """
         Read stream-json output from a synchronous subprocess.
-
-        This is a generator that yields events as they arrive.
-        Useful for integration with daemon's existing subprocess handling.
-
-        Usage:
-            process = subprocess.Popen(
-                ["claude", "--print", "--output-format", "stream-json"],
-                stdout=subprocess.PIPE,
-                text=True,
-            )
-
-            for event in logger.stream_from_sync_process(process):
-                print(event.to_log_line())
         """
         if process.stdout is None:
             return
@@ -279,8 +407,8 @@ class ConversationLogger:
                 if not line_str:
                     continue
 
-                event = self.parse_event(line_str)
-                if event:
+                events = self.parse_event(line_str)
+                for event in events:
                     self.log_event(event)
                     yield event
 

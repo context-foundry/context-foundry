@@ -63,10 +63,13 @@
             align-items: center;
         }
 
-        .logo img {
-            height: 32px;
-            width: auto;
-            display: block;
+        .logo-text {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--accent-purple);
+            letter-spacing: -1px;
+            font-family: "SFMono-Regular", "Input Mono", Menlo, Consolas, monospace;
+            line-height: 1;
         }
 
         .connection-status {
@@ -927,6 +930,65 @@
             color: var(--accent-purple);
         }
 
+        /* Conversation Viewer Modal */
+        .conversation-viewer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .conversation-viewer.active {
+            display: flex;
+        }
+
+        .conversation-viewer-header {
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .conversation-viewer-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .conversation-viewer-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: var(--bg-primary);
+        }
+
+        .conversation-expand-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 8px;
+            transition: all 0.15s;
+        }
+
+        .conversation-expand-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-color: var(--accent-purple);
+        }
+
         /* Approval Banner */
         .approval-banner {
             background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(210, 153, 34, 0.1));
@@ -1504,6 +1566,17 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .activity-panel.expanded {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2000;
+            border-left: none;
         }
 
         .activity-panel-header {
@@ -1725,19 +1798,50 @@
             padding: 12px 16px;
             background: var(--bg-tertiary);
             border-top: 1px solid var(--border);
+            max-height: 200px;
+            overflow-y: auto;
+            flex-shrink: 0;
+            transition: max-height 0.3s ease;
+        }
+
+        .agent-summary.minimized {
+            max-height: 40px;
+            overflow: hidden;
+        }
+
+        .agent-summary-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            cursor: pointer;
         }
 
         .agent-summary-text {
-            font-size: 12px;
+            font-size: 13px;
             font-style: italic;
             color: var(--text-secondary);
             line-height: 1.5;
-            max-height: 300px;
-            overflow-y: auto;
             white-space: pre-wrap;
             display: flex;
             flex-direction: column;
             gap: 8px;
+        }
+
+        /* Phase Group Headers */
+        .phase-group-header {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin: 24px 0 12px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+        }
+
+        .phase-group-header:first-child {
+            margin-top: 0;
         }
 
         .thought-item {
@@ -2595,7 +2699,9 @@
 <body>
     <header class="header">
         <div class="header-left">
-            <div class="logo"><img src="https://contextfoundry.dev/cf_logo_gray_2025.png" alt="Context Foundry"></div>
+            <div class="logo">
+                <div class="logo-text">CF</div>
+            </div>
             <div class="connection-status">
                 <div class="status-dot" id="connectionDot"></div>
                 <span id="connectionText">Connecting...</span>
@@ -2647,63 +2753,7 @@
                 </div>
             </div>
             <!-- Enhanced Stats Dashboard -->
-            <div class="stats-dashboard" id="statsDashboard">
-                <!-- Duration Card -->
-                <div class="stats-card">
-                    <span class="stats-card-label">Duration</span>
-                    <span class="stats-card-value duration" id="jobDuration">--</span>
-                    <span class="stats-card-detail" id="jobDurationDetail">Not started</span>
-                </div>
 
-                <!-- Tokens Card -->
-                <div class="stats-card">
-                    <span class="stats-card-label">Total Tokens</span>
-                    <span class="stats-card-value tokens" id="totalTokens">0</span>
-                    <span class="stats-card-detail" id="tokenBreakdown">Input: 0 | Output: 0</span>
-                </div>
-
-                <!-- Cost Estimate Card -->
-                <div class="stats-card">
-                    <span class="stats-card-label">Est. Cost</span>
-                    <span class="stats-card-value cost" id="estCost">$0.00</span>
-                    <span class="stats-card-detail" id="costModel">Claude Sonnet</span>
-                </div>
-
-                <!-- Success Rate Card -->
-                <div class="stats-card">
-                    <span class="stats-card-label">Success Rate</span>
-                    <span class="stats-card-value success" id="successRateValue">--%</span>
-                    <span class="stats-card-detail" id="successDetail">0 of 0 jobs</span>
-                </div>
-
-                <!-- Phase Progress Pipeline -->
-                <div class="phase-pipeline" id="phasePipeline">
-                    <div class="phase-step">
-                        <div class="phase-dot sleeping" id="phaseDot-Scout" title="Scout"></div>
-                        <span class="phase-label">Scout</span>
-                    </div>
-                    <div class="phase-connector" id="phaseConn-1"></div>
-                    <div class="phase-step">
-                        <div class="phase-dot sleeping" id="phaseDot-Architect" title="Architect"></div>
-                        <span class="phase-label">Arch</span>
-                    </div>
-                    <div class="phase-connector" id="phaseConn-2"></div>
-                    <div class="phase-step">
-                        <div class="phase-dot sleeping" id="phaseDot-Builder" title="Builder"></div>
-                        <span class="phase-label">Build</span>
-                    </div>
-                    <div class="phase-connector" id="phaseConn-3"></div>
-                    <div class="phase-step">
-                        <div class="phase-dot sleeping" id="phaseDot-Test" title="Test"></div>
-                        <span class="phase-label">Test</span>
-                    </div>
-                    <div class="phase-connector" id="phaseConn-4"></div>
-                    <div class="phase-step">
-                        <div class="phase-dot sleeping" id="phaseDot-Deploy" title="Deploy"></div>
-                        <span class="phase-label">Deploy</span>
-                    </div>
-                </div>
-            </div>
 
             <!-- Legacy stats bar for global stats -->
             <div class="stats-bar" style="display: none;">
@@ -2729,7 +2779,12 @@
                     <span class="activity-live-dot" id="activityLiveDot"></span>
                     <span>Agent Activity</span>
                 </div>
-                <button class="activity-close-btn" onclick="toggleActivityPanel()" title="Close panel">&times;</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="activity-close-btn" onclick="toggleActivityExpanded()" title="Toggle Fullscreen">
+                        <span id="activityExpandIcon" style="font-size: 14px;">⤢</span>
+                    </button>
+                    <button class="activity-close-btn" onclick="toggleActivityPanel()" title="Close Panel">×</button>
+                </div>
             </div>
 
             <!-- Token Usage Section -->
@@ -2765,7 +2820,11 @@
 
             <!-- Agent Summary Footer -->
             <div class="agent-summary" id="agentSummary">
-                <div class="activity-section-title">Agent Thinking</div>
+                <div class="agent-summary-header" onclick="toggleAgentThinking()">
+                    <div class="activity-section-title" style="margin-bottom: 0;">Agent Thinking</div>
+                    <span id="agentThinkingToggleIcon" class="icon icon-chevron-down"
+                        style="font-size: 10px; color: var(--text-muted);"></span>
+                </div>
                 <div class="agent-summary-text" id="agentSummaryText">
                     Waiting for agent activity...
                 </div>
@@ -2795,6 +2854,43 @@
         </div>
     </div>
 
+    <!-- Conversation Viewer Modal -->
+    <div class="conversation-viewer" id="conversationViewer">
+        <div class="conversation-viewer-header">
+            <div class="conversation-viewer-title">
+                <span style="color:var(--accent-green)">></span>
+                <span id="conversationViewerTitle">Agent Conversation</span>
+            </div>
+            <div class="artifact-viewer-actions">
+                <button class="artifact-edit-btn" id="conversationCopyBtn" onclick="copyConversation()"
+                    title="Copy to clipboard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="vertical-align: middle; margin-right: 4px;">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy
+                </button>
+                <button class="artifact-edit-btn" id="conversationSaveBtn" onclick="saveConversation()"
+                    title="Save to disk">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Save
+                </button>
+                <button class="artifact-viewer-close" onclick="closeConversationViewer()">Close (Esc)</button>
+            </div>
+        </div>
+        <div class="conversation-viewer-content" id="conversationViewerContent">
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+
     <script>
         const CONFIG = {
             sseEndpoint: '/events',
@@ -2805,7 +2901,7 @@
             dashboardApiBase: 'http://localhost:8420',
         };
 
-        const PHASES = ['Scout', 'Architect', 'Builder', 'Test', 'Deploy'];
+        const PHASES = ['Scout', 'Architect', 'Builder', 'Test', 'Screenshot', 'Documentation', 'Deploy', 'Feedback'];
 
         let state = {
             connected: false,
@@ -2844,8 +2940,8 @@
             // Track job detail scroll position (updated on scroll events, not just before render)
             jobDetailScrollTop: 0,
             jobDetailScrollTracked: false,  // Flag to prevent tracking after programmatic scroll
-            // Track conversation log scroll position per job/phase
-            conversationScrollTop: 0,
+            // Track conversation log scroll position per job/phase (keyed by jobId_phase)
+            conversationScrollPositions: {},
             conversationScrollTracked: false,
         };
 
@@ -3216,7 +3312,7 @@
             state.selectedJob = jobId;
             // Reset scroll positions when selecting a new job
             state.jobDetailScrollTop = 0;
-            state.conversationScrollTop = 0;
+            // Note: conversationScrollPositions is keyed by job+phase, no need to reset here
             const job = state.rawJobs.find(j => j.id === jobId);
 
             // Default to current phase if available
@@ -3395,7 +3491,9 @@
             // Use the tracked scroll position from state (updated on actual user scroll events)
             // This is more reliable than reading container.scrollTop which may have been reset
             const savedScrollTop = state.jobDetailScrollTop;
-            const savedConversationScrollTop = state.conversationScrollTop;
+            // Get conversation scroll position for current job+phase
+            const scrollKey = `${state.selectedJob}_${state.selectedPhase || 'default'}`;
+            const savedConversationScrollTop = state.conversationScrollPositions[scrollKey] || 0;
 
             container.innerHTML = `
                 ${approvalBannerHtml}
@@ -3461,7 +3559,7 @@
                                    display: flex; align-items: center; gap: 4px; transition: all 0.2s;"
                             onmouseover="this.style.borderColor='var(--accent-cyan)'; this.style.color='var(--accent-cyan)'"
                             onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--text-secondary)'">
-                        <span style="font-size: 14px;">&#x1F4CB;</span> Copy
+                        Copy
                     </button>
                 </div>
                 ${logsHtml}
@@ -3475,7 +3573,9 @@
             if (conversationLog) {
                 conversationLog.addEventListener('scroll', () => {
                     if (!state.conversationScrollTracked) {
-                        state.conversationScrollTop = conversationLog.scrollTop;
+                        // Save scroll position keyed by job+phase
+                        const scrollKey = `${state.selectedJob}_${state.selectedPhase || 'default'}`;
+                        state.conversationScrollPositions[scrollKey] = conversationLog.scrollTop;
                     }
                 }, { passive: true });
             }
@@ -3573,6 +3673,9 @@
                 Architect: { inputs: ['scout_report.json'], outputs: ['architecture.md', 'architecture.json'] },
                 Builder: { inputs: ['architecture.json'] },
                 Test: { outputs: ['test-report.md'] },
+                Screenshot: { outputs: ['docs/screenshots/hero.png'] },
+                Documentation: { outputs: ['README.md'] },
+                Deploy: { outputs: ['session-summary.json'] },
             };
 
             const phaseFileInfo = PHASE_FILE_MAP[phaseName] || {};
@@ -3688,7 +3791,17 @@
 
                     return `
                         <div class="artifacts-section" style="margin-top: 20px;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">Agent Conversation</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+                                <span>Agent Conversation</span>
+                                <button class="conversation-expand-btn" onclick="openConversationViewer()" title="Expand">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <polyline points="9 21 3 21 3 15"></polyline>
+                                        <line x1="21" y1="3" x2="14" y2="10"></line>
+                                        <line x1="3" y1="21" x2="10" y2="14"></line>
+                                    </svg>
+                                </button>
+                            </div>
                             <div id="conversationLog" class="conversation-log" style="background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto; padding: 12px;">
                                 ${conversations.map(msg => {
                         const isUser = msg.event_type === 'user';
@@ -3856,6 +3969,149 @@
 
         function handleViewerEscape(e) {
             if (e.key === 'Escape') closeArtifactViewer();
+        }
+
+        // ===== Conversation Viewer =====
+
+        // Store current conversation data for copy/save operations
+        let currentConversationData = null;
+        let currentConversationJobId = null;
+        let currentConversationPhase = null;
+
+        function openConversationViewer() {
+            const viewer = document.getElementById('conversationViewer');
+            const content = document.getElementById('conversationViewerContent');
+            const title = document.getElementById('conversationViewerTitle');
+
+            // Get the current conversation log HTML and data
+            const conversationLog = document.getElementById('conversationLog');
+            if (!conversationLog) {
+                content.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No conversation available.</div>';
+                viewer.classList.add('active');
+                document.addEventListener('keydown', handleConversationViewerEscape);
+                return;
+            }
+
+            // Store job/phase context for filename
+            const job = state.rawJobs.find(j => j.id === state.selectedJob);
+            currentConversationJobId = state.selectedJob;
+            currentConversationPhase = state.selectedPhase || (job?.current_phase) || 'unknown';
+
+            // Extract text content for copy/save
+            currentConversationData = extractConversationText(conversationLog);
+
+            // Clone the conversation content
+            content.innerHTML = conversationLog.innerHTML;
+
+            // Update title with phase info
+            if (job) {
+                title.textContent = `Agent Conversation - ${currentConversationPhase}`;
+            }
+
+            viewer.classList.add('active');
+            document.addEventListener('keydown', handleConversationViewerEscape);
+        }
+
+        function closeConversationViewer() {
+            const viewer = document.getElementById('conversationViewer');
+            viewer.classList.remove('active');
+            document.removeEventListener('keydown', handleConversationViewerEscape);
+        }
+
+        function handleConversationViewerEscape(e) {
+            if (e.key === 'Escape') closeConversationViewer();
+        }
+
+        function extractConversationText(element) {
+            // Extract readable text from conversation messages
+            const messages = element.querySelectorAll('.conv-msg');
+            let text = '';
+            messages.forEach(msg => {
+                const roleSpan = msg.querySelector('div > span:first-child');
+                const timeSpan = msg.querySelector('div > span:last-child');
+                const contentDiv = msg.querySelector('div:last-child');
+
+                const role = roleSpan?.textContent || 'UNKNOWN';
+                const time = timeSpan?.textContent || '';
+                const content = contentDiv?.textContent || '';
+
+                text += `[${time}] ${role}:\n${content}\n\n`;
+            });
+            return text.trim();
+        }
+
+        async function copyConversation() {
+            if (!currentConversationData) {
+                alert('No conversation data to copy');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(currentConversationData);
+                // Visual feedback
+                const btn = document.getElementById('conversationCopyBtn');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+                setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            }
+        }
+
+        async function saveConversation() {
+            if (!currentConversationData) {
+                alert('No conversation data to save');
+                return;
+            }
+
+            const job = state.rawJobs.find(j => j.id === state.selectedJob);
+            const suggestedName = `conversation-${currentConversationPhase || 'phase'}-${currentConversationJobId?.slice(0, 8) || 'unknown'}.txt`;
+
+            // Try File System Access API first (allows browsing)
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: suggestedName,
+                        types: [{
+                            description: 'Text Files',
+                            accept: { 'text/plain': ['.txt'] }
+                        }],
+                        // Start in project directory if possible
+                        startIn: 'downloads'
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(currentConversationData);
+                    await writable.close();
+
+                    // Visual feedback
+                    const btn = document.getElementById('conversationSaveBtn');
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Saved!';
+                    setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('Save failed:', err);
+                        // Fallback to blob download
+                        fallbackSaveConversation(suggestedName);
+                    }
+                }
+            } else {
+                // Fallback for browsers without File System Access API
+                fallbackSaveConversation(suggestedName);
+            }
+        }
+
+        function fallbackSaveConversation(filename) {
+            const blob = new Blob([currentConversationData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function renderMarkdown(content, container) {
@@ -4183,7 +4439,7 @@
                 await fetchPendingApprovals();
 
                 // Refresh job list to show new job
-                await fetchJobs();
+                await fetchSnapshot();
 
                 // Refresh job view
                 if (state.selectedJob) {
@@ -5489,119 +5745,11 @@
             document.getElementById('successRate').textContent = `${rate}%`;
 
             // Update enhanced stats dashboard
-            updateEnhancedStats();
+
         }
 
         // Update enhanced stats dashboard
-        function updateEnhancedStats() {
-            const job = state.selectedJob ? state.rawJobs.find(j => j.id === state.selectedJob) : null;
 
-            // Update duration
-            if (job) {
-                const duration = job.duration || 0;
-                const durationStr = formatDuration(duration);
-                document.getElementById('jobDuration').textContent = durationStr;
-
-                if (job.status === 'running') {
-                    document.getElementById('jobDurationDetail').textContent = 'In progress...';
-                } else if (job.status === 'succeeded') {
-                    document.getElementById('jobDurationDetail').textContent = 'Completed';
-                } else if (job.status === 'failed') {
-                    document.getElementById('jobDurationDetail').textContent = 'Failed';
-                } else {
-                    document.getElementById('jobDurationDetail').textContent = 'Pending';
-                }
-            } else {
-                document.getElementById('jobDuration').textContent = '--';
-                document.getElementById('jobDurationDetail').textContent = 'Select a job';
-            }
-
-            // Update tokens and cost (from phase prompts if available)
-            const prompts = job ? (state.phasePrompts[job.id] || []) : [];
-            let totalInputTokens = 0;
-            let totalOutputTokens = 0;
-
-            prompts.forEach(p => {
-                if (p.token_metrics) {
-                    totalInputTokens += p.token_metrics.actual_input_tokens || p.token_metrics.estimated_input_tokens || 0;
-                    totalOutputTokens += p.token_metrics.actual_output_tokens || 0;
-                }
-            });
-
-            const totalTokens = totalInputTokens + totalOutputTokens;
-            document.getElementById('totalTokens').textContent = formatNumber(totalTokens);
-            document.getElementById('tokenBreakdown').textContent = `Input: ${formatNumber(totalInputTokens)} | Output: ${formatNumber(totalOutputTokens)}`;
-
-            // Estimate cost (Sonnet pricing: $3/1M input, $15/1M output)
-            const inputCost = (totalInputTokens / 1000000) * 3;
-            const outputCost = (totalOutputTokens / 1000000) * 15;
-            const totalCost = inputCost + outputCost;
-            document.getElementById('estCost').textContent = `$${totalCost.toFixed(2)}`;
-
-            // Update success rate
-            const jobs = state.rawJobs;
-            const completed = jobs.filter(j => j.status === 'succeeded' || j.status === 'failed');
-            const succeeded = completed.filter(j => j.status === 'succeeded').length;
-            const rate = completed.length ? Math.round((succeeded / completed.length) * 100) : 0;
-
-            const rateEl = document.getElementById('successRateValue');
-            rateEl.textContent = `${rate}%`;
-            rateEl.className = 'stats-card-value ' + (rate >= 80 ? 'success' : rate >= 50 ? '' : 'failed');
-            document.getElementById('successDetail').textContent = `${succeeded} of ${completed.length} jobs`;
-
-            // Update phase pipeline
-            updatePhasePipeline(prompts);
-        }
-
-        // Update phase progress pipeline dots
-        function updatePhasePipeline(prompts) {
-            const phases = ['Scout', 'Architect', 'Builder', 'Test', 'Deploy'];
-            let lastCompletedIdx = -1;
-
-            phases.forEach((phase, idx) => {
-                const dot = document.getElementById(`phaseDot-${phase}`);
-                if (!dot) return;
-
-                const prompt = prompts.find(p => p.phase === phase);
-                const phaseState = prompt?.state || 'sleeping';
-
-                // Reset classes
-                dot.className = 'phase-dot';
-
-                // Map state to CSS class
-                if (['complete', 'completed'].includes(phaseState)) {
-                    dot.classList.add('complete');
-                    lastCompletedIdx = idx;
-                } else if (phaseState === 'processing') {
-                    dot.classList.add('processing');
-                } else if (['ready', 'pending'].includes(phaseState)) {
-                    dot.classList.add('ready');
-                } else if (['under_review', 'editing'].includes(phaseState)) {
-                    dot.classList.add('under_review');
-                } else if (phaseState === 'failed') {
-                    dot.classList.add('failed');
-                } else {
-                    dot.classList.add('sleeping');
-                }
-
-                // Make clickable
-                dot.style.cursor = 'pointer';
-                dot.onclick = () => {
-                    if (state.selectedJob) {
-                        state.selectedPhase = phase;
-                        renderJobDetail(state.rawJobs.find(j => j.id === state.selectedJob));
-                    }
-                };
-            });
-
-            // Update connectors
-            for (let i = 1; i <= 4; i++) {
-                const conn = document.getElementById(`phaseConn-${i}`);
-                if (conn) {
-                    conn.className = 'phase-connector' + (i <= lastCompletedIdx + 1 ? ' active' : '');
-                }
-            }
-        }
 
         // Format duration nicely
         function formatDuration(seconds) {
@@ -5744,6 +5892,30 @@
 
         // ===== ACTIVITY PANEL FUNCTIONS =====
 
+        // Toggle activity panel expansion
+        function toggleActivityExpanded() {
+            const panel = document.getElementById('activityPanel');
+            panel.classList.toggle('expanded');
+            const icon = document.getElementById('activityExpandIcon');
+            // Change icon based on state (expand vs compress)
+            icon.textContent = panel.classList.contains('expanded') ? '⤡' : '⤢';
+        }
+
+        // Toggle Agent Thinking minimization
+        function toggleAgentThinking() {
+            const container = document.getElementById('agentSummary');
+            container.classList.toggle('minimized');
+            const icon = document.getElementById('agentThinkingToggleIcon');
+
+            if (container.classList.contains('minimized')) {
+                icon.classList.remove('icon-chevron-down');
+                icon.classList.add('icon-chevron-up');
+            } else {
+                icon.classList.remove('icon-chevron-up');
+                icon.classList.add('icon-chevron-down');
+            }
+        }
+
         // Toggle activity panel visibility
         function toggleActivityPanel() {
             state.activityPanelVisible = !state.activityPanelVisible;
@@ -5790,6 +5962,7 @@
                 currentAction: null,
                 toolCalls: [],
                 summary: '',
+                thoughts: [],
             };
             renderActivityPanel();
 

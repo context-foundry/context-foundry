@@ -245,11 +245,39 @@ class PreflightValidator:
                 )
         return checks
 
+    def check_architecture_exists(self) -> PreflightCheck:
+        """Check that either architecture.json or architecture.md exists."""
+        json_path = self.working_directory / ".context-foundry" / "architecture.json"
+        md_path = self.working_directory / ".context-foundry" / "architecture.md"
+
+        if json_path.exists():
+            return PreflightCheck(
+                name="architecture_exists",
+                status=PreflightStatus.PASSED,
+                message=f"Architecture JSON found: {json_path}",
+                blocking=False,
+            )
+        elif md_path.exists():
+            return PreflightCheck(
+                name="architecture_exists",
+                status=PreflightStatus.PASSED,
+                message=f"Architecture MD found (JSON fallback): {md_path}",
+                blocking=False,
+            )
+        else:
+            return PreflightCheck(
+                name="architecture_exists",
+                status=PreflightStatus.FAILED,
+                message="Neither architecture.json nor architecture.md found",
+                blocking=True,
+            )
+
     def run_preflight(
         self,
         phase_name: str,
         required_inputs: Optional[List[str]] = None,
         json_inputs: Optional[List[str]] = None,
+        custom_check: Optional[str] = None,
     ) -> PreflightResult:
         """
         Run all pre-flight checks for a phase.
@@ -282,6 +310,10 @@ class PreflightValidator:
         for check in self.check_required_tools():
             result.add_check(check)
 
+        # Custom checks
+        if custom_check == "architecture_exists":
+            result.add_check(self.check_architecture_exists())
+
         return result
 
 
@@ -291,6 +323,7 @@ def run_phase_preflight(
     required_inputs: Optional[List[str]] = None,
     json_inputs: Optional[List[str]] = None,
     required_tools: Optional[List[str]] = None,
+    custom_check: Optional[str] = None,
 ) -> PreflightResult:
     """
     Convenience function to run pre-flight checks for a phase.
@@ -301,6 +334,7 @@ def run_phase_preflight(
         required_inputs: Required input files
         json_inputs: JSON files to validate
         required_tools: Required CLI tools
+        custom_check: Optional custom check name (e.g., "architecture_exists")
 
     Returns:
         PreflightResult
@@ -313,6 +347,7 @@ def run_phase_preflight(
         phase_name=phase_name,
         required_inputs=required_inputs,
         json_inputs=json_inputs,
+        custom_check=custom_check,
     )
 
 
@@ -329,9 +364,12 @@ PHASE_PREFLIGHT_CONFIG: Dict[str, Dict[str, Any]] = {
         "required_tools": ["claude"],
     },
     "Builder": {
-        "required_inputs": [".context-foundry/architecture.json"],
-        "json_inputs": [".context-foundry/architecture.json"],
+        # architecture.json OR architecture.md - preflight accepts either
+        # JSON is preferred but MD is valid fallback when BAML parsing fails
+        "required_inputs": [],  # Handled by custom check below
+        "json_inputs": [],  # Don't require JSON validation
         "required_tools": ["claude"],
+        "custom_check": "architecture_exists",  # Check for .json OR .md
     },
     "Test": {
         "required_inputs": [],

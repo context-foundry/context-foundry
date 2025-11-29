@@ -192,7 +192,10 @@ The Scout sub-agent should research thoroughly but **MUST NOT create additional 
 
 **Step 3: Save Scout Report**
 
-Create `.context-foundry/scout-report.md` with:
+**🚨 CRITICAL: You MUST use the Write tool to create this file!**
+**Do NOT just describe the content - actually call the Write tool!**
+
+Use the Write tool to create `.context-foundry/scout-report.md` with:
 
 ```markdown
 # Scout Report: {Project Name}
@@ -317,10 +320,16 @@ Update phase to "Scout", status "completed"
 COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 
+**BEFORE marking complete, VERIFY the file exists:**
+```bash
+ls -la .context-foundry/scout-report.md && echo "✅ FILE EXISTS" || echo "❌ FILE MISSING - USE WRITE TOOL!"
+```
+
 ✅ Phase tracking updated to "researching" at start
 ✅ Global patterns checked (if available)
 ✅ Task requirements analyzed thoroughly
-✅ `.context-foundry/scout-report.md` created (10-20KB)
+✅ **Write tool called** to create `.context-foundry/scout-report.md`
+✅ **Verified file exists** with ls command above
 ✅ Report saved to cache (if incremental mode)
 ✅ Extra research files cleaned up (Step 6)
 ✅ ONLY scout-report.md exists (no RESEARCH_FINDINGS.md, etc.)

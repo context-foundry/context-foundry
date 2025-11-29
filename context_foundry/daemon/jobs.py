@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Dict, Any, Callable
 from queue import Queue, Empty
 
@@ -444,13 +445,17 @@ class JobManager:
                     project_dir = Path(working_dir)
                     state = get_pipeline_state(project_dir)
                     if state and state.state == PipelineState.RUNNING:
-                        logger.info(f"Fixing pipeline state for orphaned job {job.id} (RUNNING -> FAILED)")
+                        logger.info(
+                            f"Fixing pipeline state for orphaned job {job.id} (RUNNING -> FAILED)"
+                        )
                         state.state = PipelineState.FAILED
                         state.error = "Job was interrupted by daemon restart"
                         state.failed_phase = state.current_phase or "Unknown"
                         save_pipeline_state(state, project_dir)
             except Exception as e:
-                logger.warning(f"Failed to fix pipeline state for orphaned job {job.id}: {e}")
+                logger.warning(
+                    f"Failed to fix pipeline state for orphaned job {job.id}: {e}"
+                )
 
         logger.info(f"Cleaned up {len(running_jobs)} orphaned RUNNING jobs")
 

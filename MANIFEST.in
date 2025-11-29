@@ -1,5 +1,8 @@
 include __version__.py
 include README.md
 include LICENSE
+include Dockerfile
+include docker-compose.yml
+include nginx.conf
 recursive-include context_foundry *.py
-recursive-include tools *.py *.css
+recursive-include tools *.py *.css *.html

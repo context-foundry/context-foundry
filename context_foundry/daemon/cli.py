@@ -23,6 +23,7 @@ from .models import JobType, JobStatus
 try:
     from tools.mcp_utils.pipeline_state import (
         get_pipeline_state,
+        save_pipeline_state,
         can_resume_pipeline,
         PipelineState,
         PHASE_ORDER,

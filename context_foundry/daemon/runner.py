@@ -1122,6 +1122,30 @@ print(json.dumps(result))
         - Only general builds merge into global patterns
         - This prevents cross-contamination
         """
+        from datetime import datetime
+        import json
+        import uuid
+
+        # Track feedback for UI visibility
+        feedback_data = {
+            "id": str(uuid.uuid4()),
+            "job_id": job_id,
+            "phase": "Feedback",
+            "state": "complete",
+            "created_at": datetime.now().isoformat(),
+            "completed_at": None,
+            "pattern_merge": {
+                "attempted": False,
+                "skipped_reason": None,
+                "patterns_checked": False,
+                "patterns_found": False,
+                "patterns_added": 0,
+                "patterns_updated": 0,
+                "s3_sync": None,
+            },
+            "summary": [],
+        }
+
         try:
             # Check session configuration for extension mode (PATTERN ISOLATION)
             session_file = (
@@ -1132,8 +1156,6 @@ print(json.dumps(result))
 
             if session_file.exists():
                 try:
-                    import json
-
                     with open(session_file) as f:
                         session = json.load(f)
                         config = session.get("configuration", {})
@@ -1160,6 +1182,13 @@ print(json.dumps(result))
                 logger.info(
                     f"Pattern isolation: {extension_name} build will not contaminate global patterns"
                 )
+                feedback_data["pattern_merge"]["skipped_reason"] = (
+                    f"Extension build ({extension_name}) - pattern isolation enforced"
+                )
+                feedback_data["summary"].append(
+                    f"⏭️ Skipped: {extension_name} extension build (pattern isolation)"
+                )
+                self._write_feedback_prompt(working_dir, feedback_data)
                 return
 
             self._emit_log(
@@ -1168,6 +1197,8 @@ print(json.dumps(result))
                 "Merging learned patterns to global storage (general build)",
                 None,
             )
+            feedback_data["pattern_merge"]["attempted"] = True
+            feedback_data["pattern_merge"]["patterns_checked"] = True
 
             # Check if project has patterns to merge
             pattern_file = (
@@ -1179,7 +1210,20 @@ print(json.dumps(result))
 
             if not pattern_file.exists():
                 logger.info(f"No patterns found for job {job_id}, skipping merge")
+                feedback_data["pattern_merge"]["patterns_found"] = False
+                feedback_data["pattern_merge"]["skipped_reason"] = (
+                    "No project patterns file found (tests passed without failures to learn from)"
+                )
+                feedback_data["summary"].append(
+                    "✅ Build succeeded with no test failures"
+                )
+                feedback_data["summary"].append(
+                    "📝 No new patterns to merge (clean build)"
+                )
+                self._write_feedback_prompt(working_dir, feedback_data)
                 return
+
+            feedback_data["pattern_merge"]["patterns_found"] = True
 
             # Import pattern management
             sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tools"))
@@ -1195,12 +1239,24 @@ print(json.dumps(result))
             if merge_result.get("status") == "success":
                 added = merge_result.get("patterns_added", 0)
                 updated = merge_result.get("patterns_updated", 0)
+                feedback_data["pattern_merge"]["patterns_added"] = added
+                feedback_data["pattern_merge"]["patterns_updated"] = updated
+
                 self._emit_log(
                     job_id,
                     "INFO",
                     f"Merged patterns to global storage: {added} added, {updated} updated",
                     None,
                 )
+
+                if added > 0 or updated > 0:
+                    feedback_data["summary"].append(
+                        f"🔄 Merged to global: {added} new patterns, {updated} updated"
+                    )
+                else:
+                    feedback_data["summary"].append(
+                        "📝 Patterns checked - no new learnings to merge"
+                    )
 
                 # Sync to S3 if available
                 try:
@@ -1210,28 +1266,50 @@ print(json.dumps(result))
                     if client.enabled:
                         s3_result = client.upload_pattern("common-issues", force=True)
                         if s3_result.get("success"):
+                            s3_uri = s3_result.get("s3_uri", "unknown")
                             self._emit_log(
                                 job_id,
                                 "INFO",
-                                f"Synced patterns to S3: {s3_result.get('s3_uri', 'unknown')}",
+                                f"Synced patterns to S3: {s3_uri}",
                                 None,
                             )
+                            feedback_data["pattern_merge"]["s3_sync"] = {
+                                "success": True,
+                                "uri": s3_uri,
+                            }
+                            feedback_data["summary"].append(f"☁️ Synced to S3: {s3_uri}")
                         else:
+                            error = s3_result.get("error", "Unknown error")
                             self._emit_log(
                                 job_id,
                                 "WARNING",
-                                f"S3 sync failed: {s3_result.get('error', 'Unknown error')}",
+                                f"S3 sync failed: {error}",
                                 None,
                             )
+                            feedback_data["pattern_merge"]["s3_sync"] = {
+                                "success": False,
+                                "error": error,
+                            }
+                    else:
+                        feedback_data["pattern_merge"]["s3_sync"] = {
+                            "success": False,
+                            "error": "S3 not configured",
+                        }
                 except Exception as s3_error:
                     logger.debug(f"S3 sync not available: {s3_error}")
+                    feedback_data["pattern_merge"]["s3_sync"] = {
+                        "success": False,
+                        "error": str(s3_error),
+                    }
             else:
+                error = merge_result.get("error", "Unknown error")
                 self._emit_log(
                     job_id,
                     "WARNING",
-                    f"Pattern merge failed: {merge_result.get('error', 'Unknown error')}",
+                    f"Pattern merge failed: {error}",
                     None,
                 )
+                feedback_data["summary"].append(f"⚠️ Pattern merge failed: {error}")
 
         except Exception as e:
             logger.error(
@@ -1243,6 +1321,27 @@ print(json.dumps(result))
                 f"Pattern merge failed: {str(e)}",
                 None,
             )
+            feedback_data["summary"].append(f"❌ Error: {str(e)}")
+
+        # Always write feedback prompt for visibility
+        feedback_data["completed_at"] = datetime.now().isoformat()
+        self._write_feedback_prompt(working_dir, feedback_data)
+
+    def _write_feedback_prompt(self, working_dir: str, feedback_data: dict):
+        """Write feedback-prompt.json for UI visibility."""
+        import json
+
+        try:
+            prompt_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
+            prompt_dir.mkdir(parents=True, exist_ok=True)
+
+            prompt_file = prompt_dir / "feedback-prompt.json"
+            with open(prompt_file, "w") as f:
+                json.dump(feedback_data, f, indent=2)
+
+            logger.info(f"Wrote feedback prompt to {prompt_file}")
+        except Exception as e:
+            logger.warning(f"Failed to write feedback prompt: {e}")
 
     def terminate_job_processes(self, job_id: str):
         """

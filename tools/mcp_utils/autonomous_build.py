@@ -237,8 +237,12 @@ def _initialize_pipeline_state(
         existing_state = get_pipeline_state(working_directory)
         if existing_state:
             # Resuming from pause - update remaining phases
+            # IMPORTANT: Filter out already-completed phases to prevent state corruption
             existing_state.mark_resumed()
-            existing_state.phases_remaining = get_phases_from(resume_from_phase)
+            all_phases = get_phases_from(resume_from_phase)
+            existing_state.phases_remaining = [
+                p for p in all_phases if p not in existing_state.phases_completed
+            ]
             save_pipeline_state(existing_state, working_directory)
             print(f"📍 Resuming pipeline from {resume_from_phase}", file=sys.stderr)
             return existing_state
@@ -1275,6 +1279,34 @@ def execute_build_with_phase_spawning(
     test_iteration = 0  # FIX #2: Initialize before conditional
 
     # ═══════════════════════════════════════════════════════════════════════
+    # AUTO-DETECT RESUME PHASE (when mode=resume but resume_from_phase not set)
+    # ═══════════════════════════════════════════════════════════════════════
+    if mode == "resume" and not resume_from_phase:
+        # Try to load existing pipeline state to determine resume point
+        existing_state = get_pipeline_state(working_directory)
+        if existing_state and existing_state.phases_remaining:
+            resume_from_phase = existing_state.phases_remaining[0]
+            print(
+                f"📍 Auto-detected resume point: {resume_from_phase}",
+                file=sys.stderr,
+            )
+        elif existing_state and existing_state.phases_completed:
+            # If no remaining phases but some completed, find next phase
+            from tools.mcp_utils.pipeline_state import PHASE_ORDER
+
+            last_completed = existing_state.phases_completed[-1]
+            try:
+                last_idx = PHASE_ORDER.index(last_completed)
+                if last_idx + 1 < len(PHASE_ORDER):
+                    resume_from_phase = PHASE_ORDER[last_idx + 1]
+                    print(
+                        f"📍 Auto-detected resume point (from completed): {resume_from_phase}",
+                        file=sys.stderr,
+                    )
+            except ValueError:
+                pass  # Phase not in order, fall through
+
+    # ═══════════════════════════════════════════════════════════════════════
     # PIPELINE STATE INITIALIZATION (for pause/resume support)
     # ═══════════════════════════════════════════════════════════════════════
     pipeline_state = _initialize_pipeline_state(
@@ -1447,7 +1479,19 @@ def execute_build_with_phase_spawning(
         Check if approval is required for a phase.
         Returns waiting_approval dict if paused, None to proceed.
         Handles expired requests by re-requesting approval.
+
+        NOTE: In HITL mode, approval is handled via wait_for_acknowledgment()
+        in the phase prompts, so this gate is skipped.
         """
+        # In HITL mode, approval happens via prompt acknowledgment, not this gate
+        execution_mode = task_config.get("execution_mode", "autonomous")
+        if execution_mode == "hitl":
+            print(
+                f"📝 {phase_name} approval handled via HITL prompt mechanism",
+                file=sys.stderr,
+            )
+            return None  # Skip approval gate, HITL uses prompt acknowledgment
+
         skip_approval = task_config.get("skip_approval", False)
         if skip_approval:
             return None
@@ -1509,7 +1553,8 @@ def execute_build_with_phase_spawning(
 
             elapsed = (datetime.now() - start_time).total_seconds()
             return {
-                "status": "waiting_approval",
+                "status": "paused",  # Use "paused" so runner.py handles it correctly
+                "paused_after": phases_completed[-1] if phases_completed else "none",
                 "phases_completed": phases_completed,
                 "waiting_phase": phase_name,
                 "approval_request_id": approval_request.request_id,

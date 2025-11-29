@@ -927,6 +927,65 @@
             color: var(--accent-purple);
         }
 
+        /* Conversation Viewer Modal */
+        .conversation-viewer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+        }
+
+        .conversation-viewer.active {
+            display: flex;
+        }
+
+        .conversation-viewer-header {
+            padding: 16px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .conversation-viewer-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .conversation-viewer-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            background: var(--bg-primary);
+        }
+
+        .conversation-expand-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+            margin-left: 8px;
+            transition: all 0.15s;
+        }
+
+        .conversation-expand-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-color: var(--accent-purple);
+        }
+
         /* Approval Banner */
         .approval-banner {
             background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(210, 153, 34, 0.1));
@@ -2795,6 +2854,37 @@
         </div>
     </div>
 
+    <!-- Conversation Viewer Modal -->
+    <div class="conversation-viewer" id="conversationViewer">
+        <div class="conversation-viewer-header">
+            <div class="conversation-viewer-title">
+                <span style="color:var(--accent-green)">></span>
+                <span id="conversationViewerTitle">Agent Conversation</span>
+            </div>
+            <div class="artifact-viewer-actions">
+                <button class="artifact-edit-btn" id="conversationCopyBtn" onclick="copyConversation()" title="Copy to clipboard">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy
+                </button>
+                <button class="artifact-edit-btn" id="conversationSaveBtn" onclick="saveConversation()" title="Save to disk">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Save
+                </button>
+                <button class="artifact-viewer-close" onclick="closeConversationViewer()">Close (Esc)</button>
+            </div>
+        </div>
+        <div class="conversation-viewer-content" id="conversationViewerContent">
+            <div style="text-align: center; padding: 40px; color: var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+
     <script>
         const CONFIG = {
             sseEndpoint: '/events',
@@ -2949,6 +3039,18 @@
             }
             // No token = read-only mode (can view but not modify)
             console.log('[Auth] Token not available - dashboard is read-only');
+        }
+
+        // Helper function to fetch with auth token
+        async function fetchWithAuth(url, options = {}) {
+            const fetchUrl = url.startsWith('http') ? url : `${CONFIG.dashboardApiBase}${url}`;
+            return fetch(fetchUrl, {
+                ...options,
+                headers: {
+                    ...options.headers,
+                    'X-CF-Auth': state.authToken || '',
+                },
+            });
         }
 
         function setupFilterButtons() {
@@ -3676,7 +3778,17 @@
 
                     return `
                         <div class="artifacts-section" style="margin-top: 20px;">
-                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase;">Agent Conversation</div>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+                                <span>Agent Conversation</span>
+                                <button class="conversation-expand-btn" onclick="openConversationViewer()" title="Expand">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="15 3 21 3 21 9"></polyline>
+                                        <polyline points="9 21 3 21 3 15"></polyline>
+                                        <line x1="21" y1="3" x2="14" y2="10"></line>
+                                        <line x1="3" y1="21" x2="10" y2="14"></line>
+                                    </svg>
+                                </button>
+                            </div>
                             <div id="conversationLog" class="conversation-log" style="background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border); max-height: 400px; overflow-y: auto; padding: 12px;">
                                 ${conversations.map(msg => {
                         const isUser = msg.event_type === 'user';
@@ -3844,6 +3956,149 @@
 
         function handleViewerEscape(e) {
             if (e.key === 'Escape') closeArtifactViewer();
+        }
+
+        // ===== Conversation Viewer =====
+
+        // Store current conversation data for copy/save operations
+        let currentConversationData = null;
+        let currentConversationJobId = null;
+        let currentConversationPhase = null;
+
+        function openConversationViewer() {
+            const viewer = document.getElementById('conversationViewer');
+            const content = document.getElementById('conversationViewerContent');
+            const title = document.getElementById('conversationViewerTitle');
+
+            // Get the current conversation log HTML and data
+            const conversationLog = document.getElementById('conversationLog');
+            if (!conversationLog) {
+                content.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-muted);">No conversation available.</div>';
+                viewer.classList.add('active');
+                document.addEventListener('keydown', handleConversationViewerEscape);
+                return;
+            }
+
+            // Store job/phase context for filename
+            const job = state.rawJobs.find(j => j.id === state.selectedJob);
+            currentConversationJobId = state.selectedJob;
+            currentConversationPhase = state.selectedPhase || (job?.current_phase) || 'unknown';
+
+            // Extract text content for copy/save
+            currentConversationData = extractConversationText(conversationLog);
+
+            // Clone the conversation content
+            content.innerHTML = conversationLog.innerHTML;
+
+            // Update title with phase info
+            if (job) {
+                title.textContent = `Agent Conversation - ${currentConversationPhase}`;
+            }
+
+            viewer.classList.add('active');
+            document.addEventListener('keydown', handleConversationViewerEscape);
+        }
+
+        function closeConversationViewer() {
+            const viewer = document.getElementById('conversationViewer');
+            viewer.classList.remove('active');
+            document.removeEventListener('keydown', handleConversationViewerEscape);
+        }
+
+        function handleConversationViewerEscape(e) {
+            if (e.key === 'Escape') closeConversationViewer();
+        }
+
+        function extractConversationText(element) {
+            // Extract readable text from conversation messages
+            const messages = element.querySelectorAll('.conv-msg');
+            let text = '';
+            messages.forEach(msg => {
+                const roleSpan = msg.querySelector('div > span:first-child');
+                const timeSpan = msg.querySelector('div > span:last-child');
+                const contentDiv = msg.querySelector('div:last-child');
+
+                const role = roleSpan?.textContent || 'UNKNOWN';
+                const time = timeSpan?.textContent || '';
+                const content = contentDiv?.textContent || '';
+
+                text += `[${time}] ${role}:\n${content}\n\n`;
+            });
+            return text.trim();
+        }
+
+        async function copyConversation() {
+            if (!currentConversationData) {
+                alert('No conversation data to copy');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(currentConversationData);
+                // Visual feedback
+                const btn = document.getElementById('conversationCopyBtn');
+                const originalHTML = btn.innerHTML;
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+                setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            }
+        }
+
+        async function saveConversation() {
+            if (!currentConversationData) {
+                alert('No conversation data to save');
+                return;
+            }
+
+            const job = state.rawJobs.find(j => j.id === state.selectedJob);
+            const suggestedName = `conversation-${currentConversationPhase || 'phase'}-${currentConversationJobId?.slice(0, 8) || 'unknown'}.txt`;
+
+            // Try File System Access API first (allows browsing)
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: suggestedName,
+                        types: [{
+                            description: 'Text Files',
+                            accept: { 'text/plain': ['.txt'] }
+                        }],
+                        // Start in project directory if possible
+                        startIn: 'downloads'
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(currentConversationData);
+                    await writable.close();
+
+                    // Visual feedback
+                    const btn = document.getElementById('conversationSaveBtn');
+                    const originalHTML = btn.innerHTML;
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><polyline points="20 6 9 17 4 12"></polyline></svg> Saved!';
+                    setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.error('Save failed:', err);
+                        // Fallback to blob download
+                        fallbackSaveConversation(suggestedName);
+                    }
+                }
+            } else {
+                // Fallback for browsers without File System Access API
+                fallbackSaveConversation(suggestedName);
+            }
+        }
+
+        function fallbackSaveConversation(filename) {
+            const blob = new Blob([currentConversationData], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function renderMarkdown(content, container) {
@@ -4145,7 +4400,74 @@
             }
         }
 
+        async function resumePipeline(jobId, fromPhase) {
+            try {
+                const res = await fetch('/resume-pipeline', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || '',
+                    },
+                    body: JSON.stringify({
+                        job_id: jobId,
+                        from_phase: fromPhase,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    throw new Error(errData.error || 'Resume failed');
+                }
+
+                const data = await res.json();
+                console.log('Pipeline resumed:', data);
+
+                // Refresh approvals
+                await fetchPendingApprovals();
+
+                // Refresh job list to show new job
+                await fetchJobs();
+
+                // Refresh job view
+                if (state.selectedJob) {
+                    const job = state.rawJobs.find(j => j.id === state.selectedJob);
+                    if (job) renderJobDetail(job);
+                }
+
+            } catch (err) {
+                alert(`Error resuming pipeline: ${err.message}`);
+            }
+        }
+
         function renderApprovalBanner(approval) {
+            // Handle HITL phase resume type differently
+            if (approval.type === 'phase_resume') {
+                const phasesCompleted = (approval.phases_completed || []).join(' → ');
+                const pausedAt = approval.paused_at ? new Date(approval.paused_at).toLocaleString() : 'Unknown';
+                return `
+                    <div class="approval-banner" style="border-left-color: #f59e0b;">
+                        <div class="approval-banner-header">
+                            <div class="approval-banner-title">
+                                <span style="font-size: 16px;">⏸️</span>
+                                Pipeline Paused - Ready to Resume
+                                <span class="approval-banner-phase">→ ${approval.phase}</span>
+                            </div>
+                        </div>
+                        <div class="approval-banner-message">
+                            <strong>Completed phases:</strong> ${phasesCompleted || 'None'}<br>
+                            <strong>Paused at:</strong> ${pausedAt}<br>
+                            Click "Resume" to continue to the <strong>${approval.phase}</strong> phase.
+                        </div>
+                        <div class="approval-actions">
+                            <button class="approval-btn approve" onclick="resumePipeline('${approval.job_id}', '${approval.phase}')">
+                                Resume → ${approval.phase}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Standard approval banner
             return `
                 <div class="approval-banner">
                     <div class="approval-banner-header">
@@ -5905,7 +6227,12 @@
         // Update summary display
         function updateSummaryDisplay() {
             const container = document.getElementById('agentSummaryText');
-            const { thoughts, summary } = state.activityData;
+            if (!state.activityData) {
+                container.textContent = 'Waiting for agent activity...';
+                return;
+            }
+            const thoughts = state.activityData.thoughts || [];
+            const summary = state.activityData.summary || '';
 
             if (thoughts.length === 0 && !summary) {
                 container.textContent = 'Waiting for agent activity...';

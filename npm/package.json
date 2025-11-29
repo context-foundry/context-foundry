@@ -40,6 +40,10 @@
   "files": [
     "bin/",
     "scripts/",
-    "README.md"
+    "README.md",
+    "Dockerfile",
+    "docker-compose.yml",
+    "nginx.conf",
+    "cf.html"
   ]
 }
