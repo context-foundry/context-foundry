@@ -2841,6 +2841,9 @@
             // Track prompt editing state (persists even when focus lost)
             promptEditingPhase: null,  // e.g., 'Scout', 'Architect', etc.
             userRequestOpen: {}, // Track open/closed state of user request sections
+            // Track job detail scroll position (updated on scroll events, not just before render)
+            jobDetailScrollTop: 0,
+            jobDetailScrollTracked: false,  // Flag to prevent tracking after programmatic scroll
         };
 
         // Helper: Check if user is currently editing a prompt textarea
@@ -2886,6 +2889,19 @@
             connect();
             fetchSnapshot();
             fetchPendingApprovals();
+
+            // Track scroll position on the job detail container
+            // This captures user scrolling in real-time, so we always have the correct position
+            const eventListContainer = document.getElementById('eventList');
+            if (eventListContainer) {
+                eventListContainer.addEventListener('scroll', () => {
+                    // Only track if not a programmatic scroll restore in progress
+                    if (!state.jobDetailScrollTracked) {
+                        state.jobDetailScrollTop = eventListContainer.scrollTop;
+                    }
+                }, { passive: true });
+            }
+
             // Refresh approvals periodically
             setInterval(fetchPendingApprovals, 5000);
 
@@ -3183,6 +3199,8 @@
             }
 
             state.selectedJob = jobId;
+            // Reset scroll position when selecting a new job
+            state.jobDetailScrollTop = 0;
             const job = state.rawJobs.find(j => j.id === jobId);
 
             // Default to current phase if available
@@ -3358,8 +3376,9 @@
                 }
             }
 
-            // Preserve scroll position before re-rendering
-            const savedScrollTop = container.scrollTop;
+            // Use the tracked scroll position from state (updated on actual user scroll events)
+            // This is more reliable than reading container.scrollTop which may have been reset
+            const savedScrollTop = state.jobDetailScrollTop;
 
             container.innerHTML = `
                 ${approvalBannerHtml}
@@ -3434,8 +3453,20 @@
             // Setup phase tab click handlers
             setupPhaseTabClicks();
 
-            // Restore scroll position after re-rendering
-            container.scrollTop = savedScrollTop;
+            // Restore scroll position after re-rendering (use double-RAF to ensure layout is complete)
+            if (savedScrollTop > 0) {
+                // Set flag to prevent scroll event from overwriting state during programmatic restore
+                state.jobDetailScrollTracked = true;
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        container.scrollTop = savedScrollTop;
+                        // Clear flag after a brief delay to resume tracking user scrolls
+                        setTimeout(() => {
+                            state.jobDetailScrollTracked = false;
+                        }, 50);
+                    });
+                });
+            }
         }
 
         function renderPhaseTabs(job) {
