@@ -1271,6 +1271,7 @@ def execute_build_with_phase_spawning(
             required_inputs=config.get("required_inputs"),
             json_inputs=config.get("json_inputs"),
             required_tools=config.get("required_tools"),
+            custom_check=config.get("custom_check"),
         )
 
         if result.passed:
@@ -1339,6 +1340,7 @@ def execute_build_with_phase_spawning(
             required_inputs=config.get("required_inputs"),
             json_inputs=config.get("json_inputs"),
             required_tools=config.get("required_tools"),
+            custom_check=config.get("custom_check"),
         )
         if result.passed:
             audit_preflight_passed(phase_name, str(working_directory))
@@ -1831,8 +1833,23 @@ def execute_build_with_phase_spawning(
             if pause_result:
                 return pause_result
 
-        # Post-processing only when Architect was not skipped
-        if not architect_skipped:
+        # Post-processing: BAML parsing of architecture.md -> architecture.json
+        # Run BAML parsing if:
+        # 1. Architect just completed (not skipped), OR
+        # 2. Architect was skipped (resume) but architecture.json is missing
+        arch_json_path = working_directory / ".context-foundry" / "architecture.json"
+        arch_md_path = working_directory / ".context-foundry" / "architecture.md"
+
+        need_baml_parsing = not architect_skipped  # Always parse after fresh Architect
+        if architect_skipped and not arch_json_path.exists() and arch_md_path.exists():
+            # Resuming but JSON is missing - need to parse
+            print(
+                "📋 architecture.json missing after resume - running BAML parsing",
+                file=sys.stderr,
+            )
+            need_baml_parsing = True
+
+        if need_baml_parsing:
             # Breathing buffer before next BAML call
             if scout_json is not None:  # Only add buffer if Scout BAML succeeded
                 baml_breathing_buffer(3.0)

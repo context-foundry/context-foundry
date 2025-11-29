@@ -32,6 +32,64 @@ from tools.mcp_utils.phase_metrics import estimate_context_tokens, log_phase_met
 # Module logger
 logger = logging.getLogger(__name__)
 
+# =============================================================================
+# STATE MACHINE INTEGRATION
+# =============================================================================
+
+# Phase sequence mapping for task ordering
+PHASE_SEQUENCE = {
+    "Scout": 0,
+    "Architect": 1,
+    "Builder": 2,
+    "Test": 3,
+    "Screenshot": 4,
+    "Documentation": 5,
+    "Deploy": 6,
+    "Feedback": 7,
+}
+
+# Default phase timeout (used for task timeout tracking)
+DEFAULT_PHASE_TIMEOUTS = {
+    "Scout": 300,  # 5 minutes
+    "Architect": 600,  # 10 minutes
+    "Builder": 1800,  # 30 minutes
+    "Test": 600,  # 10 minutes
+    "Screenshot": 120,  # 2 minutes
+    "Documentation": 300,
+    "Deploy": 600,
+    "Feedback": 120,
+}
+
+
+def _get_state_machine():
+    """
+    Get a state machine instance connected to the daemon's database.
+
+    Returns None if daemon store is not available (e.g., running standalone).
+    """
+    try:
+        from context_foundry.daemon.store import Store
+        from context_foundry.daemon.state_machine import StateMachine
+        from pathlib import Path
+
+        # Connect to the same database as the daemon
+        # Uses WAL mode so concurrent access is safe
+        # Default daemon database path: ~/.context-foundry/daemon.db
+        db_path = Path.home() / ".context-foundry" / "daemon.db"
+        if not db_path.exists():
+            logger.debug(f"Daemon database not found at {db_path}")
+            return None
+
+        store = Store(db_path)
+        return StateMachine(store)
+    except ImportError:
+        logger.debug("State machine not available (daemon modules not found)")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to initialize state machine: {e}")
+        return None
+
+
 CF_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -564,6 +622,8 @@ class PhaseValidator:
                     + list(src_dir.rglob("*.js"))
                     + list(src_dir.rglob("*.ts"))
                     + list(src_dir.rglob("*.tsx"))
+                    + list(src_dir.rglob("*.html"))
+                    + list(src_dir.rglob("*.css"))
                 )
                 if source_files:
                     found_sources = True
@@ -576,6 +636,8 @@ class PhaseValidator:
                 + list(working_dir.rglob("*.js"))
                 + list(working_dir.rglob("*.ts"))
                 + list(working_dir.rglob("*.tsx"))
+                + list(working_dir.rglob("*.html"))
+                + list(working_dir.rglob("*.css"))
             )
             # Exclude common non-source directories
             code_files = [
@@ -749,15 +811,50 @@ def _run_phase_internal(
     provider: str = "claude",
     model: str = None,
     job_id: str = None,
+    skip_prompt_save: bool = False,
 ) -> PhaseResult:
     """
     Internal implementation of phase execution.
 
     This is the actual phase runner, separated to allow the human-in-the-loop
     wrapper to call it after prompt approval.
+
+    Args:
+        skip_prompt_save: If True, skip saving phase prompt file (used when called
+                         from run_phase_with_prompt_management which already saved it)
     """
+    # ==========================================================================
+    # STATE MACHINE: Initialize task tracking
+    # ==========================================================================
+    state_machine = None
+    task = None
+    task_id = None
+
+    if job_id:
+        try:
+            state_machine = _get_state_machine()
+            if state_machine:
+                # Create task for this phase
+                sequence = PHASE_SEQUENCE.get(phase_name, 99)
+                timeout = DEFAULT_PHASE_TIMEOUTS.get(phase_name, phase_timeout)
+                task = state_machine.create_task_for_phase(
+                    job_id=job_id,
+                    phase_name=phase_name,
+                    sequence=sequence,
+                    timeout_seconds=timeout,
+                    metadata={"iteration": iteration, "project_type": project_type},
+                )
+                task_id = task.id
+
+                # Start the task (CREATED -> RUNNING)
+                task = state_machine.start_task(task_id)
+                logger.info(f"Task {task_id[:8]} started for phase {phase_name}")
+        except Exception as e:
+            logger.warning(f"Failed to create task for {phase_name}: {e}")
+            # Continue without task tracking - don't fail the phase
+
     print(f"\n{'=' * 60}", file=sys.stderr)
-    print(f"🚀 STARTING PHASE: {phase_name} (Fresh Context)", file=sys.stderr)
+    print(f"STARTING PHASE: {phase_name} (Fresh Context)", file=sys.stderr)
     print(f"{'=' * 60}", file=sys.stderr)
 
     # BAML: Track phase start
@@ -797,16 +894,62 @@ def _run_phase_internal(
 
     # Load phase-specific prompt
     if not phase_prompt_path.exists():
+        error_msg = f"Phase prompt not found: {phase_prompt_path}"
+
+        # Still create a prompt file to record the failure (auditor fix)
+        if not skip_prompt_save:
+            try:
+                from tools.mcp_utils.phase_prompts import (
+                    create_phase_prompt_file,
+                    STATE_FAILED,
+                )
+
+                create_phase_prompt_file(
+                    working_directory=working_directory,
+                    phase_name=phase_name,
+                    system_prompt=f"ERROR: {error_msg}",
+                    input_instruction=input_instruction,
+                    job_id=job_id,
+                    initial_state=STATE_FAILED,
+                    execution_mode="autonomous",
+                )
+            except Exception as e:
+                logger.warning(f"Failed to create error prompt file: {e}")
+
         return PhaseResult(
             phase=phase_name,
             status="failed",
             duration_seconds=0,
             context_tokens=0,
             exit_code=1,
-            error=f"Phase prompt not found: {phase_prompt_path}",
+            error=error_msg,
         )
 
     phase_prompt = phase_prompt_path.read_text()
+
+    # Save phase prompt file for ALL builds (autonomous and HITL)
+    # This allows the dashboard to show prompts for any build
+    if not skip_prompt_save:
+        try:
+            from tools.mcp_utils.phase_prompts import (
+                create_phase_prompt_file,
+                STATE_PROCESSING,
+            )
+
+            create_phase_prompt_file(
+                working_directory=working_directory,
+                phase_name=phase_name,
+                system_prompt=phase_prompt,
+                input_instruction=input_instruction,
+                job_id=job_id,
+                initial_state=STATE_PROCESSING,  # Autonomous goes straight to processing
+                execution_mode="autonomous",
+            )
+            logger.info(f"Saved phase prompt file for {phase_name} (autonomous)")
+        except Exception as e:
+            # Don't fail the build if prompt saving fails
+            logger.warning(f"Failed to save phase prompt file: {e}")
+            print(f"⚠️  Failed to save phase prompt file: {e}", file=sys.stderr)
 
     # Build command based on provider
     if provider.lower() == "gemini":
@@ -886,18 +1029,49 @@ Environment: Running in daemon? Check daemon's PATH configuration.
         import uuid
 
         # Use job_id if available, otherwise generate a temporary ID
-        task_id = job_id if job_id else f"temp-{uuid.uuid4()}"
-        conversation_logger = ConversationLogger(task_id, working_directory)
-        print(
-            f"📝 Logging conversation to {conversation_logger.log_dir}", file=sys.stderr
-        )
+        logger_task_id = job_id if job_id else f"temp-{uuid.uuid4()}"
+        conversation_logger = ConversationLogger(logger_task_id, working_directory)
+        print(f"Logging conversation to {conversation_logger.log_dir}", file=sys.stderr)
     except ImportError:
         print(
-            "⚠️  ConversationLogger not available - skipping detailed logs",
+            "ConversationLogger not available - skipping detailed logs",
             file=sys.stderr,
         )
     except Exception as e:
-        print(f"⚠️  Failed to initialize ConversationLogger: {e}", file=sys.stderr)
+        print(f"Failed to initialize ConversationLogger: {e}", file=sys.stderr)
+
+    # ==========================================================================
+    # HEARTBEAT THREAD: Emit periodic heartbeats during long-running phases
+    # ==========================================================================
+    heartbeat_stop_event = None
+    heartbeat_thread = None
+
+    if state_machine and task_id:
+        import threading
+
+        heartbeat_stop_event = threading.Event()
+        heartbeat_interval = 30  # Emit heartbeat every 30 seconds
+
+        def heartbeat_emitter():
+            """Background thread that emits periodic heartbeats."""
+            elapsed_seconds = 0
+            while not heartbeat_stop_event.wait(timeout=heartbeat_interval):
+                elapsed_seconds += heartbeat_interval
+                try:
+                    state_machine.record_task_heartbeat(
+                        task_id=task_id,
+                        progress=f"Running for {elapsed_seconds}s",
+                        metadata={"elapsed_seconds": elapsed_seconds},
+                    )
+                    logger.debug(
+                        f"Heartbeat emitted for {phase_name} ({elapsed_seconds}s)"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to emit heartbeat: {e}")
+
+        heartbeat_thread = threading.Thread(target=heartbeat_emitter, daemon=True)
+        heartbeat_thread.start()
+        logger.info(f"Heartbeat thread started for phase {phase_name}")
 
     try:
         process = subprocess.Popen(
@@ -969,9 +1143,21 @@ Environment: Running in daemon? Check daemon's PATH configuration.
                     phase_file.write_text(json.dumps(phase_info, indent=2))
                 except Exception as baml_error:
                     print(
-                        f"⚠️  BAML timeout tracking failed: {baml_error}",
+                        f"BAML timeout tracking failed: {baml_error}",
                         file=sys.stderr,
                     )
+
+            # ==========================================================================
+            # STATE MACHINE: Mark task as timed out
+            # ==========================================================================
+            if heartbeat_stop_event:
+                heartbeat_stop_event.set()
+            if state_machine and task_id:
+                try:
+                    state_machine.timeout_task(task_id)
+                    logger.info(f"Task {task_id[:8]} marked as timed_out")
+                except Exception as e:
+                    logger.warning(f"Failed to update task status to timed_out: {e}")
 
             return PhaseResult(
                 phase=phase_name,
@@ -1062,7 +1248,23 @@ Environment: Running in daemon? Check daemon's PATH configuration.
                     validator(working_directory)
                 print(f"✅ {phase_name} output validation PASSED", file=sys.stderr)
             except Exception as e:
-                print(f"❌ {phase_name} output validation FAILED: {e}", file=sys.stderr)
+                print(
+                    f"[X] {phase_name} output validation FAILED: {e}", file=sys.stderr
+                )
+                # ==========================================================================
+                # STATE MACHINE: Mark task as failed (validation failure)
+                # ==========================================================================
+                if heartbeat_stop_event:
+                    heartbeat_stop_event.set()
+                if state_machine and task_id:
+                    try:
+                        state_machine.fail_task(
+                            task_id, f"Output validation failed: {e}"
+                        )
+                        logger.info(f"Task {task_id[:8]} marked as failed (validation)")
+                    except Exception as sm_err:
+                        logger.warning(f"Failed to update task status: {sm_err}")
+
                 return PhaseResult(
                     phase=phase_name,
                     status="failed",
@@ -1121,6 +1323,51 @@ Environment: Running in daemon? Check daemon's PATH configuration.
             except Exception as e:
                 print(f"⚠️  BAML phase completion tracking failed: {e}", file=sys.stderr)
 
+        # Update phase prompt state for autonomous builds
+        if not skip_prompt_save:
+            try:
+                from tools.mcp_utils.phase_prompts import (
+                    update_prompt_state,
+                    STATE_COMPLETE,
+                    STATE_FAILED,
+                )
+
+                prompt_state = STATE_COMPLETE if exit_code == 0 else STATE_FAILED
+                update_prompt_state(
+                    working_directory,
+                    phase_name,
+                    prompt_state,
+                    validate_transition=False,  # Autonomous mode skips validation
+                    token_metrics={
+                        "actual_input_tokens": context_tokens,
+                        "actual_output_tokens": 0,  # Not tracked in autonomous mode
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update phase prompt state: {e}")
+
+        # ==========================================================================
+        # STATE MACHINE: Update task status on completion
+        # ==========================================================================
+        if heartbeat_stop_event:
+            heartbeat_stop_event.set()
+        if state_machine and task_id:
+            try:
+                if exit_code == 0:
+                    state_machine.complete_task(
+                        task_id,
+                        result={"duration_seconds": duration},
+                        tokens_used=context_tokens,
+                    )
+                    logger.info(f"Task {task_id[:8]} marked as succeeded")
+                else:
+                    state_machine.fail_task(
+                        task_id, f"Phase exited with code {exit_code}"
+                    )
+                    logger.info(f"Task {task_id[:8]} marked as failed (exit code)")
+            except Exception as sm_err:
+                logger.warning(f"Failed to update task status: {sm_err}")
+
         phase_result_status = "completed" if exit_code == 0 else "failed"
         return PhaseResult(
             phase=phase_name,
@@ -1134,7 +1381,19 @@ Environment: Running in daemon? Check daemon's PATH configuration.
 
     except Exception as e:
         duration = (datetime.now() - start).total_seconds()
-        print(f"❌ {phase_name} ERROR: {e}", file=sys.stderr)
+        print(f"[X] {phase_name} ERROR: {e}", file=sys.stderr)
+
+        # ==========================================================================
+        # STATE MACHINE: Mark task as failed (exception)
+        # ==========================================================================
+        if heartbeat_stop_event:
+            heartbeat_stop_event.set()
+        if state_machine and task_id:
+            try:
+                state_machine.fail_task(task_id, f"Exception: {str(e)[:200]}")
+                logger.info(f"Task {task_id[:8]} marked as failed (exception)")
+            except Exception as sm_err:
+                logger.warning(f"Failed to update task status: {sm_err}")
 
         # BAML: Track error
         if is_baml_available():
@@ -1152,7 +1411,27 @@ Environment: Running in daemon? Check daemon's PATH configuration.
                 phase_file.parent.mkdir(parents=True, exist_ok=True)
                 phase_file.write_text(json.dumps(phase_info, indent=2))
             except Exception as baml_error:
-                print(f"⚠️  BAML error tracking failed: {baml_error}", file=sys.stderr)
+                print(f"BAML error tracking failed: {baml_error}", file=sys.stderr)
+
+        # Update phase prompt state to failed (auditor fix: handle exceptions)
+        if not skip_prompt_save:
+            try:
+                from tools.mcp_utils.phase_prompts import (
+                    update_prompt_state,
+                    STATE_FAILED,
+                )
+
+                update_prompt_state(
+                    working_directory,
+                    phase_name,
+                    STATE_FAILED,
+                    validate_transition=False,
+                    error=str(e),
+                )
+            except Exception as prompt_error:
+                logger.warning(
+                    f"Failed to update phase prompt state on error: {prompt_error}"
+                )
 
         return PhaseResult(
             phase=phase_name,

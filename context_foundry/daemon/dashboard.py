@@ -378,6 +378,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._save_system_prompt_to_disk()
         elif parsed.path == "/save-input-instruction-to-disk":
             self._save_input_instruction_to_disk()
+        elif parsed.path == "/resume-pipeline":
+            self._resume_pipeline()
         else:
             self.send_error(404, "Not Found")
 
@@ -564,7 +566,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_pending_approvals(self) -> None:
-        """List all pending approval requests."""
+        """List all pending approval requests and paused HITL pipelines."""
         try:
             import sys
 
@@ -575,6 +577,78 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             pending = manager.list_pending_requests()
 
             approvals = [req.to_dict() for req in pending]
+
+            # Also check for paused HITL pipelines (not in ApprovalManager)
+            # These are jobs that completed a phase and are waiting to resume
+            # Cross-check: pipeline job_id must match job.id AND job must not be running
+            from .models import JobStatus
+
+            try:
+                seen_dirs = set()  # Avoid duplicates
+                for job in self.server.context.store.list_jobs():
+                    working_dir = job.params.get("working_directory")
+                    if working_dir and working_dir not in seen_dirs:
+                        seen_dirs.add(working_dir)
+                        pipeline_state_file = (
+                            Path(working_dir)
+                            / ".context-foundry"
+                            / "pipeline-state.json"
+                        )
+                        if pipeline_state_file.exists():
+                            try:
+                                state = json.loads(pipeline_state_file.read_text())
+                                if state.get("state") == "paused":
+                                    # Cross-check: verify pipeline belongs to this job
+                                    pipeline_job_id = state.get("task_config", {}).get(
+                                        "job_id"
+                                    )
+                                    if pipeline_job_id and pipeline_job_id != job.id:
+                                        logger.debug(
+                                            f"Pipeline job_id {pipeline_job_id} doesn't match job {job.id}, skipping"
+                                        )
+                                        continue
+
+                                    # Race condition prevention: don't show paused pipeline if job is in active state
+                                    active_states = {
+                                        JobStatus.RUNNING,
+                                        JobStatus.QUEUED,
+                                        JobStatus.WAITING_APPROVAL,
+                                    }
+                                    if job.status in active_states:
+                                        logger.debug(
+                                            f"Job {job.id} is in {job.status.value} state, not showing as paused"
+                                        )
+                                        continue
+
+                                    phases_remaining = state.get("phases_remaining", [])
+                                    next_phase = (
+                                        phases_remaining[0]
+                                        if phases_remaining
+                                        else "Unknown"
+                                    )
+                                    approvals.append(
+                                        {
+                                            "request_id": f"resume-{job.id}",
+                                            "pipeline_id": job.id,
+                                            "job_id": job.id,
+                                            "working_directory": working_dir,
+                                            "phase": next_phase,
+                                            "type": "phase_resume",
+                                            "status": "pending",
+                                            "paused_at": state.get("paused_at"),
+                                            "phases_completed": state.get(
+                                                "phases_completed", []
+                                            ),
+                                            "phases_remaining": phases_remaining,
+                                        }
+                                    )
+                            except (json.JSONDecodeError, KeyError) as e:
+                                logger.debug(
+                                    f"Could not parse pipeline state for {job.id}: {e}"
+                                )
+            except Exception as e:
+                logger.warning(f"Error checking paused pipelines: {e}")
+
             body = json.dumps({"approvals": approvals}).encode("utf-8")
 
             self.send_response(200)
@@ -602,6 +676,185 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             logger.warning("Error listing pending approvals: %s", exc)
             self._send_json_error(500, str(exc))
 
+    def _resume_pipeline(self) -> None:
+        """Resume a paused HITL pipeline from the next phase."""
+        # Auth check - require valid token for destructive operations
+        if not self._check_auth():
+            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
+            return
+
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body.decode("utf-8")) if body else {}
+
+            job_id = data.get("job_id")
+            from_phase = data.get("from_phase")
+
+            if not job_id:
+                self._send_json_error(400, "Missing 'job_id' in request body")
+                return
+
+            # Get the job
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job not found: {job_id}")
+                return
+
+            # Race condition prevention: don't resume if job is in an active state
+            from .models import JobStatus
+
+            active_states = {
+                JobStatus.RUNNING,
+                JobStatus.QUEUED,
+                JobStatus.WAITING_APPROVAL,
+            }
+            if job.status in active_states:
+                self._send_json_error(
+                    409,  # Conflict
+                    f"Job {job_id} is in {job.status.value} state. Wait for it to complete before resuming.",
+                )
+                return
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self._send_json_error(400, "Job has no working directory")
+                return
+
+            # Read pipeline state to get next phase
+            pipeline_state_file = (
+                Path(working_dir) / ".context-foundry" / "pipeline-state.json"
+            )
+            if not pipeline_state_file.exists():
+                self._send_json_error(404, "No pipeline state found")
+                return
+
+            try:
+                state = json.loads(pipeline_state_file.read_text())
+            except json.JSONDecodeError:
+                self._send_json_error(500, "Invalid pipeline state JSON")
+                return
+
+            if state.get("state") != "paused":
+                self._send_json_error(
+                    400, f"Pipeline is not paused (state: {state.get('state')})"
+                )
+                return
+
+            # Verify this is a HITL-enabled pipeline (has pause_after_phases configured)
+            task_config = state.get("task_config", {})
+            if not task_config.get("pause_after_phases"):
+                self._send_json_error(
+                    400,
+                    "Pipeline is not in HITL mode (no pause_after_phases configured)",
+                )
+                return
+
+            # Verify job_id matches the pipeline's job_id
+            pipeline_job_id = task_config.get("job_id")
+            if pipeline_job_id and pipeline_job_id != job_id:
+                self._send_json_error(
+                    400,
+                    f"Job ID mismatch: pipeline belongs to {pipeline_job_id}, not {job_id}",
+                )
+                return
+
+            # Determine the phase to resume from
+            phases_remaining = state.get("phases_remaining", [])
+            if not from_phase and phases_remaining:
+                from_phase = phases_remaining[0]
+            elif not from_phase:
+                self._send_json_error(400, "No phases remaining to resume")
+                return
+
+            # Import pipeline state management
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.pipeline_state import (
+                get_pipeline_state,
+                save_pipeline_state,
+                PipelineState,
+            )
+
+            # Update pipeline state to mark as resumed
+            pipeline_state = get_pipeline_state(Path(working_dir))
+            if pipeline_state:
+                pipeline_state.state = PipelineState.RUNNING
+                pipeline_state.mark_resumed()
+                save_pipeline_state(pipeline_state, Path(working_dir))
+
+            # Submit resume job to the daemon using job_manager
+            resume_params = dict(job.params)
+            resume_params["resume_from_phase"] = from_phase
+            resume_params["mode"] = "resume"
+
+            # Use context.job_manager.submit_job (not store.submit_job which doesn't exist)
+            # Use job.type (not job.job_type)
+            new_job = self.server.context.job_manager.submit_job(
+                job_type=job.type,  # Correct attribute name
+                params=resume_params,
+                priority=job.priority,
+                metadata={
+                    "source": "dashboard_resume",
+                    "build_type": f"resume_{from_phase.lower()}",
+                    "original_job_id": job_id,
+                },
+            )
+
+            # Link original job to the new resumed job
+            # Only mark as CANCELLED if not already in a terminal state
+            from datetime import datetime
+
+            terminal_states = JobStatus.terminal_states()
+
+            # New metadata to add (update_job_status merges with existing in-store)
+            link_metadata = {
+                "superseded_by": new_job.id,
+                "superseded_reason": f"Resumed from {from_phase}",
+            }
+
+            if job.status not in terminal_states:
+                # Job was not terminal (e.g., still in some intermediate state)
+                # Mark it as cancelled since it's being superseded
+                self.server.context.store.update_job_status(
+                    job_id=job_id,
+                    status=JobStatus.CANCELLED,
+                    completed_at=datetime.now(),
+                    metadata=link_metadata,
+                )
+                logger.info(
+                    f"Original job {job_id} marked as cancelled, superseded by {new_job.id}"
+                )
+            else:
+                # Job was already terminal - just update metadata to link it
+                # Re-use its existing status to avoid misrepresenting history
+                self.server.context.store.update_job_status(
+                    job_id=job_id,
+                    status=job.status,  # Keep existing status
+                    metadata=link_metadata,
+                )
+                logger.info(
+                    f"Original job {job_id} ({job.status.value}) linked to resumed job {new_job.id}"
+                )
+
+            response = {
+                "success": True,
+                "message": f"Pipeline resumed from phase: {from_phase}",
+                "job_id": new_job.id,
+                "from_phase": from_phase,
+            }
+            resp_body = json.dumps(response).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp_body)))
+            self.end_headers()
+            self.wfile.write(resp_body)
+
+        except Exception as exc:
+            logger.warning("Error resuming pipeline: %s", exc)
+            self._send_json_error(500, str(exc))
+
     def _serve_job_conversation(self, query: str) -> None:
         """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>"""
         from urllib.parse import parse_qs
@@ -613,7 +866,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json_error(400, "Missing 'job_id' parameter")
             return
 
-        job = self.server.context.store.get_job(job_id)
+        try:
+            job = self.server.context.store.get_job(job_id)
+        except Exception as exc:
+            logger.warning(f"Error getting job {job_id}: {exc}")
+            self._send_json_error(500, f"Error retrieving job: {exc}")
+            return
+
         if not job:
             self._send_json_error(404, f"Job not found: {job_id}")
             return
@@ -651,21 +910,35 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         # Group by phase
         # We need phase timing info. Try PhaseEvents first.
-        phase_events = self.server.context.store.get_phase_events(job.id)
+        try:
+            phase_events = self.server.context.store.get_phase_events(job.id)
+        except Exception as exc:
+            logger.warning(f"Error getting phase events for job {job.id}: {exc}")
+            phase_events = []
 
         # If PhaseEvents are missing (e.g. resumed job issue), try to infer from Logs
         phase_timings = []
         if phase_events:
             for p in phase_events:
+                # Skip events with None timestamps
+                # Note: PhaseEvent has 'timestamp' not 'started_at'
+                if p.timestamp is None:
+                    continue
                 phase_timings.append(
                     {
                         "phase": p.phase,
-                        "start": p.started_at,
+                        "start": p.timestamp,
                         # Use next phase start as end, or completed_at if last
                         "end": None,
                     }
                 )
-            phase_timings.sort(key=lambda x: x["start"])
+            # Sort only if we have valid entries
+            if phase_timings:
+                try:
+                    phase_timings.sort(key=lambda x: x["start"])
+                except TypeError as e:
+                    logger.warning(f"Error sorting phase timings: {e}")
+                    phase_timings = []
         else:
             # Fallback: Infer from logs
             logs = self.server.context.store.get_logs(job.id, limit=10000)
@@ -686,10 +959,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             # Convert to list
             for phase, times in phase_map.items():
-                phase_timings.append(
-                    {"phase": phase, "start": times["start"], "end": times["end"]}
-                )
-            phase_timings.sort(key=lambda x: x["start"])
+                if times.get("start") is not None:
+                    phase_timings.append(
+                        {"phase": phase, "start": times["start"], "end": times["end"]}
+                    )
+            # Sort only if we have valid entries
+            if phase_timings:
+                try:
+                    phase_timings.sort(key=lambda x: x["start"])
+                except TypeError as e:
+                    logger.warning(f"Error sorting fallback phase timings: {e}")
+                    phase_timings = []
 
         grouped_conversations = {}
 
@@ -738,13 +1018,17 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             grouped_conversations[assigned_phase].append(msg)
 
-        body = json.dumps({"phases": grouped_conversations}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self._add_cors_headers()
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            body = json.dumps({"phases": grouped_conversations}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            logger.warning(f"Error serializing conversation response: {exc}")
+            self._send_json_error(500, f"Error generating response: {exc}")
 
     def _save_artifact(self) -> None:
         """Save edited artifact file content. POST body: {path, content}"""
@@ -1478,7 +1762,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             logger.info(f"Auto-resuming job {job_id} from phase {resume_from}")
 
-            self.server.job_manager.submit_job(
+            self.server.context.job_manager.submit_job(
                 job_type=JobType.AUTONOMOUS_BUILD,
                 params=task_config,
                 priority=10,

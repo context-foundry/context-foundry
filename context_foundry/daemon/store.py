@@ -334,6 +334,7 @@ class Store:
         completed_at: Optional[datetime] = None,
         result: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Update job status and related fields
@@ -345,6 +346,8 @@ class Store:
             completed_at: Completion timestamp (for terminal statuses)
             result: Job result data (for SUCCEEDED status)
             error: Error message (for FAILED status)
+            metadata: Job metadata to merge with existing (new keys added, existing keys updated).
+                     Performs in-store read-merge-write to preserve existing metadata fields.
         """
         updates = ["status = ?"]
         params = [status.value]
@@ -368,6 +371,23 @@ class Store:
         params.append(job_id)
 
         with self._get_connection() as conn:
+            # If metadata provided, read existing and merge (new keys added, existing updated)
+            if metadata is not None:
+                cursor = conn.execute(
+                    "SELECT metadata_json FROM jobs WHERE id = ?", (job_id,)
+                )
+                row = cursor.fetchone()
+                existing_metadata = {}
+                if row and row[0]:
+                    try:
+                        existing_metadata = json.loads(row[0])
+                    except json.JSONDecodeError:
+                        pass
+                # Merge: existing keys preserved unless overwritten by new metadata
+                merged = {**existing_metadata, **metadata}
+                updates.append("metadata_json = ?")
+                params.insert(-1, json.dumps(merged))  # Insert before job_id
+
             conn.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?", params)
 
     def increment_retry_count(self, job_id: str) -> int:
