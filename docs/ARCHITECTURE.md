@@ -4,6 +4,101 @@
 
 > *"Generate probabilistically, validate deterministically."*
 
+## Ephemeral Agent Architecture
+
+### Phases vs Agents: Understanding the Terminology
+
+A common question: **Are Scout, Architect, Builder, etc. "agents" or "phases"?**
+
+**Answer: Both.** The terminology depends on perspective:
+
+| Term | Perspective | Meaning |
+|------|-------------|---------|
+| **Phase** | Pipeline orchestration | Sequential step in the build workflow |
+| **Agent** | Execution | The Claude instance doing the work |
+| **Delegate** | MCP tooling | A spawned subprocess (`delegate_to_claude_code`) |
+
+### Agent Lifecycle
+
+Each phase spawns a **fresh, ephemeral Claude instance**:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     DAEMON (Orchestrator)                        │
+│  runner.py manages pipeline state, spawns agents sequentially   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   ┌─────────┐          ┌─────────┐          ┌─────────┐
+   │  Scout  │    →     │Architect│    →     │ Builder │  → ...
+   │ Agent   │          │ Agent   │          │ Agent   │
+   └─────────┘          └─────────┘          └─────────┘
+   200K tokens          200K tokens          200K tokens
+   (ephemeral)          (ephemeral)          (ephemeral)
+        │                     │                     │
+        ▼                     ▼                     ▼
+   scout-prompt.json    architect-prompt.json  builder-prompt.json
+   scout-report.md      architecture.md        (code files)
+```
+
+**Lifecycle:**
+1. **Spawn** - Daemon calls `delegate_to_claude_code()` with phase-specific prompt
+2. **Execute** - Agent reads input artifacts, performs task, writes output artifacts
+3. **Exit** - Process terminates, context window is released (gone forever)
+4. **Handoff** - Daemon reads output artifacts, prepares prompt for next phase
+
+### Key Characteristics
+
+| Aspect | Reality |
+|--------|---------|
+| **Context Window** | Each phase gets its own fresh 200K tokens |
+| **Lifecycle** | Ephemeral - spawned, runs, exits, context gone |
+| **Communication** | Via **disk artifacts** (not shared memory) |
+| **Implementation** | Each is a `claude` CLI subprocess |
+| **State** | Persisted in `.context-foundry/` between phases |
+
+### Why Ephemeral Agents?
+
+1. **Token efficiency** - 7 phases × 200K = 1.4M potential tokens vs. one 200K window that fills up
+2. **Isolation** - Builder crashing doesn't lose Scout's analysis
+3. **Resumability** - Can restart from any phase (disk has all state)
+4. **Specialization** - Each agent gets a focused prompt for its specific task
+5. **Fresh perspective** - No context contamination from previous phases
+
+### Inter-Agent Communication
+
+Agents **never** communicate directly. All state flows through disk:
+
+```
+Scout Agent
+    │
+    ├── Writes: scout-report.md, scout-prompt.json
+    │
+    ▼
+[Daemon reads scout output, builds architect prompt]
+    │
+    ▼
+Architect Agent
+    │
+    ├── Reads: scout-report.md (injected into prompt)
+    ├── Writes: architecture.md, architect-prompt.json
+    │
+    ▼
+[Daemon reads architect output, builds builder prompt]
+    │
+    ▼
+Builder Agent
+    │
+    ├── Reads: architecture.md (injected into prompt)
+    ├── Writes: source code files, builder-prompt.json
+    ...
+```
+
+This is fundamentally different from multi-agent frameworks where agents "talk" to each other. Context Foundry agents are **stateless workers** that read artifacts, do work, write artifacts, and disappear.
+
+---
+
 ## Overview
 
 Context Foundry's core innovation is a **stateless conversation architecture** that enables unlimited-length AI coding sessions while maintaining <40% context utilization. This document explains the technical implementation and design decisions behind context management.

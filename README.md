@@ -135,6 +135,55 @@ Each phase spawns a **fresh Claude instance** with isolated context, preventing 
 
 ---
 
+## Understanding Phases and Agents
+
+A common question: **Are Scout, Architect, Builder, etc. "agents" or "phases"?**
+
+**Answer: Both.** They are **phases** from an orchestration perspective, and **ephemeral agent instances** from an execution perspective.
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     DAEMON (Orchestrator)                        │
+│  runner.py manages pipeline state, spawns agents sequentially   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+   ┌─────────┐          ┌─────────┐          ┌─────────┐
+   │  Scout  │    →     │Architect│    →     │ Builder │  → ...
+   │ Agent   │          │ Agent   │          │ Agent   │
+   └─────────┘          └─────────┘          └─────────┘
+   200K tokens          200K tokens          200K tokens
+   (ephemeral)          (ephemeral)          (ephemeral)
+        │                     │                     │
+        ▼                     ▼                     ▼
+   scout-prompt.json    architect-prompt.json  builder-prompt.json
+   scout-report.md      architecture.md        (code files)
+```
+
+### Key Characteristics
+
+| Aspect | Reality |
+|--------|---------|
+| **Context Window** | Each phase gets its own fresh 200K tokens |
+| **Lifecycle** | Ephemeral - spawned, runs, exits, context gone |
+| **Communication** | Via **disk artifacts** (not shared memory) |
+| **Implementation** | Each is a `claude` CLI subprocess |
+| **State** | Persisted in `.context-foundry/` between phases |
+
+### Why This Design?
+
+1. **Token efficiency** - 7 phases × 200K = 1.4M potential tokens vs. one 200K window that fills up
+2. **Isolation** - Builder crashing doesn't lose Scout's analysis
+3. **Resumability** - Can restart from any phase (disk has state)
+4. **Specialization** - Each agent gets a focused prompt for its specific task
+
+They're essentially **stateless workers** that read artifacts, do work, write artifacts, and disappear.
+
+---
+
 ## Quick Start
 
 ### 1. Install
