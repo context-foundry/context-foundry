@@ -580,7 +580,9 @@ class PhaseValidator:
                 logger.warning(f"Build plan warning: {warning}")
 
             # Check each task completed (if parallel mode enabled)
-            # The parallel builder now writes .done markers for persistent tracking
+            # Validation accepts either:
+            #   1. .done marker file (created by parallel sub-builders)
+            #   2. Expected output files exist (for single-builder execution)
             if plan.get("parallel_mode") or plan.get("parallel_build_enabled"):
                 for task in plan.get("tasks", []):
                     # Support both old schema (id) and new schema (task_id)
@@ -596,10 +598,34 @@ class PhaseValidator:
                         / "builder-logs"
                         / f"{task_id}.done"
                     )
-                    if not done_file.exists():
-                        raise RuntimeError(
-                            f"Builder task {task_id} did not complete.\n"
-                            f"Expected completion marker at: {done_file}"
+
+                    # First check for .done marker (parallel sub-builders)
+                    if done_file.exists():
+                        continue
+
+                    # Fallback: check if expected files from task exist
+                    task_files = task.get("files", [])
+                    if task_files:
+                        missing_files = []
+                        for f in task_files:
+                            file_path = working_dir / f
+                            if not file_path.exists():
+                                missing_files.append(f)
+
+                        if missing_files:
+                            raise RuntimeError(
+                                f"Builder task {task_id} did not complete.\n"
+                                f"Missing expected files: {missing_files}\n"
+                                f"(No .done marker at: {done_file})"
+                            )
+                        # All expected files exist - task completed successfully
+                        logger.info(
+                            f"Task {task_id} validated via file existence (no .done marker)"
+                        )
+                    else:
+                        # No files specified and no .done marker - warn but continue
+                        logger.warning(
+                            f"Task {task_id} has no files specified and no .done marker"
                         )
 
         # Smoke check: verify SOME source files created

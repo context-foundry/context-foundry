@@ -1362,6 +1362,35 @@
             gap: 8px;
         }
 
+        .sort-row select {
+            flex: 1;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding: 6px 24px 6px 10px;
+            font-size: 11px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            transition: all 0.15s ease;
+        }
+
+        .sort-row select:hover {
+            border-color: var(--text-muted);
+            background-color: var(--bg-primary);
+        }
+
+        .sort-row select:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 1px var(--accent-purple-dim);
+        }
+
         .download-btn {
             display: flex;
             align-items: center;
@@ -1845,8 +1874,11 @@
         }
 
         .thought-item {
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border-subtle);
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            align-items: baseline;
         }
 
         .thought-item:last-child {
@@ -1858,9 +1890,12 @@
         .thought-time {
             font-size: 10px;
             color: var(--text-muted);
-            margin-bottom: 2px;
-            font-style: normal;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 60px;
         }
+
+
 
         /* No activity message */
         .activity-empty {
@@ -2693,6 +2728,24 @@
                 display: none;
             }
         }
+
+
+        /* Marquee effect for long sidekick text */
+        .marquee-text {
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee 15s linear infinite;
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            100% {
+                transform: translate(-100%, 0);
+            }
+        }
     </style>
 </head>
 
@@ -2707,8 +2760,20 @@
                 <span id="connectionText">Connecting...</span>
             </div>
         </div>
-        <div class="header-right">
-            <button class="btn" onclick="reconnect()">Reconnect</button>
+        <div class="header-right" style="flex: 1; justify-content: flex-end; max-width: 800px;">
+            <div class="sidekick-container"
+                style="display: flex; align-items: center; gap: 12px; width: 100%; justify-content: flex-end;">
+                <div id="sidekickResponse" onclick="recallSidekickMessage()" title="Click to recall last message"
+                    style="font-size: 13px; color: var(--text-secondary); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; min-width: 20px; opacity: 0; transition: opacity 0.3s; cursor: pointer;">
+                </div>
+                <div class="sidekick-input-wrapper" style="position: relative; width: 300px; flex-shrink: 0;">
+                    <input type="text" id="sidekickInput" placeholder="Say something to Context Foundry..."
+                        style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 16px; padding: 6px 16px; font-size: 13px; color: var(--text-primary); outline: none; transition: all 0.2s;"
+                        onfocus="this.style.borderColor='var(--accent-purple)'; this.style.boxShadow='0 0 0 2px var(--accent-purple-dim)';"
+                        onblur="this.style.borderColor='var(--border)'; this.style.boxShadow='none';"
+                        onkeydown="handleSidekickChat(event)">
+                </div>
+            </div>
         </div>
     </header>
 
@@ -2778,6 +2843,8 @@
                 <div class="activity-panel-title">
                     <span class="activity-live-dot" id="activityLiveDot"></span>
                     <span>Agent Activity</span>
+                    <span id="activityAgentName"
+                        style="font-size: 11px; color: var(--text-muted); font-weight: normal; margin-left: 8px;"></span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button class="activity-close-btn" onclick="toggleActivityExpanded()" title="Toggle Fullscreen">
@@ -5966,6 +6033,14 @@
             };
             renderActivityPanel();
 
+            // Update agent name based on job phase
+            const job = state.rawJobs.find(j => j.id === jobId);
+            const agentNameEl = document.getElementById('activityAgentName');
+            if (job && agentNameEl) {
+                const phase = job.phase || 'Unknown';
+                agentNameEl.textContent = `(${phase} Agent)`;
+            }
+
             // Connect to SSE endpoint (pass auth as query param since EventSource doesn't support headers)
             const authParam = state.authToken ? `&auth=${encodeURIComponent(state.authToken)}` : '';
             const url = `/agent-activity?job_id=${encodeURIComponent(jobId)}${authParam}`;
@@ -6540,6 +6615,86 @@
             const processingPrompt = prompts?.find(p => p.state === 'processing');
             if (processingPrompt && !state.activityPanelVisible) {
                 showActivityPanel(jobId);
+            }
+        }
+        // ===== SIDEKICK CHAT FUNCTIONS =====
+
+        let sidekickTimeout;
+        let lastSidekickMessage = "";
+
+        function recallSidekickMessage() {
+            const responseEl = document.getElementById('sidekickResponse');
+            if (lastSidekickMessage) {
+                responseEl.textContent = lastSidekickMessage; // Set content before making visible
+                responseEl.style.opacity = '1';
+                responseEl.style.color = 'var(--accent-purple)'; // Assuming recalled messages are successful ones
+                // Reset timeout
+                if (sidekickTimeout) clearTimeout(sidekickTimeout);
+                sidekickTimeout = setTimeout(() => {
+                    responseEl.style.opacity = '0';
+                }, 8000);
+            }
+        }
+
+        async function handleSidekickChat(event) {
+            if (event.key === 'Enter') {
+                const input = event.target;
+                const message = input.value.trim();
+                if (!message) return;
+
+                // Disable input while thinking
+                input.disabled = true;
+
+                const responseEl = document.getElementById('sidekickResponse');
+                responseEl.textContent = "Thinking...";
+                responseEl.className = ""; // Reset marquee
+                responseEl.style.opacity = '1';
+                responseEl.style.color = 'var(--text-muted)';
+
+                if (sidekickTimeout) clearTimeout(sidekickTimeout);
+
+                try {
+                    const response = await fetch('/sidekick-chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CF-Auth': state.authToken || ''
+                        },
+                        body: JSON.stringify({ message })
+                    });
+
+                    // Re-enable input and clear it
+                    input.disabled = false;
+                    input.value = '';
+                    input.focus();
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const text = data.response;
+                        lastSidekickMessage = text;
+
+                        responseEl.textContent = text;
+                        responseEl.title = text; // Show full text on hover
+                        responseEl.style.color = 'var(--accent-purple)';
+                        responseEl.style.opacity = '1'; // Ensure it's visible
+
+                        // Removed marquee logic as it was causing text to disappear.
+                        // User can hover to read full text or click to recall.
+
+                        // Fade out after a while (longer duration)
+                        sidekickTimeout = setTimeout(() => {
+                            responseEl.style.opacity = '0';
+                        }, 12000);
+                    } else {
+                        responseEl.textContent = "I'm having a bit of a glitch moment.";
+                        responseEl.style.color = 'var(--accent-red)';
+                    }
+                } catch (err) {
+                    console.error('Sidekick chat error:', err);
+                    input.disabled = false;
+                    responseEl.textContent = "Can't reach the daemon right now.";
+                    responseEl.style.color = 'var(--accent-red)';
+                }
             }
         }
     </script>

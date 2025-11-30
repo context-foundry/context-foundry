@@ -175,6 +175,8 @@ class Runner:
                     if not new_path.exists():
                         # Found unique directory name
                         working_dir = str(new_path)
+                        # Create the directory immediately to ensure it exists for the build script
+                        new_path.mkdir(parents=True, exist_ok=True)
                         logger.info(
                             f"Appending random ID for new project: {original_name} → {new_name}"
                         )

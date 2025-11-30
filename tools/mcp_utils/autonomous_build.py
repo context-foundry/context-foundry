@@ -2502,7 +2502,8 @@ def execute_build_with_phase_spawning(
                             datetime.now() - start_time
                         ).total_seconds(),
                         "phases_completed": phases_completed,
-                        "test_iterations": test_iteration,
+                        # Report 1-based count of iterations run
+                        "test_iterations": test_iteration + 1,
                     }
 
                 # ENFORCEMENT: Check Architect stayed within budget (14K tokens)

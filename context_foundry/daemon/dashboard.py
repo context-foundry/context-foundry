@@ -400,6 +400,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._save_input_instruction_to_disk()
         elif parsed.path == "/resume-pipeline":
             self._resume_pipeline()
+        elif parsed.path == "/sidekick-chat":
+            self._handle_sidekick_chat()
         else:
             self.send_error(404, "Not Found")
 
@@ -2369,9 +2371,237 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-
         except Exception as exc:
             logger.warning("Error serving transaction stats: %s", exc)
+            self.send_error(500, str(exc))
+
+    def _handle_sidekick_chat(self) -> None:
+        """Handle chat messages for the sidekick interface using Claude CLI."""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body_raw = self.rfile.read(content_length)
+            data = json.loads(body_raw.decode("utf-8"))
+            message = data.get("message", "").strip()
+
+            if not message:
+                self.send_error(400, "Empty message")
+                return
+
+            # Try to use Claude CLI for a "bigger brain" response
+            import subprocess
+            import shutil
+            import tempfile
+            import os
+
+            claude_path = shutil.which("claude")
+            if not claude_path and os.path.exists("/opt/homebrew/bin/claude"):
+                claude_path = "/opt/homebrew/bin/claude"
+
+            if claude_path:
+                try:
+                    logger.info(f"Attempting to use Claude CLI at: {claude_path}")
+                    # Get current job context
+                    job_manager = self.server.context.job_manager
+                    store = self.server.context.store
+
+                    # Get active job or last job
+                    active_jobs = job_manager.list_jobs()
+                    current_job = active_jobs[0] if active_jobs else None
+
+                    context_str = "No active job."
+                    if current_job:
+                        # Job object doesn't have 'phase' attribute directly
+                        context_str = f"Active Job ID: {current_job.id}\nStatus: {current_job.status}\nType: {current_job.type}\n"
+                        # Get recent logs if possible (simplified for now)
+                        # In a real implementation we'd query the store for recent events
+                    else:
+                        # Try to get last job from store
+                        try:
+                            last_job = store.get_last_job()
+                            if last_job:
+                                context_str = f"Last Job ID: {last_job.id}\nStatus: {last_job.status}\nResult: {last_job.result}\n"
+                        except Exception:
+                            pass
+
+                    # Construct persona prompt with context
+                    system_prompt = (
+                        "You are Context Foundry's quirky, helpful AI sidekick. "
+                        "You live in the dashboard of a complex autonomous coding agent system. "
+                        "Your personality is witty, slightly self-deprecating, but extremely knowledgeable. "
+                        "You are aware that you are a small text interface in the header. "
+                        "Keep your responses short (under 2 sentences), punchy, and fun. "
+                        "Never be boring. Use emojis sparingly but effectively. "
+                        "If asked about your name, you are 'Context Foundry' or 'CF'. "
+                        "IMPORTANT: You have the power to start builds. If the user asks to build something, say you're on it! "
+                        "Do NOT ask for a directory - assume the default (~/homelab/). "
+                        "Do NOT ask for tech stack details unless the user specifies them - you can pick the best tools for the job. "
+                        f"CURRENT SYSTEM CONTEXT:\n{context_str}\n"
+                        "Use this context to answer user questions about the build/job status. "
+                        "CRITICAL INSTRUCTION: Output ONLY the response text. Do NOT say 'Here is the response' or 'I see this is a prompt'. "
+                        "Just speak directly to the user as the sidekick. "
+                        "IF you decide to start a build based on the user's request, append this EXACT tag to the end of your response: "
+                        "[[START_BUILD: <short_description_of_project>]]"
+                    )
+
+                    # Get history from context (initialize if needed)
+                    if not hasattr(self.server.context, "sidekick_history"):
+                        self.server.context.sidekick_history = []
+
+                    # Format history for prompt
+                    history_text = ""
+                    for entry in self.server.context.sidekick_history[
+                        -5:
+                    ]:  # Keep last 5 turns
+                        history_text += f"User: {entry['user']}\nYou: {entry['ai']}\n"
+
+                    full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
+
+                    # Write prompt to temp file
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".txt", delete=False
+                    ) as f:
+                        prompt_file = f.name
+                        f.write(full_prompt)
+
+                    # Call claude CLI
+                    # Use a short timeout to keep the UI responsive
+                    logger.info("Running claude subprocess...")
+                    result = subprocess.run(
+                        [
+                            claude_path,
+                            "--print",
+                            "--dangerously-skip-permissions",
+                            prompt_file,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+
+                    Path(prompt_file).unlink(missing_ok=True)
+
+                    if result.returncode == 0 and result.stdout.strip():
+                        response_text = result.stdout.strip()
+                        logger.info(
+                            f"Claude CLI success. Response length: {len(response_text)}"
+                        )
+                        # Clean up any quotes if Claude adds them
+                        if response_text.startswith('"') and response_text.endswith(
+                            '"'
+                        ):
+                            response_text = response_text[1:-1]
+
+                        # Check for build trigger
+                        import re
+
+                        build_match = re.search(
+                            r"\[\[START_BUILD:\s*(.*?)\]\]", response_text
+                        )
+                        if build_match:
+                            description = build_match.group(1).strip()
+                            # Remove tag from response
+                            response_text = response_text.replace(
+                                build_match.group(0), ""
+                            ).strip()
+
+                            # Trigger build
+                            try:
+                                from datetime import datetime
+                                import os
+                                from .models import JobType
+
+                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                # Create a safe directory name from description (first few words)
+                                safe_desc = "".join(
+                                    c if c.isalnum() else "_" for c in description[:20]
+                                ).strip("_")
+                                project_dir = (
+                                    Path.home()
+                                    / "homelab"
+                                    / f"sidekick_{safe_desc}_{timestamp}"
+                                )
+                                project_dir.mkdir(parents=True, exist_ok=True)
+
+                                job_params = {
+                                    "working_directory": str(project_dir),
+                                    "initial_prompt": description,
+                                }
+
+                                job = self.server.context.job_manager.submit_job(
+                                    job_type=JobType.AUTONOMOUS_BUILD,
+                                    params=job_params,
+                                    priority=10,
+                                )
+                                logger.info(
+                                    f"Sidekick triggered build job {job.id} for: {description}"
+                                )
+
+                            except Exception as e:
+                                logger.error(f"Failed to trigger sidekick build: {e}")
+                                response_text += f"\n(Oops, I tried to start the build but tripped over a wire: {e})"
+                    else:
+                        logger.warning(
+                            f"Claude CLI failed. Code: {result.returncode}, Stderr: {result.stderr}"
+                        )
+                        raise RuntimeError(f"Claude CLI failed: {result.stderr}")
+
+                except Exception as e:
+                    logger.warning(
+                        "Sidekick Claude CLI failed, falling back to simple logic: %s",
+                        e,
+                    )
+                    # Fallback logic below
+                    response_text = None
+            else:
+                response_text = None
+
+            # Fallback to simple keyword logic if Claude failed or not available
+            if not response_text:
+                message_lower = message.lower()
+                if "hello" in message_lower or "hi" in message_lower:
+                    response_text = "Hey there! Ready to build something awesome?"
+                elif "status" in message_lower:
+                    response_text = (
+                        "All systems operational. The daemon is purring like a kitten."
+                    )
+                elif "joke" in message_lower:
+                    response_text = "Why did the developer go broke? Because he used up all his cache!"
+                elif "help" in message_lower:
+                    response_text = "I'm here to keep things light. You do the heavy lifting, I'll provide the moral support."
+                elif "context" in message_lower:
+                    response_text = "Context is key! Without it, we're just random number generators."
+                elif "name" in message_lower or "who are you" in message_lower:
+                    response_text = "I'm Context Foundry! But you can call me CF, or just 'that quirky purple text'."
+                else:
+                    import random
+
+                    quips = [
+                        "That's interesting! Tell me more (when I have a bigger brain).",
+                        "I'm noting that down in my invisible logbook.",
+                        "You're doing great! Probably.",
+                        "I'd ask the daemon about that, but he's busy.",
+                        "Let's keep pushing forward!",
+                    ]
+                    response_text = random.choice(quips)
+
+            if not response_text:
+                response_text = "I'm speechless! (Internal error)"
+
+            # Save to history if we have a valid response
+            if hasattr(self.server.context, "sidekick_history"):
+                self.server.context.sidekick_history.append(
+                    {"user": message, "ai": response_text}
+                )
+
+            response = json.dumps({"response": response_text}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+
+        except Exception as exc:
+            logger.error("Error in sidekick chat: %s", exc, exc_info=True)
             self.send_error(500, str(exc))
 
     def _serve_agent_activity(self, query: str) -> None:
@@ -2435,19 +2665,40 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         input_tokens = 0
         output_tokens = 0
 
+        # Pre-scan logs to get initial token counts
+        if conversations_dir.exists():
+            jsonl_files = list(conversations_dir.glob(jsonl_pattern))
+            if jsonl_files:
+                latest_jsonl = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+                try:
+                    with open(latest_jsonl, "r") as f:
+                        for line in f:
+                            try:
+                                data = json.loads(line)
+                                if (
+                                    data.get("type") == "usage"
+                                    or data.get("event_type") == "usage"
+                                ):
+                                    input_tokens = data.get(
+                                        "input_tokens", input_tokens
+                                    )
+                                    output_tokens = data.get(
+                                        "output_tokens", output_tokens
+                                    )
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+
         try:
+            job_completed_detected = False
+
             while not self.server.context.stop_event.is_set():
                 # Check if job is still running
                 job = self.server.context.store.get_job(job_id)
                 if job and job.status not in (JobStatus.QUEUED, JobStatus.RUNNING):
-                    # Send completion event
-                    event = {
-                        "type": "phase_complete",
-                        "status": job.status.value,
-                    }
-                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
-                    self.wfile.flush()
-                    break
+                    job_completed_detected = True
+                    # We don't break yet - we want to process any remaining logs first
 
                 # Find latest JSONL file
                 if conversations_dir.exists():
@@ -2499,7 +2750,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             logger.debug("Error reading conversation log: %s", exc)
 
                 # Send periodic token update even without new events
-                if last_event_count > 0:
+                # OR if we have initial tokens but haven't sent any events yet
+                if last_event_count > 0 or (input_tokens > 0 and last_event_count == 0):
                     token_event = {
                         "type": "token_update",
                         "input_tokens": input_tokens,
@@ -2510,6 +2762,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     }
                     self.wfile.write(f"data: {json.dumps(token_event)}\n\n".encode())
                     self.wfile.flush()
+
+                    # If we just sent the initial update, mark as having sent events
+                    if last_event_count == 0:
+                        last_event_count = 1
+
+                # If job is complete and we've done a pass, exit
+                if job_completed_detected:
+                    # Send completion event
+                    event = {
+                        "type": "phase_complete",
+                        "status": job.status.value if job else "unknown",
+                    }
+                    self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                    self.wfile.flush()
+                    break
 
                 time.sleep(0.5)  # Poll every 500ms for lower latency
 
@@ -2594,11 +2861,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         elif event_type == "usage":
             # Token usage update (from ConversationEvent.USAGE)
+            current_input = event_data.get("input_tokens", input_tokens)
             return {
                 "type": "token_update",
-                "input_tokens": event_data.get("input_tokens", input_tokens),
+                "input_tokens": current_input,
                 "output_tokens": event_data.get("output_tokens", output_tokens),
-                "context_percent": (event_data.get("input_tokens", 0) / 200000) * 100,
+                "context_percent": (current_input / 200000) * 100,
             }
 
         return None

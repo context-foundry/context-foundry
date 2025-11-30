@@ -34,6 +34,10 @@ logs/
 
 # Session data and patterns (local + S3 backup, NOT GitHub)
 .context-foundry/
+**/.context-foundry/
+**/conversations/
+**/chat_history/
+**/*.jsonl
 blueprints/
 checkpoints/
 checkpoints/artifacts/temp/
