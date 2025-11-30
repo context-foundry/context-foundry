@@ -90,102 +90,391 @@ def _read_conversation_preview(
     }
 
 
+def _get_file_info(fpath: Path) -> Optional[Dict[str, Any]]:
+    """Get file info dict for an artifact, or None if file doesn't exist."""
+    if not fpath.exists():
+        return None
+    try:
+        stat = fpath.stat()
+        return {
+            "path": str(fpath),
+            "size": stat.st_size,
+            "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        }
+    except Exception:
+        return None
+
+
+def _read_artifact_manifest(
+    cf_dir: Path, working_path: Path
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """
+    Read artifact manifest from .context-foundry/artifacts.json.
+
+    Manifest schema:
+    {
+        "artifacts": [
+            {
+                "phase": "Screenshot",
+                "name": "hero.png",
+                "path": "docs/screenshots/hero.png",
+                "type": "image/png"
+            },
+            ...
+        ]
+    }
+
+    Returns dict keyed by phase, with outputs dict for each phase.
+    Returns None if manifest doesn't exist or is invalid.
+    """
+    manifest_path = cf_dir / "artifacts.json"
+    if not manifest_path.exists():
+        return None
+
+    try:
+        with open(manifest_path) as f:
+            data = json.load(f)
+
+        artifacts_list = data.get("artifacts", [])
+        if not isinstance(artifacts_list, list):
+            return None
+
+        # Group by phase
+        by_phase: Dict[str, Dict[str, Any]] = {}
+        for entry in artifacts_list:
+            if not isinstance(entry, dict):
+                continue
+
+            phase = entry.get("phase")
+            name = entry.get("name")
+            rel_path = entry.get("path")
+
+            if not phase or not name or not rel_path:
+                continue
+
+            # Security: validate path (no traversal, no absolute paths)
+            try:
+                # Reject absolute paths in manifest
+                if os.path.isabs(rel_path):
+                    logger.warning(
+                        f"Manifest contains absolute path (rejected): {rel_path}"
+                    )
+                    continue
+
+                # Resolve the path relative to working directory
+                working_resolved = working_path.resolve()
+                full_path = (working_path / rel_path).resolve()
+
+                # Use relative_to() - raises ValueError if not actually within base
+                # This is safer than string prefix checking which has collision issues
+                # (e.g., /tmp/project-evil starts with /tmp/project)
+                try:
+                    full_path.relative_to(working_resolved)
+                except ValueError:
+                    logger.warning(f"Manifest path traversal attempt: {rel_path}")
+                    continue
+            except Exception:
+                continue
+
+            # Get file info (skip if missing)
+            info = _get_file_info(full_path)
+            if not info:
+                # File declared in manifest but missing - still record it
+                # so frontend knows it was expected
+                info = {
+                    "path": str(full_path),
+                    "size": 0,
+                    "modified": None,
+                    "missing": True,
+                }
+
+            # Add optional metadata from manifest
+            if entry.get("type"):
+                info["type"] = entry["type"]
+
+            # Determine the key for this artifact
+            # Frontend PHASE_FILE_MAP expects specific keys per phase:
+            # - Scout: scout-report.md, scout_report.json (filename only)
+            # - Architect: architecture.md, architecture.json (filename only)
+            # - Test: test-report.md (filename only)
+            # - Screenshot: docs/screenshots/hero.png (with path)
+            # - Documentation: README.md (filename only)
+            # - Deploy: session-summary.json (filename only)
+            #
+            # Agents may put files in various locations (docs/, .context-foundry/, root).
+            # We normalize to match frontend expectations.
+            if phase == "Screenshot" and entry.get("hero"):
+                # Hero screenshot uses standard key
+                artifact_key = "docs/screenshots/hero.png"
+            else:
+                # Normalize path: convert backslashes to forward slashes, strip leading ./
+                normalized = rel_path.replace("\\", "/")
+                while normalized.startswith("./"):
+                    normalized = normalized[2:]
+
+                # Extract filename for comparison
+                filename = (
+                    normalized.rsplit("/", 1)[-1] if "/" in normalized else normalized
+                )
+                filename_lower = filename.lower()
+
+                # Phase-specific normalization to match PHASE_FILE_MAP
+                # These phases expect filename-only keys (case-insensitive match)
+                filename_only_artifacts = {
+                    # Scout phase
+                    "scout-report.md": "scout-report.md",
+                    "scout_report.json": "scout_report.json",
+                    # Architect phase
+                    "architecture.md": "architecture.md",
+                    "architecture.json": "architecture.json",
+                    # Test phase
+                    "test-report.md": "test-report.md",
+                    # Documentation phase
+                    "readme.md": "README.md",
+                    # Deploy phase
+                    "session-summary.json": "session-summary.json",
+                }
+
+                if filename_lower in filename_only_artifacts:
+                    # Use the canonical key (properly cased)
+                    artifact_key = filename_only_artifacts[filename_lower]
+                elif normalized.startswith(".context-foundry/"):
+                    # Strip .context-foundry/ prefix for other files
+                    artifact_key = normalized[len(".context-foundry/") :]
+                else:
+                    # Keep full path for non-standard artifacts
+                    artifact_key = normalized
+
+            # Group by phase
+            if phase not in by_phase:
+                by_phase[phase] = {"outputs": {}}
+            by_phase[phase]["outputs"][artifact_key] = info
+
+        return by_phase if by_phase else None
+
+    except Exception as e:
+        logger.debug(f"Failed to read artifact manifest: {e}")
+        return None
+
+
 def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
     """
     Get phase artifact files for a job.
+
+    First checks .context-foundry/artifacts.json manifest (if present).
+    Falls back to directory scanning for backwards compatibility.
 
     Returns dict with artifact info for each phase:
     - Scout: scout-report.md, scout_report.json
     - Architect: architecture.md, architecture.json
     - Builder: (project files)
     - Test: test-report.md
+    - Screenshot: docs/screenshots/hero.png and other screenshots
+    - Documentation: README.md at project root
+    - Deploy: session-summary.json
     """
     working_dir = job.params.get("working_directory") or job.params.get("project_path")
     if not working_dir:
         return {}
 
-    cf_dir = Path(working_dir) / ".context-foundry"
+    working_path = Path(working_dir)
+    cf_dir = working_path / ".context-foundry"
     if not cf_dir.exists():
         return {}
 
-    artifacts = {}
+    # Try manifest first (agent-declared artifacts)
+    manifest_artifacts = _read_artifact_manifest(cf_dir, working_path)
 
-    # Scout artifacts
-    scout_files = {}
-    for fname in ["scout-report.md", "scout_report.json"]:
-        fpath = cf_dir / fname
-        if fpath.exists():
-            try:
-                stat = fpath.stat()
-                scout_files[fname] = {
-                    "path": str(fpath),
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                }
-            except Exception:
-                pass
-    if scout_files:
-        artifacts["Scout"] = {"outputs": scout_files}
+    # Start with manifest artifacts if available
+    artifacts = manifest_artifacts.copy() if manifest_artifacts else {}
 
-    # Architect artifacts
-    architect_files = {}
-    for fname in ["architecture.md", "architecture.json"]:
-        fpath = cf_dir / fname
-        if fpath.exists():
-            try:
-                stat = fpath.stat()
-                architect_files[fname] = {
-                    "path": str(fpath),
-                    "size": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                }
-            except Exception:
-                pass
-    if architect_files:
-        artifacts["Architect"] = {"outputs": architect_files}
+    # Fall back to / supplement with directory scanning
+    # (scanning fills in gaps not covered by manifest)
 
-    # Test artifacts (may have iterations)
+    # Scout artifacts (skip if manifest already has them)
+    if "Scout" not in artifacts:
+        scout_files = {}
+        for fname in ["scout-report.md", "scout_report.json"]:
+            info = _get_file_info(cf_dir / fname)
+            if info:
+                scout_files[fname] = info
+        if scout_files:
+            artifacts["Scout"] = {"outputs": scout_files}
+
+    # Architect artifacts (skip if manifest already has them)
+    # Check .context-foundry/, docs/, and project root (case-insensitive for both .md and .json)
+    if "Architect" not in artifacts:
+        architect_files = {}
+        # Check .context-foundry/ first (exact match)
+        for fname in ["architecture.md", "architecture.json"]:
+            info = _get_file_info(cf_dir / fname)
+            if info:
+                architect_files[fname] = info
+
+        # For files not found, check docs/ and project root (case-insensitive)
+        docs_dir = working_path / "docs"
+        for target_name, target_lower in [
+            ("architecture.md", "architecture.md"),
+            ("architecture.json", "architecture.json"),
+        ]:
+            if target_name in architect_files:
+                continue
+            # Check docs/ directory
+            if docs_dir.exists():
+                for fpath in docs_dir.iterdir():
+                    if fpath.is_file() and fpath.name.lower() == target_lower:
+                        info = _get_file_info(fpath)
+                        if info:
+                            architect_files[target_name] = info
+                        break
+            # Check project root if still not found
+            if target_name not in architect_files:
+                for fpath in working_path.iterdir():
+                    if fpath.is_file() and fpath.name.lower() == target_lower:
+                        info = _get_file_info(fpath)
+                        if info:
+                            architect_files[target_name] = info
+                        break
+
+        if architect_files:
+            artifacts["Architect"] = {"outputs": architect_files}
+
+    # Test artifacts (skip if manifest already has them)
     # Also search nested .context-foundry directories (agents sometimes create files in subdirs)
-    test_files = {}
-    # First check root .context-foundry
-    for fpath in cf_dir.glob("test-report*.md"):
-        try:
-            stat = fpath.stat()
-            test_files[fpath.name] = {
-                "path": str(fpath),
-                "size": stat.st_size,
-                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-            }
-        except Exception:
-            pass
-    # Also check nested .context-foundry directories (fallback for agent behavior)
-    if not test_files:
-        working_path = Path(working_dir)
-        for nested_cf in working_path.glob("**/.context-foundry"):
-            if nested_cf == cf_dir:
-                continue  # Skip root, already checked
-            for fpath in nested_cf.glob("test-report*.md"):
-                try:
-                    stat = fpath.stat()
-                    # Include relative path in name to distinguish nested files
-                    rel_path = fpath.relative_to(working_path)
-                    test_files[str(rel_path)] = {
-                        "path": str(fpath),
-                        "size": stat.st_size,
-                        "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    }
-                except Exception:
-                    pass
-    if test_files:
-        artifacts["Test"] = {"outputs": test_files}
+    if "Test" not in artifacts:
+        test_files = {}
+        # First check root .context-foundry
+        for fpath in cf_dir.glob("test-report*.md"):
+            info = _get_file_info(fpath)
+            if info:
+                test_files[fpath.name] = info
+        # Also check nested .context-foundry directories (fallback for agent behavior)
+        if not test_files:
+            for nested_cf in working_path.glob("**/.context-foundry"):
+                if nested_cf == cf_dir:
+                    continue  # Skip root, already checked
+                for fpath in nested_cf.glob("test-report*.md"):
+                    info = _get_file_info(fpath)
+                    if info:
+                        # Include relative path in name to distinguish nested files
+                        rel_path = fpath.relative_to(working_path)
+                        test_files[str(rel_path)] = info
+        if test_files:
+            artifacts["Test"] = {"outputs": test_files}
 
-    # Session summary (overall build info)
-    session_file = cf_dir / "session-summary.json"
-    if session_file.exists():
-        try:
-            with open(session_file) as f:
-                import json
+    # Screenshot artifacts (skip if manifest already has them)
+    # Check multiple possible locations, case-insensitive, multiple formats
+    if "Screenshot" not in artifacts:
+        screenshot_files = {}
+        # Supported image formats
+        image_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+        # Locations where agents might put screenshots (in priority order)
+        screenshot_dirs = [
+            working_path / "docs" / "screenshots",
+            working_path / "screenshots",
+            working_path / "assets" / "screenshots",
+            working_path / "images",
+        ]
+        for screenshots_dir in screenshot_dirs:
+            if not screenshots_dir.exists():
+                continue
+            # Look for hero image (case-insensitive, any supported format)
+            # Frontend expects key "docs/screenshots/hero.png"
+            if "docs/screenshots/hero.png" not in screenshot_files:
+                for fpath in screenshots_dir.iterdir():
+                    if not fpath.is_file():
+                        continue
+                    stem_lower = fpath.stem.lower()
+                    ext_lower = fpath.suffix.lower()
+                    if stem_lower == "hero" and ext_lower in image_extensions:
+                        info = _get_file_info(fpath)
+                        if info:
+                            # Use the key frontend expects
+                            screenshot_files["docs/screenshots/hero.png"] = info
+                        break
+            # Collect other screenshots (all supported formats)
+            for fpath in screenshots_dir.iterdir():
+                if not fpath.is_file():
+                    continue
+                ext_lower = fpath.suffix.lower()
+                stem_lower = fpath.stem.lower()
+                if ext_lower not in image_extensions:
+                    continue
+                if stem_lower == "hero":
+                    continue  # Already handled above
+                rel_path = fpath.relative_to(working_path)
+                key = str(rel_path)
+                if key not in screenshot_files:
+                    info = _get_file_info(fpath)
+                    if info:
+                        screenshot_files[key] = info
+        if screenshot_files:
+            artifacts["Screenshot"] = {"outputs": screenshot_files}
 
+    # Documentation artifacts (skip if manifest already has them)
+    # Check README.md at project root
+    if "Documentation" not in artifacts:
+        doc_files = {}
+        readme_path = working_path / "README.md"
+        info = _get_file_info(readme_path)
+        if info:
+            doc_files["README.md"] = info
+        # Also check for other common doc files
+        for fname in ["CHANGELOG.md", "CONTRIBUTING.md", "LICENSE"]:
+            info = _get_file_info(working_path / fname)
+            if info:
+                doc_files[fname] = info
+        if doc_files:
+            artifacts["Documentation"] = {"outputs": doc_files}
+
+    # Deploy artifacts (skip if manifest already has them)
+    # Check .context-foundry/ and project root
+    # Track where we find session-summary.json for _session parsing
+    found_session_path: Optional[Path] = None
+
+    if "Deploy" not in artifacts:
+        deploy_files = {}
+        # Check .context-foundry/ first (preferred location)
+        session_file = cf_dir / "session-summary.json"
+        info = _get_file_info(session_file)
+        if info:
+            deploy_files["session-summary.json"] = info
+            found_session_path = session_file
+        else:
+            # Fallback: check project root
+            root_session = working_path / "session-summary.json"
+            info = _get_file_info(root_session)
+            if info:
+                deploy_files["session-summary.json"] = info
+                found_session_path = root_session
+        # Check for deploy-log.md in both locations
+        deploy_log = cf_dir / "deploy-log.md"
+        info = _get_file_info(deploy_log)
+        if info:
+            deploy_files["deploy-log.md"] = info
+        else:
+            info = _get_file_info(working_path / "deploy-log.md")
+            if info:
+                deploy_files["deploy-log.md"] = info
+        if deploy_files:
+            artifacts["Deploy"] = {"outputs": deploy_files}
+    else:
+        # Manifest provided Deploy artifacts - check if session-summary exists there
+        deploy_outputs = artifacts.get("Deploy", {}).get("outputs", {})
+        if "session-summary.json" in deploy_outputs:
+            path_str = deploy_outputs["session-summary.json"].get("path")
+            if path_str:
+                found_session_path = Path(path_str)
+
+    # Session summary (overall build info) - parsed for phase status
+    # Use the session file we actually found (could be .context-foundry/ or root)
+    if found_session_path is None:
+        # Last fallback: check standard location
+        found_session_path = cf_dir / "session-summary.json"
+
+    if found_session_path.exists():
+        try:
+            with open(found_session_path) as f:
                 session = json.load(f)
                 artifacts["_session"] = {
                     "phases": session.get("phases", {}),
@@ -2390,7 +2679,6 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             # Try to use Claude CLI for a "bigger brain" response
             import subprocess
             import shutil
-            import tempfile
             import os
 
             claude_path = shutil.which("claude")
@@ -2424,23 +2712,23 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             pass
 
                     # Construct persona prompt with context
+                    # Construct direct assistant prompt
                     system_prompt = (
-                        "You are Context Foundry's quirky, helpful AI sidekick. "
-                        "You live in the dashboard of a complex autonomous coding agent system. "
-                        "Your personality is witty, slightly self-deprecating, but extremely knowledgeable. "
-                        "You are aware that you are a small text interface in the header. "
-                        "Keep your responses short (under 2 sentences), punchy, and fun. "
-                        "Never be boring. Use emojis sparingly but effectively. "
-                        "If asked about your name, you are 'Context Foundry' or 'CF'. "
-                        "IMPORTANT: You have the power to start builds. If the user asks to build something, say you're on it! "
-                        "Do NOT ask for a directory - assume the default (~/homelab/). "
-                        "Do NOT ask for tech stack details unless the user specifies them - you can pick the best tools for the job. "
-                        f"CURRENT SYSTEM CONTEXT:\n{context_str}\n"
-                        "Use this context to answer user questions about the build/job status. "
-                        "CRITICAL INSTRUCTION: Output ONLY the response text. Do NOT say 'Here is the response' or 'I see this is a prompt'. "
-                        "Just speak directly to the user as the sidekick. "
-                        "IF you decide to start a build based on the user's request, append this EXACT tag to the end of your response: "
-                        "[[START_BUILD: <short_description_of_project>]]"
+                        "You are Claude, an intelligent assistant helping the user with Context Foundry. "
+                        "You can answer questions about the system status and help start new projects. "
+                        "Keep your responses concise and helpful. "
+                        "\n\n"
+                        "CAPABILITIES:\n"
+                        "1. Answer questions about the current job or system status.\n"
+                        "2. Start new autonomous builds.\n"
+                        "\n"
+                        f"CURRENT SYSTEM STATUS:\n{context_str}\n"
+                        "\n"
+                        "INSTRUCTIONS:\n"
+                        "- If the user wants to build something, confirm you are starting it.\n"
+                        "- To trigger the build, you MUST append this tag to the end of your response:\n"
+                        "  [[START_BUILD: <short_description_of_project>]]\n"
+                        "- Assume the default directory (~/homelab/) unless specified."
                     )
 
                     # Get history from context (initialize if needed)
@@ -2456,31 +2744,23 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
 
-                    # Write prompt to temp file
-                    with tempfile.NamedTemporaryFile(
-                        mode="w", suffix=".txt", delete=False
-                    ) as f:
-                        prompt_file = f.name
-                        f.write(full_prompt)
-
                     # Call claude CLI
                     # Use a short timeout to keep the UI responsive
                     logger.info("Running claude subprocess...")
                     result = subprocess.run(
                         [
                             claude_path,
+                            "-p",
                             "--print",
                             "--dangerously-skip-permissions",
-                            prompt_file,
                         ],
+                        input=full_prompt,
                         capture_output=True,
                         text=True,
                         timeout=15,
                     )
 
-                    Path(prompt_file).unlink(missing_ok=True)
-
-                    if result.returncode == 0 and result.stdout.strip():
+                    if result.returncode == 0 and result.stdout:
                         response_text = result.stdout.strip()
                         logger.info(
                             f"Claude CLI success. Response length: {len(response_text)}"
@@ -2543,46 +2823,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         logger.warning(
                             f"Claude CLI failed. Code: {result.returncode}, Stderr: {result.stderr}"
                         )
-                        raise RuntimeError(f"Claude CLI failed: {result.stderr}")
+                        # Don't raise, just let it fall through to error message
+                        response_text = None
 
                 except Exception as e:
-                    logger.warning(
-                        "Sidekick Claude CLI failed, falling back to simple logic: %s",
-                        e,
-                    )
-                    # Fallback logic below
+                    logger.warning("Sidekick Claude CLI failed: %s", e)
                     response_text = None
             else:
                 response_text = None
 
-            # Fallback to simple keyword logic if Claude failed or not available
+            # Fallback if Claude failed
             if not response_text:
-                message_lower = message.lower()
-                if "hello" in message_lower or "hi" in message_lower:
-                    response_text = "Hey there! Ready to build something awesome?"
-                elif "status" in message_lower:
-                    response_text = (
-                        "All systems operational. The daemon is purring like a kitten."
-                    )
-                elif "joke" in message_lower:
-                    response_text = "Why did the developer go broke? Because he used up all his cache!"
-                elif "help" in message_lower:
-                    response_text = "I'm here to keep things light. You do the heavy lifting, I'll provide the moral support."
-                elif "context" in message_lower:
-                    response_text = "Context is key! Without it, we're just random number generators."
-                elif "name" in message_lower or "who are you" in message_lower:
-                    response_text = "I'm Context Foundry! But you can call me CF, or just 'that quirky purple text'."
-                else:
-                    import random
-
-                    quips = [
-                        "That's interesting! Tell me more (when I have a bigger brain).",
-                        "I'm noting that down in my invisible logbook.",
-                        "You're doing great! Probably.",
-                        "I'd ask the daemon about that, but he's busy.",
-                        "Let's keep pushing forward!",
-                    ]
-                    response_text = random.choice(quips)
+                response_text = "I'm having trouble connecting to my brain right now. Please try again in a moment."
 
             if not response_text:
                 response_text = "I'm speechless! (Internal error)"

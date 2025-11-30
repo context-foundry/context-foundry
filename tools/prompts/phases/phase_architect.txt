@@ -351,6 +351,20 @@ After Builder implements:
 **REMEMBER**: You are creating a SPECIFICATION for the Builder, not implementing yourself!
 
 ═══════════════════════════════════════════════════════════
+ARTIFACT MANIFEST REGISTRATION
+═══════════════════════════════════════════════════════════
+
+After creating architecture files, register them for dashboard visibility:
+```python
+from tools.mcp_utils.artifact_manifest import add_artifacts_batch
+
+add_artifacts_batch(working_dir, [
+    {"phase": "Architect", "name": "architecture.json", "path": ".context-foundry/architecture.json", "type": "application/json"},
+    {"phase": "Architect", "name": "architecture.md", "path": ".context-foundry/architecture.md", "type": "text/markdown"},
+])
+```
+
+═══════════════════════════════════════════════════════════
 COMPLETION CRITERIA
 ═══════════════════════════════════════════════════════════
 

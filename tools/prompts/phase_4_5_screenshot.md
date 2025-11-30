@@ -113,6 +113,21 @@ PHASE 4.5: SCREENSHOT CAPTURE (Visual Documentation)
      ✓ Manifest: docs/screenshots/manifest.json
      ```
 
+10. Register artifacts in build manifest:
+    After creating screenshots, register them for dashboard visibility:
+    ```python
+    from tools.mcp_utils.artifact_manifest import add_artifacts_batch
+
+    add_artifacts_batch(working_dir, [
+        # Use hero=True for the main screenshot - maps to standard "docs/screenshots/hero.png" key
+        {"phase": "Screenshot", "name": "hero.png", "path": "docs/screenshots/hero.png", "type": "image/png", "hero": True},
+        {"phase": "Screenshot", "name": "feature-01.png", "path": "docs/screenshots/feature-01-navigation.png", "type": "image/png"},
+        # ... add all captured screenshots
+    ])
+    ```
+    The `hero: True` flag ensures the dashboard recognizes your hero screenshot regardless of its actual path.
+    This enables the dashboard to show screenshot artifacts even if they're in non-standard locations.
+
 
 
 **IMPORTANT NOTES:**

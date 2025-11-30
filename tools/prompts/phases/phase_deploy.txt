@@ -34,5 +34,14 @@ DEPLOY INSTRUCTIONS
 3. Create commit with Context Foundry attribution
 4. Create GitHub repo using `gh repo create`
 5. Push to main branch
+6. Register deploy artifacts in build manifest:
+   ```python
+   from tools.mcp_utils.artifact_manifest import add_artifact
+
+   # Register session summary (created by orchestrator)
+   add_artifact(working_dir, "Deploy", "session-summary.json", ".context-foundry/session-summary.json", "application/json")
+   # Register deploy log if created
+   add_artifact(working_dir, "Deploy", "deploy-log.md", ".context-foundry/deploy-log.md", "text/markdown")
+   ```
 
 **DONE**: Process exits after deployment.

@@ -313,6 +313,18 @@ ls -lh .context-foundry/scout-report.md
 
 Only `.context-foundry/scout-report.md` should exist after this step.
 
+**Step 7: Register Artifacts in Build Manifest**
+
+Register scout outputs for dashboard visibility:
+```python
+from tools.mcp_utils.artifact_manifest import add_artifacts_batch
+
+add_artifacts_batch(working_dir, [
+    {"phase": "Scout", "name": "scout-report.md", "path": ".context-foundry/scout-report.md", "type": "text/markdown"},
+    {"phase": "Scout", "name": "scout_report.json", "path": ".context-foundry/scout_report.json", "type": "application/json"},
+])
+```
+
 **PHASE TRACKING (COMPLETE) - MANDATORY LAST ACTION:**
 Update phase to "Scout", status "completed"
 

@@ -215,6 +215,15 @@ The following reusable components were identified and saved for future projects:
 - Provide working usage examples
 - Use descriptive tags for searchability
 
+**Step 4: Register Test Artifacts**
+
+Register test outputs for dashboard visibility:
+```python
+from tools.mcp_utils.artifact_manifest import add_artifact
+
+add_artifact(working_dir, "Test", "test-report.md", ".context-foundry/test-report.md", "text/markdown")
+```
+
 **PHASE TRACKING (COMPLETE):**
 ```bash
 # Phase tracking is optional - ignore if script not found

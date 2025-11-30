@@ -32,4 +32,12 @@ Create comprehensive README.md covering:
 - Contributing guidelines
 - License
 
+After creating documentation files, register them in the build manifest:
+```python
+from tools.mcp_utils.artifact_manifest import add_artifact
+
+add_artifact(working_dir, "Documentation", "README.md", "README.md", "text/markdown")
+# Add any additional docs created in docs/ directory
+```
+
 **DONE**: Process exits after creating documentation.
