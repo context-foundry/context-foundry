@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>cf</title>
+    <title>Context Foundry</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
@@ -2746,10 +2746,301 @@
                 transform: translate(-100%, 0);
             }
         }
+
+        /* Sidekick Chat Modal */
+        .sidekick-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        .sidekick-modal-overlay.visible {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 80px;
+        }
+
+        .sidekick-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 70vh;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            animation: modalSlideIn 0.2s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .sidekick-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-tertiary);
+        }
+
+        .sidekick-modal-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .sidekick-modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .sidekick-modal-close:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .sidekick-modal-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            max-height: calc(70vh - 60px);
+        }
+
+        .sidekick-message {
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            position: relative;
+        }
+
+        .sidekick-message.user {
+            background: var(--accent-purple-dim);
+            border: 1px solid var(--accent-purple);
+            margin-left: 40px;
+        }
+
+        .sidekick-message.assistant {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            margin-right: 40px;
+        }
+
+        .sidekick-message-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .sidekick-message-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .sidekick-copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.2s;
+        }
+
+        .sidekick-message:hover .sidekick-copy-btn {
+            opacity: 1;
+        }
+
+        .sidekick-copy-btn:hover {
+            background: var(--accent-purple-dim);
+            border-color: var(--accent-purple);
+            color: var(--accent-purple);
+        }
+
+        .sidekick-copy-btn.copied {
+            background: var(--accent-green-dim);
+            border-color: var(--accent-green);
+            color: var(--accent-green);
+        }
+
+        .sidekick-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .sidekick-modal-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .sidekick-modal-input {
+            flex: 1;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 16px;
+            font-size: 13px;
+            color: var(--text-primary);
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        .sidekick-modal-input:focus {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 0 2px var(--accent-purple-dim);
+        }
+
+        .sidekick-modal-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .sidekick-modal-input:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .sidekick-send-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 10px;
+            background: var(--accent-purple);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .sidekick-send-btn:hover {
+            background: var(--accent-purple-bright, #a78bfa);
+            transform: scale(1.05);
+        }
+
+        .sidekick-send-btn:active {
+            transform: scale(0.95);
+        }
+
+        .sidekick-send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Paper airplane icon using CSS */
+        .paper-airplane {
+            width: 18px;
+            height: 18px;
+            position: relative;
+        }
+
+        .paper-airplane::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 8px 0 8px 16px;
+            border-color: transparent transparent transparent white;
+            transform: rotate(-5deg);
+            top: 1px;
+            left: 2px;
+        }
+
+        .paper-airplane::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 2px;
+            background: white;
+            transform: rotate(25deg);
+            top: 10px;
+            left: 0px;
+            opacity: 0.7;
+        }
+
+        /* Loading spinner for send button */
+        .sidekick-send-btn.loading .paper-airplane {
+            display: none;
+        }
+
+        .sidekick-send-btn.loading::after {
+            content: '';
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
 <body>
+    <!-- Sidekick Chat History Modal -->
+    <div class="sidekick-modal-overlay" id="sidekickModal" onclick="closeSidekickModal(event)">
+        <div class="sidekick-modal" onclick="event.stopPropagation()">
+            <div class="sidekick-modal-header">
+                <span class="sidekick-modal-title">Sidekick Conversation</span>
+                <button class="sidekick-modal-close" onclick="closeSidekickModal()">&times;</button>
+            </div>
+            <div class="sidekick-modal-body" id="sidekickModalBody">
+                <!-- Messages will be populated here -->
+            </div>
+            <div class="sidekick-modal-footer">
+                <input type="text"
+                       class="sidekick-modal-input"
+                       id="sidekickModalInput"
+                       placeholder="Type a message..."
+                       onkeydown="handleModalKeydown(event)">
+                <button class="sidekick-send-btn" id="sidekickSendBtn" onclick="sendModalMessage()">
+                    <div class="paper-airplane"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <header class="header">
         <div class="header-left">
             <div class="logo">
@@ -2763,7 +3054,7 @@
         <div class="header-right" style="flex: 1; justify-content: flex-end; max-width: 800px;">
             <div class="sidekick-container"
                 style="display: flex; align-items: center; gap: 12px; width: 100%; justify-content: flex-end;">
-                <div id="sidekickResponse" onclick="recallSidekickMessage()" title="Click to recall last message"
+                <div id="sidekickResponse" onclick="openSidekickModal()" title="Click to see full conversation"
                     style="font-size: 13px; color: var(--text-secondary); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; min-width: 20px; opacity: 0; transition: opacity 0.3s; cursor: pointer;">
                 </div>
                 <div class="sidekick-input-wrapper" style="position: relative; width: 300px; flex-shrink: 0;">
@@ -6620,19 +6911,54 @@
         // ===== SIDEKICK CHAT FUNCTIONS =====
 
         let sidekickTimeout;
-        let lastSidekickMessage = "";
+        let sidekickHistory = []; // Track full conversation history
 
-        function recallSidekickMessage() {
-            const responseEl = document.getElementById('sidekickResponse');
-            if (lastSidekickMessage) {
-                responseEl.textContent = lastSidekickMessage; // Set content before making visible
-                responseEl.style.opacity = '1';
-                responseEl.style.color = 'var(--accent-purple)'; // Assuming recalled messages are successful ones
-                // Reset timeout
-                if (sidekickTimeout) clearTimeout(sidekickTimeout);
-                sidekickTimeout = setTimeout(() => {
-                    responseEl.style.opacity = '0';
-                }, 8000);
+        function openSidekickModal() {
+            const modal = document.getElementById('sidekickModal');
+
+            // Use shared function to render messages
+            updateModalMessages();
+
+            modal.classList.add('visible');
+
+            // Focus the input after modal is visible
+            setTimeout(() => {
+                const input = document.getElementById('sidekickModalInput');
+                if (input) input.focus();
+            }, 100);
+        }
+
+        function closeSidekickModal(event) {
+            // If called from overlay click, only close if clicking the overlay itself
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('sidekickModal').classList.remove('visible');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function escapeForAttr(text) {
+            return text.replace(/'/g, "\\'").replace(/\n/g, "\\n").replace(/\r/g, "");
+        }
+
+        async function copySidekickMessage(btn, text) {
+            // Unescape the text
+            const unescaped = text.replace(/\\n/g, "\n").replace(/\\'/g, "'");
+            try {
+                await navigator.clipboard.writeText(unescaped);
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Copy';
+                    btn.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+                btn.textContent = 'Failed';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
             }
         }
 
@@ -6671,20 +6997,19 @@
                     if (response.ok) {
                         const data = await response.json();
                         const text = data.response;
-                        lastSidekickMessage = text;
+
+                        // Add to conversation history
+                        sidekickHistory.push({ user: message, ai: text });
+                        // Keep only last 10 exchanges
+                        if (sidekickHistory.length > 10) {
+                            sidekickHistory = sidekickHistory.slice(-10);
+                        }
 
                         responseEl.textContent = text;
-                        responseEl.title = text; // Show full text on hover
+                        responseEl.title = "Click to see full conversation";
                         responseEl.style.color = 'var(--accent-purple)';
-                        responseEl.style.opacity = '1'; // Ensure it's visible
-
-                        // Removed marquee logic as it was causing text to disappear.
-                        // User can hover to read full text or click to recall.
-
-                        // Fade out after a while (longer duration)
-                        sidekickTimeout = setTimeout(() => {
-                            responseEl.style.opacity = '0';
-                        }, 12000);
+                        responseEl.style.opacity = '1';
+                        // Keep response visible permanently so user can click to open modal
                     } else {
                         responseEl.textContent = "I'm having a bit of a glitch moment.";
                         responseEl.style.color = 'var(--accent-red)';
@@ -6697,6 +7022,164 @@
                 }
             }
         }
+
+        // Handle Enter key in modal input
+        function handleModalKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendModalMessage();
+            }
+        }
+
+        // Send message from modal
+        async function sendModalMessage() {
+            const input = document.getElementById('sidekickModalInput');
+            const sendBtn = document.getElementById('sidekickSendBtn');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // Disable input and show loading
+            input.disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.classList.add('loading');
+
+            // Add user message to UI immediately
+            const tempUserEntry = { user: message, ai: null };
+            sidekickHistory.push(tempUserEntry);
+            updateModalMessages();
+
+            // Add "thinking" indicator
+            const body = document.getElementById('sidekickModalBody');
+            const thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'sidekick-message assistant';
+            thinkingDiv.id = 'sidekick-thinking';
+            thinkingDiv.innerHTML = `
+                <div class="sidekick-message-label">Sidekick</div>
+                <div class="sidekick-message-content" style="color: var(--text-muted); font-style: italic;">Thinking...</div>
+            `;
+            body.appendChild(thinkingDiv);
+            body.scrollTop = body.scrollHeight;
+
+            try {
+                const response = await fetch('/sidekick-chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CF-Auth': state.authToken || ''
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                // Remove thinking indicator
+                const thinking = document.getElementById('sidekick-thinking');
+                if (thinking) thinking.remove();
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const text = data.response;
+
+                    // Update the last entry with the AI response
+                    sidekickHistory[sidekickHistory.length - 1].ai = text;
+
+                    // Keep only last 10 exchanges
+                    if (sidekickHistory.length > 10) {
+                        sidekickHistory = sidekickHistory.slice(-10);
+                    }
+
+                    // Update header response too
+                    const responseEl = document.getElementById('sidekickResponse');
+                    responseEl.textContent = text;
+                    responseEl.title = "Click to see full conversation";
+                    responseEl.style.color = 'var(--accent-purple)';
+                    responseEl.style.opacity = '1';
+                    // Keep visible permanently so user can click to open modal
+                } else {
+                    // Remove failed entry
+                    sidekickHistory.pop();
+                    // Show error in modal
+                    const errorDiv = document.createElement('div');
+                    errorDiv.className = 'sidekick-message assistant';
+                    errorDiv.innerHTML = `
+                        <div class="sidekick-message-label">Sidekick</div>
+                        <div class="sidekick-message-content" style="color: var(--accent-red);">I'm having a bit of a glitch moment. Please try again.</div>
+                    `;
+                    body.appendChild(errorDiv);
+                }
+
+                // Refresh the modal display
+                updateModalMessages();
+
+            } catch (err) {
+                console.error('Sidekick modal chat error:', err);
+                // Remove failed entry and thinking
+                sidekickHistory.pop();
+                const thinking = document.getElementById('sidekick-thinking');
+                if (thinking) thinking.remove();
+
+                // Show error
+                const body = document.getElementById('sidekickModalBody');
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'sidekick-message assistant';
+                errorDiv.innerHTML = `
+                    <div class="sidekick-message-label">Sidekick</div>
+                    <div class="sidekick-message-content" style="color: var(--accent-red);">Can't reach the daemon right now.</div>
+                `;
+                body.appendChild(errorDiv);
+            }
+
+            // Re-enable input
+            input.disabled = false;
+            input.value = '';
+            input.focus();
+            sendBtn.disabled = false;
+            sendBtn.classList.remove('loading');
+        }
+
+        // Update modal messages display
+        function updateModalMessages() {
+            const body = document.getElementById('sidekickModalBody');
+
+            if (sidekickHistory.length === 0) {
+                body.innerHTML = '<div class="sidekick-empty">No conversation yet. Say something to Sidekick!</div>';
+                return;
+            }
+
+            // Show last 5 exchanges
+            const recentHistory = sidekickHistory.slice(-5);
+            let html = '';
+
+            recentHistory.forEach((entry) => {
+                // User message
+                html += `
+                    <div class="sidekick-message user">
+                        <div class="sidekick-message-label">You</div>
+                        <div class="sidekick-message-content">${escapeHtml(entry.user)}</div>
+                        <button class="sidekick-copy-btn" onclick="copySidekickMessage(this, '${escapeForAttr(entry.user)}')">Copy</button>
+                    </div>
+                `;
+                // Assistant message (if exists)
+                if (entry.ai) {
+                    html += `
+                        <div class="sidekick-message assistant">
+                            <div class="sidekick-message-label">Sidekick</div>
+                            <div class="sidekick-message-content">${escapeHtml(entry.ai)}</div>
+                            <button class="sidekick-copy-btn" onclick="copySidekickMessage(this, '${escapeForAttr(entry.ai)}')">Copy</button>
+                        </div>
+                    `;
+                }
+            });
+
+            body.innerHTML = html;
+            body.scrollTop = body.scrollHeight;
+        }
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeSidekickModal();
+            }
+        });
     </script>
 </body>
 

@@ -2697,45 +2697,123 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             if claude_path:
                 try:
                     logger.info(f"Attempting to use Claude CLI at: {claude_path}")
-                    # Get current job context
-                    job_manager = self.server.context.job_manager
+                    # Get current job context - prioritized by importance
                     store = self.server.context.store
 
-                    # Get active job or last job
-                    active_jobs = job_manager.list_jobs()
-                    current_job = active_jobs[0] if active_jobs else None
+                    context_parts = []
 
-                    context_str = "No active job."
-                    if current_job:
-                        # Job object doesn't have 'phase' attribute directly
-                        context_str = f"Active Job ID: {current_job.id}\nStatus: {current_job.status}\nType: {current_job.type}\n"
-                        # Get recent logs if possible (simplified for now)
-                        # In a real implementation we'd query the store for recent events
+                    # PRIORITY 1: Check for pending HITL approvals (most urgent)
+                    try:
+                        from tools.mcp_utils.approval_gates import ApprovalManager
+
+                        approval_manager = ApprovalManager()
+                        pending_approvals = approval_manager.list_pending_requests()
+                        if pending_approvals:
+                            context_parts.append(
+                                f"⚠️ JOBS WAITING FOR YOUR APPROVAL ({len(pending_approvals)}):"
+                            )
+                            for req in pending_approvals[:3]:  # Show top 3
+                                context_parts.append(
+                                    f"  - {req.request_id[:8]}: Phase '{req.phase}' for {Path(req.working_directory).name}"
+                                )
+                            if len(pending_approvals) > 3:
+                                context_parts.append(
+                                    f"  ... and {len(pending_approvals) - 3} more"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Could not check pending approvals: {e}")
+
+                    # PRIORITY 2: Currently RUNNING jobs
+                    try:
+                        from .models import JobStatus
+
+                        running_jobs = store.list_jobs(
+                            status=JobStatus.RUNNING, limit=10
+                        )
+                        if running_jobs:
+                            context_parts.append(
+                                f"\n🔄 CURRENTLY RUNNING ({len(running_jobs)}):"
+                            )
+                            for job in running_jobs[:3]:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                                context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                            if len(running_jobs) > 3:
+                                context_parts.append(
+                                    f"  ... and {len(running_jobs) - 3} more"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Could not check running jobs: {e}")
+
+                    # PRIORITY 3: Jobs waiting for approval (WAITING_APPROVAL status)
+                    try:
+                        waiting_jobs = store.list_jobs(
+                            status=JobStatus.WAITING_APPROVAL, limit=10
+                        )
+                        if waiting_jobs:
+                            context_parts.append(
+                                f"\n⏸️ PAUSED - WAITING FOR APPROVAL ({len(waiting_jobs)}):"
+                            )
+                            for job in waiting_jobs[:3]:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                                context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                    except Exception as e:
+                        logger.debug(f"Could not check waiting jobs: {e}")
+
+                    # PRIORITY 4: Recently failed jobs (informational, not urgent)
+                    try:
+                        failed_jobs = store.list_jobs(status=JobStatus.FAILED, limit=5)
+                        if (
+                            failed_jobs and not context_parts
+                        ):  # Only show if nothing more important
+                            context_parts.append(
+                                f"\n❌ RECENT FAILURES ({len(failed_jobs)}):"
+                            )
+                            for job in failed_jobs[:2]:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                                context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                        elif failed_jobs:
+                            # Just mention count if there are more important things
+                            context_parts.append(
+                                f"\n(Also {len(failed_jobs)} failed job(s) - ask if you want details)"
+                            )
+                    except Exception as e:
+                        logger.debug(f"Could not check failed jobs: {e}")
+
+                    # Build final context string
+                    if context_parts:
+                        context_str = "\n".join(context_parts)
                     else:
-                        # Try to get last job from store
-                        try:
-                            last_job = store.get_last_job()
-                            if last_job:
-                                context_str = f"Last Job ID: {last_job.id}\nStatus: {last_job.status}\nResult: {last_job.result}\n"
-                        except Exception:
-                            pass
+                        context_str = "✅ No active jobs. System is idle and ready for new builds."
 
                     # Construct persona prompt with context
                     # Construct direct assistant prompt
                     system_prompt = (
-                        "You are Claude, an intelligent assistant helping the user with Context Foundry. "
-                        "You can answer questions about the system status and help start new projects. "
-                        "Keep your responses concise and helpful. "
+                        "You are Sidekick, an intelligent assistant for Context Foundry. "
+                        "You help users monitor builds, approve HITL requests, and start new projects. "
+                        "Keep responses concise and actionable. "
                         "\n\n"
-                        "CAPABILITIES:\n"
-                        "1. Answer questions about the current job or system status.\n"
-                        "2. Start new autonomous builds.\n"
-                        "\n"
                         f"CURRENT SYSTEM STATUS:\n{context_str}\n"
                         "\n"
-                        "INSTRUCTIONS:\n"
+                        "RESPONSE PRIORITIES (follow this order):\n"
+                        "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
+                        "2. If there are RUNNING jobs - mention them and offer to show details\n"
+                        "3. If system is idle - greet the user and offer to start a new build\n"
+                        "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n"
+                        "\n"
+                        "CAPABILITIES:\n"
+                        "1. Show system status (running jobs, pending approvals)\n"
+                        "2. Help approve HITL requests: tell user to run 'cfd approve <id>'\n"
+                        "3. Start new autonomous builds\n"
+                        "\n"
+                        "BUILD INSTRUCTIONS:\n"
                         "- If the user wants to build something, confirm you are starting it.\n"
-                        "- To trigger the build, you MUST append this tag to the end of your response:\n"
+                        "- To trigger the build, append this tag to the end of your response:\n"
                         "  [[START_BUILD: <short_description_of_project>]]\n"
                         "- Assume the default directory (~/homelab/) unless specified."
                     )
@@ -2753,26 +2831,33 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
 
-                    # Call claude CLI
-                    # Use a short timeout to keep the UI responsive
-                    logger.info("Running claude subprocess...")
+                    # Call claude CLI with haiku for fast responses
+                    logger.info("Running claude subprocess with haiku...")
                     result = subprocess.run(
                         [
                             claude_path,
                             "-p",
                             "--print",
                             "--dangerously-skip-permissions",
+                            "--model",
+                            "haiku",
                         ],
                         input=full_prompt,
                         capture_output=True,
                         text=True,
-                        timeout=15,
+                        timeout=30,
                     )
 
                     if result.returncode == 0 and result.stdout:
                         response_text = result.stdout.strip()
                         logger.info(
                             f"Claude CLI success. Response length: {len(response_text)}"
+                        )
+                    elif result.returncode != 0:
+                        logger.warning(
+                            f"Claude CLI returned code {result.returncode}. "
+                            f"Stdout: {result.stdout[:200] if result.stdout else 'empty'}... "
+                            f"Stderr: {result.stderr[:500] if result.stderr else 'empty'}"
                         )
                         # Clean up any quotes if Claude adds them
                         if response_text.startswith('"') and response_text.endswith(
