@@ -2195,15 +2195,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             # Submit resume job
             resume_from = state.phases_remaining[0]
 
+            # FIX: Inherit execution_mode from original job to preserve HITL mode
+            # Without this, resume jobs default to "autonomous" even if original was "hitl"
+            execution_mode = "autonomous"
+            if job:
+                execution_mode = job.params.get("execution_mode", "autonomous")
+
             task_config = {
                 "task": f"Resume build from {resume_from}",
                 "working_directory": str(project_dir),
                 "mode": "resume",
                 "resume_from_phase": resume_from,
                 "timeout_minutes": 90,
+                "execution_mode": execution_mode,  # Inherit from original job
             }
 
-            logger.info(f"Auto-resuming job {job_id} from phase {resume_from}")
+            logger.info(
+                f"Auto-resuming job {job_id} from phase {resume_from} (mode: {execution_mode})"
+            )
 
             self.server.context.job_manager.submit_job(
                 job_type=JobType.AUTONOMOUS_BUILD,
