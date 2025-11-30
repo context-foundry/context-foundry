@@ -894,6 +894,10 @@ def run_phase(
                 )
 
     # Standard execution (no human-in-the-loop)
+    # Get execution_mode from task_config if available
+    exec_mode = (
+        task_config.get("execution_mode", "autonomous") if task_config else "autonomous"
+    )
     return _run_phase_internal(
         phase_name=phase_name,
         phase_prompt_path=phase_prompt_path,
@@ -906,6 +910,7 @@ def run_phase(
         provider=provider,
         model=model,
         job_id=job_id,
+        execution_mode=exec_mode,
     )
 
 
@@ -922,6 +927,7 @@ def _run_phase_internal(
     model: str = None,
     job_id: str = None,
     skip_prompt_save: bool = False,
+    execution_mode: str = "autonomous",
 ) -> PhaseResult:
     """
     Internal implementation of phase execution.
@@ -1059,9 +1065,11 @@ def _run_phase_internal(
                 input_instruction=input_instruction,
                 job_id=job_id,
                 initial_state=STATE_PROCESSING,  # Autonomous goes straight to processing
-                execution_mode="autonomous",
+                execution_mode=execution_mode,  # FIX: Use actual execution_mode, not hardcoded
             )
-            logger.info(f"Saved phase prompt file for {phase_name} (autonomous)")
+            logger.info(
+                f"Saved phase prompt file for {phase_name} (mode: {execution_mode})"
+            )
         except Exception as e:
             # Don't fail the build if prompt saving fails
             logger.warning(f"Failed to save phase prompt file: {e}")
