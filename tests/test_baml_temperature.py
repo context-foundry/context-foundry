@@ -78,21 +78,21 @@ def test_temperature_zero_produces_deterministic_outputs():
 
     # Check that core fields are consistent
     for i in range(1, 3):
-        assert results[0]["session_id"] == results[i]["session_id"], (
-            f"session_id should be identical (run {i})"
-        )
-        assert results[0]["current_phase"] == results[i]["current_phase"], (
-            f"current_phase should be identical (run {i})"
-        )
-        assert results[0]["status"] == results[i]["status"], (
-            f"status should be identical (run {i})"
-        )
-        assert results[0]["progress_detail"] == results[i]["progress_detail"], (
-            f"progress_detail should be identical (run {i})"
-        )
-        assert results[0]["test_iteration"] == results[i]["test_iteration"], (
-            f"test_iteration should be identical (run {i})"
-        )
+        assert (
+            results[0]["session_id"] == results[i]["session_id"]
+        ), f"session_id should be identical (run {i})"
+        assert (
+            results[0]["current_phase"] == results[i]["current_phase"]
+        ), f"current_phase should be identical (run {i})"
+        assert (
+            results[0]["status"] == results[i]["status"]
+        ), f"status should be identical (run {i})"
+        assert (
+            results[0]["progress_detail"] == results[i]["progress_detail"]
+        ), f"progress_detail should be identical (run {i})"
+        assert (
+            results[0]["test_iteration"] == results[i]["test_iteration"]
+        ), f"test_iteration should be identical (run {i})"
 
     print("✅ Temperature 0.0 verified: All outputs are deterministic and consistent")
     print("   Ran 3 identical calls, all produced same structured output")
@@ -125,12 +125,12 @@ def test_temperature_setting_in_schema():
     gpt4omini_block = content[gpt4omini_start:next_client]
 
     # Verify temperature is set to 0.0
-    assert "temperature" in gpt4omini_block, (
-        "GPT4oMini client should have temperature setting"
-    )
-    assert "0.0" in gpt4omini_block or "0" in gpt4omini_block, (
-        "Temperature should be set to 0.0 for deterministic outputs"
-    )
+    assert (
+        "temperature" in gpt4omini_block
+    ), "GPT4oMini client should have temperature setting"
+    assert (
+        "0.0" in gpt4omini_block or "0" in gpt4omini_block
+    ), "Temperature should be set to 0.0 for deterministic outputs"
 
     print("✅ BAML schema verified: temperature 0.0 configured for GPT4oMini")
     print(f"   Schema location: {schema_file}")

@@ -610,6 +610,32 @@ class Runner:
     ):
         """Emit a phase event to Store"""
         try:
+            # Enrich details with model info if available in job params or config
+            # This is a best-effort attempt for runner-emitted events
+            job = self.store.get_job(job_id)
+            if job:
+                # 1. Try explicit job params first (CLI overrides)
+                if job.params:
+                    if "model" in job.params and "model" not in details:
+                        details["model"] = job.params["model"]
+                    if "provider" in job.params and "provider" not in details:
+                        details["provider"] = job.params["provider"]
+                
+                # 2. If still missing, try to resolve from provider_config
+                if "model" not in details or "provider" not in details:
+                    try:
+                        from tools.evolution.framework.provider_config import get_provider_for_phase
+                        # Map phase name from event (e.g. "Builder") to config
+                        # Note: phase names in events might be "Scout", "Architect", etc.
+                        config_provider, config_model = get_provider_for_phase(phase)
+                        
+                        if "provider" not in details:
+                            details["provider"] = config_provider
+                        if "model" not in details and config_model:
+                            details["model"] = config_model
+                    except ImportError:
+                        pass # provider_config might not be available in daemon context
+                    
             event = PhaseEvent.create(
                 job_id=job_id,
                 phase=phase,
@@ -673,7 +699,8 @@ class Runner:
 
         # Extract parameters from job
         # NOTE: Mode has already been adjusted in run() method based on codebase detection
-        task = job.params.get("task", "Build project")
+        # Support both "task" and "description" parameter names for flexibility
+        task = job.params.get("task") or job.params.get("description", "Build project")
         mode = job.params.get("mode", "new_project")
         max_test_iterations = job.params.get("max_test_iterations", 3)
         incremental = job.params.get("incremental", False)

@@ -116,7 +116,9 @@ class SandboxManager:
         if task_id and task_id in self.active_sandboxes:
             # Cleanup from active_sandboxes (sandbox created by this instance)
             sandbox_path = self.active_sandboxes[task_id]["path"]
-            logger.info(f"🧹 Cleaning up sandbox for task {task_id[:8]}: {sandbox_path}")
+            logger.info(
+                f"🧹 Cleaning up sandbox for task {task_id[:8]}: {sandbox_path}"
+            )
 
             try:
                 if sandbox_path.exists():
@@ -141,7 +143,9 @@ class SandboxManager:
                 return False
 
             if not str(sandbox_path.resolve()).startswith(str(self.base_dir.resolve())):
-                logger.error(f"❌ Refusing to delete path outside sandbox base: {sandbox_path}")
+                logger.error(
+                    f"❌ Refusing to delete path outside sandbox base: {sandbox_path}"
+                )
                 return False
 
             logger.info(f"🧹 Cleaning up sandbox by path: {sandbox_path}")

@@ -25,21 +25,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from tools.cache.cache_manager import CacheManager
 from tools.cache.scout_cache import save_scout_report_to_cache
 from tools.cache.test_cache import save_test_results_to_cache
-from tools.cache import DEFAULT_CACHE_TTL_HOURS, DEFAULT_MAX_CACHE_SIZE_MB
 
 
 # Helper Functions
 
-def _create_scout_cache_files(tmpdir: str, count: int = 3, size_kb: float = 1.0) -> None:
+
+def _create_scout_cache_files(
+    tmpdir: str, count: int = 3, size_kb: float = 1.0
+) -> None:
     """Create scout cache files with known size."""
     content = "# Scout Report\n" + ("x" * int(size_kb * 1024))
     for i in range(count):
-        save_scout_report_to_cache(
-            f"Task {i}",
-            "new_project",
-            tmpdir,
-            content
-        )
+        save_scout_report_to_cache(f"Task {i}", "new_project", tmpdir, content)
 
 
 def _create_test_cache_files(tmpdir: str, count: int = 3) -> None:
@@ -49,8 +46,7 @@ def _create_test_cache_files(tmpdir: str, count: int = 3) -> None:
         (Path(tmpdir) / f"test{i}.py").write_text(f"# Test {i}")
         # Save test results
         save_test_results_to_cache(
-            tmpdir,
-            {"success": True, "passed": i+1, "total": i+1}
+            tmpdir, {"success": True, "passed": i + 1, "total": i + 1}
         )
 
 
@@ -58,7 +54,7 @@ def _create_expired_cache_files(tmpdir: str, count: int = 2) -> None:
     """Create expired cache files by backdating timestamps."""
     cache_dir = Path(tmpdir) / ".context-foundry" / "cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Create old files
     old_time = time.time() - (48 * 3600)  # 48 hours ago
     for i in range(count):
@@ -69,6 +65,7 @@ def _create_expired_cache_files(tmpdir: str, count: int = 2) -> None:
 
 # Test Classes
 
+
 class TestCacheManagerInit:
     """Test CacheManager initialization."""
 
@@ -78,7 +75,7 @@ class TestCacheManagerInit:
         """Test that CacheManager initializes correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             assert manager.working_directory == tmpdir
             assert manager.cache_dir.exists()
             assert ".context-foundry" in str(manager.cache_dir)
@@ -92,9 +89,9 @@ class TestCacheManagerInit:
             # Ensure cache dir doesn't exist initially
             cache_path = Path(tmpdir) / ".context-foundry" / "cache"
             assert not cache_path.exists()
-            
+
             manager = CacheManager(tmpdir)
-            
+
             assert cache_path.exists()
             assert cache_path.is_dir()
 
@@ -106,10 +103,10 @@ class TestCacheManagerInit:
             # Create cache directory manually
             cache_path = Path(tmpdir) / ".context-foundry" / "cache"
             cache_path.mkdir(parents=True, exist_ok=True)
-            
+
             # Should not raise error
             manager = CacheManager(tmpdir)
-            
+
             assert manager.cache_dir == cache_path
 
 
@@ -123,7 +120,7 @@ class TestGetStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             assert stats["total_files"] == 0
             assert stats["total_size_mb"] == 0
             assert stats["scout_cache"]["total_entries"] == 0
@@ -135,10 +132,10 @@ class TestGetStats:
         """Test get_stats counts scout cache files."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=3)
-            
+
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             assert stats["total_files"] > 0
             assert stats["scout_cache"]["total_entries"] == 3
             assert stats["total_size_mb"] > 0
@@ -149,10 +146,10 @@ class TestGetStats:
         """Test get_stats detects test cache."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_test_cache_files(tmpdir, count=1)
-            
+
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             assert stats["test_cache"]["has_cached_results"] == True
 
     @pytest.mark.unit
@@ -162,10 +159,10 @@ class TestGetStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=2)
             _create_test_cache_files(tmpdir, count=1)
-            
+
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             assert stats["scout_cache"]["total_entries"] == 2
             assert stats["test_cache"]["has_cached_results"] == True
             assert stats["total_files"] > 0
@@ -177,10 +174,10 @@ class TestGetStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create files with known size (10KB each)
             _create_scout_cache_files(tmpdir, count=3, size_kb=10)
-            
+
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             # Should be at least 0.029 MB (30KB)
             assert stats["total_size_mb"] >= 0.029
 
@@ -191,7 +188,7 @@ class TestGetStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
-            
+
             # Check all expected keys are present
             assert "cache_dir" in stats
             assert "scout_cache" in stats
@@ -211,12 +208,12 @@ class TestCleanExpired:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create expired files
             _create_expired_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.clean_expired(ttl_hours=24)
-            
+
             assert result["total"] > 0
-            
+
             # Verify files are gone
             cache_dir = Path(tmpdir) / ".context-foundry" / "cache"
             old_files = list(cache_dir.glob("scout-old-*.md"))
@@ -229,13 +226,13 @@ class TestCleanExpired:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create recent files
             _create_scout_cache_files(tmpdir, count=3)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.clean_expired(ttl_hours=24)
-            
+
             # No files should be deleted
             assert result["total"] == 0
-            
+
             # Verify files still exist
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 3
@@ -247,7 +244,7 @@ class TestCleanExpired:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             result = manager.clean_expired()
-            
+
             assert result["total"] == 0
             assert result["scout_cache"] == 0
             assert result["test_cache"] == 0
@@ -260,11 +257,11 @@ class TestCleanExpired:
             # Create both scout and test cache files
             _create_scout_cache_files(tmpdir, count=2)
             _create_test_cache_files(tmpdir, count=1)
-            
+
             manager = CacheManager(tmpdir)
             # Use ttl_hours=0 to expire all files immediately
             result = manager.clean_expired(ttl_hours=0)
-            
+
             # Both types should have deletions
             assert result["total"] > 0
             assert "scout_cache" in result
@@ -277,13 +274,13 @@ class TestCleanExpired:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create expired files
             _create_expired_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
-            
+
             # With large TTL, files should not be deleted
             result_large_ttl = manager.clean_expired(ttl_hours=1000)
             assert result_large_ttl["total"] == 0
-            
+
             # With small TTL, files should be deleted
             result_small_ttl = manager.clean_expired(ttl_hours=1)
             assert result_small_ttl["total"] > 0
@@ -300,12 +297,12 @@ class TestClearAll:
             # Create both types of cache
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.clear_all()
-            
+
             assert result["total"] > 0
-            
+
             # Verify all files are gone
             stats = manager.get_stats()
             assert stats["total_files"] == 0
@@ -317,10 +314,10 @@ class TestClearAll:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.clear_all()
-            
+
             assert result["scout_cache"] == 3
             assert result["test_cache"] >= 1
             assert result["total"] >= 4
@@ -332,7 +329,7 @@ class TestClearAll:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             result = manager.clear_all()
-            
+
             assert result["total"] == 0
 
 
@@ -346,12 +343,12 @@ class TestClearByType:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
-            count = manager.clear_by_type('scout')
-            
+            count = manager.clear_by_type("scout")
+
             assert count == 3
-            
+
             # Verify only scout files deleted
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 0
@@ -364,12 +361,12 @@ class TestClearByType:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
-            count = manager.clear_by_type('test')
-            
+            count = manager.clear_by_type("test")
+
             assert count >= 1
-            
+
             # Verify only test files deleted
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 3
@@ -382,12 +379,12 @@ class TestClearByType:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
-            count = manager.clear_by_type('all')
-            
+            count = manager.clear_by_type("all")
+
             assert count > 0
-            
+
             # Verify all files deleted
             stats = manager.get_stats()
             assert stats["total_files"] == 0
@@ -398,10 +395,10 @@ class TestClearByType:
         """Test that invalid type raises ValueError."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             with pytest.raises(ValueError) as exc_info:
-                manager.clear_by_type('invalid')
-            
+                manager.clear_by_type("invalid")
+
             assert "Unknown cache type" in str(exc_info.value)
 
     @pytest.mark.unit
@@ -410,11 +407,11 @@ class TestClearByType:
         """Test clear_by_type handles empty cache for all types."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Test all valid types
-            assert manager.clear_by_type('scout') == 0
-            assert manager.clear_by_type('test') == 0
-            assert manager.clear_by_type('all') == 0
+            assert manager.clear_by_type("scout") == 0
+            assert manager.clear_by_type("test") == 0
+            assert manager.clear_by_type("all") == 0
 
 
 class TestEnforceSizeLimit:
@@ -427,13 +424,13 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create 0.5MB cache
             _create_scout_cache_files(tmpdir, count=50, size_kb=10)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit(max_size_mb=1)
-            
+
             assert result["deleted_files"] == 0
             assert result["freed_mb"] == 0
-            
+
             # All files should remain
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 50
@@ -445,10 +442,10 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create 2MB cache
             _create_scout_cache_files(tmpdir, count=200, size_kb=10)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit(max_size_mb=1)
-            
+
             assert result["deleted_files"] > 0
             assert result["freed_mb"] > 0
             assert result["current_size_mb"] <= 1
@@ -460,7 +457,7 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             cache_dir = Path(tmpdir) / ".context-foundry" / "cache"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Create files with staggered timestamps
             now = time.time()
             files = []
@@ -468,15 +465,15 @@ class TestEnforceSizeLimit:
                 file_path = cache_dir / f"scout-test-{i}.md"
                 content = "x" * (200 * 1024)  # 200KB each = 1MB total
                 file_path.write_text(content)
-                
+
                 # Backdate files (oldest to newest)
                 file_time = now - ((4 - i) * 3600)  # Hours ago
                 os.utime(file_path, (file_time, file_time))
                 files.append(file_path)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit(max_size_mb=0.5)
-            
+
             # Oldest files should be deleted
             assert not files[0].exists()
             assert not files[1].exists()
@@ -495,7 +492,9 @@ class TestEnforceSizeLimit:
             stats_before = manager.get_stats()
 
             # Add a small buffer to handle rounding (metadata overhead)
-            result = manager.enforce_size_limit(max_size_mb=stats_before["total_size_mb"] + 0.1)
+            result = manager.enforce_size_limit(
+                max_size_mb=stats_before["total_size_mb"] + 0.1
+            )
 
             # Should not delete any files when given slightly more than current size
             assert result["deleted_files"] == 0
@@ -507,7 +506,7 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit()
-            
+
             assert result["deleted_files"] == 0
             assert result["current_size_mb"] == 0
 
@@ -518,11 +517,11 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create 10 files of 100KB each = 1MB total
             _create_scout_cache_files(tmpdir, count=10, size_kb=100)
-            
+
             manager = CacheManager(tmpdir)
             # Set limit to 0.5MB, should delete approximately half
             result = manager.enforce_size_limit(max_size_mb=0.5)
-            
+
             assert result["deleted_files"] >= 4
             assert result["current_size_mb"] <= 0.5
 
@@ -532,10 +531,10 @@ class TestEnforceSizeLimit:
         """Test that zero limit deletes all files."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=5)
-            
+
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit(max_size_mb=0)
-            
+
             # All files should be deleted
             assert result["deleted_files"] >= 5
             stats = manager.get_stats()
@@ -548,7 +547,7 @@ class TestEnforceSizeLimit:
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
             result = manager.enforce_size_limit()
-            
+
             assert "deleted_files" in result
             assert "freed_mb" in result
             assert "current_size_mb" in result
@@ -563,17 +562,17 @@ class TestPrintStats:
         """Test print_stats doesn't crash."""
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=2)
-            
+
             manager = CacheManager(tmpdir)
-            
+
             # Should not raise exception
             try:
                 # Redirect stdout to prevent cluttering test output
                 old_stdout = sys.stdout
                 sys.stdout = StringIO()
-                
+
                 manager.print_stats()
-                
+
                 sys.stdout = old_stdout
             except Exception as e:
                 sys.stdout = old_stdout
@@ -586,18 +585,18 @@ class TestPrintStats:
         with tempfile.TemporaryDirectory() as tmpdir:
             _create_scout_cache_files(tmpdir, count=2)
             _create_test_cache_files(tmpdir, count=1)
-            
+
             manager = CacheManager(tmpdir)
-            
+
             # Capture output
             old_stdout = sys.stdout
             sys.stdout = StringIO()
-            
+
             manager.print_stats()
-            
+
             output = sys.stdout.getvalue()
             sys.stdout = old_stdout
-            
+
             # Check for expected sections
             assert "Cache Statistics" in output
             assert "Scout Cache" in output
@@ -615,20 +614,20 @@ class TestCacheManagerIntegration:
         """Test complete workflow: create → stats → clear."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Step 1: Create cache files
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             # Step 2: Get stats
             stats_full = manager.get_stats()
             assert stats_full["scout_cache"]["total_entries"] == 3
             assert stats_full["test_cache"]["has_cached_results"] == True
-            
+
             # Step 3: Clear all
             result = manager.clear_all()
             assert result["total"] > 0
-            
+
             # Step 4: Verify empty
             stats_empty = manager.get_stats()
             assert stats_empty["total_files"] == 0
@@ -639,21 +638,21 @@ class TestCacheManagerIntegration:
         """Test size limit enforcement workflow."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Create large cache
             _create_scout_cache_files(tmpdir, count=100, size_kb=10)
-            
+
             # Check size before
             stats_before = manager.get_stats()
             size_before = stats_before["total_size_mb"]
-            
+
             # Enforce size limit
             result = manager.enforce_size_limit(max_size_mb=0.5)
-            
+
             # Verify size reduced
             assert result["current_size_mb"] <= 0.5
             assert result["freed_mb"] > 0
-            
+
             # Verify stats show reduced size
             stats_after = manager.get_stats()
             assert stats_after["total_size_mb"] < size_before
@@ -664,21 +663,21 @@ class TestCacheManagerIntegration:
         """Test TTL cleanup workflow."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Create old and new files
             _create_expired_cache_files(tmpdir, count=3)
             _create_scout_cache_files(tmpdir, count=2)
-            
+
             # Stats before cleanup
             stats_before = manager.get_stats()
             files_before = stats_before["total_files"]
-            
+
             # Clean expired
             result = manager.clean_expired(ttl_hours=24)
-            
+
             # Verify only old files removed
             assert result["total"] == 3
-            
+
             # Stats should show reduced count
             stats_after = manager.get_stats()
             assert stats_after["total_files"] < files_before
@@ -690,24 +689,24 @@ class TestCacheManagerIntegration:
         """Test mixed cache operations work correctly."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Create both types
             _create_scout_cache_files(tmpdir, count=3)
             _create_test_cache_files(tmpdir, count=2)
-            
+
             # Clear scout only
-            scout_count = manager.clear_by_type('scout')
+            scout_count = manager.clear_by_type("scout")
             assert scout_count == 3
-            
+
             # Verify test remains
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 0
             assert stats["test_cache"]["has_cached_results"] == True
-            
+
             # Clear test only
-            test_count = manager.clear_by_type('test')
+            test_count = manager.clear_by_type("test")
             assert test_count >= 1
-            
+
             # Verify all gone
             stats_final = manager.get_stats()
             assert stats_final["total_files"] == 0
@@ -718,20 +717,20 @@ class TestCacheManagerIntegration:
         """Test repeated operations don't cause issues."""
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = CacheManager(tmpdir)
-            
+
             # Repeat operations 10 times
             for i in range(10):
                 # Create cache
                 _create_scout_cache_files(tmpdir, count=2)
-                
+
                 # Get stats
                 stats = manager.get_stats()
                 assert stats["scout_cache"]["total_entries"] >= 2
-                
+
                 # Clear
                 result = manager.clear_all()
                 assert result["scout_cache"] >= 2
-                
+
                 # Verify empty
                 stats_empty = manager.get_stats()
                 assert stats_empty["total_files"] == 0

@@ -533,6 +533,14 @@ class StateMachine:
                 event_details.update(metadata)
             if error:
                 event_details["error"] = error
+            
+            # Propagate provider/model from task metadata to event details
+            # This ensures the dashboard always has visibility into the model used
+            if task.metadata:
+                if task.metadata.get("provider"):
+                    event_details["provider"] = task.metadata["provider"]
+                if task.metadata.get("model"):
+                    event_details["model"] = task.metadata["model"]
 
             event = PhaseEvent.create(
                 job_id=task.job_id,
@@ -622,12 +630,19 @@ class StateMachine:
         )
         self.store.save_task(task)
 
-        # Emit creation event
+        # Emit creation event - include model/provider info from metadata
+        event_details = {"task_id": task.id, "sequence": sequence}
+        if metadata:
+            if metadata.get("provider"):
+                event_details["provider"] = metadata["provider"]
+            if metadata.get("model"):
+                event_details["model"] = metadata["model"]
+
         event = PhaseEvent.create(
             job_id=job_id,
             phase=phase_name,
             status="task_created",
-            details={"task_id": task.id, "sequence": sequence},
+            details=event_details,
         )
         self.store.save_phase_event(event)
 
@@ -715,6 +730,13 @@ class StateMachine:
                     event_details["progress"] = progress
                 if metadata:
                     event_details.update(metadata)
+                
+                # Propagate provider/model from task metadata to event details
+                if task.metadata:
+                    if task.metadata.get("provider"):
+                        event_details["provider"] = task.metadata["provider"]
+                    if task.metadata.get("model"):
+                        event_details["model"] = task.metadata["model"]
 
                 event = PhaseEvent.create(
                     job_id=task.job_id,

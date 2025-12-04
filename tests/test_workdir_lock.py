@@ -331,14 +331,14 @@ class TestWorkDirLockManager:
         manager.cleanup_stale_locks(working_directories=None)
 
         # Lockfile should still exist because we didn't tell cleanup where to look
-        assert lockfile.exists(), (
-            "Orphaned lockfile not cleaned up without working_directories"
-        )
+        assert (
+            lockfile.exists()
+        ), "Orphaned lockfile not cleaned up without working_directories"
 
         # Now call cleanup WITH working_directories
         manager.cleanup_stale_locks(working_directories=[str(orphaned_dir)])
 
         # Now it should be cleaned up
-        assert not lockfile.exists(), (
-            "Lockfile should be cleaned up when directory is provided"
-        )
+        assert (
+            not lockfile.exists()
+        ), "Lockfile should be cleaned up when directory is provided"

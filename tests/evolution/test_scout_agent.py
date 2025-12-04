@@ -334,9 +334,9 @@ security_patterns = [
         os_system_findings = [
             f for f in agent.findings if "os.system" in f.description.lower()
         ]
-        assert len(os_system_findings) == 0, (
-            "Should not flag os.system() in pattern definitions"
-        )
+        assert (
+            len(os_system_findings) == 0
+        ), "Should not flag os.system() in pattern definitions"
 
     def test_scan_security_skips_unsafe_doc_examples(self, temp_project):
         """Test that scan skips documentation examples marked as UNSAFE."""
@@ -356,9 +356,9 @@ subprocess.run(['claude', '--prompt', task], check=True)
         os_system_findings = [
             f for f in agent.findings if "os.system" in f.description.lower()
         ]
-        assert len(os_system_findings) == 0, (
-            "Should not flag documentation examples marked as UNSAFE"
-        )
+        assert (
+            len(os_system_findings) == 0
+        ), "Should not flag documentation examples marked as UNSAFE"
 
     def test_scan_security_finds_actual_os_system_usage(self, temp_project):
         """Test that scan DOES find actual unsafe os.system() usage."""

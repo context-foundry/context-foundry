@@ -108,6 +108,40 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         "--limit", type=int, default=10, help="Maximum jobs to show"
     )
 
+    # Agents command
+    agents_parser = subparsers.add_parser("agents", help="Manage AI agents")
+    agents_subparsers = agents_parser.add_subparsers(dest="agent_cmd", help="Agent command")
+    
+    # agents list
+    agents_subparsers.add_parser("list", help="List all available agents")
+    
+    # agents switch
+    switch_parser = agents_subparsers.add_parser("switch", help="Switch an agent's provider")
+    switch_parser.add_argument("name", help="Name of the agent (e.g., builder)")
+    switch_parser.add_argument("provider", choices=["local", "bedrock-agent"], help="Provider type")
+    switch_parser.add_argument("--agent-id", help="AWS Bedrock Agent ID")
+    switch_parser.add_argument("--alias-id", help="AWS Bedrock Alias ID")
+
+    # Daemon command
+    daemon_parser = subparsers.add_parser("daemon", help="Manage background daemon")
+    daemon_parser.add_argument(
+        "action", 
+        choices=["start", "stop", "restart", "status", "logs"],
+        help="Daemon action"
+    )
+    daemon_parser.add_argument(
+        "--foreground", "-f", action="store_true", help="Run in foreground"
+    )
+    daemon_parser.add_argument(
+        "--config", "-c", help="Path to config file"
+    )
+    daemon_parser.add_argument(
+        "--timeout", "-t", type=int, default=10, help="Timeout for stop/restart"
+    )
+    daemon_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show detailed status"
+    )
+
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -118,9 +152,62 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         cmd_conversations(args)
     elif args.command == "jobs":
         cmd_jobs(args)
+    elif args.command == "agents":
+        cmd_agents(args)
+    elif args.command == "daemon":
+        cmd_daemon(args)
     else:
         # Default action: Launch Context Foundry TUI
         launch_context_foundry()
+
+def cmd_daemon(args):
+    """Manage daemon process"""
+    try:
+        from context_foundry.daemon.cli import cmd_daemon as daemon_main
+        daemon_main(args)
+    except ImportError as e:
+        print(f"Error importing daemon CLI: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def cmd_agents(args):
+    """Manage AI agents"""
+    import sys  # Fix UnboundLocalError
+    
+    try:
+        from tools.evolution.cli_agents import list_agents, switch_agent, AgentRegistry
+    except ImportError:
+        # Fallback if import fails (e.g. path issues)
+        import os
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        from tools.evolution.cli_agents import list_agents, switch_agent, AgentRegistry
+
+    registry = AgentRegistry()
+    
+    if args.agent_cmd == "list":
+        list_agents(registry)
+    elif args.agent_cmd == "switch":
+        agent_id = args.agent_id
+        alias_id = args.alias_id
+        
+        # Auto-lookup IDs if switching to bedrock-agent and not provided
+        if args.provider == "bedrock-agent":
+            if not (agent_id and alias_id):
+                # Check if we already have them in the registry
+                agent_config = registry.get_agent(args.name)
+                if agent_config:
+                    if not agent_id:
+                        agent_id = agent_config.get("agent_id")
+                    if not alias_id:
+                        alias_id = agent_config.get("alias_id")
+            
+            if not (agent_id and alias_id):
+                print(f"Error: --agent-id and --alias-id are required for '{args.name}' (not found in registry).", file=sys.stderr)
+                sys.exit(1)
+                
+        switch_agent(registry, args.name, args.provider, agent_id, alias_id)
+    else:
+        print("Invalid agent command", file=sys.stderr)
+        sys.exit(1)
 
 
 def get_setup_banner():

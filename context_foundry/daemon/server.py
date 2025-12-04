@@ -779,7 +779,7 @@ class CFDaemon:
                     logger.error(f"[TASK-WATCHDOG] Error checking stale jobs: {e}")
 
                 # --- Check for stalled jobs (no activity but not timed out) ---
-                stall_threshold = 600  # 10 minutes without heartbeat = stalled
+                stall_threshold = 1800  # 30 minutes without heartbeat = stalled
                 try:
                     stalled_jobs = self._state_machine.get_stale_jobs(stall_threshold)
                     for job in stalled_jobs:

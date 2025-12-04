@@ -30,16 +30,14 @@ if sys.version_info < (3, 10):
 
 # Read version from __version__.py safely without code execution
 version_file = Path(__file__).parent / "__version__.py"
-version_content = version_file.read_text(encoding='utf-8')
+version_content = version_file.read_text(encoding="utf-8")
 version_match = re.search(
-    r'^__version__\s*=\s*["\']([^"\']+)["\']',
-    version_content,
-    re.MULTILINE
+    r'^__version__\s*=\s*["\']([^"\']+)["\']', version_content, re.MULTILINE
 )
 if not version_match:
     raise RuntimeError(
         "Unable to find version string in __version__.py. "
-        "Expected format: __version__ = \"x.y.z\""
+        'Expected format: __version__ = "x.y.z"'
     )
 version = version_match.group(1)
 

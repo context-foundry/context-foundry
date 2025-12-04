@@ -519,6 +519,7 @@ def _serialize_job(context: DashboardContext, job: Job) -> Dict[str, Any]:
         "params": job.params,  # Include params for working_directory, etc.
         "duration_seconds": job.duration(),
         "agents": agent_stats,
+        "phase": last_phase.phase if last_phase else None,
         "latest_phase": _build_phase_snapshot(last_phase),
         "all_phases": [_build_phase_snapshot(e) for e in phase_events],
         "phase_artifacts": phase_artifacts,
@@ -664,6 +665,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._serve_agent_activity(parsed.query)
         elif parsed.path == "/job-conversation":
             self._serve_job_conversation(parsed.query)
+        elif parsed.path == "/config":
+            self._serve_config()
+        elif parsed.path == "/agents":
+            self._serve_agents()
         else:
             self.send_error(404, "Not Found")
 
@@ -691,6 +696,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._resume_pipeline()
         elif parsed.path == "/sidekick-chat":
             self._handle_sidekick_chat()
+        elif parsed.path == "/agents":
+            self._update_agents()
         else:
             self.send_error(404, "Not Found")
 
@@ -717,6 +724,91 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(html.encode("utf-8"))
+
+    def _serve_config(self) -> None:
+        """Serve provider configuration from ~/.context-foundry/provider_config.json"""
+        from pathlib import Path
+        config_path = Path.home() / ".context-foundry" / "provider_config.json"
+
+        config = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load config: {e}")
+                config = {"error": str(e)}
+
+        body = json.dumps(config).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_agents(self) -> None:
+        """Serve agent configuration from AgentRegistry."""
+        try:
+            from tools.evolution.framework.agent_registry import AgentRegistry
+            registry = AgentRegistry()
+            agents = registry.list_agents()
+            body = json.dumps({"agents": agents}).encode("utf-8")
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve agents: {e}")
+            self._send_json_error(500, str(e))
+
+    def _update_agents(self) -> None:
+        """Update agent configuration."""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body) if body else {}
+            
+            from tools.evolution.framework.agent_registry import AgentRegistry
+            
+            agent_name = data.get("name")
+            provider = data.get("provider")
+            
+            if not agent_name or not provider:
+                self._send_json_error(400, "Missing name or provider")
+                return
+                
+            registry = AgentRegistry()
+            
+            # Extract optional IDs if provided
+            agent_id = data.get("agent_id")
+            alias_id = data.get("alias_id")
+            
+            kwargs = {}
+            if agent_id is not None:
+                kwargs["agent_id"] = agent_id
+            if alias_id is not None:
+                kwargs["alias_id"] = alias_id
+                
+            registry.update_provider(agent_name, provider, **kwargs)
+            
+            # Return updated list
+            agents = registry.list_agents()
+            response_body = json.dumps({"status": "ok", "agents": agents}).encode("utf-8")
+            
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(response_body)))
+            self.end_headers()
+            self.wfile.write(response_body)
+            
+        except Exception as e:
+            logger.error(f"Failed to update agent: {e}")
+            self._send_json_error(500, str(e))
 
     def _serve_status(self) -> None:
         payload = build_status_payload(self.server.context)
@@ -2848,6 +2940,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         timeout=30,
                     )
 
+                    response_text = None
                     if result.returncode == 0 and result.stdout:
                         response_text = result.stdout.strip()
                         logger.info(
@@ -2859,10 +2952,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             f"Stdout: {result.stdout[:200] if result.stdout else 'empty'}... "
                             f"Stderr: {result.stderr[:500] if result.stderr else 'empty'}"
                         )
+                    else:
+                        logger.warning(
+                            f"Claude CLI failed. Code: {result.returncode}, Stderr: {result.stderr}"
+                        )
+
+                    if response_text:
                         # Clean up any quotes if Claude adds them
-                        if response_text.startswith('"') and response_text.endswith(
-                            '"'
-                        ):
+                        if response_text.startswith('"') and response_text.endswith('"'):
                             response_text = response_text[1:-1]
 
                         # Check for build trigger
@@ -2913,12 +3010,6 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                             except Exception as e:
                                 logger.error(f"Failed to trigger sidekick build: {e}")
                                 response_text += f"\n(Oops, I tried to start the build but tripped over a wire: {e})"
-                    else:
-                        logger.warning(
-                            f"Claude CLI failed. Code: {result.returncode}, Stderr: {result.stderr}"
-                        )
-                        # Don't raise, just let it fall through to error message
-                        response_text = None
 
                 except Exception as e:
                     logger.warning("Sidekick Claude CLI failed: %s", e)
@@ -3513,6 +3604,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <button class="tab-btn" data-tab="gates">Gates</button>
             <button class="tab-btn" data-tab="timeline">Timeline</button>
             <button class="tab-btn" data-tab="logs">Logs</button>
+            <button class="tab-btn" data-tab="config">Config</button>
           </div>
           <div id="tab-context" class="tab-content active">
             <div class="monospace" id="context-window">Waiting for data…</div>
@@ -3529,6 +3621,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           <div id="tab-logs" class="tab-content">
             <div class="label">Recent logs</div>
             <div id="log-list"></div>
+          </div>
+          <div id="tab-config" class="tab-content">
+            <div class="label">Provider Configuration</div>
+            <div class="monospace" id="config-view" style="margin-top:8px;font-size:12px;">Loading config...</div>
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);">
+              <p>To update configuration manually:</p>
+              <code style="background:#0b0d12;padding:4px 8px;border-radius:4px;display:block;margin:4px 0;">cat ~/.context-foundry/provider_config.json</code>
+              <p style="margin-top:4px;">Edit the file and restart the daemon.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -3566,8 +3667,62 @@ DASHBOARD_HTML = """<!DOCTYPE html>
           if (tab === 'gates') fetchAndRenderGates(state.selectedJobId);
           if (tab === 'timeline') fetchAndRenderTimeline(state.selectedJobId);
         }
+        if (tab === 'config') fetchAndRenderConfig();
       });
     });
+
+    async function fetchAndRenderConfig() {
+      const configViewEl = document.getElementById('config-view');
+      configViewEl.innerHTML = 'Loading config...';
+      try {
+        const res = await fetch('/config');
+        if (!res.ok) {
+          configViewEl.innerHTML = 'Failed to load config';
+          return;
+        }
+        const config = await res.json();
+        renderConfig(config);
+      } catch (err) {
+        console.error('Failed to fetch config', err);
+        configViewEl.innerHTML = 'Error loading config';
+      }
+    }
+
+    function renderConfig(config) {
+      const configViewEl = document.getElementById('config-view');
+      if (!config || config.error) {
+        configViewEl.innerHTML = config?.error || 'No config data';
+        return;
+      }
+      
+      let html = '<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px;font-weight:bold;">';
+      html += '<div>Phase</div><div>Provider</div><div>Model/Agent</div></div>';
+      
+      const phases = config.phases || {};
+      const order = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"];
+      
+      order.forEach(phase => {
+        const cfg = phases[phase] || {};
+        const provider = cfg.provider || 'local';
+        let model = '';
+        
+        if (provider === 'bedrock') {
+           model = cfg.model ? formatModelName(cfg.model) : '(default)';
+        } else if (provider === 'bedrock-agent') {
+           model = `Agent: ${cfg.agent_id} (${cfg.alias_id || '?'})`;
+        } else {
+           model = '(Claude CLI)';
+        }
+        
+        html += `<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;padding:4px 0;">`;
+        html += `<div>${phase}</div>`;
+        html += `<div style="color:var(--accent);">${provider}</div>`;
+        html += `<div style="color:var(--muted);">${model}</div>`;
+        html += `</div>`;
+      });
+      
+      configViewEl.innerHTML = html;
+    }
 
     async function fetchAndRenderTree(jobId) {
       if (!jobId) {
@@ -3601,7 +3756,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       (tree.phases || []).forEach((phase, i) => {
         const isLast = i === tree.phases.length - 1;
         const prefix = isLast ? '└── ' : '├── ';
-        html += `<div class="tree-phase"><span class="tree-prefix">${prefix}</span><span class="tree-label">Phase: ${phase.phase}</span>${statusBadge(phase.status)}</div>`;
+        // Include model info in phase display
+        const modelInfo = phase.model ? ` <span class="muted" style="font-size:11px;">[${formatModelName(phase.model)}]</span>` :
+                         (phase.provider === 'local' ? ' <span class="muted" style="font-size:11px;">[Local CLI]</span>' : '');
+        html += `<div class="tree-phase"><span class="tree-prefix">${prefix}</span><span class="tree-label">Phase: ${phase.phase}</span>${modelInfo}${statusBadge(phase.status)}</div>`;
 
         (phase.tasks || []).forEach((task, j) => {
           const taskPrefix = isLast ? '    ' : '│   ';
@@ -3805,6 +3963,27 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       return ['running','queued','failed','succeeded','timed_out'].includes(status) ? status : 'queued';
     }
 
+    // Format model name for display (shorten long Bedrock IDs)
+    function formatModelName(modelId) {
+      if (!modelId) return '';
+      // Map common model IDs to short names
+      const modelMap = {
+        'anthropic.claude-opus-4-5-20251101-v1:0': 'Opus 4.5',
+        'anthropic.claude-opus-4-20250514-v1:0': 'Opus 4',
+        'anthropic.claude-sonnet-4-20250514-v1:0': 'Sonnet 4',
+        'anthropic.claude-3-5-sonnet-20240620-v1:0': 'Sonnet 3.5',
+        'anthropic.claude-3-opus-20240229-v1:0': 'Opus 3',
+      };
+      if (modelMap[modelId]) return modelMap[modelId];
+      // For unknown models, try to extract a readable name
+      if (modelId.includes('qwen')) return 'Qwen';
+      if (modelId.includes('llama')) return 'Llama';
+      if (modelId.includes('mistral')) return 'Mistral';
+      // Fallback: show last part of model ID
+      const parts = modelId.split('.');
+      return parts[parts.length - 1].split('-')[0];
+    }
+
     function renderJobs(payload) {
       const jobs = payload.jobs || [];
       if (!state.selectedJobId && jobs.length) {
@@ -3814,13 +3993,25 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       jobListEl.innerHTML = jobs.map(job => {
         const selected = job.id === state.selectedJobId ? 'selected' : '';
         const agents = job.agents || { active_count: 0, total_spawned: 0 };
-        const phase = job.latest_phase ? `${job.latest_phase.phase} · ${job.latest_phase.status}` : 'No phase yet';
+        // Build phase display with model info
+        let phaseDisplay = 'No phase yet';
+        let modelDisplay = '';
+        if (job.latest_phase) {
+          const lp = job.latest_phase;
+          phaseDisplay = `${lp.phase} · ${lp.status}`;
+          if (lp.details?.model) {
+            modelDisplay = formatModelName(lp.details.model);
+          } else if (lp.details?.provider === 'local') {
+            modelDisplay = 'Local CLI';
+          }
+        }
         return `
           <div class="job-card ${selected}" data-id="${job.id}">
             <div class="job-header">
               <div>
                 <div class="job-meta">${job.id.slice(0, 8)} · ${job.type}</div>
-                <div class="label">${phase}</div>
+                <div class="label">${phaseDisplay}</div>
+                ${modelDisplay ? `<div class="muted" style="font-size:11px;">Model: ${modelDisplay}</div>` : ''}
               </div>
               <div class="status ${statusClass(job.status)}">${job.status}</div>
             </div>
@@ -3863,7 +4054,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       focusTitleEl.textContent = `${job.type} · ${job.id.slice(0,8)}`;
       focusStatusEl.textContent = job.status;
       focusStatusEl.className = `status ${statusClass(job.status)}`;
-      phaseLineEl.textContent = job.latest_phase ? `Phase: ${job.latest_phase.phase} (${job.latest_phase.status})` : 'Phase: --';
+      // Display phase with model info if available
+      if (job.latest_phase) {
+        const phase = job.latest_phase;
+        const modelInfo = phase.details?.model ? ` · ${formatModelName(phase.details.model)}` : '';
+        const providerInfo = phase.details?.provider === 'local' ? ' · Local CLI' : '';
+        phaseLineEl.textContent = `Phase: ${phase.phase} (${phase.status})${modelInfo}${providerInfo}`;
+      } else {
+        phaseLineEl.textContent = 'Phase: --';
+      }
 
       if (job.context_preview && job.context_preview.lines && job.context_preview.lines.length) {
         contextEl.textContent = job.context_preview.lines.join('\\n');

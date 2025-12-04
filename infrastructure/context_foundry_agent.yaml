@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Context Foundry Bedrock Agent Infrastructure'
+
+Parameters:
+  ModelId:
+    Type: String
+    Default: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+    Description: 'The Bedrock Foundation Model ID to use for the agent.'
+  AgentName:
+    Type: String
+    Default: 'ContextFoundryAgent'
+    Description: 'Name of the Bedrock Agent.'
+  AgentAliasName:
+    Type: String
+    Default: 'Development'
+    Description: 'Name of the Agent Alias.'
+  Instruction:
+    Type: String
+    Description: 'The system prompt/instruction for the agent.'
+
+Resources:
+  # 1. IAM Role for the Agent
+  AgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AgentName}-Role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${ModelId}'
+
+  # 2. The Bedrock Agent
+  ContextFoundryAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: !Ref AgentName
+      AgentResourceRoleArn: !GetAtt AgentRole.Arn
+      FoundationModel: !Ref ModelId
+      Instruction: !Ref Instruction
+      IdleSessionTTLInSeconds: 1800
+      ActionGroups:
+        - ActionGroupName: 'LocalTools'
+          ActionGroupExecutor:
+            CustomControl: 'RETURN_CONTROL'
+          FunctionSchema:
+            Functions:
+              - Name: 'run_command'
+                Description: 'Execute a shell command on the local machine.'
+                Parameters:
+                  command:
+                    Type: 'string'
+                    Description: 'The command to execute'
+                    Required: true
+              - Name: 'read_file'
+                Description: 'Read the contents of a file.'
+                Parameters:
+                  path:
+                    Type: 'string'
+                    Description: 'Path to the file'
+                    Required: true
+              - Name: 'write_file'
+                Description: 'Write content to a file.'
+                Parameters:
+                  path:
+                    Type: 'string'
+                    Description: 'Path to the file'
+                    Required: true
+                  content:
+                    Type: 'string'
+                    Description: 'Content to write'
+                    Required: true
+              - Name: 'list_directory'
+                Description: 'List contents of a directory.'
+                Parameters:
+                  path:
+                    Type: 'string'
+                    Description: 'Path to the directory'
+                    Required: true
+
+  # 3. Agent Alias (Required to invoke the agent)
+  AgentAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !Ref ContextFoundryAgent
+      AgentAliasName: !Ref AgentAliasName
+      Description: 'Alias for development'
+
+Outputs:
+  AgentId:
+    Description: 'The ID of the created Bedrock Agent'
+    Value: !Ref ContextFoundryAgent
+  AgentAliasId:
+    Description: 'The ID of the Agent Alias'
+    Value: !GetAtt AgentAlias.AgentAliasId

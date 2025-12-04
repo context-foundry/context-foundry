@@ -152,9 +152,9 @@ class TestAPIDesign:
         for route, handler_name in rest_api.API_ROUTES.items():
             if handler_name in implemented_handlers:
                 # Handler name is the function name
-                assert hasattr(rest_api, handler_name), (
-                    f"Handler {handler_name} not found for route {route}"
-                )
+                assert hasattr(
+                    rest_api, handler_name
+                ), f"Handler {handler_name} not found for route {route}"
 
     def test_module_docstring(self):
         """Test that module has documentation"""

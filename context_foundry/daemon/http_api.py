@@ -134,33 +134,51 @@ def get_job_tree(store: Store, job_id: str) -> Dict[str, Any]:
         # Serialize tasks
         serialized_tasks = []
         for task in sorted(phase_tasks, key=lambda t: t.created_at):
-            serialized_tasks.append(
-                {
-                    "task_id": task.id,
-                    "status": task.status.value,
-                    "created_at": task.created_at.isoformat()
-                    if task.created_at
-                    else None,
-                    "started_at": task.started_at.isoformat()
-                    if task.started_at
-                    else None,
-                    "completed_at": task.completed_at.isoformat()
-                    if task.completed_at
-                    else None,
-                    "last_heartbeat": task.last_heartbeat.isoformat()
-                    if task.last_heartbeat
-                    else None,
-                }
-            )
-
-        phases.append(
-            {
-                "phase": phase_name,
-                "status": phase_status,
-                "sequence": seq,
-                "tasks": serialized_tasks,
+            task_data = {
+                "task_id": task.id,
+                "status": task.status.value,
+                "created_at": task.created_at.isoformat()
+                if task.created_at
+                else None,
+                "started_at": task.started_at.isoformat()
+                if task.started_at
+                else None,
+                "completed_at": task.completed_at.isoformat()
+                if task.completed_at
+                else None,
+                "last_heartbeat": task.last_heartbeat.isoformat()
+                if task.last_heartbeat
+                else None,
             }
-        )
+            # Include model/provider info from task metadata
+            if task.metadata:
+                if task.metadata.get("provider"):
+                    task_data["provider"] = task.metadata["provider"]
+                if task.metadata.get("model"):
+                    task_data["model"] = task.metadata["model"]
+            serialized_tasks.append(task_data)
+
+        # Get model/provider from first task (they should all be the same for a phase)
+        phase_model = None
+        phase_provider = None
+        if phase_tasks:
+            first_task = phase_tasks[0]
+            if first_task.metadata:
+                phase_model = first_task.metadata.get("model")
+                phase_provider = first_task.metadata.get("provider")
+
+        phase_data = {
+            "phase": phase_name,
+            "status": phase_status,
+            "sequence": seq,
+            "tasks": serialized_tasks,
+        }
+        if phase_model:
+            phase_data["model"] = phase_model
+        if phase_provider:
+            phase_data["provider"] = phase_provider
+
+        phases.append(phase_data)
 
     return {
         "job_id": job.id,
@@ -257,6 +275,31 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         # Convert list values to single values
         return {k: v[0] if len(v) == 1 else v for k, v in params.items()}
 
+    def do_POST(self) -> None:
+        """Handle POST requests."""
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        try:
+            # Read request body
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            data = json.loads(body) if body else {}
+
+            # Route to appropriate handler
+            if path == "/tools/execute":
+                self._handle_execute_tool(data)
+            elif path == "/agents":
+                self._handle_agents_update(data)
+            else:
+                self._send_error(404, f"Not found: {path}")
+
+        except json.JSONDecodeError:
+            self._send_error(400, "Invalid JSON body")
+        except Exception as e:
+            logger.exception("Error handling POST request: %s", path)
+            self._send_error(500, f"Internal server error: {str(e)}")
+
     def do_GET(self) -> None:
         """Handle GET requests."""
         parsed = urlparse(self.path)
@@ -272,6 +315,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 self._handle_recent_events()
             elif path == "/metrics":
                 self._handle_metrics()
+            elif path == "/config":
+                self._handle_config()
             elif re.match(r"^/jobs/[^/]+$", path):
                 job_id = path.split("/")[2]
                 self._handle_get_job(job_id)
@@ -284,6 +329,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             elif re.match(r"^/jobs/[^/]+/tree$", path):
                 job_id = path.split("/")[2]
                 self._handle_job_tree(job_id)
+            elif path == "/agents":
+                self._handle_agents()
             else:
                 self._send_error(404, f"Not found: {path}")
 
@@ -532,6 +579,115 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _handle_config(self) -> None:
+        """GET /config - Get provider configuration."""
+        from pathlib import Path
+        config_path = Path.home() / ".context-foundry" / "provider_config.json"
+        
+        config = {}
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load config: {e}")
+                config = {"error": str(e)}
+        
+        self._send_json(config)
+
+    def _handle_execute_tool(self, data: Dict[str, Any]) -> None:
+        """POST /tools/execute - Execute a tool."""
+        # Check Authentication
+        import os
+        api_key = os.environ.get("EVOLUTION_API_KEY")
+        
+        # CRITICAL SECURITY: Do not allow tool execution without an API key
+        if not api_key:
+            self._send_error(500, "Server misconfiguration: EVOLUTION_API_KEY not set. Tool execution disabled.")
+            return
+
+        auth_header = self.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer ") or auth_header.split(" ")[1] != api_key:
+            self._send_error(401, "Unauthorized: Invalid or missing API Key")
+            return
+
+        tool_name = data.get("tool_name")
+        arguments = data.get("arguments", {})
+        working_directory = data.get("working_directory")
+
+        if not tool_name:
+            self._send_error(400, "Missing tool_name")
+            return
+            
+        if not working_directory:
+            self._send_error(400, "Missing working_directory")
+            return
+
+        try:
+            # Import here to avoid circular imports if any
+            from tools.evolution.communication.tool_executor import ToolExecutor
+            from pathlib import Path
+            
+            executor = ToolExecutor(Path(working_directory))
+            result = executor.execute(tool_name, arguments)
+            
+            self._send_json(result)
+            
+        except Exception as e:
+            logger.error(f"Tool execution error: {e}")
+            self._send_error(500, str(e))
+
+    def _handle_agents(self) -> None:
+        """GET /agents - Get agent configuration."""
+        try:
+            from tools.evolution.framework.agent_registry import AgentRegistry
+            registry = AgentRegistry()
+            agents = registry.list_agents()
+            self._send_json({"agents": agents})
+        except Exception as e:
+            logger.error(f"Failed to list agents: {e}")
+            self._send_error(500, str(e))
+
+    def _handle_agents_update(self, data: Dict[str, Any]) -> None:
+        """POST /agents - Update agent configuration."""
+        try:
+            from tools.evolution.framework.agent_registry import AgentRegistry
+            
+            agent_name = data.get("name")
+            provider = data.get("provider")
+            
+            if not agent_name or not provider:
+                self._send_error(400, "Missing name or provider")
+                return
+                
+            registry = AgentRegistry()
+            
+            # Extract optional IDs if provided
+            agent_id = data.get("agent_id")
+            alias_id = data.get("alias_id")
+            
+            # Update provider
+            # If switching to local, agent_id/alias_id will be cleared by registry if we pass None
+            # If switching to bedrock, we need to pass them if they are in the request
+            
+            kwargs = {}
+            if agent_id is not None:
+                kwargs["agent_id"] = agent_id
+            if alias_id is not None:
+                kwargs["alias_id"] = alias_id
+                
+            registry.update_provider(agent_name, provider, **kwargs)
+            
+            # Return updated list
+            agents = registry.list_agents()
+            self._send_json({"status": "ok", "agents": agents})
+            
+        except ValueError as e:
+            self._send_error(400, str(e))
+        except Exception as e:
+            logger.error(f"Failed to update agent: {e}")
+            self._send_error(500, str(e))
+
 
 # =============================================================================
 # API SERVER
@@ -545,12 +701,7 @@ class APIServer:
     Runs in a separate thread and provides REST endpoints for introspection.
     """
 
-    def __init__(
-        self,
-        store: Store,
-        host: str = "127.0.0.1",
-        port: int = 8421,
-    ):
+    def __init__(self, store: Store, host: str = "localhost", port: int = 8420):
         self.store = store
         self.host = host
         self.port = port

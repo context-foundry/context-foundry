@@ -138,6 +138,31 @@
             background-position: right 8px center;
         }
 
+        .config-select {
+            appearance: none;
+            padding: 6px 24px 6px 10px;
+            font-size: 12px;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 6px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            cursor: pointer;
+            transition: all 0.15s;
+            width: 100%;
+        }
+
+        .config-select:hover {
+            border-color: var(--text-muted);
+        }
+
+        .config-select:focus {
+            outline: none;
+            border-color: var(--accent-purple);
+        }
+
         /* Main Layout - Three columns when activity panel is visible */
         .main {
             display: grid;
@@ -2784,6 +2809,7 @@
                 opacity: 0;
                 transform: translateY(-20px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -3005,14 +3031,16 @@
             content: '';
             width: 16px;
             height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
+            border: 2px solid rgba(255, 255, 255, 0.3);
             border-top-color: white;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
 
         @keyframes spin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
     </style>
 </head>
@@ -3029,14 +3057,24 @@
                 <!-- Messages will be populated here -->
             </div>
             <div class="sidekick-modal-footer">
-                <input type="text"
-                       class="sidekick-modal-input"
-                       id="sidekickModalInput"
-                       placeholder="Type a message..."
-                       onkeydown="handleModalKeydown(event)">
+                <input type="text" class="sidekick-modal-input" id="sidekickModalInput" placeholder="Type a message..."
+                    onkeydown="handleModalKeydown(event)">
                 <button class="sidekick-send-btn" id="sidekickSendBtn" onclick="sendModalMessage()">
                     <div class="paper-airplane"></div>
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div class="sidekick-modal-overlay" id="configModal" onclick="closeConfigModal(event)">
+        <div class="sidekick-modal" onclick="event.stopPropagation()" style="max-width: 600px;">
+            <div class="sidekick-modal-header">
+                <span class="sidekick-modal-title">Pipeline Configuration</span>
+                <button class="sidekick-modal-close" onclick="closeConfigModal()">&times;</button>
+            </div>
+            <div class="sidekick-modal-body" id="configModalBody" style="padding: 16px;">
+                <div style="color: var(--text-secondary); font-size: 13px;">Loading configuration...</div>
             </div>
         </div>
     </div>
@@ -3065,6 +3103,17 @@
                         onkeydown="handleSidekickChat(event)">
                 </div>
             </div>
+            <button id="configBtn" onclick="openConfigModal()" title="Pipeline Configuration"
+                style="background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px; color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 12px; transition: all 0.2s;"
+                onmouseover="this.style.borderColor='var(--accent-purple)'; this.style.color='var(--text-primary)';"
+                onmouseout="this.style.borderColor='var(--border)'; this.style.color='var(--text-secondary)';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                    </path>
+                </svg>
+            </button>
         </div>
     </header>
 
@@ -6932,6 +6981,125 @@
             // If called from overlay click, only close if clicking the overlay itself
             if (event && event.target !== event.currentTarget) return;
             document.getElementById('sidekickModal').classList.remove('visible');
+        }
+
+        // Config Modal Functions
+        async function openConfigModal() {
+            const modal = document.getElementById('configModal');
+            const body = document.getElementById('configModalBody');
+            modal.classList.add('visible');
+
+            body.innerHTML = '<div style="color: var(--text-secondary); font-size: 13px;">Loading configuration...</div>';
+
+            try {
+                const res = await fetch('/agents');
+                if (!res.ok) throw new Error('Failed to load agents');
+                const data = await res.json();
+                renderConfigModal(data.agents || {});
+            } catch (err) {
+                body.innerHTML = `<div style="color: var(--status-failed);">Error: ${err.message}</div>`;
+            }
+        }
+
+        function closeConfigModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('configModal').classList.remove('visible');
+        }
+
+        function renderConfigModal(agents) {
+            const body = document.getElementById('configModalBody');
+            // Sort agents by phase order if possible, or just use keys
+            const order = ['scout', 'architect', 'builder', 'test', 'screenshot', 'documentation', 'deploy', 'feedback'];
+
+            // Get all agent names, ensuring we cover both the standard order and any extras
+            const agentNames = Object.keys(agents);
+            const sortedNames = [...new Set([...order, ...agentNames])].filter(name => agents[name]);
+
+            let html = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--border);">
+                            <th style="text-align: left; padding: 8px; color: var(--text-secondary);">Agent</th>
+                            <th style="text-align: left; padding: 8px; color: var(--text-secondary);">Provider</th>
+                            <th style="text-align: left; padding: 8px; color: var(--text-secondary);">Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            sortedNames.forEach(name => {
+                const agent = agents[name];
+                const provider = agent.provider || 'local';
+
+                let details = '';
+                if (provider === 'bedrock-agent') {
+                    details = `<span style="font-family: monospace; font-size: 11px;">
+                        ID: ${agent.agent_id || '?'}<br>
+                        Alias: ${agent.alias_id || '?'}
+                    </span>`;
+                } else {
+                    details = '<span style="color: var(--text-muted);">Local Claude CLI</span>';
+                }
+
+                const isBedrock = provider === 'bedrock-agent';
+
+                html += `
+                    <tr style="border-bottom: 1px solid var(--border-dim);">
+                        <td style="padding: 8px; font-weight: 500; text-transform: capitalize;">${name}</td>
+                        <td style="padding: 8px;">
+                            <select onchange="updateAgentProvider('${name}', this.value)" class="config-select">
+                                <option value="local" ${provider === 'local' ? 'selected' : ''}>Local</option>
+                                <option value="bedrock-agent" ${provider === 'bedrock-agent' ? 'selected' : ''}>Bedrock Agent</option>
+                            </select>
+                        </td>
+                        <td style="padding: 8px;">${details}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+
+            // Add note about IDs
+            html += `
+                <div style="margin-top: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+                    Note: Switching to <strong>Bedrock Agent</strong> requires the agent to be deployed. 
+                    If IDs are missing, use the CLI <code>cf agents switch</code> command to set them up first.
+                </div>
+            `;
+
+            body.innerHTML = html;
+        }
+
+        async function updateAgentProvider(name, provider) {
+            const body = document.getElementById('configModalBody');
+            // Show loading overlay or just opacity
+            body.style.opacity = '0.5';
+
+            try {
+                const res = await fetch('/agents', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        provider: provider
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || 'Failed to update');
+                }
+
+                const data = await res.json();
+                renderConfigModal(data.agents);
+
+            } catch (err) {
+                alert('Failed to update provider: ' + err.message);
+                // Reload to reset state
+                openConfigModal();
+            } finally {
+                body.style.opacity = '1';
+            }
         }
 
         function escapeHtml(text) {

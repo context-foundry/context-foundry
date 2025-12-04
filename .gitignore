@@ -95,6 +95,11 @@ test_results/
 smoke_test_*.txt
 .test_artifacts/
 
+# Security Analysis (NEVER publish)
+docs/PROMPT_INJECTION_ANALYSIS.md
+docs/*_SECURITY_*.md
+docs/*_VULNERABILITY_*.md
+
 # Strange git artifacts
 =*
 
@@ -146,3 +151,4 @@ docs/assets/SatoshiChoreTracker.gif
 
 # Glass Pane local documentation
 tools/glass-pane/AGENT_VISIBILITY.md
+# Token files

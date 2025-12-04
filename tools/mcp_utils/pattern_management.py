@@ -474,7 +474,7 @@ def merge_project_patterns_impl(
             client = S3PatternClient(
                 bucket_name=config.s3_bucket_name,
                 prefix=config.s3_prefix,
-                aws_region=config.s3_region
+                aws_region=config.s3_region,
             )
             if client.enabled:
                 s3_sync_result = client.upload_pattern(pattern_type, force=False)

@@ -243,7 +243,9 @@ class CostCalculator:
 
         # Monthly budget
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_summary = db.get_cost_summary(month_start.isoformat(sep=" "), now.isoformat(sep=" "))
+        monthly_summary = db.get_cost_summary(
+            month_start.isoformat(sep=" "), now.isoformat(sep=" ")
+        )
         monthly_cost = monthly_summary.get("total_cost", 0.0)
         monthly_budget = self.estimate_remaining_budget(monthly_cost, "monthly")
 

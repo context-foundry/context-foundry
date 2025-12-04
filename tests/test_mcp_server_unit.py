@@ -182,15 +182,15 @@ class TestDetectExistingCodebase:
         result = _detect_existing_codebase(sample_python_project)
 
         assert result["has_code"] is True, "Should detect code presence"
-        assert result["project_type"] == "python", (
-            f"Should detect python type, got {result['project_type']}"
-        )
-        assert "Python" in result["languages"], (
-            f"Should include Python in languages: {result['languages']}"
-        )
-        assert result["confidence"] == "high", (
-            f"Should have high confidence, got {result['confidence']}"
-        )
+        assert (
+            result["project_type"] == "python"
+        ), f"Should detect python type, got {result['project_type']}"
+        assert (
+            "Python" in result["languages"]
+        ), f"Should include Python in languages: {result['languages']}"
+        assert (
+            result["confidence"] == "high"
+        ), f"Should have high confidence, got {result['confidence']}"
         assert "requirements.txt" in result["project_files"]
         assert "setup.py" in result["project_files"]
 
@@ -389,9 +389,9 @@ class TestGlobalPatternsImpl:
 
         # Verify file was created
         pattern_file = Path(result["pattern_file"])
-        assert pattern_file.exists(), (
-            f"Pattern file should exist at {result['pattern_file']}"
-        )
+        assert (
+            pattern_file.exists()
+        ), f"Pattern file should exist at {result['pattern_file']}"
 
         # Verify content
         with open(pattern_file) as f:

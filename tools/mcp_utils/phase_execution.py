@@ -29,6 +29,12 @@ from tools.baml_integration import (
     update_phase_with_baml,
 )
 from tools.mcp_utils.phase_metrics import estimate_context_tokens, log_phase_metrics
+from tools.evolution.framework.llm_provider import LocalClaudeProvider, BedrockProvider, BedrockAgentProvider
+from tools.evolution.framework.provider_config import get_provider_for_phase
+from tools.evolution.agents.scout_agent import ScoutAgent
+from tools.evolution.agents.architect_agent import ArchitectAgent
+from tools.evolution.agents.builder_agent import BuilderAgent
+from tools.evolution.agents.generic_agent import GenericAgent
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -944,6 +950,43 @@ def _run_phase_internal(
     # Ensure working_directory is absolute path - agents MUST run from project root
     # ==========================================================================
     working_directory = Path(working_directory).resolve()
+    
+    # ==========================================================================
+    # PROVIDER RESOLUTION
+    # ==========================================================================
+    from tools.evolution.framework.provider_config import get_provider_for_phase, reload_config
+
+    # Force reload config to pick up any recent changes
+    reload_config()
+
+    # If provider arg is explicit (e.g. from CLI flag), it overrides config
+    # But if it's default "claude", we check config
+    if provider.lower() == "bedrock":
+        provider_type = "bedrock"
+        effective_model = model
+    elif provider.lower() == "local":
+        provider_type = "local"
+        # Allow explicit model for local provider if specified (e.g. for dashboard display or future use)
+        effective_model = model if model else None
+        extra_config = {}
+    elif provider.lower() == "bedrock-agent":
+        provider_type = "bedrock-agent"
+        effective_model = None # Model is defined in the agent
+        # We need extra config for agent ID, but CLI args might not support it yet
+        # So we likely rely on config file resolution below if not passed explicitly
+        # But wait, if provider is explicit, we skip get_provider_for_phase
+        # This is a limitation: CLI can't easily pass agent_id yet.
+        # For now, we assume if you use CLI --provider bedrock-agent, you rely on defaults or it fails
+        extra_config = {} 
+    else:
+        provider_type, effective_model, extra_config = get_provider_for_phase(phase_name)
+        # If explicit model passed, override config model
+        if model:
+            effective_model = model
+
+    print(f"🔧 Phase '{phase_name}' resolved: provider={provider_type}, model={effective_model}", file=sys.stderr)
+            
+    effective_provider = provider_type
 
     # ==========================================================================
     # STATE MACHINE: Initialize task tracking
@@ -959,18 +1002,27 @@ def _run_phase_internal(
                 # Create task for this phase
                 sequence = PHASE_SEQUENCE.get(phase_name, 99)
                 timeout = DEFAULT_PHASE_TIMEOUTS.get(phase_name, phase_timeout)
+
+                # Build task metadata including model/provider info
+                task_metadata = {
+                    "iteration": iteration,
+                    "project_type": project_type,
+                    "provider": effective_provider if 'effective_provider' in dir() else provider,
+                    "model": effective_model if 'effective_model' in dir() else model,
+                }
+
                 task = state_machine.create_task_for_phase(
                     job_id=job_id,
                     phase_name=phase_name,
                     sequence=sequence,
                     timeout_seconds=timeout,
-                    metadata={"iteration": iteration, "project_type": project_type},
+                    metadata=task_metadata,
                 )
                 task_id = task.id
 
                 # Start the task (CREATED -> RUNNING)
                 task = state_machine.start_task(task_id)
-                logger.info(f"Task {task_id[:8]} started for phase {phase_name}")
+                logger.info(f"Task {task_id[:8]} started for phase {phase_name} (provider={task_metadata.get('provider')}, model={task_metadata.get('model')})")
         except Exception as e:
             logger.warning(f"Failed to create task for {phase_name}: {e}")
             # Continue without task tracking - don't fail the phase
@@ -1075,81 +1127,156 @@ def _run_phase_internal(
             logger.warning(f"Failed to save phase prompt file: {e}")
             print(f"⚠️  Failed to save phase prompt file: {e}", file=sys.stderr)
 
-    # Build command based on provider
-    if provider.lower() == "gemini":
-        # Gemini CLI Command
-        # We prepend the system prompt to the user instruction because Gemini CLI
-        # doesn't have a dedicated --system-prompt flag in the version we checked.
-        full_prompt = f"SYSTEM INSTRUCTIONS:\n{phase_prompt}\n\nUSER INSTRUCTION:\n{input_instruction}"
+    # ==========================================================================
+    # TOOL EXECUTOR FOR BEDROCK AGENT RETURN CONTROL
+    # ==========================================================================
 
-        cmd = [
-            "gemini",
-            "--yolo",  # Auto-approve tools (equivalent to bypassPermissions)
-            "--output-format",
-            "text",
-            full_prompt,
-        ]
+    def tool_executor(tool_name: str, tool_input: dict):
+        """Execute tools for Bedrock Agent Return Control."""
+        import glob as glob_module
+        import re
+
+        logger.info(f"Tool executor called: {tool_name} with input: {tool_input}")
+
+        if tool_name == "codex_search":
+            # Call the MCP codex_search function
+            try:
+                from tools.mcp_utils.codex import codex_search
+                query = tool_input.get("query", "")
+                category = tool_input.get("category")
+                result = codex_search(query, category=category)
+                return result
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "codex_get_entry":
+            try:
+                from tools.mcp_utils.codex import codex_get_entry
+                entry_id = tool_input.get("entry_id", "")
+                result = codex_get_entry(entry_id)
+                return result
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "read_file":
+            file_path = tool_input.get("file_path", "")
+            try:
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                return {"content": content, "path": file_path}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "write_file":
+            file_path = tool_input.get("file_path", "")
+            content = tool_input.get("content", "")
+            try:
+                Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(file_path, 'w') as f:
+                    f.write(content)
+                return {"success": True, "path": file_path}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "glob":
+            pattern = tool_input.get("pattern", "")
+            search_path = tool_input.get("path", str(working_directory))
+            try:
+                full_pattern = str(Path(search_path) / pattern)
+                matches = glob_module.glob(full_pattern, recursive=True)
+                return {"matches": matches[:100]}  # Limit results
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "grep":
+            pattern = tool_input.get("pattern", "")
+            search_path = tool_input.get("path", str(working_directory))
+            try:
+                results = []
+                search_dir = Path(search_path)
+                if search_dir.is_file():
+                    files = [search_dir]
+                else:
+                    files = list(search_dir.rglob("*"))
+
+                regex = re.compile(pattern)
+                for f in files[:50]:  # Limit files searched
+                    if f.is_file() and f.suffix in ['.py', '.js', '.ts', '.json', '.md', '.txt']:
+                        try:
+                            content = f.read_text()
+                            for i, line in enumerate(content.split('\n'), 1):
+                                if regex.search(line):
+                                    results.append({"file": str(f), "line": i, "content": line[:200]})
+                        except:
+                            pass
+                return {"matches": results[:50]}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif tool_name == "run_bash":
+            command = tool_input.get("command", "")
+            try:
+                result = subprocess.run(
+                    command, shell=True, capture_output=True, text=True,
+                    cwd=str(working_directory), timeout=60
+                )
+                return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
+            except Exception as e:
+                return {"error": str(e)}
+
+        else:
+            return {"error": f"Unknown tool: {tool_name}"}
+
+    # ==========================================================================
+    # AGENT EXECUTION
+    # ==========================================================================
+
+    # NOTE: Provider resolution logic was moved to the top of the function
+    # to ensure metadata is correct. We use the resolved values here.
+
+    llm_provider = None
+    if provider_type == "bedrock":
+        llm_provider = BedrockProvider(default_model=effective_model)
+    elif provider_type == "bedrock-agent":
+        agent_id = extra_config.get("agent_id")
+        alias_id = extra_config.get("alias_id")
+        
+        if not agent_id or not alias_id:
+            logger.warning(f"Bedrock Agent provider selected but missing agent_id/alias_id in config. Falling back to Local.")
+            llm_provider = LocalClaudeProvider()
+        else:
+            region = extra_config.get("region", "us-east-1")
+            logger.info(f"Using Bedrock Agent: {agent_id} ({alias_id}) in {region}")
+            llm_provider = BedrockAgentProvider(
+                agent_id=agent_id,
+                agent_alias_id=alias_id,
+                tool_executor=tool_executor,  # Pass executor for Return Control
+                region=region
+            )
     else:
-        # Claude CLI Command (Default)
-        cmd = [
-            "claude",
-            "--permission-mode",
-            "bypassPermissions",
-            "--strict-mcp-config",  # Prevents loading user MCP servers
-            "--print",  # Required for non-interactive execution
-            "--verbose",  # Required for stream-json with --print (Claude CLI 2.x)
-            "--output-format",
-            "stream-json",  # Enable structured logging
-            "--settings",
-            '{"thinkingMode": "off"}',
-            "--system-prompt",
-            phase_prompt,
-            input_instruction,
-        ]
+        # Default to Local Claude
+        llm_provider = LocalClaudeProvider()
 
-        # Add model override if specified
-        if model:
-            cmd.insert(1, "--model")
-            cmd.insert(2, model)
+    # Select Agent
+    agent = None
+    if phase_name == "Scout":
+        agent = ScoutAgent(working_directory, llm_provider=llm_provider)
+    elif phase_name == "Architect":
+        agent = ArchitectAgent(llm_provider=llm_provider)
+    elif phase_name == "Builder":
+        agent = BuilderAgent(llm_provider=llm_provider)
+    else:
+        # Generic Agent for other phases
+        agent = GenericAgent(phase_name, prompt_path=phase_prompt_path, llm_provider=llm_provider)
 
     # Track start time
     start = datetime.now()
-
-    # Check if required CLI is available
-    cli_command = cmd[0]  # First element is the command (claude or gemini)
-    if not shutil.which(cli_command):
-        error_msg = f"""❌ {cli_command} CLI not found in PATH
-
-The {phase_name} phase requires the {cli_command} CLI to be installed and available in PATH.
-
-Installation:
-  - Claude CLI: https://claude.com/download
-  - Gemini CLI: https://ai.google.dev/gemini-api/docs/cli
-
-Current PATH: {os.environ.get('PATH', 'NOT SET')}
-
-Environment: Running in daemon? Check daemon's PATH configuration.
-"""
-        print(error_msg, file=sys.stderr)
-        return PhaseResult(
-            phase=phase_name,
-            status="failed",
-            duration_seconds=0,
-            context_tokens=0,
-            exit_code=127,  # Command not found
-            error=f"{cli_command} CLI not found in PATH",
-        )
-
-    # Run phase (BLOCKS until complete)
-    print(f"⏳ Running {phase_name} phase...", file=sys.stderr)
-    print(f"   Timeout: {phase_timeout}s", file=sys.stderr)
-    print(f"   Working directory: {working_directory}", file=sys.stderr)
 
     # Initialize conversation logger if available
     # This captures the stream-json output for the dashboard
     conversation_logger = None
     try:
-        from tools.mcp_utils.conversation_logger import ConversationLogger
+        from tools.mcp_utils.conversation_logger import ConversationLogger, ConversationEvent
         import uuid
 
         # Use job_id if available, otherwise generate a temporary ID
@@ -1157,12 +1284,26 @@ Environment: Running in daemon? Check daemon's PATH configuration.
         conversation_logger = ConversationLogger(logger_task_id, working_directory)
         print(f"Logging conversation to {conversation_logger.log_dir}", file=sys.stderr)
     except ImportError:
-        print(
-            "ConversationLogger not available - skipping detailed logs",
-            file=sys.stderr,
-        )
+        print("ConversationLogger not available", file=sys.stderr)
     except Exception as e:
         print(f"Failed to initialize ConversationLogger: {e}", file=sys.stderr)
+
+    # Define event callback for streaming logs
+    def event_callback(event_data: dict):
+        if conversation_logger:
+            try:
+                # Parse raw event data into ConversationEvent objects
+                # Since we are getting raw JSON dicts from stream-json, we can use the logger's logic
+                # But logger.parse_event expects a string line.
+                # Let's just re-serialize to string to reuse the parser logic for now
+                # This is slightly inefficient but safe and quick
+                line = json.dumps(event_data)
+                events = conversation_logger.parse_event(line)
+                for event in events:
+                    conversation_logger.log_event(event)
+            except Exception as e:
+                # Don't crash the build on logging errors
+                pass
 
     # ==========================================================================
     # HEARTBEAT THREAD: Emit periodic heartbeats during long-running phases
@@ -1198,109 +1339,77 @@ Environment: Running in daemon? Check daemon's PATH configuration.
         logger.info(f"Heartbeat thread started for phase {phase_name}")
 
     try:
-        process = subprocess.Popen(
-            cmd,
-            cwd=working_directory,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,  # Line buffered for streaming
-            env={**dict(os.environ), "PYTHONUNBUFFERED": "1"},
+        print(f"⏳ Running {phase_name} phase (Agent: {type(agent).__name__}, Provider: {type(llm_provider).__name__})...", file=sys.stderr)
+        print(f"   Timeout: {phase_timeout}s", file=sys.stderr)
+        print(f"   Working directory: {working_directory}", file=sys.stderr)
+
+        # Prepare context
+        context = {
+            "prompt_path": str(phase_prompt_path),
+            "system_prompt": phase_prompt,
+            "job_id": job_id,
+            "iteration": iteration,
+            "project_type": project_type
+        }
+
+        # Execute Agent
+        # Note: This blocks until completion, but streams events via callback
+        result = agent.run(
+            working_directory, 
+            input_instruction, 
+            context=context,
+            event_callback=event_callback
         )
-
-        # Stream output if logger is available
-        if conversation_logger:
-            import threading
-
-            def stream_logger():
-                for event in conversation_logger.stream_from_sync_process(process):
-                    # Reconstruct stdout for legacy compatibility
-                    # Note: stream-json output is NOT the actual content, so we don't append it to stdout_content
-                    # Instead, we rely on the logger to save the structured data
-                    pass
-
-            # Start logger thread
-            log_thread = threading.Thread(target=stream_logger, daemon=True)
-            log_thread.start()
-
-            # Wait for process
-            try:
-                process.wait(timeout=phase_timeout)
-            except subprocess.TimeoutExpired:
-                # Handled below
-                pass
-
-            # Read any remaining stderr
-            stderr = process.stderr.read()
-            stdout = ""  # stdout is consumed by logger
-        else:
-            # Legacy blocking execution
-            try:
-                stdout, stderr = process.communicate(timeout=phase_timeout)
-            except subprocess.TimeoutExpired:
-                # Handled below
-                pass
-            duration = (datetime.now() - start).total_seconds()
-            print(
-                f"⏱️  {phase_name} TIMEOUT after {duration:.1f}s - killing process",
-                file=sys.stderr,
-            )
-            process.kill()
-            try:
-                stdout, stderr = process.communicate(timeout=10)
-            except Exception:
-                stdout, stderr = "", ""
-
-            if is_baml_available():
-                try:
-                    phase_info = update_phase_with_baml(
-                        phase=phase_name,
-                        status="Failed",
-                        detail=f"Timeout after {duration:.1f}s",
-                        session_id=session_id,
-                        iteration=iteration,
-                    )
-                    phase_file = (
-                        working_directory / ".context-foundry" / "current-phase.json"
-                    )
-                    phase_file.parent.mkdir(parents=True, exist_ok=True)
-                    phase_file.write_text(json.dumps(phase_info, indent=2))
-                except Exception as baml_error:
-                    print(
-                        f"BAML timeout tracking failed: {baml_error}",
-                        file=sys.stderr,
-                    )
-
-            # ==========================================================================
-            # STATE MACHINE: Mark task as timed out
-            # ==========================================================================
-            if heartbeat_stop_event:
-                heartbeat_stop_event.set()
-            if state_machine and task_id:
-                try:
-                    state_machine.timeout_task(task_id)
-                    logger.info(f"Task {task_id[:8]} marked as timed_out")
-                except Exception as e:
-                    logger.warning(f"Failed to update task status to timed_out: {e}")
-
-            return PhaseResult(
-                phase=phase_name,
-                status="failed",
-                duration_seconds=duration,
-                context_tokens=0,
-                exit_code=-1,
-                error=f"Phase timeout after {phase_timeout}s",
-                stdout_lines=len(stdout.splitlines()) if stdout else 0,
-                stderr_lines=len(stderr.splitlines()) if stderr else 0,
-            )
+        
+        # Process Result
+        # Agent.run returns different things depending on the agent.
+        # Scout returns findings list. Architect/Builder return dict with output.
+        
+        stdout = ""
+        stderr = ""
+        exit_code = 0
+        
+        if isinstance(result, dict):
+            if result.get("status") == "failed":
+                exit_code = 1
+                stderr = result.get("error", "Unknown error")
+            else:
+                stdout = result.get("output", "")
+        elif isinstance(result, list):
+            # Scout returns list of findings
+            stdout = f"Scout found {len(result)} issues."
+        elif isinstance(result, str):
+            stdout = result
 
         duration = (datetime.now() - start).total_seconds()
 
-        exit_code = process.returncode
         print(
             f"✅ {phase_name} process completed (exit code: {exit_code})",
             file=sys.stderr,
         )
+
+        # ==========================================================================
+        # WRITE OUTPUT TO FILE (for agents using --print mode)
+        # LocalClaudeProvider uses --print which returns text instead of using tools.
+        # We need to write the output to the expected file for validation to pass.
+        # ==========================================================================
+        if phase_name == "Architect" and stdout and exit_code == 0:
+            cf_dir = working_directory / ".context-foundry"
+            cf_dir.mkdir(parents=True, exist_ok=True)
+
+            if iteration > 0:
+                # Fix iteration: write architecture-fix-{iteration}.md
+                arch_file = cf_dir / f"architecture-fix-{iteration}.md"
+            else:
+                # Initial architecture: write architecture.md
+                arch_file = cf_dir / "architecture.md"
+
+            # Only write if file doesn't exist or is empty (don't overwrite if Claude created it)
+            if not arch_file.exists() or arch_file.stat().st_size < 100:
+                arch_file.write_text(stdout)
+                print(f"📝 Saved Architect output to {arch_file.name} ({len(stdout)} chars)", file=sys.stderr)
+            else:
+                print(f"📝 {arch_file.name} already exists ({arch_file.stat().st_size} bytes)", file=sys.stderr)
 
         # Estimate context usage
         phase_files = []

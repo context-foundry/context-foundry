@@ -88,10 +88,270 @@ def cmd_setup(args):
         print(
             f"\n✅ Configuration saved successfully to {config.data_dir / 'config.json'}"
         )
+        print("\n💡 Tip: Run 'cfd providers' to configure which AI models to use for each build phase.")
         return 0
     except Exception as e:
         print(f"\n❌ Failed to save configuration: {e}", file=sys.stderr)
         return 1
+
+
+def cmd_daemon(args):
+    """Dispatcher for daemon commands"""
+    if args.action == "start":
+        return cmd_start(args)
+    elif args.action == "stop":
+        return cmd_stop(args)
+    elif args.action == "restart":
+        # Stop then start
+        print("Restarting daemon...")
+        cmd_stop(args)
+        time.sleep(1)
+        return cmd_start(args)
+    elif args.action == "status":
+        return cmd_status(args)
+    elif args.action == "logs":
+        # Simple log tail
+        config = Config.load(args.config)
+        log_file = config.log_dir / "cfd.log"
+        if not log_file.exists():
+            print(f"No log file found at {log_file}")
+            return 1
+        
+        print(f"Tailing logs from {log_file} (Ctrl+C to stop)...")
+        try:
+            import subprocess
+            subprocess.run(["tail", "-f", str(log_file)])
+        except KeyboardInterrupt:
+            return 0
+    else:
+        print(f"Unknown daemon action: {args.action}")
+        return 1
+
+def cmd_providers(args):
+    """Configure AI providers and models for build phases"""
+    import json
+    from pathlib import Path
+
+    config_dir = Path.home() / ".context-foundry"
+    config_path = config_dir / "provider_config.json"
+
+    # Load existing config
+    def load_config():
+        if config_path.exists():
+            try:
+                return json.loads(config_path.read_text())
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
+    def save_config(cfg):
+        config_dir.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(json.dumps(cfg, indent=2))
+
+    # Model name formatting
+    def format_model(model_id):
+        if not model_id:
+            return "(default)"
+        model_map = {
+            'anthropic.claude-opus-4-5-20251101-v1:0': 'Opus 4.5',
+            'anthropic.claude-opus-4-20250514-v1:0': 'Opus 4',
+            'anthropic.claude-sonnet-4-20250514-v1:0': 'Sonnet 4',
+            'anthropic.claude-3-5-sonnet-20240620-v1:0': 'Sonnet 3.5',
+        }
+        return model_map.get(model_id, model_id.split('.')[-1].split('-')[0] if '.' in model_id else model_id)
+
+    # Handle --init
+    if args.init:
+        if config_path.exists() and not args.force:
+            print(f"Config already exists at {config_path}")
+            print("Use --force to overwrite")
+            return 1
+
+        default_config = {
+            "default_provider": "local",
+            "default_bedrock_model": "anthropic.claude-opus-4-5-20251101-v1:0",
+            "phases": {
+                "Scout": {"provider": "bedrock", "model": "anthropic.claude-opus-4-5-20251101-v1:0"},
+                "Architect": {"provider": "bedrock", "model": "anthropic.claude-opus-4-5-20251101-v1:0"},
+                "Builder": {"provider": "bedrock", "model": "anthropic.claude-sonnet-4-20250514-v1:0"},
+                "Test": {"provider": "local"},
+                "Screenshot": {"provider": "local"},
+                "Documentation": {"provider": "local"},
+                "Deploy": {"provider": "local"},
+                "Feedback": {"provider": "local"},
+            }
+        }
+        save_config(default_config)
+        print(f"✅ Created default provider config at {config_path}")
+        return 0
+
+    # Handle --set
+    if args.set:
+        cfg = load_config()
+        if "phases" not in cfg:
+            cfg["phases"] = {}
+
+        for setting in args.set:
+            if '=' not in setting:
+                print(f"❌ Invalid format: {setting}")
+                print("   Use: PHASE=provider:model (e.g., Builder=bedrock:anthropic.claude-opus-4-5-20251101-v1:0)")
+                return 1
+
+            phase, value = setting.split('=', 1)
+            phase = phase.strip().capitalize()
+
+            if ':' in value:
+                provider, model = value.split(':', 1)
+            else:
+                provider = value
+                model = None
+
+            provider = provider.strip().lower()
+            model = model.strip() if model else None
+
+            cfg["phases"][phase] = {"provider": provider}
+            if model:
+                cfg["phases"][phase]["model"] = model
+
+            print(f"✅ Set {phase} = {provider}" + (f" ({format_model(model)})" if model else ""))
+
+        save_config(cfg)
+        return 0
+
+    # Handle --configure (interactive)
+    if args.configure:
+        print("\n🔧 Provider Configuration Wizard")
+        print("=" * 50)
+        print("\nChoose a configuration preset:\n")
+        print("  [1] Local Only - Use Claude CLI subscription for all phases")
+        print("  [2] Hybrid (Recommended) - Bedrock for heavy phases, Local for light")
+        print("  [3] Bedrock Only - Use AWS Bedrock for all phases")
+        print("  [4] Custom - Configure each phase individually")
+        print()
+
+        choice = input("Your choice [2]: ").strip() or "2"
+
+        cfg = load_config()
+        if "phases" not in cfg:
+            cfg["phases"] = {}
+
+        phases = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"]
+        heavy_phases = ["Scout", "Architect", "Builder"]
+
+        if choice == "1":
+            # Local only
+            for phase in phases:
+                cfg["phases"][phase] = {"provider": "local"}
+            cfg["default_provider"] = "local"
+            print("\n✅ All phases set to Local Claude CLI")
+
+        elif choice == "2":
+            # Hybrid
+            for phase in phases:
+                if phase in heavy_phases:
+                    cfg["phases"][phase] = {
+                        "provider": "bedrock",
+                        "model": "anthropic.claude-opus-4-5-20251101-v1:0" if phase != "Builder" else "anthropic.claude-sonnet-4-20250514-v1:0"
+                    }
+                else:
+                    cfg["phases"][phase] = {"provider": "local"}
+            cfg["default_provider"] = "local"
+            cfg["default_bedrock_model"] = "anthropic.claude-opus-4-5-20251101-v1:0"
+            print("\n✅ Hybrid configuration set:")
+            print("   Heavy phases (Scout, Architect, Builder) → Bedrock")
+            print("   Light phases (Test, Doc, Deploy) → Local CLI")
+
+        elif choice == "3":
+            # Bedrock only
+            model = input("\nDefault Bedrock model [anthropic.claude-opus-4-5-20251101-v1:0]: ").strip()
+            model = model or "anthropic.claude-opus-4-5-20251101-v1:0"
+            for phase in phases:
+                cfg["phases"][phase] = {"provider": "bedrock", "model": model}
+            cfg["default_provider"] = "bedrock"
+            cfg["default_bedrock_model"] = model
+            print(f"\n✅ All phases set to Bedrock ({format_model(model)})")
+
+        elif choice == "4":
+            # Custom
+            print("\nFor each phase, enter: 'local' or 'bedrock:MODEL_ID'")
+            print("Press Enter to keep current/default\n")
+
+            for phase in phases:
+                current = cfg.get("phases", {}).get(phase, {})
+                current_provider = current.get("provider", "local")
+                current_model = current.get("model", "")
+
+                default_display = f"{current_provider}"
+                if current_model:
+                    default_display += f":{format_model(current_model)}"
+
+                value = input(f"  {phase:15} [{default_display}]: ").strip()
+
+                if value:
+                    if ':' in value:
+                        provider, model = value.split(':', 1)
+                    else:
+                        provider = value
+                        model = None
+
+                    cfg["phases"][phase] = {"provider": provider.lower()}
+                    if model:
+                        cfg["phases"][phase]["model"] = model
+
+            print("\n✅ Custom configuration saved")
+        else:
+            print("Invalid choice")
+            return 1
+
+        save_config(cfg)
+        print(f"\nConfig saved to: {config_path}")
+        return 0
+
+    # Default: show current config
+    import os
+
+    print("\n📋 Provider Configuration")
+    print("=" * 60)
+    print(f"Config file: {config_path}")
+    print(f"Config exists: {config_path.exists()}")
+    print()
+
+    cfg = load_config()
+    phases = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"]
+
+    print(f"{'Phase':<15} {'Provider':<10} {'Model':<35}")
+    print(f"{'-'*15} {'-'*10} {'-'*35}")
+
+    for phase in phases:
+        # Check env override first
+        env_key = f"CF_PHASE_{phase.upper()}"
+        env_val = os.environ.get(env_key)
+
+        if env_val:
+            parts = env_val.split(':', 1)
+            provider = parts[0]
+            model = parts[1] if len(parts) > 1 else None
+            env_marker = " [ENV]"
+        else:
+            phase_cfg = cfg.get("phases", {}).get(phase, {})
+            provider = phase_cfg.get("provider", cfg.get("default_provider", "local"))
+            model = phase_cfg.get("model")
+            if not model and provider == "bedrock":
+                model = cfg.get("default_bedrock_model")
+            env_marker = ""
+
+        model_display = format_model(model) if model else "(default)"
+        print(f"{phase:<15} {provider:<10} {model_display:<35}{env_marker}")
+
+    print()
+    print("Usage:")
+    print("  cfd providers --configure     Interactive configuration")
+    print("  cfd providers --set Scout=bedrock:MODEL_ID")
+    print("  cfd providers --init          Create default config")
+    print()
+    print("Environment override: CF_PHASE_<NAME>=provider:model")
+
+    return 0
 
 
 def cmd_start(args):
@@ -131,6 +391,104 @@ def cmd_stop(args):
     else:
         print("Failed to stop daemon", file=sys.stderr)
         return 1
+
+
+def _display_pipeline_summary():
+    """Display a compact one-line pipeline summary"""
+    config_path = Path.home() / ".context-foundry" / "provider_config.json"
+
+    if not config_path.exists():
+        return
+
+    try:
+        with open(config_path, 'r') as f:
+            provider_config = json.load(f)
+
+        phases = provider_config.get("phases", {})
+        if not phases:
+            return
+
+        # Extract key models for summary
+        scout_cfg = phases.get("Scout", {})
+        builder_cfg = phases.get("Builder", {})
+
+        scout_model = "local"
+        if scout_cfg.get("provider") == "bedrock":
+            model = scout_cfg.get("model", "")
+            if "opus-4-5" in model:
+                scout_model = "Opus 4.5"
+            elif "sonnet" in model:
+                scout_model = "Sonnet"
+            else:
+                scout_model = "Bedrock"
+
+        builder_model = "local"
+        if builder_cfg.get("provider") == "bedrock-agent":
+            agent_id = builder_cfg.get("agent_id", "?")
+            # Try to get alias or region if available
+            alias_id = builder_cfg.get("alias_id", "")
+            builder_model = f"Agent:{agent_id[:6]}.."
+            if alias_id:
+                builder_model += f"({alias_id})"
+        elif builder_cfg.get("provider") == "bedrock":
+            builder_model = "Bedrock"
+
+        print(f"Pipeline: Scout={scout_model}, Builder={builder_model}")
+
+    except Exception:
+        pass  # Silent fail for summary
+
+
+def _display_pipeline_config():
+    """Display pipeline provider configuration from ~/.context-foundry/provider_config.json"""
+    config_path = Path.home() / ".context-foundry" / "provider_config.json"
+
+    if not config_path.exists():
+        print("\n  Pipeline Config: Not configured (using defaults)")
+        return
+
+    try:
+        with open(config_path, 'r') as f:
+            provider_config = json.load(f)
+
+        print("\n  Pipeline Provider Config:")
+        print("  ─────────────────────────────────────────────────────")
+
+        phases = provider_config.get("phases", {})
+        if not phases:
+            print("    No phase configuration found")
+            return
+
+        # Display each phase's configuration
+        for phase, config in phases.items():
+            provider = config.get("provider", "local")
+
+            if provider == "local":
+                print(f"    {phase:14} │ local (Claude CLI)")
+            elif provider == "bedrock":
+                model = config.get("model", "default")
+                # Shorten model name for display
+                if "opus-4-5" in model:
+                    model_display = "Claude Opus 4.5"
+                elif "sonnet-4" in model:
+                    model_display = "Claude Sonnet 4"
+                elif "haiku" in model:
+                    model_display = "Claude Haiku"
+                else:
+                    model_display = model.split(".")[-1][:30] if "." in model else model[:30]
+                print(f"    {phase:14} │ bedrock → {model_display}")
+            elif provider == "bedrock-agent":
+                agent_id = config.get("agent_id", "?")
+                alias_id = config.get("alias_id", "?")
+                print(f"    {phase:14} │ bedrock-agent → {agent_id} ({alias_id})")
+            else:
+                print(f"    {phase:14} │ {provider}")
+
+        print("  ─────────────────────────────────────────────────────")
+        print(f"    Config file: {config_path}")
+
+    except Exception as e:
+        print(f"\n  Pipeline Config: Error reading ({e})")
 
 
 def cmd_status(args):
@@ -182,6 +540,9 @@ def cmd_status(args):
     except Exception as e:
         print(f"Health: ⚠ Warning (failed to read heartbeat: {e})")
 
+    # Always show a compact pipeline summary
+    _display_pipeline_summary()
+
     if args.verbose:
         # Get more detailed status
         store = Store(config.db_path)
@@ -196,6 +557,9 @@ def cmd_status(args):
         print(f"  Log dir: {config.log_dir}")
         print(f"  DB path: {config.db_path}")
         print(f"  Max concurrent jobs: {config.max_concurrent_jobs}")
+
+        # Display pipeline provider configuration
+        _display_pipeline_config()
 
     # Show ALL related processes (always, not just in verbose mode)
     print("\n═══════════════════════════════════════════════════════════")
@@ -2203,6 +2567,24 @@ def cmd_pending_approvals(args):
     return 0
 
 
+def cmd_agents(args):
+    """Manage AI agents"""
+    from tools.evolution.cli_agents import list_agents, switch_agent, AgentRegistry
+    
+    registry = AgentRegistry()
+    
+    if args.agent_cmd == "list":
+        list_agents(registry)
+    elif args.agent_cmd == "switch":
+        if args.provider == "bedrock-agent" and not (args.agent_id and args.alias_id):
+            print("Error: --agent-id and --alias-id are required when switching to bedrock-agent.", file=sys.stderr)
+            return 1
+        switch_agent(registry, args.name, args.provider, args.agent_id, args.alias_id)
+    else:
+        print("Invalid agent command", file=sys.stderr)
+        return 1
+    return 0
+
 def main():
     """Main CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -2219,6 +2601,47 @@ def main():
 
     # Setup command
     _setup_parser = subparsers.add_parser("setup", help="Interactive setup wizard")
+
+    # Providers command
+    providers_parser = subparsers.add_parser(
+        "providers",
+        help="Configure AI providers and models for build phases"
+    )
+    providers_parser.add_argument(
+        "--configure",
+        action="store_true",
+        help="Interactive configuration wizard"
+    )
+    providers_parser.add_argument(
+        "--set",
+        action="append",
+        metavar="PHASE=PROVIDER:MODEL",
+        help="Set provider/model for a phase (e.g., Builder=bedrock:anthropic.claude-opus-4-5-20251101-v1:0)"
+    )
+    providers_parser.add_argument(
+        "--init",
+        action="store_true",
+        help="Create default provider config file"
+    )
+    providers_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force overwrite existing config (with --init)"
+    )
+
+    # Agents command
+    agents_parser = subparsers.add_parser("agents", help="Manage AI agents")
+    agents_subparsers = agents_parser.add_subparsers(dest="agent_cmd", help="Agent command")
+    
+    # agents list
+    agents_subparsers.add_parser("list", help="List all available agents")
+    
+    # agents switch
+    switch_parser = agents_subparsers.add_parser("switch", help="Switch an agent's provider")
+    switch_parser.add_argument("name", help="Name of the agent (e.g., builder)")
+    switch_parser.add_argument("provider", choices=["local", "bedrock-agent"], help="Provider type")
+    switch_parser.add_argument("--agent-id", help="AWS Bedrock Agent ID")
+    switch_parser.add_argument("--alias-id", help="AWS Bedrock Alias ID")
 
     # Start command
     start_parser = subparsers.add_parser("start", help="Start the daemon")
@@ -2703,6 +3126,8 @@ def main():
         "pending-approvals": cmd_pending_approvals,
         "setup": cmd_setup,
         "dashboard": cmd_dashboard,
+        "providers": cmd_providers,
+        "agents": cmd_agents,
     }
 
     return commands[args.command](args)

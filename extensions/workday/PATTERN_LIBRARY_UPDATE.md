@@ -14,7 +14,7 @@ The WorkWise build discovered **4 valuable failure patterns** that should be add
 - **Project Types**: nodejs, nextjs, react, typescript
 - **Value**: Prevents 90% of "module not found" issues
 
-### 2. jsx-in-ts-extension  
+### 2. jsx-in-ts-extension
 - **Severity**: Critical
 - **Frequency**: Rare
 - **Project Types**: react, nextjs, typescript
@@ -67,7 +67,7 @@ Add checks for:
 - [ ] Estimate AI generation time/cost
 - [ ] Recommend on-demand vs build-time generation
 
-### For Architect Phase  
+### For Architect Phase
 Add guidance on:
 - [ ] Correct file extensions (.ts vs .tsx)
 - [ ] Cache management strategies
@@ -144,7 +144,7 @@ cf-merge-patterns \
 
 ---
 
-**Created**: 2025-11-23  
-**Project**: WorkWise  
-**Status**: Ready for merge  
+**Created**: 2025-11-23
+**Project**: WorkWise
+**Status**: Ready for merge
 **Confidence**: High (patterns validated through real build)
