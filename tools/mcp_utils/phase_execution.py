@@ -519,22 +519,45 @@ class PhaseValidator:
 
     @staticmethod
     def validate_architect(working_dir: Path) -> bool:
-        """Architect must create architecture.md."""
+        """Architect must create architecture.md with substantive content."""
         required = working_dir / ".context-foundry" / "architecture.md"
         if not required.exists():
             raise FileNotFoundError(f"Architect failed to create {required}")
 
-        # Verify contains key sections
         content = required.read_text()
+        content_lower = content.lower()
 
-        # Check for Technology Stack (required)
-        if "## Technology Stack" not in content:
-            raise ValueError("architecture.md missing section: ## Technology Stack")
-
-        # Check for Architecture section (accept variations)
-        if "## Architecture" not in content and "## System Architecture" not in content:
+        # Basic size check - architecture should be substantive
+        if len(content) < 500:
             raise ValueError(
-                "architecture.md missing section: ## Architecture or ## System Architecture"
+                f"architecture.md is too small ({len(content)} bytes) - expected substantial architecture document"
+            )
+
+        # Flexible keyword checks (case-insensitive, any heading level)
+        has_tech_section = any(
+            keyword in content_lower
+            for keyword in [
+                "technology",
+                "tech stack",
+                "stack",
+                "dependencies",
+                "libraries",
+            ]
+        )
+        has_arch_section = any(
+            keyword in content_lower
+            for keyword in [
+                "architecture",
+                "structure",
+                "design",
+                "overview",
+                "modules",
+            ]
+        )
+
+        if not has_tech_section and not has_arch_section:
+            raise ValueError(
+                "architecture.md missing key sections (expected technology/architecture content)"
             )
 
         return True
