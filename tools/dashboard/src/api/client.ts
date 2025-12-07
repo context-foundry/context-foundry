@@ -319,7 +319,7 @@ export async function sendChatMessage(
 
 // ============ Conversation & Artifacts ============
 
-import type { ConversationMessage, Artifact } from '../types';
+import type { ConversationMessage } from '../types';
 
 export interface ConversationResponse {
   job_id: string;

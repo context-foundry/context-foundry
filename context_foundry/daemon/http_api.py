@@ -1068,7 +1068,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         phase = params.get("phase", "")
 
         # Try to load conversation from build output files
-        conversation = self._load_conversation_for_phase(job_id, phase)
+        conversation = self._load_conversation_for_phase(job_id, phase, job.params)
 
         self._send_json(
             {
@@ -1103,65 +1103,151 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         )
 
     def _load_conversation_for_phase(
-        self, job_id: str, phase: str
+        self, job_id: str, phase: str, params: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Load conversation messages for a job phase from build outputs."""
+        """Load conversation messages for a job phase from build outputs.
+
+        Conversations are stored in {working_directory}/.context-foundry/conversations/
+        as both .jsonl (structured) and .log (human-readable) files.
+        """
+        import json
         from pathlib import Path
 
         messages = []
 
-        # Try to find conversation logs in .context-foundry/conversations/
-        cf_dir = Path.home() / ".context-foundry" / "conversations"
-        conversation_file = cf_dir / f"conversation-{job_id}.log"
+        # Get working directory from params
+        working_dir = None
+        if params:
+            working_dir = params.get("working_directory")
 
-        if conversation_file.exists():
+        if not working_dir:
+            return messages
+
+        working_path = Path(working_dir).expanduser().resolve()
+        if not working_path.exists():
+            return messages
+
+        # Look for conversation files in project's .context-foundry/conversations/
+        conversations_dir = working_path / ".context-foundry" / "conversations"
+        jsonl_file = conversations_dir / f"conversation-{job_id}.jsonl"
+        log_file = conversations_dir / f"conversation-{job_id}.log"
+
+        # Prefer .jsonl for structured data
+        if jsonl_file.exists():
             try:
-                content = conversation_file.read_text()
-                # Parse the conversation log - it's a text format with messages
-                current_role = None
-                current_content = []
+                with open(jsonl_file, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            event = json.loads(line)
+                            event_type = event.get("event_type", "")
 
+                            # Convert to message format for UI
+                            if event_type == "assistant":
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": event.get("text", ""),
+                                        "timestamp": event.get("timestamp", ""),
+                                    }
+                                )
+                            elif event_type == "tool_use":
+                                tool_name = event.get("tool_name", "unknown")
+                                tool_input = event.get("tool_input", {})
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": f"Using tool: {tool_name}",
+                                        "timestamp": event.get("timestamp", ""),
+                                        "tool_calls": [
+                                            {
+                                                "name": tool_name,
+                                                "input": tool_input,
+                                            }
+                                        ],
+                                    }
+                                )
+                            elif event_type == "tool_result":
+                                messages.append(
+                                    {
+                                        "role": "system",
+                                        "content": f"Tool result: {event.get('text', '')[:500]}",
+                                        "timestamp": event.get("timestamp", ""),
+                                    }
+                                )
+                        except json.JSONDecodeError:
+                            continue
+                return messages
+            except Exception as e:
+                logger.error(f"Failed to load jsonl conversation for {job_id}: {e}")
+
+        # Fallback to .log file
+        if log_file.exists():
+            try:
+                content = log_file.read_text()
+                # Parse the human-readable log format
                 for line in content.split("\n"):
-                    if line.startswith("[ASSISTANT]"):
-                        if current_role and current_content:
-                            messages.append(
-                                {
-                                    "role": current_role,
-                                    "content": "\n".join(current_content),
-                                }
-                            )
-                        current_role = "assistant"
-                        current_content = [line.replace("[ASSISTANT] ", "")]
-                    elif line.startswith("[TOOL_USE]"):
-                        if current_role and current_content:
-                            messages.append(
-                                {
-                                    "role": current_role,
-                                    "content": "\n".join(current_content),
-                                }
-                            )
-                        current_role = "tool"
-                        current_content = [line.replace("[TOOL_USE] ", "")]
-                    elif line.startswith("[TOOL_RESULT]"):
-                        current_role = "tool_result"
-                        current_content = [line.replace("[TOOL_RESULT] ", "")]
-                    elif current_role:
-                        current_content.append(line)
+                    line = line.strip()
+                    if not line:
+                        continue
 
-                if current_role and current_content:
-                    messages.append(
-                        {"role": current_role, "content": "\n".join(current_content)}
-                    )
+                    # Format: [HH:MM:SS.mmm] TYPE: content
+                    if "] 💬 AGENT:" in line:
+                        # Extract timestamp and content
+                        parts = line.split("] 💬 AGENT:", 1)
+                        timestamp = parts[0].lstrip("[") if parts else ""
+                        content = parts[1].strip() if len(parts) > 1 else ""
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": content,
+                                "timestamp": timestamp,
+                            }
+                        )
+                    elif "] 🔧 TOOL:" in line:
+                        parts = line.split("] 🔧 TOOL:", 1)
+                        timestamp = parts[0].lstrip("[") if parts else ""
+                        content = parts[1].strip() if len(parts) > 1 else ""
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": f"Tool call: {content}",
+                                "timestamp": timestamp,
+                            }
+                        )
+                    elif "] ✅ RESULT:" in line:
+                        parts = line.split("] ✅ RESULT:", 1)
+                        timestamp = parts[0].lstrip("[") if parts else ""
+                        content = parts[1].strip() if len(parts) > 1 else ""
+                        messages.append(
+                            {
+                                "role": "system",
+                                "content": f"Result: {content}",
+                                "timestamp": timestamp,
+                            }
+                        )
 
             except Exception as e:
-                logger.error(f"Failed to load conversation for {job_id}: {e}")
+                logger.error(f"Failed to load log conversation for {job_id}: {e}")
 
         return messages
 
     def _load_artifacts_for_phase(
         self, job_id: str, phase: str, params: Optional[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
-        """Load artifacts for a job phase from the working directory."""
+        """Load artifacts for a job phase from the working directory.
+
+        Artifacts are stored in .context-foundry/ subdirectory with consistent naming:
+        - scout-report.md, scout_report.json (Scout)
+        - architecture.md, architecture.json (Architect)
+        - build-log.md, build-tasks.json (Builder)
+        - test-report.md (Test)
+        - screenshot-capture-log.md (Screenshot)
+        - deploy-log.md (Deploy)
+        - session-summary.json (Feedback)
+        """
         from pathlib import Path
 
         artifacts = []
@@ -1174,18 +1260,45 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         if not working_dir:
             return artifacts
 
-        working_path = Path(working_dir)
+        working_path = Path(working_dir).expanduser().resolve()
         if not working_path.exists():
             return artifacts
 
-        # Look for common artifact files based on phase
+        # Phase-specific artifacts in .context-foundry/ directory
+        # These are the actual files created by Context Foundry phases
         phase_artifacts = {
-            "scout": ["SCOUT_REPORT.md", "analysis.md"],
-            "architect": ["ARCHITECT_PLAN.md", "architecture.md", "design.md"],
-            "builder": ["*.py", "*.ts", "*.js", "*.tsx", "*.jsx"],
-            "test": ["test_*.py", "*_test.py", "*.test.ts", "*.test.js"],
-            "documentation": ["README.md", "DOCS.md", "*.md"],
-            "deploy": ["Dockerfile", "docker-compose.yml", ".github/workflows/*.yml"],
+            "scout": [
+                ".context-foundry/scout-report.md",
+                ".context-foundry/scout_report.json",
+            ],
+            "architect": [
+                ".context-foundry/architecture.md",
+                ".context-foundry/architecture.json",
+            ],
+            "builder": [
+                ".context-foundry/build-log.md",
+                ".context-foundry/build-tasks.json",
+            ],
+            "test": [
+                ".context-foundry/test-report.md",
+            ],
+            "screenshot": [
+                ".context-foundry/screenshot-capture-log.md",
+            ],
+            "documentation": [
+                "README.md",
+                "docs/*.md",
+            ],
+            "deploy": [
+                ".context-foundry/deploy-log.md",
+                "Dockerfile",
+                "docker-compose.yml",
+                ".github/workflows/*.yml",
+            ],
+            "feedback": [
+                ".context-foundry/session-summary.json",
+                ".context-foundry/current-phase.json",
+            ],
         }
 
         patterns = phase_artifacts.get(phase.lower(), [])
@@ -1205,9 +1318,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                                             file_path.relative_to(working_path)
                                         ),
                                         "type": self._get_artifact_type(file_path.name),
-                                        "content": content[
-                                            :10000
-                                        ],  # Limit content size
+                                        "content": content,  # Full content for md/json
                                         "size": file_path.stat().st_size,
                                     }
                                 )
@@ -1223,7 +1334,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                                     "name": file_path.name,
                                     "path": pattern,
                                     "type": self._get_artifact_type(file_path.name),
-                                    "content": content[:10000],
+                                    "content": content,  # Full content for md/json
                                     "size": file_path.stat().st_size,
                                 }
                             )

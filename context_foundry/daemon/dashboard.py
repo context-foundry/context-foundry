@@ -676,8 +676,16 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/jobs":
             self._serve_status()
         elif parsed.path.startswith("/api/jobs/"):
-            job_id = parsed.path.split("/api/jobs/")[1].split("/")[0]
-            self._serve_job_detail(job_id, parsed.query)
+            # Parse /api/jobs/{id} or /api/jobs/{id}/artifacts or /api/jobs/{id}/conversation
+            path_parts = parsed.path.split("/api/jobs/")[1].split("/")
+            job_id = path_parts[0]
+            sub_path = path_parts[1] if len(path_parts) > 1 else None
+            if sub_path == "artifacts":
+                self._serve_job_artifacts(job_id, parsed.query)
+            elif sub_path == "conversation":
+                self._serve_job_conversation(job_id, parsed.query)
+            else:
+                self._serve_job_detail(job_id, parsed.query)
         elif parsed.path == "/api/approvals":
             self._serve_pending_approvals()
         elif parsed.path == "/api/settings/team":
@@ -929,6 +937,280 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except Exception as e:
             logger.error(f"Failed to serve job detail: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_artifacts(self, job_id: str, query: str) -> None:
+        """Serve artifacts for a specific job phase.
+
+        Artifacts are stored in {working_directory}/.context-foundry/:
+        - scout-report.md, scout_report.json (Scout)
+        - architecture.md, architecture.json (Architect)
+        - build-log.md, build-tasks.json (Builder)
+        - test-report.md (Test)
+        - screenshot-capture-log.md (Screenshot)
+        - deploy-log.md (Deploy)
+        - session-summary.json (Feedback)
+        """
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Parse query params for phase
+            params = {}
+            if query:
+                for part in query.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        params[k] = v
+            phase = params.get("phase", "").lower()
+
+            # Get working directory
+            working_dir = None
+            if hasattr(job, "params") and job.params:
+                working_dir = job.params.get("working_directory")
+
+            artifacts = []
+            if working_dir:
+                working_path = Path(working_dir).expanduser().resolve()
+                if working_path.exists():
+                    # Phase-specific artifact files
+                    phase_artifacts = {
+                        "scout": [
+                            ".context-foundry/scout-report.md",
+                            ".context-foundry/scout_report.json",
+                        ],
+                        "architect": [
+                            ".context-foundry/architecture.md",
+                            ".context-foundry/architecture.json",
+                        ],
+                        "builder": [
+                            ".context-foundry/build-log.md",
+                            ".context-foundry/build-tasks.json",
+                        ],
+                        "test": [
+                            ".context-foundry/test-report.md",
+                        ],
+                        "screenshot": [
+                            ".context-foundry/screenshot-capture-log.md",
+                        ],
+                        "documentation": [
+                            "README.md",
+                        ],
+                        "deploy": [
+                            ".context-foundry/deploy-log.md",
+                        ],
+                        "feedback": [
+                            ".context-foundry/session-summary.json",
+                            ".context-foundry/current-phase.json",
+                        ],
+                    }
+
+                    # Also check docs/ directory for documentation phase
+                    if phase == "documentation":
+                        docs_dir = working_path / "docs"
+                        if docs_dir.exists():
+                            for md_file in docs_dir.glob("*.md"):
+                                try:
+                                    content = md_file.read_text()
+                                    artifacts.append(
+                                        {
+                                            "name": md_file.name,
+                                            "path": f"docs/{md_file.name}",
+                                            "type": "document",
+                                            "content": content,
+                                            "size": len(content),
+                                        }
+                                    )
+                                except Exception:
+                                    pass
+
+                    patterns = phase_artifacts.get(phase, [])
+                    for pattern in patterns:
+                        file_path = working_path / pattern
+                        if file_path.exists() and file_path.is_file():
+                            try:
+                                content = file_path.read_text()
+                                ext = file_path.suffix.lower()
+                                file_type = (
+                                    "document" if ext in (".md", ".txt") else "config"
+                                )
+                                artifacts.append(
+                                    {
+                                        "name": file_path.name,
+                                        "path": pattern,
+                                        "type": file_type,
+                                        "content": content,
+                                        "size": len(content),
+                                    }
+                                )
+                            except Exception:
+                                pass
+
+            body = json.dumps(
+                {
+                    "job_id": job_id,
+                    "phase": phase,
+                    "artifacts": artifacts,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job artifacts: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_conversation(self, job_id: str, query: str) -> None:
+        """Serve conversation for a specific job.
+
+        Conversations are stored in {working_directory}/.context-foundry/conversations/
+        as both .jsonl (structured) and .log (human-readable) files.
+        """
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Parse query params for phase
+            params = {}
+            if query:
+                for part in query.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        params[k] = v
+            phase = params.get("phase", "").lower()
+
+            # Get working directory
+            working_dir = None
+            if hasattr(job, "params") and job.params:
+                working_dir = job.params.get("working_directory")
+
+            messages = []
+            if working_dir:
+                working_path = Path(working_dir).expanduser().resolve()
+                conversations_dir = working_path / ".context-foundry" / "conversations"
+                jsonl_file = conversations_dir / f"conversation-{job_id}.jsonl"
+                log_file = conversations_dir / f"conversation-{job_id}.log"
+
+                # Prefer .jsonl for structured data
+                if jsonl_file.exists():
+                    try:
+                        MAX_MESSAGES = 500  # Limit to prevent memory issues
+                        with open(jsonl_file, "r") as f:
+                            for line_num, line in enumerate(f):
+                                if len(messages) >= MAX_MESSAGES:
+                                    break
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    event = json.loads(line)
+                                    event_type = event.get("event_type", "")
+
+                                    if event_type == "assistant":
+                                        text = event.get("text", "")
+                                        # Truncate very long messages
+                                        if len(text) > 5000:
+                                            text = text[:5000] + "... (truncated)"
+                                        messages.append(
+                                            {
+                                                "role": "assistant",
+                                                "content": text,
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                    elif event_type == "tool_use":
+                                        tool_name = event.get("tool_name", "unknown")
+                                        # Don't include full tool input to reduce size
+                                        messages.append(
+                                            {
+                                                "role": "assistant",
+                                                "content": f"Using tool: {tool_name}",
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                    elif event_type == "tool_result":
+                                        result_text = event.get("text", "")[:200]
+                                        messages.append(
+                                            {
+                                                "role": "system",
+                                                "content": f"Result: {result_text}",
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                except json.JSONDecodeError:
+                                    continue
+                    except Exception as e:
+                        logger.error(f"Failed to load jsonl conversation: {e}")
+
+                # Fallback to .log file
+                elif log_file.exists():
+                    try:
+                        content = log_file.read_text()
+                        for line in content.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+
+                            if "] 💬 AGENT:" in line:
+                                parts = line.split("] 💬 AGENT:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": msg_content,
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                            elif "] 🔧 TOOL:" in line:
+                                parts = line.split("] 🔧 TOOL:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": f"Tool call: {msg_content}",
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                            elif "] ✅ RESULT:" in line:
+                                parts = line.split("] ✅ RESULT:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "system",
+                                        "content": f"Result: {msg_content}",
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                    except Exception as e:
+                        logger.error(f"Failed to load log conversation: {e}")
+
+            body = json.dumps(
+                {
+                    "job_id": job_id,
+                    "phase": phase,
+                    "messages": messages,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job conversation: {e}")
             self._send_json_error(500, str(e))
 
     def _serve_team_settings(self) -> None:

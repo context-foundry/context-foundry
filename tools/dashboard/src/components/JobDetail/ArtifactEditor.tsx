@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Phase, Artifact } from '../../types';
+import type { Phase } from '../../types';
 import * as api from '../../api/client';
 
 interface ArtifactEditorProps {

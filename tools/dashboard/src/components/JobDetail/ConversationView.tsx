@@ -22,7 +22,7 @@ export function ConversationView({ jobId, phase }: ConversationViewProps) {
       try {
         const conversation = await api.getJobConversation(jobId, phase);
         // Transform API response to ConversationMessage format
-        const msgs: ConversationMessage[] = conversation.map((msg, index) => ({
+        const msgs: ConversationMessage[] = conversation.map((msg) => ({
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
           timestamp: new Date().toISOString(), // API may not provide timestamp
@@ -49,6 +49,10 @@ export function ConversationView({ jobId, phase }: ConversationViewProps) {
 
   if (isLoading) {
     return <div className="conversation-loading">Loading conversation...</div>;
+  }
+
+  if (error) {
+    return <div className="conversation-empty">{error}</div>;
   }
 
   if (messages.length === 0) {
