@@ -665,7 +665,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/agent-activity":
             self._serve_agent_activity(parsed.query)
         elif parsed.path == "/job-conversation":
-            self._serve_job_conversation(parsed.query)
+            self._serve_legacy_job_conversation(parsed.query)
         elif parsed.path == "/config":
             self._serve_config()
         elif parsed.path == "/agents":
@@ -1824,8 +1824,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send_json_error(500, str(e))
 
-    def _serve_job_conversation(self, query: str) -> None:
-        """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>"""
+    def _serve_legacy_job_conversation(self, query: str) -> None:
+        """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>
+
+        This is the legacy endpoint for /job-conversation. The new API endpoint is
+        /api/jobs/{id}/conversation which uses _serve_job_conversation.
+        """
         from urllib.parse import parse_qs
 
         params = parse_qs(query)
