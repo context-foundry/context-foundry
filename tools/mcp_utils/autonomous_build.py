@@ -36,7 +36,7 @@ from tools.baml_integration import (
 )
 
 # Import safety mechanisms
-from tools.evolution.safety import enforce_sandbox_mode
+from tools.security.safety import enforce_sandbox_mode
 
 # Import helper functions
 from tools.mcp_utils.project_detection import detect_existing_codebase

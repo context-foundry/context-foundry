@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Union
 from .llm_provider import LLMProvider
 
+
 class Agent(ABC):
     """Abstract base class for Context Foundry Agents."""
 
@@ -12,11 +13,11 @@ class Agent(ABC):
 
     @abstractmethod
     def run(
-        self, 
-        working_directory: Union[Path, str], 
-        instruction: str, 
+        self,
+        working_directory: Union[Path, str],
+        instruction: str,
         context: Optional[Dict[str, Any]] = None,
-        event_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> Any:
         """
         Run the agent's main logic.

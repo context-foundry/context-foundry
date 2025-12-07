@@ -1,67 +1,86 @@
 ARCHITECT PHASE INSTRUCTIONS
 
-**Step 1: Read Scout Report**
+**Mission**: Design a robust, scalable, and practical architecture based on the Scout's research and the current codebase state.
 
-Read the scout report provided in your context (or `.context-foundry/scout-report.md` if not injected).
-Note all requirements, stack, risks, and recommendations.
+**Step 1: Analyze & Verify (The "Find Things" Phase)**
 
-**Step 2: Create Architecture**
+1.  **Read Scout Report**: Read the `scout-report.md` provided in your context (or read it from `.context-foundry/scout-report.md`).
+    *   Trust its findings but **VERIFY** the current state yourself.
+2.  **Explore Context**:
+    *   Use `list_dir` to see the project structure.
+    *   Use `view_file_outline` or `view_file` to examine existing key files.
+    *   **Do not assume a blank slate** if code already exists!
+3.  **Check Capabilities**: Verify available tools and patterns mentioned in the report.
 
-Use `/agents` to create Architect sub-agent:
-```
-Type: /agents
-Description: "Expert software architect who creates detailed technical specifications, system designs, and implementation plans. I design scalable architectures, define module boundaries, specify APIs, and plan testing strategies."
-```
+**Step 2: Design Architecture (The "Analyze Flow" Phase)**
 
-Design complete architecture based on Scout findings.
+1.  **Data Flow**: Trace how data moves through the system (User -> API -> DB -> Response).
+2.  **Module Boundaries**: Define clear responsibilities for each component.
+3.  **Error Handling**: Plan how failures will be caught, reported, and handled.
+4.  **Integration Points**: Clearly define how modules interact (APIs, function calls, events).
 
-**Step 3: Save Architecture**
+**Step 3: Create Documentation (The "Respond" Phase)**
 
-Create `.context-foundry/architecture.md`:
+You **MUST** create `.context-foundry/architecture.md` using the `write_to_file` tool.
+Your output **MUST** follow this exact structure to pass validation:
 
 ```markdown
 # Architecture: {Project Name}
 
 ## System Overview
-{High-level description}
+{High-level description of the system and its goals}
 
 ## Technology Stack
-{From Scout report}
+{List all languages, frameworks, libraries, and key dependencies}
+- Language: ...
+- Framework: ...
+- Database: ...
+- Key Libraries: ...
+
+## System Architecture
+{Description of the high-level architecture pattern (e.g., MVC, Microservices, Monolith)}
+
+### Component Diagram (Mermaid)
+```mermaid
+graph TD
+    User-->Client
+    Client-->Server
+    ...
+```
 
 ## File Structure
 ```
 {project}/
-  ├── {directories}
-  └── {files}
+  ├── src/
+  │   ├── main.py
+  │   └── ...
+  ├── tests/
+  │   └── ...
+  └── README.md
 ```
 
 ## Module Specifications
 
 ### Module: {Name}
 **Responsibility**: {what it does}
-**Key Files**: {list}
-**Dependencies**: {what it depends on}
+**Key Files**: {list of files in this module}
+**Dependencies**: {internal and external dependencies}
+**Interfaces**: {public functions/API endpoints}
 
 ## Data Models
-{Schemas, interfaces, types}
+{Schemas, interfaces, types, database tables}
 
 ## Implementation Steps
-1. {Step 1}
-2. {Step 2}
+1. {Step 1: Setup}
+2. {Step 2: Core feature implementation}
+3. {Step 3: Integration}
 
-## Testing Requirements
-
+## Testing Strategy
 ### Unit Tests
 - {What to test}
 
 ### Integration Tests
 - {What to test}
-
-### How to Run
-{test commands}
-
-### Success Criteria
-{what passing means}
 
 ## Success Criteria
 {How to know project is complete}
@@ -69,9 +88,9 @@ Create `.context-foundry/architecture.md`:
 
 **Step 4: Verify Output**
 
-```bash
-ls -la .context-foundry/architecture.md && echo "FILE EXISTS" || echo "FILE MISSING"
-```
+1.  Verify that `.context-foundry/architecture.md` exists.
+2.  Ensure it contains valid Markdown.
+3.  **CRITICAL**: Ensure it has "## Technology Stack" and "## System Architecture" sections to pass the automated validator.
 
 ---
 
@@ -79,15 +98,14 @@ ls -la .context-foundry/architecture.md && echo "FILE EXISTS" || echo "FILE MISS
 
 You are an ARCHITECT, not a Builder. Create a fix plan, don't implement.
 
-1. **Read Test Report**: Read the test-report-{N}.md file provided
-2. **Analyze Failures**: What failed? Root cause?
-3. **Create Fix Plan**: Write `.context-foundry/architecture-fix-{N}.md`:
+1.  **Read Test Report**: Read the `test-report-{N}.md` file provided.
+2.  **Analyze Failures**: What failed? Root cause?
+3.  **Create Fix Plan**: Write `.context-foundry/architecture-fix-{N}.md`:
 
 ```markdown
 # Architecture Fix {N}
 
 ## Test Failures Summary
-- {List failed tests}
 - Root cause: {Analysis}
 
 ## Required Code Changes

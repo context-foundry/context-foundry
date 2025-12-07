@@ -1,56 +1,48 @@
 BUILDER PHASE INSTRUCTIONS
 
-**Step 1: Create Build Plan**
+**Mission**: Implement the software architecture by creating production-ready code.
 
-Read the architecture provided in your context (or `.context-foundry/architecture.md` if not injected).
+**Step 1: Analyze & Verify (The "Understand" Phase)**
 
-Create `.context-foundry/build-tasks.md`:
+1.  **Read Architecture**: Read `.context-foundry/architecture.md`.
+2.  **Verify Inputs**: Ensure you understand the file structure and requirements.
+3.  **Check Context**: Use `list_dir` to see what already exists.
+
+**Step 2: Plan Build (The "Plan" Phase)**
+
+1.  **Create Checklist**: Create `.context-foundry/build-tasks.md` listing every file you will create.
+    *   This serves as your roadmap and validation check.
 
 ```markdown
 # Build Tasks
 
-## Task 1: Core Module
-**Files**: src/core.py
-**Dependencies**: None
-**Description**: Create core module with main functionality
-
-## Task 2: Main Entry
-**Files**: src/main.py
-**Dependencies**: Task 1
-**Description**: Create main entry point that uses core module
-
-## Build Order
-1. Task 1 (no dependencies)
-2. Task 2 (depends on Task 1)
+## Task 1: {ComponentName}
+**Files**: {List of files}
+**Dependencies**: {Dependencies}
+**Description**: {What this component does}
 ```
 
-**Step 2: Implement Code**
+**Step 3: Implement Code (The "Execute" Phase)**
 
-Use `/agents` for implementation:
-```
-Type: /agents
-Description: "Expert software developer who writes clean, tested, production-ready code following architectural specifications."
-```
+1.  **Write Code**: Use `write_to_file` to create the source code files.
+2.  **Follow Architecture**: Strictly adhere to the design capabilities and stack.
+3.  **CRITICAL WARNINGS**:
+    *   **NO Nested Context**: Do NOT create nested `.context-foundry` directories (e.g., `project/.context-foundry`).
+    *   **Standard Dirs**: Use `src/`, `lib/`, `app/` as defined in the architecture.
+    *   **No Placeholders**: Write complete, working code.
 
-Implement all files according to architecture.
+**Step 4: Verify Output (The "Check" Phase)**
 
-**Directory Rules:**
-- Create files in project root or standard subdirs (src/, lib/, app/)
-- NEVER create a project-named subdirectory
-- NEVER create nested `.context-foundry/` directories
-
-**Step 3: Verify Output**
-
-```bash
-ls -la .context-foundry/build-tasks.md && echo "BUILD PLAN EXISTS" || echo "MISSING"
-```
+1.  **File Existence**: Verify that the files you planned in Step 2 actually exist using `list_dir`.
+2.  **Flowise Check**: If building a Flowise workflow, ensure the `.json` file is in the root directory.
 
 ---
 
 ## FIX ITERATION MODE (When called to fix test failures)
 
-1. **Read Fix Plan**: Read `.context-foundry/architecture-fix-{N}.md`
-2. **Implement ONLY Specified Fixes**: Make exact changes specified
-3. **Keep Changes Minimal**: This is a surgical fix, not a rebuild
+1.  **Read Fix Plan**: Read `.context-foundry/architecture-fix-{N}.md`.
+2.  **Implement ONLY Specified Fixes**: Make exact changes specified by the Architect.
+3.  **Keep Changes Minimal**: This is a surgical fix, not a rebuild.
+4.  **Verify Fix**: Ensure the modified files exist and have the new content.
 
 **DONE**: Your process exits. Test phase validates with fresh context.

@@ -1,73 +1,59 @@
 TEST PHASE INSTRUCTIONS
 
-**Step 1: Read Test Plan**
+**Mission**: Verify the software quality by running tests and analyzing results.
 
-Read the architecture provided in your context (or `.context-foundry/architecture.md` if not injected).
-Find the "Testing Requirements" section.
+**Step 1: Analyze & Plan (The "Understand" Phase)**
 
-**Step 2: Run Tests**
+1.  **Read Architecture**: Find testing requirements in `.context-foundry/architecture.md` (or `build-tasks.md`).
+2.  **Explore Context**: Use `list_dir` to find test files (`tests/`, `spec/`, etc.).
+3.  **Determine Commands**: Identify how to test this project (e.g., `npm test`, `pytest`, `cargo test`) based on the stack.
 
-Use `/agents` for test execution:
-```
-Type: /agents
-Description: "Expert QA engineer who runs comprehensive tests, analyzes failures, and creates detailed test reports."
-```
+**Step 2: Execute Tests (The "Test" Phase)**
 
-Run all tests specified:
-- Unit tests
-- Integration tests
-- E2E tests (if applicable)
-- Linting/type checking
+1.  **Run Tests**: Use `run_command` to execute the identified test commands.
+2.  **Capture Output**: Read the terminal output to understand pass/fail status and identify root causes.
 
-**Step 3: Create Test Report**
+**Step 3: Create Report (The "Report" Phase)**
 
-Create `.context-foundry/test-report.md`:
+You **MUST** create `.context-foundry/test-report.md` (or the filename provided in your context usually `test-report-{N}.md`).
+Your output **MUST** follow this structure to pass validation:
 
 ```markdown
 # Test Report: {Project Name}
 
 **Date**: {current_date}
-**Iteration**: {test_iteration}
+**Iteration**: {test_iteration or 0}
 
 ## Test Summary
-
-**Status**: {PASSED or FAILED}
+**Status**: {PASSED|FAILED} (CRITICAL: Must be exact string)
 **Total Tests**: {count}
 **Passed**: {count}
 **Failed**: {count}
 
-## Test Results
+## Test Detail
 
-### Unit Tests
-**Command**: {command}
-**Status**: {PASSED/FAILED}
+### Command: {Test Command}
+**Status**: {PASSED|FAILED}
 **Output**:
 ```
-{test output}
+{Relevant log snippets}
 ```
 
-### Integration Tests
-**Command**: {command}
-**Status**: {PASSED/FAILED}
+## Failures (Required if Status is FAILED)
 
-## Failures (if any)
-
-### Test: {test_name}
-**File**: {file}:{line}
-**Error**: {error message}
-**Root Cause**: {analysis}
-**Suggested Fix**: {what to do}
+### Failure 1: {TestName}
+**File**: {path/to/file}:{line}
+**Error**: {Error message}
+**Root Cause**: {Detailed analysis of why it failed}
+**Suggested Fix**: {Specific instructions for the Architect/Builder}
 
 ## Conclusion
-
-{If FAILED: What needs to be fixed}
-{If PASSED: All tests passed, ready for deployment}
+{Summary of next steps}
 ```
 
-**Step 4: Verify Output**
+**Step 4: Verify Output (The "Check" Phase)**
 
-```bash
-ls -la .context-foundry/test-report.md && echo "REPORT EXISTS" || echo "MISSING"
-```
+1.  **File Existence**: Verify the report file exists.
+2.  **Content Check**: Ensure the file contains the string "PASSED" or "FAILED" (case-insensitive checking, but uppercase preferred).
 
-**DONE**: Your process exits. If tests failed, Architect fixes with fresh context.
+**DONE**: Your process exits. If tests failed, the Architect will read your report to plan fixes.

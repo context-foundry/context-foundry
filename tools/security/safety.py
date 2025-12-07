@@ -86,7 +86,7 @@ def enforce_sandbox_mode(working_dir: Path, operation: str = "file operation"):
             f"   Production: {working_dir}\n"
             f"   Required:   Sandbox in /tmp/cf-sandboxes/\n\n"
             "   Create a sandbox with:\n"
-            "     from tools.evolution.sandboxes import SandboxManager\n"
+            "     from tools.security.sandboxes import SandboxManager\n"
             "     manager = SandboxManager()\n"
             "     sandbox = manager.create_sandbox(repo_url, task_id)\n"
         )

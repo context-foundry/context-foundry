@@ -67,14 +67,35 @@ function checkPythonPackage(pythonCmd) {
 }
 
 /**
- * Install context-foundry via pip
+ * Install context-foundry via pipx (preferred) or pip with --user
  */
 function installPackage(pythonCmd) {
-  log(`${colors.yellow}Installing context-foundry Python package...${colors.reset}`);
-  const pip = spawnSync(pythonCmd, ['-m', 'pip', 'install', 'context-foundry'], {
+  // Try pipx first (best for CLI tools on macOS/Linux)
+  const pipxCheck = spawnSync('which', ['pipx'], { encoding: 'utf-8' });
+  if (pipxCheck.status === 0) {
+    log(`${colors.yellow}Installing context-foundry via pipx...${colors.reset}`);
+    const pipx = spawnSync('pipx', ['install', 'context-foundry'], {
+      stdio: 'inherit'
+    });
+    if (pipx.status === 0) return true;
+    // If pipx fails (already installed, etc), try reinstall
+    const pipxReinstall = spawnSync('pipx', ['reinstall', 'context-foundry'], {
+      stdio: 'inherit'
+    });
+    if (pipxReinstall.status === 0) return true;
+  }
+
+  // Fallback: pip with --user flag (avoids PEP 668 errors)
+  log(`${colors.yellow}Installing context-foundry via pip --user...${colors.reset}`);
+  const pip = spawnSync(pythonCmd, ['-m', 'pip', 'install', '--user', 'context-foundry'], {
     stdio: 'inherit'
   });
-  return pip.status === 0;
+  if (pip.status === 0) return true;
+
+  // Last resort: suggest pipx installation
+  log(`\n${colors.yellow}Tip: Install pipx for better Python CLI tool management:${colors.reset}`);
+  log(`  ${colors.cyan}brew install pipx && pipx ensurepath${colors.reset}`);
+  return false;
 }
 
 /**

@@ -15,7 +15,7 @@ import json
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from tools.evolution.agents.scout_agent import ScoutAgent, Finding
+from tools.generators.models import Finding
 
 
 class BacklogGenerator:
@@ -25,7 +25,7 @@ class BacklogGenerator:
         self.project_root = project_root
         self.target_backlog_size = target_backlog_size
         self.template_path = (
-            project_root / "tools/evolution/templates/github_issue_template.md"
+            project_root / "tools/generators/templates/github_issue_template.md"
         )
         self.valid_labels = None  # Cache for valid labels
 
@@ -245,9 +245,96 @@ class BacklogGenerator:
         print(f"🔍 Need {needed} more issues. Running Scout...")
         print()
 
-        # Run Scout with AI analysis
-        scout = ScoutAgent(self.project_root)
-        findings = scout.scan()
+        # Run Scout with AI analysis (New Architecture)
+        from tools.mcp_utils.phase_execution import run_phase
+        import tempfile
+        import os
+
+        # Create a specialized prompt for finding extraction
+        finding_prompt = """
+SYSTEM: You are a Senior QA Engineer.
+MISSION: Scan the codebase for bugs, technical debt, security issues, and enhancements.
+OUTPUT: Return a list of findings in strictly valid JSON format.
+
+SCHEMA:
+[
+  {
+    "title": "Short descriptive title",
+    "finding_type": "bug" | "security" | "performance" | "enhancement" | "debt",
+    "priority": "P0" | "P1" | "P2" | "P3",
+    "category": ["category1", "category2"],
+    "description": "Detailed description...",
+    "file_path": "path/to/file (optional)",
+    "line_number": 123 (optional),
+    "evidence": "Code snippet or proof",
+    "effort": "small" | "medium" | "large"
+  }
+]
+
+Do not output markdown code blocks. Output ONLY raw JSON.
+"""
+
+        print("  🔍 Running Scout (via run_phase) to identify findings...")
+
+        # Create temp prompt file
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".txt", delete=False
+            ) as tmp:
+                tmp.write(finding_prompt)
+                tmp_path = Path(tmp.name)
+
+            result = run_phase(
+                phase_name="Scout",
+                phase_prompt_path=tmp_path,
+                input_instruction="Find top 5 issues in this repository.",
+                working_directory=self.project_root,
+                phase_timeout=300,
+                project_type="audit",
+            )
+
+            # Parse JSON from stdout
+            try:
+                output = result.stdout if result.stdout else ""
+                # Clean potential markdown wrapping
+                output = output.strip()
+                if output.startswith("```json"):
+                    output = output[7:]
+                if output.startswith("```"):
+                    output = output[3:]
+                if output.endswith("```"):
+                    output = output[:-3]
+
+                output = output.strip()
+                if not output:
+                    findings = []
+                else:
+                    data = json.loads(output)
+                    # Filter keys to match Finding.__init__
+                    valid_keys = {
+                        "title",
+                        "finding_type",
+                        "priority",
+                        "category",
+                        "description",
+                        "file_path",
+                        "line_number",
+                        "evidence",
+                        "effort",
+                    }
+                    findings = []
+                    for item in data:
+                        clean_item = {k: v for k, v in item.items() if k in valid_keys}
+                        findings.append(Finding(**clean_item))
+
+            except Exception as e:
+                print(f"  ⚠️  Failed to parse AI findings: {e}")
+                findings = []
+
+        finally:
+            if tmp_path and tmp_path.exists():
+                os.unlink(tmp_path)
 
         if not findings:
             print("  ⚠️  Scout found no issues")

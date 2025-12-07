@@ -27,16 +27,12 @@ from tools.baml_integration import (
     update_phase_with_baml,
 )
 from tools.mcp_utils.phase_metrics import estimate_context_tokens, log_phase_metrics
-from tools.evolution.framework.llm_provider import (
+from tools.llm_core.providers import (
     LocalClaudeProvider,
     BedrockProvider,
     BedrockAgentProvider,
 )
-from tools.evolution.framework.provider_config import get_provider_for_phase
-from tools.evolution.agents.scout_agent import ScoutAgent
-from tools.evolution.agents.architect_agent import ArchitectAgent
-from tools.evolution.agents.builder_agent import BuilderAgent
-from tools.evolution.agents.generic_agent import GenericAgent
+from tools.llm_core.config import get_provider_for_phase
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -968,9 +964,29 @@ def _run_phase_internal(
     working_directory = Path(working_directory).resolve()
 
     # ==========================================================================
-    # PROVIDER RESOLUTION
+    # CONTEXT HANDOFF: Read previous session state
     # ==========================================================================
-    from tools.evolution.framework.provider_config import reload_config
+    from tools.llm_core.context import (
+        format_context_for_prompt,
+        get_handoff_instructions,
+    )
+
+    # 1. Inject previous context (if any)
+    previous_context = format_context_for_prompt(working_directory)
+    if previous_context:
+        # Prepend to user_prompt so it's the first thing the agent sees
+        print("📥 Injecting previous session context...", file=sys.stderr)
+        input_instruction = previous_context + "\n\n" + input_instruction
+
+    # 2. Append instructions to generate the NEXT handoff
+    # We insist on this being at the end of the user prompt
+    handoff_instructions = get_handoff_instructions()
+    input_instruction += "\n\n" + handoff_instructions
+
+    # ==========================================================================
+    # 3. Construct System Prompt
+    # ==========================================================================
+    from tools.llm_core.config import reload_config
 
     # Force reload config to pick up any recent changes
     reload_config()
@@ -1307,20 +1323,6 @@ def _run_phase_internal(
         # Default to Local Claude
         llm_provider = LocalClaudeProvider()
 
-    # Select Agent
-    agent = None
-    if phase_name == "Scout":
-        agent = ScoutAgent(working_directory, llm_provider=llm_provider)
-    elif phase_name == "Architect":
-        agent = ArchitectAgent(llm_provider=llm_provider)
-    elif phase_name == "Builder":
-        agent = BuilderAgent(llm_provider=llm_provider)
-    else:
-        # Generic Agent for other phases
-        agent = GenericAgent(
-            phase_name, prompt_path=phase_prompt_path, llm_provider=llm_provider
-        )
-
     # Track start time
     start = datetime.now()
 
@@ -1392,49 +1394,27 @@ def _run_phase_internal(
 
     try:
         print(
-            f"⏳ Running {phase_name} phase (Agent: {type(agent).__name__}, Provider: {type(llm_provider).__name__})...",
+            f"⏳ Running {phase_name} phase (Provider: {type(llm_provider).__name__})...",
             file=sys.stderr,
         )
         print(f"   Timeout: {phase_timeout}s", file=sys.stderr)
         print(f"   Working directory: {working_directory}", file=sys.stderr)
 
-        # Prepare context
-        context = {
-            "prompt_path": str(phase_prompt_path),
-            "system_prompt": phase_prompt,
-            "job_id": job_id,
-            "iteration": iteration,
-            "project_type": project_type,
-        }
-
-        # Execute Agent
+        # Execute LLM Provider directly (no agent wrapper)
         # Note: This blocks until completion, but streams events via callback
-        result = agent.run(
-            working_directory,
-            input_instruction,
-            context=context,
+        result = llm_provider.generate(
+            system_prompt=phase_prompt,
+            user_prompt=input_instruction,
+            model=effective_model,
+            working_directory=working_directory,
             event_callback=event_callback,
         )
 
         # Process Result
-        # Agent.run returns different things depending on the agent.
-        # Scout returns findings list. Architect/Builder return dict with output.
-
-        stdout = ""
+        # llm_provider.generate() always returns a string
+        stdout = result if result else ""
         stderr = ""
         exit_code = 0
-
-        if isinstance(result, dict):
-            if result.get("status") == "failed":
-                exit_code = 1
-                stderr = result.get("error", "Unknown error")
-            else:
-                stdout = result.get("output", "")
-        elif isinstance(result, list):
-            # Scout returns list of findings
-            stdout = f"Scout found {len(result)} issues."
-        elif isinstance(result, str):
-            stdout = result
 
         duration = (datetime.now() - start).total_seconds()
 

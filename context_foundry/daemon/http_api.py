@@ -800,7 +800,6 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             return
 
         tool_name = data.get("tool_name")
-        arguments = data.get("arguments", {})
         working_directory = data.get("working_directory")
 
         if not tool_name:
@@ -813,13 +812,17 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
         try:
             # Import here to avoid circular imports if any
-            from tools.evolution.communication.tool_executor import ToolExecutor
-            from pathlib import Path
+            # DEPRECATED: ToolExecutor is part of old evolution framework
+            # from tools.evolution.communication.tool_executor import ToolExecutor
+            # from pathlib import Path
 
-            executor = ToolExecutor(Path(working_directory))
-            result = executor.execute(tool_name, arguments)
+            # executor = ToolExecutor(Path(working_directory))
+            # result = executor.execute(tool_name, arguments)
 
-            self._send_json(result)
+            # self._send_json(result)
+            self._send_error(
+                501, "Tool execution endpoint is deprecated pending refactor."
+            )
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}")
@@ -828,7 +831,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _handle_agents(self) -> None:
         """GET /agents - Get agent configuration."""
         try:
-            from tools.evolution.framework.agent_registry import AgentRegistry
+            from tools.llm_core.agent_registry import AgentRegistry
 
             registry = AgentRegistry()
             agents = registry.list_agents()
@@ -840,7 +843,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _handle_agents_update(self, data: Dict[str, Any]) -> None:
         """POST /agents - Update agent configuration."""
         try:
-            from tools.evolution.framework.agent_registry import AgentRegistry
+            from tools.llm_core.agent_registry import AgentRegistry
 
             agent_name = data.get("name")
             provider = data.get("provider")

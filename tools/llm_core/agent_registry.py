@@ -1,7 +1,7 @@
 import yaml
-import os
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
+
 
 class AgentRegistry:
     """
@@ -14,7 +14,7 @@ class AgentRegistry:
             self.config_path = config_path
         else:
             self.config_path = Path.home() / ".context-foundry" / "agents.yaml"
-        
+
         self.agents: Dict[str, Any] = {}
         self._load()
 
@@ -37,7 +37,7 @@ class AgentRegistry:
         """Save current agents to the YAML configuration file."""
         # Ensure directory exists
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         data = {"agents": self.agents}
         with open(self.config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False)
@@ -49,26 +49,32 @@ class AgentRegistry:
                 "description": "Researches codebases, answers questions, and performs analysis.",
                 "provider": "local",
                 "model": "claude-3-5-sonnet",
-                "tools": ["search", "read_file", "list_directory"]
+                "tools": ["search", "read_file", "list_directory"],
             },
             "architect": {
                 "description": "Designs system architecture, plans changes, and creates implementation plans.",
                 "provider": "local",
                 "model": "claude-3-opus",
-                "tools": ["search", "read_file", "list_directory", "write_file"]
+                "tools": ["search", "read_file", "list_directory", "write_file"],
             },
             "builder": {
                 "description": "Writes code, implements features, and modifies files.",
                 "provider": "local",
                 "model": "claude-3-5-sonnet",
-                "tools": ["search", "read_file", "list_directory", "write_file", "run_command"]
+                "tools": [
+                    "search",
+                    "read_file",
+                    "list_directory",
+                    "write_file",
+                    "run_command",
+                ],
             },
             "test": {
                 "description": "Runs tests and verifies functionality.",
                 "provider": "local",
                 "model": "claude-3-5-sonnet",
-                "tools": ["run_command", "read_file"]
-            }
+                "tools": ["run_command", "read_file"],
+            },
         }
 
     def list_agents(self) -> Dict[str, Any]:
@@ -89,10 +95,10 @@ class AgentRegistry:
         name = name.lower()
         if name not in self.agents:
             raise ValueError(f"Agent '{name}' not found.")
-        
+
         agent = self.agents[name]
         agent["provider"] = provider
-        
+
         # Update additional fields (e.g., agent_id)
         for key, value in kwargs.items():
             if value is not None:
@@ -100,7 +106,7 @@ class AgentRegistry:
             elif key in agent:
                 # Remove key if value is explicitly None
                 del agent[key]
-                
+
         self._save()
 
     def delete_agent(self, name: str):

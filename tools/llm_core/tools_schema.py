@@ -9,13 +9,10 @@ TOOLS_SCHEMA = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The command to execute"
-                }
+                "command": {"type": "string", "description": "The command to execute"}
             },
-            "required": ["command"]
-        }
+            "required": ["command"],
+        },
     },
     {
         "name": "read_file",
@@ -23,13 +20,10 @@ TOOLS_SCHEMA = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file"
-                }
+                "path": {"type": "string", "description": "Path to the file"}
             },
-            "required": ["path"]
-        }
+            "required": ["path"],
+        },
     },
     {
         "name": "write_file",
@@ -37,17 +31,11 @@ TOOLS_SCHEMA = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the file"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Content to write"
-                }
+                "path": {"type": "string", "description": "Path to the file"},
+                "content": {"type": "string", "description": "Content to write"},
             },
-            "required": ["path", "content"]
-        }
+            "required": ["path", "content"],
+        },
     },
     {
         "name": "list_directory",
@@ -55,12 +43,9 @@ TOOLS_SCHEMA = [
         "input_schema": {
             "type": "object",
             "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Path to the directory"
-                }
+                "path": {"type": "string", "description": "Path to the directory"}
             },
-            "required": ["path"]
-        }
-    }
+            "required": ["path"],
+        },
+    },
 ]

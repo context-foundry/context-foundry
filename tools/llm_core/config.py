@@ -68,7 +68,9 @@ def reload_config() -> None:
     _load_config()
 
 
-def get_provider_for_phase(phase: str) -> Tuple[str, Optional[str], Optional[Dict[str, str]]]:
+def get_provider_for_phase(
+    phase: str,
+) -> Tuple[str, Optional[str], Optional[Dict[str, str]]]:
     """
     Get the provider and model for a given phase.
 
@@ -97,16 +99,24 @@ def get_provider_for_phase(phase: str) -> Tuple[str, Optional[str], Optional[Dic
         parts = env_val.split(":", 1)
         provider = parts[0].strip().lower()
         rest = parts[1].strip() if len(parts) > 1 else None
-        
+
         if provider == "bedrock-agent" and rest:
-             # Parse AGENT_ID/ALIAS_ID
-             if "/" in rest:
-                 agent_id, alias_id = rest.split("/", 1)
-                 logger.debug(f"Phase '{phase}' using env override: provider=bedrock-agent, agent={agent_id}, alias={alias_id}")
-                 return ("bedrock-agent", None, {"agent_id": agent_id, "alias_id": alias_id})
-        
+            # Parse AGENT_ID/ALIAS_ID
+            if "/" in rest:
+                agent_id, alias_id = rest.split("/", 1)
+                logger.debug(
+                    f"Phase '{phase}' using env override: provider=bedrock-agent, agent={agent_id}, alias={alias_id}"
+                )
+                return (
+                    "bedrock-agent",
+                    None,
+                    {"agent_id": agent_id, "alias_id": alias_id},
+                )
+
         model = rest
-        logger.debug(f"Phase '{phase}' using env override: provider={provider}, model={model}")
+        logger.debug(
+            f"Phase '{phase}' using env override: provider={provider}, model={model}"
+        )
         return (provider, model, {})
 
     # 2. Load config file
@@ -118,7 +128,7 @@ def get_provider_for_phase(phase: str) -> Tuple[str, Optional[str], Optional[Dic
     if phase_config:
         provider = phase_config.get("provider", config.get("default_provider", "local"))
         model = phase_config.get("model")
-        
+
         extra_config = {}
         if provider == "bedrock-agent":
             extra_config["agent_id"] = phase_config.get("agent_id")
@@ -128,23 +138,40 @@ def get_provider_for_phase(phase: str) -> Tuple[str, Optional[str], Optional[Dic
         if model is None and provider == "bedrock":
             model = config.get("default_bedrock_model")
 
-        logger.debug(f"Phase '{phase}' using config: provider={provider}, model={model}")
+        logger.debug(
+            f"Phase '{phase}' using config: provider={provider}, model={model}"
+        )
         return (provider, model, extra_config)
 
     # 4. Use defaults from config or hardcoded
     default_provider = config.get("default_provider", "local")
-    default_model = config.get("default_bedrock_model") if default_provider == "bedrock" else None
+    default_model = (
+        config.get("default_bedrock_model") if default_provider == "bedrock" else None
+    )
 
-    logger.debug(f"Phase '{phase}' using defaults: provider={default_provider}, model={default_model}")
+    logger.debug(
+        f"Phase '{phase}' using defaults: provider={default_provider}, model={default_model}"
+    )
     return (default_provider, default_model, {})
 
 
-def get_all_phase_configs() -> Dict[str, Tuple[str, Optional[str], Optional[Dict[str, str]]]]:
+def get_all_phase_configs() -> (
+    Dict[str, Tuple[str, Optional[str], Optional[Dict[str, str]]]]
+):
     """
     Get provider/model config for all known phases.
     Useful for displaying current configuration.
     """
-    phases = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"]
+    phases = [
+        "Scout",
+        "Architect",
+        "Builder",
+        "Test",
+        "Screenshot",
+        "Documentation",
+        "Deploy",
+        "Feedback",
+    ]
     return {phase: get_provider_for_phase(phase) for phase in phases}
 
 
@@ -162,39 +189,36 @@ def create_default_config() -> None:
             "Scout": {
                 "provider": "bedrock",
                 "model": "anthropic.claude-opus-4-5-20251101-v1:0",
-                "_comment": "Deep codebase analysis needs best reasoning"
+                "_comment": "Deep codebase analysis needs best reasoning",
             },
             "Architect": {
                 "provider": "bedrock",
                 "model": "anthropic.claude-opus-4-5-20251101-v1:0",
-                "_comment": "System design needs advanced reasoning"
+                "_comment": "System design needs advanced reasoning",
             },
             "Builder": {
                 "provider": "bedrock",
                 "model": "anthropic.claude-sonnet-4-20250514-v1:0",
-                "_comment": "Code generation - can swap to qwen3-coder for specialized tasks"
+                "_comment": "Code generation - can swap to qwen3-coder for specialized tasks",
             },
-            "Test": {
-                "provider": "local",
-                "_comment": "Simple task - use subscription"
-            },
+            "Test": {"provider": "local", "_comment": "Simple task - use subscription"},
             "Screenshot": {
                 "provider": "local",
-                "_comment": "Simple task - use subscription"
+                "_comment": "Simple task - use subscription",
             },
             "Documentation": {
                 "provider": "local",
-                "_comment": "Simple task - use subscription"
+                "_comment": "Simple task - use subscription",
             },
             "Deploy": {
                 "provider": "local",
-                "_comment": "Simple task - use subscription"
+                "_comment": "Simple task - use subscription",
             },
             "Feedback": {
                 "provider": "local",
-                "_comment": "Simple task - use subscription"
-            }
-        }
+                "_comment": "Simple task - use subscription",
+            },
+        },
     }
 
     CONFIG_PATH.write_text(json.dumps(default_config, indent=2))
@@ -203,7 +227,7 @@ def create_default_config() -> None:
 
 def print_current_config() -> None:
     """Print current configuration to stdout (for CLI usage)."""
-    print(f"\nProvider Configuration")
+    print("\nProvider Configuration")
     print(f"{'='*50}")
     print(f"Config file: {CONFIG_PATH}")
     print(f"Config exists: {CONFIG_PATH.exists()}")
@@ -220,7 +244,7 @@ def print_current_config() -> None:
             agent_id = extra.get("agent_id", "N/A")
             alias_id = extra.get("alias_id", "N/A")
             model_display = f"Agent: {agent_id} (Alias: {alias_id})"
-            
+
         # Check if overridden by env
         env_key = f"CF_PHASE_{phase.upper()}"
         env_marker = " [ENV]" if os.environ.get(env_key) else ""

@@ -624,7 +624,7 @@ class Runner:
                 # 2. If still missing, try to resolve from provider_config
                 if "model" not in details or "provider" not in details:
                     try:
-                        from tools.evolution.framework.provider_config import (
+                        from tools.llm_core.config import (
                             get_provider_for_phase,
                         )
 

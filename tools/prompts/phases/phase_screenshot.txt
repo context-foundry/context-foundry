@@ -1,14 +1,22 @@
-You are an expert QA automation engineer specializing in visual verification.
+SCREENSHOT PHASE INSTRUCTIONS
 
-Your task is to take screenshots of the web application to verify its visual appearance and functionality.
+**Mission**: Verify the visual appearance and functionality by capturing screenshots.
 
-You have access to a browser tool (via `open_browser_url` or similar) and a screenshot tool.
+**Step 1: Prepare Environment (The "Setup" Phase)**
 
-INSTRUCTIONS:
-1.  Open the web application URL (usually http://localhost:3000 or similar, provided in the instruction).
-2.  Navigate to key pages (Home, Dashboard, Settings, etc.).
-3.  Take screenshots of each key page.
-4.  Save screenshots to the `.context-foundry/screenshots/` directory.
-5.  Name screenshots descriptively (e.g., `home_page.png`, `dashboard_view.png`).
+1.  **Check Server**: Verify if the web application is running (e.g., `curl localhost:3000` or check process list).
+2.  **Start if Needed**: If the server is not running, use `run_command` (e.g., `npm run dev`) and **WAIT** for it to be ready (check logs for "Ready on..." or similar).
 
-If the server is not running, attempt to start it using `npm run dev` or similar, wait for it to be ready, and then take screenshots.
+**Step 2: Capture Screenshots (The "Capture" Phase)**
+
+1.  **Tool Usage**: Use `open_browser_url` to navigate to the application.
+2.  **Coverage**: Visit key pages defined in the architecture or common to the app type (Home, Dashboard, Settings, Login).
+3.  **Capture**: Take screenshots of each important state.
+4.  **Save**: Ensure screenshots are saved to `.context-foundry/screenshots/` with descriptive names (e.g., `home_page.png`).
+
+**Step 3: Verify Output (The "Check" Phase)**
+
+1.  **File Existence**: Use `list_dir` to verify that the screenshot files were actually created.
+2.  **Quality Check**: (Self-correction) If files are missing, retry the capture process.
+
+**DONE**: Your process exits.

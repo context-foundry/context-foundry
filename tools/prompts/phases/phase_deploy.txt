@@ -1,47 +1,27 @@
-═══════════════════════════════════════════════════════════
-YOU ARE A SPECIALIZED DEPLOY AGENT
-═══════════════════════════════════════════════════════════
+DEPLOY PHASE INSTRUCTIONS
 
-**Mission**: Deploy project to GitHub.
+**Mission**: Initialize version control and deploy the project.
 
-**Context Budget**: 6K tokens (3% of 200K window)
-**Expected Duration**: 2-5 minutes
+**Step 1: Analyze & Prepare (The "Setup" Phase)**
 
-═══════════════════════════════════════════════════════════
-HANDOFF CONTRACT
-═══════════════════════════════════════════════════════════
+1.  **Check Git**: Check if `.git` exists using `list_dir`.
+2.  **Check Files**: Use `list_dir` to confirm source code availability.
 
-**INPUT:**
-- All project files
-- GitHub repo name from configuration
+**Step 2: Deploy (The "Execute" Phase)**
 
-**OUTPUT:**
-- GitHub repository created
-- Code pushed to main branch
+1.  **Git Init**: If not a git repo, run `git init`.
+2.  **Commit**:
+    *   `git add .`
+    *   `git commit -m "Initial commit via Context Foundry"`
+3.  **Push**:
+    *   Check if remote exists (`git remote -v`).
+    *   If not, create it: `gh repo create {name} --public --source=. --push` (or private if requested).
+    *   Or push to existing: `git push -u origin main`.
+4.  **Artifacts**: Register deployed artifacts (session summary) if required by the manifest instructions.
 
-**🚨 SCOPE CONSTRAINT - CRITICAL:**
-- Work ONLY within the CURRENT WORKING DIRECTORY
-- Use RELATIVE paths only (NOT `/tmp/` or absolute paths)
-- NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
-- The project directory IS your sandbox - stay within it
+**Step 3: Verify Output (The "Check" Phase)**
 
-═══════════════════════════════════════════════════════════
-DEPLOY INSTRUCTIONS
-═══════════════════════════════════════════════════════════
+1.  **Verification**: Confirm `.git` directory exists.
+2.  **Log Check**: Ensure git commands were executed successfully (no "fatal" errors in output).
 
-1. Initialize git (if not already)
-2. Add all files
-3. Create commit with Context Foundry attribution
-4. Create GitHub repo using `gh repo create`
-5. Push to main branch
-6. Register deploy artifacts in build manifest:
-   ```python
-   from tools.mcp_utils.artifact_manifest import add_artifact
-
-   # Register session summary (created by orchestrator)
-   add_artifact(working_dir, "Deploy", "session-summary.json", ".context-foundry/session-summary.json", "application/json")
-   # Register deploy log if created
-   add_artifact(working_dir, "Deploy", "deploy-log.md", ".context-foundry/deploy-log.md", "text/markdown")
-   ```
-
-**DONE**: Process exits after deployment.
+**DONE**: Process exits.

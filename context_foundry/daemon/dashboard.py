@@ -998,7 +998,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def _serve_agents(self) -> None:
         """Serve agent configuration from AgentRegistry."""
         try:
-            from tools.evolution.framework.agent_registry import AgentRegistry
+            from tools.llm_core.agent_registry import AgentRegistry
 
             registry = AgentRegistry()
             agents = registry.list_agents()
@@ -1376,7 +1376,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length)
             data = json.loads(body) if body else {}
 
-            from tools.evolution.framework.agent_registry import AgentRegistry
+            from tools.llm_core.agent_registry import AgentRegistry
 
             agent_name = data.get("name")
             provider = data.get("provider")

@@ -1,29 +1,29 @@
 SCOUT PHASE INSTRUCTIONS
 
-**Step 1: Research Task Requirements**
+**Mission**: Analyze the task, explore the codebase, research requirements, and provide a comprehensive foundation for the Architect.
 
-Use `/agents` command to create a Scout sub-agent:
-```
-Type: /agents
-Description: "Expert researcher who gathers requirements, explores codebases, analyzes constraints, and provides comprehensive context for implementation. All research findings must be consolidated into a single concise summary (10-20KB). Do NOT create separate research documents."
-```
+**Step 1: Explore & Analyze (The "Find Things" Phase)**
 
-Research:
-- Analyze task requirements thoroughly
-- Explore existing files in working directory
-- Identify technology stack and constraints
-- Research best practices for this project type
-- Document challenges and recommended solutions
-- Identify testing requirements
+1.  **Explore Context**:
+    *   Use `list_dir` to see the project structure.
+    *   Use `view_file_outline` or `view_file` to examine existing key files.
+    *   **Do not guess!** Verify the current state of the repository.
+2.  **Analyze Code**: Read key files to understand existing patterns, dependencies, and architecture.
+3.  **Identify Type**: Determine if this is a standard application, a Flowise workflow, or an extension.
 
-**API Integration Research** (if project uses external APIs):
-- Research API's CORS policy
-- Check if "Server-side only" or requires API key in headers
-- If API blocks CORS: Flag need for backend proxy
+**Step 2: Research (The "Learn" Phase)**
 
-**Step 2: Save Scout Report**
+1.  **Task Analysis**: Break down the user's request into specific technical requirements.
+2.  **Pattern Research**:
+    *   **Standard Projects**: Research best practices for the identified technology stack.
+    *   **Flowise Projects**: You **MUST** query the Context Codex (or simulate queries) to pass strict validation.
+        *   Look for references like: `codex_search("flowise routing pattern")`, `codex_search("flowise missing start node")`.
+        *   Include these queries or their results in your report.
 
-Use the Write tool to create `.context-foundry/scout-report.md`:
+**Step 3: Create Report (The "Respond" Phase)**
+
+You **MUST** create `.context-foundry/scout-report.md` using the `write_to_file` tool.
+Your output **MUST** follow this structure:
 
 ```markdown
 # Scout Report: {Project Name}
@@ -54,21 +54,17 @@ Use the Write tool to create `.context-foundry/scout-report.md`:
 ## Testing Approach
 - {Testing strategy 1}
 - {Testing strategy 2}
-```
 
-Keep report concise: 10-20KB, NOT 60KB+
-
-**Step 3: Cleanup Extra Files**
-
-Remove any extra research documents:
-```bash
-rm -f RESEARCH_FINDINGS.md API_RESPONSE_EXAMPLES.md EXECUTIVE_SUMMARY.md 2>/dev/null || true
+## Context Codex Research (Flowise Projects Only)
+*Required for Flowise projects to pass validation*
+- Queried: "flowise routing pattern"
+- Applied Pattern: {Pattern ID/Name}
 ```
 
 **Step 4: Verify Output**
 
-```bash
-ls -la .context-foundry/scout-report.md && echo "FILE EXISTS" || echo "FILE MISSING"
-```
+1.  Verify that `.context-foundry/scout-report.md` exists.
+2.  Ensure it contains valid Markdown.
+3.  **Flowise Projects**: Verify that you included Codex query references to pass `validate_flowise_codex_queries`.
 
 **DONE**: Scout phase complete. Your process will exit, releasing context.
