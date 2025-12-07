@@ -141,7 +141,7 @@ export const useJobsStore = create<JobsState>((set, get) => ({
           if (job.id !== event.job_id) return job;
 
           const data = event.data as { phase: Phase; status: string };
-          const updatedPhases = job.phases.map((task) =>
+          const updatedPhases = (job.phases || []).map((task) =>
             task.phase === data.phase
               ? { ...task, status: data.status as typeof task.status }
               : task
@@ -204,8 +204,8 @@ export const useFilteredJobs = () => {
   const query = searchQuery.toLowerCase();
   return jobs.filter(
     (job) =>
-      job.task.toLowerCase().includes(query) ||
-      job.working_directory.toLowerCase().includes(query) ||
+      (job.task || job.params?.task || '').toLowerCase().includes(query) ||
+      (job.working_directory || job.params?.working_directory || '').toLowerCase().includes(query) ||
       job.id.toLowerCase().includes(query)
   );
 };

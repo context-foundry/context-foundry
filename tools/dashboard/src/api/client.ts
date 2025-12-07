@@ -110,7 +110,9 @@ export async function listJobs(params: ListJobsParams = {}): Promise<Job[]> {
   if (!response.ok) {
     throw new Error(`Failed to list jobs: ${response.statusText}`);
   }
-  return response.json();
+  const data = await response.json();
+  // API returns { jobs: [...], summary: {...} } - extract just the jobs array
+  return data.jobs || data;
 }
 
 export async function getJob(jobId: string): Promise<Job> {

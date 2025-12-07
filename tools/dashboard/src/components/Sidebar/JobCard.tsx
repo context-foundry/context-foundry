@@ -34,13 +34,16 @@ function formatTimeAgo(dateStr: string): string {
   return `${diffDays}d ago`;
 }
 
-function truncateTask(task: string, maxLength = 60): string {
+function truncateTask(task: string | undefined, maxLength = 60): string {
+  if (!task) return 'Untitled job';
   if (task.length <= maxLength) return task;
   return task.slice(0, maxLength - 3) + '...';
 }
 
 export function JobCard({ job, isSelected, onClick }: JobCardProps) {
   const statusColor = STATUS_COLORS[job.status] ?? 'var(--text-secondary)';
+  // Task can be in job.task or job.params.task depending on API version
+  const task = job.task || job.params?.task;
 
   return (
     <div className={`job-card ${isSelected ? 'selected' : ''}`} onClick={onClick}>
@@ -54,7 +57,7 @@ export function JobCard({ job, isSelected, onClick }: JobCardProps) {
         <span className="job-time">{formatTimeAgo(job.created_at)}</span>
       </div>
 
-      <div className="job-card-task">{truncateTask(job.task)}</div>
+      <div className="job-card-task">{truncateTask(task)}</div>
 
       <div className="job-card-footer">
         <span className="job-id">{job.id.slice(0, 8)}</span>

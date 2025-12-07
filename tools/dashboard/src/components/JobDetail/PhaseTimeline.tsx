@@ -30,7 +30,7 @@ export function PhaseTimeline({ job }: PhaseTimelineProps) {
   const { selectedPhase, selectPhase } = useJobsStore();
 
   // Create a map of phase -> task for quick lookup
-  const phaseMap = new Map(job.phases.map((task) => [task.phase, task]));
+  const phaseMap = new Map((job.phases || []).map((task) => [task.phase, task]));
 
   return (
     <div className="phase-timeline">

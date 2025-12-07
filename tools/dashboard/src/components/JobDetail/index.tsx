@@ -31,10 +31,10 @@ export function JobDetail() {
 
       <div className="job-detail-meta">
         <span className="meta-item">
-          <strong>Directory:</strong> {job.working_directory}
+          <strong>Directory:</strong> {job.working_directory || job.params?.working_directory || 'N/A'}
         </span>
         <span className="meta-item">
-          <strong>Mode:</strong> {job.execution_mode.toUpperCase()}
+          <strong>Mode:</strong> {(job.execution_mode || job.params?.execution_mode || 'autonomous').toUpperCase()}
         </span>
         <span className="meta-item">
           <strong>Status:</strong> {job.status.replace('_', ' ')}

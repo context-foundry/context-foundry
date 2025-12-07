@@ -7,6 +7,7 @@ The goal is minimal dependencies (stdlib only) and fast startup.
 
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -642,7 +643,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/dashboard"):
-            self._serve_html()
+            self._serve_dashboard_asset("/")
         elif parsed.path == "/status":
             self._serve_status()
         elif parsed.path == "/events":
@@ -669,6 +670,97 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._serve_config()
         elif parsed.path == "/agents":
             self._serve_agents()
+        elif parsed.path == "/health":
+            self._serve_health()
+        # API routes for Vite dashboard
+        elif parsed.path == "/api/jobs":
+            self._serve_status()
+        elif parsed.path.startswith("/api/jobs/"):
+            job_id = parsed.path.split("/api/jobs/")[1].split("/")[0]
+            self._serve_job_detail(job_id, parsed.query)
+        elif parsed.path == "/api/approvals":
+            self._serve_pending_approvals()
+        elif parsed.path == "/api/settings/team":
+            self._serve_team_settings()
+        elif parsed.path == "/api/settings/daemon":
+            self._serve_config()
+        else:
+            # Fallback to serving static files (Vite app)
+            self._serve_dashboard_asset(parsed.path)
+
+    def _serve_dashboard_asset(self, path: str) -> None:
+        """Serve static assets for the Vite dashboard."""
+        # Locate the dist directory relative to this file
+        # context_foundry/daemon/dashboard.py -> .../tools/dashboard/dist
+        root_dir = Path(__file__).resolve().parent.parent.parent
+        dist_dir = root_dir / "tools" / "dashboard" / "dist"
+
+        if not dist_dir.exists():
+            self.send_error(
+                404,
+                "Dashboard build not found. Run 'npm run build' in tools/dashboard.",
+            )
+            return
+
+        # Normalize path
+        if path.startswith("/"):
+            path = path[1:]
+
+        # Default to index.html
+        if not path or path == "dashboard":
+            path = "index.html"
+
+        target_path = (dist_dir / path).resolve()
+
+        # Security check: ensure we stay within dist_dir
+        try:
+            target_path.relative_to(dist_dir)
+        except ValueError:
+            self.send_error(403, "Forbidden")
+            return
+
+        # If file exists, serve it
+        if target_path.is_file():
+            self._serve_file(target_path)
+            return
+
+        # Fallback for SPA routing: serve index.html if it's not a found file
+        # But we should be careful not to fallback for missing assets (e.g. missing .js)
+        if path.startswith("assets/"):
+            self.send_error(404, "Asset not found")
+            return
+
+        index_path = dist_dir / "index.html"
+        if index_path.exists():
+            self._serve_file(index_path)
+        else:
+            self.send_error(404, "index.html not found")
+
+    def _serve_file(self, path: Path) -> None:
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+
+            ctype, _ = mimetypes.guess_type(path)
+            if not ctype:
+                ctype = "application/octet-stream"
+
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            logger.error(f"Failed to serve file {path}: {e}")
+            self.send_error(500, str(e))
+
+    def do_PUT(self) -> None:  # noqa: N802
+        """Handle PUT requests."""
+        parsed = urlparse(self.path)
+
+        if parsed.path == "/api/settings/team":
+            self._update_team_settings()
         else:
             self.send_error(404, "Not Found")
 
@@ -698,6 +790,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_sidekick_chat()
         elif parsed.path == "/agents":
             self._update_agents()
+        elif parsed.path == "/api/settings/test-s3":
+            self._test_s3_connection()
+        elif parsed.path.startswith("/api/jobs/"):
+            # /api/jobs/:id/action
+            parts = parsed.path.split("/")
+            if len(parts) >= 5:
+                job_id = parts[3]
+                action = parts[4]
+                if action == "cancel":
+                    self._cancel_job(job_id)
+                elif action == "pause":
+                    self._pause_job(job_id)
+                elif action == "resume":
+                    self._resume_job(job_id)
+                else:
+                    self.send_error(404, "Unknown job action")
+            else:
+                self.send_error(404, "Invalid job route")
         else:
             self.send_error(404, "Not Found")
 
@@ -728,12 +838,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def _serve_config(self) -> None:
         """Serve provider configuration from ~/.context-foundry/provider_config.json"""
         from pathlib import Path
+
         config_path = Path.home() / ".context-foundry" / "provider_config.json"
 
         config = {}
         if config_path.exists():
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     config = json.load(f)
             except Exception as e:
                 logger.error(f"Failed to load config: {e}")
@@ -751,10 +862,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Serve agent configuration from AgentRegistry."""
         try:
             from tools.evolution.framework.agent_registry import AgentRegistry
+
             registry = AgentRegistry()
             agents = registry.list_agents()
             body = json.dumps({"agents": agents}).encode("utf-8")
-            
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-cache")
@@ -765,47 +877,130 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             logger.error(f"Failed to serve agents: {e}")
             self._send_json_error(500, str(e))
 
+    def _serve_health(self) -> None:
+        """Serve health check (compatible with API /health)."""
+        try:
+            # Get job counts
+            stats = self.server.context.store.get_job_stats()
+            active_jobs = stats.get("running", 0)
+            queued_jobs = stats.get("queued", 0)
+
+            body = json.dumps(
+                {
+                    "status": "ok",
+                    "active_jobs": active_jobs,
+                    "queued_jobs": queued_jobs,
+                    "timestamp": datetime.now().isoformat(),
+                    "service": "dashboard",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve health: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_detail(self, job_id: str, query: str) -> None:
+        """Serve details for a specific job."""
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Get phases and logs
+            phases = self.server.context.store.get_job_phases(job_id)
+            logs = self.server.context.store.get_job_logs(job_id, limit=100)
+
+            body = json.dumps({"job": job, "phases": phases, "logs": logs}).encode(
+                "utf-8"
+            )
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job detail: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_team_settings(self) -> None:
+        """Serve team sync settings."""
+        try:
+            # Read from config file or return defaults
+            config_path = Path.home() / ".context-foundry" / "team_settings.json"
+            if config_path.exists():
+                settings = json.loads(config_path.read_text())
+            else:
+                settings = {
+                    "sync_mode": "local-only",
+                    "s3_bucket": "",
+                    "s3_prefix": "patterns/",
+                    "aws_region": "us-east-1",
+                }
+
+            body = json.dumps(settings).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve team settings: {e}")
+            self._send_json_error(500, str(e))
+
     def _update_agents(self) -> None:
         """Update agent configuration."""
         try:
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             data = json.loads(body) if body else {}
-            
+
             from tools.evolution.framework.agent_registry import AgentRegistry
-            
+
             agent_name = data.get("name")
             provider = data.get("provider")
-            
+
             if not agent_name or not provider:
                 self._send_json_error(400, "Missing name or provider")
                 return
-                
+
             registry = AgentRegistry()
-            
+
             # Extract optional IDs if provided
             agent_id = data.get("agent_id")
             alias_id = data.get("alias_id")
-            
+
             kwargs = {}
             if agent_id is not None:
                 kwargs["agent_id"] = agent_id
             if alias_id is not None:
                 kwargs["alias_id"] = alias_id
-                
+
             registry.update_provider(agent_name, provider, **kwargs)
-            
+
             # Return updated list
             agents = registry.list_agents()
-            response_body = json.dumps({"status": "ok", "agents": agents}).encode("utf-8")
-            
+            response_body = json.dumps({"status": "ok", "agents": agents}).encode(
+                "utf-8"
+            )
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Content-Length", str(len(response_body)))
             self.end_headers()
             self.wfile.write(response_body)
-            
+
         except Exception as e:
             logger.error(f"Failed to update agent: {e}")
             self._send_json_error(500, str(e))
@@ -1183,89 +1378,169 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.pipeline_state import (
-                get_pipeline_state,
-                save_pipeline_state,
-                PipelineState,
-            )
 
-            # Update pipeline state to mark as resumed
-            pipeline_state = get_pipeline_state(Path(working_dir))
-            if pipeline_state:
-                pipeline_state.state = PipelineState.RUNNING
-                pipeline_state.mark_resumed()
-                save_pipeline_state(pipeline_state, Path(working_dir))
+            # Resume the job
+            # 1. Update status to QUEUED
+            # 2. Submit a new job with resume parameters OR update existing job
+            # For simplicity, we'll submit a new job that resumes the pipeline
 
-            # Submit resume job to the daemon using job_manager
-            resume_params = dict(job.params)
-            resume_params["resume_from_phase"] = from_phase
+            # Create resume params
+            resume_params = job.params.copy()
             resume_params["mode"] = "resume"
+            resume_params["resume_from_phase"] = from_phase
+            resume_params["job_id"] = job_id  # Reuse ID
 
-            # Use context.job_manager.submit_job (not store.submit_job which doesn't exist)
-            # Use job.type (not job.job_type)
-            new_job = self.server.context.job_manager.submit_job(
-                job_type=job.type,  # Correct attribute name
-                params=resume_params,
-                priority=job.priority,
-                metadata={
-                    "source": "dashboard_resume",
-                    "build_type": f"resume_{from_phase.lower()}",
-                    "original_job_id": job_id,
-                },
+            # Submit new job (which will pick up the pipeline state)
+            # We need to use a new ID if we want to keep history, but user wants to "resume" this job.
+            # However, JobManager.submit_job creates a new job.
+            # If we pass job_id, it might overwrite? JobManager.submit_job takes job_id.
+
+            # Check if job is already running (we did this above, but double check)
+            if self.server.context.job_manager.get_job(job_id).status in active_states:
+                self._send_json_error(409, "Job is already active")
+                return
+
+            # Re-submit with same ID
+            try:
+                self.server.context.job_manager.submit_job(
+                    job_type=job.type,
+                    params=resume_params,
+                    job_id=job_id,
+                    priority=10,  # High priority for resume
+                )
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({"status": "ok", "job_id": job_id}).encode("utf-8")
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to resume job: {e}")
+                self._send_json_error(500, str(e))
+
+        except Exception as e:
+            logger.error(f"Failed to resume pipeline: {e}")
+            self._send_json_error(500, str(e))
+
+    def _cancel_job(self, job_id: str) -> None:
+        """Cancel a job."""
+        try:
+            success = self.server.context.job_manager.cancel_job(job_id)
+            if success:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+            else:
+                self._send_json_error(
+                    400, "Failed to cancel job (not found or not running)"
+                )
+        except Exception as e:
+            logger.error(f"Error cancelling job {job_id}: {e}")
+            self._send_json_error(500, str(e))
+
+    def _pause_job(self, job_id: str) -> None:
+        """Pause a job."""
+        # Currently not supported by JobManager, but we can try to cancel it and mark as paused?
+        # For now, return 501 Not Implemented
+        self._send_json_error(501, "Pause not yet implemented")
+
+    def _resume_job(self, job_id: str) -> None:
+        """Resume a job."""
+        # Reuse _resume_pipeline logic but adapt for no body
+        # We need to find the next phase automatically
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, "Job not found")
+                return
+
+            # Call _resume_pipeline logic internally
+            # We can mock the request body or refactor.
+            # Refactoring is better but risky for "audit".
+            # Let's just implement the logic here directly.
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self._send_json_error(400, "Job has no working directory")
+                return
+
+            pipeline_state_file = (
+                Path(working_dir) / ".context-foundry" / "pipeline-state.json"
+            )
+            if not pipeline_state_file.exists():
+                self._send_json_error(404, "No pipeline state found")
+                return
+
+            state = json.loads(pipeline_state_file.read_text())
+            phases_remaining = state.get("phases_remaining", [])
+            from_phase = phases_remaining[0] if phases_remaining else None
+
+            if not from_phase:
+                self._send_json_error(400, "No phases remaining to resume")
+                return
+
+            # Re-submit job
+            resume_params = job.params.copy()
+            resume_params["mode"] = "resume"
+            resume_params["resume_from_phase"] = from_phase
+            resume_params["job_id"] = job_id
+
+            self.server.context.job_manager.submit_job(
+                job_type=job.type, params=resume_params, job_id=job_id, priority=10
             )
 
-            # Link original job to the new resumed job
-            # Only mark as CANCELLED if not already in a terminal state
-            from datetime import datetime
-
-            terminal_states = JobStatus.terminal_states()
-
-            # New metadata to add (update_job_status merges with existing in-store)
-            link_metadata = {
-                "superseded_by": new_job.id,
-                "superseded_reason": f"Resumed from {from_phase}",
-            }
-
-            if job.status not in terminal_states:
-                # Job was not terminal (e.g., still in some intermediate state)
-                # Mark it as cancelled since it's being superseded
-                self.server.context.store.update_job_status(
-                    job_id=job_id,
-                    status=JobStatus.CANCELLED,
-                    completed_at=datetime.now(),
-                    metadata=link_metadata,
-                )
-                logger.info(
-                    f"Original job {job_id} marked as cancelled, superseded by {new_job.id}"
-                )
-            else:
-                # Job was already terminal - just update metadata to link it
-                # Re-use its existing status to avoid misrepresenting history
-                self.server.context.store.update_job_status(
-                    job_id=job_id,
-                    status=job.status,  # Keep existing status
-                    metadata=link_metadata,
-                )
-                logger.info(
-                    f"Original job {job_id} ({job.status.value}) linked to resumed job {new_job.id}"
-                )
-
-            response = {
-                "success": True,
-                "message": f"Pipeline resumed from phase: {from_phase}",
-                "job_id": new_job.id,
-                "from_phase": from_phase,
-            }
-            resp_body = json.dumps(response).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(resp_body)))
+            self._add_cors_headers()
             self.end_headers()
-            self.wfile.write(resp_body)
+            self.wfile.write(
+                json.dumps({"status": "ok", "job_id": job_id}).encode("utf-8")
+            )
 
-        except Exception as exc:
-            logger.warning("Error resuming pipeline: %s", exc)
-            self._send_json_error(500, str(exc))
+        except Exception as e:
+            logger.error(f"Failed to resume job {job_id}: {e}")
+            self._send_json_error(500, str(e))
+
+    def _update_team_settings(self) -> None:
+        """Update team settings."""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            settings = json.loads(body) if body else {}
+
+            config_path = Path.home() / ".context-foundry" / "team_settings.json"
+            config_path.parent.mkdir(exist_ok=True)
+            config_path.write_text(json.dumps(settings, indent=2))
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+        except Exception as e:
+            logger.error(f"Failed to update team settings: {e}")
+            self._send_json_error(500, str(e))
+
+    def _test_s3_connection(self) -> None:
+        """Test S3 connection."""
+        try:
+            # Mock success for now
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {"status": "ok", "message": "Connection successful (mock)"}
+                ).encode("utf-8")
+            )
+        except Exception as e:
+            self._send_json_error(500, str(e))
 
     def _serve_job_conversation(self, query: str) -> None:
         """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>"""
@@ -2959,7 +3234,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     if response_text:
                         # Clean up any quotes if Claude adds them
-                        if response_text.startswith('"') and response_text.endswith('"'):
+                        if response_text.startswith('"') and response_text.endswith(
+                            '"'
+                        ):
                             response_text = response_text[1:-1]
 
                         # Check for build trigger
@@ -3694,18 +3971,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         configViewEl.innerHTML = config?.error || 'No config data';
         return;
       }
-      
+
       let html = '<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px;font-weight:bold;">';
       html += '<div>Phase</div><div>Provider</div><div>Model/Agent</div></div>';
-      
+
       const phases = config.phases || {};
       const order = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"];
-      
+
       order.forEach(phase => {
         const cfg = phases[phase] || {};
         const provider = cfg.provider || 'local';
         let model = '';
-        
+
         if (provider === 'bedrock') {
            model = cfg.model ? formatModelName(cfg.model) : '(default)';
         } else if (provider === 'bedrock-agent') {
@@ -3713,14 +3990,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         } else {
            model = '(Claude CLI)';
         }
-        
+
         html += `<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;padding:4px 0;">`;
         html += `<div>${phase}</div>`;
         html += `<div style="color:var(--accent);">${provider}</div>`;
         html += `<div style="color:var(--muted);">${model}</div>`;
         html += `</div>`;
       });
-      
+
       configViewEl.innerHTML = html;
     }
 

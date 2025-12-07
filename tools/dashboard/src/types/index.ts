@@ -33,20 +33,29 @@ export type ExecutionMode = 'autonomous' | 'hitl';
 
 export interface Job {
   id: string;
-  task: string;
-  working_directory: string;
+  task?: string;
+  working_directory?: string;
   status: JobStatus;
-  execution_mode: ExecutionMode;
-  current_phase: Phase | null;
-  phases: Task[];
+  execution_mode?: ExecutionMode;
+  current_phase?: Phase | null;
+  phases?: Task[];
   created_at: string;
-  updated_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  error: string | null;
-  retry_count: number;
-  max_retries: number;
-  timeout_minutes: number;
+  updated_at?: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  error?: string | null;
+  retry_count?: number;
+  max_retries?: number;
+  timeout_minutes?: number;
+  // API also returns these fields
+  params?: {
+    task?: string;
+    working_directory?: string;
+    execution_mode?: string;
+    project_name?: string;
+  };
+  phase?: string;
+  type?: string;
 }
 
 export interface Task {
