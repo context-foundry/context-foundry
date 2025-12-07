@@ -151,7 +151,5 @@ extensions/*/node_modules/
 # Other assets
 docs/assets/SatoshiChoreTracker.gif
 
-# Glass Pane local documentation
-tools/glass-pane/AGENT_VISIBILITY.md
 # Token files
 .mcpregistry_*

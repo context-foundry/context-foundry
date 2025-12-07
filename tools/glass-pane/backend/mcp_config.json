@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "context-foundry": {
-      "command": "python3",
-      "args": ["/Users/name/homelab/context-foundry/tools/mcp_server.py"],
-      "env": {}
-    }
-  }
-}
