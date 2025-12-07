@@ -192,6 +192,7 @@ body {
   color: var(--text-primary);
   outline: none;
   transition: all 0.2s;
+  text-align: center;
 }
 
 .sidekick-input:focus {
