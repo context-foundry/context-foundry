@@ -1,18 +1,50 @@
-# Context Foundry v2.3.0 - 5-Minute Quickstart
+# Context Foundry v3.0.0 - 5-Minute Quickstart
 
 **Get from zero to deployed app in 5 minutes**
 
-**NEW in v2.3.0:**
+**NEW in v3.0.0:**
+- 🖥️ **Desktop App** - Native macOS application with visual dashboard
+- 🤖 **AI Sidekick** - Natural language chat to trigger builds and check status
+- ⏱️ **Live Duration Counter** - Real-time build progress tracking
+- 🎨 **Beautiful Dark UI** - Modern interface with phase timeline visualization
+- ✅ **E2E Testing** - Playwright test suite for reliability
+
+**Also includes:**
 - ✨ **CF Daemon** - Background service for persistent job management
 - 🧠 **Intelligent Parallel Detection** - AI decides optimal build parallelization
 - 📚 **Context Codex Database** - SQLite-backed knowledge with full-text search
-- 🎮 **Glass Pane Dashboard** - Real-time build monitoring TUI
+
+---
+
+## Choose Your Experience
+
+### Option A: Desktop App (Easiest)
+
+![Desktop App](docs/images/dashboard-hero.png)
+
+```bash
+# Download and install the macOS app
+cd apps/context-foundry-desktop
+npm install && npm run tauri:build
+
+# Or download pre-built .dmg from releases
+```
+
+The Desktop App provides:
+- Visual job dashboard
+- AI Sidekick chat for natural language builds
+- Real-time progress monitoring
+- No terminal required!
+
+### Option B: CLI (Power Users)
+
+Continue below for the traditional CLI setup.
 
 ---
 
 ## What You'll Do
 
-1. One-time setup (2 minutes) - **NEW: Includes daemon start**
+1. One-time setup (2 minutes) - Includes daemon start
 2. Build your first app (3 minutes of your time, 7-15 min build runs in background)
 3. See it deployed on GitHub
 

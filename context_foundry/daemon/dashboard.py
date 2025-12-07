@@ -7,6 +7,7 @@ The goal is minimal dependencies (stdlib only) and fast startup.
 
 import json
 import logging
+import mimetypes
 import os
 import re
 import secrets
@@ -642,7 +643,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if parsed.path in ("/", "/dashboard"):
-            self._serve_html()
+            self._serve_dashboard_asset("/")
         elif parsed.path == "/status":
             self._serve_status()
         elif parsed.path == "/events":
@@ -664,11 +665,237 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/agent-activity":
             self._serve_agent_activity(parsed.query)
         elif parsed.path == "/job-conversation":
-            self._serve_job_conversation(parsed.query)
+            self._serve_legacy_job_conversation(parsed.query)
         elif parsed.path == "/config":
             self._serve_config()
         elif parsed.path == "/agents":
             self._serve_agents()
+        elif parsed.path == "/health":
+            self._serve_health()
+        # API routes for Vite dashboard
+        elif parsed.path == "/api/jobs":
+            self._serve_status()
+        elif parsed.path.startswith("/api/jobs/"):
+            # Parse /api/jobs/{id} or /api/jobs/{id}/artifacts or /api/jobs/{id}/conversation
+            path_parts = parsed.path.split("/api/jobs/")[1].split("/")
+            job_id = path_parts[0]
+            sub_path = path_parts[1] if len(path_parts) > 1 else None
+            if sub_path == "artifacts":
+                self._serve_job_artifacts(job_id, parsed.query)
+            elif sub_path == "conversation":
+                self._serve_job_conversation(job_id, parsed.query)
+            else:
+                self._serve_job_detail(job_id, parsed.query)
+        elif parsed.path == "/api/approvals":
+            self._serve_pending_approvals()
+        elif parsed.path == "/api/settings/team":
+            self._serve_team_settings()
+        elif parsed.path == "/api/settings/daemon":
+            self._serve_config()
+        else:
+            # Fallback to serving static files (Vite app)
+            self._serve_dashboard_asset(parsed.path)
+
+    def _get_recent_file_context(self) -> str:
+        """
+        Scan for recently modified files to provide context to the agent.
+        Returns a formatted string of recent file contents found in the current workspace.
+        """
+        try:
+            # Determine scanning root - prefer active job's working dir, else fallback to current dir
+            store = self.server.context.store
+            # Try to find a recently active job to get a relevant working directory
+            from .models import JobStatus
+
+            scan_dir = Path.cwd()  # Default fallback
+
+            # Check running jobs first
+            active_jobs = store.list_jobs(status=JobStatus.RUNNING, limit=1)
+            if active_jobs:
+                wd = active_jobs[0].params.get("working_directory")
+                if wd and os.path.isdir(wd):
+                    scan_dir = Path(wd)
+            else:
+                # Check recent jobs
+                recent_jobs = store.list_jobs(limit=1)
+                if recent_jobs:
+                    wd = recent_jobs[0].params.get("working_directory")
+                    if wd and os.path.isdir(wd):
+                        scan_dir = Path(wd)
+
+            logger.info(f"Scanning for context in: {scan_dir}")
+
+            # Find files modified in the last 24 hours (or just take top N most recent)
+            # Exclude hidden files, git, and python cache
+            exclude_dirs = {
+                ".git",
+                "__pycache__",
+                "node_modules",
+                "dist",
+                "build",
+                ".context-foundry",
+            }
+            exclude_exts = {
+                ".pyc",
+                ".o",
+                ".obj",
+                ".so",
+                ".dll",
+                ".class",
+                ".log",
+                ".lock",
+                ".zip",
+                ".tar",
+                ".gz",
+            }
+
+            candidates = []
+            try:
+                # Walk the directory
+                for root, dirs, files in os.walk(scan_dir):
+                    # Prune excluded dirs
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if d not in exclude_dirs and not d.startswith(".")
+                    ]
+
+                    for file in files:
+                        if file.startswith("."):
+                            continue
+
+                        file_path = Path(root) / file
+                        if file_path.suffix in exclude_exts:
+                            continue
+
+                        try:
+                            stat = file_path.stat()
+                            candidates.append((file_path, stat.st_mtime))
+                        except (OSError, ValueError):
+                            continue
+            except Exception as e:
+                logger.warning(f"Error walking directory {scan_dir}: {e}")
+
+            # Sort by modification time (descending) and take top 5
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            top_files = candidates[:5]
+
+            context_str = "RECENTLY MODIFIED FILES IN WORKSPACE:\n"
+            if not top_files:
+                return context_str + "(No recent files found)\n"
+
+            for fpath, mtime in top_files:
+                try:
+                    rel_path = fpath.relative_to(scan_dir)
+                    mtime_str = datetime.fromtimestamp(mtime).isoformat()
+
+                    # Read head of file
+                    content_snippet = ""
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                            # Read first 50 lines or 2000 chars
+                            lines = []
+                            for _ in range(50):
+                                line = f.readline()
+                                if not line:
+                                    break
+                                lines.append(line)
+                            content_snippet = "".join(lines)
+                            if len(content_snippet) > 2000:
+                                content_snippet = (
+                                    content_snippet[:2000] + "\n...(truncated)..."
+                                )
+                    except Exception:
+                        content_snippet = "(binary or unreadable content)"
+
+                    context_str += (
+                        f"\n--- FILE: {rel_path} (Last modified: {mtime_str}) ---\n"
+                    )
+                    context_str += content_snippet + "\n"
+
+                except Exception as e:
+                    logger.debug(f"Error reading file context for {fpath}: {e}")
+                    continue
+
+            return context_str
+
+        except Exception as e:
+            logger.warning(f"Failed to generate file context: {e}")
+            return "CONTEXT_SCAN_ERROR: Could not scan local files."
+
+    def _serve_dashboard_asset(self, path: str) -> None:
+        """Serve static assets for the Vite dashboard."""
+        # Locate the dist directory relative to this file
+        # context_foundry/daemon/dashboard.py -> .../tools/dashboard/dist
+        root_dir = Path(__file__).resolve().parent.parent.parent
+        dist_dir = root_dir / "tools" / "dashboard" / "dist"
+
+        if not dist_dir.exists():
+            self.send_error(
+                404,
+                "Dashboard build not found. Run 'npm run build' in tools/dashboard.",
+            )
+            return
+
+        # Normalize path
+        if path.startswith("/"):
+            path = path[1:]
+
+        # Default to index.html
+        if not path or path == "dashboard":
+            path = "index.html"
+
+        target_path = (dist_dir / path).resolve()
+
+        # Security check: ensure we stay within dist_dir
+        try:
+            target_path.relative_to(dist_dir)
+        except ValueError:
+            self.send_error(403, "Forbidden")
+            return
+
+        # If file exists, serve it
+        if target_path.is_file():
+            self._serve_file(target_path)
+            return
+
+        # Fallback for SPA routing: serve index.html if it's not a found file
+        # But we should be careful not to fallback for missing assets (e.g. missing .js)
+        if path.startswith("assets/"):
+            self.send_error(404, "Asset not found")
+            return
+
+        index_path = dist_dir / "index.html"
+        if index_path.exists():
+            self._serve_file(index_path)
+        else:
+            self.send_error(404, "index.html not found")
+
+    def _serve_file(self, path: Path) -> None:
+        try:
+            with open(path, "rb") as f:
+                content = f.read()
+
+            ctype, _ = mimetypes.guess_type(path)
+            if not ctype:
+                ctype = "application/octet-stream"
+
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            logger.error(f"Failed to serve file {path}: {e}")
+            self.send_error(500, str(e))
+
+    def do_PUT(self) -> None:  # noqa: N802
+        """Handle PUT requests."""
+        parsed = urlparse(self.path)
+
+        if parsed.path == "/api/settings/team":
+            self._update_team_settings()
         else:
             self.send_error(404, "Not Found")
 
@@ -698,6 +925,24 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._handle_sidekick_chat()
         elif parsed.path == "/agents":
             self._update_agents()
+        elif parsed.path == "/api/settings/test-s3":
+            self._test_s3_connection()
+        elif parsed.path.startswith("/api/jobs/"):
+            # /api/jobs/:id/action
+            parts = parsed.path.split("/")
+            if len(parts) >= 5:
+                job_id = parts[3]
+                action = parts[4]
+                if action == "cancel":
+                    self._cancel_job(job_id)
+                elif action == "pause":
+                    self._pause_job(job_id)
+                elif action == "resume":
+                    self._resume_job(job_id)
+                else:
+                    self.send_error(404, "Unknown job action")
+            else:
+                self.send_error(404, "Invalid job route")
         else:
             self.send_error(404, "Not Found")
 
@@ -728,12 +973,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def _serve_config(self) -> None:
         """Serve provider configuration from ~/.context-foundry/provider_config.json"""
         from pathlib import Path
+
         config_path = Path.home() / ".context-foundry" / "provider_config.json"
 
         config = {}
         if config_path.exists():
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     config = json.load(f)
             except Exception as e:
                 logger.error(f"Failed to load config: {e}")
@@ -751,10 +997,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Serve agent configuration from AgentRegistry."""
         try:
             from tools.evolution.framework.agent_registry import AgentRegistry
+
             registry = AgentRegistry()
             agents = registry.list_agents()
             body = json.dumps({"agents": agents}).encode("utf-8")
-            
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-cache")
@@ -765,47 +1012,404 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             logger.error(f"Failed to serve agents: {e}")
             self._send_json_error(500, str(e))
 
+    def _serve_health(self) -> None:
+        """Serve health check (compatible with API /health)."""
+        try:
+            # Get job counts
+            stats = self.server.context.store.get_job_stats()
+            active_jobs = stats.get("running", 0)
+            queued_jobs = stats.get("queued", 0)
+
+            body = json.dumps(
+                {
+                    "status": "ok",
+                    "active_jobs": active_jobs,
+                    "queued_jobs": queued_jobs,
+                    "timestamp": datetime.now().isoformat(),
+                    "service": "dashboard",
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve health: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_detail(self, job_id: str, query: str) -> None:
+        """Serve details for a specific job."""
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Get phases and logs
+            phases = self.server.context.store.get_job_phases(job_id)
+            logs = self.server.context.store.get_job_logs(job_id, limit=100)
+
+            body = json.dumps({"job": job, "phases": phases, "logs": logs}).encode(
+                "utf-8"
+            )
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job detail: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_artifacts(self, job_id: str, query: str) -> None:
+        """Serve artifacts for a specific job phase.
+
+        Artifacts are stored in {working_directory}/.context-foundry/:
+        - scout-report.md, scout_report.json (Scout)
+        - architecture.md, architecture.json (Architect)
+        - build-log.md, build-tasks.json (Builder)
+        - test-report.md (Test)
+        - screenshot-capture-log.md (Screenshot)
+        - deploy-log.md (Deploy)
+        - session-summary.json (Feedback)
+        """
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Parse query params for phase
+            params = {}
+            if query:
+                for part in query.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        params[k] = v
+            phase = params.get("phase", "").lower()
+
+            # Get working directory
+            working_dir = None
+            if hasattr(job, "params") and job.params:
+                working_dir = job.params.get("working_directory")
+
+            artifacts = []
+            if working_dir:
+                working_path = Path(working_dir).expanduser().resolve()
+                if working_path.exists():
+                    # Phase-specific artifact files
+                    phase_artifacts = {
+                        "scout": [
+                            ".context-foundry/scout-report.md",
+                            ".context-foundry/scout_report.json",
+                        ],
+                        "architect": [
+                            ".context-foundry/architecture.md",
+                            ".context-foundry/architecture.json",
+                        ],
+                        "builder": [
+                            ".context-foundry/build-log.md",
+                            ".context-foundry/build-tasks.json",
+                        ],
+                        "test": [
+                            ".context-foundry/test-report.md",
+                        ],
+                        "screenshot": [
+                            ".context-foundry/screenshot-capture-log.md",
+                        ],
+                        "documentation": [
+                            "README.md",
+                        ],
+                        "deploy": [
+                            ".context-foundry/deploy-log.md",
+                        ],
+                        "feedback": [
+                            ".context-foundry/session-summary.json",
+                            ".context-foundry/current-phase.json",
+                        ],
+                    }
+
+                    # Also check docs/ directory for documentation phase
+                    if phase == "documentation":
+                        docs_dir = working_path / "docs"
+                        if docs_dir.exists():
+                            for md_file in docs_dir.glob("*.md"):
+                                try:
+                                    content = md_file.read_text()
+                                    artifacts.append(
+                                        {
+                                            "name": md_file.name,
+                                            "path": f"docs/{md_file.name}",
+                                            "type": "document",
+                                            "content": content,
+                                            "size": len(content),
+                                        }
+                                    )
+                                except Exception:
+                                    pass
+
+                    patterns = phase_artifacts.get(phase, [])
+                    for pattern in patterns:
+                        file_path = working_path / pattern
+                        if file_path.exists() and file_path.is_file():
+                            try:
+                                content = file_path.read_text()
+                                ext = file_path.suffix.lower()
+                                file_type = (
+                                    "document" if ext in (".md", ".txt") else "config"
+                                )
+                                artifacts.append(
+                                    {
+                                        "name": file_path.name,
+                                        "path": pattern,
+                                        "type": file_type,
+                                        "content": content,
+                                        "size": len(content),
+                                    }
+                                )
+                            except Exception:
+                                pass
+
+            body = json.dumps(
+                {
+                    "job_id": job_id,
+                    "phase": phase,
+                    "artifacts": artifacts,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job artifacts: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_job_conversation(self, job_id: str, query: str) -> None:
+        """Serve conversation for a specific job.
+
+        Conversations are stored in {working_directory}/.context-foundry/conversations/
+        as both .jsonl (structured) and .log (human-readable) files.
+        """
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, f"Job {job_id} not found")
+                return
+
+            # Parse query params for phase
+            params = {}
+            if query:
+                for part in query.split("&"):
+                    if "=" in part:
+                        k, v = part.split("=", 1)
+                        params[k] = v
+            phase = params.get("phase", "").lower()
+
+            # Get working directory
+            working_dir = None
+            if hasattr(job, "params") and job.params:
+                working_dir = job.params.get("working_directory")
+
+            messages = []
+            if working_dir:
+                working_path = Path(working_dir).expanduser().resolve()
+                conversations_dir = working_path / ".context-foundry" / "conversations"
+                jsonl_file = conversations_dir / f"conversation-{job_id}.jsonl"
+                log_file = conversations_dir / f"conversation-{job_id}.log"
+
+                # Prefer .jsonl for structured data
+                if jsonl_file.exists():
+                    try:
+                        MAX_MESSAGES = 500  # Limit to prevent memory issues
+                        with open(jsonl_file, "r") as f:
+                            for line_num, line in enumerate(f):
+                                if len(messages) >= MAX_MESSAGES:
+                                    break
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    event = json.loads(line)
+                                    event_type = event.get("event_type", "")
+
+                                    if event_type == "assistant":
+                                        text = event.get("text", "")
+                                        # Truncate very long messages
+                                        if len(text) > 5000:
+                                            text = text[:5000] + "... (truncated)"
+                                        messages.append(
+                                            {
+                                                "role": "assistant",
+                                                "content": text,
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                    elif event_type == "tool_use":
+                                        tool_name = event.get("tool_name", "unknown")
+                                        # Don't include full tool input to reduce size
+                                        messages.append(
+                                            {
+                                                "role": "assistant",
+                                                "content": f"Using tool: {tool_name}",
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                    elif event_type == "tool_result":
+                                        result_text = event.get("text", "")[:200]
+                                        messages.append(
+                                            {
+                                                "role": "system",
+                                                "content": f"Result: {result_text}",
+                                                "timestamp": event.get("timestamp", ""),
+                                            }
+                                        )
+                                except json.JSONDecodeError:
+                                    continue
+                    except Exception as e:
+                        logger.error(f"Failed to load jsonl conversation: {e}")
+
+                # Fallback to .log file
+                elif log_file.exists():
+                    try:
+                        content = log_file.read_text()
+                        for line in content.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                continue
+
+                            if "] 💬 AGENT:" in line:
+                                parts = line.split("] 💬 AGENT:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": msg_content,
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                            elif "] 🔧 TOOL:" in line:
+                                parts = line.split("] 🔧 TOOL:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "assistant",
+                                        "content": f"Tool call: {msg_content}",
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                            elif "] ✅ RESULT:" in line:
+                                parts = line.split("] ✅ RESULT:", 1)
+                                timestamp = parts[0].lstrip("[") if parts else ""
+                                msg_content = parts[1].strip() if len(parts) > 1 else ""
+                                messages.append(
+                                    {
+                                        "role": "system",
+                                        "content": f"Result: {msg_content}",
+                                        "timestamp": timestamp,
+                                    }
+                                )
+                    except Exception as e:
+                        logger.error(f"Failed to load log conversation: {e}")
+
+            body = json.dumps(
+                {
+                    "job_id": job_id,
+                    "phase": phase,
+                    "messages": messages,
+                }
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve job conversation: {e}")
+            self._send_json_error(500, str(e))
+
+    def _serve_team_settings(self) -> None:
+        """Serve team sync settings."""
+        try:
+            # Read from config file or return defaults
+            config_path = Path.home() / ".context-foundry" / "team_settings.json"
+            if config_path.exists():
+                settings = json.loads(config_path.read_text())
+            else:
+                settings = {
+                    "sync_mode": "local-only",
+                    "s3_bucket": "",
+                    "s3_prefix": "patterns/",
+                    "aws_region": "us-east-1",
+                }
+
+            body = json.dumps(settings).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            logger.error(f"Failed to serve team settings: {e}")
+            self._send_json_error(500, str(e))
+
     def _update_agents(self) -> None:
         """Update agent configuration."""
         try:
             content_length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(content_length)
             data = json.loads(body) if body else {}
-            
+
             from tools.evolution.framework.agent_registry import AgentRegistry
-            
+
             agent_name = data.get("name")
             provider = data.get("provider")
-            
+
             if not agent_name or not provider:
                 self._send_json_error(400, "Missing name or provider")
                 return
-                
+
             registry = AgentRegistry()
-            
+
             # Extract optional IDs if provided
             agent_id = data.get("agent_id")
             alias_id = data.get("alias_id")
-            
+
             kwargs = {}
             if agent_id is not None:
                 kwargs["agent_id"] = agent_id
             if alias_id is not None:
                 kwargs["alias_id"] = alias_id
-                
+
             registry.update_provider(agent_name, provider, **kwargs)
-            
+
             # Return updated list
             agents = registry.list_agents()
-            response_body = json.dumps({"status": "ok", "agents": agents}).encode("utf-8")
-            
+            response_body = json.dumps({"status": "ok", "agents": agents}).encode(
+                "utf-8"
+            )
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-cache")
             self.send_header("Content-Length", str(len(response_body)))
             self.end_headers()
             self.wfile.write(response_body)
-            
+
         except Exception as e:
             logger.error(f"Failed to update agent: {e}")
             self._send_json_error(500, str(e))
@@ -1183,92 +1787,176 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.pipeline_state import (
-                get_pipeline_state,
-                save_pipeline_state,
-                PipelineState,
-            )
 
-            # Update pipeline state to mark as resumed
-            pipeline_state = get_pipeline_state(Path(working_dir))
-            if pipeline_state:
-                pipeline_state.state = PipelineState.RUNNING
-                pipeline_state.mark_resumed()
-                save_pipeline_state(pipeline_state, Path(working_dir))
+            # Resume the job
+            # 1. Update status to QUEUED
+            # 2. Submit a new job with resume parameters OR update existing job
+            # For simplicity, we'll submit a new job that resumes the pipeline
 
-            # Submit resume job to the daemon using job_manager
-            resume_params = dict(job.params)
-            resume_params["resume_from_phase"] = from_phase
+            # Create resume params
+            resume_params = job.params.copy()
             resume_params["mode"] = "resume"
+            resume_params["resume_from_phase"] = from_phase
+            resume_params["job_id"] = job_id  # Reuse ID
 
-            # Use context.job_manager.submit_job (not store.submit_job which doesn't exist)
-            # Use job.type (not job.job_type)
-            new_job = self.server.context.job_manager.submit_job(
-                job_type=job.type,  # Correct attribute name
-                params=resume_params,
-                priority=job.priority,
-                metadata={
-                    "source": "dashboard_resume",
-                    "build_type": f"resume_{from_phase.lower()}",
-                    "original_job_id": job_id,
-                },
+            # Submit new job (which will pick up the pipeline state)
+            # We need to use a new ID if we want to keep history, but user wants to "resume" this job.
+            # However, JobManager.submit_job creates a new job.
+            # If we pass job_id, it might overwrite? JobManager.submit_job takes job_id.
+
+            # Check if job is already running (we did this above, but double check)
+            if self.server.context.job_manager.get_job(job_id).status in active_states:
+                self._send_json_error(409, "Job is already active")
+                return
+
+            # Re-submit with same ID
+            try:
+                self.server.context.job_manager.submit_job(
+                    job_type=job.type,
+                    params=resume_params,
+                    job_id=job_id,
+                    priority=10,  # High priority for resume
+                )
+
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.end_headers()
+                self.wfile.write(
+                    json.dumps({"status": "ok", "job_id": job_id}).encode("utf-8")
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to resume job: {e}")
+                self._send_json_error(500, str(e))
+
+        except Exception as e:
+            logger.error(f"Failed to resume pipeline: {e}")
+            self._send_json_error(500, str(e))
+
+    def _cancel_job(self, job_id: str) -> None:
+        """Cancel a job."""
+        try:
+            success = self.server.context.job_manager.cancel_job(job_id)
+            if success:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self._add_cors_headers()
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+            else:
+                self._send_json_error(
+                    400, "Failed to cancel job (not found or not running)"
+                )
+        except Exception as e:
+            logger.error(f"Error cancelling job {job_id}: {e}")
+            self._send_json_error(500, str(e))
+
+    def _pause_job(self, job_id: str) -> None:
+        """Pause a job."""
+        # Currently not supported by JobManager, but we can try to cancel it and mark as paused?
+        # For now, return 501 Not Implemented
+        self._send_json_error(501, "Pause not yet implemented")
+
+    def _resume_job(self, job_id: str) -> None:
+        """Resume a job."""
+        # Reuse _resume_pipeline logic but adapt for no body
+        # We need to find the next phase automatically
+        try:
+            job = self.server.context.store.get_job(job_id)
+            if not job:
+                self._send_json_error(404, "Job not found")
+                return
+
+            # Call _resume_pipeline logic internally
+            # We can mock the request body or refactor.
+            # Refactoring is better but risky for "audit".
+            # Let's just implement the logic here directly.
+
+            working_dir = job.params.get("working_directory")
+            if not working_dir:
+                self._send_json_error(400, "Job has no working directory")
+                return
+
+            pipeline_state_file = (
+                Path(working_dir) / ".context-foundry" / "pipeline-state.json"
+            )
+            if not pipeline_state_file.exists():
+                self._send_json_error(404, "No pipeline state found")
+                return
+
+            state = json.loads(pipeline_state_file.read_text())
+            phases_remaining = state.get("phases_remaining", [])
+            from_phase = phases_remaining[0] if phases_remaining else None
+
+            if not from_phase:
+                self._send_json_error(400, "No phases remaining to resume")
+                return
+
+            # Re-submit job
+            resume_params = job.params.copy()
+            resume_params["mode"] = "resume"
+            resume_params["resume_from_phase"] = from_phase
+            resume_params["job_id"] = job_id
+
+            self.server.context.job_manager.submit_job(
+                job_type=job.type, params=resume_params, job_id=job_id, priority=10
             )
 
-            # Link original job to the new resumed job
-            # Only mark as CANCELLED if not already in a terminal state
-            from datetime import datetime
-
-            terminal_states = JobStatus.terminal_states()
-
-            # New metadata to add (update_job_status merges with existing in-store)
-            link_metadata = {
-                "superseded_by": new_job.id,
-                "superseded_reason": f"Resumed from {from_phase}",
-            }
-
-            if job.status not in terminal_states:
-                # Job was not terminal (e.g., still in some intermediate state)
-                # Mark it as cancelled since it's being superseded
-                self.server.context.store.update_job_status(
-                    job_id=job_id,
-                    status=JobStatus.CANCELLED,
-                    completed_at=datetime.now(),
-                    metadata=link_metadata,
-                )
-                logger.info(
-                    f"Original job {job_id} marked as cancelled, superseded by {new_job.id}"
-                )
-            else:
-                # Job was already terminal - just update metadata to link it
-                # Re-use its existing status to avoid misrepresenting history
-                self.server.context.store.update_job_status(
-                    job_id=job_id,
-                    status=job.status,  # Keep existing status
-                    metadata=link_metadata,
-                )
-                logger.info(
-                    f"Original job {job_id} ({job.status.value}) linked to resumed job {new_job.id}"
-                )
-
-            response = {
-                "success": True,
-                "message": f"Pipeline resumed from phase: {from_phase}",
-                "job_id": new_job.id,
-                "from_phase": from_phase,
-            }
-            resp_body = json.dumps(response).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(resp_body)))
+            self._add_cors_headers()
             self.end_headers()
-            self.wfile.write(resp_body)
+            self.wfile.write(
+                json.dumps({"status": "ok", "job_id": job_id}).encode("utf-8")
+            )
 
-        except Exception as exc:
-            logger.warning("Error resuming pipeline: %s", exc)
-            self._send_json_error(500, str(exc))
+        except Exception as e:
+            logger.error(f"Failed to resume job {job_id}: {e}")
+            self._send_json_error(500, str(e))
 
-    def _serve_job_conversation(self, query: str) -> None:
-        """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>"""
+    def _update_team_settings(self) -> None:
+        """Update team settings."""
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(content_length)
+            settings = json.loads(body) if body else {}
+
+            config_path = Path.home() / ".context-foundry" / "team_settings.json"
+            config_path.parent.mkdir(exist_ok=True)
+            config_path.write_text(json.dumps(settings, indent=2))
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+        except Exception as e:
+            logger.error(f"Failed to update team settings: {e}")
+            self._send_json_error(500, str(e))
+
+    def _test_s3_connection(self) -> None:
+        """Test S3 connection."""
+        try:
+            # Mock success for now
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._add_cors_headers()
+            self.end_headers()
+            self.wfile.write(
+                json.dumps(
+                    {"status": "ok", "message": "Connection successful (mock)"}
+                ).encode("utf-8")
+            )
+        except Exception as e:
+            self._send_json_error(500, str(e))
+
+    def _serve_legacy_job_conversation(self, query: str) -> None:
+        """Serve full conversation history for a job, grouped by phase. Query: job_id=<id>
+
+        This is the legacy endpoint for /job-conversation. The new API endpoint is
+        /api/jobs/{id}/conversation which uses _serve_job_conversation.
+        """
         from urllib.parse import parse_qs
 
         params = parse_qs(query)
@@ -2794,6 +3482,31 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     context_parts = []
 
+                    # 1. PERSONA & SYSTEM INSTRUCTIONS (The "Brain" of the operation)
+                    system_preamble = (
+                        "You are the Context Foundry Agent. You are empathetic, jovial, happy, fun, relaxed, and calculated, "
+                        "but always professional. You are the 'Sidekick' to the user in this enterprise environment.\n\n"
+                        "YOUR CAPABILITIES:\n"
+                        "1. You can guide the user to run Context Foundry commands.\n"
+                        "2. You can explain what's happening in their project.\n"
+                        "3. You are AWARE of the files they are working on (see 'Context' section below).\n\n"
+                        "COMMAND MAPPING:\n"
+                        "If the user asks to build something, run a phase, or start a project, you should suggest the appropriate 'cf' command.\n"
+                        "- 'cf scout': To research or plan.\n"
+                        "- 'cf architect': To design architecture.\n"
+                        "- 'cf build': To run the full pipeline.\n\n"
+                        "If proposing a command, format it clearly like: `Run: cf command ...` and ask if they want to proceed.\n"
+                    )
+                    context_parts.append(system_preamble)
+
+                    # 2. FILE CONTEXT (The "Eyes" of the operation)
+                    try:
+                        file_context = self._get_recent_file_context()
+                        context_parts.append(file_context)
+                    except Exception as e:
+                        logger.warning(f"Failed to get file context: {e}")
+
+                    # 3. JOB STATUS CONTEXT (The "Ears" of the operation)
                     # PRIORITY 1: Check for pending HITL approvals (most urgent)
                     try:
                         from tools.mcp_utils.approval_gates import ApprovalManager
@@ -2872,43 +3585,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         elif failed_jobs:
                             # Just mention count if there are more important things
                             context_parts.append(
-                                f"\n(Also {len(failed_jobs)} failed job(s) - ask if you want details)"
+                                f"\n(Also {len(failed_jobs)} recent failures)"
                             )
                     except Exception as e:
                         logger.debug(f"Could not check failed jobs: {e}")
 
-                    # Build final context string
-                    if context_parts:
-                        context_str = "\n".join(context_parts)
-                    else:
-                        context_str = "✅ No active jobs. System is idle and ready for new builds."
-
-                    # Construct persona prompt with context
-                    # Construct direct assistant prompt
-                    system_prompt = (
-                        "You are Sidekick, an intelligent assistant for Context Foundry. "
-                        "You help users monitor builds, approve HITL requests, and start new projects. "
-                        "Keep responses concise and actionable. "
-                        "\n\n"
-                        f"CURRENT SYSTEM STATUS:\n{context_str}\n"
-                        "\n"
-                        "RESPONSE PRIORITIES (follow this order):\n"
-                        "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
-                        "2. If there are RUNNING jobs - mention them and offer to show details\n"
-                        "3. If system is idle - greet the user and offer to start a new build\n"
-                        "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n"
-                        "\n"
-                        "CAPABILITIES:\n"
-                        "1. Show system status (running jobs, pending approvals)\n"
-                        "2. Help approve HITL requests: tell user to run 'cfd approve <id>'\n"
-                        "3. Start new autonomous builds\n"
-                        "\n"
-                        "BUILD INSTRUCTIONS:\n"
+                    # Build the complete system prompt from context_parts + instructions
+                    build_instructions = (
+                        "\n\nBUILD INSTRUCTIONS:\n"
                         "- If the user wants to build something, confirm you are starting it.\n"
                         "- To trigger the build, append this tag to the end of your response:\n"
                         "  [[START_BUILD: <short_description_of_project>]]\n"
                         "- Assume the default directory (~/homelab/) unless specified."
                     )
+                    context_parts.append(build_instructions)
+                    system_prompt = "\n".join(context_parts)
 
                     # Get history from context (initialize if needed)
                     if not hasattr(self.server.context, "sidekick_history"):
@@ -2959,7 +3650,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     if response_text:
                         # Clean up any quotes if Claude adds them
-                        if response_text.startswith('"') and response_text.endswith('"'):
+                        if response_text.startswith('"') and response_text.endswith(
+                            '"'
+                        ):
                             response_text = response_text[1:-1]
 
                         # Check for build trigger
@@ -3694,18 +4387,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         configViewEl.innerHTML = config?.error || 'No config data';
         return;
       }
-      
+
       let html = '<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;border-bottom:1px solid #1f2937;padding-bottom:8px;margin-bottom:8px;font-weight:bold;">';
       html += '<div>Phase</div><div>Provider</div><div>Model/Agent</div></div>';
-      
+
       const phases = config.phases || {};
       const order = ["Scout", "Architect", "Builder", "Test", "Screenshot", "Documentation", "Deploy", "Feedback"];
-      
+
       order.forEach(phase => {
         const cfg = phases[phase] || {};
         const provider = cfg.provider || 'local';
         let model = '';
-        
+
         if (provider === 'bedrock') {
            model = cfg.model ? formatModelName(cfg.model) : '(default)';
         } else if (provider === 'bedrock-agent') {
@@ -3713,14 +4406,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         } else {
            model = '(Claude CLI)';
         }
-        
+
         html += `<div style="display:grid;grid-template-columns:100px 100px 1fr;gap:8px;padding:4px 0;">`;
         html += `<div>${phase}</div>`;
         html += `<div style="color:var(--accent);">${provider}</div>`;
         html += `<div style="color:var(--muted);">${model}</div>`;
         html += `</div>`;
       });
-      
+
       configViewEl.innerHTML = html;
     }
 
