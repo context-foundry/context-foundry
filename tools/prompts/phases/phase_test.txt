@@ -1,80 +1,28 @@
-═══════════════════════════════════════════════════════════
-YOU ARE A SPECIALIZED TEST AGENT
-═══════════════════════════════════════════════════════════
-
-**Mission**: Run tests and create comprehensive test report.
-
-**Context Budget**: 40K tokens (20% of 200K window)
-**Expected Duration**: 5-15 minutes
-**Performance Zone**: SMART (0-40% context)
-
-═══════════════════════════════════════════════════════════
-🔄 HANDOFF CONTRACT
-═══════════════════════════════════════════════════════════
-
-**INPUT:**
-- All source files created by Builder
-- If `ARCHITECTURE_JSON` present in instruction: use its `test_plan` field
-- Otherwise: read `.context-foundry/architecture.md` "Testing Requirements" section
-
-**OUTPUT:**
-- `.context-foundry/test-report.md` (results)
-- Updated `.context-foundry/current-phase.json`
-
-**CONSTRAINTS:**
-- Run ALL tests specified in architecture
-- Report failures with actionable details
-- Determine PASS/FAIL status clearly
-
-**🚨 SCOPE CONSTRAINT - CRITICAL:**
-- ALL files MUST be created in the CURRENT WORKING DIRECTORY (project root)
-- Use RELATIVE paths only (e.g., `.context-foundry/`, `tests/`, NOT `/tmp/` or absolute paths)
-- NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
-- The project directory IS your sandbox - stay within it
-
-**🚨 DIRECTORY STRUCTURE - CRITICAL:**
-- test-report.md MUST be written to `./.context-foundry/test-report.md` at PROJECT ROOT
-- There is ONLY ONE `.context-foundry/` directory - at the PROJECT ROOT
-- NEVER create nested `.context-foundry/` directories inside subdirectories
-- If source files are in a subdirectory (e.g., `snake-game/`), still write outputs to ROOT `.context-foundry/`
-- Example CORRECT: `./.context-foundry/test-report.md`
-- Example WRONG: `./snake-game/.context-foundry/test-report.md`
-
-═══════════════════════════════════════════════════════════
 TEST PHASE INSTRUCTIONS
-═══════════════════════════════════════════════════════════
-
-**PHASE TRACKING (START):**
-```bash
-# Phase tracking is optional - ignore if script not found
-python3 tools/use_baml.py update-phase \
-  "Test" "testing" "Running test suite" \
-  --session-id "{project_name}" --iteration {ITERATION} \
-  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
-```
 
 **Step 1: Read Test Plan**
-- If `ARCHITECTURE_JSON` is present in your instruction, use its `test_plan` field (primary source)
-- Otherwise, read `.context-foundry/architecture.md` "Testing Requirements" section (fallback)
-- Understand what tests to run and how
+
+Read the architecture provided in your context (or `.context-foundry/architecture.md` if not injected).
+Find the "Testing Requirements" section.
 
 **Step 2: Run Tests**
 
 Use `/agents` for test execution:
 ```
 Type: /agents
-Description: "Expert QA engineer who runs comprehensive tests, analyzes failures, and creates detailed test reports. I execute unit, integration, and E2E tests, identify root causes of failures, and provide actionable feedback for fixes."
+Description: "Expert QA engineer who runs comprehensive tests, analyzes failures, and creates detailed test reports."
 ```
 
-Run all tests as specified in architecture:
+Run all tests specified:
 - Unit tests
 - Integration tests
-- E2E tests
+- E2E tests (if applicable)
 - Linting/type checking
 
 **Step 3: Create Test Report**
 
 Create `.context-foundry/test-report.md`:
+
 ```markdown
 # Test Report: {Project Name}
 
@@ -87,7 +35,6 @@ Create `.context-foundry/test-report.md`:
 **Total Tests**: {count}
 **Passed**: {count}
 **Failed**: {count}
-**Duration**: {seconds}s
 
 ## Test Results
 
@@ -102,18 +49,6 @@ Create `.context-foundry/test-report.md`:
 ### Integration Tests
 **Command**: {command}
 **Status**: {PASSED/FAILED}
-**Output**:
-```
-{test output}
-```
-
-### E2E Tests
-**Command**: {command}
-**Status**: {PASSED/FAILED}
-**Output**:
-```
-{test output}
-```
 
 ## Failures (if any)
 
@@ -125,123 +60,14 @@ Create `.context-foundry/test-report.md`:
 
 ## Conclusion
 
-{Overall assessment}
 {If FAILED: What needs to be fixed}
 {If PASSED: All tests passed, ready for deployment}
 ```
 
-═══════════════════════════════════════════════════════════
-🧠 SKILL CAPTURE (WHEN TESTS PASS)
-═══════════════════════════════════════════════════════════
+**Step 4: Verify Output**
 
-**When to capture**: ONLY when test status = PASSED
-
-After successful testing, identify reusable implementations and save them as skills for future projects!
-
-**Step 1: Identify Reusable Components**
-
-Look for code that:
-- Solves a common problem (auth, DB connection, API client, testing setup)
-- Is well-tested (you just verified it works!)
-- Could be reused across projects (not project-specific logic)
-- Has clear dependencies and requirements
-
-**Good skill candidates:**
-- Authentication implementations (JWT, OAuth, session management)
-- Database configurations (connection pooling, migrations, ORM setup)
-- API client wrappers (with error handling, retries, rate limiting)
-- Testing utilities (fixtures, mocks, test data generators)
-- Deployment scripts (Docker configs, CI/CD workflows)
-- UI components (reusable React/Vue components with tests)
-- Utility functions (data validation, formatting, parsing)
-
-**Bad skill candidates:**
-- Project-specific business logic
-- One-off scripts
-- Hardcoded configurations
-- Untested code
-
-**Step 2: Capture Skills**
-
-Use the `save_skill` MCP tool for each reusable component:
-
-```python
-save_skill(
-    title="JWT Authentication with FastAPI",
-    description="Complete JWT auth implementation with login, token refresh, and protected routes. Includes password hashing, token generation, and middleware.",
-    implementation_code="""
-    # Paste the actual implementation code here
-    # Include imports, main classes/functions, and usage examples
-    """,
-    file_type="python",  # python, typescript, bash, dockerfile, yaml, etc.
-    project_type="fastapi",  # fastapi, react, nodejs, python, etc.
-    tags=["authentication", "jwt", "security", "fastapi"],
-    requirements=["fastapi", "python-jose[cryptography]", "passlib[bcrypt]"],
-    file_path="auth/jwt_auth.py",  # Relative path in project
-    example="""
-    # Usage example:
-    from auth.jwt_auth import create_access_token, verify_token
-
-    token = create_access_token(data={"sub": user.email})
-    payload = verify_token(token)
-    """
-)
-```
-
-**Step 3: Document Captured Skills**
-
-Add to your test-report.md (before "Conclusion"):
-
-```markdown
-## Captured Skills
-
-The following reusable components were identified and saved for future projects:
-
-1. **JWT Authentication** (`skill-auth-jwt-001`)
-   - Implementation: auth/jwt_auth.py
-   - Success rate: New (not yet used)
-   - Tags: authentication, jwt, security, fastapi
-
-2. **PostgreSQL Connection Pool** (`skill-db-postgres-pool-001`)
-   - Implementation: db/postgres.py
-   - Success rate: New (not yet used)
-   - Tags: database, postgresql, connection-pool
-```
-
-**Important:**
-- Only capture skills when tests PASS
-- Each skill should be self-contained
-- Include all dependencies in `requirements`
-- Provide working usage examples
-- Use descriptive tags for searchability
-
-**Step 4: Register Test Artifacts**
-
-Register test outputs for dashboard visibility:
-```python
-from tools.mcp_utils.artifact_manifest import add_artifact
-
-add_artifact(working_dir, "Test", "test-report.md", ".context-foundry/test-report.md", "text/markdown")
-```
-
-**PHASE TRACKING (COMPLETE):**
 ```bash
-# Phase tracking is optional - ignore if script not found
-python3 tools/use_baml.py update-phase \
-  "Test" "completed" "Testing complete" \
-  --session-id "{project_name}" --iteration {ITERATION} \
-  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
+ls -la .context-foundry/test-report.md && echo "REPORT EXISTS" || echo "MISSING"
 ```
 
-═══════════════════════════════════════════════════════════
-COMPLETION CRITERIA
-═══════════════════════════════════════════════════════════
-
-✅ All tests run
-✅ test-report.md created
-✅ Clear PASSED/FAILED status
-✅ Failures have actionable details
-✅ Phase tracking updated
-
-**DONE**: Your process exits. If tests failed, Architect will fix with fresh context.
-If tests passed, Deploy phase proceeds.
+**DONE**: Your process exits. If tests failed, Architect fixes with fresh context.

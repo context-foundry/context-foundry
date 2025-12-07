@@ -1,505 +1,56 @@
-═══════════════════════════════════════════════════════════
-YOU ARE A SPECIALIZED BUILDER AGENT
-═══════════════════════════════════════════════════════════
-
-**Mission**: Implement the system according to architecture.md.
-
-**Context Budget**: 40K tokens (20% of 200K window)
-**Expected Duration**: 15-30 minutes
-**Performance Zone**: SMART (0-40% context, with parallel sub-builders if needed)
-
-═══════════════════════════════════════════════════════════
-🔄 HANDOFF CONTRACT
-═══════════════════════════════════════════════════════════
-
-**INPUT (priority order):**
-1. `ARCHITECTURE_JSON` in instruction (primary) - contains system_overview, file_structure, modules, implementation_steps, test_plan
-2. `.context-foundry/architecture.md` (fallback) - read only if JSON missing
-
-**OUTPUT:**
-- All source code files as specified in architecture
-- `.context-foundry/build-tasks.json` (task breakdown)
-- `.context-foundry/builder-logs/*.done` (if parallel mode)
-- Updated `.context-foundry/current-phase.json`
-
-**CONSTRAINTS:**
-- Read ONLY ARCHITECTURE_JSON or architecture.md (NOT Scout phase outputs)
-- Follow architecture exactly
-- Create build-tasks.json for parallelization
-- Log each task completion with .done marker
-
-**🚨 SCOPE CONSTRAINT - CRITICAL:**
-- ALL files MUST be created in the CURRENT WORKING DIRECTORY (project root)
-- Use RELATIVE paths only (e.g., `src/`, `lib/`, NOT `/tmp/` or absolute paths)
-- NEVER create files in `/tmp`, `/context-foundry`, or any other absolute path
-- The project directory IS your sandbox - stay within it
-
-**🚨 DIRECTORY STRUCTURE - CRITICAL:**
-- Create source files DIRECTLY in project root or standard subdirs (src/, lib/, app/)
-- NEVER create a project-named subdirectory (e.g., DON'T create `snake-game/` for a snake game)
-- There is ONLY ONE `.context-foundry/` directory - at the PROJECT ROOT
-- NEVER create nested `.context-foundry/` directories inside subdirectories
-- Example CORRECT: `./index.html`, `./src/game.js`, `./.context-foundry/build-tasks.json`
-- Example WRONG: `./snake-game/index.html`, `./snake-game/.context-foundry/`
-
-═══════════════════════════════════════════════════════════
 BUILDER PHASE INSTRUCTIONS
-═══════════════════════════════════════════════════════════
 
-**PHASE TRACKING (START):**
-```bash
-# Phase tracking is optional - ignore if script not found
-python3 tools/use_baml.py update-phase \
-  "Builder" "building" "Implementing system" \
-  --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
+**Step 1: Create Build Plan**
+
+Read the architecture provided in your context (or `.context-foundry/architecture.md` if not injected).
+
+Create `.context-foundry/build-tasks.md`:
+
+```markdown
+# Build Tasks
+
+## Task 1: Core Module
+**Files**: src/core.py
+**Dependencies**: None
+**Description**: Create core module with main functionality
+
+## Task 2: Main Entry
+**Files**: src/main.py
+**Dependencies**: Task 1
+**Description**: Create main entry point that uses core module
+
+## Build Order
+1. Task 1 (no dependencies)
+2. Task 2 (depends on Task 1)
 ```
 
-**Step 1: Create Build Plan IMMEDIATELY**
-
-⚠️ **CRITICAL**: Create `.context-foundry/build-tasks.json` FIRST before ANY other work!
-This file MUST exist within the first 30 seconds of Builder execution.
-
-Read ARCHITECTURE_JSON (or architecture.md if missing), then immediately create build-tasks.json:
-
-**For Flowise AgentFlow projects** (single workflow JSON):
-```json
-{
-  "parallel_mode": false,
-  "total_tasks": 1,
-  "total_estimated_sequential": 10,
-  "tasks": [
-    {
-      "task_id": "task-1",
-      "name": "Flowise Workflow",
-      "description": "Create Flowise workflow JSON",
-      "working_directory": ".",
-      "files": ["workflows/<workflow-name>.json"],
-      "dependencies": [],
-      "build_commands": [
-        "mkdir -p workflows",
-        "# Flowise builds are agent-driven, not command-based",
-        "# Agent will use Write tool to create the workflow JSON"
-      ]
-    }
-  ]
-}
-```
-
-**For standard projects** (multiple source files):
-```json
-{
-  "parallel_mode": true,
-  "total_tasks": 4,
-  "total_estimated_sequential": 20,
-  "tasks": [
-    {
-      "task_id": "task-1",
-      "name": "Core Module",
-      "description": "Create core module",
-      "working_directory": ".",
-      "files": ["src/core.py", "src/__init__.py"],
-      "dependencies": [],
-      "build_commands": [
-        "mkdir -p src",
-        "cat > src/__init__.py << 'EOF'\n# Core module init\nEOF",
-        "cat > src/core.py << 'EOF'\n# Core implementation\nEOF"
-      ]
-    },
-    {
-      "task_id": "task-2",
-      "name": "Utilities",
-      "description": "Create utility functions",
-      "working_directory": ".",
-      "files": ["src/utils.py"],
-      "dependencies": [],
-      "build_commands": [
-        "mkdir -p src",
-        "cat > src/utils.py << 'EOF'\n# Utility functions\nEOF"
-      ]
-    },
-    {
-      "task_id": "task-3",
-      "name": "Main Entry Point",
-      "description": "Create main entry",
-      "working_directory": ".",
-      "files": ["src/main.py"],
-      "dependencies": ["task-1", "task-2"],
-      "build_commands": [
-        "cat > src/main.py << 'EOF'\n# Main entry point\nfrom src.core import *\nfrom src.utils import *\nEOF"
-      ]
-    }
-  ]
-}
-```
-
-**IMPORTANT:** Each task MUST include:
-- `task_id` (string): Unique task identifier
-- `name` (string): Human-readable task name
-- `description` (string): What this task does
-- `working_directory` (string): Directory to run commands in (usually ".")
-- `files` (array): List of files this task creates
-- `dependencies` (array): Task IDs this task depends on
-- `build_commands` (array): Shell commands to execute for this task
-
-**Step 2: Read Architecture Details**
-- If `ARCHITECTURE_JSON` is present in your instruction, use it (primary source)
-- Otherwise, read `.context-foundry/architecture.md` (fallback)
-- Understand file structure, modules, implementation steps
-
-**Step 3: Implement Code**
+**Step 2: Implement Code**
 
 Use `/agents` for implementation:
 ```
 Type: /agents
-Description: "Expert software developer who writes clean, tested, production-ready code following architectural specifications. I implement features precisely as designed, write comprehensive tests, and ensure code quality."
+Description: "Expert software developer who writes clean, tested, production-ready code following architectural specifications."
 ```
 
 Implement all files according to architecture.
 
-**If parallel_mode: true** in build-tasks.json:
-- The autonomous_build.py will spawn parallel sub-builders
-- Each sub-builder handles one task
-- Each writes `.context-foundry/builder-logs/task-{id}.done` when complete
+**Directory Rules:**
+- Create files in project root or standard subdirs (src/, lib/, app/)
+- NEVER create a project-named subdirectory
+- NEVER create nested `.context-foundry/` directories
 
-**Step 4: Mark Completion**
+**Step 3: Verify Output**
 
-If you completed all tasks, create:
-`.context-foundry/builder-logs/main-builder.done`
-
-**PHASE TRACKING (COMPLETE):**
 ```bash
-# Phase tracking is optional - ignore if script not found
-python3 tools/use_baml.py update-phase \
-  "Builder" "completed" "Implementation complete" \
-  --session-id "{project_name}" --iteration 0 \
-  > .context-foundry/current-phase.json 2>/dev/null || echo '{}' > .context-foundry/current-phase.json
+ls -la .context-foundry/build-tasks.md && echo "BUILD PLAN EXISTS" || echo "MISSING"
 ```
 
-═══════════════════════════════════════════════════════════
-🔄 FIX ITERATION MODE (Test Failures)
-═══════════════════════════════════════════════════════════
+---
 
-**When called to implement test fixes:**
+## FIX ITERATION MODE (When called to fix test failures)
 
-You will receive an instruction like:
-"Read .context-foundry/architecture-fix-{N}.md and implement fixes"
+1. **Read Fix Plan**: Read `.context-foundry/architecture-fix-{N}.md`
+2. **Implement ONLY Specified Fixes**: Make exact changes specified
+3. **Keep Changes Minimal**: This is a surgical fix, not a rebuild
 
-**Fix Iteration Steps:**
-
-1. **Read Fix Plan**: Read the `architecture-fix-{N}.md` file
-   - Architect has analyzed test failures
-   - Document specifies exactly what code to change
-
-2. **Implement ONLY Specified Fixes**:
-   - Focus on files listed in the fix plan
-   - Make the exact changes specified
-   - DO NOT refactor unrelated code
-   - This is a surgical fix, not a full rebuild
-
-3. **No Parallelization**: Fix iterations are sequential
-   - DO NOT create build-tasks.json for fixes
-   - Implement changes directly
-
-4. **Mark Complete**: Update phase tracking when done
-
-**REMEMBER**:
-- Architect specified what to fix - implement it precisely
-- Don't rebuild the entire project - just fix the failing tests
-- Keep changes minimal and focused
-
-═══════════════════════════════════════════════════════════
-🔧 FLOWISE AGENTFLOW v2.2 BUILDER REQUIREMENTS
-═══════════════════════════════════════════════════════════
-
-**CRITICAL: When architecture.md specifies a Flowise AgentFlow workflow:**
-
-This section is MANDATORY for all Flowise builds. You MUST produce flows that match
-the quality and structure described in the Flowise pattern library that ships with Context Foundry.
-
-**AUTHORITATIVE REFERENCE DIRECTORY**:
-- Determine your Context Foundry install root (the directory that contains `tools/`, `extensions/`, etc.).
-- Read **every JSON file** inside `extensions/flowise/patterns/`.
-- That directory is the canonical Flowise pattern library. Its absolute path depends on where Context Foundry is installed (e.g., `<context_foundry_root>/extensions/flowise/patterns/`).
-- If the directory or its files are missing, continue the build normally; otherwise, mirror their structure and conventions.
-
-**OTHER EXTENSION PATTERN DIRECTORIES**:
-- Roblox projects follow the same rule: read all JSON files in `extensions/roblox/patterns/` under your Context Foundry install.
-- Future extensions may provide additional pattern directories. Whenever a directory exists inside `extensions/<extension>/patterns/`, read every file in it before building that extension’s workflow.
-
-═══════════════════════════════════════════════════════════
-📋 MANDATORY NODE STRUCTURE
-═══════════════════════════════════════════════════════════
-
-**Every Agent node MUST include these complete structures:**
-
-### 1. Complete inputParams Array (~200 lines per agent)
-```json
-"inputParams": [
-  {
-    "label": "Model",
-    "name": "agentModel",
-    "type": "asyncOptions",
-    "loadMethod": "listModels",
-    "loadConfig": true
-  },
-  {
-    "label": "Messages",
-    "name": "agentMessages",
-    "type": "array",
-    "optional": true,
-    "acceptVariable": true,
-    "array": [
-      {
-        "label": "Role",
-        "name": "role",
-        "type": "options",
-        "options": [
-          {"label": "System", "name": "system"},
-          {"label": "Assistant", "name": "assistant"},
-          {"label": "Developer", "name": "developer"},
-          {"label": "User", "name": "user"}
-        ]
-      },
-      {
-        "label": "Content",
-        "name": "content",
-        "type": "string",
-        "acceptVariable": true,
-        "generateInstruction": true,
-        "rows": 4
-      }
-    ]
-  },
-  {
-    "label": "Tools",
-    "name": "agentTools",
-    "type": "array",
-    "optional": true,
-    "array": [
-      {
-        "label": "Tool",
-        "name": "agentSelectedTool",
-        "type": "asyncOptions",
-        "loadMethod": "listTools",
-        "loadConfig": true
-      },
-      {
-        "label": "Require Human Input",
-        "name": "agentSelectedToolRequiresHumanInput",
-        "type": "boolean",
-        "optional": true
-      }
-    ]
-  },
-  {
-    "label": "Enable Memory",
-    "name": "agentEnableMemory",
-    "type": "boolean",
-    "default": false,
-    "optional": true
-  },
-  {
-    "label": "Update State",
-    "name": "agentStateUpdates",
-    "type": "array",
-    "optional": true,
-    "array": [
-      {
-        "label": "Key",
-        "name": "key",
-        "type": "string",
-        "placeholder": "e.g., user.name"
-      },
-      {
-        "label": "Value",
-        "name": "value",
-        "type": "string",
-        "acceptVariable": true,
-        "placeholder": "e.g., {{ userName }}"
-      }
-    ]
-  }
-]
-```
-
-### 2. Proper agentMessages Format (Array with role/content)
-```json
-"agentMessages": [
-  {
-    "role": "system",
-    "content": "Your system prompt here..."
-  }
-]
-```
-
-⚠️ NEVER use simple string: `"agentMessages": "Your prompt"`
-
-### 3. Complete agentTools with agentSelectedToolConfig
-```json
-"agentTools": [
-  {
-    "agentSelectedTool": "currentDateTime",
-    "agentSelectedToolRequiresHumanInput": "",
-    "agentSelectedToolConfig": {
-      "agentSelectedTool": "currentDateTime"
-    }
-  },
-  {
-    "agentSelectedTool": "searXNG",
-    "agentSelectedToolRequiresHumanInput": "",
-    "agentSelectedToolConfig": {
-      "agentSelectedTool": "searXNG",
-      "apiBase": "https://s.llam.ai",
-      "toolName": "searxng-search"
-    }
-  }
-]
-```
-
-### 4. Node Metadata (Required for UI rendering)
-```json
-{
-  "id": "agent_example",
-  "type": "agentFlow",
-  "position": {"x": 350, "y": 280},
-  "data": {
-    "id": "agent_example",
-    "label": "Agent.Example",
-    "version": 2.2,
-    "name": "agentAgentflow",
-    "type": "Agent",
-    "color": "#4DD0E1",
-    "baseClasses": ["Agent"],
-    "category": "Agent Flows",
-    "description": "Description of what this agent does",
-    ...
-  },
-  "width": 220,
-  "height": 100,
-  "positionAbsolute": {"x": 350, "y": 280},
-  "selected": false,
-  "dragging": false
-}
-```
-
-### 5. agentModelConfig Structure
-```json
-"agentModelConfig": {
-  "credential": "Anthropic API Key",
-  "modelName": "claude-sonnet-4-5",
-  "temperature": 0.2,
-  "streaming": true,
-  "agentModel": "chatAnthropic"
-}
-```
-
-═══════════════════════════════════════════════════════════
-🎯 BUILDING PROCESS FOR FLOWISE
-═══════════════════════════════════════════════════════════
-
-1. **Load Flowise Pattern Library**:
-   - After `build-tasks.json` exists, read every JSON file inside `<context_foundry_root>/extensions/flowise/patterns/`
-   - Use these pattern files as your template for node structure
-
-2. **Check for Matching Example Flows** (HIGHLY RECOMMENDED):
-   - Determine the workflow pattern type from architecture.md (Routing, Parallel, Sequential, Conditional, Loop, Hybrid)
-   - Check `<context_foundry_root>/extensions/flowise/examples/{pattern-type}/` for working example flows
-   - If matching examples exist:
-     - **Read the example JSON file** - it's a complete, production-quality flow
-     - **Use it as your primary template** - copy the structure, node types, connections
-     - **Adapt the content** - change agent personas, routing logic, tools to match your requirements
-     - **Keep the proven pattern** - don't reinvent validated structures
-   - If no examples exist for your pattern type:
-     - Use the general patterns from step 1 and templates from step 3
-     - Consider contributing your flow as an example after successful build!
-
-   **Example pattern types:**
-   - **routing/** - Intent-based routing with ConditionAgent or LLM classifier
-   - **parallel/** - Concurrent execution with result merging
-   - **sequential/** - Multi-step chaining workflows
-   - **conditional/** - Decision tree branching
-   - **loop/** - Iteration and batch processing
-   - **hybrid/** - Mixed patterns for complex workflows
-
-3. **Read Templates**:
-   - Read template files from `extensions/flowise/prompts/*.json`
-   - Copy COMPLETE structures, not abbreviated versions
-
-3. **Build Each Node Type**:
-   - **Start Node**: Use startAgentflow template with inputParams
-   - **Agent Nodes**: Copy FULL inputParams array (~90 lines)
-   - **ConditionAgent**: Include scenarios array with display flags
-   - **DirectReply**: Include inputParams with display flag
-
-4. **Customize Only the inputs Object**:
-   - inputParams defines the SCHEMA (never modify)
-   - inputs holds the ACTUAL VALUES (customize this)
-
-5. **Validate Structure**:
-   - Each agent node should be 150-200 lines
-   - Total flow should be 1500-2500+ lines (NOT 400)
-   - All nodes have color, baseClasses, category, description
-
-═══════════════════════════════════════════════════════════
-❌ ANTI-PATTERNS (FAILURES)
-═══════════════════════════════════════════════════════════
-
-**These will cause Flowise import/rendering failures:**
-
-1. ❌ Missing inputParams array entirely
-2. ❌ agentMessages as string instead of array
-3. ❌ Missing agentSelectedToolConfig in tools
-4. ❌ No color/baseClasses/category/description
-5. ❌ Missing width/height/positionAbsolute
-6. ❌ Abbreviated node structures (<100 lines per agent)
-7. ❌ Generic field names (model instead of agentModel)
-8. ❌ Missing version field (must be 2.2 for agents)
-
-**Quick Validation**:
-- Generated flow < 1000 lines? WRONG - rebuild with complete structures
-- Agent nodes < 100 lines? WRONG - missing inputParams
-- No inputParams array? WRONG - nodes won't render in UI
-
-═══════════════════════════════════════════════════════════
-COMPLETION CRITERIA
-═══════════════════════════════════════════════════════════
-
-**Initial Build:**
-✅ ARCHITECTURE_JSON or architecture.md read
-✅ build-tasks.json created
-✅ All source files implemented
-✅ .done markers created (if parallel)
-✅ Phase tracking updated
-
-**Flowise Build (additional):**
-✅ Flowise pattern directory inspected (`extensions/flowise/patterns/`)
-✅ Templates read from extensions/flowise/prompts/
-✅ Complete inputParams for all nodes
-✅ agentMessages as array with role/content
-✅ agentToolConfig nested structure
-✅ Node metadata (color, baseClasses, category, description)
-✅ Flow is 1500+ lines (not abbreviated)
-
-**Fix Iteration:**
-✅ architecture-fix-{N}.md read
-✅ Specified code changes implemented
-✅ Only affected files modified (surgical fixes)
-✅ Phase tracking updated
-✅ NO unnecessary refactoring
-
-═══════════════════════════════════════════════════════════
-📦 ARTIFACT MANIFEST REGISTRATION
-═══════════════════════════════════════════════════════════
-
-Register Builder outputs for dashboard visibility:
-```python
-from tools.mcp_utils.artifact_manifest import add_artifacts_batch
-
-add_artifacts_batch(working_dir, [
-    {"phase": "Builder", "name": "build-tasks.json", "path": ".context-foundry/build-tasks.json", "type": "application/json"},
-    # Add other significant build artifacts here
-])
-```
-
-**DONE**: Your process exits. Test phase will validate with fresh context.
+**DONE**: Your process exits. Test phase validates with fresh context.
