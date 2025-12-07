@@ -130,6 +130,14 @@ export function JobDetail() {
             {formatStatus(job.status)}
           </span>
         </span>
+        {job.current_phase && isRunning && (
+          <span className="meta-item current-phase-indicator">
+            <strong>Current Phase:</strong>{' '}
+            <span className="current-phase-badge">
+              {job.current_phase}
+            </span>
+          </span>
+        )}
       </div>
 
       <PhaseTimeline job={job} />

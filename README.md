@@ -1,14 +1,14 @@
 <div align="center">
-  <img src="docs/assets/cf_logo_twitter_2025.png" alt="Context Foundry" width="100%">
+  <img src="docs/assets/cf_logo_twitter_2025.png" alt="Context Foundry" width="180">
 </div>
 
 # Context Foundry
 
-> *"Generate probabilistically, validate deterministically."*
+**What if you could describe what you want to build, walk away, and come back to working code?**
 
-**Autonomous AI development platform** that spawns fresh Claude instances to research, design, build, test, and deploy complete software projects. Walk away and come back to production-ready code.
+Context Foundry is an autonomous build system that does the tedious parts for you. Give it a task, and it researches, designs, builds, tests, and deploys—without you babysitting every step.
 
-**Version 3.0.0** | [Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Desktop App](#desktop-app)
+[Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Desktop App](#desktop-app)
 
 ---
 
@@ -21,68 +21,52 @@
 
 ## What is Context Foundry?
 
-Context Foundry is an **autonomous development platform** with four main components:
+Most AI coding assistants need you to hold their hand—approving every file change, fixing their mistakes, keeping them on track. Context Foundry works differently.
 
-| Component | Description |
-|-----------|-------------|
-| **Desktop App** | Native macOS application with visual dashboard, job monitoring, and AI Sidekick chat |
-| **MCP Server** | Model Context Protocol server that exposes build tools to Claude Code |
-| **Daemon (cfd)** | Background service managing build queues, resource limits, and process monitoring |
-| **CLI Tools** | Terminal interface for monitoring builds and managing the system |
-
-Unlike traditional AI coding assistants that require constant supervision, Context Foundry runs complete build pipelines autonomously:
+You describe what you want. It figures out the rest.
 
 ```
-You: "Build a weather dashboard with React"
-[Walk away for 10 minutes]
-Result: Complete app deployed to GitHub, tests passing
+You: "Build an interactive math game for kids learning multiplication"
+
+[Go grab coffee]
+
+Result: Working React app with 4 difficulty levels, progress tracking,
+        animated feedback, and tests—all pushed to GitHub.
 ```
+
+Behind the scenes, it spawns specialized AI agents for each phase: one to research, one to design the architecture, one to write code, one to test. Each agent has fresh context and a focused job.
 
 ---
 
-## Core Philosophy
+## How It Works
 
-Context Foundry combines **probabilistic AI generation** with **deterministic validation**:
+Each build runs through phases, and each phase gets a **fresh AI agent** with its own context window:
 
-- **Probabilistic**: AI agents generate code freely using their full capabilities
-- **Deterministic**: Code-level validators verify outputs, checksums detect unauthorized changes, phase contracts enforce handoffs
+1. **Scout** — Researches the problem, existing patterns, and constraints
+2. **Architect** — Designs the solution structure and makes technical decisions
+3. **Builder** — Writes the actual code
+4. **Test** — Runs tests, catches failures, triggers fixes if needed
 
-This hybrid approach makes autonomous operation reliable. See [Architecture](docs/ARCHITECTURE.md) for details.
+If tests fail, it loops back and fixes itself. No manual intervention required.
+
+The key insight: instead of one AI that runs out of context, you get specialized agents that each do one thing well and pass artifacts to the next.
 
 ---
 
 ## Key Features
 
-### Build Pipeline
-
-| Feature | Description |
-|---------|-------------|
-| **8-Phase Workflow** | Scout -> Architect -> Builder -> Test -> Docs -> Deploy -> Feedback |
-| **Self-Healing Tests** | Automatically fixes test failures through redesign/rebuild cycles |
-| **Parallel Execution** | AI decides when to spawn parallel agents for faster builds |
-| **Incremental Builds** | Smart change detection rebuilds only what changed |
-
-### Pattern Learning
-
-| Feature | Description |
-|---------|-------------|
-| **Context Codex** | SQLite database tracking issues, solutions, and build metrics |
-| **Skills Library** | Reusable code implementations with success rate tracking |
-
-### Infrastructure
-
-| Feature | Description |
-|---------|-------------|
-| **Daemon Service** | Background process with task queue, resource limits, watchdog |
-| **Mission Control TUI** | Terminal interface for real-time build monitoring |
-| **BAML Type Safety** | Structured JSON outputs with schema validation |
-| **Deterministic Enforcement** | Post-phase validators, checksum verification, state machine |
+| Feature | What it does |
+|---------|--------------|
+| **Self-Healing Builds** | Tests fail? It automatically fixes and retries. |
+| **Pattern Learning** | Remembers solutions that worked, avoids mistakes it's made before. |
+| **Desktop App** | Visual dashboard to watch builds, browse artifacts, chat with the AI. |
+| **Daemon Service** | Runs in the background, manages job queues, handles resource limits. |
 
 ### Extensions
 
-Extensions let you specialize Context Foundry for specific domains. Think of them as giving the AI a business case, architectural blueprints, and success criteria before asking it to build something complex.
+Want to build Roblox games? Flowise workflows? Something domain-specific?
 
-Create an extension by adding domain-specific patterns, example implementations, and validation rules to `extensions/<your-domain>/`. The AI will reference these during builds to produce domain-appropriate solutions.
+Extensions let you teach Context Foundry your domain. Add patterns, examples, and constraints to `extensions/<your-domain>/` and it'll reference them during builds.
 
 ---
 
@@ -183,10 +167,10 @@ A common question: **Are Scout, Architect, Builder, etc. "agents" or "phases"?**
 
 ### Why This Design?
 
-1. **Token efficiency** - 7 phases × 200K = 1.4M potential tokens vs. one 200K window that fills up
-2. **Isolation** - Builder crashing doesn't lose Scout's analysis
-3. **Resumability** - Can restart from any phase (disk has state)
-4. **Specialization** - Each agent gets a focused prompt for its specific task
+1. **Fresh context every phase** — Most builds use only 30-50K tokens per phase, leaving plenty of headroom
+2. **Isolation** — If Builder crashes, you don't lose Scout's analysis
+3. **Resumability** — Can restart from any phase since state lives on disk
+4. **Focus** — Each agent has one job and a tailored prompt for it
 
 They're essentially **stateless workers** that read artifacts, do work, write artifacts, and disappear.
 
@@ -271,14 +255,6 @@ See [Quick Start Guide](QUICKSTART.md) for detailed setup instructions.
 
 ## CLI Tools
 
-### Mission Control TUI
-
-```bash
-cf                    # Launch interactive terminal UI
-```
-
-### Daemon Management
-
 ```bash
 cfd start             # Start the daemon
 cfd status            # Check status
@@ -286,22 +262,6 @@ cfd logs <job-id>     # View build logs
 cfd list              # List active builds
 cfd stop              # Stop the daemon
 ```
-
----
-
-## MCP Tools Available
-
-| Tool | Description |
-|------|-------------|
-| `autonomous_build_and_deploy` | Full build pipeline: research -> design -> build -> test -> deploy |
-| `delegate_to_claude_code` | Spawn fresh Claude instance for subtasks |
-| `delegate_to_claude_code_async` | Non-blocking delegation with progress tracking |
-| `search_skills` | Find reusable code implementations |
-| `save_skill` | Save successful implementation as reusable skill |
-| `create_evolution_task` | Create self-improvement task |
-| `get_daemon_status` | Check daemon health and resource usage |
-
-See [MCP Tools Reference](docs/MCP_SETUP.md) for complete documentation.
 
 ---
 

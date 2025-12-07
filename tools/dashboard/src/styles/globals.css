@@ -776,6 +776,42 @@ body {
   color: var(--text-primary);
 }
 
+.current-phase-indicator {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.current-phase-badge {
+  background: var(--accent-blue);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: capitalize;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.current-phase-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
 .job-error {
   background: rgba(248, 81, 73, 0.1);
   border: 1px solid var(--accent-red);
