@@ -227,12 +227,16 @@ function JobRow({ job, onClick }: JobRowProps) {
 
 // Status icon component
 function StatusIcon({ status }: { status: JobStatus }) {
-  const icons: Record<JobStatus, React.ReactNode> = {
-    running: <Loader2 className="w-5 h-5 text-status-running animate-spin" />,
+  const icons: Partial<Record<JobStatus, React.ReactNode>> = {
+    queued: <Clock className="w-5 h-5 text-status-pending" />,
     pending: <Clock className="w-5 h-5 text-status-pending" />,
+    running: <Loader2 className="w-5 h-5 text-status-running animate-spin" />,
     succeeded: <CheckCircle className="w-5 h-5 text-status-succeeded" />,
     failed: <XCircle className="w-5 h-5 text-status-failed" />,
     cancelled: <AlertCircle className="w-5 h-5 text-status-cancelled" />,
+    timed_out: <XCircle className="w-5 h-5 text-status-failed" />,
+    waiting_approval: <Clock className="w-5 h-5 text-status-pending" />,
+    stalled: <AlertCircle className="w-5 h-5 text-status-failed" />,
   }
 
   return icons[status] || <Play className="w-5 h-5 text-cf-muted" />

@@ -161,17 +161,21 @@ function JobDetail() {
 
 // Status badge component
 function StatusBadge({ status }: { status: JobStatus }) {
-  const classes: Record<JobStatus, string> = {
-    running: 'status-running',
+  const classes: Partial<Record<JobStatus, string>> = {
+    queued: 'status-pending',
     pending: 'status-pending',
+    running: 'status-running',
     succeeded: 'status-succeeded',
     failed: 'status-failed',
     cancelled: 'status-cancelled',
+    timed_out: 'status-failed',
+    waiting_approval: 'status-pending',
+    stalled: 'status-failed',
   }
 
   return (
-    <span className={clsx('status-badge', classes[status])}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={clsx('status-badge', classes[status] || 'status-pending')}>
+      {status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
     </span>
   )
 }
@@ -224,12 +228,16 @@ function PhaseRow({ phase }: { phase: PhaseNode }) {
 
 // Phase status icon
 function PhaseStatusIcon({ status }: { status: JobStatus }) {
-  const icons: Record<JobStatus, React.ReactNode> = {
-    running: <Loader2 size={18} className="text-status-running animate-spin" />,
+  const icons: Partial<Record<JobStatus, React.ReactNode>> = {
+    queued: <Clock size={18} className="text-status-pending" />,
     pending: <Clock size={18} className="text-status-pending" />,
+    running: <Loader2 size={18} className="text-status-running animate-spin" />,
     succeeded: <CheckCircle size={18} className="text-status-succeeded" />,
     failed: <XCircle size={18} className="text-status-failed" />,
     cancelled: <AlertCircle size={18} className="text-status-cancelled" />,
+    timed_out: <XCircle size={18} className="text-status-failed" />,
+    waiting_approval: <Clock size={18} className="text-status-pending" />,
+    stalled: <AlertCircle size={18} className="text-status-failed" />,
   }
 
   return icons[status] || <Clock size={18} className="text-cf-muted" />
@@ -237,12 +245,16 @@ function PhaseStatusIcon({ status }: { status: JobStatus }) {
 
 // Task status icon (smaller)
 function TaskStatusIcon({ status }: { status: JobStatus }) {
-  const icons: Record<JobStatus, React.ReactNode> = {
-    running: <Loader2 size={14} className="text-status-running animate-spin" />,
+  const icons: Partial<Record<JobStatus, React.ReactNode>> = {
+    queued: <Clock size={14} className="text-status-pending" />,
     pending: <Clock size={14} className="text-status-pending" />,
+    running: <Loader2 size={14} className="text-status-running animate-spin" />,
     succeeded: <CheckCircle size={14} className="text-status-succeeded" />,
     failed: <XCircle size={14} className="text-status-failed" />,
     cancelled: <AlertCircle size={14} className="text-status-cancelled" />,
+    timed_out: <XCircle size={14} className="text-status-failed" />,
+    waiting_approval: <Clock size={14} className="text-status-pending" />,
+    stalled: <AlertCircle size={14} className="text-status-failed" />,
   }
 
   return icons[status] || <Clock size={14} className="text-cf-muted" />

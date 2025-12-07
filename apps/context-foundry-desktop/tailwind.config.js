@@ -20,11 +20,15 @@ export default {
         },
         // Status colors
         status: {
+          queued: '#eab308',
           running: '#22c55e',
           pending: '#eab308',
           failed: '#ef4444',
           succeeded: '#22c55e',
           cancelled: '#6b7280',
+          'timed-out': '#ef4444',
+          'waiting-approval': '#eab308',
+          stalled: '#ef4444',
         },
       },
       animation: {

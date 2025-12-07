@@ -16,7 +16,7 @@ export interface DaemonStatus {
 // Job Types
 // ============================================================================
 
-export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+export type JobStatus = 'queued' | 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed_out' | 'waiting_approval' | 'stalled'
 
 export interface Job {
   id: string
