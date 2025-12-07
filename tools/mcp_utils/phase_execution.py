@@ -12,8 +12,6 @@ Implements:
 import copy
 import json
 import logging
-import os
-import shutil
 import subprocess
 import sys
 import time
@@ -29,7 +27,11 @@ from tools.baml_integration import (
     update_phase_with_baml,
 )
 from tools.mcp_utils.phase_metrics import estimate_context_tokens, log_phase_metrics
-from tools.evolution.framework.llm_provider import LocalClaudeProvider, BedrockProvider, BedrockAgentProvider
+from tools.evolution.framework.llm_provider import (
+    LocalClaudeProvider,
+    BedrockProvider,
+    BedrockAgentProvider,
+)
 from tools.evolution.framework.provider_config import get_provider_for_phase
 from tools.evolution.agents.scout_agent import ScoutAgent
 from tools.evolution.agents.architect_agent import ArchitectAgent
@@ -227,22 +229,15 @@ class PhaseValidator:
 
     @staticmethod
     def validate_scout(working_dir: Path) -> bool:
-        """Scout must create scout-report.md OR scout_report.json."""
+        """Scout must create scout-report.md."""
         md_report = working_dir / ".context-foundry" / "scout-report.md"
-        json_report = working_dir / ".context-foundry" / "scout_report.json"
 
-        if not md_report.exists() and not json_report.exists():
-            raise FileNotFoundError(
-                f"Scout failed to create {md_report} or {json_report}"
-            )
+        if not md_report.exists():
+            raise FileNotFoundError(f"Scout failed to create {md_report}")
 
-        # Verify non-empty if MD exists
-        if md_report.exists() and md_report.stat().st_size < 100:
+        # Verify non-empty
+        if md_report.stat().st_size < 100:
             raise ValueError("scout-report.md is too small (< 100 bytes)")
-
-        # Verify non-empty if JSON exists
-        if json_report.exists() and json_report.stat().st_size < 100:
-            raise ValueError("scout_report.json is too small (< 100 bytes)")
 
         return True
 
@@ -547,12 +542,11 @@ class PhaseValidator:
     @staticmethod
     def validate_builder(working_dir: Path, project_type: str = "unknown") -> bool:
         """
-        Builder validation is LOOSE - verify build-tasks.json + smoke checks.
+        Builder validation is LOOSE - verify source files exist.
 
         Don't validate exact files (too dynamic). Instead:
-        1. build-tasks.json exists
-        2. At least SOME source files created
-        3. No obvious errors in builder logs
+        1. At least SOME source files created
+        2. No obvious errors in builder logs
 
         NOTE (Gap #4): This validator reads session-summary.json to detect Flowise mode,
         but earlier enforcement in run_builder_phase() depends on the flowise_mode flag
@@ -562,21 +556,20 @@ class PhaseValidator:
         # First, check for nested .context-foundry directories (common agent error)
         PhaseValidator.check_no_nested_context_foundry(working_dir)
 
-        # Check build plan exists (OPTIONAL - Builder may skip this)
+        # Build tasks are now in build-tasks.md (markdown format)
+        # Legacy JSON support for backwards compatibility only
         build_tasks = working_dir / ".context-foundry" / "build-tasks.json"
         plan = None
         if build_tasks.exists():
             try:
-                # Parse task plan to check for parallel mode
+                # Parse task plan to check for parallel mode (legacy JSON)
                 with open(build_tasks) as f:
                     plan = json.load(f)
             except Exception as e:
                 logger.warning(f"Failed to parse build-tasks.json: {e}")
         else:
-            # build-tasks.json is optional - Builder may create files directly
-            logger.info(
-                "build-tasks.json not found - checking for source files directly"
-            )
+            # build-tasks.md is the standard now - Builder creates files directly
+            logger.info("Checking for source files created by Builder")
 
         # Only check parallel completion if we have a valid build plan
         if plan:
@@ -950,11 +943,11 @@ def _run_phase_internal(
     # Ensure working_directory is absolute path - agents MUST run from project root
     # ==========================================================================
     working_directory = Path(working_directory).resolve()
-    
+
     # ==========================================================================
     # PROVIDER RESOLUTION
     # ==========================================================================
-    from tools.evolution.framework.provider_config import get_provider_for_phase, reload_config
+    from tools.evolution.framework.provider_config import reload_config
 
     # Force reload config to pick up any recent changes
     reload_config()
@@ -971,21 +964,26 @@ def _run_phase_internal(
         extra_config = {}
     elif provider.lower() == "bedrock-agent":
         provider_type = "bedrock-agent"
-        effective_model = None # Model is defined in the agent
+        effective_model = None  # Model is defined in the agent
         # We need extra config for agent ID, but CLI args might not support it yet
         # So we likely rely on config file resolution below if not passed explicitly
         # But wait, if provider is explicit, we skip get_provider_for_phase
         # This is a limitation: CLI can't easily pass agent_id yet.
         # For now, we assume if you use CLI --provider bedrock-agent, you rely on defaults or it fails
-        extra_config = {} 
+        extra_config = {}
     else:
-        provider_type, effective_model, extra_config = get_provider_for_phase(phase_name)
+        provider_type, effective_model, extra_config = get_provider_for_phase(
+            phase_name
+        )
         # If explicit model passed, override config model
         if model:
             effective_model = model
 
-    print(f"🔧 Phase '{phase_name}' resolved: provider={provider_type}, model={effective_model}", file=sys.stderr)
-            
+    print(
+        f"🔧 Phase '{phase_name}' resolved: provider={provider_type}, model={effective_model}",
+        file=sys.stderr,
+    )
+
     effective_provider = provider_type
 
     # ==========================================================================
@@ -1007,8 +1005,10 @@ def _run_phase_internal(
                 task_metadata = {
                     "iteration": iteration,
                     "project_type": project_type,
-                    "provider": effective_provider if 'effective_provider' in dir() else provider,
-                    "model": effective_model if 'effective_model' in dir() else model,
+                    "provider": effective_provider
+                    if "effective_provider" in dir()
+                    else provider,
+                    "model": effective_model if "effective_model" in dir() else model,
                 }
 
                 task = state_machine.create_task_for_phase(
@@ -1022,7 +1022,9 @@ def _run_phase_internal(
 
                 # Start the task (CREATED -> RUNNING)
                 task = state_machine.start_task(task_id)
-                logger.info(f"Task {task_id[:8]} started for phase {phase_name} (provider={task_metadata.get('provider')}, model={task_metadata.get('model')})")
+                logger.info(
+                    f"Task {task_id[:8]} started for phase {phase_name} (provider={task_metadata.get('provider')}, model={task_metadata.get('model')})"
+                )
         except Exception as e:
             logger.warning(f"Failed to create task for {phase_name}: {e}")
             # Continue without task tracking - don't fail the phase
@@ -1142,6 +1144,7 @@ def _run_phase_internal(
             # Call the MCP codex_search function
             try:
                 from tools.mcp_utils.codex import codex_search
+
                 query = tool_input.get("query", "")
                 category = tool_input.get("category")
                 result = codex_search(query, category=category)
@@ -1152,6 +1155,7 @@ def _run_phase_internal(
         elif tool_name == "codex_get_entry":
             try:
                 from tools.mcp_utils.codex import codex_get_entry
+
                 entry_id = tool_input.get("entry_id", "")
                 result = codex_get_entry(entry_id)
                 return result
@@ -1161,7 +1165,7 @@ def _run_phase_internal(
         elif tool_name == "read_file":
             file_path = tool_input.get("file_path", "")
             try:
-                with open(file_path, 'r') as f:
+                with open(file_path, "r") as f:
                     content = f.read()
                 return {"content": content, "path": file_path}
             except Exception as e:
@@ -1172,7 +1176,7 @@ def _run_phase_internal(
             content = tool_input.get("content", "")
             try:
                 Path(file_path).parent.mkdir(parents=True, exist_ok=True)
-                with open(file_path, 'w') as f:
+                with open(file_path, "w") as f:
                     f.write(content)
                 return {"success": True, "path": file_path}
             except Exception as e:
@@ -1201,13 +1205,26 @@ def _run_phase_internal(
 
                 regex = re.compile(pattern)
                 for f in files[:50]:  # Limit files searched
-                    if f.is_file() and f.suffix in ['.py', '.js', '.ts', '.json', '.md', '.txt']:
+                    if f.is_file() and f.suffix in [
+                        ".py",
+                        ".js",
+                        ".ts",
+                        ".json",
+                        ".md",
+                        ".txt",
+                    ]:
                         try:
                             content = f.read_text()
-                            for i, line in enumerate(content.split('\n'), 1):
+                            for i, line in enumerate(content.split("\n"), 1):
                                 if regex.search(line):
-                                    results.append({"file": str(f), "line": i, "content": line[:200]})
-                        except:
+                                    results.append(
+                                        {
+                                            "file": str(f),
+                                            "line": i,
+                                            "content": line[:200],
+                                        }
+                                    )
+                        except Exception:
                             pass
                 return {"matches": results[:50]}
             except Exception as e:
@@ -1217,10 +1234,18 @@ def _run_phase_internal(
             command = tool_input.get("command", "")
             try:
                 result = subprocess.run(
-                    command, shell=True, capture_output=True, text=True,
-                    cwd=str(working_directory), timeout=60
+                    command,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    cwd=str(working_directory),
+                    timeout=60,
                 )
-                return {"stdout": result.stdout, "stderr": result.stderr, "returncode": result.returncode}
+                return {
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
+                    "returncode": result.returncode,
+                }
             except Exception as e:
                 return {"error": str(e)}
 
@@ -1240,9 +1265,11 @@ def _run_phase_internal(
     elif provider_type == "bedrock-agent":
         agent_id = extra_config.get("agent_id")
         alias_id = extra_config.get("alias_id")
-        
+
         if not agent_id or not alias_id:
-            logger.warning(f"Bedrock Agent provider selected but missing agent_id/alias_id in config. Falling back to Local.")
+            logger.warning(
+                "Bedrock Agent provider selected but missing agent_id/alias_id in config. Falling back to Local."
+            )
             llm_provider = LocalClaudeProvider()
         else:
             region = extra_config.get("region", "us-east-1")
@@ -1251,7 +1278,7 @@ def _run_phase_internal(
                 agent_id=agent_id,
                 agent_alias_id=alias_id,
                 tool_executor=tool_executor,  # Pass executor for Return Control
-                region=region
+                region=region,
             )
     else:
         # Default to Local Claude
@@ -1267,7 +1294,9 @@ def _run_phase_internal(
         agent = BuilderAgent(llm_provider=llm_provider)
     else:
         # Generic Agent for other phases
-        agent = GenericAgent(phase_name, prompt_path=phase_prompt_path, llm_provider=llm_provider)
+        agent = GenericAgent(
+            phase_name, prompt_path=phase_prompt_path, llm_provider=llm_provider
+        )
 
     # Track start time
     start = datetime.now()
@@ -1276,7 +1305,7 @@ def _run_phase_internal(
     # This captures the stream-json output for the dashboard
     conversation_logger = None
     try:
-        from tools.mcp_utils.conversation_logger import ConversationLogger, ConversationEvent
+        from tools.mcp_utils.conversation_logger import ConversationLogger
         import uuid
 
         # Use job_id if available, otherwise generate a temporary ID
@@ -1301,7 +1330,7 @@ def _run_phase_internal(
                 events = conversation_logger.parse_event(line)
                 for event in events:
                     conversation_logger.log_event(event)
-            except Exception as e:
+            except Exception:
                 # Don't crash the build on logging errors
                 pass
 
@@ -1339,7 +1368,10 @@ def _run_phase_internal(
         logger.info(f"Heartbeat thread started for phase {phase_name}")
 
     try:
-        print(f"⏳ Running {phase_name} phase (Agent: {type(agent).__name__}, Provider: {type(llm_provider).__name__})...", file=sys.stderr)
+        print(
+            f"⏳ Running {phase_name} phase (Agent: {type(agent).__name__}, Provider: {type(llm_provider).__name__})...",
+            file=sys.stderr,
+        )
         print(f"   Timeout: {phase_timeout}s", file=sys.stderr)
         print(f"   Working directory: {working_directory}", file=sys.stderr)
 
@@ -1349,26 +1381,26 @@ def _run_phase_internal(
             "system_prompt": phase_prompt,
             "job_id": job_id,
             "iteration": iteration,
-            "project_type": project_type
+            "project_type": project_type,
         }
 
         # Execute Agent
         # Note: This blocks until completion, but streams events via callback
         result = agent.run(
-            working_directory, 
-            input_instruction, 
+            working_directory,
+            input_instruction,
             context=context,
-            event_callback=event_callback
+            event_callback=event_callback,
         )
-        
+
         # Process Result
         # Agent.run returns different things depending on the agent.
         # Scout returns findings list. Architect/Builder return dict with output.
-        
+
         stdout = ""
         stderr = ""
         exit_code = 0
-        
+
         if isinstance(result, dict):
             if result.get("status") == "failed":
                 exit_code = 1
@@ -1407,20 +1439,23 @@ def _run_phase_internal(
             # Only write if file doesn't exist or is empty (don't overwrite if Claude created it)
             if not arch_file.exists() or arch_file.stat().st_size < 100:
                 arch_file.write_text(stdout)
-                print(f"📝 Saved Architect output to {arch_file.name} ({len(stdout)} chars)", file=sys.stderr)
+                print(
+                    f"📝 Saved Architect output to {arch_file.name} ({len(stdout)} chars)",
+                    file=sys.stderr,
+                )
             else:
-                print(f"📝 {arch_file.name} already exists ({arch_file.stat().st_size} bytes)", file=sys.stderr)
+                print(
+                    f"📝 {arch_file.name} already exists ({arch_file.stat().st_size} bytes)",
+                    file=sys.stderr,
+                )
 
         # Estimate context usage
         phase_files = []
         if phase_name == "Scout":
             phase_files = []
             md_report = working_directory / ".context-foundry" / "scout-report.md"
-            json_report = working_directory / ".context-foundry" / "scout_report.json"
             if md_report.exists():
                 phase_files.append(md_report)
-            if json_report.exists():
-                phase_files.append(json_report)
         elif phase_name == "Architect":
             if iteration > 0:
                 # Fix iteration N: reads test report from PREVIOUS iteration (N-1)
@@ -1438,16 +1473,9 @@ def _run_phase_internal(
                     / f"architecture-fix-{iteration}.md",
                 ]
             else:
-                # Initial architecture: reads scout-report.md (or json), writes architecture.md
-                scout_md = working_directory / ".context-foundry" / "scout-report.md"
-                scout_json = (
-                    working_directory / ".context-foundry" / "scout_report.json"
-                )
-
-                scout_file = scout_md if scout_md.exists() else scout_json
-
+                # Initial architecture: reads scout-report.md, writes architecture.md
                 phase_files = [
-                    scout_file,
+                    working_directory / ".context-foundry" / "scout-report.md",
                     working_directory / ".context-foundry" / "architecture.md",
                 ]
         elif phase_name == "Builder":
@@ -1938,58 +1966,35 @@ def run_builder_phase(
     Returns:
         PhaseResult with metrics
     """
-    # Wait for architecture.json from Architect phase (up to 5 minutes)
-    # Typically produced in 2-3 minutes; fall back to architecture.md if timeout
-    arch_json_path = working_directory / ".context-foundry" / "architecture.json"
+    # Wait for architecture.md from Architect phase (up to 5 minutes)
     arch_md_path = working_directory / ".context-foundry" / "architecture.md"
 
     MAX_WAIT_SECONDS = 300  # 5 minutes
     POLL_INTERVAL = 10  # 10 seconds
 
-    if not arch_json_path.exists():
+    if not arch_md_path.exists():
         print(
-            f"⏳ Waiting for architecture.json (up to {MAX_WAIT_SECONDS}s)...",
+            f"⏳ Waiting for architecture.md (up to {MAX_WAIT_SECONDS}s)...",
             file=sys.stderr,
         )
         waited = 0
-        while waited < MAX_WAIT_SECONDS and not arch_json_path.exists():
+        while waited < MAX_WAIT_SECONDS and not arch_md_path.exists():
             time.sleep(POLL_INTERVAL)
             waited += POLL_INTERVAL
             if waited % 60 == 0:  # Log every minute
                 print(
-                    f"⏳ Still waiting for architecture.json ({waited}s elapsed)...",
+                    f"⏳ Still waiting for architecture.md ({waited}s elapsed)...",
                     file=sys.stderr,
                 )
 
-        if not arch_json_path.exists():
-            if arch_md_path.exists():
-                print(
-                    f"⚠️ Timeout after {waited}s - falling back to architecture.md",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"⚠️ Timeout after {waited}s - no architecture files found",
-                    file=sys.stderr,
-                )
+        if not arch_md_path.exists():
+            print(
+                f"⚠️ Timeout after {waited}s - no architecture.md found",
+                file=sys.stderr,
+            )
         else:
             print(
-                f"✅ architecture.json found after {waited}s",
-                file=sys.stderr,
-            )
-
-    # Prefer structured architecture JSON if available; append to instruction once
-    if arch_json_path.exists() and "ARCHITECTURE_JSON:" not in instruction:
-        try:
-            arch_json = arch_json_path.read_text()
-            instruction = instruction + "\n\nARCHITECTURE_JSON:\n" + arch_json
-            print(
-                "ℹ️  Injected architecture.json into Builder instruction",
-                file=sys.stderr,
-            )
-        except Exception as e:
-            print(
-                f"⚠️  Failed to read architecture.json; continuing without JSON ({e})",
+                f"✅ architecture.md found after {waited}s",
                 file=sys.stderr,
             )
 
@@ -2078,7 +2083,7 @@ def run_builder_phase(
 
     else:
         print(
-            "📝 No build-tasks.json found - using legacy sequential build",
+            "📝 Running sequential build from architecture.md",
             file=sys.stderr,
         )
 

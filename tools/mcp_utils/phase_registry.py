@@ -54,11 +54,10 @@ class PhaseDefinition:
 
 
 # Default phase definitions
-# NOTE: The system uses both .md (human-readable) and .json (machine/BAML) files:
-# - Scout: outputs scout-report.md + scout_report.json (BAML). JSON preferred, MD fallback.
-# - Architect: reads scout_report.json (or scout-report.md fallback), outputs architecture.json
-# - Builder: reads architecture.json (or architecture.md fallback)
-# Fallbacks exist for resilience when BAML parsing fails. Contract validation warns but doesn't fail.
+# NOTE: Agents communicate via Markdown files (better for LLM consumption):
+# - Scout: outputs scout-report.md
+# - Architect: reads scout-report.md, outputs architecture.md
+# - Builder: reads architecture.md, outputs build-tasks.md and source files
 DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
     PhaseId.SCOUT: PhaseDefinition(
         id=PhaseId.SCOUT,
@@ -67,9 +66,7 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         depends_on=[],
         timeout_seconds=600,
         required_inputs=[],
-        required_outputs=[
-            ".context-foundry/scout_report.json"
-        ],  # JSON preferred; MD fallback if BAML fails
+        required_outputs=[".context-foundry/scout-report.md"],
         can_skip=False,
     ),
     PhaseId.ARCHITECT: PhaseDefinition(
@@ -78,12 +75,8 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         description="Design the solution architecture and implementation plan",
         depends_on=[PhaseId.SCOUT],
         timeout_seconds=900,
-        required_inputs=[
-            ".context-foundry/scout_report.json"
-        ],  # Falls back to scout-report.md
-        required_outputs=[
-            ".context-foundry/architecture.json"
-        ],  # JSON preferred; MD fallback if BAML fails
+        required_inputs=[".context-foundry/scout-report.md"],
+        required_outputs=[".context-foundry/architecture.md"],
         can_skip=False,
     ),
     PhaseId.BUILDER: PhaseDefinition(
@@ -92,9 +85,7 @@ DEFAULT_PHASES: Dict[PhaseId, PhaseDefinition] = {
         description="Implement the solution based on the architecture",
         depends_on=[PhaseId.ARCHITECT],
         timeout_seconds=1800,
-        required_inputs=[
-            ".context-foundry/architecture.json"
-        ],  # Falls back to architecture.md
+        required_inputs=[".context-foundry/architecture.md"],
         required_outputs=[],  # Source files - validated by presence of any code files
         can_skip=False,
     ),

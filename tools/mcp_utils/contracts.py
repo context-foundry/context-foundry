@@ -272,48 +272,29 @@ def validate_scout_output(working_dir: Path) -> ContractValidationResult:
         result=ValidationResult.PASSED,
     )
 
-    # Check for scout_report.json (required - BAML contract)
-    scout_json = working_dir / ".context-foundry" / "scout_report.json"
+    # Check for scout-report.md (required output)
     scout_md = working_dir / ".context-foundry" / "scout-report.md"
 
-    if not scout_json.exists():
-        if scout_md.exists():
-            # MD exists but JSON doesn't - warn but don't fail (fallback available)
-            result.add_violation(
-                ContractViolation(
-                    rule="scout_json_missing",
-                    message="scout_report.json not created (scout-report.md exists as fallback)",
-                    severity=ValidationResult.WARNING,
-                    path=str(scout_json),
-                    suggestion="BAML parsing may have timed out - scout-report.md will be used",
-                )
+    if not scout_md.exists():
+        result.add_violation(
+            ContractViolation(
+                rule="required_output",
+                message="Scout report not created: scout-report.md missing",
+                severity=ValidationResult.FAILED,
+                path=str(scout_md),
+                suggestion="Scout phase should create .context-foundry/scout-report.md",
             )
-        else:
-            # Neither exists - fail
-            result.add_violation(
-                ContractViolation(
-                    rule="required_output",
-                    message="Scout report not created: neither scout_report.json nor scout-report.md",
-                    severity=ValidationResult.FAILED,
-                    path=str(scout_json),
-                    suggestion="Scout phase should create .context-foundry/scout_report.json",
-                )
+        )
+    elif scout_md.stat().st_size < 100:
+        result.add_violation(
+            ContractViolation(
+                rule="scout_md_empty",
+                message="scout-report.md is too small (< 100 bytes)",
+                severity=ValidationResult.FAILED,
+                path=str(scout_md),
+                suggestion="Scout phase should produce substantive research output",
             )
-    else:
-        # Validate JSON is parseable
-        try:
-            with open(scout_json) as f:
-                json.load(f)
-        except json.JSONDecodeError as e:
-            result.add_violation(
-                ContractViolation(
-                    rule="scout_json_invalid",
-                    message=f"scout_report.json is invalid JSON: {e}",
-                    severity=ValidationResult.FAILED,
-                    path=str(scout_json),
-                    suggestion="Check BAML parsing logs for errors",
-                )
-            )
+        )
 
     return result
 
@@ -326,48 +307,29 @@ def validate_architect_output(working_dir: Path) -> ContractValidationResult:
         result=ValidationResult.PASSED,
     )
 
-    # Check for architecture files - JSON is the primary contract
-    arch_json = working_dir / ".context-foundry" / "architecture.json"
+    # Check for architecture.md (required output)
     arch_md = working_dir / ".context-foundry" / "architecture.md"
 
-    if not arch_json.exists():
-        if arch_md.exists():
-            # MD exists but JSON doesn't - warn but don't fail
-            result.add_violation(
-                ContractViolation(
-                    rule="architect_json_missing",
-                    message="architecture.json not created (architecture.md exists as fallback)",
-                    severity=ValidationResult.WARNING,
-                    path=str(arch_json),
-                    suggestion="BAML parsing may have timed out - architecture.md will be used",
-                )
+    if not arch_md.exists():
+        result.add_violation(
+            ContractViolation(
+                rule="required_output",
+                message="Architecture not created: architecture.md missing",
+                severity=ValidationResult.FAILED,
+                path=str(arch_md),
+                suggestion="Architect phase should create .context-foundry/architecture.md",
             )
-        else:
-            # Neither exists - fail
-            result.add_violation(
-                ContractViolation(
-                    rule="required_output",
-                    message="Architecture not created: neither architecture.json nor architecture.md",
-                    severity=ValidationResult.FAILED,
-                    path=str(arch_json),
-                    suggestion="Architect phase should create architecture files",
-                )
+        )
+    elif arch_md.stat().st_size < 100:
+        result.add_violation(
+            ContractViolation(
+                rule="architect_md_empty",
+                message="architecture.md is too small (< 100 bytes)",
+                severity=ValidationResult.FAILED,
+                path=str(arch_md),
+                suggestion="Architect phase should produce substantive architecture output",
             )
-    else:
-        # Validate JSON is parseable
-        try:
-            with open(arch_json) as f:
-                json.load(f)
-        except json.JSONDecodeError as e:
-            result.add_violation(
-                ContractViolation(
-                    rule="architect_json_invalid",
-                    message=f"architecture.json is invalid JSON: {e}",
-                    severity=ValidationResult.FAILED,
-                    path=str(arch_json),
-                    suggestion="Check BAML parsing logs for errors",
-                )
-            )
+        )
 
     return result
 

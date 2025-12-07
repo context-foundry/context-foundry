@@ -359,8 +359,8 @@ PHASE_PREFLIGHT_CONFIG: Dict[str, Dict[str, Any]] = {
         "required_tools": ["claude"],
     },
     "Architect": {
-        "required_inputs": [".context-foundry/scout_report.json"],
-        "json_inputs": [".context-foundry/scout_report.json"],
+        "required_inputs": [".context-foundry/scout-report.md"],
+        "json_inputs": [],  # MD files, not JSON
         "required_tools": ["claude"],
     },
     "Builder": {
