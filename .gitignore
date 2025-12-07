@@ -85,6 +85,8 @@ ace/pricing.db
 coverage.json
 
 # Internal Planning & Testing (private, not for public repo)
+HANDOFF*.md
+**/HANDOFF*.md
 NEXT_WEEK_PRIORITIES.md
 *_PRIORITIES.md
 *_ROADMAP.md
