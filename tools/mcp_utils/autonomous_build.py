@@ -2440,11 +2440,12 @@ def execute_build_with_phase_spawning(
                     file=sys.stderr,
                 )
 
-            screenshot_prompt = MODULE_DIR / "prompts" / "phase_4_5_screenshot.md"
+            screenshot_prompt = (
+                MODULE_DIR / "prompts" / "phases" / "phase_screenshot.txt"
+            )
             screenshot_instruction = (
-                "Capture screenshots of the application for documentation.\n"
-                "Install Playwright, start the app, capture hero + feature screenshots.\n"
-                "Save to docs/screenshots/ directory. Gracefully skip if not applicable."
+                "Follow the SCREENSHOT PHASE INSTRUCTIONS in the prompt.\n"
+                "Capture screenshots of key pages and save to .context-foundry/screenshots/."
             )
 
             screenshot_result = run_phase(
@@ -2540,16 +2541,10 @@ def execute_build_with_phase_spawning(
                     file=sys.stderr,
                 )
 
-            docs_prompt = MODULE_DIR / "prompts" / "phase_5_documentation.md"
+            docs_prompt = MODULE_DIR / "prompts" / "phases" / "phase_documentation.txt"
             docs_instruction = (
-                "Generate comprehensive README.md with:\n"
-                "- Project overview and features\n"
-                "- Installation instructions\n"
-                "- Usage examples\n"
-                "- Screenshots (from docs/screenshots/ if available)\n"
-                "- API documentation\n"
-                "- Contributing guidelines\n"
-                "- License and badges"
+                "Follow the DOCUMENTATION PHASE INSTRUCTIONS in the prompt.\n"
+                "Generate comprehensive README.md with project overview, installation, and usage."
             )
 
             docs_result = run_phase(
@@ -2639,22 +2634,16 @@ def execute_build_with_phase_spawning(
                     file=sys.stderr,
                 )
 
-            deploy_prompt = MODULE_DIR / "prompts" / "phase_6_deployment.md"
+            deploy_prompt = MODULE_DIR / "prompts" / "phases" / "phase_deploy.txt"
 
             # Determine repository name
             github_repo_name = task_config.get("github_repo_name")
             repo_name = github_repo_name or working_directory.name
 
             deploy_instruction = (
-                f"Deploy to GitHub:\n"
-                f"1. Check if gh CLI is available and authenticated\n"
-                f"2. Initialize git repo (if not already)\n"
-                f"3. Stage all files: git add .\n"
-                f"4. Commit: git commit -m 'feat: {task[:60]}'\n"
-                f"5. Create GitHub repo: gh repo create {repo_name} --public --source=. --push\n"
-                f"6. Push to main branch\n"
-                f"7. Update session-summary.json with repo URL\n\n"
-                f"If gh CLI not available, print instructions and exit with code 10 (build success, deploy skipped)."
+                f"Follow the DEPLOY PHASE INSTRUCTIONS in the prompt.\n"
+                f"Deploy to GitHub as repo: {repo_name}\n"
+                f"Use gh repo create if needed."
             )
 
             deploy_result = run_phase(
