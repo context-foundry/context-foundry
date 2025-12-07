@@ -274,7 +274,7 @@ Check if CONFIGURATION.incremental is true, then:
 ```python
 python3 -c "
 import sys
-sys.path.insert(0, '/Users/name/homelab/context-foundry')
+sys.path.insert(0, '{CF_ROOT}')
 from tools.cache.scout_cache import save_scout_report_to_cache
 
 with open('.context-foundry/scout-report.md', 'r') as f:

@@ -81,8 +81,8 @@ def autonomous_build_and_deploy_impl(
         task: What to build/fix/enhance
         working_directory: Where to create/work on the project
             - **Relative path** (recommended): Creates project as sibling of context-foundry
-              Example: "weather-app" → /Users/name/homelab/weather-app
-              (if context-foundry is at /Users/name/homelab/context-foundry)
+              Example: "weather-app" → ~/projects/weather-app
+              (if context-foundry is at {CF_ROOT})
             - **Absolute path**: Uses exact path specified
               Example: "/tmp/weather-app" → /tmp/weather-app
             **Core Feature:** Use relative paths to keep all projects organized together!
@@ -110,8 +110,8 @@ def autonomous_build_and_deploy_impl(
             github_repo_name="weather-app",
             enable_test_loop=True
         )
-        # If context-foundry is at /Users/name/homelab/context-foundry
-        # This creates: /Users/name/homelab/weather-app
+        # If context-foundry is at {CF_ROOT}
+        # This creates: ~/projects/weather-app
         # Returns: {"task_id": "abc-123", "status": "started", ...}
 
         # Alternative: Use absolute path (if you need specific location)

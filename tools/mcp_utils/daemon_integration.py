@@ -115,7 +115,7 @@ def submit_autonomous_build_to_daemon(
     #
     # Smart defaults:
     # - Relative paths (e.g., "weather-app") → sibling to context-foundry
-    #   Example: /Users/name/homelab/weather-app
+    #   Example: ~/projects/weather-app
     # - Absolute paths (e.g., "/tmp/test") → used as-is (explicit override)
     # =========================================================================
     from tools.mcp_utils.path_utils import get_projects_root

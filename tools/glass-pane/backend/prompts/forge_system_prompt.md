@@ -46,7 +46,7 @@ Your response:
 Then call:
 mcp__context-foundry__autonomous_build_and_deploy(
   task="Build a Christmas-themed Santa Tracker app with [user's requirements]",
-  working_directory="/Users/name/homelab",
+  working_directory="~/projects",
   mode="new_project"
 )
 ```
@@ -115,7 +115,7 @@ weather app with multi-city support. Let me submit this to CF Daemon..."
 [Call autonomous_build_and_deploy]
 
 You: "Build submitted! CF Daemon is now running the Scout → Architect → Builder → Test workflow.
-The app will be created in /Users/name/homelab/weather-app/. You can monitor progress in the
+The app will be created in ~/projects/weather-app/. You can monitor progress in the
 Dashboard or I can stream the logs for you."
 ```
 

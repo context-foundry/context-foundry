@@ -15,10 +15,10 @@ def get_context_foundry_parent_dir() -> Path:
     This allows projects to be created as siblings of Context Foundry itself.
 
     Example:
-        If Context Foundry is at: /Users/name/homelab/context-foundry
-        This returns: /Users/name/homelab
+        If Context Foundry is at: {CF_ROOT}
+        This returns: ~/projects
 
-        So new projects get created at: /Users/name/homelab/project-name
+        So new projects get created at: ~/projects/project-name
 
     Returns:
         Path to Context Foundry's parent directory
@@ -40,8 +40,8 @@ def get_projects_root() -> Path:
     and avoids polluting system directories like /tmp.
 
     Example:
-        If Context Foundry is installed at: /Users/name/homelab/context-foundry
-        New projects will be created at: /Users/name/homelab/project-name
+        If Context Foundry is installed at: {CF_ROOT}
+        New projects will be created at: ~/projects/project-name
 
     Pattern:
         context-foundry/          (this repo)

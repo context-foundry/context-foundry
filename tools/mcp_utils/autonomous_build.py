@@ -860,7 +860,7 @@ def autonomous_build_and_deploy_impl(
         # Absolute paths are used as-is (explicit override)
         #
         # Examples:
-        #   "weather-app" → /Users/name/homelab/weather-app (recommended)
+        #   "weather-app" → ~/projects/weather-app (recommended)
         #   "/tmp/test" → /tmp/test (explicit override)
         working_dir_input = Path(working_directory)
         if working_dir_input.is_absolute():

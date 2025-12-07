@@ -5,7 +5,7 @@ This module provides utilities for converting between absolute and relative path
 which significantly reduces token usage in tool outputs.
 
 Token savings example:
-- Absolute: /Users/name/homelab/context-foundry/tools/cache/cache_manager.py (57 chars)
+- Absolute: {CF_ROOT}/tools/cache/cache_manager.py (57 chars)
 - Relative: tools/cache/cache_manager.py (30 chars)
 - Savings: 47% reduction per path
 
@@ -35,11 +35,11 @@ def to_relative_path(
         ValueError: If strict=True and path is outside working_dir
 
     Example:
-        >>> to_relative_path('/Users/name/homelab/context-foundry/tools/cache.py',
-        ...                  '/Users/name/homelab/context-foundry')
+        >>> to_relative_path('{CF_ROOT}/tools/cache.py',
+        ...                  '{CF_ROOT}')
         'tools/cache.py'
 
-        >>> to_relative_path('tools/cache.py', '/Users/name/homelab/context-foundry')
+        >>> to_relative_path('tools/cache.py', '{CF_ROOT}')
         'tools/cache.py'  # Already relative, returned as-is
     """
     if working_dir is None:
@@ -78,8 +78,8 @@ def to_absolute_path(
         Absolute path as string
 
     Example:
-        >>> to_absolute_path('tools/cache.py', '/Users/name/homelab/context-foundry')
-        '/Users/name/homelab/context-foundry/tools/cache.py'
+        >>> to_absolute_path('tools/cache.py', '{CF_ROOT}')
+        '{CF_ROOT}/tools/cache.py'
     """
     if working_dir is None:
         working_dir = os.getcwd()
@@ -105,11 +105,11 @@ def is_within_project(
         True if path is within working_dir, False otherwise
 
     Example:
-        >>> is_within_project('/Users/name/homelab/context-foundry/tools/cache.py',
-        ...                   '/Users/name/homelab/context-foundry')
+        >>> is_within_project('{CF_ROOT}/tools/cache.py',
+        ...                   '{CF_ROOT}')
         True
 
-        >>> is_within_project('/etc/passwd', '/Users/name/homelab/context-foundry')
+        >>> is_within_project('/etc/passwd', '{CF_ROOT}')
         False
     """
     if working_dir is None:
@@ -142,8 +142,8 @@ def format_tool_output_paths(
         Output with paths converted to relative
 
     Example:
-        >>> output = "Error in /Users/name/homelab/context-foundry/tools/cache.py:42"
-        >>> format_tool_output_paths(output, '/Users/name/homelab/context-foundry')
+        >>> output = "Error in {CF_ROOT}/tools/cache.py:42"
+        >>> format_tool_output_paths(output, '{CF_ROOT}')
         'Error in tools/cache.py:42'
     """
     if working_dir is None:
@@ -208,8 +208,8 @@ def format_file_path_for_display(
 
     Example:
         >>> format_file_path_for_display(
-        ...     '/Users/name/homelab/context-foundry/tools/cache/cache_manager.py',
-        ...     '/Users/name/homelab/context-foundry',
+        ...     '{CF_ROOT}/tools/cache/cache_manager.py',
+        ...     '{CF_ROOT}',
         ...     max_length=30
         ... )
         'tools/.../cache_manager.py'
@@ -275,12 +275,12 @@ def get_common_path_prefix(paths: list[Union[str, Path]]) -> str:
 
     Example:
         >>> paths = [
-        ...     '/Users/name/homelab/context-foundry/tools/cache.py',
-        ...     '/Users/name/homelab/context-foundry/tools/metrics.py',
-        ...     '/Users/name/homelab/context-foundry/tests/test.py'
+        ...     '{CF_ROOT}/tools/cache.py',
+        ...     '{CF_ROOT}/tools/metrics.py',
+        ...     '{CF_ROOT}/tests/test.py'
         ... ]
         >>> get_common_path_prefix(paths)
-        '/Users/name/homelab/context-foundry'
+        '{CF_ROOT}'
     """
     if not paths:
         return ""
@@ -317,10 +317,10 @@ def relativize_paths_in_dict(
 
     Example:
         >>> data = {
-        ...     'file': '/Users/name/homelab/context-foundry/tools/cache.py',
+        ...     'file': '{CF_ROOT}/tools/cache.py',
         ...     'line': 42
         ... }
-        >>> relativize_paths_in_dict(data, '/Users/name/homelab/context-foundry')
+        >>> relativize_paths_in_dict(data, '{CF_ROOT}')
         {'file': 'tools/cache.py', 'line': 42}
     """
     if working_dir is None:

@@ -7,7 +7,7 @@ Real-time monitoring dashboard for Context Foundry builds.
 ### Easy Way (Recommended)
 
 ```bash
-cd /Users/name/homelab/context-foundry/tools/glass-pane
+cd {CF_ROOT}/tools/glass-pane
 ./start-glass-pane.sh
 ```
 

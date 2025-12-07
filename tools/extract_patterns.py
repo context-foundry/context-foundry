@@ -19,7 +19,7 @@ except ImportError as e:
     print(f"Import error: {e}")
     sys.exit(1)
 
-WORKDAY_EXT_DIR = Path("/Users/name/homelab/context-foundry/extensions/workday")
+WORKDAY_EXT_DIR = Path(__file__).parent.parent / "extensions" / "workday"
 PATTERNS_FILE = WORKDAY_EXT_DIR / "patterns/workday-expertise.json"
 
 

@@ -62,7 +62,7 @@ This guide explains how to set up and use the Context Foundry MCP server to dele
 
 2. **Context Foundry dependencies**
    ```bash
-   cd /Users/name/homelab/context-foundry
+   cd {CF_ROOT}
    pip install -r requirements-mcp.txt
    ```
 
@@ -116,12 +116,12 @@ cat .mcp.json  # Should show your MCP server configuration
 
 **Setup command**:
 ```bash
-claude mcp add --scope user --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
+claude mcp add --scope user --transport stdio context-foundry -- python3.10 {CF_ROOT}/tools/mcp_server.py
 ```
 
 **Important**:
 - Use `--scope user` to make it truly global (not `--scope local`)
-- Replace `/Users/name/homelab/context-foundry` with your actual Context Foundry path
+- Replace `{CF_ROOT}` with your actual Context Foundry path
 - Replace `python3.10` with your Python version if different
 
 **Verification**:
@@ -144,7 +144,7 @@ claude mcp add --scope user --transport stdio context-foundry -- python3.10 /new
 ### Step 1: Install Dependencies
 
 ```bash
-cd /Users/name/homelab/context-foundry
+cd {CF_ROOT}
 
 # Install MCP dependencies
 pip install -r requirements-mcp.txt
@@ -174,10 +174,10 @@ Choose **either** global (recommended) or project-scoped configuration:
 Makes the MCP server available from **any directory** on your system:
 
 ```bash
-claude mcp add --scope user --transport stdio context-foundry -- python3.10 /Users/name/homelab/context-foundry/tools/mcp_server.py
+claude mcp add --scope user --transport stdio context-foundry -- python3.10 {CF_ROOT}/tools/mcp_server.py
 ```
 
-Replace `/Users/name/homelab/context-foundry` with your actual path.
+Replace `{CF_ROOT}` with your actual path.
 
 Verify from **any directory**:
 ```bash
@@ -220,7 +220,7 @@ which claude
 Open a terminal and run:
 
 ```bash
-cd /Users/name/homelab/context-foundry
+cd {CF_ROOT}
 python3 tools/mcp_server.py
 ```
 
@@ -269,7 +269,7 @@ The tool will:
 ```
 Use mcp__delegate_to_claude_code with:
 - task: "Analyze this project and create a README.md"
-- working_directory: "/Users/name/homelab/my-project"
+- working_directory: "~/projects/my-project"
 ```
 
 #### Example 3: With Timeout and Flags
@@ -277,7 +277,7 @@ Use mcp__delegate_to_claude_code with:
 ```
 Use mcp__delegate_to_claude_code with:
 - task: "Run all tests and create a coverage report"
-- working_directory: "/Users/name/homelab/my-project"
+- working_directory: "~/projects/my-project"
 - timeout_minutes: 15.0
 - additional_flags: "--model claude-sonnet-4"
 ```
@@ -320,12 +320,12 @@ Each delegation runs in a fresh Claude Code instance with clean context.
 ```
 1. Use mcp__delegate_to_claude_code:
    - task: "Analyze the codebase architecture and create ARCHITECTURE.md"
-   - working_directory: "/Users/name/homelab/my-project"
+   - working_directory: "~/projects/my-project"
    - timeout_minutes: 20.0
 
 2. Use mcp__delegate_to_claude_code:
    - task: "Generate API documentation from code"
-   - working_directory: "/Users/name/homelab/my-project"
+   - working_directory: "~/projects/my-project"
    - timeout_minutes: 15.0
 ```
 
@@ -334,16 +334,16 @@ Each delegation runs in a fresh Claude Code instance with clean context.
 ```
 1. Use mcp__delegate_to_claude_code:
    - task: "Create comprehensive unit tests for all modules"
-   - working_directory: "/Users/name/homelab/my-project"
+   - working_directory: "~/projects/my-project"
 
 2. Use mcp__delegate_to_claude_code:
    - task: "Run tests and create coverage report"
-   - working_directory: "/Users/name/homelab/my-project"
+   - working_directory: "~/projects/my-project"
    - timeout_minutes: 10.0
 
 3. Use mcp__delegate_to_claude_code:
    - task: "Analyze test results and suggest improvements"
-   - working_directory: "/Users/name/homelab/my-project"
+   - working_directory: "~/projects/my-project"
 ```
 
 ## Troubleshooting
@@ -384,7 +384,7 @@ python3.10 tools/mcp_server.py  # if you have 3.10 installed
 2. **Check the path in mcp_settings.json is correct:**
    ```bash
    # The path should point to your actual location
-   python3 /Users/name/homelab/context-foundry/tools/mcp_server.py
+   python3 {CF_ROOT}/tools/mcp_server.py
    ```
 
 3. **Restart Claude Code:**
@@ -463,7 +463,7 @@ python3.10 tools/mcp_server.py  # if you have 3.10 installed
 2. **Use absolute paths:**
    ```
    # Good:
-   working_directory: "/Users/name/homelab/project"
+   working_directory: "~/projects/project"
 
    # May cause issues:
    working_directory: "~/project"  # Expand ~ first
@@ -496,7 +496,7 @@ Follow the test scenarios in `examples/test_claude_code_delegation.md` to verify
 
 ```bash
 # View test examples
-cat /Users/name/homelab/context-foundry/examples/test_claude_code_delegation.md
+cat {CF_ROOT}/examples/test_claude_code_delegation.md
 ```
 
 Quick test:
@@ -526,7 +526,7 @@ Edit `~/.config/claude-code/mcp_settings.json`:
     "context-foundry": {
       "command": "/usr/local/bin/python3.11",  ← Specify full path
       "args": [
-        "/Users/name/homelab/context-foundry/tools/mcp_server.py"
+        "{CF_ROOT}/tools/mcp_server.py"
       ]
     }
   }
@@ -543,7 +543,7 @@ Pass environment variables to the MCP server:
     "context-foundry": {
       "command": "python3",
       "args": [
-        "/Users/name/homelab/context-foundry/tools/mcp_server.py"
+        "{CF_ROOT}/tools/mcp_server.py"
       ],
       "env": {
         "ANTHROPIC_API_KEY": "your-api-key",
@@ -564,7 +564,7 @@ To temporarily disable without deleting the configuration:
     "context-foundry": {
       "command": "python3",
       "args": [
-        "/Users/name/homelab/context-foundry/tools/mcp_server.py"
+        "{CF_ROOT}/tools/mcp_server.py"
       ],
       "disabled": true  ← Set to true
     }
@@ -615,8 +615,8 @@ After successful setup:
 
 ## Additional Resources
 
-- **MCP Server Code:** `/Users/name/homelab/context-foundry/tools/mcp_server.py`
-- **Test Examples:** `/Users/name/homelab/context-foundry/examples/test_claude_code_delegation.md`
+- **MCP Server Code:** `{CF_ROOT}/tools/mcp_server.py`
+- **Test Examples:** `{CF_ROOT}/examples/test_claude_code_delegation.md`
 - **MCP Settings:** `~/.config/claude-code/mcp_settings.json`
 - **MCP Protocol Docs:** https://modelcontextprotocol.io/
 
@@ -634,7 +634,7 @@ If you encounter issues:
 
 ### Terminal 1 - Start MCP Server:
 ```bash
-cd /Users/name/homelab/context-foundry
+cd {CF_ROOT}
 python3 tools/mcp_server.py
 # Keep running!
 ```

@@ -103,7 +103,7 @@ class MCPClient:
                 return cached_data
 
         # PRIORITY 1: Try reading from live working directory
-        # Common patterns: /Users/name/homelab/<project>
+        # Common patterns: ~/projects/<project>
         live_paths = [
             Path.home() / "homelab" / task_id,
             Path.cwd() / task_id,
@@ -146,7 +146,7 @@ class MCPClient:
         It reads from the task's working directory.
         """
         # Try to find the task's working directory
-        # Common patterns: /Users/name/homelab/<project>
+        # Common patterns: ~/projects/<project>
         # or checkpoints/ralph/<session_id>
 
         # Check if task_id matches a checkpoint session

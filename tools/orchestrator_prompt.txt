@@ -159,7 +159,7 @@ python3 tools/use_baml.py status
 - Files automatically truncated at 50K lines / 500K chars
 - If truncated, use `offset` parameter to read more sections
 - All paths shown are relative to project root (saves tokens)
-- Example: `tools/cache.py` instead of `/Users/name/homelab/context-foundry/tools/cache.py`
+- Example: `tools/cache.py` instead of `{CF_ROOT}/tools/cache.py`
 
 **Search Operations:**
 - Grep limited to 10K matches / 300K chars
@@ -465,7 +465,7 @@ Read extensions/roblox/prompts/SCOUT-PROJECT-ASSESSMENT.md
    ```python
    python3 -c "
    import sys
-   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   sys.path.insert(0, '{CF_ROOT}')
    from tools.cache.scout_cache import get_cached_scout_report
 
    cached = get_cached_scout_report(
@@ -625,12 +625,12 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
 
    3. **Read STANDARD_TOOLS.md** (understand required tools):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/tool-configs/STANDARD_TOOLS.md
+      Read {CF_ROOT}/extensions/flowise/tool-configs/STANDARD_TOOLS.md
       ```
 
    4. **Read AGENT-NODE-TEMPLATE.json** (node structure reference):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+      Read {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
       ```
 
    🚨 **CRITICAL: Standard Tools Research** 🚨
@@ -639,7 +639,7 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    2. **searXNG** - Real-time web search (federated meta-search)
 
    Read the exact structure from:
-   /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
 
    Document in scout-report.md:
    - "✅ Standard tools (currentDateTime + searXNG) will be included in ALL agents"
@@ -811,7 +811,7 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    ```python
    python3 -c "
    import sys
-   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   sys.path.insert(0, '{CF_ROOT}')
    from tools.cache.scout_cache import save_scout_report_to_cache
 
    with open('.context-foundry/scout-report.md', 'r') as f:
@@ -853,7 +853,7 @@ Update phase: "Scout" (1/7, "researching", "Analyzing task requirements")
    # Count tokens in Scout output
    SCOUT_TOKENS=$(python3 -c "
    import sys
-   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   sys.path.insert(0, '{CF_ROOT}')
    from tools.context_budget import TokenCounter
    from pathlib import Path
 
@@ -1045,7 +1045,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
 
    3. **Read AGENT-NODE-TEMPLATE.json** (Node structure reference):
       ```
-      Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+      Read {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
       ```
       Use as authoritative reference for inputParams array structure
 
@@ -1075,7 +1075,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    ```
    ## Standard Agent Tools
    All agents will include currentDateTime and searXNG tools using the exact structure
-   from /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   from {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
    ```
 
    **Template Files**:
@@ -1115,7 +1115,7 @@ Update phase: "Architect" (2/7, "designing", "Creating system architecture")
    - ✅ Built-in memory configuration within agent
 
    **Example Templates** (for manual reference/debugging, not automatically read):
-   /Users/name/homelab/context-foundry/extensions/flowise/templates/
+   {CF_ROOT}/extensions/flowise/templates/
    (15 real Flowise exports for comparison and validation)
 
    Architecture Requirements:
@@ -1428,14 +1428,14 @@ Read extensions/roblox/prompts/BUILDER-LUAU-BEST-PRACTICES.md
 
 1. **READ FAILURE_PATTERNS.md** (understand what NOT to do):
    ```
-   Read /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+   Read {CF_ROOT}/extensions/flowise/FAILURE_PATTERNS.md
    ```
    **WHY**: Contains 6+ failure patterns with EXACT validation code to prevent crashes.
    Pattern #6 specifically addresses the tool structure issue you MUST avoid.
 
 2. **READ the AGENT-NODE-TEMPLATE.json** (get the correct structure):
    ```
-   Read /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
+   Read {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json
    ```
    **WHY**: This has the EXACT, tested, working structure for agent nodes.
 
@@ -1797,7 +1797,7 @@ Run this command BEFORE creating or finalizing README.md:
 
 ```bash
 # Execute mermaid generator
-python3 /Users/name/homelab/context-foundry/extensions/flowise/mermaid_generator.py \
+python3 {CF_ROOT}/extensions/flowise/mermaid_generator.py \
   <workflow-name>.json \
   WORKFLOW-DIAGRAM.md \
   --interactive \
@@ -1976,7 +1976,7 @@ Read extensions/roblox/prompts/TESTER-TEST-STRATEGY.md
    ```python
    python3 -c "
    import sys
-   sys.path.insert(0, '/Users/name/homelab/context-foundry')
+   sys.path.insert(0, '{CF_ROOT}')
    from tools.cache.test_cache import get_cached_test_results
 
    cached = get_cached_test_results(
@@ -2209,7 +2209,7 @@ if all_passed:
 else:
     print("\n❌ VALIDATION FAILED: Some agents missing required tools")
     print("\n🔧 FIX REQUIRED:")
-    print("1. Read template: /Users/name/homelab/context-foundry/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json")
+    print("1. Read template: {CF_ROOT}/extensions/flowise/prompts/AGENT-NODE-TEMPLATE.json")
     print("2. Copy agentTools structure from lines 341-367")
     print("3. Add to EVERY agent node's inputs.agentTools array")
     print("4. Re-run this validation")
@@ -2281,7 +2281,7 @@ if [ "$START_NODE_COUNT" -eq 0 ]; then
     echo '  }'
     echo ""
     echo "Fix: Add Start node specification to architecture.md"
-    echo "See: /Users/name/homelab/context-foundry/extensions/flowise/AGENT_PATTERN_REFERENCE.md"
+    echo "See: {CF_ROOT}/extensions/flowise/AGENT_PATTERN_REFERENCE.md"
     exit 1
 fi
 
@@ -2372,7 +2372,7 @@ VALIDATION_SCRIPT
    **Run comprehensive validator (validates ALL 10 patterns)**:
 
    ```bash
-   python3 /Users/name/homelab/context-foundry/extensions/flowise/validate_workflow.py *.json
+   python3 {CF_ROOT}/extensions/flowise/validate_workflow.py *.json
 
    VALIDATION_EXIT_CODE=$?
    ```
@@ -2491,7 +2491,7 @@ import sys
 import re
 from pathlib import Path
 
-sys.path.insert(0, '/Users/name/homelab/context-foundry')
+sys.path.insert(0, '{CF_ROOT}')
 from tools.cache.test_cache import save_test_results_to_cache
 
 # Parse test results from test output (saved in variables or test-final-report.md)
@@ -2605,7 +2605,7 @@ PYTHON_SCRIPT
        # - Structural issues (wrong file format, missing nodes)
 
        # Read current failure patterns
-       PATTERNS_FILE="/Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md"
+       PATTERNS_FILE="{CF_ROOT}/extensions/flowise/FAILURE_PATTERNS.md"
 
        # If pattern is NEW and significant:
        # - Add new pattern section to FAILURE_PATTERNS.md
@@ -2667,7 +2667,7 @@ EOF
        5. Structural integrity violations
 
        After documenting:
-       - Save to: /Users/name/homelab/context-foundry/extensions/flowise/FAILURE_PATTERNS.md
+       - Save to: {CF_ROOT}/extensions/flowise/FAILURE_PATTERNS.md
        - This will be loaded in NEXT build's Architect phase
        - Creates continuous learning loop
 
@@ -3248,7 +3248,7 @@ PHASE 7: FEEDBACK ANALYSIS (Self-Learning & Continuous Improvement)
    )
    ```
 
-   Replace {absolute_path} with the actual working directory path (e.g., /Users/name/homelab/1942-shooter)
+   Replace {absolute_path} with the actual working directory path (e.g., ~/projects/1942-shooter)
    Replace {timestamp} with the actual feedback file timestamp (e.g., 2025-01-13)
 
    **What this does automatically:**
