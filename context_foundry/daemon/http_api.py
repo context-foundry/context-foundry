@@ -732,31 +732,327 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             self._send_error(500, str(e))
 
     def _handle_pending_approvals(self) -> None:
-        """GET /pending-approvals - Get pending approvals."""
-        # For now, return empty list - approvals are not yet implemented
-        self._send_json([])
+        """GET /pending-approvals - List all pending approval requests and paused HITL pipelines."""
+        from pathlib import Path
+
+        ctx = self._get_context()
+        approvals = []
+
+        # Try to get pending approvals from ApprovalManager
+        try:
+            import sys
+
+            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+            from tools.mcp_utils.approval_gates import ApprovalManager
+
+            manager = ApprovalManager()
+            pending = manager.list_pending_requests()
+            approvals = [req.to_dict() for req in pending]
+        except ImportError as exc:
+            logger.debug(f"approval_gates module not available: {exc}")
+        except Exception as e:
+            logger.warning(f"Error getting pending approvals: {e}")
+
+        # Also check for paused HITL pipelines
+        try:
+            seen_dirs: set = set()
+            for job in ctx.store.list_jobs():
+                working_dir = (
+                    job.params.get("working_directory") if job.params else None
+                )
+                if working_dir and working_dir not in seen_dirs:
+                    seen_dirs.add(working_dir)
+                    pipeline_state_file = (
+                        Path(working_dir) / ".context-foundry" / "pipeline-state.json"
+                    )
+                    if pipeline_state_file.exists():
+                        try:
+                            state = json.loads(pipeline_state_file.read_text())
+                            if state.get("state") == "paused":
+                                # Cross-check: verify pipeline belongs to this job
+                                pipeline_job_id = state.get("task_config", {}).get(
+                                    "job_id"
+                                )
+                                if pipeline_job_id and pipeline_job_id != job.id:
+                                    continue
+
+                                # Don't show paused pipeline if job is in active state
+                                active_states = {
+                                    JobStatus.RUNNING,
+                                    JobStatus.QUEUED,
+                                    JobStatus.WAITING_APPROVAL,
+                                }
+                                if job.status in active_states:
+                                    continue
+
+                                phases_remaining = state.get("phases_remaining", [])
+                                next_phase = (
+                                    phases_remaining[0]
+                                    if phases_remaining
+                                    else "Unknown"
+                                )
+                                approvals.append(
+                                    {
+                                        "request_id": f"resume-{job.id}",
+                                        "pipeline_id": job.id,
+                                        "job_id": job.id,
+                                        "working_directory": working_dir,
+                                        "phase": next_phase,
+                                        "type": "phase_resume",
+                                        "status": "pending",
+                                        "paused_at": state.get("paused_at"),
+                                        "phases_completed": state.get(
+                                            "phases_completed", []
+                                        ),
+                                        "phases_remaining": phases_remaining,
+                                    }
+                                )
+                        except (json.JSONDecodeError, KeyError) as e:
+                            logger.debug(
+                                f"Could not parse pipeline state for {job.id}: {e}"
+                            )
+        except Exception as e:
+            logger.warning(f"Error checking paused pipelines: {e}")
+
+        self._send_json({"approvals": approvals})
 
     def _handle_sidekick_chat(self, data: Dict[str, Any]) -> None:
-        """POST /sidekick-chat - Handle chat message from sidekick."""
-        job_id = data.get("job_id")
-        message = data.get("message")
+        """POST /sidekick-chat - Handle chat messages using Claude CLI."""
+        import subprocess
+        import shutil
+        import os
+        import re
+        from pathlib import Path
 
-        if not job_id:
-            self._send_error(400, "Missing job_id")
-            return
+        message = data.get("message", "").strip()
 
         if not message:
-            self._send_error(400, "Missing message")
+            self._send_error(400, "Empty message")
             return
 
-        # For now, return a placeholder response
-        # TODO: Integrate with actual chat/LLM system
-        self._send_json(
-            {
-                "response": f"Chat received for job {job_id}: {message}. (Chat functionality coming soon!)",
-                "job_id": job_id,
-            }
-        )
+        ctx = self._get_context()
+        response_text = None
+
+        # Try to use Claude CLI for context-aware responses
+        claude_path = shutil.which("claude")
+        if not claude_path and os.path.exists("/opt/homebrew/bin/claude"):
+            claude_path = "/opt/homebrew/bin/claude"
+
+        if claude_path:
+            try:
+                # Build context from current job status
+                context_parts = []
+
+                # PRIORITY 1: Check for pending HITL approvals
+                try:
+                    import sys
+
+                    sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                    from tools.mcp_utils.approval_gates import ApprovalManager
+
+                    approval_manager = ApprovalManager()
+                    pending_approvals = approval_manager.list_pending_requests()
+                    if pending_approvals:
+                        context_parts.append(
+                            f"⚠️ JOBS WAITING FOR YOUR APPROVAL ({len(pending_approvals)}):"
+                        )
+                        for req in pending_approvals[:3]:
+                            context_parts.append(
+                                f"  - {req.request_id[:8]}: Phase '{req.phase}' for {Path(req.working_directory).name}"
+                            )
+                        if len(pending_approvals) > 3:
+                            context_parts.append(
+                                f"  ... and {len(pending_approvals) - 3} more"
+                            )
+                except Exception as e:
+                    logger.debug(f"Could not check pending approvals: {e}")
+
+                # PRIORITY 2: Currently RUNNING jobs
+                try:
+                    running_jobs = ctx.store.list_jobs(
+                        status=JobStatus.RUNNING, limit=10
+                    )
+                    if running_jobs:
+                        context_parts.append(
+                            f"\n🔄 CURRENTLY RUNNING ({len(running_jobs)}):"
+                        )
+                        for job in running_jobs[:3]:
+                            task_name = ""
+                            if job.params:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                            context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                        if len(running_jobs) > 3:
+                            context_parts.append(
+                                f"  ... and {len(running_jobs) - 3} more"
+                            )
+                except Exception as e:
+                    logger.debug(f"Could not check running jobs: {e}")
+
+                # PRIORITY 3: Jobs waiting for approval
+                try:
+                    waiting_jobs = ctx.store.list_jobs(
+                        status=JobStatus.WAITING_APPROVAL, limit=10
+                    )
+                    if waiting_jobs:
+                        context_parts.append(
+                            f"\n⏸️ PAUSED - WAITING FOR APPROVAL ({len(waiting_jobs)}):"
+                        )
+                        for job in waiting_jobs[:3]:
+                            task_name = ""
+                            if job.params:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                            context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                except Exception as e:
+                    logger.debug(f"Could not check waiting jobs: {e}")
+
+                # PRIORITY 4: Recently failed jobs
+                try:
+                    failed_jobs = ctx.store.list_jobs(status=JobStatus.FAILED, limit=5)
+                    if failed_jobs and not context_parts:
+                        context_parts.append(
+                            f"\n❌ RECENT FAILURES ({len(failed_jobs)}):"
+                        )
+                        for job in failed_jobs[:2]:
+                            task_name = ""
+                            if job.params:
+                                task_name = job.params.get(
+                                    "task", job.params.get("initial_prompt", "Unknown")
+                                )[:40]
+                            context_parts.append(f"  - {job.id[:8]}: {task_name}")
+                    elif failed_jobs:
+                        context_parts.append(
+                            f"\n(Also {len(failed_jobs)} failed job(s) - ask if you want details)"
+                        )
+                except Exception as e:
+                    logger.debug(f"Could not check failed jobs: {e}")
+
+                # Build context string
+                if context_parts:
+                    context_str = "\n".join(context_parts)
+                else:
+                    context_str = (
+                        "✅ No active jobs. System is idle and ready for new builds."
+                    )
+
+                # System prompt
+                system_prompt = (
+                    "You are Sidekick, an intelligent assistant for Context Foundry. "
+                    "You help users monitor builds, approve HITL requests, and start new projects. "
+                    "Keep responses concise and actionable. "
+                    "\n\n"
+                    f"CURRENT SYSTEM STATUS:\n{context_str}\n"
+                    "\n"
+                    "RESPONSE PRIORITIES:\n"
+                    "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
+                    "2. If there are RUNNING jobs - mention them and offer to show details\n"
+                    "3. If system is idle - greet the user and offer to start a new build\n"
+                    "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n"
+                    "\n"
+                    "CAPABILITIES:\n"
+                    "1. Show system status (running jobs, pending approvals)\n"
+                    "2. Help approve HITL requests: tell user to run 'cfd approve <id>'\n"
+                    "3. Start new autonomous builds\n"
+                    "\n"
+                    "BUILD INSTRUCTIONS:\n"
+                    "- If the user wants to build something, confirm you are starting it.\n"
+                    "- To trigger the build, append this tag to the end of your response:\n"
+                    "  [[START_BUILD: <short_description_of_project>]]\n"
+                    "- Assume the default directory (~/homelab/) unless specified."
+                )
+
+                # Get conversation history
+                history = data.get("history", [])
+                history_text = ""
+                for entry in history[-5:]:
+                    if entry.get("role") == "user":
+                        history_text += f"User: {entry.get('content', '')}\n"
+                    else:
+                        history_text += f"You: {entry.get('content', '')}\n"
+
+                full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
+
+                # Call claude CLI with haiku for fast responses
+                logger.info("Running claude subprocess with haiku...")
+                result = subprocess.run(
+                    [
+                        claude_path,
+                        "-p",
+                        "--print",
+                        "--dangerously-skip-permissions",
+                        "--model",
+                        "haiku",
+                    ],
+                    input=full_prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+
+                if result.returncode == 0 and result.stdout:
+                    response_text = result.stdout.strip()
+                    logger.info(
+                        f"Claude CLI success. Response length: {len(response_text)}"
+                    )
+
+                    # Clean up quotes
+                    if response_text.startswith('"') and response_text.endswith('"'):
+                        response_text = response_text[1:-1]
+
+                    # Check for build trigger
+                    build_match = re.search(
+                        r"\[\[START_BUILD:\s*(.*?)\]\]", response_text
+                    )
+                    if build_match:
+                        description = build_match.group(1).strip()
+                        response_text = response_text.replace(
+                            build_match.group(0), ""
+                        ).strip()
+
+                        # Trigger build
+                        try:
+                            from datetime import datetime
+
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            safe_desc = "".join(
+                                c if c.isalnum() else "_" for c in description[:20]
+                            ).strip("_")
+                            project_dir = (
+                                Path.home()
+                                / "homelab"
+                                / f"sidekick_{safe_desc}_{timestamp}"
+                            )
+                            project_dir.mkdir(parents=True, exist_ok=True)
+
+                            # Note: Job submission would require access to job_manager
+                            # For now, log the intent and let the user know
+                            logger.info(
+                                f"Build requested: {description} at {project_dir}"
+                            )
+                            response_text += (
+                                f"\n\n📦 Build request logged for: {description}"
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to trigger sidekick build: {e}")
+                            response_text += f"\n(Build trigger failed: {e})"
+                else:
+                    logger.warning(f"Claude CLI failed. Code: {result.returncode}")
+
+            except subprocess.TimeoutExpired:
+                logger.warning("Claude CLI timed out")
+            except Exception as e:
+                logger.warning(f"Sidekick Claude CLI failed: {e}")
+
+        # Fallback if Claude failed
+        if not response_text:
+            response_text = (
+                "I'm having trouble connecting right now. Please try again in a moment."
+            )
+
+        self._send_json({"response": response_text})
 
     def _handle_job_conversation(self, job_id: str) -> None:
         """GET /jobs/{job_id}/conversation - Get conversation for a job phase."""
