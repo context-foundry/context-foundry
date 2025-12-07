@@ -1,0 +1,3 @@
+#!/bin/bash
+# Launch Context Foundry Desktop App
+open "/Users/name/homelab/context-foundry/apps/context-foundry-desktop/src-tauri/target/release/bundle/macos/Context Foundry.app"

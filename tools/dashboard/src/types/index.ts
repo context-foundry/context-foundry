@@ -120,8 +120,20 @@ export interface ConversationMessage {
 }
 
 // SSE Event Types
+export type SSEEventType =
+  | 'job_created'
+  | 'job_started'
+  | 'job_update'
+  | 'job_completed'
+  | 'job_failed'
+  | 'phase_update'
+  | 'log'
+  | 'metrics'
+  | 'approval'
+  | 'heartbeat';
+
 export interface SSEEvent {
-  type: 'job_update' | 'phase_update' | 'log' | 'metrics' | 'approval' | 'heartbeat';
+  type: SSEEventType;
   job_id: string;
   data: unknown;
   timestamp: string;

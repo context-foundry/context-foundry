@@ -54,12 +54,21 @@ export const useJobsStore = create<JobsState>((set, get) => ({
   isConnected: false,
 
   fetchJobs: async () => {
-    const { filter, sort } = get();
+    const { filter, sort, selectedJobId } = get();
     set({ isLoading: true, error: null });
 
     try {
       const jobs = await api.listJobs({ filter, sort });
-      set({ jobs, isLoading: false, isConnected: true });
+
+      // Auto-select first job if none selected and jobs exist
+      const shouldAutoSelect = !selectedJobId && jobs.length > 0;
+
+      set({
+        jobs,
+        isLoading: false,
+        isConnected: true,
+        selectedJobId: shouldAutoSelect ? jobs[0].id : selectedJobId,
+      });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch jobs',
@@ -128,9 +137,53 @@ export const useJobsStore = create<JobsState>((set, get) => ({
     const { jobs, selectedJobId } = get();
 
     switch (event.type) {
+      case 'job_created': {
+        // Add new job to the list if not already present
+        const exists = jobs.some((job) => job.id === event.job_id);
+        if (!exists && event.data) {
+          const newJob = event.data as Job;
+          set({ jobs: [newJob, ...jobs] });
+        }
+        break;
+      }
+
+      case 'job_started': {
+        // Update job status to running
+        const updatedJobs = jobs.map((job) =>
+          job.id === event.job_id
+            ? { ...job, status: 'running' as const, ...(event.data as Partial<Job>) }
+            : job
+        );
+        set({ jobs: updatedJobs, isConnected: true });
+        break;
+      }
+
       case 'job_update': {
         const updatedJobs = jobs.map((job) =>
           job.id === event.job_id ? { ...job, ...(event.data as Partial<Job>) } : job
+        );
+        set({ jobs: updatedJobs, isConnected: true });
+        break;
+      }
+
+      case 'job_completed': {
+        // Update job status to succeeded
+        const updatedJobs = jobs.map((job) =>
+          job.id === event.job_id
+            ? { ...job, status: 'succeeded' as const, ...(event.data as Partial<Job>) }
+            : job
+        );
+        set({ jobs: updatedJobs });
+        break;
+      }
+
+      case 'job_failed': {
+        // Update job status to failed
+        const data = event.data as { error?: string };
+        const updatedJobs = jobs.map((job) =>
+          job.id === event.job_id
+            ? { ...job, status: 'failed' as const, error: data.error }
+            : job
         );
         set({ jobs: updatedJobs });
         break;
@@ -163,7 +216,8 @@ export const useJobsStore = create<JobsState>((set, get) => ({
       }
 
       case 'heartbeat':
-        // Connection is alive, no state update needed
+        // Connection is alive, update connection status
+        set({ isConnected: true });
         break;
 
       default:

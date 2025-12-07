@@ -16,6 +16,13 @@ from .models import Job, JobStatus, JobType, LogEntry, AgentTracker
 from .config import Config
 from .store import Store
 from .workdir_lock import WorkDirLockManager
+from .events import (
+    emit_job_created,
+    emit_job_started,
+    emit_job_updated,
+    emit_job_completed,
+    emit_job_failed,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -218,6 +225,19 @@ class JobManager:
         )
         self.store.save_log(log)
 
+        # Emit SSE event for real-time updates
+        emit_job_created(
+            job.id,
+            {
+                "id": job.id,
+                "type": job.type.value,
+                "status": job.status.value,
+                "params": job.params,
+                "priority": job.priority,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+            },
+        )
+
         logger.info(
             f"Job submitted: {job.id} (type={job_type.value}, priority={priority})"
         )
@@ -327,6 +347,15 @@ class JobManager:
             source="job_manager",
         )
         self.store.save_log(log)
+
+        # Emit SSE event for real-time updates
+        emit_job_updated(
+            job_id,
+            {
+                "status": JobStatus.CANCELLED.value,
+                "completed_at": datetime.now().isoformat(),
+            },
+        )
 
         logger.info(f"Job cancelled: {job_id}")
         return True
@@ -624,10 +653,11 @@ class JobManager:
                     return
 
             # Update status to RUNNING
+            started_at = datetime.now()
             self.store.update_job_status(
                 job_id,
                 JobStatus.RUNNING,
-                started_at=datetime.now(),
+                started_at=started_at,
             )
 
             # Emit log
@@ -639,6 +669,16 @@ class JobManager:
                 source="job_manager",
             )
             self.store.save_log(log)
+
+            # Emit SSE event for real-time updates
+            emit_job_started(
+                job_id,
+                {
+                    "status": JobStatus.RUNNING.value,
+                    "started_at": started_at.isoformat(),
+                    "execution_mode": execution_mode,
+                },
+            )
 
             logger.info(f"Executing job {job_id} (type={job.type.value})")
 
@@ -694,11 +734,13 @@ class JobManager:
                 thread.join(timeout=5)
 
                 # Mark as TIMED_OUT instead of FAILED
+                completed_at = datetime.now()
+                error_msg = f"Job exceeded timeout of {timeout_minutes} minutes"
                 self.store.update_job_status(
                     job_id,
                     JobStatus.TIMED_OUT,
-                    completed_at=datetime.now(),
-                    error=f"Job exceeded timeout of {timeout_minutes} minutes",
+                    completed_at=completed_at,
+                    error=error_msg,
                 )
 
                 # Emit log
@@ -709,6 +751,9 @@ class JobManager:
                     source="job_manager",
                 )
                 self.store.save_log(log)
+
+                # Emit SSE event for real-time updates
+                emit_job_failed(job_id, error_msg)
 
                 logger.error(f"Job {job_id} timed out after {timeout_minutes} minutes")
 
@@ -739,6 +784,17 @@ class JobManager:
                     phase=paused_after,
                 )
                 self.store.save_log(log)
+
+                # Emit SSE event for HITL pause
+                emit_job_updated(
+                    job_id,
+                    {
+                        "paused": True,
+                        "paused_after": paused_after,
+                        "awaiting_approval": True,
+                    },
+                )
+
                 logger.info(
                     f"Job {job_id} paused after {paused_after}, awaiting approval"
                 )
@@ -746,10 +802,11 @@ class JobManager:
                 return
 
             # Mark as succeeded
+            completed_at = datetime.now()
             self.store.update_job_status(
                 job_id,
                 JobStatus.SUCCEEDED,
-                completed_at=datetime.now(),
+                completed_at=completed_at,
                 result=result,
             )
 
@@ -761,6 +818,9 @@ class JobManager:
                 source="job_manager",
             )
             self.store.save_log(log)
+
+            # Emit SSE event for real-time updates
+            emit_job_completed(job_id, result)
 
             logger.info(f"Job {job_id} completed successfully")
 
@@ -797,6 +857,17 @@ class JobManager:
                 )
                 self.store.save_log(log)
 
+                # Emit SSE event for retry status
+                emit_job_updated(
+                    job_id,
+                    {
+                        "status": JobStatus.QUEUED.value,
+                        "retry_count": new_retry_count,
+                        "max_retries": job.max_retries,
+                        "last_error": error_msg,
+                    },
+                )
+
                 logger.warning(
                     f"Job {job_id} will be retried ({new_retry_count}/{job.max_retries})"
                 )
@@ -822,6 +893,9 @@ class JobManager:
                     source="job_manager",
                 )
                 self.store.save_log(log)
+
+                # Emit SSE event for real-time updates
+                emit_job_failed(job_id, error_msg)
 
                 logger.error(f"Job {job_id} failed permanently")
 

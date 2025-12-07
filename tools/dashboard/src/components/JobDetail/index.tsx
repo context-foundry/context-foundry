@@ -53,11 +53,18 @@ function calculateDuration(startedAt: string | null | undefined, completedAt: st
 
 export function JobDetail() {
   const job = useSelectedJob();
-  const { selectedPhase } = useJobsStore();
+  const { selectedPhase, selectPhase } = useJobsStore();
   const [elapsed, setElapsed] = useState(0);
 
   const isRunning = job?.status === 'running';
   const hasStarted = !!job?.started_at;
+
+  // Auto-select first phase (Scout) when job is selected
+  useEffect(() => {
+    if (job && !selectedPhase) {
+      selectPhase('scout');
+    }
+  }, [job?.id, selectedPhase, selectPhase]);
 
   // Update elapsed time every second while running
   useEffect(() => {

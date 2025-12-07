@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 from .jobs import JobManager
 from .models import Job, JobStatus, PhaseEvent
 from .store import Store
+from .events import get_event_bus
 
 logger = logging.getLogger(__name__)
 
@@ -1425,25 +1426,88 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_events(self) -> None:
+        """
+        Stream events via SSE using the event bus.
+
+        Uses a hybrid approach:
+        - Subscribes to event bus for real-time job updates
+        - Sends heartbeats every 15 seconds to keep connection alive
+        - Falls back to full status updates every 30 seconds for sync
+        """
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "keep-alive")
         self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
+        # Subscribe to the event bus
+        event_bus = get_event_bus()
+        subscriber_id, event_queue = event_bus.subscribe(include_recent=False)
+
         try:
+            # Send initial full status payload
+            payload = build_status_payload(self.server.context)
+            initial_message = f"data: {json.dumps(payload)}\n\n"
+            self.wfile.write(initial_message.encode("utf-8"))
+            self.wfile.flush()
+
+            last_heartbeat = time.time()
+            last_full_sync = time.time()
+            heartbeat_interval = 15.0  # seconds
+            full_sync_interval = 30.0  # seconds
+
             while not self.server.context.stop_event.is_set():
-                payload = build_status_payload(self.server.context)
-                message = f"data: {json.dumps(payload)}\n\n"
-                self.wfile.write(message.encode("utf-8"))
-                self.wfile.flush()
-                time.sleep(self.server.context.refresh_interval)
+                try:
+                    # Try to get an event from the queue (with timeout)
+                    from queue import Empty
+
+                    try:
+                        event = event_queue.get(timeout=1.0)
+
+                        # Convert event to SSE format
+                        event_data = event.to_dict()
+                        message = f"data: {json.dumps(event_data)}\n\n"
+                        self.wfile.write(message.encode("utf-8"))
+                        self.wfile.flush()
+
+                    except Empty:
+                        pass  # No event, check heartbeat
+
+                    now = time.time()
+
+                    # Send heartbeat periodically
+                    if now - last_heartbeat >= heartbeat_interval:
+                        heartbeat_data = {
+                            "type": "heartbeat",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                        heartbeat_message = f"data: {json.dumps(heartbeat_data)}\n\n"
+                        self.wfile.write(heartbeat_message.encode("utf-8"))
+                        self.wfile.flush()
+                        last_heartbeat = now
+
+                    # Send full sync periodically (for clients that may have missed events)
+                    if now - last_full_sync >= full_sync_interval:
+                        payload = build_status_payload(self.server.context)
+                        sync_message = f"data: {json.dumps(payload)}\n\n"
+                        self.wfile.write(sync_message.encode("utf-8"))
+                        self.wfile.flush()
+                        last_full_sync = now
+
+                except Exception as e:
+                    logger.debug(f"SSE event loop error: {e}")
+                    break
+
         except (BrokenPipeError, ConnectionResetError):
             # Client disconnected; ignore.
-            return
+            pass
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning("Dashboard SSE loop error: %s", exc)
+        finally:
+            # Unsubscribe from event bus
+            event_bus.unsubscribe(subscriber_id)
 
     def _serve_auth_token(self) -> None:
         """Serve the auth token for the UI to use in subsequent requests."""
