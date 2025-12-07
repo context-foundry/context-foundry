@@ -294,9 +294,10 @@ def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
     # (scanning fills in gaps not covered by manifest)
 
     # Scout artifacts (skip if manifest already has them)
+    # Only look for markdown files - JSON files are deprecated
     if "Scout" not in artifacts:
         scout_files = {}
-        for fname in ["scout-report.md", "scout_report.json"]:
+        for fname in ["scout-report.md"]:
             info = _get_file_info(cf_dir / fname)
             if info:
                 scout_files[fname] = info
@@ -304,11 +305,11 @@ def _get_phase_artifacts(job: Job) -> Dict[str, Any]:
             artifacts["Scout"] = {"outputs": scout_files}
 
     # Architect artifacts (skip if manifest already has them)
-    # Check .context-foundry/, docs/, and project root (case-insensitive for both .md and .json)
+    # Check .context-foundry/, docs/, and project root - markdown only (JSON deprecated)
     if "Architect" not in artifacts:
         architect_files = {}
         # Check .context-foundry/ first (exact match)
-        for fname in ["architecture.md", "architecture.json"]:
+        for fname in ["architecture.md"]:
             info = _get_file_info(cf_dir / fname)
             if info:
                 architect_files[fname] = info

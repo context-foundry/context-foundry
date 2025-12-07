@@ -827,17 +827,13 @@ Return the JSON analysis based on the requirements and any codex patterns shown 
         cf_dir = self.project_root / ".context-foundry"
         cf_dir.mkdir(parents=True, exist_ok=True)
 
-        # Include actually-queried codex patterns in the JSON output
+        # Include actually-queried codex patterns for the markdown report
         analysis_with_codex = analysis.copy()
         analysis_with_codex["_codex_actually_queried"] = self.codex_patterns_applied
         analysis_with_codex["_codex_available"] = self.codex_available
         analysis_with_codex["_detected_project_type"] = self.detected_project_type
 
-        # Save JSON
-        json_path = cf_dir / "scout_report.json"
-        json_path.write_text(json.dumps(analysis_with_codex, indent=2))
-
-        # Save Markdown
+        # Save Markdown only (no JSON - agents communicate via markdown files)
         md_path = cf_dir / "scout-report.md"
         md_content = f"""# Scout Report - New Project Analysis
 
@@ -920,17 +916,7 @@ Return the JSON analysis based on the requirements and any codex patterns shown 
         cf_dir = working_directory / ".context-foundry"
         cf_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save JSON - include codex patterns and availability in the JSON output
-        json_path = cf_dir / "scout_report.json"
-        report_data = {
-            "findings": [f.to_dict() for f in findings],
-            "detected_project_type": self.detected_project_type,
-            "codex_patterns_applied": self.codex_patterns_applied,
-            "codex_available": self.codex_available,
-        }
-        json_path.write_text(json.dumps(report_data, indent=2))
-
-        # Save Markdown
+        # Save Markdown only (no JSON - agents communicate via markdown files)
         md_path = cf_dir / "scout-report.md"
         md_content = "# Scout Report\n\n"
 

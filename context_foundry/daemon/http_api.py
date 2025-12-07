@@ -1093,34 +1093,38 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                     file_context_str = "(Could not scan workspace files)"
 
                 # System prompt - matches dashboard.py persona
-                system_prompt = (
-                    "You are the Context Foundry Agent. You are empathetic, jovial, happy, fun, relaxed, and calculated, "
-                    "but always professional. You are the 'Sidekick' to the user in this enterprise environment.\n\n"
-                    "YOUR CAPABILITIES:\n"
-                    "1. You can guide the user to run Context Foundry commands.\n"
-                    "2. You can explain what's happening in their project.\n"
-                    "3. You are AWARE of the files they are working on (see 'File Context' section below).\n"
-                    "4. You can help approve HITL requests: tell user to run 'cfd approve <id>'\n"
-                    "5. You can start new autonomous builds.\n\n"
-                    "COMMAND MAPPING:\n"
-                    "If the user asks to build something, run a phase, or start a project, you should suggest the appropriate 'cf' command.\n"
-                    "- 'cf scout': To research or plan.\n"
-                    "- 'cf architect': To design architecture.\n"
-                    "- 'cf build': To run the full pipeline.\n\n"
-                    "If proposing a command, format it clearly like: `Run: cf command ...` and ask if they want to proceed.\n\n"
-                    f"CURRENT SYSTEM STATUS:\n{job_context_str}\n\n"
-                    f"{file_context_str}\n\n"
-                    "RESPONSE PRIORITIES:\n"
-                    "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
-                    "2. If there are RUNNING jobs - mention them and offer to show details\n"
-                    "3. If system is idle - greet the user and offer to start a new build\n"
-                    "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n\n"
-                    "BUILD INSTRUCTIONS:\n"
-                    "- If the user wants to build something, confirm you are starting it.\n"
-                    "- To trigger the build, append this tag to the end of your response:\n"
-                    "  [[START_BUILD: <short_description_of_project>]]\n"
-                    "- Assume the default directory (~/homelab/) unless specified."
-                )
+                try:
+                    prompt_path = (
+                        Path(__file__).resolve().parents[3]
+                        / "tools"
+                        / "prompts"
+                        / "sidekick.txt"
+                    )
+                    if prompt_path.exists():
+                        base_prompt = prompt_path.read_text()
+                        # Format the prompt with dynamic context
+                        # We use safe_substitute to avoid errors if the prompt file has other curly braces
+                        from string import Template
+
+                        system_prompt = Template(base_prompt).safe_substitute(
+                            job_context_str=job_context_str,
+                            file_context_str=file_context_str,
+                        )
+                    else:
+                        logger.warning(
+                            f"Sidekick prompt file not found at {prompt_path}, using fallback."
+                        )
+                        raise FileNotFoundError("Prompt file missing")
+                except Exception as e:
+                    logger.warning(f"Failed to load sidekick prompt from file: {e}")
+                    # Fallback prompt
+                    system_prompt = (
+                        "You are the Context Foundry Agent (Sidekick). You are empathetic, jovial, happy, fun, relaxed, and calculated, "
+                        "but always professional. You are the 'Sidekick' to the user in this enterprise environment.\n\n"
+                        f"CURRENT SYSTEM STATUS:\n{job_context_str}\n\n"
+                        f"{file_context_str}\n\n"
+                        "Detailed instructions unavailable (prompt load failed)."
+                    )
 
                 # Get conversation history
                 history = data.get("history", [])
@@ -1445,18 +1449,17 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
         # Phase-specific artifacts in .context-foundry/ directory
         # These are the actual files created by Context Foundry phases
+        # NOTE: Using markdown only - JSON files are deprecated
         phase_artifacts = {
             "scout": [
                 ".context-foundry/scout-report.md",
-                ".context-foundry/scout_report.json",
             ],
             "architect": [
                 ".context-foundry/architecture.md",
-                ".context-foundry/architecture.json",
             ],
             "builder": [
                 ".context-foundry/build-log.md",
-                ".context-foundry/build-tasks.json",
+                ".context-foundry/build-tasks.md",
             ],
             "test": [
                 ".context-foundry/test-report.md",

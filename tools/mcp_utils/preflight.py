@@ -246,29 +246,31 @@ class PreflightValidator:
         return checks
 
     def check_architecture_exists(self) -> PreflightCheck:
-        """Check that either architecture.json or architecture.md exists."""
-        json_path = self.working_directory / ".context-foundry" / "architecture.json"
+        """Check that architecture.md exists (JSON is deprecated)."""
         md_path = self.working_directory / ".context-foundry" / "architecture.md"
+        # Legacy JSON path for backward compatibility
+        json_path = self.working_directory / ".context-foundry" / "architecture.json"
 
-        if json_path.exists():
+        if md_path.exists():
             return PreflightCheck(
                 name="architecture_exists",
                 status=PreflightStatus.PASSED,
-                message=f"Architecture JSON found: {json_path}",
+                message=f"Architecture found: {md_path}",
                 blocking=False,
             )
-        elif md_path.exists():
+        elif json_path.exists():
+            # Accept legacy JSON but prefer MD
             return PreflightCheck(
                 name="architecture_exists",
                 status=PreflightStatus.PASSED,
-                message=f"Architecture MD found (JSON fallback): {md_path}",
+                message=f"Architecture JSON found (deprecated, prefer .md): {json_path}",
                 blocking=False,
             )
         else:
             return PreflightCheck(
                 name="architecture_exists",
                 status=PreflightStatus.FAILED,
-                message="Neither architecture.json nor architecture.md found",
+                message="Architecture file not found (.context-foundry/architecture.md)",
                 blocking=True,
             )
 

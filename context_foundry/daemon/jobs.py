@@ -801,28 +801,35 @@ class JobManager:
                 # Job stays in RUNNING status, will be resumed via approval
                 return
 
-            # Mark as succeeded
-            completed_at = datetime.now()
-            self.store.update_job_status(
-                job_id,
-                JobStatus.SUCCEEDED,
-                completed_at=completed_at,
-                result=result,
-            )
+            # Mark as succeeded (only if runner hasn't already updated status)
+            # The runner may have already set SUCCEEDED status directly
+            current_job = self.store.get_job(job_id)
+            if current_job and current_job.status == JobStatus.SUCCEEDED:
+                logger.info(
+                    f"Job {job_id} already marked as SUCCEEDED by runner; skipping duplicate update"
+                )
+            else:
+                completed_at = datetime.now()
+                self.store.update_job_status(
+                    job_id,
+                    JobStatus.SUCCEEDED,
+                    completed_at=completed_at,
+                    result=result,
+                )
 
-            # Emit log
-            log = LogEntry.create(
-                job_id=job_id,
-                level="INFO",
-                message="Job completed successfully",
-                source="job_manager",
-            )
-            self.store.save_log(log)
+                # Emit log
+                log = LogEntry.create(
+                    job_id=job_id,
+                    level="INFO",
+                    message="Job completed successfully",
+                    source="job_manager",
+                )
+                self.store.save_log(log)
 
-            # Emit SSE event for real-time updates
-            emit_job_completed(job_id, result)
+                # Emit SSE event for real-time updates
+                emit_job_completed(job_id, result)
 
-            logger.info(f"Job {job_id} completed successfully")
+                logger.info(f"Job {job_id} completed successfully")
 
         except Exception as e:
             error_msg = f"Job execution failed: {str(e)}"
@@ -833,9 +840,18 @@ class JobManager:
             if not job:
                 return
 
-            # If job was cancelled mid-run, skip retries and keep status
-            if job.status == JobStatus.CANCELLED:
-                logger.info(f"Job {job_id} was cancelled; skipping retries")
+            # If job is already in a terminal state, skip retries and keep status
+            # This prevents the retry logic from overwriting FAILED/SUCCEEDED/CANCELLED
+            # status that was set by the runner (e.g., when polling detected failure)
+            if job.status in (
+                JobStatus.CANCELLED,
+                JobStatus.FAILED,
+                JobStatus.SUCCEEDED,
+                JobStatus.TIMED_OUT,
+            ):
+                logger.info(
+                    f"Job {job_id} already in terminal state ({job.status.value}); skipping retries"
+                )
                 return
 
             # Check if we should retry
