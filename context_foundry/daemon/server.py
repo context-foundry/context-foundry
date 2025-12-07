@@ -349,6 +349,13 @@ class CFDaemon:
         if homebrew_bin not in current_path:
             os.environ["PATH"] = f"{homebrew_bin}:{current_path}"
 
+        # CRITICAL: Preserve HOME for Claude CLI auth (reads tokens from ~/.config/claude/)
+        # The double-fork can sometimes lose these env vars
+        if "HOME" not in os.environ:
+            import pwd
+
+            os.environ["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
+
         # Store the status pipe for later use
         self._status_pipe = pipe_w
         return None  # We're the child
