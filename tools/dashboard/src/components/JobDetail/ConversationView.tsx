@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Phase, ConversationMessage } from '../../types';
+import * as api from '../../api/client';
 
 interface ConversationViewProps {
   jobId: string;
@@ -11,13 +12,32 @@ interface ConversationViewProps {
 export function ConversationView({ jobId, phase }: ConversationViewProps) {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // TODO: Fetch conversation for this job/phase
-    // For now, show placeholder
-    setIsLoading(false);
-    setMessages([]);
+    async function fetchConversation() {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const conversation = await api.getJobConversation(jobId, phase);
+        // Transform API response to ConversationMessage format
+        const msgs: ConversationMessage[] = conversation.map((msg, index) => ({
+          role: msg.role as 'user' | 'assistant' | 'system',
+          content: msg.content,
+          timestamp: new Date().toISOString(), // API may not provide timestamp
+        }));
+        setMessages(msgs);
+      } catch (err) {
+        console.error('Failed to fetch conversation:', err);
+        setError('Failed to load conversation');
+        setMessages([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchConversation();
   }, [jobId, phase]);
 
   // Auto-scroll to bottom on new messages

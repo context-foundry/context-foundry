@@ -305,6 +305,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 self._handle_execute_tool(data)
             elif path == "/agents":
                 self._handle_agents_update(data)
+            elif path == "/sidekick-chat":
+                self._handle_sidekick_chat(data)
             else:
                 self._send_error(404, f"Not found: {path}")
 
@@ -349,6 +351,14 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 self._handle_job_tree(job_id)
             elif path == "/agents":
                 self._handle_agents()
+            elif path == "/pending-approvals":
+                self._handle_pending_approvals()
+            elif re.match(r"^/jobs/[^/]+/conversation$", path):
+                job_id = path.split("/")[2]
+                self._handle_job_conversation(job_id)
+            elif re.match(r"^/jobs/[^/]+/artifacts$", path):
+                job_id = path.split("/")[2]
+                self._handle_job_artifacts(job_id)
             else:
                 self._send_error(404, f"Not found: {path}")
 
@@ -421,6 +431,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         serialized = []
         for job in jobs:
             current_phase = gate_mgr.get_current_phase(job.id)
+            # Extract task from params for display
+            task = None
+            if job.params:
+                task = job.params.get("task")
             serialized.append(
                 {
                     "job_id": job.id,
@@ -428,6 +442,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                     "status": job.status.value,
                     "priority": job.priority,
                     "current_phase": current_phase,
+                    "task": task,  # Include task for job list display
+                    "params": job.params,  # Include full params
                     "created_at": job.created_at.isoformat()
                     if job.created_at
                     else None,
@@ -714,6 +730,227 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         except Exception as e:
             logger.error(f"Failed to update agent: {e}")
             self._send_error(500, str(e))
+
+    def _handle_pending_approvals(self) -> None:
+        """GET /pending-approvals - Get pending approvals."""
+        # For now, return empty list - approvals are not yet implemented
+        self._send_json([])
+
+    def _handle_sidekick_chat(self, data: Dict[str, Any]) -> None:
+        """POST /sidekick-chat - Handle chat message from sidekick."""
+        job_id = data.get("job_id")
+        message = data.get("message")
+
+        if not job_id:
+            self._send_error(400, "Missing job_id")
+            return
+
+        if not message:
+            self._send_error(400, "Missing message")
+            return
+
+        # For now, return a placeholder response
+        # TODO: Integrate with actual chat/LLM system
+        self._send_json(
+            {
+                "response": f"Chat received for job {job_id}: {message}. (Chat functionality coming soon!)",
+                "job_id": job_id,
+            }
+        )
+
+    def _handle_job_conversation(self, job_id: str) -> None:
+        """GET /jobs/{job_id}/conversation - Get conversation for a job phase."""
+        ctx = self._get_context()
+        params = self._parse_query_params()
+
+        # Verify job exists
+        job = ctx.store.get_job(job_id)
+        if not job:
+            self._send_error(404, f"Job not found: {job_id}")
+            return
+
+        phase = params.get("phase", "")
+
+        # Try to load conversation from build output files
+        conversation = self._load_conversation_for_phase(job_id, phase)
+
+        self._send_json(
+            {
+                "job_id": job_id,
+                "phase": phase,
+                "messages": conversation,
+            }
+        )
+
+    def _handle_job_artifacts(self, job_id: str) -> None:
+        """GET /jobs/{job_id}/artifacts - Get artifacts for a job phase."""
+        ctx = self._get_context()
+        params = self._parse_query_params()
+
+        # Verify job exists
+        job = ctx.store.get_job(job_id)
+        if not job:
+            self._send_error(404, f"Job not found: {job_id}")
+            return
+
+        phase = params.get("phase", "")
+
+        # Try to load artifacts from build output files
+        artifacts = self._load_artifacts_for_phase(job_id, phase, job.params)
+
+        self._send_json(
+            {
+                "job_id": job_id,
+                "phase": phase,
+                "artifacts": artifacts,
+            }
+        )
+
+    def _load_conversation_for_phase(
+        self, job_id: str, phase: str
+    ) -> List[Dict[str, Any]]:
+        """Load conversation messages for a job phase from build outputs."""
+        from pathlib import Path
+
+        messages = []
+
+        # Try to find conversation logs in .context-foundry/conversations/
+        cf_dir = Path.home() / ".context-foundry" / "conversations"
+        conversation_file = cf_dir / f"conversation-{job_id}.log"
+
+        if conversation_file.exists():
+            try:
+                content = conversation_file.read_text()
+                # Parse the conversation log - it's a text format with messages
+                current_role = None
+                current_content = []
+
+                for line in content.split("\n"):
+                    if line.startswith("[ASSISTANT]"):
+                        if current_role and current_content:
+                            messages.append(
+                                {
+                                    "role": current_role,
+                                    "content": "\n".join(current_content),
+                                }
+                            )
+                        current_role = "assistant"
+                        current_content = [line.replace("[ASSISTANT] ", "")]
+                    elif line.startswith("[TOOL_USE]"):
+                        if current_role and current_content:
+                            messages.append(
+                                {
+                                    "role": current_role,
+                                    "content": "\n".join(current_content),
+                                }
+                            )
+                        current_role = "tool"
+                        current_content = [line.replace("[TOOL_USE] ", "")]
+                    elif line.startswith("[TOOL_RESULT]"):
+                        current_role = "tool_result"
+                        current_content = [line.replace("[TOOL_RESULT] ", "")]
+                    elif current_role:
+                        current_content.append(line)
+
+                if current_role and current_content:
+                    messages.append(
+                        {"role": current_role, "content": "\n".join(current_content)}
+                    )
+
+            except Exception as e:
+                logger.error(f"Failed to load conversation for {job_id}: {e}")
+
+        return messages
+
+    def _load_artifacts_for_phase(
+        self, job_id: str, phase: str, params: Optional[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """Load artifacts for a job phase from the working directory."""
+        from pathlib import Path
+
+        artifacts = []
+
+        # Get working directory from job params
+        working_dir = None
+        if params:
+            working_dir = params.get("working_directory")
+
+        if not working_dir:
+            return artifacts
+
+        working_path = Path(working_dir)
+        if not working_path.exists():
+            return artifacts
+
+        # Look for common artifact files based on phase
+        phase_artifacts = {
+            "scout": ["SCOUT_REPORT.md", "analysis.md"],
+            "architect": ["ARCHITECT_PLAN.md", "architecture.md", "design.md"],
+            "builder": ["*.py", "*.ts", "*.js", "*.tsx", "*.jsx"],
+            "test": ["test_*.py", "*_test.py", "*.test.ts", "*.test.js"],
+            "documentation": ["README.md", "DOCS.md", "*.md"],
+            "deploy": ["Dockerfile", "docker-compose.yml", ".github/workflows/*.yml"],
+        }
+
+        patterns = phase_artifacts.get(phase.lower(), [])
+
+        for pattern in patterns:
+            try:
+                if "*" in pattern:
+                    # Glob pattern
+                    for file_path in working_path.glob(pattern):
+                        if file_path.is_file() and file_path.stat().st_size < 100000:
+                            try:
+                                content = file_path.read_text()
+                                artifacts.append(
+                                    {
+                                        "name": file_path.name,
+                                        "path": str(
+                                            file_path.relative_to(working_path)
+                                        ),
+                                        "type": self._get_artifact_type(file_path.name),
+                                        "content": content[
+                                            :10000
+                                        ],  # Limit content size
+                                        "size": file_path.stat().st_size,
+                                    }
+                                )
+                            except Exception:
+                                pass
+                else:
+                    file_path = working_path / pattern
+                    if file_path.exists() and file_path.is_file():
+                        try:
+                            content = file_path.read_text()
+                            artifacts.append(
+                                {
+                                    "name": file_path.name,
+                                    "path": pattern,
+                                    "type": self._get_artifact_type(file_path.name),
+                                    "content": content[:10000],
+                                    "size": file_path.stat().st_size,
+                                }
+                            )
+                        except Exception:
+                            pass
+            except Exception as e:
+                logger.error(f"Error loading artifacts for pattern {pattern}: {e}")
+
+        return artifacts
+
+    def _get_artifact_type(self, filename: str) -> str:
+        """Determine artifact type from filename."""
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
+        if ext in ("py", "js", "ts", "tsx", "jsx", "rs", "go", "java"):
+            return "code"
+        elif ext in ("md", "txt", "rst"):
+            return "document"
+        elif ext in ("json", "yaml", "yml", "toml"):
+            return "config"
+        elif filename in ("Dockerfile", "Makefile"):
+            return "config"
+        else:
+            return "other"
 
 
 # =============================================================================

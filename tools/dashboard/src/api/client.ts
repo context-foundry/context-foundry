@@ -175,7 +175,7 @@ export async function resumeJob(jobId: string): Promise<void> {
 import type { PendingApproval } from '../types';
 
 export async function getPendingApprovals(): Promise<PendingApproval[]> {
-  const response = await fetchWithAuth('/pending-approvals');
+  const response = await fetchWithAuth('/api/pending-approvals');
   if (!response.ok) {
     throw new Error(`Failed to get pending approvals: ${response.statusText}`);
   }
@@ -302,7 +302,7 @@ export async function sendChatMessage(
   message: string,
   history: ChatMessage[] = []
 ): Promise<string> {
-  const response = await fetchWithAuth('/sidekick-chat', {
+  const response = await fetchWithAuth('/api/sidekick-chat', {
     method: 'POST',
     body: JSON.stringify({
       job_id: jobId,
@@ -315,6 +315,48 @@ export async function sendChatMessage(
   }
   const data = await response.json();
   return data.response;
+}
+
+// ============ Conversation & Artifacts ============
+
+import type { ConversationMessage, Artifact } from '../types';
+
+export interface ConversationResponse {
+  job_id: string;
+  phase: string;
+  messages: ConversationMessage[];
+}
+
+export async function getJobConversation(jobId: string, phase: string): Promise<ConversationMessage[]> {
+  const response = await fetchWithAuth(`/api/jobs/${jobId}/conversation?phase=${phase}`);
+  if (!response.ok) {
+    throw new Error(`Failed to get conversation: ${response.statusText}`);
+  }
+  const data: ConversationResponse = await response.json();
+  return data.messages || [];
+}
+
+export interface ArtifactData {
+  name: string;
+  path: string;
+  type: string;
+  content: string;
+  size: number;
+}
+
+export interface ArtifactsResponse {
+  job_id: string;
+  phase: string;
+  artifacts: ArtifactData[];
+}
+
+export async function getJobArtifacts(jobId: string, phase: string): Promise<ArtifactData[]> {
+  const response = await fetchWithAuth(`/api/jobs/${jobId}/artifacts?phase=${phase}`);
+  if (!response.ok) {
+    throw new Error(`Failed to get artifacts: ${response.statusText}`);
+  }
+  const data: ArtifactsResponse = await response.json();
+  return data.artifacts || [];
 }
 
 // ============ Settings Endpoints ============
