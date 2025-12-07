@@ -992,6 +992,10 @@ def list_delegations_impl(
     Implementation of list_delegations tool.
 
     Lists all async delegation tasks (both running and completed).
+    Queries THREE sources:
+    1. In-memory active_tasks (current MCP server process)
+    2. Daemon's SQLite database (~/.context-foundry/cfd/jobs.db) - PRIORITY
+    3. Legacy delegation files (~/.context-foundry/delegations/)
 
     Args:
         active_tasks: Reference to active_tasks dict from mcp_server
@@ -1000,11 +1004,96 @@ def list_delegations_impl(
         JSON string with list of all tasks and their status
     """
     try:
+        import sqlite3
+
         tasks_list = []
         seen_task_ids = set()
 
-        # First, add tasks from in-memory (current process)
+        # =====================================================================
+        # PRIORITY 1: Query daemon's SQLite database (most authoritative)
+        # =====================================================================
+        daemon_db_path = Path.home() / ".context-foundry" / "cfd" / "jobs.db"
+        if daemon_db_path.exists():
+            try:
+                conn = sqlite3.connect(str(daemon_db_path), timeout=5.0)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.execute(
+                    """
+                    SELECT id, type, status, priority, params_json,
+                           created_at, started_at, completed_at
+                    FROM jobs
+                    ORDER BY created_at DESC
+                    LIMIT 100
+                    """
+                )
+
+                for row in cursor.fetchall():
+                    task_id = row["id"]
+
+                    # Parse params to get task description and working_directory
+                    task_desc = ""
+                    working_dir = ""
+                    timeout_mins = 0
+                    try:
+                        params = (
+                            json.loads(row["params_json"]) if row["params_json"] else {}
+                        )
+                        task_desc = params.get("task", "")[:80]
+                        working_dir = params.get("working_directory", "")
+                        timeout_mins = params.get("timeout_minutes", 0)
+                    except Exception:
+                        task_desc = "(no description)"
+
+                    # Calculate elapsed time
+                    elapsed = 0
+                    if row["created_at"]:
+                        try:
+                            # Handle ISO format timestamps
+                            created_str = row["created_at"]
+                            if "T" in created_str:
+                                created_time = datetime.fromisoformat(
+                                    created_str.replace("Z", "+00:00")
+                                )
+                            else:
+                                created_time = datetime.strptime(
+                                    created_str, "%Y-%m-%d %H:%M:%S"
+                                )
+                            elapsed = (
+                                datetime.now() - created_time.replace(tzinfo=None)
+                            ).total_seconds()
+                        except Exception:
+                            pass
+
+                    tasks_list.append(
+                        {
+                            "task_id": task_id,
+                            "status": row["status"],
+                            "task": task_desc if task_desc else f"[{row['type']}]",
+                            "elapsed_seconds": round(elapsed, 2),
+                            "timeout_minutes": timeout_mins,
+                            "working_directory": working_dir,
+                            "source": "daemon",
+                            "priority": row["priority"],
+                        }
+                    )
+                    seen_task_ids.add(task_id)
+
+                conn.close()
+            except Exception as db_error:
+                # Log but don't fail - continue to other sources
+                print(
+                    f"Warning: Could not query daemon database: {db_error}",
+                    file=sys.stderr,
+                )
+
+        # =====================================================================
+        # PRIORITY 2: Add tasks from in-memory (current MCP server process)
+        # =====================================================================
         for task_id, task_info in active_tasks.items():
+            # Skip if already seen from daemon db
+            if task_id in seen_task_ids:
+                continue
+
             process = task_info["process"]
             poll_result = process.poll()
 
@@ -1029,11 +1118,14 @@ def list_delegations_impl(
                     "elapsed_seconds": round(elapsed, 2),
                     "timeout_minutes": task_info["timeout_minutes"],
                     "working_directory": task_info["cwd"],
+                    "source": "memory",
                 }
             )
             seen_task_ids.add(task_id)
 
-        # Then, add tasks from disk (other processes / sessions)
+        # =====================================================================
+        # PRIORITY 3: Legacy delegation files (backwards compatibility)
+        # =====================================================================
         delegations_dir = Path.home() / ".context-foundry" / "delegations"
         if delegations_dir.exists():
             for task_file in delegations_dir.glob("task-*.json"):
@@ -1041,7 +1133,7 @@ def list_delegations_impl(
                     metadata = json.loads(task_file.read_text())
                     task_id = metadata.get("task_id")
 
-                    # Skip if already in in-memory list
+                    # Skip if already in list
                     if task_id in seen_task_ids:
                         continue
 
@@ -1063,6 +1155,7 @@ def list_delegations_impl(
                             "elapsed_seconds": round(elapsed, 2),
                             "timeout_minutes": metadata.get("timeout_minutes", 0),
                             "working_directory": metadata.get("working_directory", ""),
+                            "source": "legacy",
                         }
                     )
                     seen_task_ids.add(task_id)
@@ -1075,11 +1168,14 @@ def list_delegations_impl(
                 {"message": "No delegation tasks found", "delegations": []}, indent=2
             )
 
+        # Sort by elapsed time (most recent first) for better UX
+        tasks_list.sort(key=lambda x: x.get("elapsed_seconds", 0))
+
         return json.dumps(
             {
                 "total_tasks": len(tasks_list),
                 "delegations": tasks_list,
-                "message": "Use get_delegation_result(task_id) to retrieve results",
+                "message": "Use get_delegation_result(task_id) to retrieve results. Daemon jobs shown first.",
             },
             indent=2,
         )
