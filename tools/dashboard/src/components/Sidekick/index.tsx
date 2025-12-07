@@ -3,7 +3,7 @@ import { useSidekickStore } from '../../stores/sidekick';
 
 export function SidekickInput() {
   const [input, setInput] = useState('');
-  const { sendMessage, lastResponse, isLoading, openModal } = useSidekickStore();
+  const { sendMessage, isLoading, openModal } = useSidekickStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleKeyDown = async (e: React.KeyboardEvent) => {
@@ -11,34 +11,19 @@ export function SidekickInput() {
       e.preventDefault();
       const message = input;
       setInput('');
+      openModal(); // Open modal immediately
       await sendMessage(message);
     }
   };
 
-  // Truncate response for display
-  const displayResponse = lastResponse
-    ? lastResponse.length > 80
-      ? lastResponse.slice(0, 80) + '...'
-      : lastResponse
-    : '';
-
   return (
     <div className="sidekick-container">
-      {displayResponse && (
-        <div
-          className="sidekick-response"
-          onClick={openModal}
-          title="Click to see full conversation"
-        >
-          {displayResponse}
-        </div>
-      )}
       <div className="sidekick-input-wrapper">
         <input
           ref={inputRef}
           type="text"
           className="sidekick-input"
-          placeholder="Say something to Context Foundry..."
+          placeholder="Type a command or chat..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -141,7 +126,7 @@ export function SidekickModal() {
             ref={inputRef}
             type="text"
             className="sidekick-modal-input"
-            placeholder="Type a message..."
+            placeholder="Chat with agent..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}

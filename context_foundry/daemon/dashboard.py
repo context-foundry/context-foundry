@@ -696,6 +696,133 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             # Fallback to serving static files (Vite app)
             self._serve_dashboard_asset(parsed.path)
 
+    def _get_recent_file_context(self) -> str:
+        """
+        Scan for recently modified files to provide context to the agent.
+        Returns a formatted string of recent file contents found in the current workspace.
+        """
+        try:
+            # Determine scanning root - prefer active job's working dir, else fallback to current dir
+            store = self.server.context.store
+            # Try to find a recently active job to get a relevant working directory
+            from .models import JobStatus
+
+            scan_dir = Path.cwd()  # Default fallback
+
+            # Check running jobs first
+            active_jobs = store.list_jobs(status=JobStatus.RUNNING, limit=1)
+            if active_jobs:
+                wd = active_jobs[0].params.get("working_directory")
+                if wd and os.path.isdir(wd):
+                    scan_dir = Path(wd)
+            else:
+                # Check recent jobs
+                recent_jobs = store.list_jobs(limit=1)
+                if recent_jobs:
+                    wd = recent_jobs[0].params.get("working_directory")
+                    if wd and os.path.isdir(wd):
+                        scan_dir = Path(wd)
+
+            logger.info(f"Scanning for context in: {scan_dir}")
+
+            # Find files modified in the last 24 hours (or just take top N most recent)
+            # Exclude hidden files, git, and python cache
+            exclude_dirs = {
+                ".git",
+                "__pycache__",
+                "node_modules",
+                "dist",
+                "build",
+                ".context-foundry",
+            }
+            exclude_exts = {
+                ".pyc",
+                ".o",
+                ".obj",
+                ".so",
+                ".dll",
+                ".class",
+                ".log",
+                ".lock",
+                ".zip",
+                ".tar",
+                ".gz",
+            }
+
+            candidates = []
+            try:
+                # Walk the directory
+                for root, dirs, files in os.walk(scan_dir):
+                    # Prune excluded dirs
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if d not in exclude_dirs and not d.startswith(".")
+                    ]
+
+                    for file in files:
+                        if file.startswith("."):
+                            continue
+
+                        file_path = Path(root) / file
+                        if file_path.suffix in exclude_exts:
+                            continue
+
+                        try:
+                            stat = file_path.stat()
+                            candidates.append((file_path, stat.st_mtime))
+                        except (OSError, ValueError):
+                            continue
+            except Exception as e:
+                logger.warning(f"Error walking directory {scan_dir}: {e}")
+
+            # Sort by modification time (descending) and take top 5
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            top_files = candidates[:5]
+
+            context_str = "RECENTLY MODIFIED FILES IN WORKSPACE:\n"
+            if not top_files:
+                return context_str + "(No recent files found)\n"
+
+            for fpath, mtime in top_files:
+                try:
+                    rel_path = fpath.relative_to(scan_dir)
+                    mtime_str = datetime.fromtimestamp(mtime).isoformat()
+
+                    # Read head of file
+                    content_snippet = ""
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                            # Read first 50 lines or 2000 chars
+                            lines = []
+                            for _ in range(50):
+                                line = f.readline()
+                                if not line:
+                                    break
+                                lines.append(line)
+                            content_snippet = "".join(lines)
+                            if len(content_snippet) > 2000:
+                                content_snippet = (
+                                    content_snippet[:2000] + "\n...(truncated)..."
+                                )
+                    except Exception:
+                        content_snippet = "(binary or unreadable content)"
+
+                    context_str += (
+                        f"\n--- FILE: {rel_path} (Last modified: {mtime_str}) ---\n"
+                    )
+                    context_str += content_snippet + "\n"
+
+                except Exception as e:
+                    logger.debug(f"Error reading file context for {fpath}: {e}")
+                    continue
+
+            return context_str
+
+        except Exception as e:
+            logger.warning(f"Failed to generate file context: {e}")
+            return "CONTEXT_SCAN_ERROR: Could not scan local files."
+
     def _serve_dashboard_asset(self, path: str) -> None:
         """Serve static assets for the Vite dashboard."""
         # Locate the dist directory relative to this file
@@ -3355,6 +3482,31 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
                     context_parts = []
 
+                    # 1. PERSONA & SYSTEM INSTRUCTIONS (The "Brain" of the operation)
+                    system_preamble = (
+                        "You are the Context Foundry Agent. You are empathetic, jovial, happy, fun, relaxed, and calculated, "
+                        "but always professional. You are the 'Sidekick' to the user in this enterprise environment.\n\n"
+                        "YOUR CAPABILITIES:\n"
+                        "1. You can guide the user to run Context Foundry commands.\n"
+                        "2. You can explain what's happening in their project.\n"
+                        "3. You are AWARE of the files they are working on (see 'Context' section below).\n\n"
+                        "COMMAND MAPPING:\n"
+                        "If the user asks to build something, run a phase, or start a project, you should suggest the appropriate 'cf' command.\n"
+                        "- 'cf scout': To research or plan.\n"
+                        "- 'cf architect': To design architecture.\n"
+                        "- 'cf build': To run the full pipeline.\n\n"
+                        "If proposing a command, format it clearly like: `Run: cf command ...` and ask if they want to proceed.\n"
+                    )
+                    context_parts.append(system_preamble)
+
+                    # 2. FILE CONTEXT (The "Eyes" of the operation)
+                    try:
+                        file_context = self._get_recent_file_context()
+                        context_parts.append(file_context)
+                    except Exception as e:
+                        logger.warning(f"Failed to get file context: {e}")
+
+                    # 3. JOB STATUS CONTEXT (The "Ears" of the operation)
                     # PRIORITY 1: Check for pending HITL approvals (most urgent)
                     try:
                         from tools.mcp_utils.approval_gates import ApprovalManager
@@ -3433,43 +3585,21 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         elif failed_jobs:
                             # Just mention count if there are more important things
                             context_parts.append(
-                                f"\n(Also {len(failed_jobs)} failed job(s) - ask if you want details)"
+                                f"\n(Also {len(failed_jobs)} recent failures)"
                             )
                     except Exception as e:
                         logger.debug(f"Could not check failed jobs: {e}")
 
-                    # Build final context string
-                    if context_parts:
-                        context_str = "\n".join(context_parts)
-                    else:
-                        context_str = "✅ No active jobs. System is idle and ready for new builds."
-
-                    # Construct persona prompt with context
-                    # Construct direct assistant prompt
-                    system_prompt = (
-                        "You are Sidekick, an intelligent assistant for Context Foundry. "
-                        "You help users monitor builds, approve HITL requests, and start new projects. "
-                        "Keep responses concise and actionable. "
-                        "\n\n"
-                        f"CURRENT SYSTEM STATUS:\n{context_str}\n"
-                        "\n"
-                        "RESPONSE PRIORITIES (follow this order):\n"
-                        "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
-                        "2. If there are RUNNING jobs - mention them and offer to show details\n"
-                        "3. If system is idle - greet the user and offer to start a new build\n"
-                        "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n"
-                        "\n"
-                        "CAPABILITIES:\n"
-                        "1. Show system status (running jobs, pending approvals)\n"
-                        "2. Help approve HITL requests: tell user to run 'cfd approve <id>'\n"
-                        "3. Start new autonomous builds\n"
-                        "\n"
-                        "BUILD INSTRUCTIONS:\n"
+                    # Build the complete system prompt from context_parts + instructions
+                    build_instructions = (
+                        "\n\nBUILD INSTRUCTIONS:\n"
                         "- If the user wants to build something, confirm you are starting it.\n"
                         "- To trigger the build, append this tag to the end of your response:\n"
                         "  [[START_BUILD: <short_description_of_project>]]\n"
                         "- Assume the default directory (~/homelab/) unless specified."
                     )
+                    context_parts.append(build_instructions)
+                    system_prompt = "\n".join(context_parts)
 
                     # Get history from context (initialize if needed)
                     if not hasattr(self.server.context, "sidekick_history"):

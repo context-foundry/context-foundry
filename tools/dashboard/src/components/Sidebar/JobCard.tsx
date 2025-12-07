@@ -40,20 +40,38 @@ function truncateTask(task: string | undefined, maxLength = 60): string {
   return task.slice(0, maxLength - 3) + '...';
 }
 
+function formatStatus(status: string): string {
+  return status
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function formatMode(mode: string | undefined): string {
+  if (!mode) return 'Autonomous';
+  return mode.charAt(0).toUpperCase() + mode.slice(1).toLowerCase();
+}
+
 export function JobCard({ job, isSelected, onClick }: JobCardProps) {
   const statusColor = STATUS_COLORS[job.status] ?? 'var(--text-secondary)';
   // Task can be in job.task or job.params.task depending on API version
   const task = job.task || job.params?.task;
+  const mode = job.execution_mode || job.params?.execution_mode || 'autonomous';
 
   return (
     <div className={`job-card ${isSelected ? 'selected' : ''}`} onClick={onClick}>
       <div className="job-card-header">
-        <span
-          className="job-status-badge"
-          style={{ backgroundColor: statusColor }}
-        >
-          {job.status.replace('_', ' ')}
-        </span>
+        <div className="job-card-badges">
+          <span
+            className={`job-status-badge status-${job.status}`}
+            style={{ backgroundColor: statusColor }}
+          >
+            {formatStatus(job.status)}
+          </span>
+          <span className={`job-mode-badge mode-${mode === 'hitl' ? 'hitl' : 'autonomous'}`}>
+            {formatMode(mode)}
+          </span>
+        </div>
         <span className="job-time">{formatTimeAgo(job.created_at)}</span>
       </div>
 
@@ -63,9 +81,6 @@ export function JobCard({ job, isSelected, onClick }: JobCardProps) {
         <span className="job-id">{job.id.slice(0, 8)}</span>
         {job.current_phase && (
           <span className="job-phase">{job.current_phase}</span>
-        )}
-        {job.execution_mode === 'hitl' && (
-          <span className="job-mode-badge">HITL</span>
         )}
       </div>
     </div>

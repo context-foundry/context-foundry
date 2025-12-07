@@ -69,7 +69,10 @@ export class SSEManager {
     };
 
     this.eventSource.onerror = () => {
-      console.warn('[SSE] Connection error, will reconnect...');
+      // Only log on first failure, then silently retry
+      if (this.reconnectAttempts === 0) {
+        console.log('[SSE] Not available, falling back to polling');
+      }
       this._isConnected = false;
       this.onConnectionChange?.(false);
       this.scheduleReconnect();
@@ -153,7 +156,10 @@ export class SSEManager {
       this.options.maxReconnectDelay
     );
 
-    console.log(`[SSE] Reconnecting in ${Math.round(delay / 1000)}s...`);
+    // Only log reconnect attempts at debug level after first failure
+    if (this.reconnectAttempts < 3) {
+      console.debug(`[SSE] Retry in ${Math.round(delay / 1000)}s...`);
+    }
 
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;

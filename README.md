@@ -8,16 +8,24 @@
 
 **Autonomous AI development platform** that spawns fresh Claude instances to research, design, build, test, and deploy complete software projects. Walk away and come back to production-ready code.
 
-**Version 2.5.0** | [Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Features](docs/FEATURES.md)
+**Version 3.0.0** | [Quick Start](QUICKSTART.md) | [Documentation](docs/) | [Desktop App](#desktop-app)
+
+---
+
+<div align="center">
+  <img src="docs/images/dashboard-hero.png" alt="Context Foundry Desktop" width="100%">
+  <p><em>Context Foundry Desktop - Native macOS app for visual build monitoring</em></p>
+</div>
 
 ---
 
 ## What is Context Foundry?
 
-Context Foundry is an **autonomous development platform** with three main components:
+Context Foundry is an **autonomous development platform** with four main components:
 
 | Component | Description |
 |-----------|-------------|
+| **Desktop App** | Native macOS application with visual dashboard, job monitoring, and AI Sidekick chat |
 | **MCP Server** | Model Context Protocol server that exposes build tools to Claude Code |
 | **Daemon (cfd)** | Background service managing build queues, resource limits, and process monitoring |
 | **CLI Tools** | Terminal interface for monitoring builds and managing the system |
@@ -184,17 +192,70 @@ They're essentially **stateless workers** that read artifacts, do work, write ar
 
 ---
 
-## Quick Start
+## Desktop App
 
-### 1. Install
+Context Foundry Desktop is a **native macOS application** that provides a visual interface for monitoring and managing builds.
+
+<div align="center">
+  <img src="docs/images/job-detail.png" alt="Job Detail View" width="80%">
+</div>
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Visual Dashboard** | See all jobs at a glance with status, duration, and phase progress |
+| **Live Duration Counter** | Real-time timer showing build progress in seconds |
+| **AI Sidekick Chat** | Natural language interface to check status, trigger builds, and get help |
+| **Phase Timeline** | Visual progress through Scout → Architect → Builder → Test phases |
+| **Conversation View** | See what the AI is thinking during each phase |
+| **Artifact Browser** | View generated code with syntax highlighting and line numbers |
+| **Dark Theme** | Native dark mode with beautiful purple accents |
+
+### Install Desktop App
 
 ```bash
+# Download from releases (macOS)
+curl -L https://github.com/your-org/context-foundry/releases/latest/download/ContextFoundry.dmg -o ContextFoundry.dmg
+open ContextFoundry.dmg
+
+# Or build from source
+cd apps/context-foundry-desktop
+npm install
+npm run tauri:build
+```
+
+See [Desktop App Documentation](apps/context-foundry-desktop/README.md) for full details.
+
+---
+
+## Quick Start
+
+### Option 1: Desktop App (Recommended)
+
+1. Download and install the Desktop App (see above)
+2. Launch Context Foundry Desktop
+3. Use the Sidekick chat to start your first build:
+   ```
+   "Build a todo app with React"
+   ```
+
+### Option 2: CLI
+
+```bash
+# Install via npm
 npm install -g context-foundry
+
+# Start the daemon
+cfd start
+
+# Build something
+cf build "Create a weather dashboard with React"
 ```
 
 This installs the package and automatically configures Claude Code. (Alternative: `pip install context-foundry && cf setup`)
 
-### 2. Build Something
+### Option 3: Claude Code Integration
 
 In Claude Code, just ask in natural language:
 
@@ -249,6 +310,8 @@ See [MCP Tools Reference](docs/MCP_SETUP.md) for complete documentation.
 | Guide | Description |
 |-------|-------------|
 | [Quick Start](QUICKSTART.md) | Get running in 5 minutes |
+| [Desktop App](apps/context-foundry-desktop/README.md) | Native macOS/Windows application |
+| [Dashboard](tools/dashboard/README.md) | Web dashboard development guide |
 | [User Guide](docs/USER_GUIDE.md) | Detailed usage instructions |
 | [Architecture](docs/ARCHITECTURE.md) | How it works under the hood |
 | [Features](docs/FEATURES.md) | Complete feature reference |
@@ -263,13 +326,18 @@ See [MCP Tools Reference](docs/MCP_SETUP.md) for complete documentation.
 
 ```
 context-foundry/
+├── apps/
+│   └── context-foundry-desktop/  # Native macOS/Windows desktop app (Tauri)
 ├── tools/
+│   ├── dashboard/             # React dashboard frontend
 │   ├── mcp_server.py          # MCP server entry point
 │   ├── mcp_utils/             # Build orchestration, delegation, patterns
 │   ├── prompts/phases/        # Phase-specific system prompts
 │   ├── evolution/             # Daemon, self-improvement, safety
 │   ├── cli.py                 # Main CLI (cf command)
 │   └── cfd                    # Daemon CLI script
+├── context_foundry/
+│   └── daemon/                # Python daemon (HTTP API, job management)
 ├── extensions/                # Domain-specific extensions
 ├── npm/                       # npm package wrapper
 ├── docs/                      # Documentation

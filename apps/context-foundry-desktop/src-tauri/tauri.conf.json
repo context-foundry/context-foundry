@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.contextfoundry.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "",
     "devUrl": "http://localhost:5174",
     "beforeBuildCommand": "cd ../../tools/dashboard && npm install && npm run build",
     "frontendDist": "../../../tools/dashboard/dist"

@@ -587,14 +587,19 @@ body {
   margin-bottom: 8px;
 }
 
+.job-card-badges {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
 .job-status-badge {
   padding: 2px 8px;
   border-radius: 4px;
-  /* Changed from pill (12px) to rounded rect */
   font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
   color: #fff;
+  white-space: nowrap;
 }
 
 .job-time {
@@ -625,11 +630,25 @@ body {
 }
 
 .job-mode-badge {
-  background: var(--accent-yellow);
-  color: #000;
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 4px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Autonomous mode - calm cyan/teal */
+.job-mode-badge.mode-autonomous {
+  background: rgba(57, 197, 207, 0.15);
+  color: var(--accent-cyan);
+  border: 1px solid rgba(57, 197, 207, 0.3);
+}
+
+/* HITL mode - attention-grabbing orange */
+.job-mode-badge.mode-hitl {
+  background: rgba(249, 115, 22, 0.15);
+  color: var(--accent-orange);
+  border: 1px solid rgba(249, 115, 22, 0.4);
 }
 
 /* ============ Job Detail ============ */
@@ -668,6 +687,49 @@ body {
 .job-actions {
   display: flex;
   gap: 8px;
+}
+
+.job-detail-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.job-duration {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.job-duration.running {
+  background: rgba(88, 166, 255, 0.1);
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.job-duration.running .duration-icon {
+  animation: pulse-icon 1s ease-in-out infinite;
+}
+
+@keyframes pulse-icon {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.duration-icon {
+  font-size: 14px;
+}
+
+.duration-value {
+  font-weight: 500;
+  min-width: 60px;
 }
 
 .job-detail-meta {
@@ -917,11 +979,84 @@ body {
 
 .artifact-code {
   background: var(--bg-primary);
-  padding: 12px;
+  padding: 0;
   border-radius: 6px;
   overflow-x: auto;
   font-size: 12px;
   line-height: 1.5;
+}
+
+/* ============ Line Numbers ============ */
+.code-with-lines {
+  display: flex;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.code-with-lines.editable {
+  border: 1px solid var(--border);
+}
+
+.line-numbers {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  text-align: right;
+  min-width: 3.5em;
+  flex-shrink: 0;
+}
+
+.line-number {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 12px 0 8px;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.line-number:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.code-content {
+  flex: 1;
+  padding: 12px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.code-line {
+  display: inline;
+}
+
+/* Textarea with line numbers */
+.code-with-lines .artifact-textarea {
+  flex: 1;
+  min-height: 300px;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--text-primary);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.code-with-lines .artifact-textarea:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* ============ Modal ============ */
@@ -1037,6 +1172,22 @@ body {
   font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 16px;
+}
+
+.daemon-status {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.daemon-status .connection-status {
+  margin-bottom: 8px;
+}
+
+.daemon-status .settings-hint {
+  margin-bottom: 0;
 }
 
 .settings-version {
@@ -1438,6 +1589,226 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
+}
+
+/* ============ Collapsible Section ============ */
+.collapsible-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  gap: 12px;
+}
+
+.collapsible-header:hover {
+  background: var(--border);
+}
+
+.collapsible-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.collapsible-chevron {
+  transition: transform 0.3s ease;
+  color: var(--text-secondary);
+}
+
+.collapsible-section.expanded .collapsible-chevron {
+  transform: rotate(90deg);
+}
+
+.collapsible-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.collapsible-header-content {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.collapsible-content {
+  transition: height 0.3s ease;
+}
+
+.collapsible-inner {
+  padding: 16px;
+}
+
+/* ============ Search Box ============ */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-box-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 180px;
+}
+
+.search-box-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-box-input {
+  width: 100%;
+  padding: 6px 28px 6px 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  transition: all 0.15s;
+}
+
+.search-box-input:focus {
+  border-color: var(--accent-purple);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.search-box-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-box-clear {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.search-box-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+}
+
+.search-box-results {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.search-box-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.search-box-no-results {
+  font-size: 11px;
+  color: var(--accent-red);
+  white-space: nowrap;
+}
+
+.search-box-nav {
+  display: flex;
+  gap: 2px;
+}
+
+.search-box-nav-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.search-box-nav-btn:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* ============ Search Highlighting ============ */
+.search-highlight {
+  background: rgba(210, 153, 34, 0.3);
+  color: var(--text-primary);
+  padding: 1px 2px;
+  border-radius: 2px;
+}
+
+.search-highlight.current {
+  background: var(--accent-yellow);
+  color: #000;
+  box-shadow: 0 0 0 2px rgba(210, 153, 34, 0.4);
+}
+
+.message-content-searchable {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/* ============ Artifact Edit Search Container ============ */
+.artifact-edit-search-container {
+  position: relative;
+}
+
+.artifact-textarea-searchable {
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text-primary);
+  position: relative;
+  z-index: 2;
+}
+
+.artifact-search-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: auto;
+  pointer-events: none;
+  z-index: 1;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ============ Responsive ============ */

@@ -3,11 +3,7 @@ import { useApprovalCount } from '../../stores/approvals';
 import { useApprovalsStore } from '../../stores/approvals';
 import { SidekickInput } from '../Sidekick';
 
-interface HeaderProps {
-  isConnected: boolean;
-}
-
-export function Header({ isConnected }: HeaderProps) {
+export function Header() {
   const { openSettings } = useSettingsStore();
   const { openModal: openApprovals } = useApprovalsStore();
   const approvalCount = useApprovalCount();
@@ -17,10 +13,6 @@ export function Header({ isConnected }: HeaderProps) {
       <div className="header-left">
         <div className="logo">
           <span className="logo-text">CF</span>
-        </div>
-        <div className="connection-status">
-          <span className={`status-dot ${isConnected ? 'connected' : ''}`} />
-          <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
       </div>
 

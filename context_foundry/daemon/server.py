@@ -464,6 +464,7 @@ class CFDaemon:
                     store=self.store,
                     host=self.config.http_api_host,
                     port=self.config.http_api_port,
+                    job_manager=self.job_manager,
                 )
                 self.http_api_server.start()
                 logger.info(f"HTTP API available at {self.http_api_server.url}")

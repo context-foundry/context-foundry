@@ -9,63 +9,63 @@ export default defineConfig({
     proxy: {
       // Proxy API requests to CF Daemon
       '/api': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Proxy SSE events endpoint
       '/events': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Proxy status endpoint
       '/status': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Proxy approval endpoints
       '/approve': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       '/deny': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       '/resume-pipeline': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Proxy phase endpoints
       '/phase-prompts': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       '/phase-inject': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       '/phase-acknowledge': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Proxy artifact endpoint
       '/artifact': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Sidekick chat
       '/sidekick-chat': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Pending approvals
       '/pending-approvals': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
       // Auth token
       '/auth-token': {
-        target: 'http://localhost:8420',
+        target: 'http://localhost:8421',
         changeOrigin: true,
       },
     },

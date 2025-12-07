@@ -3,7 +3,8 @@
 Context Foundry CLI Entry Point
 
 Usage:
-    cf              # Launch Context Foundry TUI
+    cf              # Launch Context Foundry TUI (browser)
+    cf desktop      # Launch Context Foundry Desktop app
     cf setup        # Configure Claude Code MCP integration
     cf --version    # Show version
     cf --help       # Show help
@@ -55,7 +56,8 @@ For more help: https://github.com/context-foundry/context-foundry/blob/main/INST
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  cf              Launch Context Foundry TUI
+  cf              Launch Context Foundry (browser)
+  cf desktop      Launch Context Foundry Desktop app
   cf setup        Configure Claude Code MCP integration
   cf --version    Show version information
   cf --help       Show this help message
@@ -126,6 +128,18 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         "--verbose", "-v", action="store_true", help="Show detailed status"
     )
 
+    # Desktop command - launch Tauri desktop app
+    desktop_parser = subparsers.add_parser(
+        "desktop", help="Launch Context Foundry desktop app"
+    )
+    desktop_parser.add_argument(
+        "action",
+        nargs="?",
+        choices=["start", "stop"],
+        default="start",
+        help="Action (default: start)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -138,6 +152,8 @@ For more information, visit: https://github.com/context-foundry/context-foundry
         cmd_jobs(args)
     elif args.command == "daemon":
         cmd_daemon(args)
+    elif args.command == "desktop":
+        cmd_desktop(args)
     else:
         # Default action: Launch Context Foundry TUI
         launch_context_foundry()
@@ -151,6 +167,73 @@ def cmd_daemon(args):
         daemon_main(args)
     except ImportError as e:
         print(f"Error importing daemon CLI: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_desktop(args):
+    """Launch Context Foundry desktop app"""
+    import subprocess
+    import os
+
+    # Find the desktop app directory
+    cli_dir = Path(__file__).parent
+    desktop_dir = cli_dir.parent / "apps" / "context-foundry-desktop"
+
+    if not desktop_dir.exists():
+        print(f"Error: Desktop app not found at {desktop_dir}", file=sys.stderr)
+        print("\nTo install the desktop app:")
+        print(f"  cd {desktop_dir.parent}")
+        print("  git clone ... context-foundry-desktop")
+        sys.exit(1)
+
+    if args.action == "stop":
+        print("Stopping Context Foundry Desktop...")
+        # Kill any running vite and tauri processes
+        try:
+            subprocess.run(
+                ["pkill", "-f", "vite.*5174"],
+                capture_output=True,
+            )
+            subprocess.run(
+                ["pkill", "-f", "tauri dev"],
+                capture_output=True,
+            )
+            print("Stopped.")
+        except Exception as e:
+            print(f"Error stopping: {e}")
+        return
+
+    # Start the desktop app
+    print("🚀 Starting Context Foundry Desktop...")
+    print("   Dashboard: http://localhost:5174")
+    print("   Press Ctrl+C to stop\n")
+
+    try:
+        # Change to desktop directory and run npm start
+        os.chdir(desktop_dir)
+        process = subprocess.Popen(
+            ["npm", "run", "start"],
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+        )
+
+        # Wait for process or interrupt
+        process.wait()
+
+    except KeyboardInterrupt:
+        print("\n\n👋 Stopping Context Foundry Desktop...")
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        print("Stopped.")
+    except FileNotFoundError:
+        print("Error: npm not found. Please install Node.js.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error launching desktop app: {e}", file=sys.stderr)
         sys.exit(1)
 
 

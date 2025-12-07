@@ -12,7 +12,7 @@ import { useSettingsStore } from './stores/settings';
 import { useSidekickStore } from './stores/sidekick';
 
 function App() {
-  const { fetchJobs, initSSE, isConnected } = useJobsStore();
+  const { fetchJobs, initSSE } = useJobsStore();
   const { fetchApprovals, showModal: showApprovalModal } = useApprovalsStore();
   const { showSettingsPanel } = useSettingsStore();
   const { isOpen: showSidekickModal } = useSidekickStore();
@@ -25,21 +25,25 @@ function App() {
     fetchJobs();
     fetchApprovals();
 
-    // Initialize SSE connection
+    // Initialize SSE connection (for real-time updates when available)
     const cleanup = initSSE();
+
+    // Poll for jobs every 3 seconds
+    const jobsInterval = setInterval(fetchJobs, 3000);
 
     // Poll for approvals every 5 seconds
     const approvalInterval = setInterval(fetchApprovals, 5000);
 
     return () => {
       cleanup();
+      clearInterval(jobsInterval);
       clearInterval(approvalInterval);
     };
   }, [fetchJobs, fetchApprovals, initSSE]);
 
   return (
     <div className="app">
-      <Header isConnected={isConnected} />
+      <Header />
 
       <main className={`main ${showActivityPanel ? 'with-activity-panel' : ''}`}>
         <Sidebar />

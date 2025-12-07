@@ -1,10 +1,12 @@
 import { useSettingsStore } from '../../stores/settings';
+import { useJobsStore } from '../../stores/jobs';
 import { TeamSettings } from './TeamSettings';
 import { S3Config } from './S3Config';
 import versionInfo from '../../version.json';
 
 export function SettingsPanel() {
   const { closeSettings, activeTab, setActiveTab, error, successMessage } = useSettingsStore();
+  const isConnected = useJobsStore((state) => state.isConnected);
 
   return (
     <div className="modal-overlay" onClick={closeSettings}>
@@ -53,7 +55,20 @@ export function SettingsPanel() {
 
           {activeTab === 'daemon' && (
             <div className="settings-section">
-              <h3>Daemon Configuration</h3>
+              <h3>Daemon Status</h3>
+              <div className="daemon-status">
+                <div className="connection-status">
+                  <span className={`status-dot ${isConnected ? 'connected' : ''}`} />
+                  <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+                </div>
+                <p className="settings-hint">
+                  {isConnected
+                    ? 'Successfully connected to the CF Daemon on port 8421.'
+                    : 'Unable to connect to the CF Daemon. Make sure it is running with `cfd start`.'}
+                </p>
+              </div>
+
+              <h3>Configuration</h3>
               <p className="settings-hint">
                 Daemon settings are configured via the config file at
                 <code>~/.context-foundry/cfd/config.json</code>

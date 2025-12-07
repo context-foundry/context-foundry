@@ -43,6 +43,7 @@ class APIContext:
     """Shared context for API requests."""
 
     store: Store
+    job_manager: Optional[Any] = None  # JobManager, optional to avoid circular import
     start_time: datetime = field(default_factory=datetime.now)
     stop_event: threading.Event = field(default_factory=threading.Event)
 
@@ -263,6 +264,151 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _get_context(self) -> APIContext:
         """Get the shared API context."""
         return self.server.api_context  # type: ignore
+
+    def _get_recent_file_context(self) -> str:
+        """
+        Scan for recently modified files to provide context to the agent.
+        Returns a formatted string of recent file contents found in the current workspace.
+        """
+        import os
+        from pathlib import Path
+        from datetime import datetime
+
+        try:
+            ctx = self._get_context()
+            scan_dir = Path.cwd()  # Default fallback
+
+            # Try to find a recently active job to get a relevant working directory
+            try:
+                # Check running jobs first
+                active_jobs = ctx.store.list_jobs(status=JobStatus.RUNNING, limit=1)
+                if active_jobs:
+                    wd = (
+                        active_jobs[0].params.get("working_directory")
+                        if active_jobs[0].params
+                        else None
+                    )
+                    if wd and os.path.isdir(wd):
+                        scan_dir = Path(wd)
+                else:
+                    # Check recent jobs
+                    recent_jobs = ctx.store.list_jobs(limit=1)
+                    if recent_jobs:
+                        wd = (
+                            recent_jobs[0].params.get("working_directory")
+                            if recent_jobs[0].params
+                            else None
+                        )
+                        if wd and os.path.isdir(wd):
+                            scan_dir = Path(wd)
+            except Exception as e:
+                logger.debug(f"Could not determine scan directory from jobs: {e}")
+
+            logger.info(f"Scanning for context in: {scan_dir}")
+
+            # Find files modified recently
+            # Exclude hidden files, git, and common build artifacts
+            exclude_dirs = {
+                ".git",
+                "__pycache__",
+                "node_modules",
+                "dist",
+                "build",
+                ".context-foundry",
+                "venv",
+                ".venv",
+            }
+            exclude_exts = {
+                ".pyc",
+                ".o",
+                ".obj",
+                ".so",
+                ".dll",
+                ".class",
+                ".log",
+                ".lock",
+                ".zip",
+                ".tar",
+                ".gz",
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".gif",
+                ".ico",
+            }
+
+            candidates = []
+            try:
+                for root, dirs, files in os.walk(scan_dir):
+                    # Prune excluded dirs
+                    dirs[:] = [
+                        d
+                        for d in dirs
+                        if d not in exclude_dirs and not d.startswith(".")
+                    ]
+
+                    for file in files:
+                        if file.startswith("."):
+                            continue
+
+                        file_path = Path(root) / file
+                        if file_path.suffix.lower() in exclude_exts:
+                            continue
+
+                        try:
+                            stat = file_path.stat()
+                            candidates.append((file_path, stat.st_mtime))
+                        except (OSError, ValueError):
+                            continue
+            except Exception as e:
+                logger.warning(f"Error walking directory {scan_dir}: {e}")
+
+            # Sort by modification time (descending) and take top 5
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            top_files = candidates[:5]
+
+            context_str = "RECENTLY MODIFIED FILES IN WORKSPACE:\n"
+            if not top_files:
+                return context_str + "(No recent files found)\n"
+
+            for fpath, mtime in top_files:
+                try:
+                    rel_path = fpath.relative_to(scan_dir)
+                    mtime_str = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
+
+                    # Read head of file
+                    content_snippet = ""
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                            # Read first 50 lines or 2000 chars
+                            lines = []
+                            for _ in range(50):
+                                line = f.readline()
+                                if not line:
+                                    break
+                                lines.append(line)
+                            content_snippet = "".join(lines)
+                            if len(content_snippet) > 2000:
+                                content_snippet = (
+                                    content_snippet[:2000] + "\n...(truncated)..."
+                                )
+                    except Exception:
+                        content_snippet = "(binary or unreadable content)"
+
+                    context_str += (
+                        f"\n--- FILE: {rel_path} (Modified: {mtime_str}) ---\n"
+                    )
+                    context_str += content_snippet + "\n"
+
+                except Exception as e:
+                    logger.debug(f"Error reading file context for {fpath}: {e}")
+                    continue
+
+            return context_str
+
+        except Exception as e:
+            logger.warning(f"Failed to generate file context: {e}")
+            return "CONTEXT_SCAN_ERROR: Could not scan local files."
 
     def _parse_query_params(self) -> Dict[str, str]:
         """Parse query string parameters."""
@@ -930,33 +1076,45 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 except Exception as e:
                     logger.debug(f"Could not check failed jobs: {e}")
 
-                # Build context string
+                # Build job status context string
                 if context_parts:
-                    context_str = "\n".join(context_parts)
+                    job_context_str = "\n".join(context_parts)
                 else:
-                    context_str = (
+                    job_context_str = (
                         "✅ No active jobs. System is idle and ready for new builds."
                     )
 
-                # System prompt
+                # FILE CONTEXT (The "Eyes" of the operation)
+                file_context_str = ""
+                try:
+                    file_context_str = self._get_recent_file_context()
+                except Exception as e:
+                    logger.warning(f"Failed to get file context: {e}")
+                    file_context_str = "(Could not scan workspace files)"
+
+                # System prompt - matches dashboard.py persona
                 system_prompt = (
-                    "You are Sidekick, an intelligent assistant for Context Foundry. "
-                    "You help users monitor builds, approve HITL requests, and start new projects. "
-                    "Keep responses concise and actionable. "
-                    "\n\n"
-                    f"CURRENT SYSTEM STATUS:\n{context_str}\n"
-                    "\n"
+                    "You are the Context Foundry Agent. You are empathetic, jovial, happy, fun, relaxed, and calculated, "
+                    "but always professional. You are the 'Sidekick' to the user in this enterprise environment.\n\n"
+                    "YOUR CAPABILITIES:\n"
+                    "1. You can guide the user to run Context Foundry commands.\n"
+                    "2. You can explain what's happening in their project.\n"
+                    "3. You are AWARE of the files they are working on (see 'File Context' section below).\n"
+                    "4. You can help approve HITL requests: tell user to run 'cfd approve <id>'\n"
+                    "5. You can start new autonomous builds.\n\n"
+                    "COMMAND MAPPING:\n"
+                    "If the user asks to build something, run a phase, or start a project, you should suggest the appropriate 'cf' command.\n"
+                    "- 'cf scout': To research or plan.\n"
+                    "- 'cf architect': To design architecture.\n"
+                    "- 'cf build': To run the full pipeline.\n\n"
+                    "If proposing a command, format it clearly like: `Run: cf command ...` and ask if they want to proceed.\n\n"
+                    f"CURRENT SYSTEM STATUS:\n{job_context_str}\n\n"
+                    f"{file_context_str}\n\n"
                     "RESPONSE PRIORITIES:\n"
                     "1. If there are JOBS WAITING FOR APPROVAL - this is URGENT! Tell the user immediately and explain how to approve (cfd approve <id>)\n"
                     "2. If there are RUNNING jobs - mention them and offer to show details\n"
                     "3. If system is idle - greet the user and offer to start a new build\n"
-                    "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n"
-                    "\n"
-                    "CAPABILITIES:\n"
-                    "1. Show system status (running jobs, pending approvals)\n"
-                    "2. Help approve HITL requests: tell user to run 'cfd approve <id>'\n"
-                    "3. Start new autonomous builds\n"
-                    "\n"
+                    "4. Failed jobs are low priority - only mention if user asks or nothing else is happening\n\n"
                     "BUILD INSTRUCTIONS:\n"
                     "- If the user wants to build something, confirm you are starting it.\n"
                     "- To trigger the build, append this tag to the end of your response:\n"
@@ -1015,6 +1173,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         # Trigger build
                         try:
                             from datetime import datetime
+                            from .models import JobType
 
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             safe_desc = "".join(
@@ -1027,17 +1186,37 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                             )
                             project_dir.mkdir(parents=True, exist_ok=True)
 
-                            # Note: Job submission would require access to job_manager
-                            # For now, log the intent and let the user know
-                            logger.info(
-                                f"Build requested: {description} at {project_dir}"
-                            )
-                            response_text += (
-                                f"\n\n📦 Build request logged for: {description}"
-                            )
+                            # Submit job using job_manager
+                            if ctx.job_manager:
+                                job_params = {
+                                    "task": description,
+                                    "working_directory": str(project_dir),
+                                    "initial_prompt": description,
+                                }
+
+                                job = ctx.job_manager.submit_job(
+                                    job_type=JobType.AUTONOMOUS_BUILD,
+                                    params=job_params,
+                                    priority=10,
+                                )
+                                logger.info(
+                                    f"Sidekick triggered build job {job.id} for: {description}"
+                                )
+                                response_text += (
+                                    f"\n\n🚀 Build started! Job ID: `{job.id[:8]}`\n"
+                                    f"📁 Project: `{project_dir.name}`"
+                                )
+                            else:
+                                logger.warning(
+                                    "No job_manager available - cannot submit job"
+                                )
+                                response_text += (
+                                    f"\n\n⚠️ Build request logged but daemon job_manager unavailable. "
+                                    f'Try: `cfd build "{description}"`'
+                                )
                         except Exception as e:
                             logger.error(f"Failed to trigger sidekick build: {e}")
-                            response_text += f"\n(Build trigger failed: {e})"
+                            response_text += f"\n\n❌ Build trigger failed: {e}"
                 else:
                     logger.warning(f"Claude CLI failed. Code: {result.returncode}")
 
@@ -1372,13 +1551,19 @@ class APIServer:
     Runs in a separate thread and provides REST endpoints for introspection.
     """
 
-    def __init__(self, store: Store, host: str = "localhost", port: int = 8420):
+    def __init__(
+        self,
+        store: Store,
+        host: str = "localhost",
+        port: int = 8420,
+        job_manager: Optional[Any] = None,
+    ):
         self.store = store
         self.host = host
         self.port = port
         self._server: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
-        self._context = APIContext(store=store)
+        self._context = APIContext(store=store, job_manager=job_manager)
 
     def start(self) -> bool:
         """Start the API server in a background thread."""

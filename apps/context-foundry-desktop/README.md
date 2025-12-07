@@ -2,6 +2,8 @@
 
 A native desktop application for macOS (and Windows) that provides a visual dashboard for the Context Foundry Daemon (cfd).
 
+![Context Foundry Dashboard](../../docs/images/dashboard-hero.png)
+
 ## Overview
 
 Context Foundry Desktop is built with:
@@ -18,6 +20,24 @@ The application wraps the existing `cfd` daemon and provides:
 - Phase timeline visualization
 - System metrics and graphs
 - System tray integration
+- AI Sidekick chat assistant
+
+## Features
+
+### Job Detail View
+![Job Detail](../../docs/images/job-detail.png)
+
+View detailed job information including conversation history, artifacts, and phase progress.
+
+### Collapsible Sections & Search
+![Search Feature](../../docs/images/search-feature.png)
+
+Collapsible sections for better organization and built-in search with keyboard navigation.
+
+### Mobile Responsive
+![Mobile View](../../docs/images/mobile-view.png)
+
+Responsive design works on all screen sizes.
 
 ## Prerequisites
 
@@ -199,12 +219,61 @@ This verifies:
 - TypeScript types are valid
 - Daemon health (if running)
 
+### Run E2E Tests (Playwright)
+
+The dashboard includes comprehensive E2E tests using Playwright:
+
+```bash
+# Navigate to dashboard
+cd ../../tools/dashboard
+
+# Install Playwright browsers (first time only)
+npx playwright install chromium
+
+# Run all E2E tests
+npm run test:e2e
+
+# Run tests with UI (interactive mode)
+npm run test:e2e:ui
+
+# Run tests in headed mode (see the browser)
+npm run test:e2e:headed
+
+# Run only Chromium tests
+npm run test:e2e:chromium
+```
+
+#### Test Coverage
+
+| Test Suite | Description |
+|------------|-------------|
+| `dashboard.spec.ts` | Dashboard load, job list, filters, navigation |
+| `sidekick.spec.ts` | Chat modal, messages, responses, build triggers |
+| `job-detail.spec.ts` | Job info, conversation, artifacts, search |
+| `screenshot.spec.ts` | Documentation screenshot generation |
+
+#### Generate Documentation Screenshots
+
+```bash
+npm run test:screenshots
+```
+
+This captures screenshots to `docs/images/` for documentation.
+
 ### Run Rust Tests
 
 ```bash
 cd src-tauri
 cargo test
 ```
+
+### CI/CD
+
+E2E tests run automatically on:
+- Push to `main` or `develop` branches
+- Pull requests targeting `main` or `develop`
+
+See `.github/workflows/dashboard-tests.yml` for the full CI configuration.
 
 ## MCP Integration
 

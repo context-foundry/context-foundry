@@ -59,11 +59,12 @@ export const useJobsStore = create<JobsState>((set, get) => ({
 
     try {
       const jobs = await api.listJobs({ filter, sort });
-      set({ jobs, isLoading: false });
+      set({ jobs, isLoading: false, isConnected: true });
     } catch (error) {
       set({
         error: error instanceof Error ? error.message : 'Failed to fetch jobs',
         isLoading: false,
+        isConnected: false,
       });
     }
   },
@@ -171,9 +172,10 @@ export const useJobsStore = create<JobsState>((set, get) => ({
   },
 
   initSSE: () => {
+    // SSE is optional - connection status is based on API calls, not SSE
     const manager = getSSEManager({
-      onConnectionChange: (connected) => {
-        set({ isConnected: connected });
+      onConnectionChange: () => {
+        // Don't update isConnected here - we track it via fetchJobs success/failure
       },
     });
 
