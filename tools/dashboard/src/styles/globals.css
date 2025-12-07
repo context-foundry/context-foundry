@@ -12,9 +12,11 @@
   --text-muted: #6e7681;
   --accent-purple: #8b5cf6;
   --accent-blue: #58a6ff;
-  --accent-green: #3fb950;
+  --accent-green: #2ea043;
+  /* Muted green */
   --accent-yellow: #d29922;
-  --accent-red: #f85149;
+  --accent-red: #da3633;
+  /* Muted red */
   --accent-cyan: #39c5cf;
   --accent-orange: #f97316;
   --accent-pink: #ec4899;
@@ -96,8 +98,15 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .header-center {
@@ -184,7 +193,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: translateY(-50%) rotate(360deg); }
+  to {
+    transform: translateY(-50%) rotate(360deg);
+  }
 }
 
 /* Sidekick Modal */
@@ -578,7 +589,8 @@ body {
 
 .job-status-badge {
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: 4px;
+  /* Changed from pill (12px) to rounded rect */
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -700,6 +712,8 @@ body {
   cursor: pointer;
   transition: all 0.15s;
   min-width: 80px;
+  color: var(--text-primary);
+  /* Fix black text on buttons */
 }
 
 .phase-item:hover {
@@ -720,8 +734,15 @@ body {
 }
 
 @keyframes phase-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4); }
-  50% { box-shadow: 0 0 0 4px rgba(88, 166, 255, 0); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(88, 166, 255, 0);
+  }
 }
 
 .phase-item.phase-succeeded {
@@ -738,7 +759,8 @@ body {
 }
 
 .phase-name {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
   text-transform: capitalize;
 }
 

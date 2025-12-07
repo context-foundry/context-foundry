@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles */
+@layer base {
+  html {
+    @apply bg-cf-background text-cf-text;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  }
+
+  body {
+    @apply min-h-screen antialiased;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-cf-background;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-cf-border rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-cf-muted;
+  }
+}
+
+/* Component utilities */
+@layer components {
+  .card {
+    @apply bg-cf-surface border border-cf-border rounded-lg p-4;
+  }
+
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+  }
+
+  .btn-primary {
+    @apply bg-cf-primary hover:bg-cf-primary/80 text-white;
+  }
+
+  .btn-secondary {
+    @apply bg-cf-surface hover:bg-cf-border text-cf-text border border-cf-border;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .status-running {
+    @apply bg-status-running/20 text-status-running;
+  }
+
+  .status-pending {
+    @apply bg-status-pending/20 text-status-pending;
+  }
+
+  .status-failed {
+    @apply bg-status-failed/20 text-status-failed;
+  }
+
+  .status-succeeded {
+    @apply bg-status-succeeded/20 text-status-succeeded;
+  }
+
+  .status-cancelled {
+    @apply bg-status-cancelled/20 text-status-cancelled;
+  }
+}
+
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}

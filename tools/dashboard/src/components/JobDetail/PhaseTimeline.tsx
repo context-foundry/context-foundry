@@ -55,23 +55,24 @@ export function PhaseTimeline({ job }: PhaseTimelineProps) {
   );
 }
 
-function getPhaseIcon(phase: Phase, status: TaskStatus): string {
+function getPhaseIcon(_phase: Phase, status: TaskStatus): string {
   if (status === 'running') return '...';
   if (status === 'succeeded') return '✓';
   if (status === 'failed' || status === 'timed_out') return '✗';
   if (status === 'cancelled') return '—';
 
-  // Default icons by phase
-  const icons: Record<Phase, string> = {
-    scout: '🔍',
-    architect: '📐',
-    builder: '🔨',
-    test: '🧪',
-    screenshot: '📸',
-    documentation: '📝',
-    deploy: '🚀',
-    feedback: '💬',
-  };
+  // Default icons by phase - removed per user request
+  // const icons: Record<Phase, string> = {
+  //   scout: '🔍',
+  //   architect: '📐',
+  //   builder: '🔨',
+  //   test: '🧪',
+  //   screenshot: '📸',
+  //   documentation: '📝',
+  //   deploy: '🚀',
+  //   feedback: '💬',
+  // };
 
-  return icons[phase] ?? '○';
+  // return icons[phase] ?? '○';
+  return '';
 }

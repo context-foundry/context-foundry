@@ -137,12 +137,8 @@ def get_job_tree(store: Store, job_id: str) -> Dict[str, Any]:
             task_data = {
                 "task_id": task.id,
                 "status": task.status.value,
-                "created_at": task.created_at.isoformat()
-                if task.created_at
-                else None,
-                "started_at": task.started_at.isoformat()
-                if task.started_at
-                else None,
+                "created_at": task.created_at.isoformat() if task.created_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
                 "completed_at": task.completed_at.isoformat()
                 if task.completed_at
                 else None,
@@ -275,10 +271,28 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         # Convert list values to single values
         return {k: v[0] if len(v) == 1 else v for k, v in params.items()}
 
+    def do_OPTIONS(self) -> None:
+        """Handle OPTIONS preflight requests for CORS."""
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header(
+            "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
+        )
+        self.send_header(
+            "Access-Control-Allow-Headers", "Content-Type, Authorization, X-CF-Auth"
+        )
+        self.send_header("Access-Control-Max-Age", "86400")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_POST(self) -> None:
         """Handle POST requests."""
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
+
+        # Strip /api prefix if present (support both /api/jobs and /jobs)
+        if path.startswith("/api/"):
+            path = path[4:]  # Remove "/api" prefix
 
         try:
             # Read request body
@@ -304,6 +318,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         """Handle GET requests."""
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
+
+        # Strip /api prefix if present (support both /api/jobs and /jobs)
+        if path.startswith("/api/"):
+            path = path[4:]  # Remove "/api" prefix
 
         try:
             # Route to appropriate handler
@@ -582,32 +600,40 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _handle_config(self) -> None:
         """GET /config - Get provider configuration."""
         from pathlib import Path
+
         config_path = Path.home() / ".context-foundry" / "provider_config.json"
-        
+
         config = {}
         if config_path.exists():
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     config = json.load(f)
             except Exception as e:
                 logger.error(f"Failed to load config: {e}")
                 config = {"error": str(e)}
-        
+
         self._send_json(config)
 
     def _handle_execute_tool(self, data: Dict[str, Any]) -> None:
         """POST /tools/execute - Execute a tool."""
         # Check Authentication
         import os
+
         api_key = os.environ.get("EVOLUTION_API_KEY")
-        
+
         # CRITICAL SECURITY: Do not allow tool execution without an API key
         if not api_key:
-            self._send_error(500, "Server misconfiguration: EVOLUTION_API_KEY not set. Tool execution disabled.")
+            self._send_error(
+                500,
+                "Server misconfiguration: EVOLUTION_API_KEY not set. Tool execution disabled.",
+            )
             return
 
         auth_header = self.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer ") or auth_header.split(" ")[1] != api_key:
+        if (
+            not auth_header.startswith("Bearer ")
+            or auth_header.split(" ")[1] != api_key
+        ):
             self._send_error(401, "Unauthorized: Invalid or missing API Key")
             return
 
@@ -618,7 +644,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         if not tool_name:
             self._send_error(400, "Missing tool_name")
             return
-            
+
         if not working_directory:
             self._send_error(400, "Missing working_directory")
             return
@@ -627,12 +653,12 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             # Import here to avoid circular imports if any
             from tools.evolution.communication.tool_executor import ToolExecutor
             from pathlib import Path
-            
+
             executor = ToolExecutor(Path(working_directory))
             result = executor.execute(tool_name, arguments)
-            
+
             self._send_json(result)
-            
+
         except Exception as e:
             logger.error(f"Tool execution error: {e}")
             self._send_error(500, str(e))
@@ -641,6 +667,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         """GET /agents - Get agent configuration."""
         try:
             from tools.evolution.framework.agent_registry import AgentRegistry
+
             registry = AgentRegistry()
             agents = registry.list_agents()
             self._send_json({"agents": agents})
@@ -652,36 +679,36 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         """POST /agents - Update agent configuration."""
         try:
             from tools.evolution.framework.agent_registry import AgentRegistry
-            
+
             agent_name = data.get("name")
             provider = data.get("provider")
-            
+
             if not agent_name or not provider:
                 self._send_error(400, "Missing name or provider")
                 return
-                
+
             registry = AgentRegistry()
-            
+
             # Extract optional IDs if provided
             agent_id = data.get("agent_id")
             alias_id = data.get("alias_id")
-            
+
             # Update provider
             # If switching to local, agent_id/alias_id will be cleared by registry if we pass None
             # If switching to bedrock, we need to pass them if they are in the request
-            
+
             kwargs = {}
             if agent_id is not None:
                 kwargs["agent_id"] = agent_id
             if alias_id is not None:
                 kwargs["alias_id"] = alias_id
-                
+
             registry.update_provider(agent_name, provider, **kwargs)
-            
+
             # Return updated list
             agents = registry.list_agents()
             self._send_json({"status": "ok", "agents": agents})
-            
+
         except ValueError as e:
             self._send_error(400, str(e))
         except Exception as e:

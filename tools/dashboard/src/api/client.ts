@@ -5,7 +5,15 @@
  * Supports authentication via X-CF-Auth header.
  */
 
-const API_BASE = '';  // Uses Vite proxy in dev, empty for production
+// Detect if running in Tauri
+// @ts-ignore
+const isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
+
+// In Tauri, the API is at localhost:8421 (daemon port)
+// In Web (dev/prod), we use relative paths (proxied by Vite or served by daemon)
+export const API_BASE = isTauri ? 'http://127.0.0.1:8421' : '';
+
+console.log('Context Foundry API Client Initialized:', { isTauri, API_BASE });
 
 let authToken: string | null = null;
 
@@ -88,6 +96,15 @@ export interface ListJobsParams {
   offset?: number;
 }
 
+// Transform API response to match frontend Job type
+// API returns job_id, frontend expects id
+function transformJob(apiJob: Record<string, unknown>): Job {
+  return {
+    ...apiJob,
+    id: (apiJob.job_id || apiJob.id) as string,
+  } as Job;
+}
+
 export async function listJobs(params: ListJobsParams = {}): Promise<Job[]> {
   const searchParams = new URLSearchParams();
   if (params.filter && params.filter !== 'all') {
@@ -112,7 +129,9 @@ export async function listJobs(params: ListJobsParams = {}): Promise<Job[]> {
   }
   const data = await response.json();
   // API returns { jobs: [...], summary: {...} } - extract just the jobs array
-  return data.jobs || data;
+  const jobs = data.jobs || data;
+  // Transform job_id -> id for frontend compatibility
+  return jobs.map(transformJob);
 }
 
 export async function getJob(jobId: string): Promise<Job> {
@@ -120,7 +139,8 @@ export async function getJob(jobId: string): Promise<Job> {
   if (!response.ok) {
     throw new Error(`Failed to get job: ${response.statusText}`);
   }
-  return response.json();
+  const data = await response.json();
+  return transformJob(data);
 }
 
 export async function cancelJob(jobId: string): Promise<void> {
