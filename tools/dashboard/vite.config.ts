@@ -58,6 +58,16 @@ export default defineConfig({
         target: 'http://localhost:8420',
         changeOrigin: true,
       },
+      // Pending approvals
+      '/pending-approvals': {
+        target: 'http://localhost:8420',
+        changeOrigin: true,
+      },
+      // Auth token
+      '/auth-token': {
+        target: 'http://localhost:8420',
+        changeOrigin: true,
+      },
     },
   },
   build: {
