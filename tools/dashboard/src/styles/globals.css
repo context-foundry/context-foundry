@@ -69,13 +69,10 @@ body {
   align-items: center;
 }
 
-.logo-text {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--accent-purple);
-  letter-spacing: -1px;
-  font-family: "SFMono-Regular", "Input Mono", Menlo, Consolas, monospace;
-  line-height: 1;
+.logo-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
 }
 
 .connection-status {

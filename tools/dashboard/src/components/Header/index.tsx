@@ -12,7 +12,7 @@ export function Header() {
     <header className="header">
       <div className="header-left">
         <div className="logo">
-          <span className="logo-text">CF</span>
+          <img src="/cf-logo.png" alt="Context Foundry" className="logo-img" />
         </div>
       </div>
 
