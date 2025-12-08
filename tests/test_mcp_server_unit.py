@@ -70,16 +70,6 @@ from tools.mcp_server import (  # noqa: E402
     _read_global_patterns_impl,
     _save_global_patterns_impl,
     _merge_project_patterns_impl,
-    create_evolution_task,
-    get_evolution_tasks,
-    start_evolution_daemon,
-    stop_evolution_daemon,
-    get_daemon_status,
-    register_project,
-    apply_pattern_to_project,
-    validate_project_health,
-    register_agent,
-    send_agent_message,
     bootstrap_patterns_on_startup,
     active_builds,
     active_tasks,
@@ -464,96 +454,6 @@ class TestGlobalPatternsImpl:
         assert (
             result.get("new_patterns", 0) >= 0 or result.get("updated_patterns", 0) >= 0
         )
-
-
-class TestEvolutionSystemStubs:
-    """Test evolution system stub functions"""
-
-    @pytest.mark.unit
-    def test_create_evolution_task_stub(self):
-        """Should return evolution system message"""
-        result = create_evolution_task(
-            task_type="self_improvement", target_project="/tmp/test", priority=5
-        )
-
-        assert isinstance(result, str)
-        # Should mention evolution or not implemented
-        result_lower = result.lower()
-        assert "evolution" in result_lower or "not" in result_lower or "{" in result
-
-    @pytest.mark.unit
-    def test_get_evolution_tasks_stub(self):
-        """Should return tasks list or message"""
-        result = get_evolution_tasks(status="pending", limit=10)
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_start_evolution_daemon_stub(self):
-        """Should return daemon start message"""
-        result = start_evolution_daemon(config_path=None)
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_stop_evolution_daemon_stub(self):
-        """Should return daemon stop message"""
-        result = stop_evolution_daemon(graceful=True)
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_get_daemon_status_stub(self):
-        """Should return status information"""
-        result = get_daemon_status()
-
-        assert isinstance(result, str)
-        # Should be JSON or contain status information
-        result_lower = result.lower()
-        assert "status" in result_lower or "daemon" in result_lower or "{" in result
-
-    @pytest.mark.unit
-    def test_register_project_stub(self):
-        """Should return registration message"""
-        result = register_project(project_path="/tmp/test", project_type="python")
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_apply_pattern_to_project_stub(self):
-        """Should return pattern application message"""
-        result = apply_pattern_to_project(
-            project_path="/tmp/test", pattern_id="test-pattern"
-        )
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_validate_project_health_stub(self):
-        """Should return health validation message"""
-        result = validate_project_health(project_path="/tmp/test")
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_register_agent_stub(self):
-        """Should return agent registration message"""
-        result = register_agent(
-            agent_name="test-agent",
-            agent_url="http://localhost:8000",
-            capabilities=["test"],
-        )
-
-        assert isinstance(result, str)
-
-    @pytest.mark.unit
-    def test_send_agent_message_stub(self):
-        """Should return message sending result"""
-        result = send_agent_message(
-            target_agent="test-agent", message_type="info", payload={"test": "data"}
-        )
-
-        assert isinstance(result, str)
 
 
 class TestBootstrapPatterns:
