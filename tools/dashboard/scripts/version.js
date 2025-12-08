@@ -26,7 +26,8 @@ function exec(cmd, cwd = cfRootDir) {
 
 function getVersionInfo() {
   // Get version from git describe (e.g., "v2.5.3" or "v2.5.3-43-gc16ca0d")
-  const gitDescribe = exec('git describe --tags --always');
+  // Use --match to only consider release tags (not session-* or nightly tags)
+  const gitDescribe = exec("git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]' --always");
 
   // Parse version components
   let version = '0.0.0';
