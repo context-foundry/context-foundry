@@ -1367,9 +1367,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                                 c if c.isalnum() else "_" for c in description[:20]
                             ).strip("_")
                             project_dir = (
-                                Path.home()
-                                / "homelab"
-                                / f"sidekick_{safe_desc}_{timestamp}"
+                                Path.home() / "homelab" / f"{safe_desc}_{timestamp}"
                             )
                             project_dir.mkdir(parents=True, exist_ok=True)
 
