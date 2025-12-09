@@ -1369,7 +1369,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                             project_dir = (
                                 Path.home() / "homelab" / f"{safe_desc}_{timestamp}"
                             )
-                            project_dir.mkdir(parents=True, exist_ok=True)
+                            # NOTE: Don't mkdir here - runner.py will append random suffix
+                            # and create the final directory to avoid duplicates
 
                             # Submit job using job_manager
                             if ctx.job_manager:
