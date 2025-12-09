@@ -97,6 +97,34 @@ class Store:
                 self._read_conn.execute("PRAGMA query_only = ON")
             return self._read_conn
 
+    def refresh_read_connection(self):
+        """Force refresh of the cached read connection.
+
+        Call this before critical reads to ensure we see the latest writes
+        from other processes (like subprocess builds).
+
+        In WAL mode, this ensures the connection sees any commits made by
+        other connections since the cached connection was opened.
+        """
+        if self._read_conn_lock is None:
+            return
+
+        with self._read_conn_lock:
+            if self._read_conn is not None:
+                try:
+                    # Execute a WAL checkpoint to sync with main DB
+                    # PASSIVE mode doesn't block writers
+                    self._read_conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                except Exception as e:
+                    # If checkpoint fails, close and recreate the connection
+                    logger = logging.getLogger(__name__)
+                    logger.debug(f"WAL checkpoint failed, recreating connection: {e}")
+                    try:
+                        self._read_conn.close()
+                    except Exception:
+                        pass
+                    self._read_conn = None
+
     def close(self):
         """Close any cached connections."""
         if self._read_conn is not None:

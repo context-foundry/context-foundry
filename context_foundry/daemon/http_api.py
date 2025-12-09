@@ -567,6 +567,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         limit = int(params.get("limit", 50))
         offset = int(params.get("offset", 0))
 
+        # CRITICAL: Refresh read connection to see subprocess writes
+        # This fixes the race condition where cached connection misses updates
+        ctx.store.refresh_read_connection()
+
         # Get gate manager for current_phase
         gate_mgr = GateManager(ctx.store)
 
@@ -576,7 +580,13 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         # Serialize
         serialized = []
         for job in jobs:
+            # Try to get current phase from database first
             current_phase = gate_mgr.get_current_phase(job.id)
+
+            # If job is running but no phase from DB, try reading from file
+            if not current_phase and job.status == JobStatus.RUNNING:
+                current_phase = self._read_current_phase_from_file(job.params)
+
             # Extract task from params for display
             task = None
             if job.params:
@@ -611,9 +621,132 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             }
         )
 
+    def _read_current_phase_from_file(
+        self, params: Optional[Dict[str, Any]]
+    ) -> Optional[str]:
+        """Read current phase from the project's current-phase.json file.
+
+        This provides a fallback when the database doesn't have task records yet
+        (e.g., early in a build before tasks are created).
+
+        Args:
+            params: Job params containing working_directory
+
+        Returns:
+            Current phase name or None if not found
+        """
+        if not params:
+            return None
+
+        working_dir = params.get("working_directory")
+        if not working_dir:
+            return None
+
+        from pathlib import Path
+
+        phase_file = Path(working_dir) / ".context-foundry" / "current-phase.json"
+        if not phase_file.exists():
+            return None
+
+        try:
+            with open(phase_file) as f:
+                phase_info = json.load(f)
+                return phase_info.get("currentPhase") or phase_info.get("phase")
+        except Exception as e:
+            logger.debug(f"Failed to read current-phase.json: {e}")
+            return None
+
+    def _read_phase_token_usage(
+        self, params: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Read token usage per phase from session-summary.json.
+
+        Token data is stored in context_metrics.by_phase, with phase status in phases.
+
+        Args:
+            params: Job params containing working_directory
+
+        Returns:
+            Dict with token usage info per phase
+        """
+        if not params:
+            return {}
+
+        working_dir = params.get("working_directory")
+        if not working_dir:
+            return {}
+
+        from pathlib import Path
+
+        summary_file = Path(working_dir) / ".context-foundry" / "session-summary.json"
+        if not summary_file.exists():
+            return {}
+
+        try:
+            with open(summary_file) as f:
+                summary = json.load(f)
+
+            # Token data is in context_metrics.by_phase
+            context_metrics = summary.get("context_metrics", {})
+            by_phase = context_metrics.get("by_phase", {})
+
+            # Phase status is in phases
+            phases_status = summary.get("phases", {})
+
+            token_usage = {}
+            total_tokens = 0
+
+            for phase_key, phase_data in by_phase.items():
+                # Convert phase_key like "phase_scout" or "phase_test_iteration_1" to display name
+                phase_name = phase_key.replace("phase_", "").replace("_", " ").title()
+
+                tokens = phase_data.get("tokens_used", 0)
+                percentage = phase_data.get("percentage", 0)
+                zone = phase_data.get("zone", "unknown")
+                duration = phase_data.get("duration_seconds", 0)
+                exit_code = phase_data.get("exit_code", 0)
+                budget = phase_data.get("budget_allocated", 0)
+                over_budget = phase_data.get("over_budget", False)
+
+                # Get status from phases dict if available
+                status_data = phases_status.get(phase_key, {})
+                status = status_data.get(
+                    "status", "completed" if exit_code == 0 else "failed"
+                )
+
+                token_usage[phase_name] = {
+                    "tokens_used": tokens,
+                    "context_percent": round(percentage, 1),
+                    "zone": zone,
+                    "status": status,
+                    "duration_seconds": duration,
+                    "budget_allocated": budget,
+                    "over_budget": over_budget,
+                }
+                total_tokens += tokens
+
+            max_context = context_metrics.get("max_context_window", 200000)
+            model = context_metrics.get("model", "unknown")
+
+            return {
+                "phases": token_usage,
+                "total_tokens": total_tokens,
+                "context_window": max_context,
+                "model": model,
+                "total_context_percent": round((total_tokens / max_context) * 100, 1)
+                if total_tokens
+                else 0,
+            }
+        except Exception as e:
+            logger.debug(f"Failed to read session-summary.json for tokens: {e}")
+            return {}
+
     def _handle_get_job(self, job_id: str) -> None:
         """GET /jobs/{job_id} - Get job details."""
         ctx = self._get_context()
+
+        # CRITICAL: Refresh read connection to see subprocess writes
+        ctx.store.refresh_read_connection()
 
         job = ctx.store.get_job(job_id)
         if not job:
@@ -625,8 +758,15 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         current_phase = gate_mgr.get_current_phase(job_id)
         next_phase = gate_mgr.get_next_phase(job_id)
 
+        # If job is running but no phase from DB, try reading from file
+        if not current_phase and job.status == JobStatus.RUNNING:
+            current_phase = self._read_current_phase_from_file(job.params)
+
         # Get phase summary
         phase_summary = ctx.store.get_job_phase_summary(job_id)
+
+        # Get token usage from session summary file
+        token_usage = self._read_phase_token_usage(job.params)
 
         self._send_json(
             {
@@ -647,6 +787,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 "retry_count": job.retry_count,
                 "max_retries": job.max_retries,
                 "phase_summary": phase_summary,
+                "token_usage": token_usage,
             }
         )
 
@@ -681,6 +822,9 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _handle_job_gates(self, job_id: str) -> None:
         """GET /jobs/{job_id}/gates - Get job gate status."""
         ctx = self._get_context()
+
+        # CRITICAL: Refresh read connection to see subprocess writes
+        ctx.store.refresh_read_connection()
 
         # Verify job exists
         job = ctx.store.get_job(job_id)
@@ -719,6 +863,9 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def _handle_job_tree(self, job_id: str) -> None:
         """GET /jobs/{job_id}/tree - Get job tree view."""
         ctx = self._get_context()
+
+        # CRITICAL: Refresh read connection to see subprocess writes
+        ctx.store.refresh_read_connection()
 
         tree = get_job_tree(ctx.store, job_id)
 
@@ -1098,7 +1245,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 # System prompt - matches dashboard.py persona
                 try:
                     prompt_path = (
-                        Path(__file__).resolve().parents[3]
+                        Path(__file__).resolve().parents[2]
                         / "tools"
                         / "prompts"
                         / "sidekick.txt"
@@ -1129,7 +1276,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         "Detailed instructions unavailable (prompt load failed)."
                     )
 
-                # Get conversation history
+                # Get conversation history for memory compaction
                 history = data.get("history", [])
                 history_text = ""
                 for entry in history[-5:]:
@@ -1137,6 +1284,8 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         history_text += f"User: {entry.get('content', '')}\n"
                     else:
                         history_text += f"You: {entry.get('content', '')}\n"
+
+                # ... prompt construction ...
 
                 full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
 
@@ -1154,7 +1303,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                     input=full_prompt,
                     capture_output=True,
                     text=True,
-                    timeout=30,
+                    timeout=60,
                 )
 
                 if result.returncode == 0 and result.stdout:
@@ -1222,10 +1371,35 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                                     f'Try: `cfd build "{description}"`'
                                 )
                         except Exception as e:
-                            logger.error(f"Failed to trigger sidekick build: {e}")
-                            response_text += f"\n\n❌ Build trigger failed: {e}"
+                            logger.error(f"Failed to trigger build: {e}")
+                            response_text += f"\n\n(Note: Failed to trigger build automatically: {e})"
+
+                    # [MEMORY] Save conversation after response
+                    from tools.llm_core.memory import (
+                        ConversationMemory,
+                        compact_conversation,
+                    )
+
+                    try:
+                        # Create memory entry from current exchange
+                        # We combine history (which is just dictionaries) + current message + response
+                        all_messages = history + [
+                            {"role": "user", "content": message},
+                            {"role": "assistant", "content": response_text},
+                        ]
+
+                        memory_entry = compact_conversation(
+                            all_messages, source="sidekick"
+                        )
+                        ConversationMemory().save_conversation(memory_entry)
+                        logger.info(f"Saved conversation memory: {memory_entry.id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to save conversation memory: {e}")
+
                 else:
                     logger.warning(f"Claude CLI failed. Code: {result.returncode}")
+                    if result.stderr:
+                        logger.warning(f"Claude CLI stderr: {result.stderr}")
 
             except subprocess.TimeoutExpired:
                 logger.warning("Claude CLI timed out")
@@ -1237,6 +1411,37 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             response_text = (
                 "I'm having trouble connecting right now. Please try again in a moment."
             )
+
+        # Save conversation to long-term memory
+        try:
+            from tools.llm_core.memory import ConversationMemory, compact_conversation
+
+            # Build messages list from history + current exchange
+            messages = []
+            for entry in data.get("history", [])[-5:]:
+                messages.append(
+                    {
+                        "role": entry.get("role", "user"),
+                        "content": entry.get("content", ""),
+                    }
+                )
+            messages.append({"role": "user", "content": message})
+            messages.append({"role": "assistant", "content": response_text})
+
+            # Detect outcome (build triggered, question answered, etc.)
+            outcome = None
+            if "Build started!" in response_text:
+                outcome = "Triggered a new build"
+            elif "?" not in message:
+                outcome = "Completed request"
+
+            # Compact and save
+            memory = ConversationMemory()
+            entry = compact_conversation(messages, outcome=outcome, source="sidekick")
+            memory.save_conversation(entry)
+            logger.debug(f"Saved conversation to memory: {entry.id[:8]}")
+        except Exception as e:
+            logger.debug(f"Failed to save conversation to memory: {e}")
 
         self._send_json({"response": response_text})
 
