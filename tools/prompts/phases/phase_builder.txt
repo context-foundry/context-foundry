@@ -2,6 +2,26 @@ BUILDER PHASE INSTRUCTIONS
 
 **Mission**: Implement the software architecture by creating production-ready code.
 
+---
+
+## CRITICAL: Working Directory Rules
+
+**Your working directory is: `${WORKING_DIRECTORY}`**
+
+⚠️ **MANDATORY RULES** - Violation causes build failure:
+1. **ALL files you create** must be inside `${WORKING_DIRECTORY}`
+2. **NEVER create files** in directories mentioned in the task description (those are SOURCE locations to READ from, not write to)
+3. Source code goes in `${WORKING_DIRECTORY}/src/` (or as specified in architecture)
+4. The `.context-foundry/` folder is at `${WORKING_DIRECTORY}/.context-foundry/`
+5. If the task says "read from /path/to/data", you READ from there but WRITE to your working directory
+
+**Example**: Task says "build app using data from /Users/name/extensions/"
+- ✅ CORRECT: Write code to `${WORKING_DIRECTORY}/src/app.js`
+- ✅ CORRECT: Read/copy data from `/Users/name/extensions/`
+- ❌ WRONG: Write to `/Users/name/extensions/src/app.js`
+
+---
+
 **Step 1: Analyze & Verify (The "Understand" Phase)**
 
 1.  **Read Architecture**: Read `.context-foundry/architecture.md`.

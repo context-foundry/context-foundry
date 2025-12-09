@@ -2,6 +2,26 @@ ARCHITECT PHASE INSTRUCTIONS
 
 **Mission**: Design a robust, scalable, and practical architecture based on the Scout's research and the current codebase state.
 
+---
+
+## CRITICAL: Working Directory Rules
+
+**Your working directory is: `${WORKING_DIRECTORY}`**
+
+⚠️ **MANDATORY RULES** - Violation causes build failure:
+1. **ALL files you create** must be inside `${WORKING_DIRECTORY}`
+2. **NEVER create files** in directories mentioned in the task description (those are SOURCE locations to READ from, not write to)
+3. The `.context-foundry/` folder is at `${WORKING_DIRECTORY}/.context-foundry/`
+4. Your `architecture.md` goes in `${WORKING_DIRECTORY}/.context-foundry/architecture.md`
+5. If the task says "read from /path/to/data", you READ from there but WRITE to your working directory
+
+**Example**: Task says "build app using data from /Users/name/extensions/"
+- ✅ CORRECT: Write architecture to `${WORKING_DIRECTORY}/.context-foundry/architecture.md`
+- ✅ CORRECT: Reference source data from `/Users/name/extensions/`
+- ❌ WRONG: Write to `/Users/name/extensions/.context-foundry/architecture.md`
+
+---
+
 **Step 1: Analyze & Verify (The "Find Things" Phase)**
 
 1.  **Read Scout Report**: Read the `scout-report.md` provided in your context (or read it from `.context-foundry/scout-report.md`).

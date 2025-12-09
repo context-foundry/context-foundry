@@ -32,7 +32,7 @@ from tools.llm_core.providers import (
     BedrockProvider,
     BedrockAgentProvider,
 )
-from tools.llm_core.config import get_provider_for_phase
+from tools.llm_core.config import get_provider_for_phase, reload_config
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -986,8 +986,6 @@ def _run_phase_internal(
     # ==========================================================================
     # 3. Construct System Prompt
     # ==========================================================================
-    from tools.llm_core.config import reload_config
-
     # Force reload config to pick up any recent changes
     reload_config()
 
@@ -1141,6 +1139,50 @@ def _run_phase_internal(
         )
 
     phase_prompt = phase_prompt_path.read_text()
+
+    # ==========================================================================
+    # TEMPLATE SUBSTITUTION - Always substitute WORKING_DIRECTORY for all phases
+    # ==========================================================================
+    from string import Template
+
+    # Inject conversation memory for Scout phase
+    if phase_name.lower() == "scout" and "${CONVERSATION_MEMORY}" in phase_prompt:
+        try:
+            from tools.llm_core.memory import ConversationMemory
+
+            memory = ConversationMemory()
+            # Extract topics from input instruction for relevance matching
+            task_words = (
+                input_instruction.lower().split()[:10] if input_instruction else []
+            )
+            memory_context = memory.format_for_prompt(current_topics=task_words)
+
+            if memory_context:
+                memory_block = f"## 🧠 Conversation Memory\n\n{memory_context}"
+            else:
+                memory_block = (
+                    "## 🧠 Conversation Memory\n\n(No prior conversations found)"
+                )
+
+            phase_prompt = Template(phase_prompt).safe_substitute(
+                CONVERSATION_MEMORY=memory_block,
+                WORKING_DIRECTORY=str(working_directory),
+            )
+            logger.info(
+                "Injected conversation memory and working directory into prompt"
+            )
+        except Exception as e:
+            logger.debug(f"Could not inject conversation memory: {e}")
+            phase_prompt = phase_prompt.replace("${CONVERSATION_MEMORY}", "")
+            # Still substitute WORKING_DIRECTORY even if memory fails
+            phase_prompt = phase_prompt.replace(
+                "${WORKING_DIRECTORY}", str(working_directory)
+            )
+    else:
+        # For non-Scout phases, still substitute WORKING_DIRECTORY
+        phase_prompt = Template(phase_prompt).safe_substitute(
+            WORKING_DIRECTORY=str(working_directory),
+        )
 
     # Save phase prompt file for ALL builds (autonomous and HITL)
     # This allows the dashboard to show prompts for any build
