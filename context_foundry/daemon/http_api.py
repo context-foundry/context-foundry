@@ -1290,23 +1290,54 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 full_prompt = f"{system_prompt}\n\nConversation History:\n{history_text}\nUser says: {message}\n\nYour response:"
 
                 # Call claude CLI with haiku for fast responses
-                logger.info("Running claude subprocess with haiku...")
-                result = subprocess.run(
-                    [
-                        claude_path,
-                        "-p",
-                        "--print",
-                        "--dangerously-skip-permissions",
-                        "--model",
-                        "haiku",
-                    ],
-                    input=full_prompt,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,
-                )
+                # Use retry logic for reliability (first call often slow due to cold start)
+                max_retries = 2
+                last_error = None
+                result = None
 
-                if result.returncode == 0 and result.stdout:
+                for attempt in range(max_retries):
+                    try:
+                        # First attempt gets longer timeout (cold start)
+                        timeout = 90 if attempt == 0 else 60
+                        logger.info(
+                            f"Running claude subprocess (attempt {attempt + 1}/{max_retries}, timeout={timeout}s)..."
+                        )
+
+                        result = subprocess.run(
+                            [
+                                claude_path,
+                                "-p",
+                                "--print",
+                                "--dangerously-skip-permissions",
+                                "--model",
+                                "haiku",
+                            ],
+                            input=full_prompt,
+                            capture_output=True,
+                            text=True,
+                            timeout=timeout,
+                        )
+
+                        if result.returncode == 0 and result.stdout:
+                            break  # Success, exit retry loop
+                        else:
+                            last_error = f"Exit code {result.returncode}"
+                            if result.stderr:
+                                last_error += f": {result.stderr[:200]}"
+                            logger.warning(
+                                f"Claude CLI attempt {attempt + 1} failed: {last_error}"
+                            )
+
+                    except subprocess.TimeoutExpired:
+                        last_error = f"Timeout after {timeout}s"
+                        logger.warning(
+                            f"Claude CLI attempt {attempt + 1} timed out after {timeout}s"
+                        )
+                    except Exception as e:
+                        last_error = str(e)
+                        logger.warning(f"Claude CLI attempt {attempt + 1} error: {e}")
+
+                if result and result.returncode == 0 and result.stdout:
                     response_text = result.stdout.strip()
                     logger.info(
                         f"Claude CLI success. Response length: {len(response_text)}"
@@ -1397,12 +1428,11 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         logger.warning(f"Failed to save conversation memory: {e}")
 
                 else:
-                    logger.warning(f"Claude CLI failed. Code: {result.returncode}")
-                    if result.stderr:
-                        logger.warning(f"Claude CLI stderr: {result.stderr}")
+                    # All retries failed
+                    logger.warning(
+                        f"Claude CLI failed after {max_retries} attempts. Last error: {last_error}"
+                    )
 
-            except subprocess.TimeoutExpired:
-                logger.warning("Claude CLI timed out")
             except Exception as e:
                 logger.warning(f"Sidekick Claude CLI failed: {e}")
 
