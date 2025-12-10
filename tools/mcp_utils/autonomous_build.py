@@ -38,7 +38,7 @@ from tools.mcp_utils.phase_execution import (
     run_phase,
     run_builder_phase,
     PhaseValidator,
-    # tests_passed - REMOVED: Now using exit codes instead of parsing natural language
+    tests_passed,  # Re-enabled: Exit codes only indicate process success, not test results
 )
 from tools.mcp_utils.pipeline_state import (
     PipelineState,
@@ -2131,19 +2131,21 @@ def execute_build_with_phase_spawning(
 
                 results[f"test_{test_iteration}"] = test_result
 
-                # Check if tests passed using exit code (RELIABLE - not language parsing!)
-                # Exit code 0 = success (UNIX standard), non-zero = failure
-                if test_result.exit_code == 0:
+                # Check if tests passed by parsing the test report
+                # NOTE: Exit codes only indicate process success, not test results!
+                # Claude exits with code 0 even when it writes "FAILED" in the report.
+                test_report_path = working_directory / test_file
+                if test_report_path.exists() and tests_passed(test_report_path):
                     print(
-                        f"✅ Tests PASSED (iteration {test_iteration}) - exit code: 0",
+                        f"✅ Tests PASSED (iteration {test_iteration}) - verified from {test_file}",
                         file=sys.stderr,
                     )
                     test_passed = True
                     break
 
-                # Tests failed
+                # Tests failed (report says FAILED or file doesn't exist)
                 print(
-                    f"❌ Tests FAILED (iteration {test_iteration}) - exit code: {test_result.exit_code}",
+                    f"❌ Tests FAILED (iteration {test_iteration}) - verified from {test_file}",
                     file=sys.stderr,
                 )
 
