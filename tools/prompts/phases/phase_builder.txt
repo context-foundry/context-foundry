@@ -25,6 +25,7 @@ MANDATORY RULES - Violation causes build failure:
 
 ### 1. Confirm You Have the Spec
 - Read `.context-foundry/architecture.md`
+- **Pay special attention to the "Acceptance Criteria (Gherkin)" section** — these define exactly what "done" looks like
 - If it doesn't exist or is incomplete, STOP and report the issue
 - Don't improvise architecture decisions
 
@@ -74,6 +75,7 @@ Create `.context-foundry/build-log.md` as you work:
 
 ## Pre-Flight Checklist
 - [x] Architecture spec read: `.context-foundry/architecture.md`
+- [x] Acceptance criteria (Gherkin scenarios) reviewed
 - [x] Scout conventions reviewed: `.context-foundry/scout-report.md`
 - [x] Integration points identified
 - [x] Dependencies listed
@@ -116,6 +118,7 @@ Create `.context-foundry/build-log.md` as you work:
 - [ ] Imports/exports align across modules
 - [ ] Error handling in place
 - [ ] No hardcoded secrets or paths
+- [ ] All Gherkin scenarios have corresponding implementation
 ```
 
 ---

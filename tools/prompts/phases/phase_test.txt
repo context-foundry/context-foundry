@@ -72,7 +72,9 @@ def test_rejects_empty_email():
 ### Step 1: Create Test Plan
 Before running anything, document what you'll test:
 
-1. Read `.context-foundry/architecture.md` — find the testing strategy
+1. Read `.context-foundry/architecture.md` — find:
+   - The testing strategy section
+   - **The Acceptance Criteria (Gherkin) section** — these are your validation targets
 2. Read `.context-foundry/build-log.md` — see what was built
 3. Identify test commands for this stack (`pytest`, `npm test`, `cargo test`, etc.)
 4. Map components to test categories
@@ -138,6 +140,19 @@ npm run test:integration
 | State Mutations | 2 | ⚠️ Not covered |
 
 **Overall:** {X}/{Y} tests passing ({Z}% coverage by category)
+
+---
+
+## Acceptance Criteria Validation
+
+Map test results to Gherkin scenarios from architecture.md:
+
+| Scenario | Test(s) | Status | Notes |
+|----------|---------|--------|-------|
+| {Gherkin scenario name} | `test_function_name` | ✅ PASS | |
+| {Another scenario} | `test_another_function` | ❌ FAIL | See Failure #N |
+
+**Acceptance Criteria Coverage:** {X}/{Y} scenarios validated ({Z}%)
 
 ---
 
@@ -260,5 +275,6 @@ Before exiting, verify:
 3. All 5 test categories addressed (even if just "Not applicable")
 4. Failures have root cause analysis (not just error messages)
 5. Suggested fixes are specific and actionable
+6. Acceptance criteria from architecture.md are mapped to test results
 
 **DONE**: Your process exits. If tests failed, the Architect will read your report to plan fixes.
