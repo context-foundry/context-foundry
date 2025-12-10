@@ -2504,8 +2504,12 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_error(500, str(exc))
 
     def _serve_phase_prompts(self, query: str) -> None:
-        """Get phase prompts for a job. Query: job_id=<id>"""
-        # Require auth (prompts may contain sensitive build instructions)
+        """Get phase handoffs for a job. Query: job_id=<id>
+
+        Returns the actual .md handoff files that humans should review,
+        along with phase status for HITL approval flow.
+        """
+        # Require auth (handoffs may contain sensitive build details)
         if not self._check_auth():
             self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
             return
@@ -2529,7 +2533,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             working_dir = job.params.get("working_directory")
             if not working_dir:
                 body = json.dumps(
-                    {"prompts": [], "warning": "No working directory for job"}
+                    {
+                        "handoffs": {},
+                        "status": {},
+                        "warning": "No working directory for job",
+                    }
                 ).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -2539,31 +2547,19 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
-            # Look for phase prompt files in .context-foundry/phase-prompts/
-            prompts_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
-            prompts = []
+            # Use new lightweight status system
+            from tools.mcp_utils.phase_status import get_all_handoffs, get_phase_status
 
-            if prompts_dir.exists():
-                for prompt_file in prompts_dir.glob("*.json"):
-                    try:
-                        prompt_data = json.loads(prompt_file.read_text())
-                        prompts.append(prompt_data)
-                    except (json.JSONDecodeError, IOError) as e:
-                        logger.warning(
-                            "Failed to read prompt file %s: %s", prompt_file, e
-                        )
+            handoffs = get_all_handoffs(Path(working_dir))
+            status = get_phase_status(Path(working_dir))
 
-            # Sort by phase order
-            phase_order = {
-                "Scout": 0,
-                "Architect": 1,
-                "Builder": 2,
-                "Test": 3,
-                "Deploy": 4,
-            }
-            prompts.sort(key=lambda p: phase_order.get(p.get("phase", ""), 99))
-
-            body = json.dumps({"prompts": prompts}).encode("utf-8")
+            body = json.dumps(
+                {
+                    "handoffs": handoffs,
+                    "status": status,
+                    "execution_mode": status.get("execution_mode", "autonomous"),
+                }
+            ).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-cache")
@@ -2573,311 +2569,53 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
 
         except Exception as exc:
-            logger.warning("Error serving phase prompts: %s", exc)
+            logger.warning("Error serving phase handoffs: %s", exc)
             self.send_error(500, str(exc))
 
     def _save_phase_prompt(self) -> None:
-        """Save edited phase prompt. POST body: {job_id, phase, system_prompt?, input_instruction?}"""
-        if not self._check_auth():
-            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
-            return
+        """DEPRECATED: Prompt editing is no longer supported.
 
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            # Size limit: 500KB max for prompt edits
-            if content_length > 500_000:
-                self.send_error(413, "Request body too large (max 500KB for prompts)")
-                return
+        In the new HITL workflow, humans review the .md handoff files
+        (scout-report.md, architecture.md, etc.) directly instead of
+        editing JSON prompt blobs.
 
-            body_raw = self.rfile.read(content_length)
-            data = json.loads(body_raw.decode("utf-8"))
-
-            job_id = data.get("job_id")
-            phase = data.get("phase")
-
-            if not job_id or not phase:
-                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
-                return
-
-            # Find job and validate
-            job = self.server.context.store.get_job(job_id)
-            if not job:
-                self.send_error(404, f"Job not found: {job_id}")
-                return
-
-            working_dir = job.params.get("working_directory")
-            if not working_dir:
-                self.send_error(400, "Job has no working directory")
-                return
-
-            # Load existing prompt or create new
-            prompts_dir = Path(working_dir) / ".context-foundry" / "phase-prompts"
-            prompts_dir.mkdir(parents=True, exist_ok=True)
-            prompt_file = prompts_dir / f"{phase.lower()}-prompt.json"
-
-            if prompt_file.exists():
-                prompt_data = json.loads(prompt_file.read_text())
-            else:
-                self.send_error(404, f"No prompt found for phase: {phase}")
-                return
-
-            # State guard: block edits after processing/completion
-            current_state = prompt_data.get("state", "ready")
-            # New states: processing, complete, failed are terminal for editing
-            terminal_states = {"processing", "complete", "failed"}
-            if current_state in terminal_states:
-                self.send_error(
-                    409,
-                    f"Cannot edit prompt in state '{current_state}'. Phase is already being executed or complete.",
-                )
-                return
-
-            # Update with edits
-            if "system_prompt" in data:
-                prompt_data["system_prompt_edited"] = data["system_prompt"]
-            if "input_instruction" in data:
-                prompt_data["input_instruction_edited"] = data["input_instruction"]
-
-            prompt_data["edited_at"] = datetime.now().isoformat()
-            prompt_data["edited_by"] = data.get("edited_by", "dashboard_user")
-            # Transition to ready_edit state (user has made edits)
-            prompt_data["state"] = "ready_edit"
-
-            # Save
-            prompt_file.write_text(json.dumps(prompt_data, indent=2))
-            logger.info("Phase prompt saved: %s/%s", job_id[:8], phase)
-
-            response = json.dumps(
-                {
-                    "success": True,
-                    "job_id": job_id,
-                    "phase": phase,
-                    "prompt": prompt_data,
-                }
-            ).encode("utf-8")
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-
-        except json.JSONDecodeError as exc:
-            self.send_error(400, f"Invalid JSON: {exc}")
-        except Exception as exc:
-            logger.warning("Error saving phase prompt: %s", exc)
-            self.send_error(500, str(exc))
+        Use GET /phase-prompts to see handoff files and POST /phase-acknowledge
+        to approve phases.
+        """
+        self.send_error(
+            410,
+            "Prompt editing is deprecated. Review handoff files (.md) directly "
+            "and use /phase-acknowledge to approve phases.",
+        )
 
     def _inject_phase_prompt(self) -> None:
-        """Approve and mark phase prompt for injection. POST body: {job_id, phase}
+        """DEPRECATED: Use /phase-acknowledge instead.
 
-        NOTE: This is the legacy approval endpoint. For the new HITL workflow,
-        use /phase-acknowledge instead. Both endpoints now use consistent state constants.
+        This legacy endpoint is no longer supported. Use POST /phase-acknowledge
+        with {job_id, phase} to approve phases in the new HITL workflow.
         """
-        if not self._check_auth():
-            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
-            return
-
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            body_raw = self.rfile.read(content_length)
-            data = json.loads(body_raw.decode("utf-8"))
-
-            job_id = data.get("job_id")
-            phase = data.get("phase")
-
-            if not job_id or not phase:
-                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
-                return
-
-            # Find job
-            job = self.server.context.store.get_job(job_id)
-            if not job:
-                self.send_error(404, f"Job not found: {job_id}")
-                return
-
-            working_dir = job.params.get("working_directory")
-            if not working_dir:
-                self.send_error(400, "Job has no working directory")
-                return
-
-            # Load prompt
-            prompt_file = (
-                Path(working_dir)
-                / ".context-foundry"
-                / "phase-prompts"
-                / f"{phase.lower()}-prompt.json"
-            )
-            if not prompt_file.exists():
-                self.send_error(404, f"No prompt found for phase: {phase}")
-                return
-
-            prompt_data = json.loads(prompt_file.read_text())
-
-            # Import state constants for consistency with new state machine
-            import sys
-
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.phase_prompts import (
-                STATE_READY,
-                STATE_PROCESSING,
-                STATE_COMPLETE,
-                STATE_FAILED,
-            )
-
-            # State guard: block approval if already processing or in terminal state
-            current_state = prompt_data.get("state", STATE_READY)
-            if current_state == STATE_PROCESSING:
-                self.send_error(409, "Prompt is already approved and being processed")
-                return
-            if current_state in {STATE_COMPLETE, STATE_FAILED}:
-                self.send_error(
-                    409,
-                    f"Cannot approve prompt in state '{current_state}'. Phase has already been processed.",
-                )
-                return
-
-            # Mark as processing (approved) - consistent with new state machine
-            prompt_data["state"] = STATE_PROCESSING
-            prompt_data["approved_at"] = datetime.now().isoformat()
-            prompt_data["approved_by"] = data.get("approved_by", "dashboard_user")
-
-            # Save
-            prompt_file.write_text(json.dumps(prompt_data, indent=2))
-            logger.info("Phase prompt approved: %s/%s", job_id[:8], phase)
-
-            # The runner will detect the processing state and proceed with injection
-
-            response = json.dumps(
-                {
-                    "success": True,
-                    "job_id": job_id,
-                    "phase": phase,
-                    "state": STATE_PROCESSING,
-                    "message": f"Phase {phase} prompt approved for injection",
-                }
-            ).encode("utf-8")
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-
-        except json.JSONDecodeError as exc:
-            self.send_error(400, f"Invalid JSON: {exc}")
-        except Exception as exc:
-            logger.warning("Error injecting phase prompt: %s", exc)
-            self.send_error(500, str(exc))
+        self.send_error(
+            410, "This endpoint is deprecated. Use POST /phase-acknowledge instead."
+        )
 
     def _start_phase_review(self) -> None:
+        """DEPRECATED: Phase review state is no longer tracked separately.
+
+        In the new HITL workflow, phases are either pending_approval or approved.
+        Use GET /phase-prompts to see handoff files and their status.
         """
-        Start reviewing a phase prompt. POST body: {job_id, phase, reviewed_by?}
-        Transitions state: ready -> under_review
-        """
-        if not self._check_auth():
-            self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
-            return
-
-        try:
-            content_length = int(self.headers.get("Content-Length", 0))
-            body_raw = self.rfile.read(content_length)
-            data = json.loads(body_raw.decode("utf-8"))
-
-            job_id = data.get("job_id")
-            phase = data.get("phase")
-
-            if not job_id or not phase:
-                self.send_error(400, "Missing 'job_id' or 'phase' in request body")
-                return
-
-            # Find job
-            job = self.server.context.store.get_job(job_id)
-            if not job:
-                self.send_error(404, f"Job not found: {job_id}")
-                return
-
-            working_dir = job.params.get("working_directory")
-            if not working_dir:
-                self.send_error(400, "Job has no working directory")
-                return
-
-            # Import phase_prompts module
-            import sys
-
-            sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.phase_prompts import (
-                read_phase_prompt,
-                update_prompt_state,
-                STATE_READY,
-                STATE_UNDER_REVIEW,
-            )
-
-            # Read current prompt
-            prompt_data = read_phase_prompt(Path(working_dir), phase)
-            if not prompt_data:
-                self.send_error(404, f"No prompt found for phase: {phase}")
-                return
-
-            current_state = prompt_data.get("state", STATE_READY)
-
-            # Only allow transition from ready state
-            if current_state != STATE_READY:
-                self.send_error(
-                    409,
-                    f"Cannot start review from state '{current_state}'. Must be in 'ready' state.",
-                )
-                return
-
-            # Transition to under_review
-            success = update_prompt_state(
-                Path(working_dir),
-                phase,
-                STATE_UNDER_REVIEW,
-                reviewed_by=data.get("reviewed_by", "dashboard_user"),
-            )
-
-            if not success:
-                self.send_error(500, "Failed to update prompt state")
-                return
-
-            # Re-read to get updated data
-            prompt_data = read_phase_prompt(Path(working_dir), phase)
-
-            response = json.dumps(
-                {
-                    "success": True,
-                    "job_id": job_id,
-                    "phase": phase,
-                    "state": STATE_UNDER_REVIEW,
-                    "prompt": prompt_data,
-                }
-            ).encode("utf-8")
-
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self._add_cors_headers()
-            self.send_header("Content-Length", str(len(response)))
-            self.end_headers()
-            self.wfile.write(response)
-
-        except json.JSONDecodeError as exc:
-            self.send_error(400, f"Invalid JSON: {exc}")
-        except Exception as exc:
-            logger.warning("Error starting phase review: %s", exc)
-            self.send_error(500, str(exc))
+        self.send_error(
+            410,
+            "This endpoint is deprecated. Use GET /phase-prompts to view handoff status.",
+        )
 
     def _acknowledge_phase(self) -> None:
         """
-        Acknowledge a phase prompt, allowing the agent to start execution.
-        POST body: {job_id, phase, acknowledged_by?, was_edited?}
-        Transitions state: draft/under_review -> acknowledged_edited/acknowledged_unedited -> processing
+        Approve a phase, allowing the next phase to start (HITL mode).
+        POST body: {job_id, phase, approved_by?}
 
-        This is the "clean plate" mechanism - the agent is blocked waiting
-        for this state transition before it can start.
-
-        The was_edited flag creates a permanent record of whether the human
-        edited the prompts before submission.
+        In HITL mode, the agent waits for approval of the previous phase's
+        handoff file before starting the next phase.
         """
         if not self._check_auth():
             self.send_error(401, "Unauthorized: missing or invalid X-CF-Auth header")
@@ -2890,7 +2628,6 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
             job_id = data.get("job_id")
             phase = data.get("phase")
-            was_edited = data.get("was_edited", False)
 
             if not job_id or not phase:
                 self.send_error(400, "Missing 'job_id' or 'phase' in request body")
@@ -2907,85 +2644,32 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Job has no working directory")
                 return
 
-            # Import phase_prompts module
+            # Use new lightweight status system
             import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.phase_prompts import (
-                read_phase_prompt,
-                update_prompt_state,
-                STATE_DRAFT,
-                STATE_READY,
-                STATE_UNDER_REVIEW,
-                STATE_READY_EDIT,
-                STATE_ACKNOWLEDGED_EDITED,
-                STATE_ACKNOWLEDGED_UNEDITED,
-            )
+            from tools.mcp_utils.phase_status import approve_phase, get_phase_status
 
-            # Read current prompt
-            prompt_data = read_phase_prompt(Path(working_dir), phase)
-            if not prompt_data:
-                self.send_error(404, f"No prompt found for phase: {phase}")
-                return
+            approved_by = data.get("approved_by", "dashboard_user")
+            success = approve_phase(Path(working_dir), phase, approved_by)
 
-            current_state = prompt_data.get("state", STATE_DRAFT)
-
-            # Allow acknowledge from draft, ready, under_review, or ready_edit states
-            # Note: Include both constant values AND literal "ready_edit" string
-            # because the save endpoint uses literal "ready_edit" but STATE_READY_EDIT = "under_review"
-            valid_states = {
-                STATE_DRAFT,
-                STATE_READY,
-                STATE_UNDER_REVIEW,
-                STATE_READY_EDIT,
-                "ready_edit",  # Literal string used by save endpoint
-            }
-            if current_state not in valid_states:
+            if not success:
+                # Check current status for better error message
+                status = get_phase_status(Path(working_dir))
+                phase_data = status.get("phases", {}).get(phase, {})
+                current_status = phase_data.get("status", "unknown")
                 self.send_error(
                     409,
-                    f"Cannot acknowledge from state '{current_state}'. "
-                    f"Must be in one of: {', '.join(valid_states)}",
+                    f"Cannot approve phase '{phase}' - current status is '{current_status}' "
+                    f"(must be 'pending_approval')",
                 )
                 return
 
-            # Transition to acknowledged state (records edit status permanently)
-            # The agent is waiting for this state - it will transition to processing when it starts
-            acknowledged_state = (
-                STATE_ACKNOWLEDGED_EDITED if was_edited else STATE_ACKNOWLEDGED_UNEDITED
-            )
-
-            # Pass explicit edit flags from request (handles temp edits that aren't in file yet)
-            # These override the file-derived values in update_prompt_state
-            system_prompt_was_edited = data.get("system_prompt_was_edited", False)
-            input_instruction_was_edited = data.get(
-                "input_instruction_was_edited", False
-            )
-
-            success = update_prompt_state(
-                Path(working_dir),
-                phase,
-                acknowledged_state,
-                validate_transition=False,  # Allow direct transition for user acknowledgment
-                acknowledged_by=data.get("acknowledged_by", "dashboard_user"),
-                system_prompt_was_edited=system_prompt_was_edited,
-                input_instruction_was_edited=input_instruction_was_edited,
-            )
-
-            if not success:
-                self.send_error(500, "Failed to update prompt state to acknowledged")
-                return
-
-            # NOTE: We do NOT transition to processing here.
-            # The agent is polling for acknowledged_edited/acknowledged_unedited states.
-            # When the agent sees the acknowledged state, IT will transition to processing
-            # when it actually starts execution. This makes the acknowledged state observable.
-
-            edit_status = "with edits" if was_edited else "unedited"
             logger.info(
-                "Phase prompt acknowledged (%s): %s/%s - agent will wake up and start",
-                edit_status,
+                "Phase approved: %s/%s by %s - next phase will start",
                 job_id[:8],
                 phase,
+                approved_by,
             )
 
             response = json.dumps(
@@ -2993,9 +2677,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     "success": True,
                     "job_id": job_id,
                     "phase": phase,
-                    "state": acknowledged_state,
-                    "was_edited": was_edited,
-                    "message": f"Phase {phase} acknowledged ({edit_status}). Agent will start execution.",
+                    "status": "approved",
+                    "approved_by": approved_by,
+                    "message": f"Phase {phase} approved. Next phase will start.",
                 }
             ).encode("utf-8")
 
@@ -3012,7 +2696,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError as exc:
             self.send_error(400, f"Invalid JSON: {exc}")
         except Exception as exc:
-            logger.warning("Error acknowledging phase: %s", exc)
+            logger.warning("Error approving phase: %s", exc)
             self.send_error(500, str(exc))
 
     def _resume_pipeline_if_paused(self, job_id: str, working_dir: str) -> None:
@@ -3385,56 +3069,39 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
-            # Import phase_prompts module
+            # Use new lightweight status system
             import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.phase_prompts import (
-                read_phase_prompt,
-                read_all_phase_prompts,
-            )
+            from tools.mcp_utils.phase_status import get_phase_status
+
+            status_data = get_phase_status(Path(working_dir))
+            phases_status = status_data.get("phases", {})
 
             if phase:
                 # Single phase
-                prompt_data = read_phase_prompt(Path(working_dir), phase)
-                if not prompt_data:
-                    self.send_error(404, f"No prompt found for phase: {phase}")
-                    return
-
+                phase_data = phases_status.get(phase, {})
                 result = {
                     "phase": phase,
-                    "state": prompt_data.get("state", "sleeping"),
-                    "token_metrics": prompt_data.get("token_metrics", {}),
+                    "state": phase_data.get("status", "waiting"),
                     "timestamps": {
-                        "created_at": prompt_data.get("created_at"),
-                        "ready_at": prompt_data.get("ready_at"),
-                        "review_started_at": prompt_data.get("review_started_at"),
-                        "edited_at": prompt_data.get("edited_at"),
-                        "acknowledged_at": prompt_data.get("acknowledged_at"),
-                        "processing_started_at": prompt_data.get(
-                            "processing_started_at"
-                        ),
-                        "completed_at": prompt_data.get("completed_at"),
+                        "running_at": phase_data.get("running_at"),
+                        "pending_approval_at": phase_data.get("pending_approval_at"),
+                        "approved_at": phase_data.get("approved_at"),
+                        "complete_at": phase_data.get("complete_at"),
                     },
-                    "has_edits": bool(
-                        prompt_data.get("system_prompt_edited")
-                        or prompt_data.get("input_instruction_edited")
-                    ),
+                    "approved_by": phase_data.get("approved_by"),
                 }
             else:
                 # All phases
-                all_prompts = read_all_phase_prompts(Path(working_dir))
                 result = {
                     "phases": {
                         name: {
-                            "state": data.get("state", "sleeping"),
-                            "token_metrics": data.get("token_metrics", {}),
-                            "has_edits": bool(
-                                data.get("system_prompt_edited")
-                                or data.get("input_instruction_edited")
-                            ),
+                            "state": data.get("status", "waiting"),
+                            "approved_at": data.get("approved_at"),
+                            "approved_by": data.get("approved_by"),
                         }
-                        for name, data in all_prompts.items()
+                        for name, data in phases_status.items()
                     }
                 }
 
@@ -3488,13 +3155,35 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(body)
                 return
 
-            # Import phase_prompts module
+            # Use new lightweight status system (transaction stats simplified)
             import sys
 
             sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-            from tools.mcp_utils.phase_prompts import get_transaction_stats
+            from tools.mcp_utils.phase_status import get_phase_status
 
-            stats = get_transaction_stats(Path(working_dir))
+            status_data = get_phase_status(Path(working_dir))
+            phases = status_data.get("phases", {})
+
+            # Compute simplified stats from status
+            stats = {
+                "total_phases": len(phases),
+                "completed_phases": sum(
+                    1 for p in phases.values() if p.get("status") == "complete"
+                ),
+                "pending_phases": sum(
+                    1 for p in phases.values() if p.get("status") == "pending_approval"
+                ),
+                "running_phases": sum(
+                    1 for p in phases.values() if p.get("status") == "running"
+                ),
+                "waiting_phases": sum(
+                    1 for p in phases.values() if p.get("status") == "waiting"
+                ),
+                "failed_phases": sum(
+                    1 for p in phases.values() if p.get("status") == "failed"
+                ),
+                "execution_mode": status_data.get("execution_mode", "autonomous"),
+            }
 
             # Add job-level info
             stats["job_id"] = job_id

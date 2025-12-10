@@ -29,7 +29,10 @@ export type Phase =
   | 'deploy'
   | 'feedback';
 
-export type ExecutionMode = 'autonomous' | 'hitl';
+export type ExecutionMode = 'autonomous' | 'hitl' | 'interactive';
+
+/** Status of a phase in the HITL workflow */
+export type PhaseStatus = 'waiting' | 'running' | 'pending_approval' | 'approved' | 'complete' | 'failed';
 
 export interface Job {
   id: string;

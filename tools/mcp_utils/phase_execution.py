@@ -868,47 +868,35 @@ def run_phase(
 
     # Check for human-in-the-loop mode
     if task_config:
-        from tools.mcp_utils.phase_prompts import (
-            get_phase_prompt_config,
-            is_human_in_the_loop_enabled,
-            run_phase_with_prompt_management,
+        from tools.mcp_utils.phase_status import (
+            get_previous_phase,
+            wait_for_approval,
         )
 
         execution_mode = task_config.get("execution_mode", "autonomous")
-        print(
-            f"[HITL DEBUG] run_phase called for {phase_name}, execution_mode={execution_mode}",
-            flush=True,
-        )
 
-        if is_human_in_the_loop_enabled(task_config):
-            config = get_phase_prompt_config(task_config, phase_name)
-            print(
-                f"[HITL DEBUG] human_in_the_loop_enabled=True, config.human_in_the_loop={config.human_in_the_loop}",
-                flush=True,
-            )
-
-            if config.human_in_the_loop:
-                logger.info(f"Human-in-the-loop mode enabled for {phase_name} phase")
-                print(
-                    f"[HITL DEBUG] Calling run_phase_with_prompt_management for {phase_name}",
-                    flush=True,
+        if execution_mode == "hitl":
+            # In HITL mode, wait for approval of previous phase's output
+            prev_phase = get_previous_phase(phase_name)
+            if prev_phase:
+                logger.info(
+                    f"HITL: Waiting for {prev_phase} approval before {phase_name}"
                 )
+                print(f"⏳ HITL: Waiting for {prev_phase} approval...", file=sys.stderr)
 
-                # Use the wrapper that handles prompt management
-                return run_phase_with_prompt_management(
-                    phase_name=phase_name,
-                    phase_prompt_path=phase_prompt_path,
-                    input_instruction=input_instruction,
-                    working_directory=working_directory,
-                    config=config,
-                    job_id=job_id,
-                    run_phase_func=_run_phase_internal,
-                    phase_timeout=phase_timeout,
-                    validator=validator,
-                    iteration=iteration,
-                    project_type=project_type,
-                    provider=provider,
-                    model=model,
+                if not wait_for_approval(working_directory, prev_phase, timeout=3600):
+                    return PhaseResult(
+                        phase=phase_name,
+                        status="failed",
+                        duration_seconds=0,
+                        context_tokens=0,
+                        exit_code=1,
+                        error=f"Timeout waiting for {prev_phase} approval",
+                    )
+
+                print(
+                    f"✅ HITL: {prev_phase} approved, proceeding with {phase_name}",
+                    file=sys.stderr,
                 )
 
     # Standard execution (no human-in-the-loop)
@@ -1089,25 +1077,14 @@ def _run_phase_internal(
     if not phase_prompt_path.exists():
         error_msg = f"Phase prompt not found: {phase_prompt_path}"
 
-        # Still create a prompt file to record the failure (auditor fix)
+        # Record failure in phase status
         if not skip_prompt_save:
             try:
-                from tools.mcp_utils.phase_prompts import (
-                    create_phase_prompt_file,
-                    STATE_FAILED,
-                )
+                from tools.mcp_utils.phase_status import mark_phase_failed
 
-                create_phase_prompt_file(
-                    working_directory=working_directory,
-                    phase_name=phase_name,
-                    system_prompt=f"ERROR: {error_msg}",
-                    input_instruction=input_instruction,
-                    job_id=job_id,
-                    initial_state=STATE_FAILED,
-                    execution_mode="autonomous",
-                )
+                mark_phase_failed(working_directory, phase_name, error_msg)
             except Exception as e:
-                logger.warning(f"Failed to create error prompt file: {e}")
+                logger.warning(f"Failed to update phase status: {e}")
 
         return PhaseResult(
             phase=phase_name,
@@ -1164,31 +1141,25 @@ def _run_phase_internal(
             WORKING_DIRECTORY=str(working_directory),
         )
 
-    # Save phase prompt file for ALL builds (autonomous and HITL)
-    # This allows the dashboard to show prompts for any build
+    # Mark phase as running in status tracker
     if not skip_prompt_save:
         try:
-            from tools.mcp_utils.phase_prompts import (
-                create_phase_prompt_file,
-                STATE_PROCESSING,
+            from tools.mcp_utils.phase_status import (
+                mark_phase_running,
+                init_phase_status,
+                get_phase_status,
             )
 
-            create_phase_prompt_file(
-                working_directory=working_directory,
-                phase_name=phase_name,
-                system_prompt=phase_prompt,
-                input_instruction=input_instruction,
-                job_id=job_id,
-                initial_state=STATE_PROCESSING,  # Autonomous goes straight to processing
-                execution_mode=execution_mode,  # FIX: Use actual execution_mode, not hardcoded
-            )
+            # Initialize status file if not exists
+            if not get_phase_status(working_directory):
+                init_phase_status(working_directory, execution_mode)
+
+            mark_phase_running(working_directory, phase_name)
             logger.info(
-                f"Saved phase prompt file for {phase_name} (mode: {execution_mode})"
+                f"Phase {phase_name} marked as running (mode: {execution_mode})"
             )
         except Exception as e:
-            # Don't fail the build if prompt saving fails
-            logger.warning(f"Failed to save phase prompt file: {e}")
-            print(f"⚠️  Failed to save phase prompt file: {e}", file=sys.stderr)
+            logger.warning(f"Failed to update phase status: {e}")
 
     # ==========================================================================
     # TOOL EXECUTOR FOR BEDROCK AGENT RETURN CONTROL
@@ -1609,28 +1580,27 @@ def _run_phase_internal(
             except Exception as e:
                 print(f"⚠️  BAML phase completion tracking failed: {e}", file=sys.stderr)
 
-        # Update phase prompt state for autonomous builds
+        # Update phase status on completion
         if not skip_prompt_save:
             try:
-                from tools.mcp_utils.phase_prompts import (
-                    update_prompt_state,
-                    STATE_COMPLETE,
-                    STATE_FAILED,
+                from tools.mcp_utils.phase_status import (
+                    mark_phase_complete,
+                    mark_phase_failed,
+                    mark_phase_pending_approval,
                 )
 
-                prompt_state = STATE_COMPLETE if exit_code == 0 else STATE_FAILED
-                update_prompt_state(
-                    working_directory,
-                    phase_name,
-                    prompt_state,
-                    validate_transition=False,  # Autonomous mode skips validation
-                    token_metrics={
-                        "actual_input_tokens": context_tokens,
-                        "actual_output_tokens": 0,  # Not tracked in autonomous mode
-                    },
-                )
+                if exit_code == 0:
+                    # In HITL mode, mark as pending_approval; otherwise complete
+                    if execution_mode == "hitl":
+                        mark_phase_pending_approval(working_directory, phase_name)
+                    else:
+                        mark_phase_complete(working_directory, phase_name)
+                else:
+                    mark_phase_failed(
+                        working_directory, phase_name, f"Exit code: {exit_code}"
+                    )
             except Exception as e:
-                logger.warning(f"Failed to update phase prompt state: {e}")
+                logger.warning(f"Failed to update phase status: {e}")
 
         # ==========================================================================
         # STATE MACHINE: Update task status on completion
@@ -1699,24 +1669,15 @@ def _run_phase_internal(
             except Exception as baml_error:
                 print(f"BAML error tracking failed: {baml_error}", file=sys.stderr)
 
-        # Update phase prompt state to failed (auditor fix: handle exceptions)
+        # Update phase status to failed
         if not skip_prompt_save:
             try:
-                from tools.mcp_utils.phase_prompts import (
-                    update_prompt_state,
-                    STATE_FAILED,
-                )
+                from tools.mcp_utils.phase_status import mark_phase_failed
 
-                update_prompt_state(
-                    working_directory,
-                    phase_name,
-                    STATE_FAILED,
-                    validate_transition=False,
-                    error=str(e),
-                )
-            except Exception as prompt_error:
+                mark_phase_failed(working_directory, phase_name, str(e))
+            except Exception as status_error:
                 logger.warning(
-                    f"Failed to update phase prompt state on error: {prompt_error}"
+                    f"Failed to update phase status on error: {status_error}"
                 )
 
         return PhaseResult(

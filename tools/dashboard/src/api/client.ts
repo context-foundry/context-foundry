@@ -212,52 +212,74 @@ export async function resumePipeline(jobId: string): Promise<void> {
   }
 }
 
-// ============ Phase Prompt Endpoints ============
+// ============ Phase Handoff Endpoints (HITL) ============
 
-export interface PhasePrompt {
-  job_id: string;
-  phase: string;
-  system_prompt: string;
-  input_instruction: string;
-  editable: boolean;
+import type { PhaseStatus } from '../types';
+export type { PhaseStatus };
+
+/** Handoff data for a single phase */
+export interface PhaseHandoff {
+  /** Output file name (e.g., "scout-report.md") */
+  output: string | null;
+  /** Markdown content of the handoff file */
+  content: string | null;
+  /** Current status of this phase */
+  status: PhaseStatus;
+  /** When the phase was approved (ISO timestamp) */
+  approved_at?: string;
+  /** Who approved the phase */
+  approved_by?: string;
 }
 
-export async function getPhasePrompts(jobId: string): Promise<PhasePrompt[]> {
+/** Response from GET /phase-prompts (now returns handoffs) */
+export interface PhaseHandoffsResponse {
+  /** Map of phase name to handoff data */
+  handoffs: Record<string, PhaseHandoff>;
+  /** Full status object */
+  status: {
+    execution_mode: string;
+    created_at?: string;
+    phases: Record<string, { status: PhaseStatus; [key: string]: unknown }>;
+  };
+  /** Execution mode (autonomous, hitl, interactive) */
+  execution_mode: string;
+}
+
+/**
+ * Get phase handoffs for a job (HITL review).
+ * Returns the .md handoff files that humans review before approving.
+ */
+export async function getPhaseHandoffs(jobId: string): Promise<PhaseHandoffsResponse> {
   const response = await fetchWithAuth(`/phase-prompts?job_id=${jobId}`);
   if (!response.ok) {
-    throw new Error(`Failed to get phase prompts: ${response.statusText}`);
+    throw new Error(`Failed to get phase handoffs: ${response.statusText}`);
   }
   return response.json();
 }
 
-export async function injectPhasePrompt(
-  jobId: string,
-  phase: string,
-  systemPrompt: string,
-  inputInstruction: string
-): Promise<void> {
-  const response = await fetchWithAuth('/phase-inject', {
-    method: 'POST',
-    body: JSON.stringify({
-      job_id: jobId,
-      phase,
-      system_prompt: systemPrompt,
-      input_instruction: inputInstruction,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to inject phase prompt: ${response.statusText}`);
-  }
-}
-
-export async function acknowledgePhase(jobId: string, phase: string): Promise<void> {
+/**
+ * Approve a phase to proceed (HITL mode).
+ * In HITL mode, agents wait for approval of the previous phase's handoff
+ * before starting the next phase.
+ */
+export async function approvePhase(jobId: string, phase: string): Promise<void> {
   const response = await fetchWithAuth('/phase-acknowledge', {
     method: 'POST',
     body: JSON.stringify({ job_id: jobId, phase }),
   });
   if (!response.ok) {
-    throw new Error(`Failed to acknowledge phase: ${response.statusText}`);
+    throw new Error(`Failed to approve phase: ${response.statusText}`);
   }
+}
+
+/**
+ * Get phases that are pending approval.
+ * Convenience function to filter handoffs by status.
+ */
+export function getPhasesPendingApproval(handoffs: PhaseHandoffsResponse): string[] {
+  return Object.entries(handoffs.handoffs)
+    .filter(([_, data]) => data.status === 'pending_approval')
+    .map(([phase]) => phase);
 }
 
 // ============ Artifact Endpoints ============

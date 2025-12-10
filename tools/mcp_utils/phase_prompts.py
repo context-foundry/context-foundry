@@ -1,24 +1,21 @@
 """
-Phase Prompt Management for Manual Workflow Mode
+DEPRECATED: Phase Prompt Management
 
-This module handles:
-- Creating phase prompt files before execution
-- State machine for phase lifecycle with clear human edit tracking
-- Waiting for user acknowledgment before agent execution ("clean plate" mechanism)
-- Reading effective prompts (edited or original)
-- Token estimation for prompts
+This module is deprecated. Use tools.mcp_utils.phase_status instead.
 
-State Machine (HITL mode):
-  Draft -> Under Review -> Acknowledged (Edited/Unedited) -> Processing -> Complete/Failed
+The new system:
+- Uses .md handoff files directly (scout-report.md, architecture.md, etc.)
+- Single phase-status.json file instead of 8+ JSON files
+- 4 states instead of 6: waiting, running, pending_approval, complete
+- ~150 lines instead of ~900 lines
 
-State Machine (Autonomous mode):
-  Processing -> Complete/Failed
+Migration:
+- create_phase_prompt_file() -> mark_phase_running()
+- update_prompt_state() -> mark_phase_complete() / mark_phase_failed()
+- wait_for_acknowledgment() -> wait_for_approval()
+- read_phase_prompt() -> get_phase_status()
 
-The key insight is that prompts have two origins:
-  - System prompt: Deterministic (from prompt file)
-  - Input instruction: AI-generated (probabilistic)
-
-When a human acknowledges, we permanently record whether they edited before submission.
+See: tools/mcp_utils/phase_status.py
 """
 
 import json

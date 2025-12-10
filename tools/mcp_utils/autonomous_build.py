@@ -1,15 +1,7 @@
-"""Autonomous build with per-phase process spawning (FIXED ARCHITECTURE).
+"""Autonomous build with per-phase process spawning.
 
-This is the NEW implementation that spawns separate processes per phase.
-Each phase gets a FRESH context window and reads only the previous phase's .md file.
-
-Key differences from OLD autonomous_build.py:
-- ONE orchestrator → SEPARATE processes per phase
-- Accumulated context → FRESH context per phase (released on exit)
-- 100K+ tokens → Peak 55K tokens (Builder only)
-- DUMB/CRITICAL zones → ALL phases in SMART ZONE (0-40%)
-
-See docs/PHASE_PROCESS_SPAWNING_DESIGN.md for architecture details.
+Each phase spawns as a separate subprocess with fresh context,
+reading only the previous phase's .md handoff file.
 """
 
 import copy
@@ -816,24 +808,27 @@ def autonomous_build_and_deploy_impl(
     """
     Autonomous build with per-phase process spawning.
 
-    **NEW ARCHITECTURE (v3.0):**
-    - Spawns background Python process that executes phases sequentially
-    - Each phase within that process spawns separate `claude` subprocess
-    - Returns immediately with task_id (NON-BLOCKING)
-    - Background process tracked in active_tasks for monitoring
-
-    **Phase Flow (in background process):**
-    Scout (NEW process) → scout-report.md → EXITS
-    Architect (NEW process) → reads scout-report.md → architecture.md → EXITS
-    Builder (NEW process) → reads architecture.md → source files → EXITS
-    Test (NEW process) → runs tests → test-report.md → EXITS
+    Spawns a background process that executes phases sequentially.
+    Each phase runs as a separate subprocess, releases context on exit.
+    Returns immediately with task_id (non-blocking).
 
     Args:
-        Same as OLD autonomous_build.py
-        active_tasks: REQUIRED - Dictionary to track background processes
+        task: Build task description
+        working_directory: Project directory path
+        github_repo_name: Optional GitHub repo name
+        existing_repo: Optional existing repo to enhance
+        mode: "new_project", "enhance", or "bugfix"
+        max_test_iterations: Max test/fix cycles (default 3)
+        timeout_minutes: Build timeout (default 90)
+        use_parallel: Override parallel builder detection
+        incremental: Skip completed phases
+        force_rebuild: Ignore cached results
+        sandbox_path: Sandbox directory path
+        sandbox_task_id: Sandbox task identifier
+        active_tasks: Dictionary to track background processes
 
     Returns:
-        JSON with task_id, status, message (returns IMMEDIATELY)
+        JSON with task_id, status, message
     """
     try:
         # ═══════════════════════════════════════════════════════════════════════
