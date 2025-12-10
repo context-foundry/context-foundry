@@ -48,9 +48,9 @@ Behind the scenes, it spawns specialized AI agents for each phase: one to resear
 Each build runs through phases, and each phase gets a **fresh AI agent** with its own context window:
 
 1. **Scout** — Researches the problem, existing patterns, and constraints
-2. **Architect** — Designs the solution structure and makes technical decisions
-3. **Builder** — Writes the actual code
-4. **Test** — Runs tests, catches failures, triggers fixes if needed
+2. **Architect** — Designs the solution structure, makes technical decisions, and writes [Gherkin acceptance criteria](docs/gherkin-acceptance-criteria.md)
+3. **Builder** — Writes the actual code against the acceptance criteria
+4. **Test** — Validates each Gherkin scenario, catches failures, triggers fixes if needed
 
 If tests fail, it loops back and fixes itself. No manual intervention required.
 
@@ -64,6 +64,7 @@ The key insight: instead of one AI that runs out of context, you get specialized
 |---------|--------------|
 | **Self-Healing Builds** | Tests fail? It automatically fixes and retries. |
 | **Pattern Learning** | Remembers solutions that worked, avoids mistakes it's made before. |
+| **Human-in-the-Loop** | Review Gherkin acceptance criteria before Builder starts. Clear sign-off gates. |
 | **Desktop App** | Visual dashboard to watch builds, browse artifacts, chat with the AI. |
 | **Daemon Service** | Runs in the background, manages job queues, handles resource limits. |
 
