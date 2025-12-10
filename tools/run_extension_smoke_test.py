@@ -39,7 +39,7 @@ def smoke_test_extension(extension_name: str) -> bool:
     print("=" * 70)
 
     test_count = 0
-    total_tests = 8 if extension_name == "roblox" else 4
+    total_tests = 7 if extension_name == "roblox" else 4
 
     # Test 1: Extension directory exists
     test_count += 1
@@ -157,46 +157,7 @@ def smoke_test_extension(extension_name: str) -> bool:
             print(f"  ✗ FAIL: Detection test failed: {e}")
             return False
 
-        # Test 6: Orchestrator injection
-        test_count += 1
-        print(f"\n[{test_count}/{total_tests}] Validating orchestrator injection...")
-        try:
-            orchestrator_path = cf_root / "tools" / "orchestrator_prompt.txt"
-            content = orchestrator_path.read_text()
-
-            required_markers = [
-                "=== ROBLOX-SCOUT-START ===",
-                "=== ROBLOX-ARCHITECT-START ===",
-                "=== ROBLOX-BUILDER-START ===",
-                "=== ROBLOX-TESTER-START ===",
-                "=== ROBLOX-DOCS-START ===",
-            ]
-
-            required_content = [
-                "DO NOT research",
-                "Server-Authoritative",
-                "RemoteEvent",
-                "TestEZ",
-                "Rojo",
-            ]
-
-            for marker in required_markers:
-                if marker not in content:
-                    print(f"  ✗ FAIL: Missing marker: {marker}")
-                    return False
-
-            for req in required_content:
-                if req not in content:
-                    print(f"  ✗ FAIL: Missing content: {req}")
-                    return False
-
-            print("  ✓ PASS: All orchestrator injections present")
-
-        except Exception as e:
-            print(f"  ✗ FAIL: Orchestrator validation failed: {e}")
-            return False
-
-        # Test 7: Template validation
+        # Test 6: Template validation
         test_count += 1
         print(f"\n[{test_count}/{total_tests}] Validating template project...")
         try:
@@ -232,7 +193,7 @@ def smoke_test_extension(extension_name: str) -> bool:
             print(f"  ✗ FAIL: Template validation failed: {e}")
             return False
 
-        # Test 8: Integration tests
+        # Test 7: Integration tests
         test_count += 1
         print(f"\n[{test_count}/{total_tests}] Running integration tests...")
         try:

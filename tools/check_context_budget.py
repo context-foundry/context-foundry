@@ -3,7 +3,7 @@
 Context Budget Check - CLI Tool for Agents
 
 This tool allows agents to check context budget status during builds.
-Designed to be called directly from orchestrator_prompt.txt.
+Called by phase agents during autonomous build execution.
 
 Usage:
     python3 tools/check_context_budget.py --phase scout --check-before
@@ -127,7 +127,7 @@ def print_build_context_header(context: Dict, width: int = 78):
 
             dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
             started = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-        except:
+        except Exception:
             pass  # Use raw value
     print(f"  Started:      {started}")
 

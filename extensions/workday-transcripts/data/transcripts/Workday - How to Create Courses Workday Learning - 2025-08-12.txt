@@ -1,0 +1,55 @@
+[Music]
+
+Welcome to Workday Learning: Create Courses. In this session, we'll discuss and demonstrate how to create digital and blended courses, as well as the business cases for each type of course. In Workday Learning, we use courses to deliver structured learning experiences that disseminate knowledge and build skills.
+
+Think of courses as learning components that bring together different types of learning content, like videos, documents, and surveys, to build course lessons. However, there's a key distinction: while you can create individual lessons within a course, you can't bring in existing standalone lessons. Standalone lessons are independent learning components in Workday Learning and cannot be incorporated into courses.
+
+Therefore, when it comes to structuring your learning content, there are two types of courses: digital and blended. Let's explore each type.
+
+Digital courses provide a self-paced learning experience. You can incorporate a variety of lesson types, such as media, external links, surveys, and packaged content, to create on-demand learning. Since learners can access these courses anytime, you don't need to schedule specific offerings. However, you may require enrollment if you want to manage learner access.
+
+Blended courses take things a step further by combining digital elements with live instruction. You can include all the same digital course lesson types, but with the added power of instructor-led training sessions. This blend of online and live learning creates an interactive learning experience. Keep in mind that any instructor-led or training activity course lessons require a scheduled course offering. This ensures that learners can enroll in specific sessions and attend at designated times.
+
+By understanding the nuances of digital and blended courses, you can use Workday Learning to create learning experiences that cater to your workforce's needs and preferences.
+
+Now, let's shift our focus to the process of creating courses. Whether you are building a digital or blended learning experience, there are a couple of key things to keep in mind. First, make sure you complete all required course fields. Second, every course needs at least one course lesson to deliver its content.
+
+Let's meet Deborah Simpson, an HR manager who supports learning and development initiatives at Global Modern Services. She needs to create a digital course to support their new sales onboarding initiative. Let's follow along as Deborah builds this course in Workday Learning.
+
+To begin, Deborah navigates to the create course task. From the popup, Deborah selects the create digital course option and clicks okay. From the create course page, Deborah completes the required fields, such as the course title, description, and topic. Notice Deborah only populates the optional fields that meet her requirements.
+
+Deborah scrolls down and selects the add lesson option. In this example, Deborah adds a media course lesson and completes the relevant fields. She makes the lesson mandatory for learners to receive a completion. She then selects the select file button to add a media file. She could also drag and drop a file from her desktop into the course.
+
+Once the course meets Deborah's requirements, she selects the submit button. The course publishes, making it available in the learning catalog. Employees can now easily browse the catalog, or the course can be distributed through a mass enrollment or learning campaign.
+
+As you build your courses in Workday Learning, it's important to be mindful of the information you include. Workday provides a range of fields to capture course details. Be intentional, using only the fields that support your business needs. This approach keeps your course content concise and relevant, ensuring learners quickly grasp the learning content requirements.
+
+Now that we've discussed digital courses, let's shift our focus to blended learning. While blended courses share similarities with their digital counterparts, they offer unique features that cater to an interactive learning experience. With blended courses, you gain the power of versioning, allowing you to manage updates and revisions to your course content over time. You can also manage learner demand and enrollment with waitlists. And of course, blended courses bring a human touch to the learning journey.
+
+Let's rejoin Deborah as she creates a blended course for the sales onboarding initiative. This time, she'll incorporate a mix of on-demand learning and in-person training sessions to provide a comprehensive learning experience. Again, Deborah navigates to the create course task to select the create blended course option and then clicks okay.
+
+Next, from the create blended course page, Deborah completes all required and any relevant fields. In addition to the required fields, Deborah leaves the default effective date to manage future course versions. To streamline the enrollment process, she selects the enable auto-enrollment from the waitlist checkbox. This ensures waitlisted learners automatically enroll in course offerings as spots become available.
+
+After adding a cover image, Deborah enters capacity information by entering a number other than zero in the waitlist capacity field. Deborah activates waitlisting for any scheduled offerings. She scrolls to the bottom of the page and completes the allowed instructors field. By entering these details, Deborah limits scheduling any future offerings to this pool of instructors. Alternatively, she can leave this field empty and enter these details when scheduling an offering to provide flexibility.
+
+Since this course will contain a virtual instructor-led lesson, any specified locations will cause an error. She then selects the add lesson option. For this course, Deborah adds a media lesson. For the virtual classroom course lesson, Deborah has many new fields to consider. She completes the title and description fields. Since this course is designed for onboarding, she elects to track attendance and grades with a pass/fail grading scheme.
+
+Once the course meets her requirements, she selects submit to publish the course to the learning catalog. Notice when Julia Brandt, a member of the sales team, views the course, many of the fields Deborah entered during the course creation display. However, Julia is unable to enroll because Deborah has yet to schedule any offerings. Thus, the course remains inaccessible.
+
+For blended courses featuring instructor-led or training activity lessons, scheduled course offerings are essential. When scheduling an offering, you'll specify the location, whether it's a physical or virtual location, and assign learning trainers to guide these sessions. Additionally, you'll set the date and time, ensuring learners know when and where to participate.
+
+Deborah is ready to schedule a course offering for the new sales protocol blended course. Let's observe how she enters key details for enrollment to occur. First, Deborah navigates to the course and selects the view as admin button in the lower left corner. From the admin view, Deborah selects the schedule button.
+
+Notice as Deborah scrolls down, many of the original fields from the blended course copy over. In the instructor-led details section, Deborah specifies the primary instructor. Since Deborah had previously specified a pool of instructors when creating the blended course, she is limited and selects Charlotte Ryan. She then specifies information such as instructors, virtual classroom URL, and password and login information. She enters the start and end date and time and specifies the time zone. When satisfied, Deborah selects submit.
+
+Deborah can view any scheduled course offerings from the scheduling tab on the course page in the admin view. Building on that idea, let's discuss training activities in Workday Learning. These course lesson types provide a structured environment for learners to practice on-the-job skills under the guidance of an assessor. Organizations can use training activities as opportunities to demonstrate sales pitches, conduct mock interviews, perform technical tasks, and more.
+
+You can seamlessly integrate training activities into your blended courses, adding them as an individual lesson or even building an entire course around a single training activity known as spontaneous training activities. Spontaneous training activities empower organizations with flexibility to deliver convenient, non-scheduled on-the-job training. Regardless of how you structure a training activity lesson, you'll need to populate the required fields.
+
+Let's observe how Deborah adds a training activity lesson to the sales protocol blended course. To begin, Deborah navigates to the sales protocol course page. In admin view, she selects the edit button. From the edit course popup, she selects the update current version option, then clicks okay. From the edit course page, Deborah scrolls down to the add lesson link to select the training activity option.
+
+Notice how the page dynamically updates with fields unique to training activity lessons. Deborah begins by specifying the allowed assessors and dragging and dropping a demonstration checklist into the training material section. Similar to an instructor-led classroom lesson, she opts to track grades and attendance while designating the grading scheme. Lastly, she selects the training activity type and then selects submit.
+
+Now, when Julia Brandt navigates to the sales protocol course, she notices the course updates. She observes the new training activity lesson and the select offering button as the course is ready for enrollment. While Workday Learning automatically updates existing offerings with many types of blended course edits, you will need to manually update any existing offering when you add a training activity or instructor-led course lesson. This ensures flexibility and control in deciding which offerings uptake these changes.
+
+In this session, we've learned the differences between digital and blended courses and how to create each type. We also explored the different types of course lessons and the role instructor-led course offerings play in the enrollment process. Thank you for taking the time to learn with Workday.

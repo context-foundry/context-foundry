@@ -81,7 +81,7 @@ def infer_doc_sources(doc_file: Path, project_root: Path) -> List[str]:
 
     # Architecture docs depend on main source files
     if "architecture" in doc_name or "design" in doc_name:
-        sources.extend(["tools/mcp_server.py", "tools/orchestrator_prompt.txt"])
+        sources.extend(["tools/mcp_server.py", "tools/mcp_utils/autonomous_build.py"])
 
     # API docs depend on API/server files
     elif "api" in doc_name:
@@ -155,11 +155,17 @@ def build_docs_manifest(working_directory: str) -> DocsManifest:
                 "sources": ["setup.py", "requirements.txt", "package.json"]
             },
             "## Usage": {
-                "sources": ["tools/mcp_server.py", "tools/orchestrator_prompt.txt"]
+                "sources": [
+                    "tools/mcp_server.py",
+                    "tools/mcp_utils/autonomous_build.py",
+                ]
             },
             "## API Reference": {"sources": ["tools/mcp_server.py"]},
             "## Architecture": {
-                "sources": ["tools/mcp_server.py", "tools/orchestrator_prompt.txt"]
+                "sources": [
+                    "tools/mcp_server.py",
+                    "tools/mcp_utils/autonomous_build.py",
+                ]
             },
         }
 
