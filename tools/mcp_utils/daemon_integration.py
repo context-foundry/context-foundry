@@ -115,20 +115,38 @@ def submit_autonomous_build_to_daemon(
     #
     # Smart defaults:
     # - Relative paths (e.g., "weather-app") → sibling to context-foundry
-    #   Example: ~/projects/weather-app
-    # - Absolute paths (e.g., "/tmp/test") → used as-is (explicit override)
+    #   Example: ~/homelab/weather-app
+    # - Absolute paths in /tmp or temp dirs → REDIRECT to projects root
+    # - Other absolute paths → used as-is (explicit override)
     # =========================================================================
     from tools.mcp_utils.path_utils import get_projects_root
+    import tempfile
 
     working_dir_input = Path(working_directory)
+    projects_root = get_projects_root()
+
+    # Check if path is in a temp directory (common mistake)
+    temp_dirs = ["/tmp", "/private/tmp", tempfile.gettempdir()]
+    is_temp_path = any(str(working_dir_input).startswith(td) for td in temp_dirs)
+
     if working_dir_input.is_absolute():
-        final_working_dir = working_dir_input
-        print(
-            f"📍 Using explicit working directory: {working_dir_input}",
-            file=sys.stderr,
-        )
+        if is_temp_path and mode == "new_project":
+            # Redirect /tmp paths to projects root for new projects
+            project_name = working_dir_input.name
+            final_working_dir = projects_root / project_name
+            print(
+                "⚠️  Redirecting from temp directory to projects root:",
+                file=sys.stderr,
+            )
+            print(f"   Original: {working_dir_input}", file=sys.stderr)
+            print(f"   Redirected to: {final_working_dir}", file=sys.stderr)
+        else:
+            final_working_dir = working_dir_input
+            print(
+                f"📍 Using explicit working directory: {working_dir_input}",
+                file=sys.stderr,
+            )
     else:
-        projects_root = get_projects_root()
         final_working_dir = projects_root / working_directory
         print(
             f"📍 Creating project in: {final_working_dir} (sibling to context-foundry)",

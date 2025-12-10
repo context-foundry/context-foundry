@@ -1361,13 +1361,15 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                         try:
                             from datetime import datetime
                             from .models import JobType
+                            from tools.mcp_utils.path_utils import get_projects_root
 
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             safe_desc = "".join(
                                 c if c.isalnum() else "_" for c in description[:20]
                             ).strip("_")
+                            # Use projects root (sibling to context-foundry) instead of hardcoded ~/homelab
                             project_dir = (
-                                Path.home() / "homelab" / f"{safe_desc}_{timestamp}"
+                                get_projects_root() / f"{safe_desc}_{timestamp}"
                             )
                             # NOTE: Don't mkdir here - runner.py will append random suffix
                             # and create the final directory to avoid duplicates

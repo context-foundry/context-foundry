@@ -113,10 +113,26 @@ class Runner:
         # Import needed modules for random ID and codebase detection
         import random
         import re
+        import tempfile
         from pathlib import Path
         from context_foundry.daemon.models import JobType
+        from tools.mcp_utils.path_utils import get_projects_root
 
         mode = job.params.get("mode", "new_project")
+
+        # Redirect temp directory paths to projects root for new projects
+        # This prevents builds from being created in /tmp which is volatile
+        temp_dirs = ["/tmp", "/private/tmp", tempfile.gettempdir()]
+        is_temp_path = any(working_dir.startswith(td) for td in temp_dirs)
+
+        if is_temp_path and mode == "new_project":
+            # Extract project name and redirect to projects root
+            project_name = Path(working_dir).name
+            projects_root = get_projects_root()
+            working_dir = str(projects_root / project_name)
+            logger.warning(f"Redirected temp path to projects root: {working_dir}")
+            # Update job params to reflect the redirect
+            job.params["working_directory"] = working_dir
 
         # Save the ORIGINAL base path (before any random ID suffix) for safety checks
         base_path_for_detection = working_dir
