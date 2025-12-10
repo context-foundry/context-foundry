@@ -13,8 +13,13 @@ Context Foundry is an autonomous build system that does the tedious parts for yo
 ---
 
 <div align="center">
-  <img src="docs/images/dashboard-hero.png" alt="Context Foundry Desktop" width="100%">
-  <p><em>Context Foundry Desktop - Native macOS app for visual build monitoring</em></p>
+  <img src="docs/assets/screenshots/dashboard.png" alt="Context Foundry Dashboard" width="100%">
+  <p><em>Context Foundry Desktop - Monitor builds, view artifacts, track progress</em></p>
+</div>
+
+<div align="center">
+  <img src="docs/assets/screenshots/sidekick.png" alt="AI Sidekick Assistant" width="100%">
+  <p><em>AI Sidekick - Chat with your builds, ask questions, get insights</em></p>
 </div>
 
 ---
