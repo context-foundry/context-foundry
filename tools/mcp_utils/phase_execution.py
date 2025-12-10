@@ -964,27 +964,7 @@ def _run_phase_internal(
     working_directory = Path(working_directory).resolve()
 
     # ==========================================================================
-    # CONTEXT HANDOFF: Read previous session state
-    # ==========================================================================
-    from tools.llm_core.context import (
-        format_context_for_prompt,
-        get_handoff_instructions,
-    )
-
-    # 1. Inject previous context (if any)
-    previous_context = format_context_for_prompt(working_directory)
-    if previous_context:
-        # Prepend to user_prompt so it's the first thing the agent sees
-        print("📥 Injecting previous session context...", file=sys.stderr)
-        input_instruction = previous_context + "\n\n" + input_instruction
-
-    # 2. Append instructions to generate the NEXT handoff
-    # We insist on this being at the end of the user prompt
-    handoff_instructions = get_handoff_instructions()
-    input_instruction += "\n\n" + handoff_instructions
-
-    # ==========================================================================
-    # 3. Construct System Prompt
+    # Construct System Prompt
     # ==========================================================================
     # Force reload config to pick up any recent changes
     reload_config()
