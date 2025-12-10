@@ -13,6 +13,7 @@
 6. [Pattern Training](#pattern-training)
 7. [Testing & Validation](#testing--validation)
 8. [Reference Examples](#reference-examples)
+9. [Teaching New Languages](#teaching-new-languages)
 
 ---
 
@@ -971,6 +972,32 @@ Ideas for extension system evolution:
 - Dynamic pattern generation from project history
 - Community pattern sharing via S3
 - Automated pattern extraction from successful builds
+
+---
+
+## Teaching New Languages
+
+If you need to teach Context Foundry a programming language that is **not in Claude's training data** (new languages, DSLs, proprietary scripting languages), see the dedicated guide:
+
+**[Teaching New Programming Languages](TEACHING_NEW_LANGUAGES.md)**
+
+This guide covers:
+
+- **BNF Grammar** - How to document syntax rules with examples
+- **Type System Rules** - How to document type constraints and interactions
+- **Code Examples** - What working samples to provide
+- **Pattern JSON Structure** - How to document common mistakes
+- **Context Flow** - How the orchestrator tells subagents about your language
+
+### Quick Reference: What to Provide
+
+| Material | Required? | Purpose |
+|----------|-----------|---------|
+| Grammar/Syntax | Yes | BNF or prose describing valid code |
+| Type System | Yes (if typed) | Type rules and error conditions |
+| Standard Library | Yes | Built-in functions/types reference |
+| Code Examples | Yes | 5-10 working samples |
+| Common Mistakes | Recommended | Anti-patterns with fixes |
 
 ---
 

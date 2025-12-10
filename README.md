@@ -280,6 +280,13 @@ cfd stop              # Stop the daemon
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and fixes |
 | [FAQ](docs/FAQ.md) | Frequently asked questions |
 
+### Extension Development
+
+| Guide | Description |
+|-------|-------------|
+| [Extension Development](docs/EXTENSION_DEVELOPMENT_GUIDE.md) | Create domain-specific extensions |
+| [Teaching New Languages](docs/TEACHING_NEW_LANGUAGES.md) | Teach Claude languages not in its training data |
+
 ---
 
 ## File Structure
