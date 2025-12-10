@@ -181,14 +181,6 @@ They're essentially **stateless workers** that read artifacts, do work, write ar
 
 ---
 
-## Desktop App
-
-Context Foundry Desktop is a **native macOS application** that provides a visual interface for monitoring and managing builds.
-
-<div align="center">
-  <img src="docs/images/job-detail.png" alt="Job Detail View" width="80%">
-</div>
-
 ### Features
 
 | Feature | Description |
