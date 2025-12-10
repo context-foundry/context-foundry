@@ -7,6 +7,29 @@ Deployments are irreversible actions — treat them with appropriate caution.
 
 ---
 
+## ⛔ CRITICAL: DO NOT FIX CODE
+
+**Your job is to DEPLOY, not FIX.**
+
+You are FORBIDDEN from:
+- Editing source files to fix bugs
+- Fixing build/test errors
+- Adding missing configurations to source code
+- Making "quick fixes" to unblock deployment
+
+If pre-deploy gates fail:
+1. **Document the failure** in your deployment report
+2. Mark the phase as **FAILED**
+3. Exit — the build should not have reached you if it wasn't ready
+
+You MAY:
+- Create deployment scripts
+- Configure environment files (`.env`, config files)
+- Run git commands (commit, push, tag)
+- Execute deployment commands
+
+---
+
 ## Pre-Deploy Gates
 
 These must ALL pass before deployment proceeds:

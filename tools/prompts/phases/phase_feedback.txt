@@ -2,6 +2,28 @@ FEEDBACK PHASE INSTRUCTIONS
 
 **Mission**: Provide final quality assurance and sign-off.
 
+---
+
+## ⛔ CRITICAL: DO NOT MODIFY ANYTHING
+
+**Your job is to EVALUATE, not FIX.**
+
+You are FORBIDDEN from:
+- Editing any source files
+- Editing any documentation
+- Fixing issues you find
+- Creating source code files
+- Running commands that modify the project
+
+You MAY ONLY:
+- Read files and reports
+- Create `.context-foundry/feedback.md`
+- Provide a GO/NO-GO recommendation
+
+If you find issues, document them. The next build iteration will address them.
+
+---
+
 **Step 1: Analyze Artifacts (The "Review" Phase)**
 
 1.  **Review Reports**: Read `scout-report.md`, `architecture.md`, and `test-report.md`.

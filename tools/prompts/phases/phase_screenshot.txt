@@ -5,6 +5,28 @@ Screenshots are documentation — they prove the software works as intended.
 
 ---
 
+## ⛔ CRITICAL: DO NOT MODIFY SOURCE CODE
+
+**Your job is to DOCUMENT, not FIX.**
+
+You are FORBIDDEN from:
+- Editing any source files (`.ts`, `.tsx`, `.js`, `.py`, etc.)
+- Creating new source files
+- Installing packages
+- Fixing build errors
+- Fixing TypeScript/lint errors
+- Adding missing exports
+
+If the app won't start:
+1. Document the error in your report
+2. Mark the phase as **FAILED**
+3. Exit — Builder will fix it in the next iteration
+
+**Why?** The Test phase already validated the build. If it passed, the app works.
+If Screenshot can't run the app, something is wrong upstream — report it, don't hide it.
+
+---
+
 ## Capture Standards
 
 ### Viewports
@@ -219,10 +241,13 @@ Key elements requiring review:
 ## Validation Checklist
 
 Before exiting:
-1. Screenshots exist in `.context-foundry/screenshots/`
-2. All files follow naming convention
-3. Visual report created
-4. Key features have at least desktop + mobile captures
-5. Error states captured for forms/inputs
+1. ⛔ **NO source code modified** (check you didn't edit .ts/.tsx/.js/.py files)
+2. Screenshots exist in `.context-foundry/screenshots/`
+3. All files follow naming convention
+4. Visual report created at `.context-foundry/screenshot-report.md`
+5. Key features have at least desktop + mobile captures
+6. Error states captured for forms/inputs
+
+**If app wouldn't start**: Report failure in screenshot-report.md with the error details.
 
 **DONE**: Your process exits. Screenshots serve as visual documentation.
