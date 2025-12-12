@@ -733,6 +733,9 @@ class Runner:
         execution_mode = job.params.get("execution_mode", "autonomous")
         resume_from_phase = job.params.get("resume_from_phase", None)
 
+        # Spec mode parameters
+        spec_files = job.params.get("spec_files", [])
+
         # Detect project info at the ACTUAL working directory
         # (which may have random ID appended for new projects)
         working_path = Path(working_dir)
@@ -789,6 +792,7 @@ result = execute_build_with_phase_spawning(
         "execution_mode": {repr(execution_mode)},
         "timeout_minutes": {timeout_minutes},
         "job_id": {repr(str(job.id))},
+        "spec_files": {repr(spec_files)},
     }},
     enable_test_loop={enable_test_loop},
     max_test_iterations={max_test_iterations},

@@ -1568,10 +1568,29 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 1: SCOUT
         # ═══════════════════════════════════════════════════════════════════════
+        # Check if spec mode is enabled (user provided spec files)
+        spec_files = task_config.get("spec_files", [])
+        is_spec_mode = bool(spec_files)
+
         # Check if phase should be skipped (already completed or resuming from later phase)
         scout_skipped = _should_skip_phase(
             "Scout", pipeline_state, resume_from_phase, working_directory
         )
+
+        # In spec mode, always skip Scout - user's spec replaces Scout's job
+        if is_spec_mode and not scout_skipped:
+            print(
+                "📋 SPEC MODE: Skipping Scout phase (building from spec files)",
+                file=sys.stderr,
+            )
+            print(f"   Spec files: {spec_files}", file=sys.stderr)
+            scout_skipped = True
+            # Mark Scout as completed even though we skipped it
+            if "Scout" not in phases_completed:
+                phases_completed.append("Scout")
+                if pipeline_state:
+                    pipeline_state.mark_phase_completed("Scout")
+                    save_pipeline_state(pipeline_state, working_directory)
 
         if scout_skipped:
             print("⏭️  Skipping Scout phase (already completed)", file=sys.stderr)
@@ -1782,26 +1801,73 @@ def execute_build_with_phase_spawning(
             # Audit: Phase started
             audit_phase_started("Architect", str(working_directory))
 
-            # FIX #4: Use module-relative path
-            architect_prompt = MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
+            # Choose prompt based on spec mode
+            if is_spec_mode:
+                # SPEC MODE: Use extraction prompt instead of design prompt
+                architect_prompt = (
+                    MODULE_DIR / "prompts" / "phases" / "phase_architect_spec_mode.txt"
+                )
+                print(
+                    "📋 SPEC MODE: Using extraction prompt for Architect",
+                    file=sys.stderr,
+                )
 
-            # Inject scout report as markdown (more token-efficient for LLM consumption)
-            scout_md_path = working_directory / ".context-foundry" / "scout-report.md"
-            if scout_md_path.exists() and scout_md_path.stat().st_size > 100:
-                scout_content = scout_md_path.read_text()
-                architect_instruction = (
-                    "Create architecture.md based on the following scout report.\n\n"
-                    "SCOUT_REPORT:\n" + scout_content
-                )
-                log_debug("Injecting scout-report.md (markdown)", working_directory)
+                # Read spec files and inject their contents
+                spec_contents = []
+                for spec_file in spec_files:
+                    spec_path = Path(spec_file)
+                    if spec_path.exists():
+                        try:
+                            content = spec_path.read_text()
+                            spec_contents.append(
+                                f"### File: {spec_path.name}\n"
+                                f"Path: {spec_file}\n\n"
+                                f"```\n{content}\n```"
+                            )
+                            print(f"   ✓ Loaded spec: {spec_file}", file=sys.stderr)
+                        except Exception as e:
+                            print(
+                                f"   ⚠ Failed to read spec {spec_file}: {e}",
+                                file=sys.stderr,
+                            )
+                    else:
+                        print(f"   ⚠ Spec file not found: {spec_file}", file=sys.stderr)
+
+                if spec_contents:
+                    architect_instruction = (
+                        "EXTRACT (do not invent) from the following specification file(s).\n"
+                        "Create architecture.md with Gherkin acceptance criteria.\n\n"
+                        "SPECIFICATION FILES:\n\n" + "\n\n".join(spec_contents)
+                    )
+                else:
+                    architect_instruction = (
+                        "ERROR: No spec files could be loaded. "
+                        f"Attempted to read: {spec_files}"
+                    )
+                log_debug("SPEC MODE: Injecting spec file contents", working_directory)
             else:
-                architect_instruction = (
-                    "Read .context-foundry/scout-report.md and create architecture.md."
+                # NORMAL MODE: Use standard design prompt
+                architect_prompt = (
+                    MODULE_DIR / "prompts" / "phases" / "phase_architect.txt"
                 )
-                log_debug(
-                    "Scout report not found, architect will read directly",
-                    working_directory,
+
+                # Inject scout report as markdown (more token-efficient for LLM consumption)
+                scout_md_path = (
+                    working_directory / ".context-foundry" / "scout-report.md"
                 )
+                if scout_md_path.exists() and scout_md_path.stat().st_size > 100:
+                    scout_content = scout_md_path.read_text()
+                    architect_instruction = (
+                        "Create architecture.md based on the following scout report.\n\n"
+                        "SCOUT_REPORT:\n" + scout_content
+                    )
+                    log_debug("Injecting scout-report.md (markdown)", working_directory)
+                else:
+                    architect_instruction = "Read .context-foundry/scout-report.md and create architecture.md."
+                    log_debug(
+                        "Scout report not found, architect will read directly",
+                        working_directory,
+                    )
 
             architect_result = run_phase(
                 "Architect",

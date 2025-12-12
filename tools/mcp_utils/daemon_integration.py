@@ -73,6 +73,7 @@ def submit_autonomous_build_to_daemon(
     force_rebuild: bool = False,
     pause_after_phases: Optional[List[str]] = None,
     execution_mode: str = "autonomous",
+    spec_files: Optional[List[str]] = None,
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -92,6 +93,7 @@ def submit_autonomous_build_to_daemon(
         force_rebuild: Force full rebuild
         pause_after_phases: Phases to pause after (e.g., ["Scout", "Architect"])
         execution_mode: "autonomous", "interactive", or "selective"
+        spec_files: List of specification file paths (enables spec mode)
 
     Returns:
         JSON string with job submission result
@@ -170,6 +172,7 @@ def submit_autonomous_build_to_daemon(
         "force_rebuild": force_rebuild,
         "pause_after_phases": pause_after_phases or [],
         "execution_mode": execution_mode,
+        "spec_files": spec_files or [],  # Spec mode: list of spec file paths
     }
 
     # Submit job to daemon queue
@@ -197,6 +200,16 @@ def submit_autonomous_build_to_daemon(
         if mode == "new_project":
             path_note = f"\nNote: A random ID will be appended to prevent overwrites (e.g., {project_name}-c4r)"
 
+        # Determine if spec mode is active
+        is_spec_mode = bool(spec_files)
+        spec_mode_note = ""
+        expected_phases = "Scout → Architect → Builder → Test → Complete"
+        if is_spec_mode:
+            spec_mode_note = (
+                f"\n📋 SPEC MODE: Building from {len(spec_files)} spec file(s)"
+            )
+            expected_phases = "Architect (extraction) → Builder → Test → Complete"
+
         # Return success response with monitoring instructions
         return json.dumps(
             {
@@ -205,6 +218,8 @@ def submit_autonomous_build_to_daemon(
                 "project": project_name,
                 "working_directory": final_working_dir_str,
                 "timeout_minutes": timeout_minutes,
+                "spec_mode": is_spec_mode,
+                "spec_files": spec_files or [],
                 "message": f"""
 🚀 Build job submitted to CF Daemon!
 
@@ -212,7 +227,7 @@ Job ID: {job.id}
 Project: {project_name}
 Status: {job.status.value}
 Priority: {job.priority}
-Working Directory: {final_working_dir_str}{path_note}
+Working Directory: {final_working_dir_str}{path_note}{spec_mode_note}
 
 The daemon will execute this build when a worker is available.
 
@@ -226,7 +241,7 @@ Check status anytime:
   "Show all my builds"
 
 Expected phases:
-  Scout → Architect → Builder → Test → Complete
+  {expected_phases}
 
 Expected duration: 7-15 minutes
 """.strip(),
