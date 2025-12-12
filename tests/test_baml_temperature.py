@@ -6,8 +6,11 @@ Verifies that temperature 0.0 produces deterministic outputs.
 With temperature 0.0, the same input should produce identical outputs.
 """
 
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,6 +22,10 @@ from tools.baml_integration import (
 )
 
 
+@pytest.mark.skipif(
+    not os.environ.get("OPENAI_API_KEY"),
+    reason="OPENAI_API_KEY not set - skipping integration test",
+)
 def test_temperature_zero_produces_deterministic_outputs():
     """
     Test that temperature 0.0 setting produces deterministic outputs.
@@ -61,7 +68,8 @@ def test_temperature_zero_produces_deterministic_outputs():
 
     # Try both dict-style and attribute-style access
     try:
-        session_id = (
+        # Verify we can access the session_id (dict or attribute style)
+        _ = (
             first_result["session_id"]
             if isinstance(first_result, dict)
             else first_result.session_id

@@ -164,6 +164,10 @@ class TestDaemonizationLogic:
         # Parent should have closed write end
         mock_close.assert_called_with(4)
 
+    @pytest.mark.skipif(
+        os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"),
+        reason="Daemon fork tests require real file descriptors, skipping in CI",
+    )
     @patch("sys.stdin")
     @patch("sys.stdout")
     @patch("sys.stderr")
@@ -228,6 +232,10 @@ class TestDaemonizationLogic:
         mock_dup2.assert_any_call(5, 1)  # stdout
         mock_dup2.assert_any_call(5, 2)  # stderr
 
+    @pytest.mark.skipif(
+        os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"),
+        reason="Daemon fork tests require real file descriptors, skipping in CI",
+    )
     @patch("sys.stdin")
     @patch("sys.stdout")
     @patch("sys.stderr")
