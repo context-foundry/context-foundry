@@ -326,8 +326,210 @@ cfd build "Update dependencies" /path/to/project --mode upgrade_deps
 - Mention specific modules to test
 - Indicate test types (unit/integration/e2e)
 
+---
+
+# Execution Modes
+
+In addition to **Task Modes** (above) which control *what type of work* is done, Context Foundry supports **Execution Modes** which control *how the build runs*.
+
+## Execution Mode vs Task Mode
+
+| Concept | What It Controls | Examples |
+|---------|------------------|----------|
+| **Task Mode** | Type of work to perform | `new_project`, `fix_bug`, `add_feature`, `refactor` |
+| **Execution Mode** | How the pipeline executes | `autonomous`, `simple_mode`, `spec_files`, `hitl` |
+
+These are **orthogonal** - you can combine any Task Mode with any Execution Mode(s).
+
+---
+
+## Available Execution Modes
+
+### 1. Autonomous Mode (Default)
+
+Full pipeline execution with all 8 phases:
+
+```
+Scout → Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback
+```
+
+**Parameters:** None (default behavior)
+
+**Use when:** Production builds, complete projects
+
+---
+
+### 2. Simple Mode
+
+**Skip Screenshot and Deploy phases for faster local builds.**
+
+```
+Scout → Architect → Builder → Test → Docs → Feedback
+```
+
+**Parameter:** `simple_mode=True`
+
+**Phases skipped:**
+- ❌ Screenshot (Playwright visual capture)
+- ❌ Deploy (GitHub repo creation/push)
+
+**Time saved:** 2-5 minutes per build
+
+**Use when:**
+- Local development and prototyping
+- CI/CD pipeline testing
+- Quick iteration cycles
+- Don't need GitHub deployment
+
+**Example:**
+```python
+autonomous_build_and_deploy(
+    task="Build a REST API",
+    working_directory="/projects/api",
+    mode="new_project",      # Task Mode
+    simple_mode=True         # Execution Mode
+)
+```
+
+---
+
+### 3. Spec Mode
+
+**Build from your specification documents instead of AI research.**
+
+```
+Architect (extraction) → Builder → Test → Screenshot → Docs → Deploy → Feedback
+```
+
+**Parameter:** `spec_files=["/path/to/spec.pdf", ...]`
+
+**Phase changes:**
+- ❌ Scout phase is skipped entirely
+- ✅ Architect runs in "extraction mode" (extracts from spec, doesn't invent)
+
+**Supported formats:**
+| Format | Extensions |
+|--------|------------|
+| Plain Text | `.txt`, `.md`, `.json`, `.yaml`, `.xml` |
+| PDF | `.pdf` (requires `pypdf`) |
+| Word | `.docx` (requires `python-docx`) |
+| Images | `.png`, `.jpg`, `.gif`, `.webp` |
+
+**Use when:**
+- You have a PRD, design doc, or technical spec
+- You want exact implementation of requirements
+- Client provided specifications
+
+**Example:**
+```python
+autonomous_build_and_deploy(
+    task="Build the dashboard",
+    working_directory="/projects/dashboard",
+    spec_files=[
+        "/docs/dashboard-prd.pdf",
+        "/docs/wireframes.png"
+    ]
+)
+```
+
+---
+
+### 4. Human-in-the-Loop (HIL) Mode
+
+**Pause for human approval after specified phases.**
+
+```
+Scout → ⏸️ → Architect → ⏸️ → Builder → ⏸️ → Test → ...
+```
+
+**Parameters:**
+- `execution_mode="hitl"`
+- `pause_after_phases=["Scout", "Architect", "Builder"]` (optional)
+
+**Use when:**
+- Critical/production systems requiring oversight
+- Learning how Context Foundry works
+- Compliance requirements for review
+
+**Example:**
+```python
+autonomous_build_and_deploy(
+    task="Build payment processor",
+    working_directory="/projects/payments",
+    execution_mode="hitl",
+    pause_after_phases=["Scout", "Architect", "Builder", "Test"]
+)
+```
+
+---
+
+## Mode Compatibility Matrix
+
+**All execution modes are independent and can be combined!**
+
+| Combination | Valid | Pipeline |
+|-------------|-------|----------|
+| Autonomous (default) | ✅ | Scout → Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback |
+| Simple only | ✅ | Scout → Architect → Builder → Test → Docs → Feedback |
+| Spec only | ✅ | Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback |
+| HIL only | ✅ | Scout ⏸️ Architect ⏸️ Builder ⏸️ Test → Screenshot → Docs → Deploy → Feedback |
+| **Simple + Spec** | ✅ | Architect → Builder → Test → Docs → Feedback |
+| **Simple + HIL** | ✅ | Scout ⏸️ Architect ⏸️ Builder ⏸️ Test → Docs → Feedback |
+| **Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Screenshot → Docs → Deploy → Feedback |
+| **Simple + Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Docs → Feedback |
+
+### Combined with Task Modes
+
+You can combine **any Task Mode** with **any Execution Mode(s)**:
+
+```python
+# Fix a bug with simple mode (no deploy)
+autonomous_build_and_deploy(
+    task="Fix the login timeout bug",
+    working_directory="/projects/myapp",
+    mode="fix_bug",           # Task Mode
+    simple_mode=True          # Execution Mode
+)
+
+# Build feature from spec with HIL
+autonomous_build_and_deploy(
+    task="Add OAuth support",
+    working_directory="/projects/myapp",
+    mode="add_feature",       # Task Mode
+    spec_files=["/docs/oauth-spec.md"],  # Spec Mode
+    execution_mode="hitl",    # HIL Mode
+    pause_after_phases=["Architect"]
+)
+```
+
+---
+
+## Quick Reference
+
+| Mode | Parameter | Effect |
+|------|-----------|--------|
+| **Simple** | `simple_mode=True` | Skip Screenshot + Deploy |
+| **Spec** | `spec_files=[...]` | Skip Scout, extract from docs |
+| **HIL** | `execution_mode="hitl"` | Pause for approval |
+| **Pause Points** | `pause_after_phases=[...]` | Custom pause locations |
+
+### Decision Guide
+
+| Your Situation | Recommended Configuration |
+|----------------|---------------------------|
+| Quick local prototype | `simple_mode=True` |
+| Production deployment | Default (no special modes) |
+| Have a PRD/spec | `spec_files=[...]` |
+| Critical system | `execution_mode="hitl"` |
+| Client spec with review | `spec_files=[...], execution_mode="hitl"` |
+| Fast iteration with spec | `spec_files=[...], simple_mode=True` |
+| Maximum speed (local) | `simple_mode=True, spec_files=[...]` |
+
+---
+
 ## See Also
 
+- [User Guide - Build Modes](USER_GUIDE.md#build-modes)
 - [Getting Started Guide](GETTING_STARTED.md)
 - [Phase Process Documentation](PHASE_PROCESS_SPAWNING_DESIGN.md)
 - [FAQ](FAQ.md)

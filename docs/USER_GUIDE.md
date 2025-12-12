@@ -278,7 +278,18 @@ Claude Code will extract these requirements and use the right parameters.
 
 ## Build Modes
 
-Context Foundry supports three build modes that can be combined for different workflows:
+Context Foundry supports **four execution modes** that can be combined for different workflows. These modes control *how* the build runs, while [Task Modes](#task-modes-new_project-fix_bug-etc) control *what type* of work is done.
+
+### Execution Mode Overview
+
+| Mode | Purpose | Phases Affected | Use Case |
+|------|---------|-----------------|----------|
+| **Regular** | Full autonomous build | All 8 phases | Default for most builds |
+| **Simple** | Fast builds, skip optional phases | Skip Screenshot + Deploy | Local development, testing |
+| **Spec Mode** | Build from your documents | Skip Scout, Architect extracts | Have PRD/spec already |
+| **HIL Mode** | Human approval at each phase | Pause after each phase | Critical systems, learning |
+
+---
 
 ### Regular Mode (Default)
 
@@ -288,7 +299,56 @@ Standard autonomous build where AI researches and designs everything:
 Build a weather dashboard with React
 ```
 
-**Pipeline:** Scout → Architect → Builder → Test → Deploy
+**Pipeline:** Scout → Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback
+
+---
+
+### Simple Mode (NEW!)
+
+**Skip Screenshot and Deploy phases for faster local builds.**
+
+When you're developing locally and don't need screenshots or GitHub deployment, use simple mode to save 2-5 minutes per build.
+
+```
+Build a weather app with simple_mode=True
+```
+
+**Pipeline:** Scout → Architect → Builder → Test → Docs → Feedback
+
+**What's skipped:**
+- ❌ Screenshot phase (Playwright capture)
+- ❌ Deploy phase (GitHub repo creation/push)
+
+**What's kept:**
+- ✅ Scout (research)
+- ✅ Architect (design)
+- ✅ Builder (implementation)
+- ✅ Test (validation)
+- ✅ Documentation (README generation)
+- ✅ Feedback (pattern learning)
+
+#### Simple Mode via MCP
+
+```python
+autonomous_build_and_deploy(
+    task="Build a calculator app",
+    working_directory="/Users/me/projects/calc",
+    simple_mode=True  # Skip Screenshot and Deploy
+)
+```
+
+#### When to Use Simple Mode
+
+| Scenario | Use Simple Mode? |
+|----------|------------------|
+| Local development/prototyping | ✅ Yes |
+| Testing the build pipeline | ✅ Yes |
+| Quick iteration on features | ✅ Yes |
+| Production deployment | ❌ No |
+| Need visual documentation | ❌ No |
+| Publishing to GitHub | ❌ No |
+
+---
 
 ### Spec Mode (Build from Your Documents)
 
@@ -299,7 +359,7 @@ Build from spec at ~/Documents/dashboard-spec.pdf
 Output to ~/projects/my-dashboard
 ```
 
-**Pipeline:** ~~Scout~~ → Architect (extracts from spec) → Builder → Test → Deploy
+**Pipeline:** ~~Scout~~ → Architect (extracts from spec) → Builder → Test → Screenshot → Docs → Deploy → Feedback
 
 **Key difference:** Scout is skipped. Architect **extracts** from your spec files instead of **inventing** a design.
 
@@ -344,6 +404,8 @@ autonomous_build_and_deploy(
 )
 ```
 
+---
+
 ### Human-in-the-Loop (HIL) Mode
 
 Want to review and approve at each phase before continuing?
@@ -356,20 +418,55 @@ Build a payment system with human-in-the-loop review
 
 You'll be prompted to review and approve after each major phase.
 
-### Combined: Spec Mode + HIL
+#### HIL Mode via MCP
 
-**These modes are independent and can be combined!**
-
-| Mode | What It Controls |
-|------|------------------|
-| **Spec Mode** | *Input source* — Your documents vs AI research |
-| **HIL Mode** | *Approval gates* — When to pause for review |
-
-**Use both together:**
-
+```python
+autonomous_build_and_deploy(
+    task="Build a payment processor",
+    working_directory="/Users/me/projects/payments",
+    execution_mode="hitl",  # Human-in-the-loop
+    pause_after_phases=["Scout", "Architect", "Builder"]  # Where to pause
+)
 ```
-Build from spec ~/Documents/spec.pdf with human-in-the-loop review
-Output to ~/projects/my-app
+
+---
+
+## Mode Compatibility Matrix
+
+**All execution modes are independent and can be combined!**
+
+| Combination | Valid? | Pipeline |
+|-------------|--------|----------|
+| Regular only | ✅ | Scout → Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback |
+| Simple only | ✅ | Scout → Architect → Builder → Test → Docs → Feedback |
+| Spec only | ✅ | Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback |
+| HIL only | ✅ | Scout ⏸️ Architect ⏸️ Builder ⏸️ Test → Screenshot → Docs → Deploy → Feedback |
+| **Simple + Spec** | ✅ | Architect → Builder → Test → Docs → Feedback |
+| **Simple + HIL** | ✅ | Scout ⏸️ Architect ⏸️ Builder ⏸️ Test → Docs → Feedback |
+| **Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Screenshot → Docs → Deploy → Feedback |
+| **Simple + Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Docs → Feedback |
+
+### Mode Summary Table
+
+| Mode | What It Controls | Parameter |
+|------|------------------|-----------|
+| **Spec Mode** | *Input source* — Your documents vs AI research | `spec_files=[...]` |
+| **Simple Mode** | *Phase skipping* — Skip Screenshot and Deploy | `simple_mode=True` |
+| **HIL Mode** | *Approval gates* — When to pause for review | `execution_mode="hitl"` |
+
+### Combined Example: Spec + Simple + HIL
+
+Build from your spec, skip optional phases, with human review:
+
+```python
+autonomous_build_and_deploy(
+    task="Build the user dashboard",
+    working_directory="/Users/me/projects/dashboard",
+    spec_files=["/Users/me/Documents/dashboard-spec.pdf"],
+    simple_mode=True,
+    execution_mode="hitl",
+    pause_after_phases=["Architect", "Builder"]
+)
 ```
 
 **What happens:**
@@ -379,17 +476,26 @@ Output to ~/projects/my-app
 4. Builder implements
 5. **⏸️ Pause for your approval** of the code
 6. Test validates
+7. ~~Screenshot~~ (skipped - simple mode)
+8. Documentation generates README
+9. ~~Deploy~~ (skipped - simple mode)
+10. Feedback analyzes and learns patterns
 
-#### When to Use Each Mode
+---
 
-| Scenario | Recommended Mode |
-|----------|------------------|
+### When to Use Each Mode
+
+| Scenario | Recommended Mode(s) |
+|----------|---------------------|
 | Quick prototype, no spec | Regular Mode |
+| Local development iteration | **Simple Mode** |
 | Have a detailed PRD/design doc | Spec Mode |
 | Critical system, want oversight | HIL Mode |
 | Implementing client's spec with review | Spec Mode + HIL |
+| Fast iteration with spec | **Spec Mode + Simple Mode** |
 | Learning how CF works | HIL Mode (see each phase) |
-| Production payment system | Spec Mode + HIL |
+| Production deployment | Regular Mode (or Spec Mode) |
+| CI/CD pipeline testing | **Simple Mode** |
 
 ---
 
