@@ -90,7 +90,7 @@ For each capture:
 3. **Wait for animations/loading to complete**
 4. Verify content is visible (no spinners unless capturing loading state)
 5. Take screenshot
-6. Save to `.context-foundry/screenshots/` with proper naming
+6. Save to `docs/screenshots/` with proper naming
 
 ### Step 4: Visual Analysis
 Review each screenshot for:
@@ -110,7 +110,7 @@ If baseline screenshots exist:
 
 ## Output: Visual Report
 
-Create `.context-foundry/screenshot-report.md`:
+Create `docs/screenshot-report.md`:
 
 ```markdown
 # Visual Report: {Project Name}
@@ -242,9 +242,9 @@ Key elements requiring review:
 
 Before exiting:
 1. ⛔ **NO source code modified** (check you didn't edit .ts/.tsx/.js/.py files)
-2. Screenshots exist in `.context-foundry/screenshots/`
+2. Screenshots exist in `docs/screenshots/`
 3. All files follow naming convention
-4. Visual report created at `.context-foundry/screenshot-report.md`
+4. Visual report created at `docs/screenshot-report.md`
 5. Key features have at least desktop + mobile captures
 6. Error states captured for forms/inputs
 

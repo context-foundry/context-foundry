@@ -2521,7 +2521,7 @@ def execute_build_with_phase_spawning(
             )
             screenshot_instruction = (
                 "Follow the SCREENSHOT PHASE INSTRUCTIONS in the prompt.\n"
-                "Capture screenshots of key pages and save to .context-foundry/screenshots/."
+                "Capture screenshots of key pages and save to docs/screenshots/."
             )
 
             screenshot_result = run_phase(
