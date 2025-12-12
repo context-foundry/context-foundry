@@ -155,9 +155,9 @@ def get_provider_for_phase(
     return (default_provider, default_model, {})
 
 
-def get_all_phase_configs() -> (
-    Dict[str, Tuple[str, Optional[str], Optional[Dict[str, str]]]]
-):
+def get_all_phase_configs() -> Dict[
+    str, Tuple[str, Optional[str], Optional[Dict[str, str]]]
+]:
     """
     Get provider/model config for all known phases.
     Useful for displaying current configuration.
@@ -228,7 +228,7 @@ def create_default_config() -> None:
 def print_current_config() -> None:
     """Print current configuration to stdout (for CLI usage)."""
     print("\nProvider Configuration")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
     print(f"Config file: {CONFIG_PATH}")
     print(f"Config exists: {CONFIG_PATH.exists()}")
     print()
@@ -236,7 +236,7 @@ def print_current_config() -> None:
     configs = get_all_phase_configs()
 
     print(f"{'Phase':<15} {'Provider':<10} {'Model':<50}")
-    print(f"{'-'*15} {'-'*10} {'-'*50}")
+    print(f"{'-' * 15} {'-' * 10} {'-' * 50}")
 
     for phase, (provider, model, extra) in configs.items():
         model_display = model or "(default)"

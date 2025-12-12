@@ -1798,9 +1798,9 @@ def _execute_agentic_tasks(
     builder_logs_dir = working_directory / ".context-foundry" / "builder-logs"
     builder_logs_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"\n{'=' * 60}", file=sys.stderr)
     print(f"🚀 AGENTIC BUILD: {len(tasks)} tasks", file=sys.stderr)
-    print(f"{'='*60}\n", file=sys.stderr)
+    print(f"{'=' * 60}\n", file=sys.stderr)
 
     # Task Prompt Path
     task_prompt_path = (
@@ -1902,12 +1902,12 @@ def _execute_agentic_tasks(
     duration = (datetime.now() - start_time).total_seconds()
     success = len(failed_tasks) == 0
 
-    print(f"\n{'='*60}", file=sys.stderr)
+    print(f"\n{'=' * 60}", file=sys.stderr)
     print(
         f"🏁 BUILD COMPLETE: {len(completed_tasks)}/{len(tasks)} tasks successful",
         file=sys.stderr,
     )
-    print(f"{'='*60}\n", file=sys.stderr)
+    print(f"{'=' * 60}\n", file=sys.stderr)
 
     return PhaseResult(
         phase="Builder",

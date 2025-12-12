@@ -231,9 +231,9 @@ class TestModeAutoSwitching:
 
         # Verify random ID would NOT be appended (because mode is now enhancement)
         should_append = job.type == JobType.AUTONOMOUS_BUILD and mode == "new_project"
-        assert (
-            not should_append
-        ), "Random ID should NOT be appended after mode switch to enhancement"
+        assert not should_append, (
+            "Random ID should NOT be appended after mode switch to enhancement"
+        )
 
     def test_new_project_without_code_stays_new_project(
         self, runner, store, temp_projects_dir
@@ -535,9 +535,9 @@ class TestRunnerPreRunLogic:
         saved_params = save_job_calls[-1]  # Get last save
 
         # Verify mode was auto-switched to enhancement (because existing_repo + code exists)
-        assert (
-            saved_params["mode"] == "enhancement"
-        ), "Mode should be auto-switched when existing_repo is provided and has code"
+        assert saved_params["mode"] == "enhancement", (
+            "Mode should be auto-switched when existing_repo is provided and has code"
+        )
 
         # Verify persistence: retrieve from store and confirm
         updated_job = store.get_job(job.id)

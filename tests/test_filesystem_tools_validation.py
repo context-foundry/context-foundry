@@ -159,9 +159,9 @@ class TestCacheManagement:
         # Cache keys should be in format "category/name"
         for cache_key, tool in scanner._tool_cache.items():
             expected_key = f"{tool.category}/{tool.name}"
-            assert (
-                cache_key == expected_key
-            ), f"Cache key {cache_key} doesn't match expected {expected_key}"
+            assert cache_key == expected_key, (
+                f"Cache key {cache_key} doesn't match expected {expected_key}"
+            )
 
     def test_tools_in_different_categories_dont_collide(self):
         """Test that tools with same name in different categories don't overwrite"""
@@ -228,9 +228,9 @@ class TestCachePersistence:
 
             # All keys should have category/name format
             for cache_key in cache_data.keys():
-                assert (
-                    "/" in cache_key
-                ), f"Cache key {cache_key} missing category separator"
+                assert "/" in cache_key, (
+                    f"Cache key {cache_key} missing category separator"
+                )
 
     def test_cache_loads_with_correct_keys(self):
         """Test that cache loads and reconstructs with category/name keys"""

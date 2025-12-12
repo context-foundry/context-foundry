@@ -377,14 +377,14 @@ class TestTimeoutIntegration:
 
         # Verify status is TIMED_OUT
         final_job = manager.get_job(job.id)
-        assert (
-            final_job.status == JobStatus.TIMED_OUT
-        ), f"Expected TIMED_OUT but got {final_job.status}"
+        assert final_job.status == JobStatus.TIMED_OUT, (
+            f"Expected TIMED_OUT but got {final_job.status}"
+        )
 
         # Verify no retry happened
-        assert (
-            final_job.retry_count == 0
-        ), f"Expected 0 retries but got {final_job.retry_count}"
+        assert final_job.retry_count == 0, (
+            f"Expected 0 retries but got {final_job.retry_count}"
+        )
 
     def test_timeout_cleans_up_agent_tracker(self, job_manager_with_runner):
         """Verify agent tracker is cleaned up on timeout"""

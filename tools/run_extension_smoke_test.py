@@ -90,9 +90,9 @@ def smoke_test_extension(extension_name: str) -> bool:
             for pattern in patterns.get("patterns", []):
                 assert "pattern_id" in pattern, f"Pattern missing pattern_id: {pattern}"
                 assert "category" in pattern, f"Pattern missing category: {pattern}"
-                assert (
-                    "description" in pattern
-                ), f"Pattern missing description: {pattern}"
+                assert "description" in pattern, (
+                    f"Pattern missing description: {pattern}"
+                )
 
             print("  ✓ PASS: All patterns have valid structure")
         else:

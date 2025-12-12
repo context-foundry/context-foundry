@@ -136,19 +136,19 @@ def _classify_zombie(
     """
     # Old daemon (>1 day)
     if proc_type == "cfd_daemon" and age_seconds > 86400:
-        return f"Old daemon (running {age_seconds/3600:.1f}h)"
+        return f"Old daemon (running {age_seconds / 3600:.1f}h)"
 
     # Stuck Claude (>2 hours)
     if proc_type == "claude" and age_seconds > 7200:
-        return f"Stuck Claude instance ({age_seconds/3600:.1f}h)"
+        return f"Stuck Claude instance ({age_seconds / 3600:.1f}h)"
 
     # Orphaned build script (>3 hours)
     if proc_type == "autonomous_build" and age_seconds > 10800:
-        return f"Orphaned build script ({age_seconds/3600:.1f}h)"
+        return f"Orphaned build script ({age_seconds / 3600:.1f}h)"
 
     # Orphaned MCP server (>2 hours)
     if proc_type == "mcp_server" and age_seconds > 7200:
-        return f"Orphaned MCP server ({age_seconds/3600:.1f}h)"
+        return f"Orphaned MCP server ({age_seconds / 3600:.1f}h)"
 
     return None
 
@@ -222,8 +222,8 @@ def _format_age(seconds: float) -> str:
     if seconds < 60:
         return f"{seconds:.0f}s"
     elif seconds < 3600:
-        return f"{seconds/60:.0f}m"
+        return f"{seconds / 60:.0f}m"
     elif seconds < 86400:
-        return f"{seconds/3600:.1f}h"
+        return f"{seconds / 3600:.1f}h"
     else:
-        return f"{seconds/86400:.1f}d"
+        return f"{seconds / 86400:.1f}d"

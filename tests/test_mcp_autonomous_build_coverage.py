@@ -227,9 +227,9 @@ class TestDetectTaskIntent:
                     "new feature",
                 ]
             )
-            assert (
-                has_feature_keywords
-            ), f"Task '{task}' should contain add/feature keywords"
+            assert has_feature_keywords, (
+                f"Task '{task}' should contain add/feature keywords"
+            )
 
     def test_detect_add_docs_intent(self):
         """Test detection of documentation intent via keywords"""

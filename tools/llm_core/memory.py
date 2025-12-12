@@ -285,7 +285,9 @@ class ConversationMemory:
                 sections.append("\n🔗 RELATED PAST CONVERSATIONS:")
                 for entry in relevant:
                     age = entry.age_days()
-                    age_str = f"{int(age)}d ago" if age < 30 else f"{int(age/30)}mo ago"
+                    age_str = (
+                        f"{int(age)}d ago" if age < 30 else f"{int(age / 30)}mo ago"
+                    )
                     sections.append(f"  [{age_str}] {entry.summary}")
 
         # Recurring patterns

@@ -564,7 +564,7 @@ def wait_for_acknowledgment(
 
     # Human-in-the-loop mode - wait for acknowledgment
     logger.info(f"Waiting for user acknowledgment of {phase_name} phase prompt...")
-    print(f"\n{'='*60}", flush=True)
+    print(f"\n{'=' * 60}", flush=True)
     print(f"WAITING FOR ACKNOWLEDGMENT: {phase_name}", flush=True)
     print("", flush=True)
     print("   Open the dashboard to review and acknowledge the prompt.", flush=True)
@@ -572,7 +572,7 @@ def wait_for_acknowledgment(
     print("", flush=True)
     print("   Dashboard: http://localhost:8421", flush=True)
     print(f"   Timeout: {config.approval_timeout}s", flush=True)
-    print(f"{'='*60}\n", flush=True)
+    print(f"{'=' * 60}\n", flush=True)
 
     start_time = time.time()
 

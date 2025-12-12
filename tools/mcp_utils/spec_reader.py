@@ -300,9 +300,7 @@ def format_spec_for_prompt(
             "file_path": str(path),
             "content": content,
             "formatted": (
-                f"### File: {path.name}\n"
-                f"Path: {file_path}\n\n"
-                f"```\n{content}\n```"
+                f"### File: {path.name}\nPath: {file_path}\n\n```\n{content}\n```"
             ),
         }
     elif content_type == "image":

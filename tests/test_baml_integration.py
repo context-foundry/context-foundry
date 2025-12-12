@@ -237,8 +237,11 @@ class TestPhaseTracking:
 
     def test_update_phase_with_baml_normalizes_and_injects_timestamps(self):
         """Ensure PhaseInfo payloads are flattened with real timestamps"""
-        with patch("tools.baml_integration.get_baml_client") as mock_get_client, patch(
-            "tools.baml_integration._now_iso", return_value="2025-01-02T03:04:05Z"
+        with (
+            patch("tools.baml_integration.get_baml_client") as mock_get_client,
+            patch(
+                "tools.baml_integration._now_iso", return_value="2025-01-02T03:04:05Z"
+            ),
         ):
             mock_client = MagicMock()
             mock_get_client.return_value = mock_client

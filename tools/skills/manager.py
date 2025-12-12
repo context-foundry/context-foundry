@@ -243,52 +243,52 @@ class SkillsManager:
         else:
             success_pct = "Not yet used"
 
-        md = f"""# {metadata['title']}
+        md = f"""# {metadata["title"]}
 
-**Category**: {metadata['category']}
-**Project Type**: {metadata['project_type']}
-**File Type**: {metadata['file_type']}
-**Success Rate**: {success_pct} ({metrics['usage_count']} uses)
+**Category**: {metadata["category"]}
+**Project Type**: {metadata["project_type"]}
+**File Type**: {metadata["file_type"]}
+**Success Rate**: {success_pct} ({metrics["usage_count"]} uses)
 
 ## Description
 
-{metadata['description']}
+{metadata["description"]}
 
 ## Implementation
 
-```{metadata['file_type']}
-{impl['code']}
+```{metadata["file_type"]}
+{impl["code"]}
 ```
 
 ## Dependencies
 
-{self._format_list(impl['dependencies']) if impl['dependencies'] else 'None'}
+{self._format_list(impl["dependencies"]) if impl["dependencies"] else "None"}
 
 ## Suggested File Path
 
-`{impl['file_path']}`
+`{impl["file_path"]}`
 
 ## Usage Example
 
-```{metadata['file_type']}
-{usage['example']}
+```{metadata["file_type"]}
+{usage["example"]}
 ```
 
 ## Tags
 
-{', '.join(f'`{tag}`' for tag in skill['tags'])}
+{", ".join(f"`{tag}`" for tag in skill["tags"])}
 
 ## Metrics
 
-- **Times Used**: {metrics['usage_count']}
+- **Times Used**: {metrics["usage_count"]}
 - **Success Rate**: {success_pct}
-- **Last Used**: {metrics['last_used'] or 'Never'}
+- **Last Used**: {metrics["last_used"] or "Never"}
 
 ---
 
-*Auto-generated from skill {skill['skill_id']}*
-*Created: {skill['created_at']}*
-*Updated: {skill['updated_at']}*
+*Auto-generated from skill {skill["skill_id"]}*
+*Created: {skill["created_at"]}*
+*Updated: {skill["updated_at"]}*
 """
         return md
 

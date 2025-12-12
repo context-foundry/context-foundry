@@ -204,9 +204,9 @@ class TestClaudeCliParsing:
 
                     # Verify temp file was cleaned up
                     for file_path in created_files:
-                        assert not Path(
-                            file_path
-                        ).exists(), f"Temp file not cleaned up: {file_path}"
+                        assert not Path(file_path).exists(), (
+                            f"Temp file not cleaned up: {file_path}"
+                        )
 
 
 @pytest.mark.integration

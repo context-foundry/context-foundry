@@ -363,7 +363,7 @@ def cmd_providers(args):
     ]
 
     print(f"{'Phase':<15} {'Provider':<10} {'Model':<35}")
-    print(f"{'-'*15} {'-'*10} {'-'*35}")
+    print(f"{'-' * 15} {'-' * 10} {'-' * 35}")
 
     for phase in phases:
         # Check env override first
@@ -1806,7 +1806,7 @@ def cmd_cleanup(args):
 
     for i, zombie in enumerate(zombies, 1):
         print(f"\n[{i}/{len(zombies)}] PID {zombie.pid}: {zombie.name}")
-        print(f"  Age: {zombie.age_seconds/3600:.1f}h")
+        print(f"  Age: {zombie.age_seconds / 3600:.1f}h")
         print(f"  Reason: {zombie.reason}")
         print(f"  Command: {zombie.cmdline[:80]}")
         print(f"  Kill command: kill -9 {zombie.pid}")
@@ -2621,7 +2621,7 @@ def cmd_agents(args):
     if args.agent_cmd == "list":
         print("\nCurrently registered agents:")
         print(f"{'Name':<15} {'Provider':<15} {'Model/Details':<40}")
-        print(f"{'-'*15} {'-'*15} {'-'*40}")
+        print(f"{'-' * 15} {'-' * 15} {'-' * 40}")
         for name, config in registry.list_agents().items():
             provider = config.get("provider", "local")
             details = config.get("model", "")
