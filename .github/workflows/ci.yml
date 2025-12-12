@@ -17,6 +17,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -43,6 +44,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -72,19 +74,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install bandit safety
+          pip install bandit pip-audit
 
       - name: Run Bandit security linter
-        run: bandit -r mcp_server/ -ll
-        continue-on-error: true
+        run: bandit -r tools/ context_foundry/ --severity-level high
 
       - name: Check for known security vulnerabilities
-        run: safety check --json
-        continue-on-error: true
+        run: pip-audit --progress-spinner off
+        continue-on-error: true  # Dependency vulnerabilities are informational
 
   integration:
     name: Integration Tests
@@ -97,6 +99,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
 
       - name: Install Context Foundry
         run: |

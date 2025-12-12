@@ -1267,7 +1267,7 @@ def _run_phase_internal(
             try:
                 result = subprocess.run(
                     command,
-                    shell=True,
+                    shell=True,  # nosec B602 - shell=True needed for bash commands
                     capture_output=True,
                     text=True,
                     cwd=str(working_directory),

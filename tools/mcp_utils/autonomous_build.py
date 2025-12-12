@@ -3081,7 +3081,7 @@ def _get_source_file_checksums(working_dir: Path) -> dict[str, str]:
             try:
                 relative_path = file_path.relative_to(working_dir)
                 with open(file_path, "rb") as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
+                    file_hash = hashlib.md5(f.read(), usedforsecurity=False).hexdigest()
                 checksums[str(relative_path)] = file_hash
             except (OSError, ValueError):
                 # Skip files we can't read
