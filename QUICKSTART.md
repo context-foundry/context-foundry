@@ -8,6 +8,8 @@
 - ⏱️ **Live Duration Counter** - Real-time build progress tracking
 - 🎨 **Beautiful Dark UI** - Modern interface with phase timeline visualization
 - ✅ **E2E Testing** - Playwright test suite for reliability
+- 📋 **Spec Mode** - Build directly from your PDFs, Word docs, wireframes
+- 👤 **HIL + Spec Mode** - Combine specification files with human approval gates
 
 **Also includes:**
 - ✨ **CF Daemon** - Background service for persistent job management
@@ -316,6 +318,77 @@ Build a full-stack task management app with:
 
 ---
 
+## Build Modes
+
+Context Foundry supports three build modes that can be combined:
+
+### Regular Mode (Default)
+```
+Build a todo app with localStorage
+```
+**What happens:** Scout → Architect → Builder → Test → Deploy
+
+### Spec Mode (Build from Your Documents)
+
+Have a design doc, PRD, or wireframes? Skip the AI brainstorming:
+
+```
+Build from spec at ~/Documents/my-spec.pdf
+Output to ~/projects/my-app
+```
+
+**What happens:** ~~Scout~~ → Architect (extracts from spec) → Builder → Test
+
+**Supported file formats:**
+- **Text:** .txt, .md, .json, .yaml
+- **PDF:** .pdf (requires `pip install pypdf`)
+- **Word:** .docx (requires `pip install python-docx`)
+- **Images:** .png, .jpg, .gif, .webp (diagrams, wireframes, mockups)
+
+**Multiple spec files:**
+```
+Build using these specs:
+- ~/Documents/requirements.md
+- ~/Documents/wireframes.png
+- ~/Documents/api-design.pdf
+
+Output to ~/projects/my-app
+```
+
+### Human-in-the-Loop (HIL) Mode
+
+Want to review and approve each phase before continuing?
+
+```
+Build a payment system with human-in-the-loop review
+```
+
+**What happens:** Scout → **Approve?** → Architect → **Approve?** → Builder → **Approve?** → Test
+
+### Combined: Spec Mode + HIL
+
+These modes are **independent and combinable**:
+
+| Mode | What It Controls |
+|------|------------------|
+| **Spec Mode** | *Input source* — Your files vs AI research |
+| **HIL Mode** | *Approval gates* — When to pause for review |
+
+```
+Build from spec ~/Documents/spec.pdf with human-in-the-loop review
+Output to ~/projects/my-app
+```
+
+**What happens:**
+1. ~~Scout~~ (skipped - your spec is the source)
+2. Architect extracts from your PDF
+3. **⏸️ Pause for your approval** of architecture
+4. Builder implements
+5. **⏸️ Pause for your approval** of code
+6. Test validates
+
+---
+
 ## Tips for Best Results
 
 ### ✅ Do This
@@ -602,6 +675,15 @@ A: Say: "Build locally only, skip GitHub deployment"
 **Q: Can it work on existing code?**
 A: Yes! Say: "Enhance my project at /path/to/project by adding [features]"
 
+**Q: Can I build from my own design documents?**
+A: Yes! Use Spec Mode: "Build from spec at ~/Documents/my-spec.pdf". Supports PDF, Word, Markdown, images.
+
+**Q: Can I combine Spec Mode with Human-in-the-Loop?**
+A: Yes! They're independent features. Say: "Build from spec ~/spec.pdf with HIL review"
+
+**Q: What file types does Spec Mode support?**
+A: Text (.txt, .md), PDF (.pdf), Word (.docx), and images (.png, .jpg). Install `pypdf` and `python-docx` for full support.
+
 **Q: Is the generated code good quality?**
 A: Yes - 90%+ test coverage, follows best practices, includes documentation.
 
@@ -614,9 +696,16 @@ A: Builds are autonomous but time out after the specified duration (default 90 m
 
 **The magic of Context Foundry:**
 
-1. **You:** "Build [describe your app]"
+1. **You:** "Build [describe your app]" or "Build from spec [your-doc.pdf]"
 2. **System:** [Builds autonomously for 7-15 minutes]
 3. **You:** Get deployed app with tests and docs
+
+**Three ways to build:**
+- **Regular:** AI researches and designs everything
+- **Spec Mode:** Build from your PDFs, Word docs, wireframes
+- **HIL Mode:** Review and approve each phase
+
+**Combine them:** "Build from spec ~/spec.pdf with HIL review"
 
 **No commands to memorize. No copy/paste. No supervision needed.**
 

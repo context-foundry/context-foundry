@@ -38,6 +38,123 @@ Full-featured Terminal User Interface with real-time monitoring:
 
 ---
 
+## Spec Mode (v3.0.0)
+
+**Build directly from your design documents**
+
+Skip the AI brainstorming and build exactly what your specification describes:
+
+### How It Works
+```
+Normal Mode:  Scout → Architect → Builder → Tester
+              (AI researches) (AI designs)
+
+Spec Mode:           Architect → Builder → Tester
+                     (extracts from YOUR spec)
+```
+
+In Spec Mode:
+- **Scout is skipped** — Your spec replaces Scout's requirements analysis
+- **Architect extracts** — Reads your spec and fills the standard template (doesn't invent)
+- **Builder implements** — Builds exactly what your spec describes
+- **Tester validates** — Tests against Gherkin criteria extracted from your spec
+
+### Supported Formats
+| Format | Extensions | Notes |
+|--------|------------|-------|
+| Plain text | `.txt`, `.md`, `.json`, `.yaml` | Built-in |
+| PDF | `.pdf` | Requires `pypdf` |
+| Word | `.docx` | Requires `python-docx` |
+| Images | `.png`, `.jpg`, `.gif`, `.webp` | Diagrams, wireframes, mockups |
+
+### Usage Examples
+
+**Natural language:**
+```
+Build from spec at ~/Documents/dashboard-spec.pdf
+Output to ~/builds/my-dashboard
+```
+
+**Multiple spec files:**
+```
+Build using these specs:
+- ~/Documents/requirements.md
+- ~/Documents/wireframes.png
+- ~/Documents/api-design.pdf
+```
+
+**Programmatic (MCP):**
+```python
+autonomous_build_and_deploy(
+    task="Build a dashboard",
+    working_directory="/path/to/project",
+    spec_files=["/path/to/spec.pdf", "/path/to/wireframes.png"]
+)
+```
+
+---
+
+## Spec Mode + HIL Compatibility (v3.0.0)
+
+**Combine specification-driven builds with human approval gates**
+
+Spec Mode and Human-in-the-Loop (HIL) are **independent features** that work together:
+
+| Mode | What It Controls |
+|------|------------------|
+| **Spec Mode** | *Input source* — Where requirements come from (your files vs AI research) |
+| **HIL Mode** | *Approval gates* — When to pause for human review |
+
+### Combined Usage
+
+```
+Build from spec ~/Documents/spec.pdf with human-in-the-loop review
+Output to ~/builds/my-app
+```
+
+**Pipeline:**
+1. ~~Scout~~ (skipped - your spec is the source)
+2. Architect extracts from your PDF
+3. **⏸️ Pause for approval** of the architecture
+4. Builder implements after approval
+5. **⏸️ Pause for approval** of the code
+6. Tester validates
+
+### When to Use
+
+| Scenario | Recommended Approach |
+|----------|---------------------|
+| Quick prototype | Regular mode (no spec, no HIL) |
+| Implementing a client's PRD | Spec Mode |
+| Critical production system | HIL Mode |
+| Client spec with review requirements | Spec Mode + HIL |
+
+---
+
+## Semantic Pattern Deduplication (v3.0.0)
+
+**Intelligent pattern matching prevents duplicate learnings**
+
+When patterns are saved, Context Foundry uses Claude to semantically compare new patterns against existing ones. Even with different wording, semantically identical patterns are merged instead of duplicated.
+
+### How It Works
+
+```
+New pattern: "polling-race-condition-bug"
+Existing:    "daemon-job-status-race-condition"
+
+Claude: "These describe the same issue"
+Result: Update existing pattern (frequency +1), don't create duplicate
+```
+
+### Benefits
+- **No duplicate patterns** — Even when LLMs generate different IDs
+- **Better frequency tracking** — Same issue found multiple times = higher frequency
+- **Cleaner pattern library** — Focused, deduplicated knowledge base
+- **Cost-effective** — ~$0.008 per semantic check (Opus 4.5)
+
+---
+
 ## Context Codex (v2.3.0)
 
 **Database-Backed Self-Learning**

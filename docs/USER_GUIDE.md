@@ -8,14 +8,15 @@
 
 1. [Getting Started](#getting-started)
 2. [Basic Usage](#basic-usage)
-3. [Autonomous Builds](#autonomous-builds)
-4. [Task Delegation](#task-delegation)
-5. [Parallel Execution](#parallel-execution)
-6. [Understanding the Workflow](#understanding-the-workflow)
-7. [**Real-Time Monitoring Dashboard (NEW)**](#real-time-monitoring-dashboard)
-8. [Troubleshooting](#troubleshooting)
-9. [Best Practices](#best-practices)
-10. [Advanced Usage](#advanced-usage)
+3. [**Build Modes (NEW)**](#build-modes)
+4. [Autonomous Builds](#autonomous-builds)
+5. [Task Delegation](#task-delegation)
+6. [Parallel Execution](#parallel-execution)
+7. [Understanding the Workflow](#understanding-the-workflow)
+8. [**Real-Time Monitoring Dashboard**](#real-time-monitoring-dashboard)
+9. [Troubleshooting](#troubleshooting)
+10. [Best Practices](#best-practices)
+11. [Advanced Usage](#advanced-usage)
 
 ---
 
@@ -272,6 +273,123 @@ Make a todo app and deploy to my existing repo at github.com/me/todos
 ```
 
 Claude Code will extract these requirements and use the right parameters.
+
+---
+
+## Build Modes
+
+Context Foundry supports three build modes that can be combined for different workflows:
+
+### Regular Mode (Default)
+
+Standard autonomous build where AI researches and designs everything:
+
+```
+Build a weather dashboard with React
+```
+
+**Pipeline:** Scout → Architect → Builder → Test → Deploy
+
+### Spec Mode (Build from Your Documents)
+
+Have a PRD, design doc, wireframes, or technical spec? Skip the AI brainstorming and build directly from your specifications:
+
+```
+Build from spec at ~/Documents/dashboard-spec.pdf
+Output to ~/projects/my-dashboard
+```
+
+**Pipeline:** ~~Scout~~ → Architect (extracts from spec) → Builder → Test → Deploy
+
+**Key difference:** Scout is skipped. Architect **extracts** from your spec files instead of **inventing** a design.
+
+#### Supported File Formats
+
+| Format | Extensions | Requirements |
+|--------|------------|--------------|
+| Plain Text | `.txt`, `.md`, `.json`, `.yaml`, `.xml` | Built-in |
+| PDF | `.pdf` | `pip install pypdf` |
+| Word | `.docx` | `pip install python-docx` |
+| Images | `.png`, `.jpg`, `.gif`, `.webp` | Built-in (diagrams, wireframes, mockups) |
+
+**Install PDF/Word support:**
+```bash
+pip install -r requirements-spec.txt
+# Or individually: pip install pypdf python-docx
+```
+
+#### Multiple Spec Files
+
+Combine multiple documents:
+
+```
+Build using these specs:
+- ~/Documents/requirements.md
+- ~/Documents/wireframes.png
+- ~/Documents/api-design.pdf
+
+Output to ~/projects/my-app
+```
+
+#### Spec Mode via MCP
+
+```python
+autonomous_build_and_deploy(
+    task="Build a dashboard application",
+    working_directory="/Users/me/builds/dashboard",
+    spec_files=[
+        "/Users/me/Documents/dashboard-spec.pdf",
+        "/Users/me/Documents/wireframes.png"
+    ]
+)
+```
+
+### Human-in-the-Loop (HIL) Mode
+
+Want to review and approve at each phase before continuing?
+
+```
+Build a payment system with human-in-the-loop review
+```
+
+**Pipeline:** Scout → **⏸️ Approve?** → Architect → **⏸️ Approve?** → Builder → **⏸️ Approve?** → Test
+
+You'll be prompted to review and approve after each major phase.
+
+### Combined: Spec Mode + HIL
+
+**These modes are independent and can be combined!**
+
+| Mode | What It Controls |
+|------|------------------|
+| **Spec Mode** | *Input source* — Your documents vs AI research |
+| **HIL Mode** | *Approval gates* — When to pause for review |
+
+**Use both together:**
+
+```
+Build from spec ~/Documents/spec.pdf with human-in-the-loop review
+Output to ~/projects/my-app
+```
+
+**What happens:**
+1. ~~Scout~~ (skipped - your spec is the source)
+2. Architect **extracts** from your PDF
+3. **⏸️ Pause for your approval** of the architecture
+4. Builder implements
+5. **⏸️ Pause for your approval** of the code
+6. Test validates
+
+#### When to Use Each Mode
+
+| Scenario | Recommended Mode |
+|----------|------------------|
+| Quick prototype, no spec | Regular Mode |
+| Have a detailed PRD/design doc | Spec Mode |
+| Critical system, want oversight | HIL Mode |
+| Implementing client's spec with review | Spec Mode + HIL |
+| Learning how CF works | HIL Mode (see each phase) |
+| Production payment system | Spec Mode + HIL |
 
 ---
 

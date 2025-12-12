@@ -27,6 +27,12 @@
 - [What happens to the agents after the build completes?](#what-happens-to-the-agents-after-the-build-completes)
 - [Can I see the agent conversations?](#can-i-see-the-agent-conversations)
 
+**Spec Mode (NEW)**
+- [Can I build from my own design documents?](#can-i-build-from-my-own-design-documents)
+- [What file formats does Spec Mode support?](#what-file-formats-does-spec-mode-support)
+- [Can I combine Spec Mode with Human-in-the-Loop?](#can-i-combine-spec-mode-with-human-in-the-loop)
+- [What's the difference between Spec Mode and Regular Mode?](#whats-the-difference-between-spec-mode-and-regular-mode)
+
 **Usage & Control**
 - [Can I review the architect's plan before building starts?](#can-i-review-the-architects-plan-before-building-starts)
 - [How do I know what patterns are being applied to my build?](#how-do-i-know-what-patterns-are-being-applied-to-my-build)
@@ -447,6 +453,127 @@ You'll see:
 **Why:** The delegated Claude instance only returns the final artifacts, not the full conversation log.
 
 **Future enhancement:** Could add `--verbose` mode to capture full conversation logs if desired for debugging.
+
+---
+
+## Spec Mode (NEW)
+
+### Can I build from my own design documents?
+
+**Yes! Spec Mode lets you build directly from your specifications.**
+
+Instead of having Scout research and Architect invent, you can point Context Foundry at your existing design documents:
+
+```
+Build from spec at ~/Documents/dashboard-spec.pdf
+Output to ~/projects/my-dashboard
+```
+
+**What happens:**
+1. Scout is **skipped** (your spec replaces research)
+2. Architect **extracts** from your spec (doesn't invent)
+3. Builder implements exactly what your spec describes
+4. Tester validates against Gherkin criteria from your spec
+
+**Why use Spec Mode:**
+- You already have a PRD, design doc, or technical spec
+- You want to build exactly what you specified
+- You're implementing a client's requirements
+- You don't want AI "creativity" - you want AI execution
+
+---
+
+### What file formats does Spec Mode support?
+
+**Built-in support:**
+- Plain text: `.txt`, `.md`, `.json`, `.yaml`, `.xml`
+- Images: `.png`, `.jpg`, `.gif`, `.webp` (wireframes, mockups, diagrams)
+
+**With optional dependencies:**
+- PDF: `.pdf` (requires `pip install pypdf`)
+- Word: `.docx` (requires `pip install python-docx`)
+
+**Install PDF/Word support:**
+```bash
+pip install -r requirements-spec.txt
+# Or: pip install pypdf python-docx
+```
+
+**Multiple files work together:**
+```
+Build using these specs:
+- ~/Documents/requirements.md       # Text requirements
+- ~/Documents/wireframes.png        # Visual mockups
+- ~/Documents/api-design.pdf        # API specification
+```
+
+All files are combined and given to Architect for extraction.
+
+---
+
+### Can I combine Spec Mode with Human-in-the-Loop?
+
+**Yes! They're independent features that work together.**
+
+| Mode | Controls |
+|------|----------|
+| **Spec Mode** | *Input source* — Your docs vs AI research |
+| **HIL Mode** | *Approval gates* — When to pause for review |
+
+**Combined usage:**
+```
+Build from spec ~/Documents/spec.pdf with human-in-the-loop review
+Output to ~/projects/my-app
+```
+
+**Pipeline:**
+1. ~~Scout~~ (skipped - your spec is the source)
+2. Architect extracts from your PDF
+3. **⏸️ You review and approve** the architecture
+4. Builder implements
+5. **⏸️ You review and approve** the code
+6. Tester validates
+
+**Use cases for combined mode:**
+- Client spec with mandatory review gates
+- Regulated industries requiring approval trails
+- Critical production systems
+- Educational demonstrations
+
+---
+
+### What's the difference between Spec Mode and Regular Mode?
+
+**Regular Mode (Default):**
+```
+Scout → Architect → Builder → Tester
+(researches)  (designs)
+```
+- Scout researches best practices, prior art, patterns
+- Architect invents the design based on Scout's findings
+- Good for: Quick prototypes, AI-driven exploration
+
+**Spec Mode:**
+```
+         Architect → Builder → Tester
+         (extracts)
+```
+- Scout is skipped entirely
+- Architect extracts from YOUR spec files (doesn't invent)
+- Good for: Implementing existing designs, client PRDs
+
+**Key difference:** Regular mode = AI designs for you. Spec mode = AI builds what you designed.
+
+**Choosing the right mode:**
+
+| Scenario | Mode |
+|----------|------|
+| "Build me a todo app" (general) | Regular |
+| "Build from my PRD" | Spec |
+| "Prototype something cool" | Regular |
+| "Implement this wireframe exactly" | Spec |
+| "I want AI creativity" | Regular |
+| "I want AI execution" | Spec |
 
 ---
 
