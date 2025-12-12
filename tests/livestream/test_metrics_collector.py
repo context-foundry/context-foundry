@@ -297,7 +297,7 @@ class TestLivePhaseUpdate:
             "current_agent": "builder",
         }
 
-        with patch.object(collector.db, "update_task_phase") as mock_update:
+        with patch.object(collector.db, "update_task_phase"):
             await collector.collect_live_phase_update(session_id, phase_data)
 
             # Should have updated database
@@ -430,11 +430,11 @@ class TestCrossThreadCommunication:
                 watcher = PhaseFileWatcher(collector)
                 watcher.loop = collector.loop
 
-                # Mock the collector's collect_live_phase_update
-                collector.collect_live_phase_update = Mock()
-                collector.collect_live_phase_update.return_value = asyncio.coroutine(
-                    lambda: None
-                )()
+                # Mock the collector's collect_live_phase_update to return an awaitable
+                async def mock_coro(*args, **kwargs):
+                    pass
+
+                collector.collect_live_phase_update = Mock(return_value=mock_coro())
 
                 # Simulate file change from different thread
                 phase_data = {"session_id": "test", "phase": "build"}
@@ -447,7 +447,8 @@ class TestCrossThreadCommunication:
 
                         # Should have used run_coroutine_threadsafe for cross-thread communication
                         mock_run_coro.assert_called_once()
-                        assert mock_run_coro.call_args[1] == collector.loop
+                        # call_args[0] is positional args tuple, [1] is the second arg (the loop)
+                        assert mock_run_coro.call_args[0][1] == collector.loop
 
 
 class TestTaskInitialization:

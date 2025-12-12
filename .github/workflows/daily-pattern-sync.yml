@@ -78,8 +78,30 @@ jobs:
           echo "Skipping pattern submission to avoid duplicates"
           exit 0
 
-      - name: Validate patterns before submission
+      - name: Check if pattern files exist
         if: steps.check_changes.outputs.has_changes == 'true'
+        id: check_files
+        run: |
+          # Check if pattern directory and files exist
+          if [ ! -d ".context-foundry/patterns" ]; then
+            echo "⚠️ No .context-foundry/patterns/ directory found"
+            echo "Pattern files are generated locally during builds and don't exist in the repo."
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          PATTERN_FILES=$(ls .context-foundry/patterns/*.json 2>/dev/null || true)
+          if [ -z "$PATTERN_FILES" ]; then
+            echo "⚠️ No pattern files found in .context-foundry/patterns/"
+            echo "has_files=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "✅ Found pattern files"
+          echo "has_files=true" >> $GITHUB_OUTPUT
+
+      - name: Validate patterns before submission
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           echo "🔍 Validating patterns before submission..."
 
@@ -96,8 +118,16 @@ jobs:
 
           echo "✅ All patterns valid"
 
+      - name: Exit if no pattern files
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files != 'true'
+        run: |
+          echo "✅ No pattern files to sync"
+          echo "Pattern files are created locally during builds."
+          echo "This workflow will sync them once they exist."
+          exit 0
+
       - name: Generate sync metadata
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         id: metadata
         run: |
           DATE=$(date +'%Y%m%d')
@@ -112,7 +142,7 @@ jobs:
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Get pattern statistics
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         id: stats
         run: |
           PATTERN_COUNT=0
@@ -133,7 +163,7 @@ jobs:
           echo "total_builds=$TOTAL_BUILDS" >> $GITHUB_OUTPUT
 
       - name: Create pattern sync branch
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -142,7 +172,7 @@ jobs:
           git checkout -b "${{ steps.metadata.outputs.branch }}"
 
       - name: Update pattern metadata
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           # Update last_updated timestamp in pattern files
           TIMESTAMP="${{ steps.metadata.outputs.timestamp }}"
@@ -160,7 +190,7 @@ jobs:
           fi
 
       - name: Commit pattern changes
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -180,14 +210,14 @@ jobs:
           )"
 
       - name: Push branch
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           git push origin "${{ steps.metadata.outputs.branch }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Pull Request
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         id: create_pr
         run: |
           PR_BODY=$(cat <<EOF
@@ -241,14 +271,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           gh pr merge ${{ steps.create_pr.outputs.pr_number }} --auto --squash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create sync tag
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           git tag -a "${{ steps.metadata.outputs.sync_tag }}" -m "Pattern sync ${{ steps.metadata.outputs.date }}"
           git push origin "${{ steps.metadata.outputs.sync_tag }}"
@@ -256,7 +286,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: steps.check_changes.outputs.has_changes == 'true' && steps.check_files.outputs.has_files == 'true'
         run: |
           echo "## ✅ Pattern Sync Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

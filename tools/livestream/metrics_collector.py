@@ -26,7 +26,6 @@ try:
         TRACK_DECISIONS,
         TRACK_TEST_ITERATIONS,
         TRACK_PATTERN_EFFECTIVENESS,
-        TOKEN_BUDGET_LIMIT,
     )
 except ImportError:
     # Fall back to direct imports (when run as script)
@@ -206,7 +205,11 @@ class MetricsCollector:
         This is the main collection loop.
         """
         # Get all active tasks from MCP
-        tasks = self.mcp_client.list_active_tasks()
+        try:
+            tasks = self.mcp_client.list_active_tasks()
+        except Exception as e:
+            print(f"⚠️  Error getting active tasks: {e}")
+            return
 
         for task in tasks:
             task_id = task["task_id"]
@@ -335,8 +338,6 @@ class MetricsCollector:
         Args:
             task: Task data from MCP
         """
-        task_id = task["task_id"]
-
         # Collect token usage metrics
         if TRACK_TOKEN_USAGE:
             await self.collect_token_metrics(task)
