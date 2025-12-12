@@ -165,7 +165,8 @@ class TestDaemonizationLogic:
         mock_close.assert_called_with(4)
 
     @pytest.mark.skipif(
-        os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"),
+        os.environ.get("CI") is not None
+        or os.environ.get("GITHUB_ACTIONS") is not None,
         reason="Daemon fork tests require real file descriptors, skipping in CI",
     )
     @patch("sys.stdin")
@@ -233,7 +234,8 @@ class TestDaemonizationLogic:
         mock_dup2.assert_any_call(5, 2)  # stderr
 
     @pytest.mark.skipif(
-        os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"),
+        os.environ.get("CI") is not None
+        or os.environ.get("GITHUB_ACTIONS") is not None,
         reason="Daemon fork tests require real file descriptors, skipping in CI",
     )
     @patch("sys.stdin")

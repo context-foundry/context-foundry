@@ -17,6 +17,7 @@ import tempfile
 import shutil
 import json
 import time
+import os
 from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, patch, MagicMock
@@ -72,6 +73,10 @@ def reload_mcp_server():
 
 @pytest.mark.integration
 @pytest.mark.tier1
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation e2e tests require Claude CLI, skipping in CI",
+)
 class TestSynchronousDelegationE2E:
     """End-to-end tests for synchronous delegation workflows"""
 
@@ -200,6 +205,10 @@ class TestSynchronousDelegationE2E:
 
 @pytest.mark.integration
 @pytest.mark.tier1
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation e2e tests require Claude CLI, skipping in CI",
+)
 class TestAsynchronousDelegationE2E:
     """End-to-end tests for asynchronous delegation workflows"""
 
@@ -362,6 +371,10 @@ class TestAsynchronousDelegationE2E:
 
 @pytest.mark.integration
 @pytest.mark.tier1
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation e2e tests require Claude CLI, skipping in CI",
+)
 class TestMultiPhaseBuildWorkflow:
     """Test complete multi-phase build workflows"""
 
@@ -531,6 +544,10 @@ class TestMultiPhaseBuildWorkflow:
 
 @pytest.mark.integration
 @pytest.mark.tier2
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation e2e tests require Claude CLI, skipping in CI",
+)
 class TestDelegationEdgeCases:
     """Test edge cases and error conditions in delegation"""
 
@@ -611,6 +628,10 @@ class TestDelegationEdgeCases:
 
 @pytest.mark.integration
 @pytest.mark.tier2
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation e2e tests require Claude CLI, skipping in CI",
+)
 class TestDelegationPerformance:
     """Test delegation performance and optimization"""
 
