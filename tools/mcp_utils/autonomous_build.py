@@ -803,6 +803,11 @@ def autonomous_build_and_deploy_impl(
     sandbox_path: Optional[str] = None,
     sandbox_task_id: Optional[str] = None,
     active_tasks: Optional[Dict[str, Dict[str, Any]]] = None,
+    # Execution mode parameters (for direct execution without daemon)
+    pause_after_phases: Optional[List[str]] = None,
+    execution_mode: str = "autonomous",
+    spec_files: Optional[List[str]] = None,
+    simple_mode: bool = False,
     # REMOVED: enable_test_loop - testing is now automatic based on project detection
 ) -> str:
     """
@@ -811,6 +816,11 @@ def autonomous_build_and_deploy_impl(
     Spawns a background process that executes phases sequentially.
     Each phase runs as a separate subprocess, releases context on exit.
     Returns immediately with task_id (non-blocking).
+
+    This function can be called directly (without daemon) for:
+    - Environments where daemon isn't available
+    - Testing/debugging the build pipeline
+    - Simpler deployments
 
     Args:
         task: Build task description
@@ -826,6 +836,10 @@ def autonomous_build_and_deploy_impl(
         sandbox_path: Sandbox directory path
         sandbox_task_id: Sandbox task identifier
         active_tasks: Dictionary to track background processes
+        pause_after_phases: Phases to pause after (HIL mode)
+        execution_mode: "autonomous", "hitl", "interactive", or "selective"
+        spec_files: List of spec file paths (enables Spec Mode)
+        simple_mode: Skip Screenshot and Deploy phases
 
     Returns:
         JSON with task_id, status, message
@@ -1027,6 +1041,11 @@ def autonomous_build_and_deploy_impl(
             "flowise_flow": flowise_mode,
             "project_type": project_type,
             "codebase_detection": codebase_info,
+            # Execution mode parameters
+            "pause_after_phases": pause_after_phases or [],
+            "execution_mode": execution_mode,
+            "spec_files": spec_files or [],
+            "simple_mode": simple_mode,
         }
 
         # Generate unique task ID

@@ -504,6 +504,77 @@ autonomous_build_and_deploy(
 
 ---
 
+## Daemon vs Direct Execution
+
+Context Foundry can run builds in two ways:
+
+### Daemon Mode (Default)
+
+```python
+autonomous_build_and_deploy(
+    task="Build an app",
+    working_directory="/projects/app"
+    # Daemon mode is the default
+)
+```
+
+**What you get:**
+- ✅ Job persistence (survives disconnections)
+- ✅ Working directory locking (prevents conflicts)
+- ✅ Progress monitoring via CLI (`cfd logs <job-id> --follow`)
+- ✅ Web dashboard visualization (localhost:8080)
+- ✅ Automatic retry on failures
+- ✅ Pattern merging and self-improvement
+- ✅ Job queuing and scheduling
+
+**Prerequisites:**
+```bash
+cfd start  # Start the daemon first
+cfd status # Verify it's running
+```
+
+### Direct Mode (No Daemon)
+
+```python
+autonomous_build_and_deploy(
+    task="Build an app",
+    working_directory="/projects/app",
+    no_daemon=True  # Run directly without daemon
+)
+```
+
+**What you get:**
+- ✅ Same build functionality (all phases work)
+- ✅ No daemon setup required
+- ✅ Simpler for testing/development
+- ✅ Works in any environment
+- ❌ No web dashboard
+- ❌ No `cfd logs` monitoring
+- ❌ No job persistence/queuing
+
+**No prerequisites** - just call the MCP tool.
+
+### When to Use Each
+
+| Situation | Recommended | Why |
+|-----------|-------------|-----|
+| Production builds | `use_daemon=True` | Persistence, monitoring, reliability |
+| CI/CD pipelines | `use_daemon=False` | Simpler, no daemon setup needed |
+| Local development | Either | Personal preference |
+| Testing the MCP server | `use_daemon=False` | Faster iteration |
+| Multiple concurrent builds | `use_daemon=True` | Job queuing, locking |
+| One-off quick build | `use_daemon=False` | Less setup |
+
+### Interchangeable
+
+Both modes produce **identical build results**. The only difference is operational:
+- Daemon mode: Better monitoring, persistence, and coordination
+- Direct mode: Simpler, no dependencies
+
+You can switch between them freely - same task, same parameters, same output.
+
+---
+
 ## Quick Reference
 
 | Mode | Parameter | Effect |
@@ -512,6 +583,7 @@ autonomous_build_and_deploy(
 | **Spec** | `spec_files=[...]` | Skip Scout, extract from docs |
 | **HIL** | `execution_mode="hitl"` | Pause for approval |
 | **Pause Points** | `pause_after_phases=[...]` | Custom pause locations |
+| **No Daemon** | `no_daemon=True` | Run directly without daemon |
 
 ### Decision Guide
 
@@ -523,7 +595,10 @@ autonomous_build_and_deploy(
 | Critical system | `execution_mode="hitl"` |
 | Client spec with review | `spec_files=[...], execution_mode="hitl"` |
 | Fast iteration with spec | `spec_files=[...], simple_mode=True` |
-| Maximum speed (local) | `simple_mode=True, spec_files=[...]` |
+| Maximum speed (local) | `simple_mode=True, spec_files=[...], no_daemon=True` |
+| CI/CD pipeline | `no_daemon=True` |
+| Need monitoring dashboard | Default (daemon mode) |
+| Daemon not installed | `no_daemon=True` |
 
 ---
 

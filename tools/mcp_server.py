@@ -623,7 +623,7 @@ def _autonomous_build_and_deploy_impl(
     )
 
 
-# MCP tool wrapper (submits to CF Daemon)
+# MCP tool wrapper (submits to CF Daemon or runs directly)
 @mcp.tool()
 def autonomous_build_and_deploy(
     task: str,
@@ -646,17 +646,23 @@ def autonomous_build_and_deploy(
         List[str]
     ] = None,  # Spec mode: paths to specification files (skips Scout, Architect extracts)
     simple_mode: bool = False,  # Skip Screenshot and Deploy phases
+    no_daemon: bool = False,  # Run directly without CF Daemon
 ) -> str:
     """
-    Submit autonomous build job to CF Daemon queue.
+    Run an autonomous build - either via CF Daemon or directly.
 
-    This tool now delegates to the Context Foundry Daemon instead of spawning
-    processes directly. The daemon provides:
+    By default, submits to the Context Foundry Daemon which provides:
     - Job persistence (survives disconnections)
     - Working directory locking (prevents conflicts)
     - Progress monitoring via CLI (cfd logs <job-id> --follow)
+    - Web dashboard visualization
     - Automatic retry on failures
     - Pattern merging and self-improvement
+
+    When use_daemon=False, runs directly in a background process:
+    - No daemon required
+    - Simpler setup for testing/development
+    - Same build functionality, just no daemon features
 
     Testing is automatic - runs whenever code is detected in the project.
 
@@ -670,30 +676,54 @@ def autonomous_build_and_deploy(
     - When simple_mode=True, Screenshot and Deploy phases are skipped
     - Flow: Scout → Architect → Builder → Test → Documentation → Feedback
 
-    Prerequisites:
-    - CF Daemon must be running: `cfd start`
-    - Check daemon status: `cfd status`
+    Daemon Mode (default):
+    - Prerequisites: CF Daemon must be running (`cfd start`)
+    - Returns: JSON with job_id and monitoring instructions
+
+    Direct Mode (no_daemon=True):
+    - No prerequisites, runs directly in background process
+    - Returns: JSON with task_id and status
 
     Returns:
-        JSON with job_id and monitoring instructions
+        JSON with job_id/task_id and status information
     """
-    from tools.mcp_utils.daemon_integration import submit_autonomous_build_to_daemon
+    if not no_daemon:
+        from tools.mcp_utils.daemon_integration import submit_autonomous_build_to_daemon
 
-    return submit_autonomous_build_to_daemon(
-        task=task,
-        working_directory=working_directory,
-        github_repo_name=github_repo_name,
-        mode=mode,
-        max_test_iterations=max_test_iterations,
-        timeout_minutes=timeout_minutes,
-        use_parallel=use_parallel,
-        incremental=incremental,
-        force_rebuild=force_rebuild,
-        pause_after_phases=pause_after_phases,
-        execution_mode=execution_mode,
-        spec_files=spec_files,
-        simple_mode=simple_mode,
-    )
+        return submit_autonomous_build_to_daemon(
+            task=task,
+            working_directory=working_directory,
+            github_repo_name=github_repo_name,
+            mode=mode,
+            max_test_iterations=max_test_iterations,
+            timeout_minutes=timeout_minutes,
+            use_parallel=use_parallel,
+            incremental=incremental,
+            force_rebuild=force_rebuild,
+            pause_after_phases=pause_after_phases,
+            execution_mode=execution_mode,
+            spec_files=spec_files,
+            simple_mode=simple_mode,
+        )
+    else:
+        # Direct execution without daemon
+        return autonomous_build_and_deploy_impl(
+            task=task,
+            working_directory=working_directory,
+            github_repo_name=github_repo_name,
+            existing_repo=existing_repo,
+            mode=mode,
+            max_test_iterations=max_test_iterations,
+            timeout_minutes=timeout_minutes,
+            use_parallel=use_parallel,
+            incremental=incremental,
+            force_rebuild=force_rebuild,
+            active_tasks=active_tasks,
+            pause_after_phases=pause_after_phases,
+            execution_mode=execution_mode,
+            spec_files=spec_files,
+            simple_mode=simple_mode,
+        )
 
 
 # ============================================================================
