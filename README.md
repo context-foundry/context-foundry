@@ -390,6 +390,8 @@ They're essentially **stateless workers** that read artifacts, do work, write ar
 
 ---
 
+## Desktop App
+
 ### Features
 
 | Feature | Description |
