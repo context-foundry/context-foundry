@@ -2475,13 +2475,15 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 4.5: SCREENSHOT (Visual Documentation)
         # ═══════════════════════════════════════════════════════════════════════
-        # Check if phase should be skipped
-        screenshot_skipped = _should_skip_phase(
+        # Check if phase should be skipped (simple_mode or already completed)
+        simple_mode = task_config.get("simple_mode", False)
+        screenshot_skipped = simple_mode or _should_skip_phase(
             "Screenshot", pipeline_state, resume_from_phase
         )
 
         if screenshot_skipped:
-            print("⏭️  Skipping Screenshot phase (already completed)", file=sys.stderr)
+            skip_reason = "simple_mode enabled" if simple_mode else "already completed"
+            print(f"⏭️  Skipping Screenshot phase ({skip_reason})", file=sys.stderr)
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Screenshot")
@@ -2672,12 +2674,17 @@ def execute_build_with_phase_spawning(
         # ═══════════════════════════════════════════════════════════════════════
         # PHASE 6: DEPLOY (GitHub)
         # ═══════════════════════════════════════════════════════════════════════
-        deploy_skipped = _should_skip_phase("Deploy", pipeline_state, resume_from_phase)
+        # Check if phase should be skipped (simple_mode or already completed/resuming)
+        deploy_skipped = simple_mode or _should_skip_phase(
+            "Deploy", pipeline_state, resume_from_phase
+        )
         if deploy_skipped:
-            print(
-                "⏭️  Skipping Deploy phase (resuming from later phase)", file=sys.stderr
+            skip_reason = (
+                "simple_mode enabled" if simple_mode else "resuming from later phase"
             )
-            phases_completed.append("Deploy")
+            print(f"⏭️  Skipping Deploy phase ({skip_reason})", file=sys.stderr)
+            if not simple_mode:
+                phases_completed.append("Deploy")
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Deploy")

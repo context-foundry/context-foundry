@@ -736,6 +736,9 @@ class Runner:
         # Spec mode parameters
         spec_files = job.params.get("spec_files", [])
 
+        # Simple mode: skip Screenshot and Deploy phases
+        simple_mode = job.params.get("simple_mode", False)
+
         # Detect project info at the ACTUAL working directory
         # (which may have random ID appended for new projects)
         working_path = Path(working_dir)
@@ -793,6 +796,7 @@ result = execute_build_with_phase_spawning(
         "timeout_minutes": {timeout_minutes},
         "job_id": {repr(str(job.id))},
         "spec_files": {repr(spec_files)},
+        "simple_mode": {simple_mode},
     }},
     enable_test_loop={enable_test_loop},
     max_test_iterations={max_test_iterations},

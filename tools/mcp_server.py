@@ -645,6 +645,7 @@ def autonomous_build_and_deploy(
     spec_files: Optional[
         List[str]
     ] = None,  # Spec mode: paths to specification files (skips Scout, Architect extracts)
+    simple_mode: bool = False,  # Skip Screenshot and Deploy phases
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -664,6 +665,10 @@ def autonomous_build_and_deploy(
     - Architect runs in "extraction mode" (extracts from spec, doesn't design)
     - Builder implements the spec exactly as written
     - Tester validates against Gherkin criteria extracted by Architect
+
+    Simple Mode:
+    - When simple_mode=True, Screenshot and Deploy phases are skipped
+    - Flow: Scout → Architect → Builder → Test → Documentation → Feedback
 
     Prerequisites:
     - CF Daemon must be running: `cfd start`
@@ -687,6 +692,7 @@ def autonomous_build_and_deploy(
         pause_after_phases=pause_after_phases,
         execution_mode=execution_mode,
         spec_files=spec_files,
+        simple_mode=simple_mode,
     )
 
 

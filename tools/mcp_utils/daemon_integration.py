@@ -74,6 +74,7 @@ def submit_autonomous_build_to_daemon(
     pause_after_phases: Optional[List[str]] = None,
     execution_mode: str = "autonomous",
     spec_files: Optional[List[str]] = None,
+    simple_mode: bool = False,
 ) -> str:
     """
     Submit autonomous build job to CF Daemon queue.
@@ -94,6 +95,7 @@ def submit_autonomous_build_to_daemon(
         pause_after_phases: Phases to pause after (e.g., ["Scout", "Architect"])
         execution_mode: "autonomous", "interactive", or "selective"
         spec_files: List of specification file paths (enables spec mode)
+        simple_mode: Skip Screenshot and Deploy phases
 
     Returns:
         JSON string with job submission result
@@ -173,6 +175,7 @@ def submit_autonomous_build_to_daemon(
         "pause_after_phases": pause_after_phases or [],
         "execution_mode": execution_mode,
         "spec_files": spec_files or [],  # Spec mode: list of spec file paths
+        "simple_mode": simple_mode,  # Skip Screenshot and Deploy phases
     }
 
     # Submit job to daemon queue
@@ -203,12 +206,23 @@ def submit_autonomous_build_to_daemon(
         # Determine if spec mode is active
         is_spec_mode = bool(spec_files)
         spec_mode_note = ""
-        expected_phases = "Scout → Architect → Builder → Test → Complete"
+        simple_mode_note = ""
+        expected_phases = (
+            "Scout → Architect → Builder → Test → Screenshot → Docs → Deploy → Feedback"
+        )
         if is_spec_mode:
             spec_mode_note = (
                 f"\n📋 SPEC MODE: Building from {len(spec_files)} spec file(s)"
             )
-            expected_phases = "Architect (extraction) → Builder → Test → Complete"
+            expected_phases = "Architect (extraction) → Builder → Test → Screenshot → Docs → Deploy → Feedback"
+        if simple_mode:
+            simple_mode_note = "\n⚡ SIMPLE MODE: Skipping Screenshot and Deploy phases"
+            if is_spec_mode:
+                expected_phases = (
+                    "Architect (extraction) → Builder → Test → Docs → Feedback"
+                )
+            else:
+                expected_phases = "Scout → Architect → Builder → Test → Docs → Feedback"
 
         # Return success response with monitoring instructions
         return json.dumps(
@@ -220,6 +234,7 @@ def submit_autonomous_build_to_daemon(
                 "timeout_minutes": timeout_minutes,
                 "spec_mode": is_spec_mode,
                 "spec_files": spec_files or [],
+                "simple_mode": simple_mode,
                 "message": f"""
 🚀 Build job submitted to CF Daemon!
 
@@ -227,7 +242,7 @@ Job ID: {job.id}
 Project: {project_name}
 Status: {job.status.value}
 Priority: {job.priority}
-Working Directory: {final_working_dir_str}{path_note}{spec_mode_note}
+Working Directory: {final_working_dir_str}{path_note}{spec_mode_note}{simple_mode_note}
 
 The daemon will execute this build when a worker is available.
 
