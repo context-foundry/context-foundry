@@ -64,6 +64,9 @@ class PipelineStateSnapshot:
 
     # Progress tracking
     phases_completed: List[str] = field(default_factory=list)
+    phases_skipped: List[str] = field(
+        default_factory=list
+    )  # Phases skipped (e.g., simple_mode)
     current_phase: Optional[str] = None
     phases_remaining: List[str] = field(default_factory=list)
 
@@ -129,6 +132,7 @@ class PipelineStateSnapshot:
             if isinstance(self.state, PipelineState)
             else self.state,
             "phases_completed": self.phases_completed,
+            "phases_skipped": self.phases_skipped,
             "current_phase": self.current_phase,
             "phases_remaining": self.phases_remaining,
             "execution_mode": self.execution_mode,
@@ -155,6 +159,7 @@ class PipelineStateSnapshot:
             pipeline_id=data.get("pipeline_id", str(uuid.uuid4())),
             state=state,
             phases_completed=data.get("phases_completed", []),
+            phases_skipped=data.get("phases_skipped", []),
             current_phase=data.get("current_phase"),
             phases_remaining=data.get("phases_remaining", list(PHASE_ORDER)),
             execution_mode=data.get("execution_mode", "autonomous"),
@@ -246,6 +251,25 @@ class PipelineStateSnapshot:
         if not self.phases_remaining:
             self.state = PipelineState.COMPLETED
 
+    def mark_phase_skipped(self, phase_name: str, reason: str = "") -> None:
+        """
+        Mark a phase as skipped (e.g., due to simple_mode).
+
+        Removes from phases_remaining but adds to phases_skipped instead of phases_completed.
+
+        Args:
+            phase_name: Phase to skip
+            reason: Optional reason for skipping (e.g., "simple_mode")
+        """
+        if phase_name not in self.phases_skipped:
+            self.phases_skipped.append(phase_name)
+        if phase_name in self.phases_remaining:
+            self.phases_remaining.remove(phase_name)
+
+        # Check if all phases done (completed + skipped)
+        if not self.phases_remaining:
+            self.state = PipelineState.COMPLETED
+
     def mark_paused(self, after_phase: str) -> None:
         """Mark pipeline as paused"""
         self.state = PipelineState.PAUSED
@@ -286,6 +310,9 @@ class PipelineStateSnapshot:
             f"Mode: {self.execution_mode}",
             f"Completed: {', '.join(self.phases_completed) or 'None'}",
         ]
+
+        if self.phases_skipped:
+            lines.append(f"Skipped: {', '.join(self.phases_skipped)}")
 
         if self.current_phase:
             lines.append(f"Current: {self.current_phase}")

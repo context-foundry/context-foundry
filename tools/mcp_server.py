@@ -170,6 +170,12 @@ def context_foundry_status() -> str:
 - "Check build status"
 - "List my projects"
 
+⚡ **Execution Modes:**
+- `simple_mode=True` - Skip Screenshot + Deploy (faster local builds)
+- `spec_files=[...]` - Build from your PRD/spec documents
+- `execution_mode="hitl"` - Human-in-the-loop approval gates
+- `no_daemon=True` - Run directly without CF Daemon
+
 **How to Use:**
 Just describe what you want in plain English. Context Foundry handles the rest.
 No commands to memorize, no syntax to learn.

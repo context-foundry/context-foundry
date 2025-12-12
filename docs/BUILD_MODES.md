@@ -478,6 +478,32 @@ autonomous_build_and_deploy(
 | **Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Screenshot → Docs → Deploy → Feedback |
 | **Simple + Spec + HIL** | ✅ | Architect ⏸️ Builder ⏸️ Test → Docs → Feedback |
 
+### Important: Pause Behavior with Skipped Phases
+
+When combining `simple_mode=True` with `pause_after_phases`, pauses on skipped phases **will not trigger**:
+
+```python
+# This pause will NOT trigger - Screenshot is skipped!
+autonomous_build_and_deploy(
+    task="Build an app",
+    working_directory="/projects/app",
+    simple_mode=True,
+    pause_after_phases=["Screenshot"]  # Won't pause - phase is skipped
+)
+
+# Instead, pause after the previous active phase:
+autonomous_build_and_deploy(
+    task="Build an app",
+    working_directory="/projects/app",
+    simple_mode=True,
+    pause_after_phases=["Test"]  # Will pause after Test, before Docs
+)
+```
+
+**Why?** Skipped phases don't execute, so there's no "after" moment to pause at.
+
+**Workaround:** If you want to pause before Documentation in simple mode, pause after `Test` instead.
+
 ### Combined with Task Modes
 
 You can combine **any Task Mode** with **any Execution Mode(s)**:
@@ -558,12 +584,12 @@ autonomous_build_and_deploy(
 
 | Situation | Recommended | Why |
 |-----------|-------------|-----|
-| Production builds | `use_daemon=True` | Persistence, monitoring, reliability |
-| CI/CD pipelines | `use_daemon=False` | Simpler, no daemon setup needed |
+| Production builds | Default (daemon) | Persistence, monitoring, reliability |
+| CI/CD pipelines | `no_daemon=True` | Simpler, no daemon setup needed |
 | Local development | Either | Personal preference |
-| Testing the MCP server | `use_daemon=False` | Faster iteration |
-| Multiple concurrent builds | `use_daemon=True` | Job queuing, locking |
-| One-off quick build | `use_daemon=False` | Less setup |
+| Testing the MCP server | `no_daemon=True` | Faster iteration |
+| Multiple concurrent builds | Default (daemon) | Job queuing, locking |
+| One-off quick build | `no_daemon=True` | Less setup |
 
 ### Interchangeable
 

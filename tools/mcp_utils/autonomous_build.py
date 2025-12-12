@@ -2503,6 +2503,10 @@ def execute_build_with_phase_spawning(
         if screenshot_skipped:
             skip_reason = "simple_mode enabled" if simple_mode else "already completed"
             print(f"⏭️  Skipping Screenshot phase ({skip_reason})", file=sys.stderr)
+            # Mark phase as skipped in pipeline state (fixes state desync)
+            if simple_mode and pipeline_state:
+                pipeline_state.mark_phase_skipped("Screenshot", "simple_mode")
+                save_pipeline_state(pipeline_state, working_directory)
         else:
             # Check emergency stop before starting phase
             emergency_result = check_emergency_stop("Screenshot")
@@ -2702,7 +2706,11 @@ def execute_build_with_phase_spawning(
                 "simple_mode enabled" if simple_mode else "resuming from later phase"
             )
             print(f"⏭️  Skipping Deploy phase ({skip_reason})", file=sys.stderr)
-            if not simple_mode:
+            # Mark phase as skipped in pipeline state (fixes state desync)
+            if simple_mode and pipeline_state:
+                pipeline_state.mark_phase_skipped("Deploy", "simple_mode")
+                save_pipeline_state(pipeline_state, working_directory)
+            elif not simple_mode:
                 phases_completed.append("Deploy")
         else:
             # Check emergency stop before starting phase
