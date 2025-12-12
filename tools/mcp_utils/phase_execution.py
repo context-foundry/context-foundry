@@ -2119,6 +2119,7 @@ def tests_passed(test_report_path: Path) -> bool:
         "status: ✅ passed",  # "**Status**: ✅ **PASSED**"
         "status**: ✅ **passed",  # Bold formatting variation
         "status**: passed",  # "**Status**: PASSED"
+        "**status:** passed",  # "**Status:** PASSED" (colon after bold)
         "result: pass",
         "**status**: passed",
         "all tests executed successfully",  # From test-report-2.md

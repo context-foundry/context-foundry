@@ -1327,18 +1327,31 @@ def execute_build_with_phase_spawning(
         task=task,
     )
 
-    def run_preflight_for_phase(phase_name: str) -> Optional[Dict[str, Any]]:
-        """Run preflight checks for a phase. Returns error dict if failed, None if passed."""
+    def run_preflight_for_phase(
+        phase_name: str, skip_required_inputs: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Run preflight checks for a phase. Returns error dict if failed, None if passed.
+
+        Args:
+            phase_name: Name of the phase to run preflight for
+            skip_required_inputs: If True, skip required input file checks (used for Spec Mode
+                                  where Architect doesn't need scout-report.md)
+        """
         config = get_phase_preflight_config(phase_name)
         if not config:
             return None  # No preflight config for this phase
 
         audit_preflight_started(phase_name, str(working_directory))
 
+        # In Spec Mode, skip required_inputs check for Architect (no scout-report.md needed)
+        required_inputs = (
+            None if skip_required_inputs else config.get("required_inputs")
+        )
+
         result = run_phase_preflight(
             phase_name=phase_name,
             working_directory=working_directory,
-            required_inputs=config.get("required_inputs"),
+            required_inputs=required_inputs,
             json_inputs=config.get("json_inputs"),
             required_tools=config.get("required_tools"),
             custom_check=config.get("custom_check"),
@@ -1793,8 +1806,10 @@ def execute_build_with_phase_spawning(
                 pipeline_state.mark_phase_started("Architect")
                 save_pipeline_state(pipeline_state, working_directory)
 
-            # Run preflight checks
-            preflight_error = run_preflight_for_phase("Architect")
+            # Run preflight checks (skip scout-report.md requirement in Spec Mode)
+            preflight_error = run_preflight_for_phase(
+                "Architect", skip_required_inputs=is_spec_mode
+            )
             if preflight_error:
                 return preflight_error
 
