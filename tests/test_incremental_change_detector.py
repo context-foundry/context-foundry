@@ -245,10 +245,16 @@ class TestGetGitChangedFiles:
     @patch("subprocess.run")
     def test_get_git_changed_files_success(self, mock_run):
         """Test getting changed files successfully."""
-        mock_result = Mock()
-        mock_result.returncode = 0
-        mock_result.stdout = "file1.py\nfile2.py\nfile3.py\n"
-        mock_run.return_value = mock_result
+        # Mock changed files (first call) and deleted files (second call)
+        mock_result_changed = Mock()
+        mock_result_changed.returncode = 0
+        mock_result_changed.stdout = "file1.py\nfile2.py\nfile3.py\n"
+
+        mock_result_deleted = Mock()
+        mock_result_deleted.returncode = 0
+        mock_result_deleted.stdout = ""  # No deleted files
+
+        mock_run.side_effect = [mock_result_changed, mock_result_deleted]
 
         files = get_git_changed_files("/tmp/project", "abc123")
 
@@ -260,7 +266,7 @@ class TestGetGitChangedFiles:
         mock_result = Mock()
         mock_result.returncode = 0
         mock_result.stdout = ""
-        mock_run.return_value = mock_result
+        mock_run.side_effect = [mock_result, mock_result]  # Both calls return empty
 
         files = get_git_changed_files("/tmp/project", "abc123")
 

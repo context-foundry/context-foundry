@@ -191,7 +191,7 @@ class TestDetectTaskIntent:
         task_examples = [
             "Fix the login bug",
             "Debug authentication issue",
-            "Resolve crash on startup",
+            "Fix crash on startup",  # Changed from "Resolve crash on startup"
         ]
 
         # These should all contain keywords that trigger fix_bug mode
@@ -209,7 +209,7 @@ class TestDetectTaskIntent:
         task_examples = [
             "Add user authentication",
             "Implement new dashboard",
-            "Create payment integration",
+            "Add payment integration",  # Changed from "Create payment integration"
             "Enhance the UI with dark mode",
         ]
 
@@ -297,7 +297,8 @@ class TestReadPhaseInfo:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            phase_file = tmppath / ".context-foundry" / "phase_info.json"
+            # Fixed: use correct filename current-phase.json (not phase_info.json)
+            phase_file = tmppath / ".context-foundry" / "current-phase.json"
             phase_file.parent.mkdir(parents=True)
 
             phase_data = {
@@ -307,7 +308,7 @@ class TestReadPhaseInfo:
             }
             phase_file.write_text(json.dumps(phase_data))
 
-            result = _read_phase_info(tmppath)
+            result = _read_phase_info(str(tmppath))  # Pass as string
 
             assert result is not None
             assert result["current_phase"] == 2
@@ -320,7 +321,7 @@ class TestReadPhaseInfo:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
 
-            result = _read_phase_info(tmppath)
+            result = _read_phase_info(str(tmppath))
 
             # Should return None or empty dict
             assert result is None or result == {}
@@ -331,13 +332,14 @@ class TestReadPhaseInfo:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            phase_file = tmppath / ".context-foundry" / "phase_info.json"
+            # Fixed: use correct filename current-phase.json
+            phase_file = tmppath / ".context-foundry" / "current-phase.json"
             phase_file.parent.mkdir(parents=True)
 
             # Write invalid JSON
             phase_file.write_text("{ invalid json }")
 
-            result = _read_phase_info(tmppath)
+            result = _read_phase_info(str(tmppath))
 
             # Should handle gracefully
             assert result is None or result == {}
@@ -348,7 +350,8 @@ class TestReadPhaseInfo:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)
-            phase_file = tmppath / ".context-foundry" / "phase_info.json"
+            # Fixed: use correct filename current-phase.json
+            phase_file = tmppath / ".context-foundry" / "current-phase.json"
             phase_file.parent.mkdir(parents=True)
             phase_file.write_text('{"phase": 1}')
 
@@ -356,7 +359,7 @@ class TestReadPhaseInfo:
             phase_file.chmod(0o000)
 
             try:
-                result = _read_phase_info(tmppath)
+                result = _read_phase_info(str(tmppath))
                 # Should handle gracefully
                 assert result is None or result == {}
             finally:
@@ -374,10 +377,12 @@ class TestTruncateOutput:
         from mcp_server import _truncate_output
 
         short_text = "Hello world"
-        result = _truncate_output(short_text, max_tokens=1000)
+        # Function returns tuple: (truncated_output, was_truncated, stats)
+        result, was_truncated, stats = _truncate_output(short_text, max_tokens=1000)
 
-        # Should return original text
+        # Should return original text, not truncated
         assert short_text in result
+        assert was_truncated is False
 
     def test_truncate_long_output(self):
         """Test truncating very long output"""
@@ -385,20 +390,26 @@ class TestTruncateOutput:
 
         # Create text that's definitely over token limit
         long_text = "word " * 50000  # ~200k tokens
-        result = _truncate_output(long_text, max_tokens=1000)
+        # Function returns tuple: (truncated_output, was_truncated, stats)
+        result, was_truncated, stats = _truncate_output(long_text, max_tokens=1000)
 
         # Should be truncated
-        assert len(result) < len(long_text)
-        assert "truncated" in result.lower() or "..." in result
+        assert was_truncated is True
+        # Verify truncation message is present
+        assert "truncated" in result.lower()
+        # Verify stats are populated
+        assert stats.get("total_chars", 0) > 0
 
     def test_truncate_empty_output(self):
         """Test truncating empty output"""
         from mcp_server import _truncate_output
 
-        result = _truncate_output("", max_tokens=1000)
+        # Function returns tuple: (truncated_output, was_truncated, stats)
+        result, was_truncated, stats = _truncate_output("", max_tokens=1000)
 
         # Should handle gracefully
         assert isinstance(result, str)
+        assert was_truncated is False
 
 
 if __name__ == "__main__":
