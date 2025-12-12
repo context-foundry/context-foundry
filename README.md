@@ -63,7 +63,8 @@ The key insight: instead of one AI that runs out of context, you get specialized
 | Feature | What it does |
 |---------|--------------|
 | **Self-Healing Builds** | Tests fail? It automatically fixes and retries. |
-| **Pattern Learning** | Remembers solutions that worked, avoids mistakes it's made before. |
+| **Pattern Learning** | Remembers solutions that worked, avoids mistakes it's made before. Uses semantic deduplication to prevent duplicate patterns. |
+| **Spec Mode** | Have a design doc? Skip the AI brainstorming—build directly from your specification files (PDF, Word, Markdown, images). |
 | **Human-in-the-Loop** | Review Gherkin acceptance criteria before Builder starts. Clear sign-off gates. |
 | **Desktop App** | Visual dashboard to watch builds, browse artifacts, chat with the AI. |
 | **Daemon Service** | Runs in the background, manages job queues, handles resource limits. |
@@ -73,6 +74,213 @@ The key insight: instead of one AI that runs out of context, you get specialized
 Want to build Roblox games? Flowise workflows? Something domain-specific?
 
 Extensions let you teach Context Foundry your domain. Add patterns, examples, and constraints to `extensions/<your-domain>/` and it'll reference them during builds.
+
+---
+
+## Spec Mode: Build from Your Documents
+
+Already have a design document, requirements spec, or wireframes? **Spec Mode** lets you skip the AI brainstorming and build directly from your specifications.
+
+### How It Works
+
+```
+Normal Mode:  Scout → Architect → Builder → Tester
+              (AI researches) (AI designs)
+
+Spec Mode:           Architect → Builder → Tester
+                     (extracts from YOUR spec)
+```
+
+In Spec Mode:
+- **Scout is skipped** — Your spec replaces Scout's requirements analysis
+- **Architect extracts** — Reads your spec and fills the standard template (doesn't invent)
+- **Builder implements** — Builds exactly what your spec describes
+- **Tester validates** — Tests against Gherkin criteria extracted from your spec
+
+### Supported File Formats
+
+| Format | Extensions | Notes |
+|--------|------------|-------|
+| Plain text | `.txt`, `.md`, `.json`, `.yaml`, `.xml` | Built-in |
+| PDF | `.pdf` | Requires `pypdf` (see below) |
+| Word | `.docx` | Requires `python-docx` (see below) |
+| Images | `.png`, `.jpg`, `.gif`, `.webp` | Diagrams, wireframes, mockups |
+
+**Enable PDF/Word support:**
+```bash
+pip install -r requirements-spec.txt
+# Or: pip install pypdf python-docx
+```
+
+### How to Run a Spec Mode Build
+
+**In Claude Code (natural language):**
+```
+Build a dashboard app using the spec at ~/Documents/dashboard-spec.pdf
+Output to ~/builds/my-dashboard
+```
+
+**Multiple spec files:**
+```
+Build using these specs:
+- ~/Documents/requirements.md
+- ~/Documents/wireframes.png
+- ~/Documents/api-design.pdf
+
+Working directory: ~/builds/my-app
+```
+
+**Programmatically (MCP tool):**
+```python
+autonomous_build_and_deploy(
+    task="Build a dashboard application",
+    working_directory="/Users/me/builds/dashboard",
+    spec_files=[
+        "/Users/me/Documents/dashboard-spec.pdf",
+        "/Users/me/Documents/wireframes.png"
+    ]
+)
+```
+
+### Can Spec Mode Combine with Human-in-the-Loop (HIL)?
+
+**Yes!** Spec Mode and HIL are independent features that work together:
+
+| Mode | What It Controls |
+|------|------------------|
+| **Spec Mode** | *Input source* — Where requirements come from (your files vs AI research) |
+| **HIL Mode** | *Approval gates* — When to pause for human review |
+
+**Combined usage:**
+```
+Build from spec ~/Documents/spec.pdf with human-in-the-loop review
+
+Output to ~/builds/my-app
+```
+
+This will:
+1. Skip Scout (Spec Mode)
+2. Architect extracts from your PDF
+3. **Pause for your approval** of the architecture (HIL)
+4. Builder implements after you approve
+5. **Pause for your approval** of the code (HIL)
+6. Tester validates
+
+---
+
+## Pattern Learning: Smarter Over Time
+
+Context Foundry learns from every build. When an agent solves a problem, the solution gets saved to the pattern library. Future builds benefit from past learnings.
+
+### How Patterns Work
+
+```
+Build 1: Agent encounters CORS error → Learns solution → Saves pattern
+Build 2: Same CORS error → Agent reads pattern → Applies known fix instantly
+```
+
+Patterns are stored in `~/.context-foundry/patterns/`:
+
+| File | Contains | Used By |
+|------|----------|---------|
+| `common-issues.json` | Bug fixes, gotchas, workarounds | Builder, Test |
+| `architecture-patterns.json` | Design patterns, best practices | Architect |
+| `test-patterns.json` | Testing strategies, E2E patterns | Test |
+| `scout-learnings.json` | Research insights, domain knowledge | Scout |
+
+### Semantic Deduplication (New)
+
+**Problem:** LLMs generate different names for the same issue. Without deduplication, you'd get:
+- `"cors-error-fix"`
+- `"fix-cors-issue"`
+- `"cross-origin-request-blocked"`
+
+All describing the **same solution**—wasting storage and causing confusion.
+
+**Solution:** When merging patterns, Context Foundry uses Claude to semantically compare new patterns against existing ones. If they describe the same issue (even with different wording), it updates the existing pattern instead of creating a duplicate.
+
+```
+New pattern: "polling-race-condition-bug"
+Existing:    "daemon-job-status-race-condition"
+
+Claude: "These describe the same issue"
+Result: Update existing pattern (frequency +1), don't create duplicate
+```
+
+**Cost:** ~$0.008 per semantic check (Opus 4.5). Only runs when exact ID doesn't match.
+
+**Latency:** <2 seconds per check. Most builds have 0-2 new patterns, so impact is minimal.
+
+### Pattern Library Commands
+
+```bash
+# View current patterns
+cat ~/.context-foundry/patterns/common-issues.json | jq '.patterns | length'
+
+# Sync patterns to cloud (optional)
+# Uses S3 for team sharing
+```
+
+---
+
+## Running Builds
+
+### Regular Autonomous Build
+
+**In Claude Code:**
+```
+Build a weather dashboard with React
+```
+
+**Via CLI:**
+```bash
+cfd start                    # Start daemon
+cf build "Weather dashboard with React"
+cfd logs <job-id> --follow   # Watch progress
+```
+
+**What happens:**
+1. Scout researches the task
+2. Architect designs the solution
+3. Builder writes the code
+4. Tester validates (loops if tests fail)
+5. Done!
+
+### Spec Mode Build
+
+**In Claude Code:**
+```
+Build from spec at ~/Documents/my-spec.pdf
+Output to ~/builds/my-project
+```
+
+**What happens:**
+1. ~~Scout~~ (skipped — your spec is the source)
+2. Architect **extracts** from your spec (doesn't invent)
+3. Builder implements what the spec describes
+4. Tester validates
+5. Done!
+
+### Human-in-the-Loop (HIL) Build
+
+**In Claude Code:**
+```
+Build a payment system with human-in-the-loop review
+```
+
+**What happens:**
+1. Scout researches → **Pause for approval**
+2. Architect designs → **Pause for approval**
+3. Builder implements → **Pause for approval**
+4. Tester validates
+5. Done!
+
+### Combined: Spec Mode + HIL
+
+```
+Build from spec ~/Documents/spec.md with HIL review
+Output to ~/builds/project
+```
 
 ---
 
