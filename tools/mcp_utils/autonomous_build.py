@@ -2773,6 +2773,123 @@ def execute_build_with_phase_spawning(
                 # Continue anyway - deployment is optional
 
         # ═══════════════════════════════════════════════════════════════════════
+        # PHASE 8: FEEDBACK (Quality Assurance & Pattern Learning)
+        # ═══════════════════════════════════════════════════════════════════════
+        feedback_skipped = _should_skip_phase(
+            "Feedback", pipeline_state, resume_from_phase
+        )
+
+        if feedback_skipped:
+            print("⏭️  Skipping Feedback phase (already completed)", file=sys.stderr)
+        else:
+            # Check emergency stop before starting phase
+            emergency_result = check_emergency_stop("Feedback")
+            if emergency_result:
+                return emergency_result
+
+            # Check approval gate (configurable via require_approval_phases)
+            approval_result = check_approval_gate("Feedback")
+            if approval_result:
+                if approval_result.get("skip_phase"):
+                    pass  # Phase skipped due to denial, continue
+                else:
+                    return approval_result  # Waiting for approval
+
+            print("\n📊 Running Feedback phase...", file=sys.stderr)
+
+            # Mark phase as started
+            if pipeline_state:
+                pipeline_state.mark_phase_started("Feedback")
+                save_pipeline_state(pipeline_state, working_directory)
+            audit_phase_started("Feedback", str(working_directory))
+
+            # Run preflight for optional phase
+            run_optional_preflight("Feedback")
+
+            if is_timeout_exceeded():
+                print(
+                    "⚠️  Build timeout exceeded, but running Feedback anyway (max 5 min)",
+                    file=sys.stderr,
+                )
+
+            feedback_prompt = MODULE_DIR / "prompts" / "phases" / "phase_feedback.txt"
+            feedback_instruction = (
+                "Follow the FEEDBACK PHASE INSTRUCTIONS in the prompt.\n"
+                "Create .context-foundry/feedback.md (human-readable report) and "
+                ".context-foundry/learnings.json (machine-readable patterns).\n"
+                f"Review all artifacts in {working_directory}/.context-foundry/"
+            )
+
+            feedback_result = run_phase(
+                "Feedback",
+                feedback_prompt,
+                feedback_instruction,
+                working_directory,
+                phase_timeout=300,  # 5 min
+                project_type=project_type,
+                task_config=task_config,
+            )
+
+            # Feedback is optional - don't fail build if it doesn't work
+            if feedback_result.status == "completed":
+                if "Feedback" not in phases_completed:
+                    phases_completed.append("Feedback")
+                    if pipeline_state:
+                        pipeline_state.mark_phase_completed("Feedback")
+                        save_pipeline_state(pipeline_state, working_directory)
+                    audit_phase_completed("Feedback", str(working_directory))
+                print("✅ Feedback captured", file=sys.stderr)
+
+                # Merge learnings to global patterns
+                learnings_file = (
+                    working_directory / ".context-foundry" / "learnings.json"
+                )
+                if learnings_file.exists():
+                    try:
+                        from .pattern_management import merge_project_patterns
+
+                        merge_result = merge_project_patterns(
+                            project_path=str(working_directory),
+                            pattern_type="common-issues",
+                            increment_build_count=True,
+                        )
+                        print(
+                            f"📚 Patterns merged: {merge_result.get('patterns_added', 0)} new, "
+                            f"{merge_result.get('patterns_updated', 0)} updated",
+                            file=sys.stderr,
+                        )
+                    except Exception as e:
+                        print(f"⚠️  Pattern merge failed: {e}", file=sys.stderr)
+                else:
+                    print(
+                        "⚠️  No learnings.json found, skipping pattern merge",
+                        file=sys.stderr,
+                    )
+
+                # Check if we should pause after Feedback
+                pause_result = _check_and_handle_pause(
+                    "Feedback",
+                    working_directory,
+                    pipeline_state,
+                    phases_completed,
+                    start_time,
+                    test_iteration,
+                )
+                if pause_result:
+                    return pause_result
+            else:
+                audit_phase_failed(
+                    "Feedback",
+                    str(working_directory),
+                    feedback_result.error or "Feedback phase failed",
+                )
+                print(
+                    f"⚠️  Feedback phase failed: {feedback_result.error or 'Unknown'}",
+                    file=sys.stderr,
+                )
+                # Continue anyway - feedback is optional
+
+        # ═══════════════════════════════════════════════════════════════════════
         # SUCCESS
         # ═══════════════════════════════════════════════════════════════════════
         duration = (datetime.now() - start_time).total_seconds()

@@ -48,7 +48,7 @@ PHASE_OUTPUTS = {
     "Screenshot": None,  # No handoff file
     "Documentation": None,  # Creates README.md but not in .context-foundry
     "Deploy": None,
-    "Feedback": "learnings.json",
+    "Feedback": "feedback.md",  # Also creates learnings.json for pattern merging
 }
 
 
