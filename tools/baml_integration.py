@@ -12,8 +12,10 @@ Key Features:
 - Client caching for performance
 - Reduced error rates: 5% → <1% compared to raw JSON parsing
 
-BAML is REQUIRED for Context Foundry builds. Install with:
+BAML is OPTIONAL but recommended for type-safe outputs. Install with:
     pip install -r requirements.txt  # Includes baml-py>=0.211.0
+
+Without BAML, Context Foundry uses Claude CLI parsing with JSON fallbacks.
 
 Usage:
     from tools.baml_integration import get_baml_client, update_phase_with_baml
@@ -90,14 +92,14 @@ def _validate_scout_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate a Scout payload against the BAML-generated Pydantic model.
 
-    Returns the normalized dict if validation passes, otherwise raises.
+    Returns the normalized dict if validation passes.
+    Falls back to returning payload as-is if BAML types unavailable.
     """
     try:
         from tools.baml_client.baml_client.types import ScoutReport
-    except Exception as exc:  # pragma: no cover - defensive import
-        raise RuntimeError(
-            f"Failed to import ScoutReport for validation: {exc}"
-        ) from exc
+    except Exception:
+        # BAML types not available - return payload without validation
+        return payload
 
     try:
         if hasattr(ScoutReport, "model_validate"):  # Pydantic v2
@@ -106,19 +108,22 @@ def _validate_scout_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         validated = ScoutReport.parse_obj(payload)  # Pydantic v1
         return validated.dict()
     except Exception as exc:
-        raise RuntimeError(f"Scout payload failed schema validation: {exc}") from exc
+        # Validation failed but don't block - log and return original
+        print(f"[BAML] Scout validation warning: {exc}", file=sys.stderr)
+        return payload
 
 
 def _validate_architecture_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate an Architecture payload against the BAML-generated Pydantic model.
+
+    Falls back to returning payload as-is if BAML types unavailable.
     """
     try:
         from tools.baml_client.baml_client.types import ArchitectureBlueprint
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to import ArchitectureBlueprint for validation: {exc}"
-        ) from exc
+    except Exception:
+        # BAML types not available - return payload without validation
+        return payload
 
     try:
         if hasattr(ArchitectureBlueprint, "model_validate"):  # Pydantic v2
@@ -127,19 +132,22 @@ def _validate_architecture_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         validated = ArchitectureBlueprint.parse_obj(payload)  # Pydantic v1
         return validated.dict()
     except Exception as exc:
-        raise RuntimeError(
-            f"Architecture payload failed schema validation: {exc}"
-        ) from exc
+        # Validation failed but don't block - log and return original
+        print(f"[BAML] Architecture validation warning: {exc}", file=sys.stderr)
+        return payload
 
 
 def _validate_phase_info_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Validate a PhaseInfo payload against the BAML-generated Pydantic model.
+
+    Falls back to returning payload as-is if BAML types unavailable.
     """
     try:
         from tools.baml_client.baml_client.types import PhaseInfo
-    except Exception as exc:
-        raise RuntimeError(f"Failed to import PhaseInfo for validation: {exc}") from exc
+    except Exception:
+        # BAML types not available - return payload without validation
+        return payload
 
     try:
         if hasattr(PhaseInfo, "model_validate"):  # Pydantic v2
@@ -148,9 +156,9 @@ def _validate_phase_info_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         validated = PhaseInfo.parse_obj(payload)  # Pydantic v1
         return validated.dict()
     except Exception as exc:
-        raise RuntimeError(
-            f"PhaseInfo payload failed schema validation: {exc}"
-        ) from exc
+        # Validation failed but don't block - log and return original
+        print(f"[BAML] PhaseInfo validation warning: {exc}", file=sys.stderr)
+        return payload
 
 
 def _run_claude_cli_json(prompt: str, timeout_seconds: int = 180) -> Dict[str, Any]:
@@ -643,17 +651,24 @@ Return ONLY valid JSON matching the PhaseInfo schema:
                 raise
 
         except Exception as e:
-            # BAML is required - fail hard, no fallback
-            error_msg = f"BAML phase tracking failed: {e}"
-            print(f"❌ {error_msg}", file=sys.stderr)
-            raise RuntimeError(error_msg) from e
+            # BAML failed - fall through to simple JSON fallback
+            print(f"[BAML] Phase tracking via BAML failed: {e}", file=sys.stderr)
 
-    # BAML is required - no fallback to JSON
-    raise RuntimeError(
-        "BAML is required but not available. "
-        "Ensure baml-py is installed and OPENAI_API_KEY is set. "
-        "Run: pip install baml-py && export OPENAI_API_KEY=your-key"
-    )
+    # Simple JSON fallback when both Claude CLI and BAML are unavailable
+    print("[BAML] Using simple JSON fallback for phase tracking", file=sys.stderr)
+    now = _now_iso()
+    return {
+        "session_id": session_id,
+        "current_phase": phase,
+        "phase": phase,
+        "phase_number": "1",
+        "status": status,
+        "progress_detail": detail,
+        "test_iteration": iteration,
+        "phases_completed": [],
+        "started_at": now,
+        "last_updated": now,
+    }
 
 
 def validate_phase_info(phase_info_json: str) -> Dict[str, Any]:
@@ -695,14 +710,31 @@ Return ONLY valid JSON matching the PhaseInfo schema.
                 file=sys.stderr,
             )
 
-    # BAML is required for validation fallback
+    # Try simple JSON parsing fallback if BAML not available
     if not is_baml_available():
-        error_msg = (
-            "BAML is required but not available. "
-            "Ensure baml-py is installed and OPENAI_API_KEY is set. "
-            f"Error: {get_baml_error()}"
+        print(
+            f"[BAML] Not available ({get_baml_error()}), attempting simple JSON parse",
+            file=sys.stderr,
         )
-        raise RuntimeError(error_msg)
+        try:
+            parsed = json.loads(phase_info_json)
+            normalized = normalize_phase_info(parsed)
+            return inject_real_timestamps(normalized)
+        except json.JSONDecodeError as e:
+            print(f"[BAML] Simple JSON parse failed: {e}", file=sys.stderr)
+            # Return minimal valid structure
+            now = _now_iso()
+            return {
+                "session_id": "unknown",
+                "current_phase": "unknown",
+                "phase": "unknown",
+                "status": "unknown",
+                "progress_detail": phase_info_json[:100],
+                "test_iteration": 0,
+                "phases_completed": [],
+                "started_at": now,
+                "last_updated": now,
+            }
 
     # Prefer Claude CLI (subscription)
     if BAML_USE_CLAUDE_CLI:
@@ -733,7 +765,24 @@ Return ONLY valid JSON matching the PhaseInfo schema.
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            # Fallback to simple JSON parse
+            try:
+                parsed = json.loads(phase_info_json)
+                normalized = normalize_phase_info(parsed)
+                return inject_real_timestamps(normalized)
+            except Exception:
+                now = _now_iso()
+                return {
+                    "session_id": "unknown",
+                    "current_phase": "unknown",
+                    "phase": "unknown",
+                    "status": "unknown",
+                    "progress_detail": str(phase_info_json)[:100],
+                    "test_iteration": 0,
+                    "phases_completed": [],
+                    "started_at": now,
+                    "last_updated": now,
+                }
 
         # Call BAML ValidatePhaseInfo function
         ctx = client.create_context_manager()
@@ -769,10 +818,28 @@ Return ONLY valid JSON matching the PhaseInfo schema.
         return inject_real_timestamps(normalized)
 
     except Exception as e:
-        # BAML is required - fail hard
-        error_msg = f"BAML validation failed: {e}"
-        print(f"❌ {error_msg}", file=sys.stderr)
-        raise RuntimeError(error_msg) from e
+        # BAML validation failed - try simple JSON fallback
+        print(
+            f"[BAML] Validation failed: {e}, using simple JSON parse", file=sys.stderr
+        )
+        try:
+            parsed = json.loads(phase_info_json)
+            normalized = normalize_phase_info(parsed)
+            return inject_real_timestamps(normalized)
+        except Exception:
+            # Return minimal valid structure
+            now = _now_iso()
+            return {
+                "session_id": "unknown",
+                "current_phase": "unknown",
+                "phase": "unknown",
+                "status": "unknown",
+                "progress_detail": str(phase_info_json)[:100],
+                "test_iteration": 0,
+                "phases_completed": [],
+                "started_at": now,
+                "last_updated": now,
+            }
 
 
 def generate_scout_report_baml(
@@ -837,14 +904,48 @@ Do not include markdown or prose outside the JSON."""
             )
 
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Return minimal scout report structure when BAML unavailable
+        print(
+            f"[BAML] Not available for Scout report generation: {get_baml_error()}",
+            file=sys.stderr,
         )
+        return {
+            "executive_summary": f"Scout analysis for: {task_description[:200]}",
+            "past_learnings_applied": [],
+            "known_risks": ["BAML not available - limited validation"],
+            "key_requirements": [task_description],
+            "tech_stack": {
+                "languages": [],
+                "frameworks": [],
+                "dependencies": [],
+                "justification": "Unable to analyze - BAML unavailable",
+            },
+            "architecture_recommendations": [],
+            "main_challenges": [],
+            "testing_approach": "Manual testing recommended",
+            "timeline_estimate": "Unknown",
+        }
 
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            # Return minimal structure if client unavailable
+            return {
+                "executive_summary": f"Scout analysis for: {task_description[:200]}",
+                "past_learnings_applied": [],
+                "known_risks": ["BAML client unavailable"],
+                "key_requirements": [task_description],
+                "tech_stack": {
+                    "languages": [],
+                    "frameworks": [],
+                    "dependencies": [],
+                    "justification": "Unable to analyze",
+                },
+                "architecture_recommendations": [],
+                "main_challenges": [],
+                "testing_approach": "Manual testing recommended",
+                "timeline_estimate": "Unknown",
+            }
 
         # Call BAML GenerateScoutReport function
         ctx = client.create_context_manager()
@@ -941,14 +1042,37 @@ Do not include markdown or prose outside the JSON.
             )
 
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Return minimal architecture structure when BAML unavailable
+        print(
+            f"[BAML] Not available for Architecture generation: {get_baml_error()}",
+            file=sys.stderr,
         )
+        return {
+            "overview": "Architecture generated without BAML validation",
+            "directory_structure": [],
+            "modules": [],
+            "implementation_steps": [],
+            "test_plan": {"unit_tests": [], "integration_tests": [], "e2e_tests": []},
+            "risk_mitigations": {
+                risk: "Manual review required" for risk in flagged_risks
+            },
+        }
 
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            return {
+                "overview": "Architecture generated without BAML client",
+                "directory_structure": [],
+                "modules": [],
+                "implementation_steps": [],
+                "test_plan": {
+                    "unit_tests": [],
+                    "integration_tests": [],
+                    "e2e_tests": [],
+                },
+                "risk_mitigations": {},
+            }
 
         # Call BAML GenerateArchitecture function
         ctx = client.create_context_manager()
@@ -1031,14 +1155,47 @@ Do not include markdown fences or commentary."""
             )
 
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Return minimal structure - markdown content becomes the summary
+        print(
+            f"[BAML] Not available for Scout markdown parsing: {get_baml_error()}",
+            file=sys.stderr,
         )
+        return {
+            "executive_summary": markdown_content[:500] if markdown_content else "",
+            "past_learnings_applied": [],
+            "known_risks": [],
+            "key_requirements": [],
+            "tech_stack": {
+                "languages": [],
+                "frameworks": [],
+                "dependencies": [],
+                "justification": "",
+            },
+            "architecture_recommendations": [],
+            "main_challenges": [],
+            "testing_approach": "",
+            "timeline_estimate": "",
+        }
 
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            return {
+                "executive_summary": markdown_content[:500] if markdown_content else "",
+                "past_learnings_applied": [],
+                "known_risks": [],
+                "key_requirements": [],
+                "tech_stack": {
+                    "languages": [],
+                    "frameworks": [],
+                    "dependencies": [],
+                    "justification": "",
+                },
+                "architecture_recommendations": [],
+                "main_challenges": [],
+                "testing_approach": "",
+                "timeline_estimate": "",
+            }
 
         ctx = client.create_context_manager()
         result = client.call_function_sync(
@@ -1099,14 +1256,35 @@ def parse_architecture_markdown_baml(markdown_content: str) -> Dict[str, Any]:
         RuntimeError: If BAML unavailable or parsing fails
     """
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Return minimal architecture structure
+        print(
+            f"[BAML] Not available for Architecture markdown parsing: {get_baml_error()}",
+            file=sys.stderr,
         )
+        return {
+            "overview": markdown_content[:500] if markdown_content else "",
+            "directory_structure": [],
+            "modules": [],
+            "implementation_steps": [],
+            "test_plan": {"unit_tests": [], "integration_tests": [], "e2e_tests": []},
+            "risk_mitigations": {},
+        }
 
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            return {
+                "overview": markdown_content[:500] if markdown_content else "",
+                "directory_structure": [],
+                "modules": [],
+                "implementation_steps": [],
+                "test_plan": {
+                    "unit_tests": [],
+                    "integration_tests": [],
+                    "e2e_tests": [],
+                },
+                "risk_mitigations": {},
+            }
 
         ctx = client.create_context_manager()
         result = client.call_function_sync(
@@ -1148,9 +1326,16 @@ def parse_architecture_markdown_baml(markdown_content: str) -> Dict[str, Any]:
         return internal_repr
 
     except Exception as e:
-        error_msg = f"BAML Architecture markdown parsing failed: {e}"
-        print(f"❌ {error_msg}", file=sys.stderr)
-        raise RuntimeError(error_msg) from e
+        # BAML parsing failed - return minimal structure
+        print(f"[BAML] Architecture markdown parsing failed: {e}", file=sys.stderr)
+        return {
+            "overview": markdown_content[:500] if markdown_content else "",
+            "directory_structure": [],
+            "modules": [],
+            "implementation_steps": [],
+            "test_plan": {"unit_tests": [], "integration_tests": [], "e2e_tests": []},
+            "risk_mitigations": {},
+        }
 
 
 def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
@@ -1161,20 +1346,26 @@ def validate_build_result_baml(result_json: str) -> Dict[str, Any]:
         result_json: Build result JSON
 
     Returns:
-        BuildTaskResult dict
-
-    Raises:
-        RuntimeError: If BAML unavailable or validation fails
+        BuildTaskResult dict (or parsed JSON if BAML unavailable)
     """
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Try simple JSON parse
+        print(
+            f"[BAML] Not available for build result validation: {get_baml_error()}",
+            file=sys.stderr,
         )
+        try:
+            return json.loads(result_json)
+        except json.JSONDecodeError:
+            return {"status": "unknown", "raw_result": result_json[:500]}
 
     try:
         client = get_baml_client()
         if client is None:
-            raise RuntimeError("BAML client not available")
+            try:
+                return json.loads(result_json)
+            except json.JSONDecodeError:
+                return {"status": "unknown", "raw_result": result_json[:500]}
 
         # Call BAML ValidateBuildResult function
         ctx = client.create_context_manager()
@@ -1227,7 +1418,7 @@ def fallback_to_json(operation: str, error: Exception) -> None:
         error: Exception that occurred
     """
     print(f"⚠️  BAML {operation} failed: {error}", file=sys.stderr)
-    print("BAML is required for Context Foundry builds.", file=sys.stderr)
+    print("Build will continue with fallback parsing.", file=sys.stderr)
 
 
 def validate_build_plan_no_cycles(build_plan: Dict[str, Any]) -> None:
@@ -1305,19 +1496,31 @@ def create_build_plan(
 
     Returns:
         BuildPlan dict with parallel_build_enabled, tasks, and time estimates
-
-    Raises:
-        RuntimeError: If BAML unavailable or generation fails
     """
     if not is_baml_available():
-        raise RuntimeError(
-            f"BAML is required but not available. Error: {get_baml_error()}"
+        # Return simple sequential build plan
+        print(
+            f"[BAML] Not available for build plan creation: {get_baml_error()}",
+            file=sys.stderr,
         )
+        return {
+            "parallel_build_enabled": False,
+            "tasks": [],
+            "reasoning": "BAML unavailable - using sequential build",
+            "estimated_time_sequential": "unknown",
+            "estimated_time_parallel": "unknown",
+        }
 
     try:
         client = get_baml_client(force_recompile=True)
         if client is None:
-            raise RuntimeError("BAML client not available")
+            return {
+                "parallel_build_enabled": False,
+                "tasks": [],
+                "reasoning": "BAML client unavailable",
+                "estimated_time_sequential": "unknown",
+                "estimated_time_parallel": "unknown",
+            }
 
         # Call BAML CreateBuildPlan function
         ctx = client.create_context_manager()

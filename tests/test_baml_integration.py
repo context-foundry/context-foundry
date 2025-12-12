@@ -381,9 +381,10 @@ class TestPhaseTracking:
             # Mock BAML to fail on invalid JSON
             mock_client.call_function_sync.side_effect = Exception("Invalid JSON")
 
-            # Should raise RuntimeError, not return tuple
-            with pytest.raises(RuntimeError, match="BAML validation failed"):
-                validate_phase_info(invalid_json)
+            # With graceful fallback, should return minimal structure instead of raising
+            result = validate_phase_info(invalid_json)
+            assert isinstance(result, dict)
+            assert "session_id" in result  # Fallback structure has this field
 
     def test_validate_phase_info_missing_fields(self):
         """Test validating JSON with missing required fields"""
@@ -405,9 +406,10 @@ class TestPhaseTracking:
                 "Missing required fields"
             )
 
-            # Should raise RuntimeError, not return tuple
-            with pytest.raises(RuntimeError, match="BAML validation failed"):
-                validate_phase_info(incomplete_json)
+            # With graceful fallback, should return minimal structure instead of raising
+            result = validate_phase_info(incomplete_json)
+            assert isinstance(result, dict)
+            assert "session_id" in result  # Fallback structure has this field
 
 
 class TestScoutReport:
@@ -438,18 +440,21 @@ class TestScoutReport:
             assert isinstance(report, dict)
             assert "summary" in report
 
-    def test_generate_scout_report_fails_without_baml(self):
-        """Test Scout report fails when BAML unavailable"""
+    def test_generate_scout_report_fallback_without_baml(self):
+        """Test Scout report returns fallback when BAML unavailable"""
         with patch("tools.baml_integration.is_baml_available", return_value=False):
             with patch(
                 "tools.baml_integration.get_baml_error",
                 return_value="BAML not installed",
             ):
-                with pytest.raises(RuntimeError, match="BAML is required"):
-                    generate_scout_report_baml(
-                        task_description="Build a web app",
-                        codebase_analysis="Python project",
-                    )
+                # With graceful fallback, should return minimal structure
+                result = generate_scout_report_baml(
+                    task_description="Build a web app",
+                    codebase_analysis="Python project",
+                )
+                assert isinstance(result, dict)
+                assert "executive_summary" in result
+                assert "key_requirements" in result
 
 
 class TestArchitectureBlueprint:
@@ -478,15 +483,20 @@ class TestArchitectureBlueprint:
 
             assert isinstance(architecture, dict)
 
-    def test_generate_architecture_fails_without_baml(self):
-        """Test architecture generation fails when BAML unavailable"""
+    def test_generate_architecture_fallback_without_baml(self):
+        """Test architecture returns fallback when BAML unavailable"""
         with patch("tools.baml_integration.is_baml_available", return_value=False):
             with patch(
                 "tools.baml_integration.get_baml_error",
                 return_value="BAML not installed",
             ):
-                with pytest.raises(RuntimeError, match="BAML is required"):
-                    generate_architecture_baml(json.dumps({"summary": "test"}), [])
+                # With graceful fallback, should return minimal structure
+                result = generate_architecture_baml(
+                    json.dumps({"summary": "test"}), ["risk1"]
+                )
+                assert isinstance(result, dict)
+                assert "overview" in result
+                assert "modules" in result
 
 
 class TestBuilderTaskResult:
@@ -517,15 +527,17 @@ class TestBuilderTaskResult:
             assert isinstance(validated, dict)
             assert validated["status"] == "success"
 
-    def test_validate_build_result_fails_without_baml(self):
-        """Test build validation fails when BAML unavailable"""
+    def test_validate_build_result_fallback_without_baml(self):
+        """Test build validation returns fallback when BAML unavailable"""
         with patch("tools.baml_integration.is_baml_available", return_value=False):
             with patch(
                 "tools.baml_integration.get_baml_error",
                 return_value="BAML not installed",
             ):
-                with pytest.raises(RuntimeError, match="BAML is required"):
-                    validate_build_result_baml(json.dumps({"task_id": "test"}))
+                # With graceful fallback, should return parsed JSON
+                result = validate_build_result_baml(json.dumps({"task_id": "test"}))
+                assert isinstance(result, dict)
+                assert result["task_id"] == "test"  # Should parse the JSON
 
 
 class TestFallbackBehavior:
@@ -538,38 +550,39 @@ class TestFallbackBehavior:
 
         captured = capsys.readouterr()
         assert "BAML test_operation failed" in captured.err
-        assert "BAML is required" in captured.err
+        assert "fallback" in captured.err.lower()
 
 
-class TestBAMLRequired:
-    """Test that BAML is required and fails hard when unavailable"""
+class TestBAMLOptional:
+    """Test that BAML is optional with graceful fallbacks"""
 
-    def test_baml_must_be_available(self):
-        """Test that BAML is available (required dependency)"""
-        # BAML is now a required dependency - it must be available
-        assert is_baml_available(), (
-            "BAML must be available. Install with: pip install baml-py\n"
-            f"Error: {get_baml_error()}"
-        )
+    def test_baml_availability_check(self):
+        """Test that we can check BAML availability"""
+        # BAML availability can be checked - it's optional but recommended
+        available = is_baml_available()
+        # Just verify the check works without error
+        assert isinstance(available, bool)
 
-    def test_update_phase_fails_without_baml(self):
-        """Test that phase tracking fails hard without BAML"""
+    def test_update_phase_fallback_without_baml(self):
+        """Test that phase tracking falls back gracefully without BAML"""
         # Mock BAML as unavailable
         with patch("tools.baml_integration.is_baml_available", return_value=False):
             with patch(
                 "tools.baml_integration.get_baml_error",
                 return_value="BAML not installed",
             ):
-                # Should raise RuntimeError, not return JSON fallback
-                with pytest.raises(RuntimeError, match="BAML is required"):
-                    update_phase_with_baml(
-                        phase="Test",
-                        status="testing",
-                        detail="Testing BAML requirement",
-                    )
+                # Should return fallback structure, not raise
+                result = update_phase_with_baml(
+                    phase="Test",
+                    status="testing",
+                    detail="Testing BAML fallback",
+                )
+                assert isinstance(result, dict)
+                assert "current_phase" in result
+                assert result["current_phase"] == "Test"
 
-    def test_validate_fails_without_baml(self):
-        """Test that validation fails hard without BAML"""
+    def test_validate_fallback_without_baml(self):
+        """Test that validation falls back gracefully without BAML"""
         valid_json = json.dumps(
             {"session_id": "test", "current_phase": "Test", "status": "testing"}
         )
@@ -580,9 +593,10 @@ class TestBAMLRequired:
                 "tools.baml_integration.get_baml_error",
                 return_value="BAML not installed",
             ):
-                # Should raise RuntimeError, not return tuple
-                with pytest.raises(RuntimeError, match="BAML is required"):
-                    validate_phase_info(valid_json)
+                # Should return parsed JSON, not raise
+                result = validate_phase_info(valid_json)
+                assert isinstance(result, dict)
+                assert result["session_id"] == "test"
 
 
 if __name__ == "__main__":

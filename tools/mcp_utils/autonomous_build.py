@@ -846,17 +846,17 @@ def autonomous_build_and_deploy_impl(
     """
     try:
         # ═══════════════════════════════════════════════════════════════════════
-        # BAML VERIFICATION
+        # BAML CHECK (optional - build continues without it)
         # ═══════════════════════════════════════════════════════════════════════
-        if not is_baml_available():
-            error_msg = (
-                "❌ BAML is required but not available.\n"
-                f"Error: {get_baml_error()}\n\n"
-                "Install with: pip install baml-py\n"
+        if is_baml_available():
+            print("✅ BAML is available (type-safe parsing enabled)", file=sys.stderr)
+        else:
+            print(
+                f"⚠️  BAML not available: {get_baml_error()}\n"
+                "   Build will continue using Claude CLI for parsing.\n"
+                "   For type-safe output, install: pip install baml-py",
+                file=sys.stderr,
             )
-            return json.dumps({"error": error_msg}, indent=2)
-
-        print("✅ BAML is available", file=sys.stderr)
 
         # Determine final working directory
         # Smart defaults: relative paths use projects root (sibling to context-foundry)
