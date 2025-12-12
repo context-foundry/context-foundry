@@ -287,9 +287,10 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
             return None
 
         # Create dict mapping filenames to their contents
+        # Use explicit UTF-8 encoding for Windows compatibility
         files_dict = {}
         for schema_file in schema_files:
-            files_dict[schema_file.name] = schema_file.read_text()
+            files_dict[schema_file.name] = schema_file.read_text(encoding="utf-8")
 
         # Get environment variables for BAML
         env_vars_for_baml = get_baml_env_vars()
@@ -306,9 +307,13 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
             file=sys.stderr,
         )
 
+        # Convert Windows backslashes to forward slashes for BAML compatibility
+        # The BAML Rust library expects POSIX-style paths
+        root_path_str = str(schemas_dir).replace("\\", "/")
+
         # Pass environment to BAML
         BAML_CLIENT = BamlRuntime.from_files(
-            root_path=str(schemas_dir), files=files_dict, env_vars=env_vars_for_baml
+            root_path=root_path_str, files=files_dict, env_vars=env_vars_for_baml
         )
 
         print("[BAML] BamlRuntime created successfully", file=sys.stderr)
@@ -319,7 +324,30 @@ def get_baml_client(force_recompile: bool = False) -> Optional[Any]:
         return BAML_CLIENT
 
     except Exception as e:
-        BAML_COMPILATION_ERROR = f"Failed to initialize BamlRuntime: {e}"
+        import platform
+
+        platform_info = f" (Platform: {platform.system()} {platform.release()})"
+        BAML_COMPILATION_ERROR = f"Failed to initialize BamlRuntime: {e}{platform_info}"
+
+        # Log additional diagnostics for debugging
+        print(f"[BAML ERROR] Initialization failed: {e}", file=sys.stderr)
+        print(
+            f"[BAML ERROR] Platform: {platform.system()} {platform.release()}",
+            file=sys.stderr,
+        )
+        print(f"[BAML ERROR] Schemas dir: {schemas_dir}", file=sys.stderr)
+        # root_path_str and files_dict may not be defined if exception occurred early
+        try:
+            print(f"[BAML ERROR] Root path used: {root_path_str}", file=sys.stderr)
+        except NameError:
+            pass
+        try:
+            print(
+                f"[BAML ERROR] Schema files: {list(files_dict.keys())}", file=sys.stderr
+            )
+        except NameError:
+            pass
+
         return None
 
 
