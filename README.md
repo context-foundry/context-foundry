@@ -13,13 +13,13 @@ Context Foundry is an autonomous build system that does the tedious parts for yo
 ---
 
 <div align="center">
-  <img src="docs/images/dashboard-hero.png" alt="Context Foundry Dashboard" width="100%">
+  <img src="docs/assets/screenshots/dashboard.png" alt="Context Foundry Dashboard" width="100%">
   <p><em>Context Foundry Desktop - Monitor builds, view artifacts, track progress</em></p>
 </div>
 
 <div align="center">
-  <img src="docs/images/job-detail.png" alt="Job Detail View" width="100%">
-  <p><em>Job Detail - View conversation history, artifacts, and phase progress</em></p>
+  <img src="docs/assets/screenshots/sidekick.png" alt="AI Sidekick Assistant" width="100%">
+  <p><em>AI Sidekick - Chat with your builds, ask questions, get insights</em></p>
 </div>
 
 ---
@@ -389,15 +389,6 @@ A common question: **Are Scout, Architect, Builder, etc. "agents" or "phases"?**
 They're essentially **stateless workers** that read artifacts, do work, write artifacts, and disappear.
 
 ---
-
-## Desktop App
-
-A native desktop application for macOS (and Windows) that provides a visual dashboard for Context Foundry.
-
-<div align="center">
-  <img src="docs/images/dark-theme-showcase.png" alt="Dark Theme" width="100%">
-  <p><em>Beautiful dark theme with real-time build monitoring</em></p>
-</div>
 
 ### Features
 
