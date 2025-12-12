@@ -4,12 +4,137 @@ Handles reading, writing, and merging of global pattern storage across builds.
 """
 
 import json
+import logging
+import os
+import shutil
+import subprocess
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from context_foundry.daemon.config import Config
+
+logger = logging.getLogger(__name__)
+
+
+def find_semantic_duplicate(
+    new_pattern: Dict[str, Any],
+    existing_patterns: List[Dict[str, Any]],
+    similarity_threshold: float = 0.85,
+) -> Optional[int]:
+    """
+    Use Claude to find if a semantically equivalent pattern already exists.
+
+    Instead of relying on exact ID matching (which fails because LLMs generate
+    different IDs for the same concept), we ask Claude to compare the new pattern
+    against existing ones and identify semantic duplicates.
+
+    Args:
+        new_pattern: The pattern being added
+        existing_patterns: List of existing global patterns
+        similarity_threshold: Not used directly, but kept for API compatibility
+
+    Returns:
+        Index of the matching pattern in existing_patterns, or None if no match
+    """
+    # Skip if no existing patterns to compare against
+    if not existing_patterns:
+        return None
+
+    # Skip if Claude CLI not available
+    if not shutil.which("claude"):
+        logger.warning("Claude CLI not found, falling back to ID-only matching")
+        return None
+
+    # Extract key info from new pattern
+    new_title = new_pattern.get("title", "")
+    new_desc = new_pattern.get("description", "")
+    new_problem = new_pattern.get("root_cause", "") or new_pattern.get("issue", {}).get(
+        "description", ""
+    )
+
+    # Build a summary of existing patterns for Claude to compare against
+    existing_summaries = []
+    for i, p in enumerate(existing_patterns):
+        title = p.get("title", "")
+        desc = p.get("description", "")[:200]  # Truncate to save tokens
+        pid = p.get("pattern_id") or p.get("id", f"pattern_{i}")
+        existing_summaries.append(
+            f"[{i}] ID: {pid}\n    Title: {title}\n    Description: {desc}..."
+        )
+
+    # Limit to 20 patterns to avoid context overflow
+    if len(existing_summaries) > 20:
+        existing_summaries = existing_summaries[:20]
+        logger.info("Truncated to first 20 patterns for semantic comparison")
+
+    existing_text = "\n\n".join(existing_summaries)
+
+    prompt = f"""You are a pattern deduplication system. Determine if the NEW PATTERN below is semantically equivalent to any EXISTING PATTERN.
+
+Two patterns are semantically equivalent if they describe the SAME underlying issue/solution, even if worded differently.
+
+NEW PATTERN:
+Title: {new_title}
+Description: {new_desc}
+Root Cause: {new_problem}
+
+EXISTING PATTERNS:
+{existing_text}
+
+RESPOND WITH ONLY ONE OF:
+- The index number (e.g., "3") if the new pattern matches an existing one
+- "NONE" if the new pattern is genuinely new
+
+Your response (just the number or NONE):"""
+
+    try:
+        # Call Claude CLI using the user's logged-in model
+        # (No --model flag = uses default model for the subscription)
+        cmd = ["claude", "--print", "--dangerously-skip-permissions", prompt]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            stdin=subprocess.DEVNULL,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+        )
+
+        if result.returncode != 0:
+            logger.warning(f"Claude semantic check failed: {result.stderr}")
+            return None
+
+        response = result.stdout.strip().upper()
+
+        if response == "NONE":
+            return None
+
+        # Try to parse as integer index
+        try:
+            idx = int(response.strip())
+            if 0 <= idx < len(existing_patterns):
+                matched_id = existing_patterns[idx].get(
+                    "pattern_id"
+                ) or existing_patterns[idx].get("id")
+                logger.info(
+                    f"Semantic match found: new pattern matches existing '{matched_id}'"
+                )
+                return idx
+        except ValueError:
+            logger.warning(f"Unexpected response from semantic check: {response}")
+            return None
+
+    except subprocess.TimeoutExpired:
+        logger.warning("Claude semantic check timed out")
+        return None
+    except Exception as e:
+        logger.warning(f"Claude semantic check error: {e}")
+        return None
+
+    return None
 
 
 def read_global_patterns_impl(pattern_type: str = "common-issues") -> Dict[str, Any]:
@@ -225,6 +350,7 @@ def merge_project_patterns_impl(
             project_patterns = project_data.get("patterns", [])
             global_patterns = global_data.get("patterns", [])
             merge_stats["total_project_patterns"] = len(project_patterns)
+            merge_stats["semantic_matches"] = 0  # Track semantic dedup hits
 
             # Create lookup by pattern_id or id
             global_by_id = {}
@@ -233,57 +359,88 @@ def merge_project_patterns_impl(
                 if pid:
                     global_by_id[pid] = i
 
+            # Helper to update an existing pattern
+            def update_existing_pattern(
+                existing: Dict, proj_pattern: Dict, is_semantic_match: bool = False
+            ):
+                """Update an existing pattern with new data."""
+                # Increment frequency
+                existing["frequency"] = existing.get("frequency", 1) + 1
+
+                # Update last_seen
+                existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+
+                # Merge project_types (unique values)
+                existing_types = set(existing.get("project_types", []))
+                new_types = set(proj_pattern.get("project_types", []))
+                existing["project_types"] = sorted(list(existing_types | new_types))
+
+                # Preserve highest severity
+                severity_order = {
+                    "CRITICAL": 4,
+                    "HIGH": 3,
+                    "MEDIUM": 2,
+                    "LOW": 1,
+                    "critical": 4,
+                    "high": 3,
+                    "medium": 2,
+                    "low": 1,
+                }
+                existing_severity = severity_order.get(
+                    existing.get("severity", "LOW"), 1
+                )
+                new_severity = severity_order.get(
+                    proj_pattern.get("severity", "LOW"), 1
+                )
+                if new_severity > existing_severity:
+                    existing["severity"] = proj_pattern["severity"]
+
+                # If semantic match, also merge any additional fields
+                if is_semantic_match:
+                    # Add alias ID to track that this pattern has multiple names
+                    aliases = existing.get("aliases", [])
+                    new_id = proj_pattern.get("pattern_id") or proj_pattern.get("id")
+                    if new_id and new_id not in aliases:
+                        aliases.append(new_id)
+                        existing["aliases"] = aliases
+
             # Merge each project pattern
             for proj_pattern in project_patterns:
                 pattern_id = proj_pattern.get("pattern_id") or proj_pattern.get("id")
                 if not pattern_id:
                     continue
 
+                # Step 1: Check for exact ID match (fast, no API call)
                 if pattern_id in global_by_id:
-                    # Update existing pattern
                     idx = global_by_id[pattern_id]
-                    existing = global_patterns[idx]
-
-                    # Increment frequency
-                    existing["frequency"] = existing.get("frequency", 1) + 1
-
-                    # Update last_seen
-                    existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-
-                    # Merge project_types (unique values)
-                    existing_types = set(existing.get("project_types", []))
-                    new_types = set(proj_pattern.get("project_types", []))
-                    existing["project_types"] = sorted(list(existing_types | new_types))
-
-                    # Preserve highest severity
-                    severity_order = {
-                        "CRITICAL": 4,
-                        "HIGH": 3,
-                        "MEDIUM": 2,
-                        "LOW": 1,
-                        "critical": 4,
-                        "high": 3,
-                        "medium": 2,
-                        "low": 1,
-                    }
-                    existing_severity = severity_order.get(
-                        existing.get("severity", "LOW"), 1
-                    )
-                    new_severity = severity_order.get(
-                        proj_pattern.get("severity", "LOW"), 1
-                    )
-                    if new_severity > existing_severity:
-                        existing["severity"] = proj_pattern["severity"]
-
+                    update_existing_pattern(global_patterns[idx], proj_pattern)
                     merge_stats["updated_patterns"] += 1
-                else:
-                    # Add new pattern
-                    new_pattern = proj_pattern.copy()
-                    new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["frequency"] = new_pattern.get("frequency", 1)
-                    global_patterns.append(new_pattern)
-                    merge_stats["new_patterns"] += 1
+                    continue
+
+                # Step 2: Check for semantic duplicate (uses Claude Haiku)
+                semantic_idx = find_semantic_duplicate(proj_pattern, global_patterns)
+                if semantic_idx is not None:
+                    # Found a semantic match - update that pattern instead of adding new
+                    update_existing_pattern(
+                        global_patterns[semantic_idx],
+                        proj_pattern,
+                        is_semantic_match=True,
+                    )
+                    merge_stats["updated_patterns"] += 1
+                    merge_stats["semantic_matches"] += 1
+                    logger.info(
+                        f"Semantic dedup: '{pattern_id}' matched existing pattern "
+                        f"'{global_patterns[semantic_idx].get('pattern_id') or global_patterns[semantic_idx].get('id')}'"
+                    )
+                    continue
+
+                # Step 3: Truly new pattern - add it
+                new_pattern = proj_pattern.copy()
+                new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
+                new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+                new_pattern["frequency"] = new_pattern.get("frequency", 1)
+                global_patterns.append(new_pattern)
+                merge_stats["new_patterns"] += 1
 
             global_data["patterns"] = global_patterns
 
@@ -392,66 +549,93 @@ def merge_project_patterns_impl(
             project_patterns = project_data.get("patterns", [])
             global_patterns = global_data.get("patterns", [])
             merge_stats["total_project_patterns"] = len(project_patterns)
+            merge_stats["semantic_matches"] = 0  # Track semantic dedup hits
 
             # Create lookup by pattern_id
             global_by_id = {}
             for i, p in enumerate(global_patterns):
-                pid = p.get("pattern_id")
+                pid = p.get("pattern_id") or p.get("id")
                 if pid:
                     global_by_id[pid] = i
 
+            # Helper to update an existing pattern
+            def update_pattern(
+                existing: Dict, proj_pattern: Dict, is_semantic_match: bool = False
+            ):
+                """Update an existing pattern with new data."""
+                existing["frequency"] = existing.get("frequency", 1) + 1
+                existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+
+                # Merge project_types
+                existing_types = set(existing.get("project_types", []))
+                new_types = set(proj_pattern.get("project_types", []))
+                existing["project_types"] = sorted(list(existing_types | new_types))
+
+                # Preserve highest severity if present
+                if "severity" in existing or "severity" in proj_pattern:
+                    severity_order = {
+                        "CRITICAL": 4,
+                        "HIGH": 3,
+                        "MEDIUM": 2,
+                        "LOW": 1,
+                        "critical": 4,
+                        "high": 3,
+                        "medium": 2,
+                        "low": 1,
+                    }
+                    existing_severity = severity_order.get(
+                        existing.get("severity", "LOW"), 1
+                    )
+                    new_severity = severity_order.get(
+                        proj_pattern.get("severity", "LOW"), 1
+                    )
+                    if new_severity > existing_severity:
+                        existing["severity"] = proj_pattern["severity"]
+
+                # Track aliases for semantic matches
+                if is_semantic_match:
+                    aliases = existing.get("aliases", [])
+                    new_id = proj_pattern.get("pattern_id") or proj_pattern.get("id")
+                    if new_id and new_id not in aliases:
+                        aliases.append(new_id)
+                        existing["aliases"] = aliases
+
             # Merge each project pattern
             for proj_pattern in project_patterns:
-                pattern_id = proj_pattern.get("pattern_id")
+                pattern_id = proj_pattern.get("pattern_id") or proj_pattern.get("id")
                 if not pattern_id:
                     continue
 
+                # Step 1: Check for exact ID match (fast)
                 if pattern_id in global_by_id:
-                    # Update existing pattern
                     idx = global_by_id[pattern_id]
-                    existing = global_patterns[idx]
-
-                    # Increment frequency
-                    existing["frequency"] = existing.get("frequency", 1) + 1
-
-                    # Update last_seen
-                    existing["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-
-                    # Merge project_types (unique values)
-                    existing_types = set(existing.get("project_types", []))
-                    new_types = set(proj_pattern.get("project_types", []))
-                    existing["project_types"] = sorted(list(existing_types | new_types))
-
-                    # Preserve highest severity if present
-                    if "severity" in existing or "severity" in proj_pattern:
-                        severity_order = {
-                            "CRITICAL": 4,
-                            "HIGH": 3,
-                            "MEDIUM": 2,
-                            "LOW": 1,
-                            "critical": 4,
-                            "high": 3,
-                            "medium": 2,
-                            "low": 1,
-                        }
-                        existing_severity = severity_order.get(
-                            existing.get("severity", "LOW"), 1
-                        )
-                        new_severity = severity_order.get(
-                            proj_pattern.get("severity", "LOW"), 1
-                        )
-                        if new_severity > existing_severity:
-                            existing["severity"] = proj_pattern["severity"]
-
+                    update_pattern(global_patterns[idx], proj_pattern)
                     merge_stats["updated_patterns"] += 1
-                else:
-                    # Add new pattern
-                    new_pattern = proj_pattern.copy()
-                    new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
-                    new_pattern["frequency"] = new_pattern.get("frequency", 1)
-                    global_patterns.append(new_pattern)
-                    merge_stats["new_patterns"] += 1
+                    continue
+
+                # Step 2: Check for semantic duplicate (uses Claude Haiku)
+                semantic_idx = find_semantic_duplicate(proj_pattern, global_patterns)
+                if semantic_idx is not None:
+                    update_pattern(
+                        global_patterns[semantic_idx],
+                        proj_pattern,
+                        is_semantic_match=True,
+                    )
+                    merge_stats["updated_patterns"] += 1
+                    merge_stats["semantic_matches"] += 1
+                    logger.info(
+                        f"Semantic dedup ({pattern_type}): '{pattern_id}' matched "
+                        f"'{global_patterns[semantic_idx].get('pattern_id') or global_patterns[semantic_idx].get('id')}'"
+                    )
+                    continue
+
+                # Step 3: Truly new pattern
+                new_pattern = proj_pattern.copy()
+                new_pattern["first_seen"] = datetime.now().strftime("%Y-%m-%d")
+                new_pattern["last_seen"] = datetime.now().strftime("%Y-%m-%d")
+                new_pattern["frequency"] = new_pattern.get("frequency", 1)
+                global_patterns.append(new_pattern)
+                merge_stats["new_patterns"] += 1
 
             global_data["patterns"] = global_patterns
 
