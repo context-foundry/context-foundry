@@ -1812,37 +1812,35 @@ def execute_build_with_phase_spawning(
                     file=sys.stderr,
                 )
 
-                # Read spec files and inject their contents
-                spec_contents = []
-                for spec_file in spec_files:
-                    spec_path = Path(spec_file)
-                    if spec_path.exists():
-                        try:
-                            content = spec_path.read_text()
-                            spec_contents.append(
-                                f"### File: {spec_path.name}\n"
-                                f"Path: {spec_file}\n\n"
-                                f"```\n{content}\n```"
-                            )
-                            print(f"   ✓ Loaded spec: {spec_file}", file=sys.stderr)
-                        except Exception as e:
-                            print(
-                                f"   ⚠ Failed to read spec {spec_file}: {e}",
-                                file=sys.stderr,
-                            )
-                    else:
-                        print(f"   ⚠ Spec file not found: {spec_file}", file=sys.stderr)
+                # Read spec files using the spec reader (supports PDF, Word, images)
+                from tools.mcp_utils.spec_reader import read_all_spec_files
 
-                if spec_contents:
+                spec_result = read_all_spec_files(spec_files)
+
+                # Log what was loaded
+                print(spec_result["summary"], file=sys.stderr)
+
+                if spec_result["text_content"]:
                     architect_instruction = (
                         "EXTRACT (do not invent) from the following specification file(s).\n"
                         "Create architecture.md with Gherkin acceptance criteria.\n\n"
-                        "SPECIFICATION FILES:\n\n" + "\n\n".join(spec_contents)
+                        "SPECIFICATION FILES:\n\n"
+                        + "\n\n".join(spec_result["text_content"])
                     )
+
+                    # If there are images, add a note about them
+                    if spec_result["images"]:
+                        architect_instruction += (
+                            f"\n\nNOTE: {len(spec_result['images'])} image file(s) were included. "
+                            "Please analyze any diagrams, mockups, or visual specifications shown."
+                        )
+                        # TODO: When Claude CLI supports image input, pass spec_result["images"]
+                        # directly as vision input. For now, images are noted but not passed.
                 else:
                     architect_instruction = (
-                        "ERROR: No spec files could be loaded. "
-                        f"Attempted to read: {spec_files}"
+                        "ERROR: No spec files could be loaded.\n"
+                        f"Attempted to read: {spec_files}\n"
+                        f"Errors: {spec_result['errors']}"
                     )
                 log_debug("SPEC MODE: Injecting spec file contents", working_directory)
             else:

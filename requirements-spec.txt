@@ -1,0 +1,18 @@
+# Spec File Reader - Optional Dependencies
+#
+# These enable reading different spec file formats in spec mode.
+# Install with: pip install -r requirements-spec.txt
+#
+# All are OPTIONAL - spec mode gracefully degrades without them:
+# - Without pypdf: PDF files won't be readable
+# - Without python-docx: Word files won't be readable
+# - Images work without extra dependencies (base64 encoding built-in)
+
+# PDF Support (choose one)
+pypdf>=4.0.0  # Modern PDF reader (recommended, lightweight)
+# pdfplumber>=0.10.0  # Alternative: better for complex PDFs with tables
+
+# Word Document Support
+python-docx>=1.0.0  # Read .docx files (Microsoft Word)
+
+# Note: .doc (old Word format) not supported - convert to .docx first
