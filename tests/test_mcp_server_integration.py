@@ -12,6 +12,7 @@ CRITICAL PATHS TESTED:
 Priority: 10/10 - These are the primary user-facing MCP tools.
 """
 
+import os
 import pytest
 import subprocess
 from unittest.mock import Mock, patch, MagicMock, mock_open
@@ -30,6 +31,10 @@ sys.modules["fastmcp.server"] = MagicMock()
 sys.modules["fastmcp.server.dependencies"] = MagicMock()
 
 
+@pytest.mark.skipif(
+    os.environ.get("CI") is not None or os.environ.get("GITHUB_ACTIONS") is not None,
+    reason="Delegation tests require Claude CLI, skipping in CI",
+)
 class TestDelegateToClaudeCode:
     """Test synchronous Claude Code delegation"""
 
