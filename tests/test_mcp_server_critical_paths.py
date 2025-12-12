@@ -272,8 +272,8 @@ class TestPatternManagement:
 
     def test_save_global_patterns(self):
         """Test saving global patterns"""
-        with patch("pathlib.Path.mkdir") as mock_mkdir:
-            with patch("builtins.open", mock_open()) as mock_file:
+        with patch("pathlib.Path.mkdir"):
+            with patch("builtins.open", mock_open()):
                 from mcp_server import save_global_patterns
 
                 pattern_data = (

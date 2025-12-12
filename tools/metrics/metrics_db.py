@@ -49,7 +49,7 @@ class MetricsDatabase:
             if hasattr(_thread_local, "connection"):
                 try:
                     _thread_local.connection.close()
-                except:
+                except Exception:
                     pass
 
             _thread_local.connection = sqlite3.connect(
@@ -69,7 +69,7 @@ class MetricsDatabase:
                 delattr(_thread_local, "connection")
                 if hasattr(_thread_local, "db_path"):
                     delattr(_thread_local, "db_path")
-            except:
+            except Exception:
                 pass
 
     @contextmanager

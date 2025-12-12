@@ -112,7 +112,9 @@ def merge_scout_learnings(
     Returns: (merged_learnings, new_count, updated_count)
     """
     # Create lookup by learning_id
-    global_by_id = {l["learning_id"]: i for i, l in enumerate(global_learnings)}
+    global_by_id = {
+        learning["learning_id"]: i for i, learning in enumerate(global_learnings)
+    }
 
     new_count = 0
     updated_count = 0

@@ -298,7 +298,7 @@ class TestAsynchronousDelegationE2E:
         # Start 3 concurrent tasks
         task_ids = []
         for i in range(3):
-            result = delegate_to_claude_code_async(
+            delegate_to_claude_code_async(
                 task=f"Task {i}: Build component {i}",
                 working_directory=str(self.test_project_dir),
             )
@@ -338,7 +338,7 @@ class TestAsynchronousDelegationE2E:
         mock_popen.return_value = mock_process
 
         # Start task
-        result = delegate_to_claude_code_async(
+        delegate_to_claude_code_async(
             task="Task that will fail", working_directory=str(self.test_project_dir)
         )
 
@@ -633,9 +633,7 @@ class TestDelegationPerformance:
         import time
 
         start = time.time()
-        result = delegate_to_claude_code(
-            task="Timed task", working_directory=str(self.temp_dir)
-        )
+        delegate_to_claude_code(task="Timed task", working_directory=str(self.temp_dir))
         duration = time.time() - start
 
         # Should complete quickly (mocked)

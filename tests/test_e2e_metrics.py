@@ -112,7 +112,7 @@ class TestE2EMetrics:
         """Test build finalization"""
         # Create build with metrics
         build_id = self.db.create_build(session_id="e2e-finalize", status="running")
-        phase_id = self.db.create_phase(
+        self.db.create_phase(
             build_id, "Scout", tokens_input=10000, tokens_output=5000, cost=0.105
         )
 
@@ -174,9 +174,7 @@ class TestE2EMetrics:
         """Test budget alert generation"""
         # Create expensive build (triggers warning)
         build_id = self.db.create_build(session_id="expensive-build")
-        phase_id = self.db.create_phase(
-            build_id, "Scout", cost=42.0
-        )  # 84% of $50 daily limit
+        self.db.create_phase(build_id, "Scout", cost=42.0)  # 84% of $50 daily limit
         self.db.update_build("expensive-build", total_cost=42.0)
 
         # Get budget status

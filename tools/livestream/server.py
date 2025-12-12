@@ -167,7 +167,7 @@ class SessionMonitor:
                     if "/" in phase_number_str
                     else None
                 )
-            except:
+            except Exception:
                 current_phase_num = None
 
             if current_phase_num is not None:
@@ -403,7 +403,7 @@ async def broadcast_event(session_id: str, event: Dict):
         for connection in connections[session_id]:
             try:
                 await connection.send_json(event)
-            except:
+            except Exception:
                 pass
 
     return {"broadcasted": len(connections.get(session_id, []))}
@@ -443,7 +443,7 @@ async def phase_update(phase_data: Dict):
                     {"type": "phase_update", "data": monitor.sessions[session_id]}
                 )
                 broadcast_count += 1
-            except:
+            except Exception:
                 pass
 
     return {
@@ -501,7 +501,7 @@ def get_phase_breakdown(session_data: Dict) -> Dict:
         current_phase_num = (
             int(phase_number_str.split("/")[0]) if "/" in phase_number_str else None
         )
-    except:
+    except Exception:
         current_phase_num = None
 
     # Calculate overall progress
@@ -771,7 +771,7 @@ async def agent_update(agent_data: Dict):
                 try:
                     await connection.send_json(event)
                     broadcast_count += 1
-                except:
+                except Exception:
                     pass
 
         return JSONResponse(
@@ -794,7 +794,7 @@ try:
     # Try relative imports first (when used as module)
     from .mcp_client import get_client
     from .metrics_db import get_db
-    from .config import TOKEN_BUDGET_LIMIT, get_token_status
+    from .config import get_token_status
 
     MCP_ENHANCED = True
 except ImportError:
@@ -802,7 +802,7 @@ except ImportError:
         # Fall back to direct imports (when run as script)
         from mcp_client import get_client
         from metrics_db import get_db
-        from config import TOKEN_BUDGET_LIMIT, get_token_status
+        from config import get_token_status  # noqa: F401
 
         MCP_ENHANCED = True
     except ImportError:

@@ -178,7 +178,7 @@ class TestCacheIntegration(unittest.TestCase):
         from tools.mcp_server import autonomous_build_and_deploy
 
         # Call autonomous build
-        result = autonomous_build_and_deploy(
+        autonomous_build_and_deploy(
             task="Test build", working_directory="/tmp/test-cache", mode="new_project"
         )
 
@@ -203,7 +203,7 @@ class TestCacheIntegration(unittest.TestCase):
 
     def test_cache_hit_rate_tracking(self):
         """Test tracking of cache hit rates"""
-        calc = CostCalculator()
+        CostCalculator()
 
         # Simulate 10 builds: 1 cache miss, 9 cache hits
         usages = []
@@ -241,7 +241,7 @@ class TestCacheIntegration(unittest.TestCase):
 
         # 1h cache write (2× cost)
         # Note: Currently not distinguished in TokenUsage, but would be in future
-        usage_1h = TokenUsage(
+        TokenUsage(
             input_tokens=100,
             output_tokens=200,
             cache_write_tokens=8500,  # Would be $7.50/MTok for 1h

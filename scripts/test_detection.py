@@ -50,7 +50,7 @@ def _detect_existing_codebase(directory: Path) -> Dict[str, Any]:
                 timeout=5,
             )
             result["git_clean"] = len(status_result.stdout.strip()) == 0
-        except:
+        except Exception:
             result["git_clean"] = None
 
     # Define project indicator files

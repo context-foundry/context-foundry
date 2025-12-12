@@ -118,7 +118,7 @@ Building a weather application using React and TypeScript with OpenWeatherMap AP
         print_info("Cache MISS (expected)")
 
         # Simulate Scout phase (slow)
-        scout_time = simulate_phase("Scout Phase", 0.5, skipped=False)
+        simulate_phase("Scout Phase", 0.5, skipped=False)
 
         # Save to cache
         save_scout_report_to_cache(task, mode, tmpdir, scout_report)
@@ -143,7 +143,7 @@ Building a weather application using React and TypeScript with OpenWeatherMap AP
         print_success("Cache HIT! Reusing Scout report")
 
         # Scout phase skipped
-        scout_time = simulate_phase("Scout Phase", 0.5, skipped=True)
+        simulate_phase("Scout Phase", 0.5, skipped=True)
 
         build2_time = time.time() - start
         print(f"\n{Color.BOLD}Build #2 Total: {build2_time:.2f}s{Color.END}")
@@ -209,7 +209,7 @@ module.exports = { add };
         print_info("Cache MISS (expected)")
 
         # Simulate running tests (slow)
-        test_time = simulate_phase("Test Phase", 0.8, skipped=False)
+        simulate_phase("Test Phase", 0.8, skipped=False)
 
         # Save test results
         test_results = {
@@ -246,7 +246,7 @@ module.exports = { add };
         print_success("Cache HIT! No source code changes detected")
 
         # Test phase skipped
-        test_time = simulate_phase("Test Phase", 0.8, skipped=True)
+        simulate_phase("Test Phase", 0.8, skipped=True)
 
         build2_time = time.time() - start
         print(f"\n{Color.BOLD}Build #2 Total: {build2_time:.2f}s{Color.END}")
@@ -290,7 +290,7 @@ module.exports = { greet };
         print_success("Cache MISS detected (code changed) - correct behavior!")
 
         # Test phase runs again
-        test_time = simulate_phase("Test Phase", 0.8, skipped=False)
+        simulate_phase("Test Phase", 0.8, skipped=False)
 
         build3_time = time.time() - start
         print(f"\n{Color.BOLD}Build #3 Total: {build3_time:.2f}s{Color.END}")
@@ -317,12 +317,6 @@ def test_combined_scenario():
         print(f"{Color.BOLD}Scenario:{Color.END} Complete build workflow\n")
 
         # Simulate typical build phases with realistic timings
-        phase_times = {
-            "Scout": 2.0,  # Normally 2 min, using 2s for test
-            "Architect": 2.0,  # Normally 2 min, using 2s for test
-            "Builder": 5.0,  # Normally 5 min, using 5s for test
-            "Test": 3.0,  # Normally 3 min, using 3s for test
-        }
 
         # Build 1: Full build (no cache)
         print(f"{Color.BOLD}Build #1 (Full Build - No Cache):{Color.END}")

@@ -204,7 +204,7 @@ class TestDelegateToClaudeCodeAsync:
             # Clear active tasks
             active_tasks.clear()
 
-            result = delegate_to_claude_code_async(task="Test task")
+            delegate_to_claude_code_async(task="Test task")
 
             # Should have created a task entry
             assert len(active_tasks) > 0

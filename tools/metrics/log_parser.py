@@ -137,7 +137,7 @@ class LogParser:
                     full_data = json.loads(line)
                     request_id = full_data.get("id")
                     model = full_data.get("model")
-                except:
+                except Exception:
                     request_id = None
                     model = None
 

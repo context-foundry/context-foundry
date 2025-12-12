@@ -213,7 +213,7 @@ class TestTestCache:
             cached = get_cached_test_results(tmpdir)
 
             assert cached is not None
-            assert cached["success"] == True
+            assert cached["success"] is True
             assert cached["passed"] == 25
             assert cached["total"] == 25
 
@@ -247,7 +247,7 @@ class TestTestCache:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Initially no cache
             stats_before = get_test_cache_stats(tmpdir)
-            assert stats_before["has_cached_results"] == False
+            assert stats_before["has_cached_results"] is False
 
             # Create source files and save results
             (Path(tmpdir) / "src").mkdir()
@@ -263,8 +263,8 @@ class TestTestCache:
 
             # Check stats after save
             stats_after = get_test_cache_stats(tmpdir)
-            assert stats_after["has_cached_results"] == True
-            assert stats_after["cache_valid"] == True
+            assert stats_after["has_cached_results"] is True
+            assert stats_after["cache_valid"] is True
             assert stats_after["files_tracked"] == 1
             assert stats_after["last_test_passed"] == 25
 
@@ -292,7 +292,7 @@ class TestCacheManager:
             stats = manager.get_stats()
 
             assert stats["scout_cache"]["total_entries"] == 1
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
             assert stats["total_files"] > 0
 
     def test_clear_all(self):
@@ -341,7 +341,7 @@ class TestCacheManager:
             # Verify scout cache cleared but test cache remains
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 0
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
 
 
 if __name__ == "__main__":

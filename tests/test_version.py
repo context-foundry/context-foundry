@@ -130,7 +130,7 @@ class TestGetVersionInfo:
         # This will raise ValueError in current implementation
         # Test documents actual behavior
         with pytest.raises(ValueError):
-            info = version.get_version_info()
+            version.get_version_info()
 
     @patch("tools.version.get_version")
     def test_get_version_info_invalid_format(self, mock_get_version):
@@ -140,7 +140,7 @@ class TestGetVersionInfo:
         # This will raise ValueError in current implementation
         # Test documents actual behavior
         with pytest.raises(ValueError):
-            info = version.get_version_info()
+            version.get_version_info()
 
     @patch("tools.version.get_version")
     def test_get_version_info_empty_version(self, mock_get_version):
@@ -150,7 +150,7 @@ class TestGetVersionInfo:
         # This will raise ValueError when trying to parse empty string as int
         # Test documents actual behavior
         with pytest.raises(ValueError):
-            info = version.get_version_info()
+            version.get_version_info()
 
 
 class TestModuleConstants:
@@ -218,7 +218,7 @@ class TestEdgeCases:
         # Current implementation doesn't handle 'v' prefix
         # Will raise ValueError
         with pytest.raises(ValueError):
-            info = version.get_version_info()
+            version.get_version_info()
 
     @patch("tools.version.get_version")
     def test_version_with_extra_parts(self, mock_get_version):
@@ -240,7 +240,7 @@ class TestEdgeCases:
         # Current implementation will crash with ValueError
         # Test documents actual behavior
         with pytest.raises(ValueError):
-            info = version.get_version_info()
+            version.get_version_info()
 
     @patch("tools.version.VERSION_FILE")
     def test_version_file_permission_error(self, mock_version_file):

@@ -28,7 +28,7 @@ def integration_pre_check(working_directory: str) -> Dict:
         }
     """
     start_time = time.time()
-    working_dir = Path(working_directory)
+    Path(working_directory)
 
     # Detect project language
     language = detect_project_language(working_directory)
@@ -103,7 +103,7 @@ def detect_project_language(working_directory: str) -> str:
             }
             if "typescript" in deps:
                 return "typescript"
-        except:
+        except Exception:
             pass
         return "javascript"
     elif (working_dir / "requirements.txt").exists() or (
@@ -320,7 +320,7 @@ def check_imports(working_directory: str, language: str) -> Dict:
                 # Find relative imports like "from .module import" or "from ..package import"
                 import re
 
-                relative_imports = re.findall(r"from\s+(\.+\w+)\s+import", content)
+                re.findall(r"from\s+(\.+\w+)\s+import", content)
 
                 # Basic check: just verify file is syntactically correct (already done in syntax check)
                 # Full import resolution would require running Python interpreter

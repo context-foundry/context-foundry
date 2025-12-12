@@ -52,7 +52,7 @@ class TestMetricsDatabase:
 
     def test_update_build(self):
         """Test updating a build record"""
-        build_id = self.db.create_build(session_id="test-session-2", status="running")
+        self.db.create_build(session_id="test-session-2", status="running")
 
         self.db.update_build(
             "test-session-2",
@@ -157,7 +157,7 @@ class TestMetricsDatabase:
         # Create multiple builds
         for i in range(3):
             build_id = self.db.create_build(session_id=f"test-total-{i}")
-            phase_id = self.db.create_phase(
+            self.db.create_phase(
                 build_id, "Scout", tokens_input=1000, tokens_output=500, cost=0.0105
             )
 
@@ -180,8 +180,8 @@ class TestMetricsDatabase:
     def test_get_cost_summary(self):
         """Test getting cost summary for date range"""
         # Create builds
-        build_id1 = self.db.create_build(session_id="cost-test-1")
-        build_id2 = self.db.create_build(session_id="cost-test-2")
+        self.db.create_build(session_id="cost-test-1")
+        self.db.create_build(session_id="cost-test-2")
 
         self.db.update_build(
             "cost-test-1",
@@ -212,7 +212,7 @@ class TestMetricsDatabase:
     def test_cleanup_old_data(self):
         """Test data retention cleanup"""
         # Create old build
-        old_build_id = self.db.create_build(session_id="old-build")
+        self.db.create_build(session_id="old-build")
 
         # Manually set created_at to 100 days ago
         old_date = (datetime.now() - timedelta(days=100)).isoformat()
@@ -227,7 +227,7 @@ class TestMetricsDatabase:
         conn.commit()
 
         # Create recent build
-        recent_build_id = self.db.create_build(session_id="recent-build")
+        self.db.create_build(session_id="recent-build")
 
         # Cleanup data older than 90 days
         deleted = self.db.cleanup_old_data(days=90)

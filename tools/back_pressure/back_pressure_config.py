@@ -206,7 +206,7 @@ def detect_language(working_directory: str) -> str:
 
             if "typescript" in dependencies:
                 return "typescript"
-        except:
+        except Exception:
             pass
 
         # Check for tsconfig.json

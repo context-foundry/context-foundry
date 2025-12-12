@@ -319,7 +319,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Process queue
-    process_parser = subparsers.add_parser("process", help="Process task queue")
+    subparsers.add_parser("process", help="Process task queue")
 
     # Add task
     add_parser = subparsers.add_parser("add", help="Add task to queue")
@@ -331,7 +331,7 @@ def main():
     )
 
     # List queue
-    list_parser = subparsers.add_parser("list", help="List queued tasks")
+    subparsers.add_parser("list", help="List queued tasks")
 
     args = parser.parse_args()
 

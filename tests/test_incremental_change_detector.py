@@ -384,7 +384,7 @@ class TestDetectChanges:
         assert 0 <= report.change_percentage <= 100
 
         # Total files should match sum of categories
-        total_categorized = (
+        (
             len(report.changed_files)
             + len(report.added_files)
             + len(report.unchanged_files)

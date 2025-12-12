@@ -260,8 +260,8 @@ class TestVisualization:
 
         lines = viz.split("\n")
         # Large phase should have more filled bars than Small
-        large_line = [l for l in lines if "Large" in l][0]
-        small_line = [l for l in lines if "Small" in l][0]
+        large_line = [line for line in lines if "Large" in line][0]
+        small_line = [line for line in lines if "Small" in line][0]
 
         large_filled = large_line.count("█")
         small_filled = small_line.count("█")
@@ -376,9 +376,7 @@ class TestExportFormats:
             output_path = f.name
 
         try:
-            markdown = reporter.export_markdown_report(
-                sample_context_metrics, output_path
-            )
+            reporter.export_markdown_report(sample_context_metrics, output_path)
 
             # Check file was created
             assert Path(output_path).exists()

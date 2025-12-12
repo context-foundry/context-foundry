@@ -120,7 +120,7 @@ class EventBroadcaster:
             for line in f:
                 try:
                     events.append(json.loads(line))
-                except:
+                except Exception:
                     pass
 
         return events

@@ -533,7 +533,7 @@ class StateMachine:
                 event_details.update(metadata)
             if error:
                 event_details["error"] = error
-            
+
             # Propagate provider/model from task metadata to event details
             # This ensures the dashboard always has visibility into the model used
             if task.metadata:
@@ -730,7 +730,7 @@ class StateMachine:
                     event_details["progress"] = progress
                 if metadata:
                     event_details.update(metadata)
-                
+
                 # Propagate provider/model from task metadata to event details
                 if task.metadata:
                     if task.metadata.get("provider"):

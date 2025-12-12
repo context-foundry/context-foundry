@@ -206,7 +206,9 @@ class PatternMerger:
             Tuple of (merged_learnings, stats)
         """
         # Create lookup by learning_id
-        dest_by_id = {l["learning_id"]: i for i, l in enumerate(dest_learnings)}
+        dest_by_id = {
+            learning["learning_id"]: i for i, learning in enumerate(dest_learnings)
+        }
 
         for source_learning in source_learnings:
             learning_id = source_learning.get("learning_id")

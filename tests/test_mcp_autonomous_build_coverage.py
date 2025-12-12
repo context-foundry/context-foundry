@@ -71,7 +71,7 @@ class TestDetectExistingCodebase:
             result = _detect_existing_codebase(Path(tmpdir))
 
             assert result is not None
-            assert result["has_code"] == False
+            assert result["has_code"] is False
             assert result["project_type"] is None
             assert result["languages"] == []
 
@@ -88,7 +88,7 @@ class TestDetectExistingCodebase:
 
             result = _detect_existing_codebase(tmppath)
 
-            assert result["has_code"] == True
+            assert result["has_code"] is True
             # Language detection returns capitalized names
             assert any("python" in lang.lower() for lang in result["languages"])
             assert result["confidence"] in ["high", "medium", "low"]
@@ -108,7 +108,7 @@ class TestDetectExistingCodebase:
 
             result = _detect_existing_codebase(tmppath)
 
-            assert result["has_code"] == True
+            assert result["has_code"] is True
             # Check for JavaScript/Node (case-insensitive)
             assert any(
                 "javascript" in lang.lower() or "node" in lang.lower()
@@ -128,7 +128,7 @@ class TestDetectExistingCodebase:
 
             result = _detect_existing_codebase(tmppath)
 
-            assert result["has_git"] == True
+            assert result["has_git"] is True
             # git_clean should be True or False (depends on git state)
             assert "git_clean" in result
 
@@ -142,7 +142,7 @@ class TestDetectExistingCodebase:
 
         # Should handle gracefully
         assert result is not None
-        assert result["has_code"] == False
+        assert result["has_code"] is False
 
     def test_detect_flowise_project(self):
         """Test detection of Flowise project"""
@@ -159,7 +159,7 @@ class TestDetectExistingCodebase:
 
             # Should detect Flowise flow
             if "flowise_flow" in result:
-                assert result["flowise_flow"] == True
+                assert result["flowise_flow"] is True
 
     def test_detect_multiple_languages(self):
         """Test detection of multi-language project"""
@@ -175,7 +175,7 @@ class TestDetectExistingCodebase:
 
             result = _detect_existing_codebase(tmppath)
 
-            assert result["has_code"] == True
+            assert result["has_code"] is True
             # Should detect at least Python and JavaScript
             assert len(result["languages"]) >= 1
 

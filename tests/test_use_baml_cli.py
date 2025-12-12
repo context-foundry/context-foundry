@@ -166,7 +166,7 @@ class TestCLIScoutReport:
         mock_scout.return_value = {"report": "Content"}
 
         with patch("builtins.print"):
-            result = use_baml.main()
+            use_baml.main()
 
         call_args = mock_scout.call_args
         assert call_args[1]["past_patterns"] == "pattern1"

@@ -90,7 +90,7 @@ class TestCacheManagerInit:
             cache_path = Path(tmpdir) / ".context-foundry" / "cache"
             assert not cache_path.exists()
 
-            manager = CacheManager(tmpdir)
+            CacheManager(tmpdir)
 
             assert cache_path.exists()
             assert cache_path.is_dir()
@@ -124,7 +124,7 @@ class TestGetStats:
             assert stats["total_files"] == 0
             assert stats["total_size_mb"] == 0
             assert stats["scout_cache"]["total_entries"] == 0
-            assert stats["test_cache"]["has_cached_results"] == False
+            assert stats["test_cache"]["has_cached_results"] is False
 
     @pytest.mark.unit
     @pytest.mark.tier1
@@ -150,7 +150,7 @@ class TestGetStats:
             manager = CacheManager(tmpdir)
             stats = manager.get_stats()
 
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
 
     @pytest.mark.unit
     @pytest.mark.tier2
@@ -164,7 +164,7 @@ class TestGetStats:
             stats = manager.get_stats()
 
             assert stats["scout_cache"]["total_entries"] == 2
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
             assert stats["total_files"] > 0
 
     @pytest.mark.unit
@@ -352,7 +352,7 @@ class TestClearByType:
             # Verify only scout files deleted
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 0
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
 
     @pytest.mark.unit
     @pytest.mark.tier1
@@ -370,7 +370,7 @@ class TestClearByType:
             # Verify only test files deleted
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 3
-            assert stats["test_cache"]["has_cached_results"] == False
+            assert stats["test_cache"]["has_cached_results"] is False
 
     @pytest.mark.unit
     @pytest.mark.tier1
@@ -472,7 +472,7 @@ class TestEnforceSizeLimit:
                 files.append(file_path)
 
             manager = CacheManager(tmpdir)
-            result = manager.enforce_size_limit(max_size_mb=0.5)
+            manager.enforce_size_limit(max_size_mb=0.5)
 
             # Oldest files should be deleted
             assert not files[0].exists()
@@ -622,7 +622,7 @@ class TestCacheManagerIntegration:
             # Step 2: Get stats
             stats_full = manager.get_stats()
             assert stats_full["scout_cache"]["total_entries"] == 3
-            assert stats_full["test_cache"]["has_cached_results"] == True
+            assert stats_full["test_cache"]["has_cached_results"] is True
 
             # Step 3: Clear all
             result = manager.clear_all()
@@ -701,7 +701,7 @@ class TestCacheManagerIntegration:
             # Verify test remains
             stats = manager.get_stats()
             assert stats["scout_cache"]["total_entries"] == 0
-            assert stats["test_cache"]["has_cached_results"] == True
+            assert stats["test_cache"]["has_cached_results"] is True
 
             # Clear test only
             test_count = manager.clear_by_type("test")

@@ -116,7 +116,7 @@ def get_cache_stats(working_directory: str) -> Dict[str, Any]:
 
 
 # Re-export Phase 2 incremental modules
-from ..incremental import (
+from ..incremental import (  # noqa: E402
     # Global Scout Cache
     get_global_cache_dir,
     generate_global_scout_key,

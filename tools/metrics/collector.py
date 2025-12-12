@@ -162,7 +162,7 @@ class MetricsCollector:
         """Update phase totals with new usage (for real-time display)"""
         # Note: This is a simplified update. In production, you'd query current
         # totals and increment them
-        cost = self.calculator.calculate_cost(usage, model)
+        self.calculator.calculate_cost(usage, model)
 
         # This will be aggregated from api_calls table, so we don't update here
         # The database queries will calculate totals dynamically
