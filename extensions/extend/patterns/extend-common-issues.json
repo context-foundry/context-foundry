@@ -1,8 +1,8 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "last_updated": "2025-12-11",
   "project_type": "workday-extend",
-  "total_builds": 0,
+  "total_builds": 1,
   "source": "ArcaneAuditor 42 rules + Context Foundry learnings",
   "patterns": [
     {
@@ -364,6 +364,90 @@
       "last_seen": "2025-12-11",
       "example_bad": "<% self.data = {:}; self.data.foo = bar; return self.data; %>",
       "example_good": "<% let postData = {:}; postData.foo = bar; return postData; %>"
+    },
+    {
+      "id": "extend-amd-missing-default-route",
+      "error_pattern": "tasks.*routingPattern(?!.*\"/\")",
+      "description": "AMD must have one task with routingPattern '/' as the default entry point",
+      "solution": "Set the home/landing page task routingPattern to '/' instead of '/pageName'",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "{ \"id\": \"homePage\", \"routingPattern\": \"/homePage\", \"page\": {\"id\": \"homePage\"} }",
+      "example_good": "{ \"id\": \"homePage\", \"routingPattern\": \"/\", \"page\": {\"id\": \"homePage\"} }"
+    },
+    {
+      "id": "extend-amd-missing-dataproviders",
+      "error_pattern": "baseUrlType.*workday-common",
+      "description": "Pages using baseUrlType require matching dataProviders definition in AMD",
+      "solution": "Add dataProviders array to AMD with key matching baseUrlType used in pages",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "{ \"appProperties\": [], \"tasks\": [...] }",
+      "example_good": "{ \"appProperties\": [], \"dataProviders\": [{ \"key\": \"workday-common\", \"value\": \"<% apiGatewayEndpoint + '/common/v1' %>\" }], \"tasks\": [...] }"
+    },
+    {
+      "id": "extend-amd-page-must-be-object",
+      "error_pattern": "\"page\":\\s*\"[^\"]+\"",
+      "description": "AMD task 'page' property must be an object with 'id', not a string",
+      "solution": "Change page from string to object: { \"id\": \"pageName\" }",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "{ \"id\": \"myTask\", \"routingPattern\": \"/myPage\", \"page\": \"myPage\" }",
+      "example_good": "{ \"id\": \"myTask\", \"routingPattern\": \"/myPage\", \"page\": { \"id\": \"myPage\" } }"
+    },
+    {
+      "id": "extend-filename-must-match-applicationid",
+      "error_pattern": "applicationId.*app\\.amd|site\\.smd",
+      "description": "AMD and SMD filenames must match the applicationId (e.g., myApp_abc123.amd)",
+      "solution": "Rename files to {applicationId}.amd and {applicationId}.smd",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "app.amd, site.smd",
+      "example_good": "demo_rnr_vvkjnn.amd, demo_rnr_vvkjnn.smd"
+    },
+    {
+      "id": "extend-cardcontainer-undefined-cards",
+      "error_pattern": "cardContainer.*cardId",
+      "description": "cardContainer cards must reference defined .card files or use buttons instead",
+      "solution": "Either define cards as .card files/pods, or replace cardContainer with buttons for simple navigation",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "{ \"type\": \"cardContainer\", \"cards\": [{ \"type\": \"card\", \"cardId\": \"myCard\" }] }",
+      "example_good": "{ \"type\": \"section\", \"horizontal\": true, \"children\": [{ \"type\": \"button\", \"id\": \"navBtn\", \"label\": \"Navigate\", \"taskReference\": { \"taskId\": \"targetPage\" } }] }"
+    },
+    {
+      "id": "extend-instancelist-mutually-exclusive",
+      "error_pattern": "instanceList.*searchEndPoint|instanceList.*instanceListConfiguration",
+      "description": "instanceList requires exactly ONE of: instanceList, values, or instanceListLoopTag - they are mutually exclusive",
+      "solution": "Use 'values' attribute with endpoint data for simple lists",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "{ \"type\": \"instanceList\", \"id\": \"myList\", \"searchEndPoint\": \"<%endpoints.myEndpoint%>\", \"searchResultValues\": \"<%myEndpoint.data%>\" }",
+      "example_good": "{ \"type\": \"instanceList\", \"id\": \"myList\", \"values\": \"<%myEndpoint.data ?? []%>\", \"idKey\": \"id\", \"displayKey\": \"descriptor\" }"
+    },
+    {
+      "id": "extend-script-only-functions",
+      "error_pattern": "\"script\":\\s*\"<%\\s*(const|let|var|pageVariables)",
+      "description": "Page 'script' section only allows function definitions - variable declarations cause validation errors",
+      "solution": "Move variable initialization to 'onLoad' using pageVariables",
+      "severity": "high",
+      "frequency": 1,
+      "first_seen": "2025-12-11",
+      "last_seen": "2025-12-11",
+      "example_bad": "\"script\": \"<% const myData = [{id: 1}]; %>\"",
+      "example_good": "\"onLoad\": \"<% pageVariables.myData = [{id: 1}]; %>\""
     }
   ]
 }

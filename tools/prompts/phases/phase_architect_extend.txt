@@ -9,16 +9,20 @@ Extend apps are JSON-based, low-code applications — your architecture defines 
 
 ## What You Design
 
+**IMPORTANT: Workday Extend apps use a FLAT file structure. ALL files go in the project root directory - NO subfolders!**
+
 Workday Extend apps consist of:
 
-| Component | File Type | Purpose |
-|-----------|-----------|---------|
-| **AMD** | JSON | App Metadata - tasks, flows, dataProviders |
-| **SMD** | JSON | Site Metadata - auth, languages |
-| **PMD Pages** | JSON | Page definitions with widgets |
-| **Scripts** | .script | Reusable PMD script files |
-| **Cards** | JSON | Reusable card templates |
-| **Pods** | JSON | Reusable pod components |
+| Component | File Type | Location | Purpose |
+|-----------|-----------|----------|---------|
+| **AMD** | `.amd` | `{appName}.amd` in root | App Metadata - tasks, flows, dataProviders |
+| **SMD** | `.smd` | `{appName}.smd` in root | Site Metadata - auth, languages |
+| **PMD Pages** | `.pmd` | `{pageName}.pmd` in root | Page definitions with widgets |
+| **Scripts** | `.script` | `{name}.script` in root | Reusable PMD script files |
+| **Cards** | `.card` | `{name}.card` in root | Reusable card templates |
+| **Pods** | `.pod` | `{name}.pod` in root | Reusable pod components |
+
+**DO NOT design subfolders like pages/, scripts/, cards/, pods/. All files must be flat in the project root directory.**
 
 ---
 
