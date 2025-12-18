@@ -29,5 +29,5 @@ urllib3>=2.5.0  # Security fix for redirect handling
 
 # Relay (Feature-by-Feature Building) - Optional Claude Agent SDK
 # Install for enhanced Relay experience with MCP servers and security hooks
-# pip install claude-code-sdk
+claude-agent-sdk>=0.1.18  # Recommended for optimal relay_build performance
 # If not installed, Relay falls back to subprocess-based execution

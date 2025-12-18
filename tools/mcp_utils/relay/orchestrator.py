@@ -6,7 +6,7 @@ Main orchestration loop for feature-by-feature autonomous building.
 Implements Anthropic's pattern for long-running agents with fresh context per feature.
 
 Supports two execution modes:
-1. Claude Agent SDK (preferred) - if claude_code_sdk is installed
+1. Claude Agent SDK (preferred) - if claude_agent_sdk is installed
 2. Subprocess delegation (fallback) - uses existing CF infrastructure
 
 Based on:
@@ -35,14 +35,14 @@ from .prompts import (
 
 # Try to import Claude Agent SDK
 try:
-    from claude_code_sdk import ClaudeSDKClient, ClaudeCodeOptions
-    from claude_code_sdk.types import HookMatcher
+    from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+    from claude_agent_sdk.types import HookMatcher
 
     CLAUDE_SDK_AVAILABLE = True
 except ImportError:
     CLAUDE_SDK_AVAILABLE = False
     ClaudeSDKClient = None
-    ClaudeCodeOptions = None
+    ClaudeAgentOptions = None
     HookMatcher = None
 
 
@@ -212,7 +212,7 @@ def create_sdk_client(project_dir: Path, model: str) -> Optional["ClaudeSDKClien
     settings_file.write_text(json.dumps(security_settings, indent=2))
 
     return ClaudeSDKClient(
-        options=ClaudeCodeOptions(
+        options=ClaudeAgentOptions(
             model=model,
             system_prompt=get_system_prompt(),
             allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
