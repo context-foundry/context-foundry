@@ -26,3 +26,8 @@ watchdog>=3.0.0  # Monitor file system events for metrics collection
 # AWS Integration (Cloud Brain)
 boto3>=1.34.0
 urllib3>=2.5.0  # Security fix for redirect handling
+
+# Relay (Feature-by-Feature Building) - Optional Claude Agent SDK
+# Install for enhanced Relay experience with MCP servers and security hooks
+# pip install claude-code-sdk
+# If not installed, Relay falls back to subprocess-based execution

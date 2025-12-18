@@ -1584,6 +1584,89 @@ def bootstrap_patterns_on_startup():
     return bootstrap_patterns_on_startup_impl()
 
 
+# ============================================================================
+# RELAY - Feature-by-Feature Autonomous Building
+# ============================================================================
+# Implements Anthropic's pattern for long-running agents
+# https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+
+
+@mcp.tool()
+def relay_build(
+    task: str,
+    working_directory: str,
+    feature_count: int = 50,
+    max_iterations: int = 200,
+    regression_sample_size: int = 2,
+    timeout_per_feature: float = 10.0,
+    model: str = "claude-opus-4-5-20251101",
+    webhook_url: Optional[str] = None,
+) -> str:
+    """
+    Build a project feature-by-feature with fresh context per feature.
+
+    Implements Anthropic's recommended pattern for long-running autonomous agents:
+    - Initialization Agent creates feature list and project structure
+    - Coding Agents implement one feature at a time with fresh context
+    - Regression testing verifies previously completed features
+    - Progress persists via feature-list.json + git commits
+
+    Based on: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+
+    Args:
+        task: Project description/requirements (will be written to app_spec.txt)
+        working_directory: Where to create the project
+        feature_count: Target number of features to generate (default: 50)
+        max_iterations: Maximum coding agent iterations - safety limit (default: 200)
+        regression_sample_size: Number of completed features to regression test each iteration (default: 2)
+        timeout_per_feature: Minutes allowed per feature implementation (default: 10)
+        model: Model to use for coding agents (default: claude-opus-4)
+        webhook_url: Optional Flowise/N8N webhook URL for progress notifications
+
+    Returns:
+        JSON with build results including:
+        - status: "completed", "partial", or "failed"
+        - features_completed: Number of features passing
+        - features_total: Total features in feature list
+        - completion_percentage: Progress percentage
+        - duration_seconds: Total build time
+
+    Examples:
+        # Build a simple todo app
+        relay_build(
+            task="Build a todo list app with React and local storage",
+            working_directory="/Users/me/projects/todo-app",
+            feature_count=30
+        )
+
+        # Build with webhook notifications
+        relay_build(
+            task="Build an e-commerce dashboard",
+            working_directory="/Users/me/projects/dashboard",
+            feature_count=100,
+            webhook_url="https://my-n8n.example.com/webhook/abc123"
+        )
+
+        # Continue existing project (feature_list.json exists)
+        relay_build(
+            task="",  # Task ignored when continuing
+            working_directory="/Users/me/projects/existing-project"
+        )
+    """
+    from tools.mcp_utils.relay import relay_build_impl
+
+    return relay_build_impl(
+        task=task,
+        working_directory=working_directory,
+        feature_count=feature_count,
+        max_iterations=max_iterations,
+        regression_sample_size=regression_sample_size,
+        timeout_per_feature=timeout_per_feature,
+        model=model,
+        webhook_url=webhook_url,
+    )
+
+
 def bootstrap_filesystem_tools():
     """
     Bootstrap filesystem-based tool discovery on startup.
@@ -1656,6 +1739,10 @@ if __name__ == "__main__":
     )
     print(
         "   - autonomous_build_and_deploy: Fully autonomous Scout→Architect→Builder→Test→Deploy (runs in background)",
+        file=sys.stderr,
+    )
+    print(
+        "   - relay_build: Feature-by-feature building with fresh context per feature (Anthropic pattern)",
         file=sys.stderr,
     )
     print(
