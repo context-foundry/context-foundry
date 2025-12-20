@@ -507,7 +507,7 @@ class PhaseValidator:
                 f"⚠️ Flowise flow quality validation FAILED:\n\n{error_summary}\n\n"
                 f"Builder must produce flows matching the patterns in "
                 f"{PhaseValidator.get_extension_patterns_dir('flowise')}.\n"
-                f"Re-run with templates from extensions/flowise/prompts/*.json"
+                f"Re-run with templates from extensions/flowise/node-templates/*.json"
             )
 
         print("✅ Flowise flow quality validation passed", file=sys.stderr)

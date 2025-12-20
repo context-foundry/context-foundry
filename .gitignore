@@ -153,3 +153,6 @@ docs/assets/SatoshiChoreTracker.gif
 
 # Token files
 .mcpregistry_*
+
+# Flowise extension (separate private repo)
+extensions/flowise/
