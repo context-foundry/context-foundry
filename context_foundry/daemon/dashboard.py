@@ -3254,7 +3254,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         input=simple_prompt,
                         capture_output=True,
                         text=True,
-                        timeout=30,
+                        timeout=90,
                     )
 
                     logger.info(f"Sidekick: Claude returned code {result.returncode}")
@@ -3270,7 +3270,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                         )
 
                 except subprocess.TimeoutExpired:
-                    logger.warning("Sidekick: Claude timed out after 30s")
+                    logger.warning("Sidekick: Claude timed out after 90s")
                 except Exception as e:
                     logger.warning(f"Sidekick: Claude error - {e}")
 
