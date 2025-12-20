@@ -21,11 +21,25 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from tools.baml_integration import (
-    get_baml_error,
-    is_baml_available,
-    update_phase_with_baml,
-)
+# BAML integration (optional - archived in refactor)
+try:
+    from tools.baml_integration import (
+        get_baml_error,
+        is_baml_available,
+        update_phase_with_baml,
+    )
+except ImportError:
+    # BAML not available - provide graceful fallbacks
+    def is_baml_available():
+        return False
+
+    def get_baml_error():
+        return "BAML integration not installed"
+
+    def update_phase_with_baml(*args, **kwargs):
+        return None
+
+
 from tools.mcp_utils.phase_metrics import estimate_context_tokens, log_phase_metrics
 from tools.llm_core.providers import (
     LocalClaudeProvider,

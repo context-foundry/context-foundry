@@ -20,15 +20,33 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 from multiprocessing import Process, Queue
 
-# Import BAML integration
-from tools.baml_integration import (
-    is_baml_available,
-    get_baml_error,
-    parse_architecture_markdown_baml,
-)
+# BAML integration (optional - archived in refactor)
+try:
+    from tools.baml_integration import (
+        is_baml_available,
+        get_baml_error,
+        parse_architecture_markdown_baml,
+    )
+except ImportError:
+    # BAML not available - provide graceful fallbacks
+    def is_baml_available():
+        return False
 
-# Import safety mechanisms
-from tools.security.safety import enforce_sandbox_mode
+    def get_baml_error():
+        return "BAML integration not installed"
+
+    def parse_architecture_markdown_baml(*args, **kwargs):
+        return None
+
+
+# Safety mechanisms (optional - archived in refactor)
+try:
+    from tools.security.safety import enforce_sandbox_mode
+except ImportError:
+    # Security module not available - provide no-op fallback
+    def enforce_sandbox_mode(*args, **kwargs):
+        pass
+
 
 # Import helper functions
 from tools.mcp_utils.project_detection import detect_existing_codebase

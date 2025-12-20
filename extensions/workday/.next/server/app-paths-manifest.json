@@ -1,8 +1,0 @@
-{
-  "/_not-found/page": "app/_not-found/page.js",
-  "/patterns/[id]/page": "app/patterns/[id]/page.js",
-  "/learn/[patternId]/page": "app/learn/[patternId]/page.js",
-  "/patterns/page": "app/patterns/page.js",
-  "/api/generate/quiz/route": "app/api/generate/quiz/route.js",
-  "/api/generate/scenario/route": "app/api/generate/scenario/route.js"
-}
