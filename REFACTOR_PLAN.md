@@ -30,7 +30,6 @@ context-foundry/
 ### Delete directories
 ```bash
 rm -rf archive/           # 788MB - old archived code
-rm -rf examples/          # 324MB - example projects
 rm -rf logs/              # 5.3MB - old logs
 rm -rf htmlcov/           # 8.6MB - coverage reports
 rm -rf builds/            # Working directory
@@ -43,21 +42,28 @@ rm -rf checkpoints/       # Session checkpoints
 rm -rf ace/               # Unknown/unused
 rm -rf foundry/           # Old patterns dir
 rm -rf active-projects/   # Working directory
+
+# Clean extension build artifacts (keep source/transcripts)
+rm -rf extensions/*/node_modules/
+rm -rf extensions/*/.next/
 ```
 
-### Add to .gitignore
+### Extensions directory - KEEP
+Keep `extensions/` - contains valuable assets:
+- `workday/*.txt` - Training transcripts (38 files, few KB)
+- `roblox/` - Roblox patterns and scripts
+- `workday-transcripts/` - Additional transcripts
+
+The 574MB was node_modules/.next/ - now gitignored and cleaned locally.
+
+### Already in .gitignore
 ```
-# Already there: extensions/flowise/
-examples/
 archive/
-logs/
-builds/
-projects/
-sandbox/
-working/
-tmp/
-*.db
-*.log
+examples/
+extensions/flowise/
+extensions/roblox/
+extensions/*/node_modules/
+extensions/*/.next/
 ```
 
 ### Delete optional tools (move to separate packages later)

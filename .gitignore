@@ -145,8 +145,11 @@ extensions/roblox/
 # Workday extension (keep transcripts private)
 extensions/workday/**/*.txt
 
-# Extension dependencies
+# Extension dependencies and build artifacts
 extensions/*/node_modules/
+extensions/*/.next/
+extensions/*/dist/
+extensions/*/.turbo/
 
 # Other assets
 docs/assets/SatoshiChoreTracker.gif
