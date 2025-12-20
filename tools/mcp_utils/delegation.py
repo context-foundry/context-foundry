@@ -16,10 +16,31 @@ import time
 import traceback
 import uuid
 import threading
-import psutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+# psutil is optional but recommended for process management
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    psutil = None
+    PSUTIL_AVAILABLE = False
+
+# Import cross-platform utilities
+try:
+    from tools.mcp_utils.platform_utils import (
+        kill_process_tree,
+        is_process_running,
+        terminate_process_gracefully,
+    )
+except ImportError:
+    # Fallback if platform_utils not available
+    kill_process_tree = None
+    is_process_running = None
+    terminate_process_gracefully = None
 
 # Import conversation logger for transparent agent visibility
 try:
@@ -1252,86 +1273,105 @@ def cancel_delegation_impl(
                     indent=2,
                 )
 
-            # Check if process is still running using psutil
-            try:
-                proc = psutil.Process(pid)
+            # Check if process is still running and cancel it
+            start_time = datetime.fromisoformat(
+                metadata.get("start_time", datetime.now().isoformat())
+            )
+            elapsed = (datetime.now() - start_time).total_seconds()
+            termination_method = "unknown"
 
-                # Verify it's actually a claude-code process (basic sanity check)
-                cmdline = " ".join(proc.cmdline())
-                if "claude" not in cmdline.lower() and "python" not in cmdline.lower():
+            if PSUTIL_AVAILABLE:
+                # Use psutil for robust process management
+                try:
+                    proc = psutil.Process(pid)
+
+                    # Verify it's actually a claude-code process (basic sanity check)
+                    cmdline = " ".join(proc.cmdline())
+                    if (
+                        "claude" not in cmdline.lower()
+                        and "python" not in cmdline.lower()
+                    ):
+                        return json.dumps(
+                            {
+                                "status": "error",
+                                "error": f"PID {pid} exists but doesn't appear to be a claude-code process",
+                                "message": f"Process command: {cmdline[:100]}",
+                                "cancelled": False,
+                            },
+                            indent=2,
+                        )
+
+                    try:
+                        # Try graceful termination first
+                        proc.terminate()
+                        proc.wait(timeout=5)
+                        termination_method = "graceful (SIGTERM)"
+                    except psutil.TimeoutExpired:
+                        # Force kill if graceful failed
+                        proc.kill()
+                        proc.wait()
+                        termination_method = "forced (SIGKILL)"
+
+                except psutil.NoSuchProcess:
                     return json.dumps(
                         {
                             "status": "error",
-                            "error": f"PID {pid} exists but doesn't appear to be a claude-code process",
-                            "message": f"Process command: {cmdline[:100]}",
+                            "error": f"Process with PID {pid} is not running",
+                            "message": "Task may have already completed or been killed",
+                            "cancelled": False,
+                        },
+                        indent=2,
+                    )
+            else:
+                # Fallback: use os.kill (less robust but cross-platform)
+                try:
+                    import signal
+
+                    # Try SIGTERM first (graceful)
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(2)
+                    # Check if still running
+                    try:
+                        os.kill(pid, 0)
+                        # Still running, force kill
+                        os.kill(pid, signal.SIGKILL)
+                        termination_method = "forced (SIGKILL)"
+                    except OSError:
+                        termination_method = "graceful (SIGTERM)"
+                except OSError as e:
+                    return json.dumps(
+                        {
+                            "status": "error",
+                            "error": f"Failed to kill process {pid}: {e}",
+                            "message": "Task may have already completed or permission denied",
                             "cancelled": False,
                         },
                         indent=2,
                     )
 
-                # Kill the process
-                start_time = datetime.fromisoformat(
-                    metadata.get("start_time", datetime.now().isoformat())
-                )
-                elapsed = (datetime.now() - start_time).total_seconds()
+            # Update metadata file
+            metadata["status"] = "cancelled"
+            metadata["cancelled_at"] = datetime.now().isoformat()
+            metadata["cancellation_reason"] = reason or "Manual cancellation by user"
+            metadata["duration_seconds"] = elapsed
+            metadata["termination_method"] = termination_method
+            task_file.write_text(json.dumps(metadata, indent=2))
 
-                try:
-                    # Try graceful termination first
-                    proc.terminate()
-                    proc.wait(timeout=5)
-                    termination_method = "graceful (SIGTERM)"
-                except psutil.TimeoutExpired:
-                    # Force kill if graceful failed
-                    proc.kill()
-                    proc.wait()
-                    termination_method = "forced (SIGKILL)"
-
-                # Update metadata file
-                metadata["status"] = "cancelled"
-                metadata["cancelled_at"] = datetime.now().isoformat()
-                metadata["cancellation_reason"] = (
-                    reason or "Manual cancellation by user"
-                )
-                metadata["duration_seconds"] = elapsed
-                metadata["termination_method"] = termination_method
-                task_file.write_text(json.dumps(metadata, indent=2))
-
-                return json.dumps(
-                    {
-                        "status": "success",
-                        "message": f"Task cancelled successfully via {termination_method}",
-                        "task_id": task_id,
-                        "cancelled": True,
-                        "task_summary": metadata.get("task", "")[:100],
-                        "working_directory": metadata.get("working_directory", ""),
-                        "elapsed_seconds": round(elapsed, 2),
-                        "termination_method": termination_method,
-                        "reason": reason or "Manual cancellation by user",
-                        "timestamp": datetime.now().isoformat(),
-                    },
-                    indent=2,
-                )
-
-            except psutil.NoSuchProcess:
-                return json.dumps(
-                    {
-                        "status": "error",
-                        "error": f"Process with PID {pid} is not running",
-                        "message": "Task may have already completed or been killed",
-                        "cancelled": False,
-                    },
-                    indent=2,
-                )
-            except Exception as e:
-                return json.dumps(
-                    {
-                        "status": "error",
-                        "error": f"Failed to kill process: {str(e)}",
-                        "task_id": task_id,
-                        "cancelled": False,
-                    },
-                    indent=2,
-                )
+            return json.dumps(
+                {
+                    "status": "success",
+                    "message": f"Task cancelled successfully via {termination_method}",
+                    "task_id": task_id,
+                    "cancelled": True,
+                    "task_summary": metadata.get("task", "")[:100],
+                    "working_directory": metadata.get("working_directory", ""),
+                    "elapsed_seconds": round(elapsed, 2),
+                    "termination_method": termination_method,
+                    "reason": reason or "Manual cancellation by user",
+                    "timestamp": datetime.now().isoformat(),
+                },
+                indent=2,
+            )
 
         # Continue with existing logic for in-memory tasks
         process = task_info.get("process") if isinstance(task_info, dict) else None
