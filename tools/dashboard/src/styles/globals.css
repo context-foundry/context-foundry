@@ -222,8 +222,11 @@ body {
 }
 
 @keyframes spin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
   to {
-    transform: translateY(-50%) rotate(360deg);
+    transform: translate(-50%, -50%) rotate(360deg);
   }
 }
 
@@ -418,6 +421,7 @@ body {
 
 .sidekick-send-btn.loading {
   position: relative;
+  overflow: hidden;
 }
 
 .sidekick-send-btn.loading .paper-airplane {
@@ -427,6 +431,8 @@ body {
 .sidekick-send-btn.loading::after {
   content: '';
   position: absolute;
+  top: 50%;
+  left: 50%;
   width: 16px;
   height: 16px;
   border: 2px solid rgba(255, 255, 255, 0.3);
