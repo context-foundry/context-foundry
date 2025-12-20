@@ -923,7 +923,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._save_input_instruction_to_disk()
         elif parsed.path == "/resume-pipeline":
             self._resume_pipeline()
-        elif parsed.path == "/sidekick-chat":
+        elif parsed.path in ("/sidekick-chat", "/api/sidekick-chat"):
             self._handle_sidekick_chat()
         elif parsed.path == "/agents":
             self._update_agents()
@@ -3215,11 +3215,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             data = json.loads(body_raw.decode("utf-8"))
             message = data.get("message", "").strip()
 
+            logger.info(f"Sidekick received message: {message[:50]}...")
+
             if not message:
                 self.send_error(400, "Empty message")
                 return
 
-            # Try to use Claude CLI for a "bigger brain" response
+            # Try to use Claude CLI for response
             import subprocess
             import shutil
             import os
@@ -3228,6 +3230,64 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             if not claude_path and os.path.exists("/opt/homebrew/bin/claude"):
                 claude_path = "/opt/homebrew/bin/claude"
 
+            logger.info(f"Sidekick: Claude path = {claude_path}")
+
+            response_text = None
+
+            if claude_path:
+                try:
+                    # Simple, direct Claude call
+                    simple_prompt = (
+                        f"You are a helpful assistant. Respond briefly to: {message}"
+                    )
+                    logger.info("Sidekick: Running Claude subprocess...")
+
+                    result = subprocess.run(
+                        [
+                            claude_path,
+                            "-p",
+                            "--print",
+                            "--dangerously-skip-permissions",
+                            "--model",
+                            "haiku",
+                        ],
+                        input=simple_prompt,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+
+                    logger.info(f"Sidekick: Claude returned code {result.returncode}")
+
+                    if result.returncode == 0 and result.stdout:
+                        response_text = result.stdout.strip()
+                        logger.info(
+                            f"Sidekick: Got response of {len(response_text)} chars"
+                        )
+                    else:
+                        logger.warning(
+                            f"Sidekick: Claude failed - stderr: {result.stderr[:200] if result.stderr else 'none'}"
+                        )
+
+                except subprocess.TimeoutExpired:
+                    logger.warning("Sidekick: Claude timed out after 30s")
+                except Exception as e:
+                    logger.warning(f"Sidekick: Claude error - {e}")
+
+            if not response_text:
+                response_text = (
+                    "I'm having trouble connecting right now. Please try again."
+                )
+
+            response = json.dumps({"response": response_text}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(response)))
+            self.end_headers()
+            self.wfile.write(response)
+            return
+
+            # OLD CODE BELOW - keeping for reference but bypassed
             if claude_path:
                 try:
                     logger.info(f"Attempting to use Claude CLI at: {claude_path}")
